@@ -17,6 +17,11 @@ assets=(
   "graph/draw_rule_cycle.riv|db0cf30b8df689dc1d29dfbf4316b69c61270743a7eb94bcd3ac27600a00c9c3"
   "minimal/long_name.riv|9f4b5f73afdd9223e7351fe853afa587f242868298576320ac6556ae91c54e9f"
   "minimal/two_artboards.riv|480472d9942711492ce37cdba9aea6266f254633f5a2ac4a9e30f9d0eca70e8c"
+  "sync/scope_probe.riv|fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347|b73bc6755421c41281f9d5c8c04d8444fc43f585"
+  "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
+  "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944|0a2e478ac331586387308068e01306225ecbb20d"
+  "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
+  "sync/stateful_component_image_test.riv|47dcbcd02cd228f0e4ec71eaac84748f46f95b24737818f61b04d46242b48393|353ef4fccbf6f1801def7d737a4103657dc63a1c"
   "sync/databind_null_artboard_swap.riv|0160b4572f217271df84072b08476d433a71c5bf78a9917f39fbc03239560a1f|30a0e2d42e2e6d091350d6edb816e165e27f7988"
 )
 
@@ -40,8 +45,10 @@ for entry in "${assets[@]}"; do
   destination="$repo_root/fixtures/$relative"
   mkdir -p "$(dirname "$destination")"
 
-  if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/assets/$name" ]]; then
-    cp "$runtime_dir/tests/unit_tests/assets/$name" "$destination"
+  source_path="tests/unit_tests/assets/$name"
+  if [[ -n "$runtime_dir" ]] \
+    && git -C "$runtime_dir" cat-file -e "$source_ref:$source_path" 2>/dev/null; then
+    git -C "$runtime_dir" show "$source_ref:$source_path" > "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
     curl --fail --location --silent --show-error \
       "$base_url/$source_ref/tests/unit_tests/assets/$name" \

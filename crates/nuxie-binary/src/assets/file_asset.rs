@@ -84,7 +84,6 @@ fn cpp_file_asset_extension(type_name: &str) -> Option<&'static str> {
         "ScriptAsset" => Some("lua"),
         "ShaderAsset" => Some(super::shader_asset::FILE_EXTENSION),
         "ManifestAsset" => Some(super::manifest_asset::FILE_EXTENSION),
-        "LibraryAsset" => Some("library"),
         _ => None,
     }
 }
@@ -127,11 +126,11 @@ pub(crate) fn normalize_file_asset_ids(
         };
         // C++ dedupes through BackboardImporter::addFileAsset, which
         // FileAsset::import only reaches when addsToBackboard() is true;
-        // LibraryAsset and ManifestAsset opt out.
+        // ManifestAsset opts out.
         let is_backboard_file_asset =
             definition_by_type_key(object.type_key).is_some_and(|definition| {
                 definition.is_a("FileAsset")
-                    && !matches!(definition.name, "LibraryAsset" | "ManifestAsset")
+                    && definition.name != "ManifestAsset"
             });
         if !is_backboard_file_asset {
             continue;

@@ -668,20 +668,12 @@ fn stored_field_initializers_match_cpp_member_defaults() {
 }
 
 #[test]
-fn uint_storage_width_preserves_alias_and_uint64_semantics() {
+fn uint_storage_width_preserves_alias_semantics() {
     let file_asset = definition_by_name("FileAsset").expect("FileAsset exists");
     let asset_id = file_asset
         .property_by_key(204)
         .expect("FileAsset.assetId exists");
-    let scope_library_id = file_asset
-        .property_by_key(1037)
-        .expect("FileAsset.scopeLibraryId exists");
     assert_eq!(asset_id.uint_storage(), Some(UintStorage::Uint32));
-    assert_eq!(scope_library_id.uint_storage(), Some(UintStorage::Uint64));
-    assert_eq!(
-        scope_library_id.stored_field_initializer(),
-        Some(StoredFieldInitializer::Uint(0))
-    );
 
     let compact_layout_field = definition_by_name("LayoutComponentStyle")
         .expect("LayoutComponentStyle exists")
@@ -694,7 +686,7 @@ fn uint_storage_width_preserves_alias_and_uint64_semantics() {
         Some(UintStorage::Uint8)
     );
 
-    for key in [596, 1037] {
+    for key in [596] {
         assert_eq!(
             core_registry_field_kind_by_property_key(key),
             Some(CoreRegistryFieldKind::Uint)

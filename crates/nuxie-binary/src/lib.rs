@@ -7876,8 +7876,7 @@ fn authoring_record_to_runtime_object(
                 authored_property.value.kind_name()
             );
         }
-        if property.uint_storage() != Some(UintStorage::Uint64)
-            && let AuthoringValue::Uint(value) = &authored_property.value
+        if let AuthoringValue::Uint(value) = &authored_property.value
             && u32::try_from(*value).is_err()
         {
             bail!(
@@ -12620,11 +12619,6 @@ mod uint_wire_tests {
             .iter()
             .find(|property| property.name == "assetId")
             .expect("FileAsset.assetId schema");
-        let uint64_property = file_asset
-            .properties
-            .iter()
-            .find(|property| property.name == "scopeLibraryId")
-            .expect("FileAsset.scopeLibraryId schema");
         let uint8_property = definition_by_name("LayoutComponentStyle")
             .expect("LayoutComponentStyle schema")
             .properties
@@ -12645,14 +12639,6 @@ mod uint_wire_tests {
                 .contains("does not fit in C++ unsigned int")
         );
 
-        let wide_bytes = encoded_var_uint(u64::MAX);
-        let mut wide_reader = BinaryReader::new(&wide_bytes);
-        assert_eq!(
-            read_known_uint_field(&mut wide_reader, uint64_property, "uint64 field")
-                .expect("known uint64"),
-            u64::MAX
-        );
-
         // uint8 changes only generated member storage. Registry dispatch and
         // deserialization accept the complete uint32 wire range, then the
         // generated uint8_t member assignment truncates to its low byte.
@@ -12665,31 +12651,6 @@ mod uint_wire_tests {
         );
     }
 
-    #[test]
-    fn runtime_object_decode_preserves_known_uint64_values() {
-        let mut bytes = b"RIVE".to_vec();
-        // A legacy 7.0 header remains importable after advertising 7.2.
-        bytes.extend_from_slice(&[7, 0, 0, 0]); // version, file id, empty header ToC.
-
-        bytes.extend(encoded_var_uint(23)); // Backboard.
-        bytes.push(0); // End Backboard properties.
-
-        bytes.extend(encoded_var_uint(558)); // LibraryAsset.
-        bytes.extend(encoded_var_uint(798)); // libraryId.
-        bytes.extend(encoded_var_uint(u64::MAX));
-        bytes.extend(encoded_var_uint(799)); // libraryVersionId.
-        bytes.extend(encoded_var_uint(u64::from(u32::MAX) + 1));
-        bytes.push(0); // End LibraryAsset properties.
-
-        let file = read_runtime_file_with_error_kind(&bytes)
-            .expect("known uint64 fields should import through the full runtime reader");
-        let library = file.object(1).expect("decoded LibraryAsset");
-        assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
-        assert_eq!(
-            library.uint_property("libraryVersionId"),
-            Some(u64::from(u32::MAX) + 1)
-        );
-    }
 }
 
 #[cfg(test)]

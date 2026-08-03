@@ -12,6 +12,7 @@ use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
 
 use super::lua_blob::ScriptedBlobAssets;
+use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
 
 type ViewModelInstance = Rc<RefCell<RuntimeOwnedViewModelInstance>>;
@@ -551,6 +552,18 @@ fn create_scripted_view_model_with_parent(
             }
         })?,
     )?;
+    let get_font_model = model.clone();
+    table.set(
+        "getFont",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_font_model.property(&name) {
+                Some(ScriptViewModelProperty::Font) => lua
+                    .create_userdata(ScriptedPropertyFont::new(get_font_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let instance_model = model.clone();
     table.set(
         "instance",
@@ -612,6 +625,9 @@ fn create_scripted_view_model_with_parent(
             }
             ScriptViewModelProperty::Image => {
                 lua.create_userdata(ScriptedPropertyImage::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::Font => {
+                lua.create_userdata(ScriptedPropertyFont::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
             ScriptViewModelProperty::ViewModel => {
@@ -808,29 +824,50 @@ impl UserData for ScriptedPropertyString {
 struct ScriptedPropertyImage {
     model: ScriptViewModel,
     name: String,
+    cached_value: Rc<RefCell<Option<AnyUserData>>>,
+    _change_sink: RuntimeCellDirtSink,
 }
 
 impl ScriptedPropertyImage {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        let cached_value = Rc::new(RefCell::new(None));
+        let weak_cached_value = Rc::downgrade(&cached_value);
+        let change_sink = model
+            .property_change_sink(&name, move || {
+                if let Some(cached_value) = weak_cached_value.upgrade() {
+                    cached_value.borrow_mut().take();
+                }
+            })
+            .unwrap_or_default();
+        Self {
+            model,
+            name,
+            cached_value,
+            _change_sink: change_sink,
+        }
     }
 }
 
 impl UserData for ScriptedPropertyImage {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
-            if let Some(image) = this.model.render_image(&this.name) {
-                return lua
-                    .create_userdata(ScriptedImage::from_render_image_rc(image))
-                    .map(Value::UserData);
+            if let Some(cached) = this.cached_value.borrow().as_ref() {
+                return Ok(Value::UserData(cached.clone()));
             }
-            let asset = this.model.image(&this.name);
-            Ok(asset
-                .map(|image| create_asset_image(lua, image))
-                .transpose()?
-                .flatten()
-                .map(Value::UserData)
-                .unwrap_or(Value::Nil))
+            let value = if let Some(image) = this.model.render_image(&this.name) {
+                Some(lua.create_userdata(ScriptedImage::from_render_image_rc(image))?)
+            } else {
+                this.model
+                    .image(&this.name)
+                    .map(|image| create_asset_image(lua, image))
+                    .transpose()?
+                    .flatten()
+            };
+            let Some(value) = value else {
+                return Ok(Value::Nil);
+            };
+            *this.cached_value.borrow_mut() = Some(value.clone());
+            Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
             match value {
@@ -844,6 +881,63 @@ impl UserData for ScriptedPropertyImage {
                 }
                 _ => return Err(luaur_rt::Error::runtime("expected Image userdata or nil")),
             }
+            Ok(())
+        });
+    }
+}
+
+struct ScriptedPropertyFont {
+    model: ScriptViewModel,
+    name: String,
+    cached_value: Rc<RefCell<Option<AnyUserData>>>,
+    _change_sink: RuntimeCellDirtSink,
+}
+
+impl ScriptedPropertyFont {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        let cached_value = Rc::new(RefCell::new(None));
+        let weak_cached_value = Rc::downgrade(&cached_value);
+        let change_sink = model
+            .property_change_sink(&name, move || {
+                if let Some(cached_value) = weak_cached_value.upgrade() {
+                    cached_value.borrow_mut().take();
+                }
+            })
+            .unwrap_or_default();
+        Self {
+            model,
+            name,
+            cached_value,
+            _change_sink: change_sink,
+        }
+    }
+}
+
+impl UserData for ScriptedPropertyFont {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |lua, this| {
+            if let Some(cached) = this.cached_value.borrow().as_ref() {
+                return Ok(Value::UserData(cached.clone()));
+            }
+            let value = this
+                .model
+                .font(&this.name)
+                .map(|font| create_asset_font(lua, font))
+                .transpose()?
+                .flatten();
+            let Some(value) = value else {
+                return Ok(Value::Nil);
+            };
+            *this.cached_value.borrow_mut() = Some(value.clone());
+            Ok(Value::UserData(value))
+        });
+        fields.add_field_method_set("value", |_, this, value: Value| {
+            let font_bytes = match value {
+                Value::Nil => None,
+                Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font_bytes()),
+                _ => return Err(luaur_rt::Error::runtime("expected Font userdata or nil")),
+            };
+            this.model.set_font_bytes(&this.name, font_bytes);
             Ok(())
         });
     }
@@ -1569,6 +1663,37 @@ mod tests {
     }
 
     #[test]
+    fn nested_view_model_property_mints_the_referenced_type() {
+        let (parent, property_name) = model_with_property(ScriptViewModelProperty::ViewModel);
+        let referenced = parent
+            .view_model(&property_name)
+            .expect("authored referenced child occurrence");
+        assert_ne!(
+            parent.properties(),
+            referenced.properties(),
+            "fixture must distinguish the owner and referenced schemas"
+        );
+
+        let lua = Lua::new();
+        let parent_table =
+            create_scripted_view_model(&lua, parent.clone()).expect("scripted parent");
+        lua.globals().set("parent", parent_table).unwrap();
+        lua.globals().set("propertyName", property_name).unwrap();
+        let minted_table: Table = lua
+            .load(
+                "local property = parent:getViewModel(propertyName)\n\
+                 local referenced = property.value\n\
+                 return referenced:instance()",
+            )
+            .eval()
+            .expect("nested instance creation");
+        let minted = model_from_table(&minted_table).expect("minted nested model");
+
+        assert_eq!(minted.properties(), referenced.properties());
+        assert_ne!(minted.properties(), parent.properties());
+    }
+
+    #[test]
     fn detached_root_recurses_through_shared_list_instances() {
         let (parent, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
@@ -1863,7 +1988,10 @@ mod tests {
             "local property = model:getImage(propertyName)\n\
              assert(property ~= nil)\n\
              property.value = context:image(assetName)\n\
-             assert(property.value ~= nil)",
+             local first = property.value\n\
+             assert(first ~= nil and first == property.value)\n\
+             imageProperty = property\n\
+             savedImage = first",
         )
         .exec()
         .expect("image property script runs");
@@ -1884,25 +2012,36 @@ mod tests {
         png_header[12..16].copy_from_slice(b"IHDR");
         png_header[16..20].copy_from_slice(&3_u32.to_be_bytes());
         png_header[20..24].copy_from_slice(&5_u32.to_be_bytes());
-        let factory_image = nuxie_render_api::Factory::decode_image(&mut factory, &png_header)
-            .expect("recording factory image");
+        let factory_image: Rc<dyn nuxie_render_api::RenderImage> = Rc::from(
+            nuxie_render_api::Factory::decode_image(&mut factory, &png_header)
+                .expect("recording factory image"),
+        );
+        assert!(model.set_render_image(&property_name, Some(Rc::clone(&factory_image))));
         lua.globals()
             .set(
                 "factoryImage",
-                lua.create_userdata(ScriptedImage::from_render_image(factory_image))
-                    .unwrap(),
+                lua.create_userdata(ScriptedImage::from_render_image_rc(Rc::clone(
+                    &factory_image,
+                )))
+                .unwrap(),
             )
             .unwrap();
         let dimensions: Table = lua
             .load(
-                "local property = model:getImage(propertyName); \
-                 property.value = factoryImage; \
-                 return { property.value.width, property.value.height }",
+                "local changed = imageProperty.value; \
+                 local stableAfterHostWrite = changed == imageProperty.value; \
+                 imageProperty.value = factoryImage; \
+                 return { changed.width, changed.height, \
+                          changed ~= savedImage, stableAfterHostWrite, \
+                          changed == imageProperty.value }",
             )
             .eval()
             .expect("factory-backed image round trip");
         assert_eq!(dimensions.get::<u32>(1).unwrap(), 3);
         assert_eq!(dimensions.get::<u32>(2).unwrap(), 5);
+        assert!(dimensions.get::<bool>(3).unwrap());
+        assert!(dimensions.get::<bool>(4).unwrap());
+        assert!(dimensions.get::<bool>(5).unwrap());
         let retained = model
             .render_image(&property_name)
             .expect("runtime view-model state retains the factory image");
@@ -1967,14 +2106,107 @@ mod tests {
         );
     }
 
+    #[test]
+    fn font_properties_retain_the_exact_font_owner_across_lua_assignment() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/data_bind_font_test.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        let (model, property_name) = nuxie_runtime::script_view_models(&file)
+            .into_iter()
+            .find_map(|(view_model_name, definition)| {
+                let instance_names = file
+                    .view_models()
+                    .into_iter()
+                    .find(|view_model| {
+                        view_model.object.string_property("name") == Some(&view_model_name)
+                    })?
+                    .instances
+                    .iter()
+                    .filter_map(|instance| instance.object.string_property("name"))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                instance_names.into_iter().find_map(|instance_name| {
+                    let model = definition.named_instance(Some(&instance_name))?;
+                    let property_name = model.properties().iter().find_map(|(name, kind)| {
+                        (*kind == ScriptViewModelProperty::Font && model.font(name).is_some())
+                            .then(|| name.clone())
+                    })?;
+                    Some((model, property_name))
+                })
+            })
+            .expect("fixture has a file-backed font property");
+        let font = model.font(&property_name).expect("font identity");
+        let asset_global_id = font.asset_global_id().expect("file font asset identity");
+        let owners =
+            std::sync::Arc::new(nuxie_runtime::RuntimeFontAssetOwners::from_runtime(&file));
+        let expected = owners
+            .get(asset_global_id)
+            .expect("fixture font was decoded");
+        let lua = Lua::new();
+        crate::vm::lua_font::set_font_asset_owners(&lua, owners);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
+        lua.load(
+            "local property = model:getFont(propertyName)\n\
+             assert(property ~= nil and property.value ~= nil)\n\
+             assert(model[propertyName].value ~= nil)\n\
+             local first = property.value\n\
+             assert(first == property.value)\n\
+             fontProperty = property\n\
+             savedFont = first",
+        )
+        .exec()
+        .expect("getFont and direct font properties resolve");
+
+        let host_font: std::sync::Arc<[u8]> = std::sync::Arc::from(expected.as_ref());
+        assert!(model.set_font_bytes(&property_name, Some(host_font.clone())));
+        lua.load(
+            "local changed = fontProperty.value\n\
+             assert(changed ~= savedFont and changed == fontProperty.value)\n\
+             savedFont = changed",
+        )
+        .exec()
+        .expect("host font replacement invalidates the cached wrapper");
+
+        crate::vm::lua_font::set_font_asset_owners(
+            &lua,
+            std::sync::Arc::new(nuxie_runtime::RuntimeFontAssetOwners::default()),
+        );
+        lua.load(
+            "fontProperty.value = nil\n\
+             assert(fontProperty.value == nil)\n\
+             fontProperty.value = savedFont\n\
+             local changed = fontProperty.value\n\
+             assert(changed ~= nil and changed ~= savedFont)\n\
+             assert(changed == fontProperty.value)",
+        )
+        .exec()
+        .expect("retained Font userdata remains assignable after registry replacement");
+
+        let retained = model
+            .owned_instance()
+            .borrow()
+            .font_asset_value_by_property_name(&property_name)
+            .and_then(|value| value.live_font_bytes_arc().cloned())
+            .expect("Lua assignment installed a live font owner");
+        assert!(std::sync::Arc::ptr_eq(&retained, &host_font));
+    }
+
     fn positive_blob_lookup_surface() -> String {
         let lua = Lua::new();
         let assets = ScriptedBlobAssets::install(&lua);
         assets
-            .register("payload.bin", &[])
+            .register("payload.bin", "payload.bin", &[])
             .expect("empty duplicate registration");
         assets
-            .register("payload.bin", &[0, 1, 2, 0xff])
+            .register("payload.bin", "payload.bin", &[0, 1, 2, 0xff])
             .expect("blob registration");
         let context = lua
             .create_userdata(ScriptedContext::new(
@@ -2024,6 +2256,40 @@ mod tests {
             positive_blob_lookup_surface(),
             "payload.bin\t4\t4\t0\t255\ttrue\n"
         );
+    }
+
+    #[test]
+    fn context_blob_prefers_caller_scope_and_exposes_the_authored_short_name() {
+        let lua = Lua::new();
+        let assets = ScriptedBlobAssets::install(&lua);
+        assets.register("payload.bin", "payload.bin", &[1]).unwrap();
+        assets
+            .register("Effects#7@1/payload.bin", "payload.bin", &[2])
+            .unwrap();
+        assets
+            .register("Effects#7@2/payload.bin", "payload.bin", &[3])
+            .unwrap();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .unwrap();
+        lua.globals().set("context", context).unwrap();
+
+        let result: Table = lua
+            .load(
+                "local blob = context:blob('payload.bin')\n\
+                 return { blob.name, buffer.readu8(blob.data, 0) }",
+            )
+            .set_name("Effects#7@2/probe")
+            .eval()
+            .expect("caller-scoped blob lookup");
+
+        assert_eq!(result.get::<String>(1).unwrap(), "payload.bin");
+        assert_eq!(result.get::<u8>(2).unwrap(), 3);
     }
 
     #[test]

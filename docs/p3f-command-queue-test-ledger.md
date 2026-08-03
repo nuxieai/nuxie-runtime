@@ -9,7 +9,7 @@ The lane-focused command is:
 cargo test -p nuxie --test command_queue --no-fail-fast
 ```
 
-## Complete upstream case ports (13)
+## Complete upstream case ports (24)
 
 | Upstream `TEST_CASE` | Rust evidence |
 |---|---|
@@ -26,72 +26,72 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `cancelDraw prevents pending draw from running` | `cancel_draw_only_cancels_matching_pending_key` |
 | `cancelDraw only cancels the matching draw key` | `cancel_draw_only_cancels_matching_pending_key` |
 | `disconnect` | `disconnect_stops_a_non_waiting_server` |
+| `global asset set / remove` | `global_asset_set_and_remove` — preserves image/audio/font name registration, replacement, removal, and deletion cleanup. |
+| `View Models` | `view_models` — covers named/artboard blank, default, named, nested, list, invalid, and independent dependent-handle lifetimes. |
+| `View Model Listed Listener` | `view_model_listed_listener` — asserts the pinned six-name ordering and suppresses the callback for an invalid file. |
+| `View Model Listener` | `view_model_listener` — asserts the pinned instance-name ordering and all ten typed property definitions, including enum and nested-model metadata. |
+| `View Model Instance Listener` | `view_model_instance_listener` — preserves delete callbacks for all valid and invalid named/artboard instance handles. |
+| `External Resources` | `external_resources` — covers external image/audio/font identity and delete cleanup; the S4-45 blob assertions remain on WATCH. |
+| `RenderImage` | `render_image` — covers decode, retained dimensions, and delete lifecycle. |
+| `AudioSource` | `audio_source` — covers decode identity and delete lifecycle. |
+| `Font` | `font` — covers decode face identity and delete lifecycle. |
+| `View Model Property Set/Get` | `view_model_property_set_get` — ports typed ordered set/get, nested replacement, authored enum strings, retained image/artboard identity and clearing, invalid values/paths/handles, and deletion callback/error accounting. |
+| `CommandServer::getHandleForInstance` | `command_server_get_handle_for_instance` — round-trips retained instance identity to its queue handle. |
 
-The 14-test Rust suite has additional focused assertions for typed monotonic
+The focused Rust suite has additional supporting assertions for typed monotonic
 handles, ordered `runOnce` callbacks, bounded command/message polling,
 wait/wake, weak listeners, basic artboard lifetime, typed errors, and dependent
 cleanup. Those are supporting assertions or partial upstream-case coverage,
 not extra case-count credit.
 
-## Pending non-F6 rows (53)
+## Pending non-F6 rows (42)
 
 These rows are not promoted: their fixture- or API-specific assertions have
 not yet been executed on this branch. They are baseline follow-up work, not F6
 exclusions.
 
-1. `global asset set / remove`
-2. `View Models`
-3. `View Model Listed Listener`
-4. `View Model Listener`
-5. `View Model Instance Listener`
-6. `External Resources`
-7. `RenderImage`
-8. `AudioSource`
-9. `Font`
-10. `View Model Property Set/Get`
-11. `CommandServer::getHandleForInstance`
-12. `Set Artboard Size / Reset Artboard Size`
-13. `Set Artboard Volume / Get Artboard Volume`
-14. `View Model Property Subscriptions`
-15. `View Model Property Async Subscriptions`
-16. `List View Model Property Set/Get`
-17. `file Error Messages`
-18. `listArtboard`
-19. `listEnums`
-20. `requestViewModelInstanceViewModelName and requestViewModelInstanceName`
-21. `render image / audio source / font error`
-22. `state machine error`
-23. `artboard errors`
-24. `Set Artboard Volume / Get Artboard Volume errors on invalid handles`
-25. `Set Artboard Size / Reset Artboard Size errors on invalid handles`
-26. `listStateMachine`
-27. `requestArtboardSize`
-28. `requestDefaultViewModel`
-29. `bindViewModelInstance`
-30. `advanceStateMachine`
-31. `listenerDeleteCallbacks`
-32. `fileLoadedCallback`
-33. `artboardInstantiatedCallback`
-34. `stateMachineInstantiatedCallback`
-35. `viewModelInstanceInstantiatedCallback`
-36. `decodedCallbacks`
-37. `listenerLifeTimes`
-38. `empty test for code cove`
-39. `pointer input`
-40. `pointer down advances before rapid pointer up`
-41. `pointer input translation`
-42. `global Listener`
-43. `sync pointer events`
-44. `requestViewModelInstanceListClear`
-45. `dependency lifetime management`
-46. `file assets listed - image asset`
-47. `file assets listed - font asset`
-48. `file assets listed - type IDs match runtime`
-49. `file assets listed - empty file`
-50. `file assets listed - invalid handle`
-51. `file assets listed - all assets returned`
-52. `Global View Model Names Listed`
-53. `Set/Bind/Get Global View Model Instance`
+1. `Set Artboard Size / Reset Artboard Size`
+2. `Set Artboard Volume / Get Artboard Volume`
+3. `View Model Property Subscriptions`
+4. `View Model Property Async Subscriptions`
+5. `List View Model Property Set/Get`
+6. `file Error Messages`
+7. `listArtboard`
+8. `listEnums`
+9. `requestViewModelInstanceViewModelName and requestViewModelInstanceName`
+10. `render image / audio source / font error`
+11. `state machine error`
+12. `artboard errors`
+13. `Set Artboard Volume / Get Artboard Volume errors on invalid handles`
+14. `Set Artboard Size / Reset Artboard Size errors on invalid handles`
+15. `listStateMachine`
+16. `requestArtboardSize`
+17. `requestDefaultViewModel`
+18. `bindViewModelInstance`
+19. `advanceStateMachine`
+20. `listenerDeleteCallbacks`
+21. `fileLoadedCallback`
+22. `artboardInstantiatedCallback`
+23. `stateMachineInstantiatedCallback`
+24. `viewModelInstanceInstantiatedCallback`
+25. `decodedCallbacks`
+26. `listenerLifeTimes`
+27. `empty test for code cove`
+28. `pointer input`
+29. `pointer down advances before rapid pointer up`
+30. `pointer input translation`
+31. `global Listener`
+32. `sync pointer events`
+33. `requestViewModelInstanceListClear`
+34. `dependency lifetime management`
+35. `file assets listed - image asset`
+36. `file assets listed - font asset`
+37. `file assets listed - type IDs match runtime`
+38. `file assets listed - empty file`
+39. `file assets listed - invalid handle`
+40. `file assets listed - all assets returned`
+41. `Global View Model Names Listed`
+42. `Set/Bind/Get Global View Model Instance`
 
 ## S4-45 WATCH rows (4)
 
@@ -123,5 +123,5 @@ semantics** and remains outside this baseline lane.
 12. `Semantics clearSemanticFocus removes Focused bit from focused node` — depends on F6 focus mutation.
 13. `Semantics drainSemanticsDiff honors scaleFactor when the view is scaled` — depends on F6 view-space diff mapping.
 
-Ratchet accounting: **13 complete + 53 pending non-F6 + 13 pending F6 +
+Ratchet accounting: **24 complete + 42 pending non-F6 + 13 pending F6 +
 4 S4-45 WATCH = 83 expected upstream cases**.

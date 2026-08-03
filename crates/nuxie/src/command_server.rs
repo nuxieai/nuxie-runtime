@@ -1,11 +1,11 @@
 //! Server-thread owner for the pinned C++ `CommandServer` command loop.
 //!
 //! Direct port of `include/rive/command_server.hpp` and
-//! `src/command_server.cpp` at `d788e8ec`. The queue can be cloned across
+//! `src/command_server.cpp` at `4ac7b327`. The queue can be cloned across
 //! threads; this value is deliberately server-thread-confined because the
 //! runtime's retained `Rc` object graph is not a cross-thread object.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use crate::{
     Factory, File, OwnedArtboardInstance, RawTextFont, RenderImage, StateMachineInstance,
@@ -21,6 +21,7 @@ use crate::{
 struct ArtboardEntry {
     file: FileHandle,
     original_size: (f32, f32),
+    bindable: nuxie_runtime::RuntimeBindableArtboard,
     instance: OwnedArtboardInstance,
 }
 
@@ -30,9 +31,31 @@ struct StateMachineEntry {
 }
 
 struct ViewModelEntry {
+    file: FileHandle,
     instance: ViewModelInstance,
     view_model_name: String,
     instance_name: String,
+}
+
+enum RenderImageEntry {
+    Unique(Box<dyn RenderImage>),
+    Shared(Rc<dyn RenderImage>),
+}
+
+impl RenderImageEntry {
+    fn as_ref(&self) -> &dyn RenderImage {
+        match self {
+            Self::Unique(image) => image.as_ref(),
+            Self::Shared(image) => image.as_ref(),
+        }
+    }
+
+    fn shared(&self) -> Option<Rc<dyn RenderImage>> {
+        match self {
+            Self::Unique(_) => None,
+            Self::Shared(image) => Some(Rc::clone(image)),
+        }
+    }
 }
 
 /// Pinned command-server structure. Construct and run it on its owner thread.
@@ -44,7 +67,7 @@ pub struct CommandServer {
     artboards: BTreeMap<ArtboardHandle, ArtboardEntry>,
     state_machines: BTreeMap<StateMachineHandle, StateMachineEntry>,
     view_models: BTreeMap<ViewModelInstanceHandle, ViewModelEntry>,
-    images: BTreeMap<RenderImageHandle, Box<dyn RenderImage>>,
+    images: BTreeMap<RenderImageHandle, RenderImageEntry>,
     audio_sources: BTreeMap<AudioSourceHandle, Arc<crate::AudioSource>>,
     fonts: BTreeMap<FontHandle, RawTextFont>,
     global_images: BTreeMap<String, RenderImageHandle>,
@@ -96,19 +119,55 @@ impl CommandServer {
             .get_mut(&handle)
             .map(|entry| &mut entry.instance)
     }
+    #[doc(hidden)]
+    pub fn bindable_artboard(
+        &self,
+        handle: ArtboardHandle,
+    ) -> Option<&nuxie_runtime::RuntimeBindableArtboard> {
+        self.artboards.get(&handle).map(|entry| &entry.bindable)
+    }
     pub fn state_machine(&self, handle: StateMachineHandle) -> Option<&StateMachineInstance> {
         self.state_machines
             .get(&handle)
             .map(|entry| &entry.instance)
     }
     pub fn image(&self, handle: RenderImageHandle) -> Option<&dyn RenderImage> {
-        self.images.get(&handle).map(Box::as_ref)
+        self.images.get(&handle).map(RenderImageEntry::as_ref)
     }
     pub fn audio_source(&self, handle: AudioSourceHandle) -> Option<&Arc<crate::AudioSource>> {
         self.audio_sources.get(&handle)
     }
     pub fn font(&self, handle: FontHandle) -> Option<&RawTextFont> {
         self.fonts.get(&handle)
+    }
+    #[doc(hidden)]
+    pub fn view_model(&self, handle: ViewModelInstanceHandle) -> Option<&ViewModelInstance> {
+        self.view_models.get(&handle).map(|entry| &entry.instance)
+    }
+    #[doc(hidden)]
+    pub fn handle_for_view_model(
+        &self,
+        instance: &ViewModelInstance,
+    ) -> Option<ViewModelInstanceHandle> {
+        self.view_models.iter().find_map(|(handle, entry)| {
+            entry
+                .instance
+                .handle()
+                .ptr_eq(instance.handle())
+                .then_some(*handle)
+        })
+    }
+    #[doc(hidden)]
+    pub fn global_image_named(&self, name: &str) -> Option<RenderImageHandle> {
+        self.global_images.get(name).copied()
+    }
+    #[doc(hidden)]
+    pub fn global_audio_named(&self, name: &str) -> Option<AudioSourceHandle> {
+        self.global_audio.get(name).copied()
+    }
+    #[doc(hidden)]
+    pub fn global_font_named(&self, name: &str) -> Option<FontHandle> {
+        self.global_fonts.get(name).copied()
     }
 
     /// Wait for at least one command, then execute one entry-bounded poll.
@@ -249,6 +308,9 @@ impl CommandServer {
                         continue;
                     };
                     let original_size = artboard.dimensions().unwrap_or((0.0, 0.0));
+                    let bindable = nuxie_runtime::RuntimeBindableArtboard::new(
+                        artboard.name().unwrap_or_default(),
+                    );
                     match OwnedArtboardInstance::instantiate(
                         Arc::clone(&file_value),
                         artboard.index(),
@@ -259,6 +321,7 @@ impl CommandServer {
                                 ArtboardEntry {
                                     file,
                                     original_size,
+                                    bindable,
                                     instance,
                                 },
                             );
@@ -464,15 +527,23 @@ impl CommandServer {
                             .instance
                             .handle()
                             .linked_view_model_by_property_name_path(&path)
+                            .map(|raw| (entry.file, raw))
                     });
                     match linked {
-                        Some(raw) => {
-                            let name = format!("{path}");
+                        Some((file, raw)) => {
+                            let view_model_name = self
+                                .files
+                                .get(&file)
+                                .and_then(|file| file.view_model(raw.borrow().view_model_index()))
+                                .and_then(|model| model.name())
+                                .unwrap_or_default()
+                                .to_owned();
                             self.view_models.insert(
                                 handle,
                                 ViewModelEntry {
+                                    file,
                                     instance: ViewModelInstance { raw },
-                                    view_model_name: name,
+                                    view_model_name,
                                     instance_name: String::new(),
                                 },
                             );
@@ -500,14 +571,25 @@ impl CommandServer {
                                 .handle()
                                 .list_items_by_property_name_path(&path)
                         })
-                        .and_then(|items| items.get(index).cloned());
+                        .and_then(|items| items.get(index).cloned().map(|raw| (root, raw)))
+                        .and_then(|(root, raw)| {
+                            self.view_models.get(&root).map(|entry| (entry.file, raw))
+                        });
                     match linked {
-                        Some(raw) => {
+                        Some((file, raw)) => {
+                            let view_model_name = self
+                                .files
+                                .get(&file)
+                                .and_then(|file| file.view_model(raw.borrow().view_model_index()))
+                                .and_then(|model| model.name())
+                                .unwrap_or_default()
+                                .to_owned();
                             self.view_models.insert(
                                 handle,
                                 ViewModelEntry {
+                                    file,
                                     instance: ViewModelInstance { raw },
-                                    view_model_name: path,
+                                    view_model_name,
                                     instance_name: String::new(),
                                 },
                             );
@@ -775,10 +857,16 @@ impl CommandServer {
                     bytes,
                     request_id,
                 } => match self.factory.decode_image(&bytes) {
-                    Ok(image) => {
-                        self.images.insert(handle, image);
+                    Ok(image) if image.width() != 0 && image.height() != 0 => {
+                        self.images
+                            .insert(handle, RenderImageEntry::Shared(Rc::from(image)));
                         self.emit(CommandEvent::ImageDecoded { handle, request_id });
                     }
+                    Ok(_) => self.emit(CommandEvent::ImageError {
+                        handle,
+                        request_id,
+                        error: "failed to decode image".to_owned(),
+                    }),
                     Err(error) => self.emit(CommandEvent::ImageError {
                         handle,
                         request_id,
@@ -790,7 +878,8 @@ impl CommandServer {
                     image,
                     request_id,
                 } => {
-                    self.images.insert(handle, image);
+                    let image: Box<dyn RenderImage> = image;
+                    self.images.insert(handle, RenderImageEntry::Unique(image));
                     self.emit(CommandEvent::ImageDecoded { handle, request_id });
                 }
                 Command::DeleteImage { handle, request_id } => {
@@ -976,21 +1065,38 @@ impl CommandServer {
                     handle,
                     view_model,
                     request_id,
-                } => match self
-                    .files
-                    .get(&handle)
-                    .and_then(|f| f.view_model_named(&view_model))
-                {
-                    Some(model) => self.emit(CommandEvent::ViewModelPropertiesListed {
+                } => match self.files.get(&handle).and_then(|file| {
+                    file.view_model_named(&view_model)
+                        .map(|model| (file, model))
+                }) {
+                    Some((file, model)) => self.emit(CommandEvent::ViewModelPropertiesListed {
                         handle,
                         request_id,
                         view_model,
                         properties: model
                             .properties()
-                            .map(|p| ViewModelPropertyData {
-                                data_type: data_type_for_property(p.type_name()),
-                                name: p.name().unwrap_or_default().to_owned(),
-                                metadata: String::new(),
+                            .map(|p| {
+                                let data_type = data_type_for_property(p.type_name());
+                                let metadata = match data_type {
+                                    CommandDataType::Enum => file
+                                        .runtime
+                                        .data_enum_for_view_model_property_object(p.descriptor())
+                                        .and_then(|data_enum| {
+                                            data_enum.object.string_property("name")
+                                        }),
+                                    CommandDataType::ViewModel => p
+                                        .descriptor()
+                                        .uint_property("viewModelReferenceId")
+                                        .and_then(|index| usize::try_from(index).ok())
+                                        .and_then(|index| file.view_model(index))
+                                        .and_then(|view_model| view_model.name()),
+                                    _ => None,
+                                };
+                                ViewModelPropertyData {
+                                    data_type,
+                                    name: p.name().unwrap_or_default().to_owned(),
+                                    metadata: metadata.unwrap_or_default().to_owned(),
+                                }
                             })
                             .collect(),
                     }),
@@ -1002,10 +1108,28 @@ impl CommandServer {
                 },
                 Command::ListViewModelEnums { handle, request_id } => match self.files.get(&handle)
                 {
-                    Some(_) => self.emit(CommandEvent::ViewModelEnumsListed {
+                    Some(file) => self.emit(CommandEvent::ViewModelEnumsListed {
                         handle,
                         request_id,
-                        enums: Vec::new(),
+                        enums: file
+                            .graph
+                            .enums
+                            .iter()
+                            .map(|data_enum| crate::command_queue::ViewModelEnum {
+                                name: data_enum.name.clone().unwrap_or_default(),
+                                enumerants: data_enum
+                                    .values
+                                    .iter()
+                                    .map(|value| {
+                                        value
+                                            .value
+                                            .clone()
+                                            .or_else(|| value.key.clone())
+                                            .unwrap_or_default()
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
                     }),
                     None => self.file_error(
                         handle,
@@ -1137,6 +1261,7 @@ impl CommandServer {
                 self.view_models.insert(
                     handle,
                     ViewModelEntry {
+                        file,
                         instance,
                         view_model_name,
                         instance_name: instance_name.unwrap_or_default(),
@@ -1166,6 +1291,31 @@ impl CommandServer {
                 .map(|entry| entry.instance.handle().clone()),
             _ => None,
         };
+        let image = match &value {
+            CommandValue::Image(Some(value)) => self
+                .images
+                .get(value)
+                .and_then(|image| image.shared())
+                .map(Some),
+            CommandValue::Image(None) => Some(None),
+            _ => None,
+        };
+        let artboard = match &value {
+            CommandValue::Artboard(Some(value)) => self
+                .artboards
+                .get(value)
+                .map(|entry| Some(entry.bindable.clone())),
+            CommandValue::Artboard(None) => Some(None),
+            _ => None,
+        };
+        let enum_index = match &value {
+            CommandValue::Enum(value) => self.view_models.get(&handle).and_then(|entry| {
+                self.files.get(&entry.file).and_then(|file| {
+                    enum_value_index_for_path(file, &entry.view_model_name, &path, value)
+                })
+            }),
+            _ => None,
+        };
         let Some(entry) = self.view_models.get_mut(&handle) else {
             self.view_model_error(
                 handle,
@@ -1175,26 +1325,102 @@ impl CommandServer {
             return;
         };
         let changed = match value {
-            CommandValue::Boolean(value) => entry.instance.set_bool(&path, value),
-            CommandValue::Number(value) => entry.instance.set_number(&path, value),
-            CommandValue::String(value) => entry.instance.set_string(&path, &value),
-            CommandValue::Color(value) => entry.instance.set_color(&path, value),
-            CommandValue::Enum(value) => value
-                .parse::<u64>()
-                .ok()
-                .is_some_and(|value| entry.instance.set_enum(&path, value)),
-            CommandValue::Trigger => entry.instance.fire_trigger(&path),
-            CommandValue::Artboard(value) => entry
-                .instance
-                .set_artboard(&path, value.map_or(0, ArtboardHandle::get)),
+            CommandValue::Boolean(value) => {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .boolean_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry.instance.set_bool(&path, value);
+                exists
+            }
+            CommandValue::Number(value) => {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .number_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry.instance.set_number(&path, value);
+                exists
+            }
+            CommandValue::String(value) => {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .string_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry.instance.set_string(&path, &value);
+                exists
+            }
+            CommandValue::Color(value) => {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .color_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry.instance.set_color(&path, value);
+                exists
+            }
+            CommandValue::Enum(_) => enum_index
+                .and_then(|value| u64::try_from(value).ok())
+                .is_some_and(|value| {
+                    let exists = entry
+                        .instance
+                        .raw()
+                        .enum_value_by_property_name_path(&path)
+                        .is_some();
+                    let _ = entry.instance.set_enum(&path, value);
+                    exists
+                }),
+            CommandValue::Trigger => {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .trigger_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry.instance.fire_trigger(&path);
+                exists
+            }
+            CommandValue::Artboard(_) => artboard.is_some_and(|artboard| {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .artboard_source_handle_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry
+                    .instance
+                    .raw_mut()
+                    .set_runtime_artboard_by_property_name(&path, artboard);
+                exists
+            }),
             CommandValue::ViewModel(_) => nested.is_some_and(|nested| {
-                entry
+                let exists = entry
+                    .instance
+                    .raw()
+                    .view_model_source_handle_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry
                     .instance
                     .handle()
-                    .link_view_model_by_property_name_path(&path, &nested)
-                    .unwrap_or(false)
+                    .link_view_model_by_property_name_path(&path, &nested);
+                exists
             }),
-            CommandValue::Image(_) | CommandValue::None => false,
+            CommandValue::Image(_) => image.is_some_and(|image| {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .asset_source_handle_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry
+                    .instance
+                    .raw_mut()
+                    .set_runtime_image_by_property_name_path(
+                        &path,
+                        image.map(nuxie_runtime::RuntimeViewModelImage::from_render_image),
+                    );
+                exists
+            }),
+            CommandValue::None => false,
         };
         if !changed {
             self.view_model_error(
@@ -1228,9 +1454,22 @@ impl CommandServer {
                 CommandValue::Color(raw.color_value_by_property_name_path(path)?)
             }
             CommandDataType::Enum => {
-                CommandValue::Enum(raw.enum_value_by_property_name_path(path)?.to_string())
+                let index = usize::try_from(raw.enum_value_by_property_name_path(path)?).ok()?;
+                let entry = self.view_models.get(&handle)?;
+                let file = self.files.get(&entry.file)?;
+                let value = enum_value_name_for_path(file, &entry.view_model_name, path, index)?;
+                CommandValue::Enum(value)
             }
             CommandDataType::Trigger => CommandValue::Trigger,
+            CommandDataType::ViewModel => {
+                let linked = model
+                    .handle()
+                    .linked_view_model_by_property_name_path(path)?;
+                let handle = self.view_models.iter().find_map(|(handle, entry)| {
+                    entry.instance.handle().ptr_eq(&linked).then_some(*handle)
+                })?;
+                CommandValue::ViewModel(handle)
+            }
             _ => return None,
         })
     }
@@ -1341,7 +1580,7 @@ fn data_type_for_property(type_name: &str) -> CommandDataType {
         CommandDataType::Color
     } else if type_name.ends_with("List") {
         CommandDataType::List
-    } else if type_name.ends_with("Enum") {
+    } else if type_name.starts_with("ViewModelPropertyEnum") {
         CommandDataType::Enum
     } else if type_name.ends_with("Trigger") {
         CommandDataType::Trigger
@@ -1349,8 +1588,64 @@ fn data_type_for_property(type_name: &str) -> CommandDataType {
         CommandDataType::ViewModel
     } else if type_name.ends_with("AssetImage") {
         CommandDataType::AssetImage
+    } else if type_name.ends_with("Artboard") {
+        CommandDataType::Artboard
     } else {
         CommandDataType::None
+    }
+}
+
+fn enum_value_index_for_path(
+    file: &File,
+    view_model_name: &str,
+    path: &str,
+    key: &str,
+) -> Option<usize> {
+    let mut model = file.view_model_named(view_model_name)?;
+    let mut segments = path.split('/').peekable();
+    loop {
+        let property = model.property_named(segments.next()?)?;
+        if segments.peek().is_none() {
+            return file
+                .runtime
+                .view_model_property_enum_value_index_for_key_bytes_object(
+                    property.descriptor(),
+                    key.as_bytes(),
+                );
+        }
+        let index = usize::try_from(
+            property
+                .descriptor()
+                .uint_property("viewModelReferenceId")?,
+        )
+        .ok()?;
+        model = file.view_model(index)?;
+    }
+}
+
+fn enum_value_name_for_path(
+    file: &File,
+    view_model_name: &str,
+    path: &str,
+    index: usize,
+) -> Option<String> {
+    let mut model = file.view_model_named(view_model_name)?;
+    let mut segments = path.split('/').peekable();
+    loop {
+        let property = model.property_named(segments.next()?)?;
+        if segments.peek().is_none() {
+            let value = file
+                .runtime
+                .view_model_property_enum_value_for_index_object(property.descriptor(), index)?;
+            return Some(String::from_utf8_lossy(value).into_owned());
+        }
+        let index = usize::try_from(
+            property
+                .descriptor()
+                .uint_property("viewModelReferenceId")?,
+        )
+        .ok()?;
+        model = file.view_model(index)?;
     }
 }
 

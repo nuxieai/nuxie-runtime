@@ -1,7 +1,7 @@
 //! Thread-safe client recorder for the pinned C++ `CommandQueue` protocol.
 //!
 //! Direct port of `include/rive/command_queue.hpp` and
-//! `src/command_queue.cpp` at `d788e8ec`. Runtime objects never cross this
+//! `src/command_queue.cpp` at `4ac7b327`. Runtime objects never cross this
 //! seam: the queue owns typed, ordered command payloads and the server owns
 //! every file/artboard/state-machine/view-model occurrence.
 

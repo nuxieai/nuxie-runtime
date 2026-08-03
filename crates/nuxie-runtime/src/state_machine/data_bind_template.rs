@@ -6,7 +6,6 @@
 //! families own target storage only; they must never filter, reorder, or
 //! deduplicate the DataBind occurrence list.
 
-use crate::RuntimeViewModelPointer;
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverter, RuntimeDataBindGraphConverterBuildCache,
     RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue,
@@ -22,6 +21,7 @@ use crate::state_machine::bindables::runtime_unresolved_view_model_value_at_path
 use crate::state_machine::transition_duration_binding::{
     RuntimeTransitionDurationBinding, state_machine_transition_target_for_data_bind,
 };
+use crate::{RuntimeBlobAssetValue, RuntimeViewModelPointer};
 use nuxie_binary::{RuntimeDataValue, RuntimeFile, RuntimeObject};
 
 #[derive(Debug, Clone)]
@@ -252,6 +252,13 @@ fn runtime_state_machine_data_bind_source(
         Some(RuntimeDataValue::AssetImage(value) | RuntimeDataValue::AssetFont(value)) => {
             (RuntimeDataBindGraphValue::Asset(value), true, Vec::new())
         }
+        Some(RuntimeDataValue::AssetBlob(value)) => (
+            RuntimeDataBindGraphValue::AssetBlob(RuntimeBlobAssetValue::from_file_asset_index(
+                value,
+            )),
+            true,
+            Vec::new(),
+        ),
         Some(RuntimeDataValue::Artboard(value)) => {
             (RuntimeDataBindGraphValue::Artboard(value), true, Vec::new())
         }

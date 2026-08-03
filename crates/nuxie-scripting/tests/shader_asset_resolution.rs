@@ -49,6 +49,13 @@ return function(context)
 end
 "#;
 
+const LIBRARY_LOOKUP_ONLY_SCRIPT: &[u8] = br#"
+return function(context)
+    context:shader("lib:Effects/scene")
+    return {}
+end
+"#;
+
 const EVERY_CALLBACK_SHADER_SCRIPT: &[u8] = br#"
 return function(context)
     local shaderCount = 0
@@ -680,6 +687,70 @@ fn successful_lookup_without_a_pipeline_creates_one_module() {
 
     assert_eq!(factory.borrow().module_sources.len(), 1);
     assert!(factory.borrow().image_calls.is_empty());
+}
+
+#[test]
+fn shader_lookup_prefers_the_callers_prelinked_library_scope() {
+    let mut vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset_with_short_name(
+        "Effects#7@1/scene",
+        "scene",
+        &complete_shader_payload("library-v1"),
+    )
+    .unwrap();
+    vm.register_gpu_canvas_shader_asset_with_short_name(
+        "Effects#7@2/scene",
+        "scene",
+        &complete_shader_payload("library-v2"),
+    )
+    .unwrap();
+    let mut host = NoopScriptHost;
+    let mut factory = persistent_observing_factory();
+
+    vm.instantiate_script_with_factory(
+        "Effects#7@2/lookup",
+        &script_payload(LOOKUP_ONLY_SCRIPT),
+        &mut host,
+        &mut factory,
+    )
+    .expect("bare lookup resolves inside the caller's own prelinked scope");
+
+    assert_eq!(
+        factory.borrow().module_sources,
+        vec!["complete shader source library-v2"]
+    );
+}
+
+#[test]
+fn explicit_library_shader_lookup_does_not_fall_back_to_the_host_asset() {
+    let mut vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset_with_short_name(
+        "scene",
+        "scene",
+        &complete_shader_payload("host"),
+    )
+    .unwrap();
+    vm.register_gpu_canvas_shader_asset_with_short_name(
+        "Effects#7@1/scene",
+        "scene",
+        &complete_shader_payload("library"),
+    )
+    .unwrap();
+    let mut host = NoopScriptHost;
+    let mut factory = persistent_observing_factory();
+
+    vm.instantiate_script_with_factory(
+        "host-lookup",
+        &script_payload(LIBRARY_LOOKUP_ONLY_SCRIPT),
+        &mut host,
+        &mut factory,
+    )
+    .expect("lib: reference resolves the matching mangled library asset");
+
+    assert_eq!(
+        factory.borrow().module_sources,
+        vec!["complete shader source library"]
+    );
 }
 
 #[test]

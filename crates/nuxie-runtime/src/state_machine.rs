@@ -156,6 +156,7 @@ pub(crate) use state_machine_fire_trigger::RuntimeStateMachineFireTriggerPath;
 use state_machine_input::runtime_state_machine_input;
 pub use state_machine_input::{RuntimeStateMachineInput, StateMachineInputKind};
 pub use state_machine_input_instance::StateMachineInputInstance;
+pub use state_machine_instance::RuntimeHitResult;
 #[cfg(feature = "tools")]
 pub use state_machine_instance::RuntimeNestedEventChainStep;
 #[cfg(any(test, feature = "tools"))]
@@ -174,7 +175,6 @@ use state_transition::{
 use transition_bool_condition::RuntimeTransitionBoolCondition;
 use transition_comparator::runtime_transition_comparators;
 use transition_condition::RuntimeTransitionCondition;
-use transition_number_condition::TransitionConditionOp;
 use transition_duration_binding::runtime_transition_duration_bindings;
 pub(crate) use transition_duration_binding::{
     RuntimeTransitionDurationBinding, StateMachineTransitionDurationInstance,
@@ -182,6 +182,7 @@ pub(crate) use transition_duration_binding::{
 use transition_focus_condition::RuntimeTransitionFocusCondition;
 use transition_input_condition::RuntimeTransitionInputCondition;
 use transition_number_condition::RuntimeTransitionNumberCondition;
+use transition_number_condition::TransitionConditionOp;
 use transition_property_comparator::{
     RuntimeTransitionPropertyArtboardComparator, RuntimeTransitionPropertyComponentComparator,
 };

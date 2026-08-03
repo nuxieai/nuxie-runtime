@@ -41,6 +41,8 @@ pub(crate) struct RuntimeOwnedViewModelViewModel {
     imported_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>>,
     font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
     imported_font_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelFontAsset>>,
+    blob_assets: Vec<RuntimeOwnedViewModelBlobAsset>,
+    imported_blob_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelBlobAsset>>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     imported_artboards: BTreeMap<u32, Vec<RuntimeOwnedViewModelArtboard>>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -347,6 +349,9 @@ impl RuntimeOwnedViewModelViewModel {
             RuntimeOwnedViewModelValueKind::FontAsset => {
                 active_slot!(font_assets, imported_font_assets).cell.clone()
             }
+            RuntimeOwnedViewModelValueKind::BlobAsset => {
+                active_slot!(blob_assets, imported_blob_assets).cell.clone()
+            }
             RuntimeOwnedViewModelValueKind::Artboard => {
                 active_slot!(artboards, imported_artboards).cell.clone()
             }
@@ -633,6 +638,7 @@ impl RuntimeOwnedViewModelViewModel {
         let lists = active_values!(&self.lists, self.imported_lists);
         let assets = active_values!(&self.assets, self.imported_assets);
         let font_assets = active_values!(&self.font_assets, self.imported_font_assets);
+        let blob_assets = active_values!(&self.blob_assets, self.imported_blob_assets);
         let artboards = active_values!(&self.artboards, self.imported_artboards);
         let triggers = active_values!(&self.triggers, self.imported_triggers);
         let view_models = match self.endpoint.value() {
@@ -670,6 +676,7 @@ impl RuntimeOwnedViewModelViewModel {
             lists,
             assets,
             font_assets,
+            blob_assets,
             artboards,
             triggers,
             view_models,
@@ -824,6 +831,43 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
+    fn blob_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeBlobAssetValue> {
+        self.blob_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(RuntimeOwnedViewModelBlobAsset::value)
+    }
+
+    fn active_blob_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeBlobAssetValue> {
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow()
+                .ok()?
+                .blob_asset_value_by_property_index(property_index);
+        }
+        match self.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.blob_asset_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_blob_assets
+                .get(&object_id)
+                .and_then(|assets| {
+                    assets
+                        .iter()
+                        .find(|asset| asset.property_index == property_index)
+                })
+                .map(RuntimeOwnedViewModelBlobAsset::value),
+            _ => None,
+        }
+    }
+
     fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
         self.artboards
             .iter()
@@ -939,6 +983,12 @@ impl RuntimeOwnedViewModelViewModel {
         font_asset_value_by_property_path,
         active_font_asset_value_by_property_index,
         RuntimeFontAssetValue
+    );
+    define_active_view_model_path_reader!(
+        active_blob_asset_value_by_property_path,
+        blob_asset_value_by_property_path,
+        active_blob_asset_value_by_property_index,
+        RuntimeBlobAssetValue
     );
     define_active_view_model_path_reader!(
         active_artboard_value_by_property_path,
@@ -1600,6 +1650,30 @@ impl RuntimeOwnedViewModelViewModel {
         current.apply_data_bind_value(value)
     }
 
+    fn apply_blob_asset_data_bind_value_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: &RuntimeBlobAssetValue,
+    ) -> bool {
+        let values = match self.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.blob_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_blob_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.apply_data_bind_value(value)
+    }
+
     fn sync_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let values = match self.endpoint.value() {
             RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.artboards,
@@ -2030,6 +2104,16 @@ fn runtime_owned_view_model_property_children(
                 imported_font_assets: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_imported_font_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
+                blob_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_blob_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
+                imported_blob_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_blob_assets(file, view_model_index)
                     })
                     .unwrap_or_default(),
                 artboards: referenced_view_model_index

@@ -1,5 +1,16 @@
 // Direct owner for pinned C++ `src/nested_artboard_leaf.cpp`.
 
+pub(crate) fn nested_artboard_leaf_uint_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    (type_name == Some("NestedArtboardLeaf")
+        && property_key_for_name("NestedArtboardLeaf", "fit") == Some(property_key))
+    .then(|| instance.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true))
+}
+
 fn is_nested_artboard_occurrence_type(type_name: &str) -> bool {
     matches!(
         type_name,

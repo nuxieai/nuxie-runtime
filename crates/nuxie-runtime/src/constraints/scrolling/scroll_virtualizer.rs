@@ -348,6 +348,8 @@ pub(in crate::constraints) fn virtualized_provider_content_size(
     is_horizontal: bool,
     gap: f32,
     infinite: bool,
+    leading_padding: f32,
+    trailing_padding: f32,
 ) -> f32 {
     // This intentionally follows `ScrollConstraint::contentWidth/Height`, not
     // merely the flattened node count. Each provider contributes its aggregate
@@ -377,7 +379,13 @@ pub(in crate::constraints) fn virtualized_provider_content_size(
     } else {
         provider_item_sizes.len().saturating_sub(1)
     };
-    providers_extent + gap * inter_provider_gap_count as f32
+    let padding = if infinite {
+        // An infinite carousel's repeat length excludes layout padding.
+        0.0
+    } else {
+        leading_padding + trailing_padding
+    };
+    providers_extent + gap * inter_provider_gap_count as f32 + padding
 }
 
 #[cfg(test)]
@@ -396,7 +404,14 @@ pub(in crate::constraints) fn test_virtualizer_placements_for_metrics(
         viewport_size,
         scroll_offset,
         infinite,
-        virtualized_provider_content_size(&[item_sizes.to_vec()], is_horizontal, gap, infinite),
+        virtualized_provider_content_size(
+            &[item_sizes.to_vec()],
+            is_horizontal,
+            gap,
+            infinite,
+            0.0,
+            0.0,
+        ),
     )
     .pop()
     .unwrap_or_default()

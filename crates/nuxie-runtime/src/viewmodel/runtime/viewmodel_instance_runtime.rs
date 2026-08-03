@@ -175,6 +175,11 @@ impl ViewModelInstanceRuntime {
                     ViewModelInstanceAssetFontRuntime::new(name, cell),
                 )
             }
+            RuntimeViewModelCellValue::AssetBlob(_) => {
+                ViewModelInstanceRuntimeProperty::AssetBlob(
+                    ViewModelInstanceAssetBlobRuntime::new(name, cell),
+                )
+            }
             RuntimeViewModelCellValue::Artboard(_) => {
                 let runtime_state = self
                     .inner
@@ -269,6 +274,13 @@ impl ViewModelInstanceRuntime {
     pub fn property_font(&self, path: &str) -> Option<ViewModelInstanceAssetFontRuntime> {
         match self.property(path)? {
             ViewModelInstanceRuntimeProperty::AssetFont(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn property_blob(&self, path: &str) -> Option<ViewModelInstanceAssetBlobRuntime> {
+        match self.property(path)? {
+            ViewModelInstanceRuntimeProperty::AssetBlob(value) => Some(value),
             _ => None,
         }
     }

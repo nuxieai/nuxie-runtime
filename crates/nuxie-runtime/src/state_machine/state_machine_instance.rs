@@ -23,7 +23,9 @@ use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_ac
 use crate::properties::property_key_for_name;
 use crate::script_asset::RuntimeScriptImplementedMethods;
 use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
+use crate::view_model::{
+    RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext,
+};
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
     RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCell, RuntimeViewModelCellValue,
@@ -299,17 +301,21 @@ impl AudioEventSeam for PlaybackAudioEventSeam {
     }
 }
 
-/// Exact C++ pointer result strength. Keep this tri-state internally even
-/// though the established Rust facade projects it to `bool`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum HitResult {
+/// Exact C++ pointer result strength (`HitResult`, `hit_result.hpp`).
+///
+/// The established Rust `bool` facade projects this via [`Self::is_hit`]; the
+/// tri-state itself is public so hosts and the golden side-channel can record
+/// what C++ `Scene::pointerDown/Move/Up/Exit` return (`scene.hpp:55-60`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RuntimeHitResult {
+    #[default]
     None,
     Hit,
     HitOpaque,
 }
 
-impl HitResult {
-    fn is_hit(self) -> bool {
+impl RuntimeHitResult {
+    pub fn is_hit(self) -> bool {
         self != Self::None
     }
 
@@ -317,6 +323,10 @@ impl HitResult {
         self.max(other)
     }
 }
+
+// Internal shorthand: the FL-ported listener pipeline reads like the pinned
+// C++ when the local name matches C++'s `HitResult`.
+use RuntimeHitResult as HitResult;
 
 trait HitComponent: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn HitComponent>;
@@ -1529,6 +1539,12 @@ pub struct StateMachineInstance {
     /// Retained C++ `m_reportingEvents` analog used while notifications may
     /// enqueue the next batch into `reported_events`.
     reporting_events: Vec<StateMachineReportedEvent>,
+    /// Events first reported inside the current `applyEvents` loop. They have
+    /// already reached listeners, but remain visible to the host until the
+    /// next loop begins.
+    events_applied_during_loop: Vec<StateMachineReportedEvent>,
+    /// Rust draining-host cursor for `events_applied_during_loop`.
+    host_events_applied_during_loop_index: usize,
     /// Owner-safe output of the immediate nested bubbling phase. The artboard
     /// owner drains this FIFO and delivers it to the next ancestor; retaining
     /// values here avoids a raw child-to-parent pointer.
@@ -1953,13 +1969,30 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                     data_bind_index,
                     *value,
                 ),
-            RuntimeListenerViewModelChangeValue::Asset(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_asset_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    value.data_bind_asset_index(),
-                ),
+            RuntimeListenerViewModelChangeValue::Asset(value) => {
+                if let Some(blob_value) = value.blob_data_bind_value() {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            &blob_value,
+                        )
+                } else if let Some(font_value) = value.font_data_bind_value() {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_font_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            &font_value,
+                        )
+                } else {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            value.data_bind_asset_index(),
+                        )
+                }
+            }
             RuntimeListenerViewModelChangeValue::Artboard(value) => self
                 .data_bind_graph
                 .set_owned_view_model_context_artboard_source_for_data_bind(
@@ -2160,6 +2193,9 @@ impl Clone for StateMachineInstance {
             reported_event_listener_index: self.reported_event_listener_index,
             host_reported_event_index: self.host_reported_event_index,
             reporting_events: self.reporting_events.clone(),
+            events_applied_during_loop: self.events_applied_during_loop.clone(),
+            host_events_applied_during_loop_index: self
+                .host_events_applied_during_loop_index,
             bubbled_event_reports: self.bubbled_event_reports.clone(),
             bubbled_event_report_index: self.bubbled_event_report_index,
             deferred_owner_audio_occurrences: self.deferred_owner_audio_occurrences.clone(),
@@ -2426,6 +2462,23 @@ impl RuntimeViewModelListenerInstance {
 
     fn actions(&self) -> &[RuntimeScheduledListenerAction] {
         &self.listener().listener_actions
+    }
+
+    fn report_pending_trigger_bindings(
+        &self,
+        queue: &RuntimeCellNotificationQueue,
+        listener_index: usize,
+    ) {
+        for binding in &self.property_bindings {
+            if binding.cell_binding.as_ref().is_some_and(|binding| {
+                matches!(binding.cell.value(), RuntimeViewModelCellValue::Trigger(value) if value != 0)
+            }) {
+                // A trigger can fire before this listener binding exists
+                // (for example during script initialization). Preserve that
+                // pending fire for the first applyEvents boundary.
+                queue.report_data_bind(listener_index);
+            }
+        }
     }
 
     /// A cloned machine re-registers a FRESH reporting sink on the same
@@ -2992,6 +3045,8 @@ impl StateMachineInstance {
             reported_event_listener_index: 0,
             host_reported_event_index: 0,
             reporting_events: Vec::new(),
+            events_applied_during_loop: Vec::new(),
+            host_events_applied_during_loop_index: 0,
             bubbled_event_reports: Vec::new(),
             bubbled_event_report_index: 0,
             deferred_owner_audio_occurrences: Vec::new(),
@@ -7145,6 +7200,119 @@ impl StateMachineInstance {
         )
     }
 
+    /// C++ `Scene::pointerDown` returns the tri-state `HitResult`
+    /// (`scene.hpp:55`; computed by `updateListeners`,
+    /// `state_machine_instance.cpp:1494-1545`). This is that return for hosts
+    /// that need more than the established `bool` projection; script errors
+    /// are retained exactly like the `bool` facade and report `None`. The
+    /// argument chain matches `pointer_down`/
+    /// `pointer_down_with_owned_view_model_context` (timestamp 0, no event
+    /// context).
+    pub fn pointer_down_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Down,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_move`/
+    /// `pointer_move_with_owned_view_model_context` (`scene.hpp:56-58`). The
+    /// owned-context chain validates the timestamp exactly like the `bool`
+    /// facade; the plain chain forwards it unvalidated, also like the `bool`
+    /// facade.
+    pub fn pointer_move_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let validated = if owned_context.is_some() {
+            validate_pointer_timestamp(seconds)
+        } else {
+            Ok(())
+        };
+        let result = validated.and_then(|()| {
+            self.update_listeners(
+                artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                seconds,
+                owned_context,
+                None,
+                &mut NoopScriptHost,
+            )
+        });
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_up`/
+    /// `pointer_up_with_owned_view_model_context` (`scene.hpp:59`).
+    pub fn pointer_up_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Up,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_exit`/
+    /// `pointer_exit_with_owned_view_model_context` (`scene.hpp:60`).
+    pub fn pointer_exit_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Exit,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn update_pointer_listeners_with_script_host(
         &mut self,
@@ -7508,6 +7676,9 @@ impl StateMachineInstance {
     ) -> bool {
         const MAX_EVENT_ITERATIONS: usize = 100;
 
+        self.events_applied_during_loop.clear();
+        self.host_events_applied_during_loop_index = 0;
+
         // A typed Rust resource failure is the terminal safety fence around
         // the otherwise C++-matching protected-call behavior. Once retained,
         // no deferred focus/semantic callback, event report, or ViewModel
@@ -7528,7 +7699,7 @@ impl StateMachineInstance {
         }
 
         let mut event_iterations = 0;
-        for _ in 0..MAX_EVENT_ITERATIONS {
+        for iteration in 0..MAX_EVENT_ITERATIONS {
             if next_event_index >= self.reported_events.len()
                 && self.reported_listener_view_models.is_empty()
             {
@@ -7539,6 +7710,7 @@ impl StateMachineInstance {
                 artboard,
                 next_event_index,
                 owned_context.as_deref_mut(),
+                iteration > 0,
             );
             next_event_index = next;
             changed |= batch_changed;
@@ -7561,11 +7733,13 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         next_event_index: usize,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        preserve_host_events: bool,
     ) -> (usize, bool) {
         let batch = self.begin_local_event_listener_batch(
             artboard,
             next_event_index,
             owned_context.as_deref_mut(),
+            preserve_host_events,
             false,
         );
         self.finish_local_event_listener_batch(artboard, batch, owned_context.as_deref_mut())
@@ -7576,6 +7750,7 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         mut next_event_index: usize,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        preserve_host_events: bool,
         capture_bubbled_events: bool,
     ) -> RuntimeLocalEventListenerBatch {
         // Mirrors C++ `StateMachineInstance::applyEvents()` updating data
@@ -7599,6 +7774,9 @@ impl StateMachineInstance {
         events.extend_from_slice(&self.reported_events[next_event_index..]);
         for event in &mut events {
             event.refresh_from_live_artboard(artboard);
+        }
+        if preserve_host_events {
+            self.events_applied_during_loop.extend_from_slice(&events);
         }
         next_event_index = self.reported_events.len();
         // The reporting snapshot is no longer pending before either callback
@@ -8067,20 +8245,27 @@ impl StateMachineInstance {
                     .listener_asset_value_for_data_bind(data_bind_index, value)
                     .clone();
                 let font_value = value.font_data_bind_value();
-                match (owned_context, font_value.as_ref()) {
-                    (Some(context), Some(font_value)) => self
+                let blob_value = value.blob_data_bind_value();
+                match (owned_context, font_value.as_ref(), blob_value.as_ref()) {
+                    (Some(context), Some(font_value), _) => self
                         .set_owned_view_model_context_font_asset_source_for_data_bind(
                             context,
                             data_bind_index,
                             font_value,
                         ),
-                    (Some(context), None) => self
+                    (Some(context), _, Some(blob_value)) => self
+                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            blob_value,
+                        ),
+                    (Some(context), None, None) => self
                         .set_owned_view_model_context_asset_source_for_data_bind(
                             context,
                             data_bind_index,
                             value.asset_index(),
                         ),
-                    (None, _) => self.set_default_view_model_asset_source_for_data_bind(
+                    (None, _, _) => self.set_default_view_model_asset_source_for_data_bind(
                         data_bind_index,
                         value.data_bind_asset_index(),
                     ),
@@ -8225,6 +8410,20 @@ impl StateMachineInstance {
         // carries the generated propertyValue index.
         self.sync_bindable_font_assets_from_owned_context(context);
         true
+    }
+
+    fn set_owned_view_model_context_blob_asset_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: &RuntimeBlobAssetValue,
+    ) -> bool {
+        self.data_bind_graph
+            .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
     }
 
     pub fn set_bindable_number_for_data_bind(
@@ -10480,8 +10679,8 @@ impl StateMachineInstance {
     }
 
     /// C++ `setGlobalViewModelInstance`: validate the named file slot, then
-    /// replace exactly that slot. The occupying instance may belong to a
-    /// different ViewModel; slot identity comes from `name`.
+    /// replace or empty exactly that slot. The occupying instance may belong
+    /// to a different ViewModel; slot identity comes from `name`.
     #[doc(hidden)]
     pub(crate) fn set_global_view_model_instance(
         &mut self,
@@ -10489,15 +10688,26 @@ impl StateMachineInstance {
         name: &str,
         view_model_instance: Option<RuntimeOwnedViewModelHandle>,
     ) -> bool {
-        let (Some(file), Some(view_model_instance)) = (file, view_model_instance) else {
+        let Some(file) = file else {
             return false;
         };
         let mut validated_slot = RuntimeOwnedViewModelContext::default();
-        if !validated_slot.set_global_named_handle(file, name, view_model_instance.clone()) {
+        let valid = match view_model_instance.as_ref() {
+            Some(instance) => validated_slot.set_global_named_handle(file, name, instance.clone()),
+            None => validated_slot.unset_global_named(file, name),
+        };
+        if !valid {
             return false;
         }
+        if view_model_instance.is_none() && self.primary_data_context.is_none() {
+            return true;
+        }
         let context = self.ensure_primary_data_context();
-        if !context.set_global_named(file, name, view_model_instance) {
+        let changed = view_model_instance.map_or_else(
+            || context.unset_global_named(file, name),
+            |instance| context.set_global_named(file, name, instance),
+        );
+        if !changed {
             return false;
         }
         true
@@ -10528,17 +10738,15 @@ impl StateMachineInstance {
         true
     }
 
-    /// C++ `bind`: no retained context is a no-op; otherwise complete missing
-    /// defaults, bind the artboard, then bind this machine.
+    /// C++ `bind`: create an empty retained context when needed, complete
+    /// missing defaults, bind the artboard, then bind this machine.
     #[doc(hidden)]
     pub(crate) fn bind(
         &mut self,
         file: Option<&RuntimeFile>,
         artboard: &mut ArtboardInstance,
     ) -> Result<bool, RuntimeDataContextBindError> {
-        if self.primary_data_context.is_none() {
-            return Ok(false);
-        }
+        self.ensure_primary_data_context();
         self.record_bind_phase("complete-view-models");
         self.complete_view_model_instances(file, artboard);
         let data_context = self
@@ -11026,6 +11234,7 @@ impl StateMachineInstance {
                 context.view_model_index,
                 context.instance_index,
             );
+            machine.bind_view_model_listener_cells_for_imported_context(context);
             machine.active_file_view_model_binding =
                 Some((context.view_model_index, context.instance_index));
             machine.needs_advance = true;
@@ -11281,6 +11490,10 @@ impl StateMachineInstance {
                     listener_index,
                 );
             }
+            listener.report_pending_trigger_bindings(
+                &self.reported_listener_view_models,
+                listener_index,
+            );
         }
     }
 
@@ -11361,6 +11574,68 @@ impl StateMachineInstance {
                     listener_index,
                 );
             }
+            listener.report_pending_trigger_bindings(
+                &self.reported_listener_view_models,
+                listener_index,
+            );
+        }
+    }
+
+    fn bind_view_model_listener_cells_for_imported_context(
+        &mut self,
+        context: &RuntimeImportedViewModelInstanceContext,
+    ) {
+        for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
+            let definition = &listener.listener_definitions[listener.listener_index];
+            for binding in &mut listener.property_bindings {
+                let path = match binding.source {
+                    RuntimeViewModelListenerSource::Single => definition.view_model_path.as_ref(),
+                    RuntimeViewModelListenerSource::Input(input_index) => definition
+                        .view_model_input_types
+                        .get(input_index)
+                        .and_then(|input| input.path()),
+                };
+                let cell = path.and_then(|path| {
+                    let (view_model_index, property_path) = match path {
+                        RuntimeListenerViewModelPath::Absolute {
+                            view_model_index,
+                            property_path,
+                        } => (*view_model_index, property_path.as_slice()),
+                        RuntimeListenerViewModelPath::Relative {
+                            absolute_fallback: Some((view_model_index, property_path)),
+                            ..
+                        } => (*view_model_index, property_path.as_slice()),
+                        RuntimeListenerViewModelPath::Relative {
+                            absolute_fallback: None,
+                            ..
+                        } => return None,
+                    };
+                    if view_model_index != context.view_model_index {
+                        return None;
+                    }
+                    let mut source_path = Vec::with_capacity(property_path.len() + 1);
+                    source_path.push(u32::try_from(view_model_index).ok()?);
+                    source_path.extend(
+                        property_path
+                            .iter()
+                            .copied()
+                            .map(u32::try_from)
+                            .collect::<Result<Vec<_>, _>>()
+                            .ok()?,
+                    );
+                    context.trigger_cell_for_source_path(&source_path)
+                });
+                relink_view_model_listener_cell(
+                    binding,
+                    cell,
+                    &self.reported_listener_view_models,
+                    listener_index,
+                );
+            }
+            listener.report_pending_trigger_bindings(
+                &self.reported_listener_view_models,
+                listener_index,
+            );
         }
     }
 
@@ -11403,6 +11678,18 @@ impl StateMachineInstance {
                     return Some(context.apply_font_asset_data_bind_value_by_property_path(
                         property_path,
                         &font_value,
+                    ));
+                }
+                if context
+                    .blob_asset_value_by_property_path(property_path)
+                    .is_some()
+                {
+                    let blob_value = asset_value.blob_data_bind_value().unwrap_or_else(|| {
+                        RuntimeBlobAssetValue::from_file_asset_index(asset_value.asset_index())
+                    });
+                    return Some(context.apply_blob_asset_data_bind_value_by_property_path(
+                        property_path,
+                        &blob_value,
                     ));
                 }
                 context.asset_value_by_property_path(property_path)?;
@@ -12169,9 +12456,11 @@ impl StateMachineInstance {
                 return bubbled;
             }
         }
-        self.reported_events
-            .len()
-            .saturating_sub(self.next_unapplied_reported_event_index())
+        self.events_applied_during_loop.len()
+            + self
+                .reported_events
+                .len()
+                .saturating_sub(self.next_unapplied_reported_event_index())
     }
 
     /// Whether retained ViewModel-listener mutations are queued for the next
@@ -12205,6 +12494,12 @@ impl StateMachineInstance {
                 return Some(event);
             }
         }
+        if index < self.events_applied_during_loop.len() {
+            let event = self.events_applied_during_loop.get_mut(index)?;
+            event.refresh_from_live_artboard(artboard);
+            return Some(event);
+        }
+        let index = index.checked_sub(self.events_applied_during_loop.len())?;
         let index = self
             .next_unapplied_reported_event_index()
             .checked_add(index)?;
@@ -12219,6 +12514,10 @@ impl StateMachineInstance {
     /// Event identity is resolved against its current Artboard occurrence.
     #[doc(hidden)]
     pub fn reported_event_snapshot(&self, index: usize) -> Option<&StateMachineReportedEvent> {
+        if index < self.events_applied_during_loop.len() {
+            return self.events_applied_during_loop.get(index);
+        }
+        let index = index.checked_sub(self.events_applied_during_loop.len())?;
         self.reported_events.get(
             self.next_unapplied_reported_event_index()
                 .checked_add(index)?,
@@ -12243,6 +12542,16 @@ impl StateMachineInstance {
         &mut self,
         artboard: &ArtboardInstance,
     ) -> Vec<StateMachineReportedEvent> {
+        let applied_start = self
+            .host_events_applied_during_loop_index
+            .min(self.events_applied_during_loop.len());
+        let applied_events = &mut self.events_applied_during_loop[applied_start..];
+        for event in applied_events.iter_mut() {
+            event.refresh_from_live_artboard(artboard);
+        }
+        let mut output = applied_events.to_vec();
+        self.host_events_applied_during_loop_index = self.events_applied_during_loop.len();
+
         let start = self
             .host_reported_event_index
             .min(self.reported_events.len());
@@ -12250,9 +12559,9 @@ impl StateMachineInstance {
         for event in events.iter_mut() {
             event.refresh_from_live_artboard(artboard);
         }
-        let events = events.to_vec();
+        output.extend_from_slice(events);
         self.host_reported_event_index = self.reported_events.len();
-        events
+        output
     }
 
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
@@ -12695,6 +13004,8 @@ impl StateMachineInstance {
         for layer in &mut self.layers {
             layer.begin_new_frame();
         }
+        self.events_applied_during_loop.clear();
+        self.host_events_applied_during_loop_index = 0;
         self.prepare_advance_event_phase(artboard);
         let next_event_index = self.next_unapplied_reported_event_index();
         self.process_deferred_listener_group_events(artboard, None);
@@ -12723,8 +13034,13 @@ impl StateMachineInstance {
             return None;
         }
         phase.event_iterations += 1;
-        let batch =
-            self.begin_local_event_listener_batch(artboard, phase.next_event_index, None, true);
+        let batch = self.begin_local_event_listener_batch(
+            artboard,
+            phase.next_event_index,
+            None,
+            phase.event_iterations > 1,
+            true,
+        );
         phase.next_event_index = batch.next_event_index;
         Some(batch)
     }
@@ -17976,8 +18292,8 @@ mod scripted_listener_action_tests {
         });
 
         assert!(
-            !artboard.advance_state_machine_instance(&mut machine, 0.25),
-            "C++ clears each applyEvents batch before notifying it, so a fully consumed fire-event chain leaves no pending-work return term"
+            artboard.advance_state_machine_instance(&mut machine, 0.25),
+            "events first reported inside applyEvents remain host visible after listener delivery"
         );
         assert_eq!(
             machine
@@ -17988,8 +18304,24 @@ mod scripted_listener_action_tests {
             [3],
             "E1 -> E2 -> E3 must reach the final listener in this one applyEvents call"
         );
-        assert_eq!(machine.reported_event_count(), 0);
+        assert_eq!(
+            machine
+                .events_applied_during_loop
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [2, 3]
+        );
+        assert_eq!(machine.reported_event_count(), 2);
         assert_eq!(machine.next_unapplied_reported_event_index(), 0);
+        assert_eq!(
+            machine
+                .take_reported_events(&artboard)
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [2, 3]
+        );
         assert!(machine.take_reported_events(&artboard).is_empty());
 
         let mut finite_records = vec![
@@ -18036,8 +18368,8 @@ mod scripted_listener_action_tests {
         );
         assert_eq!(
             finite_machine.reported_event_count(),
-            0,
-            "a finite chain ending in batch 100 drains completely"
+            99,
+            "events first reported in batches 2 through 100 remain host visible"
         );
         assert_eq!(
             finite_machine
@@ -18093,6 +18425,11 @@ mod scripted_listener_action_tests {
                 .collect::<Vec<_>>(),
             [2],
             "the ViewModel callback fires an event into the next same-call batch after the event phase"
+        );
+        assert_eq!(
+            finite_machine.reported_event_count(),
+            1,
+            "the event fired by the ViewModel listener remains host visible exactly once"
         );
 
         let calls = Rc::new(RefCell::new(Vec::new()));
@@ -18196,8 +18533,8 @@ mod scripted_listener_action_tests {
         );
         assert_eq!(
             machine.reported_event_count(),
-            1,
-            "the event generated by batch 100 is pending as batch 101"
+            100,
+            "batches 2 through 100 remain host visible and the event generated by batch 100 is pending as batch 101"
         );
         assert_eq!(
             machine
@@ -18410,6 +18747,76 @@ mod scripted_listener_action_tests {
             "callback inspection sees only work appended for a later batch"
         );
         assert_eq!(reporting[0].event_local_index(), 7);
+    }
+
+    #[test]
+    fn view_model_listener_binding_reports_a_trigger_fired_before_relink() {
+        let definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
+            target_local_id: 0,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::ViewModel],
+            event_local_indices: Vec::new(),
+            view_model_path: Some(RuntimeListenerViewModelPath::Absolute {
+                view_model_index: 0,
+                property_path: vec![0],
+            }),
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        }]);
+        let mut listener = RuntimeViewModelListenerInstance::new(definitions, 0)
+            .expect("ViewModel listener instance");
+        let queue = RuntimeCellNotificationQueue::default();
+        let trigger = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(1));
+        relink_view_model_listener_cell(
+            &mut listener.property_bindings[0],
+            Some(trigger),
+            &queue,
+            0,
+        );
+        assert!(queue.is_empty(), "relink alone does not synthesize dirt");
+
+        listener.report_pending_trigger_bindings(&queue, 0);
+        assert_eq!(queue.len(), 1);
+    }
+
+    #[test]
+    fn upstream_view_model_listener_fixture_keeps_loop_fired_event_host_visible_once() {
+        let file = read_runtime_file(include_bytes!(
+            "../../../../fixtures/sync/vm_listener_fire_event.riv"
+        ))
+        .expect("upstream ViewModel-listener fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs.artboards.first().expect("default artboard graph");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("default artboard instantiates");
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture state machine");
+        let mut context = artboard
+            .imported_view_model_instance_context(0, 0)
+            .expect("fixture ViewModel instance");
+        assert!(machine.bind_imported_view_model_context(&file, &context));
+        artboard.advance_state_machine_instance(&mut machine, 0.0);
+        assert_eq!(machine.reported_event_count(), 0);
+
+        assert!(context.set_trigger_by_property_name(&file, "go", 1));
+        artboard.advance_state_machine_instance(&mut machine, 0.016);
+        assert_eq!(machine.reported_event_count(), 1);
+        assert_eq!(
+            machine
+                .reported_event(&artboard, 0)
+                .and_then(|event| event.name()),
+            Some("ding")
+        );
+
+        artboard.advance_state_machine_instance(&mut machine, 0.016);
+        assert_eq!(machine.reported_event_count(), 0);
     }
 
     #[test]
@@ -20161,7 +20568,12 @@ mod scripted_listener_action_tests {
                 .is_some_and(|bound| bound.ptr_eq(&main))
         );
 
-        assert!(!machine.set_global_view_model_instance(Some(&file), "Global A", None,));
+        assert!(machine.set_global_view_model_instance(Some(&file), "Global A", None,));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_none()
+        );
         assert!(!machine.set_global_view_model_instance(
             None,
             "Global A",
@@ -20198,6 +20610,18 @@ mod scripted_listener_action_tests {
                 .global_view_model_instance(Some(&file), "Global A")
                 .is_some_and(|bound| bound.ptr_eq(&replacement_a))
         );
+        assert!(machine.set_global_view_model_instance(Some(&file), "Global A", None));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_none(),
+            "a null instance empties the named slot"
+        );
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            "Global A",
+            Some(replacement_a.clone()),
+        ));
         assert!(
             machine
                 .global_view_model_instance(Some(&file), "Standard")
@@ -20217,6 +20641,47 @@ mod scripted_listener_action_tests {
             "the pure getter reads an occupied numeric slot even when the named ViewModel is non-global"
         );
         assert_eq!(machine.data_bind_graph.context_kind, initial_context_kind);
+
+        let mut empty_machine = scripted_listener_machine();
+        empty_machine.view_model_listeners.clear();
+        assert!(empty_machine.data_context().is_none());
+        assert!(empty_machine.set_global_view_model_instance(Some(&file), "Global A", None));
+        assert!(
+            empty_machine.data_context().is_none(),
+            "clearing an empty valid slot must not allocate a DataContext"
+        );
+
+        let (fresh_file, mut fresh_artboard) = fl_c5_bind_file_and_artboard();
+        let mut fresh_machine = scripted_listener_machine();
+        fresh_machine.view_model_listeners.clear();
+        fresh_machine
+            .bind(Some(&fresh_file), &mut fresh_artboard)
+            .expect("bind without a prior context completes defaults");
+        assert!(fresh_machine.data_context().is_some());
+        assert!(
+            fresh_machine
+                .global_view_model_instance(Some(&fresh_file), "Global A")
+                .is_some()
+        );
+
+        let mut staged_artboard = fresh_artboard;
+        let artboard_global = fl_c5_bind_handle(&fresh_file, 2);
+        assert!(staged_artboard.set_global_view_model_instance(
+            &fresh_file,
+            "Global A",
+            Some(artboard_global.clone()),
+        ));
+        assert!(
+            staged_artboard
+                .global_view_model_instance(&fresh_file, "Global A")
+                .is_some_and(|bound| bound.ptr_eq(&artboard_global))
+        );
+        assert!(staged_artboard.set_global_view_model_instance(&fresh_file, "Global A", None,));
+        assert!(
+            staged_artboard
+                .global_view_model_instance(&fresh_file, "Global A")
+                .is_none()
+        );
 
         machine.bind_phase_trace.clear();
         machine

@@ -17,6 +17,7 @@ pub enum FieldKind {
     Callback,
     Color,
     Double,
+    Int,
     String,
     Uint,
 }
@@ -24,6 +25,7 @@ pub enum FieldKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreRegistryFieldKind {
     Uint,
+    Int,
     StringOrBytes,
     Double,
     Color,
@@ -33,13 +35,17 @@ pub enum CoreRegistryFieldKind {
 /// The in-memory width requested by a uint-like schema field.
 ///
 /// All three widths use the same varuint wire family. `Uint8` is only a
-/// storage optimization in generated runtimes, while `Uint64` opts known
-/// fields into the full varuint64 value range.
+/// storage optimization in generated runtimes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UintStorage {
     Uint8,
     Uint32,
-    Uint64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntStorage {
+    Int16,
+    Int32,
 }
 
 impl UintStorage {
@@ -47,7 +53,6 @@ impl UintStorage {
         match self {
             Self::Uint8 => u8::MAX as u64,
             Self::Uint32 => u32::MAX as u64,
-            Self::Uint64 => u64::MAX,
         }
     }
 }
@@ -56,6 +61,7 @@ impl CoreRegistryFieldKind {
     pub fn from_field_kind(kind: FieldKind) -> Option<Self> {
         match kind {
             FieldKind::Uint => Some(Self::Uint),
+            FieldKind::Int => Some(Self::Int),
             FieldKind::String | FieldKind::Bytes => Some(Self::StringOrBytes),
             FieldKind::Double => Some(Self::Double),
             FieldKind::Color => Some(Self::Color),
@@ -90,6 +96,7 @@ pub enum StoredFieldInitializer {
     Bool(bool),
     Color(u32),
     Double(f32),
+    Int(i32),
     String(&'static str),
     Uint(u64),
 }
@@ -120,7 +127,7 @@ pub struct Property {
     pub animates: bool,
     pub computed: bool,
     pub journal: Option<bool>,
-    pub parentable: Option<u64>,
+    pub parentable: Option<i64>,
     pub records: Option<bool>,
     pub exports_to_runtime_conditionally: bool,
     pub pure_virtual: bool,
@@ -136,8 +143,18 @@ impl Property {
 
         Some(match self.declared_type {
             "uint8" => UintStorage::Uint8,
-            "uint64" => UintStorage::Uint64,
             _ => UintStorage::Uint32,
+        })
+    }
+
+    pub fn int_storage(self) -> Option<IntStorage> {
+        if self.runtime_type != FieldKind::Int {
+            return None;
+        }
+
+        Some(match self.declared_type {
+            "int16" => IntStorage::Int16,
+            _ => IntStorage::Int32,
         })
     }
 
@@ -220,6 +237,9 @@ impl Property {
             )),
             FieldKind::Double => Some(StoredFieldInitializer::Double(
                 value.map(parse_double_initializer).unwrap_or(0.0),
+            )),
+            FieldKind::Int => Some(StoredFieldInitializer::Int(
+                value.map(parse_int_initializer).unwrap_or(0),
             )),
             FieldKind::String => Some(StoredFieldInitializer::String(
                 value.map(parse_string_initializer).unwrap_or(""),
@@ -347,6 +367,12 @@ fn parse_double_initializer(value: &'static str) -> f32 {
         .unwrap_or_else(|err| panic!("unsupported double initializer {value:?}: {err}"))
 }
 
+fn parse_int_initializer(value: &'static str) -> i32 {
+    value
+        .parse::<i32>()
+        .unwrap_or_else(|err| panic!("unsupported int initializer {value:?}: {err}"))
+}
+
 fn parse_string_initializer(value: &'static str) -> &'static str {
     if value == "''" || value == "\"\"" {
         return "";
@@ -371,7 +397,6 @@ fn parse_uint_initializer(value: &'static str, storage: UintStorage) -> u64 {
                 UintStorage::Uint32 => u64::from(u32::try_from(parsed).unwrap_or_else(|_| {
                     panic!("uint initializer {value:?} does not fit {storage:?}")
                 })),
-                UintStorage::Uint64 => parsed,
             }
         }
     }

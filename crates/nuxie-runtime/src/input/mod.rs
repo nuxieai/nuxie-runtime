@@ -1,5 +1,5 @@
 //! Coordinator for the direct retained-focus owners at pinned Rive
-//! `d788e8ec`: `focus_manager.cpp`, `focus_node.cpp`, and `focusable.cpp`.
+//! `4ac7b327`: `focus_manager.cpp`, `focus_node.cpp`, and `focusable.cpp`.
 
 mod focus_manager;
 mod focus_node;

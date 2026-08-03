@@ -23,8 +23,8 @@ one of five kinds, and the kinds are not interchangeable:
 
 Register discipline (same culture as `corpus.toml`): every row keeps a
 status, and a row only closes with a **named, mechanical exit gate** — never
-"looked at it." New rows enter via Phase S triage (upstream drift) or via a
-discovered divergence.
+"looked at it." New rows enter via Upstream Sync cycle triage (upstream drift)
+or via a discovered divergence.
 
 ---
 
@@ -138,7 +138,8 @@ one-attempt behavior.
 ## D — Deliberate-divergence register (declare, don't fix)
 
 These are recorded choices. A public "verifiable replacement" claim should
-ship this list as documentation; each row needs to stay true under Phase S.
+ship this list as documentation; each row needs to stay true under the Upstream
+Sync cycle.
 
 1. `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 2. Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
@@ -195,13 +196,14 @@ appear.
 2. **Provenance manifest.** Add a machine-checkable `port-manifest.toml`
    mapping every upstream `src/**.cpp` (447 files) to
    `ported|partial|absent|not-applicable` + the Rust module. CI check: a new
-   upstream file (Phase S inventory) with no manifest row fails triage. This
-   converts the one-off provenance sweep into a standing invariant.
+   upstream file (Upstream Sync cycle inventory) with no manifest row fails
+   triage. This converts the one-off provenance sweep into a standing invariant.
 3. **Oracle-first rule.** No F-row implementation starts without a fixture
    or channel that would *fail* today (the existing golden culture, applied
    to gaps).
-4. **Phase S feeds the register.** Triage rows marked WATCH/deferred land
-   here automatically with staleness counters (already the convention).
+4. **The Upstream Sync cycle feeds the register.** Triage rows marked
+   WATCH/deferred land here automatically with staleness counters (already the
+   convention).
 5. **Parity scorecard.** Publish the claim in tiers, each backed by a gate:
    *frame parity* (golden ratchet + V1 e2e), *interaction parity* (V4/V5
    channels), *SDK parity* (A-tier table), *platform parity* (V7/V8 matrix),

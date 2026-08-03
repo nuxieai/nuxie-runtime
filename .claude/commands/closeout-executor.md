@@ -131,7 +131,7 @@ main — their changes are audited by the same gates, not trusted).
 - Any new D-row (accepting a divergence) or reclassification of one.
 - Any budget/tolerance/gate-threshold change (incl. the 9 MiB size gate).
 - The RD-1 post-spike perf number (report it; user reviews).
-- Phase S port approvals beyond the already-approved S3-1/S3-3.
+- Upstream Sync cycle port approvals beyond the already-approved S3-1/S3-3.
 - Anything where two honest tactics both failed.
 
 ## Working style (calibrated for you)

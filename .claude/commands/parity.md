@@ -44,7 +44,8 @@ floor regressions outrank all other work.
 3. **Check gates.** If the item is a USER-GATE (listed in the map), prepare
    the decision brief, record it under "Pending USER-GATEs" in the status
    file, surface it to the user, and take the next unblocked item. Never
-   infer approval; Phase S approvals follow `docs/upstream-sync-map.md`.
+   infer approval; Upstream Sync cycle approvals follow
+   `docs/upstream-sync-map.md`.
 4. **Execute or dispatch.** Spine work you do yourself in this worktree
    (single writer: runners, golden-compare, corpus manifests, side-channel
    format, status file, CI). Orthogonal work goes to workers using the
@@ -83,8 +84,8 @@ stop, one-line confession in the status log, back to the queue.
 
 ## Asking the user
 
-Work autonomously. Interrupt only for: the map's named USER-GATEs (Phase S
-approvals, size budget, audio engine, threading-model decision, WebGL2,
+Work autonomously. Interrupt only for: the map's named USER-GATEs (Upstream
+Sync cycle approvals, size budget, audio engine, threading-model decision, WebGL2,
 production-corpus access, any new D-row), destructive/irreversible actions,
 genuine scope changes to the map itself, or a blocker that survives two
 different tactics. Everything else is a recorded decision in the status

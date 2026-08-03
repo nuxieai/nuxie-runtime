@@ -424,7 +424,7 @@ resolved; fuzzers in CI with zero known reachable panics from accepted files;
 the repo is publishable as Nuxie runtime as-is. Then Phase R is a clean
 start.
 
-## Phase S: Upstream Sync (separate map)
+## Upstream Sync cycle (separate map)
 
 After M8, Nuxie runtime tracks `rive-app/rive-runtime` through the recurring
 workflow in `docs/upstream-sync-map.md` (`/sync-upstream` command): triage

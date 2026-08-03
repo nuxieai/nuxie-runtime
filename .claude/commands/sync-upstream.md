@@ -2,52 +2,53 @@
 description: Run one upstream-sync cycle against rive-app/rive-runtime — triage new commits with ratings, stop for user approval, then port approved changes and advance the reference pin with a green ratchet.
 ---
 
-# Sync Upstream (Phase S cycle)
+# Upstream Sync cycle
 
 You are running one cycle of the upstream-sync workflow defined in
 `docs/upstream-sync-map.md` — read it first; it is authoritative. This
 command may be invoked manually or by a scheduled job.
 
-GATE: if M8 is not checked off in `docs/v2-status.md`, stop and say so —
-Phase S activates only after the migration closes.
+GATE: if M8 is not checked off in `docs/v2-status.md`, stop and say so — the
+Upstream Sync cycle activates only after the migration closes.
 
 ## Steps
 
-1. **Inventory.** Fetch the reference repo, list
-   `LAST_SYNCED_SHA..upstream/main` (or the tag the user named), then run
-   `RIVE_RUNTIME_DIR=<clean-candidate-worktree> make port-manifest-check`
-   before bucketing every commit per the map's path signatures. A missing or
-   stale non-generated `src/**/*.cpp` row (`src/generated/**` is owned by the
-   schema/codegen gate) is a required triage finding; do not regenerate or
-   reclassify the manifest before the approval gate.
-2. **Probe.** On a throwaway branch, bump the reference pin and run the
-   default + scripted golden compares. Attribute every diff to an upstream
-   commit. Unattributed diffs mean your triage is incomplete — re-triage
-   before writing the report. Use a clean temporary C++ worktree, verify its
-   HEAD is the candidate SHA, and pass it explicitly as
-   `RIVE_RUNTIME_DIR=<candidate-worktree>`. Do not mutate the pinned checkout
-   or land the probe branch.
-3. **Triage report.** Write `docs/sync/triage-<date>-<shortsha>.md` per the
-   map's table format and rating rubric, including version-skew checks
-   (.riv header/format FIRST, then Luau bytecode/vendor compatibility, then
-   shaping/layout/bidi/image dependencies). Renderer is an active sync bucket,
-   not a Phase-R deferral. Resurface prior deferred rows with staleness counters.
+1. **Prepare the pass.** The orchestrator fetches upstream, creates or refreshes
+   a clean candidate worktree under `~/dev/worktrees/`, verifies its HEAD, and
+   clones any candidate dependency forks needed by the runners. Keep the pinned
+   checkout untouched.
+2. **Scout and probe.** Sandboxed scouts inventory the span, run
+   `port-manifest-check`, bucket every commit, and run every locally available
+   ordinary/scripted probe. The orchestrator completes network-blocked fetches,
+   dependency setup, and probes. Every final-cut diff must be attributed to an
+   upstream row or the pass stops for re-triage.
+3. **Extend one triage report.** Write or update
+   `docs/sync/triage-<date>-<shortsha>.md` per the map. A later candidate is a
+   top-up pass on that same report: preserve existing `S<cycle>-<n>` IDs, append
+   rows, and refresh final-cut evidence in place. Include version-skew checks
+   (.riv header/format first, then Luau, then shaping/layout/bidi/image and build
+   interface changes) plus deferred rows and staleness counters.
 4. **STOP FOR APPROVAL.** Present the report summary and top
    recommendations to the user. Port NOTHING and move NO pins without
    explicit row-level approval, a standing category approval, or a
    cycle-scoped authorization recorded in the map's State section. Cite the
    applicable authorization before acting.
-5. **Port approved rows** in upstream order — V2 method, one commit per
-   upstream change, message format `[sync] Port rive-runtime <sha>: <title>`,
-   goldens as oracle. New upstream fixtures enter the corpus as `not-yet`.
-6. **Advance the pin** across every active-pin artifact listed in the map's
-   State section, plus the map/status state, only when the full ratchet is
-   green at the new pin. Never blanket-rewrite historical evidence or fixture
-   provenance. Deliberate skips that move goldens require a Decision entry
-   naming the upstream sha diverged from.
-7. **Close the cycle**: append the summary to the triage file; append
-   deferred rows with staleness counters; update LAST_SYNCED_SHA and the clean
-   manual-cycle count.
+5. **Port approved rows by owner set.** Safety fixes go first; foundational
+   chains are serial; then disjoint subsystem-owner sets may run in parallel,
+   each in its own worktree. Preserve upstream order within each set and keep
+   one commit per upstream change. Stage unverifiable new fixtures in the
+   cycle-local `.s<cycle>-deferred-corpus.toml`, not the pinned corpus.
+6. **Verify landings.** A sandbox-blocked worker supplies a commit map for
+   orchestrator reconstruction. Treat every reported SHA as a claim: verify
+   that the commit object exists and inspect its diff before scheduling it.
+   Route overlap sets through named semantic merge resolvers and rerun their
+   focused oracles.
+7. **Close atomically.** In one landing, advance every active pin and
+   `LAST_SYNCED_SHA`, update candidate-dependent runner build configs, rebuild
+   the required oracles, enroll deferred corpus entries, run the full ratchet,
+   remove staging, and append the cycle summary/deferred counters. Current pins
+   move together; historical evidence, audit pins, source citations, and prior
+   fixture provenance stay frozen.
 
 ## Rules
 
@@ -56,6 +57,6 @@ Phase S activates only after the migration closes.
   cycles.
 - All V2/goal ground rules apply to port slices (port code not behaviors,
   ratchet per commit, fences, single writer, threads policy for scouts).
-- Keep the pinned reference checkout untouched. Fetch its repository metadata
-  if needed, but run candidate probes from a clean temporary C++ worktree and
-  remove that worktree when the cycle ends.
+- Keep the pinned reference checkout untouched. Run candidate probes from the
+  verified candidate worktree and remove cycle-only worktrees when the cycle
+  ends.

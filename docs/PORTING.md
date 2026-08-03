@@ -26,7 +26,7 @@ what is idiomatic Rust.
   still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
   but never substitutes for closure evidence for the family.
 - During Phase R's mechanical renderer translation, `nuxie-schema` and
-  `nuxie-binary` are frozen — do not touch them. A Phase S upstream-sync cycle
+  `nuxie-binary` are frozen — do not touch them. An Upstream Sync cycle
   may regenerate schema artifacts and update the binary decoder when the
   upstream object model changes; those edits require the sync-map inventory,
   generated-artifact checks, and both normal and forced-scripted goldens.

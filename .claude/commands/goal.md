@@ -20,8 +20,8 @@ adversarial review of the wgpu plumbing, and the R3 entry criteria — GPU
 semantic-trap audit and renderer fuzz-replay harness) is checked off in
 `docs/renderer-status.md`, with `make renderer-golden` at its target and the
 full V2 floor green. When that is true, say so and stop — do not invent new
-scope. Phase S (upstream sync, `docs/upstream-sync-map.md`) requires
-explicit user activation; never start it on your own initiative.
+scope. The Upstream Sync cycle (`docs/upstream-sync-map.md`) requires explicit
+user activation; never start it on your own initiative.
 
 ## The one metric
 

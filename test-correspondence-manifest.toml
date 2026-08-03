@@ -917,50 +917,53 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 upstream = "tests/unit_tests/runtime/semantic_artboard_test.cpp"
 test_case_count = 10
 status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+note = "P3-c phase-1 ports the underlying tree/diff code. All 10 fixture cases remain pending on the shared Artboard/StateMachineInstance lifecycle splice and #LT-1 serialization of the complete SemanticsDiff after each advance/action, including nested/component-list parentage, bounds, removals, and stable ids."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"
 test_case_count = 9
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs"]
+covered_test_cases = ["mutating a property does not recreate the SemanticNode"]
+note = "Lazy retained node identity, authored propagation, and post-creation setter behavior have focused Rust evidence. Registered-owner destruction/removal and bounds retry through the shared Artboard lifecycle remain pending; fixture-visible removal also needs #LT-1 complete SemanticsDiff serialization."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_dispatch_test.cpp"
 test_case_count = 16
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs", "crates/nuxie-runtime/src/semantic_manager.rs", "crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs"]
+covered_test_cases = ["fireSemanticTap invokes onSemanticTap on all registered listeners", "fireSemanticIncrease only invokes onSemanticIncrease", "fireSemanticDecrease only invokes onSemanticDecrease", "manager.nodeById returns null for an unknown id", "boundary node has no owning SemanticData", "removing an SD from the manager drops its id from the index", "setFocusedState toggles the Focused bit and preserves siblings", "setFocusedState is a no-op before semanticNode() has been created", "requestFocus with an unknown id returns false", "requestFocus on a boundary node returns false"]
+note = "Duplicate-preserving listener dispatch, manager lookup/removal, boundary rejection, focus-bit preservation, and owner-mediated focus lookup have focused evidence. Production node-id action/focus routing remains pending on the shared StateMachineInstance resolver splice; #LT-1 must serialize requested action id/type and resulting focus/action outcome."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_focus_list_test.cpp"
 test_case_count = 2
 status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+note = "Visual-order and manager-local id algorithms are ported. Both .riv assertions remain pending on Artboard semantic-tree construction and #LT-1 serialization of ordered added nodes with ids and root/parent/sibling fields."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_label_inference_test.cpp"
 test_case_count = 36
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+covered_test_cases = ["button derives label from child text", "button with explicit label ignores children", "multiple text children concatenated in tree order", "button derives label from image when no text", "text takes priority over image in label derivation", "derived label trims and collapses whitespace", "absorbed children are not in the flat output", "standalone group does not absorb child labels", "textField does not derive label from children", "all interactive roles derive labels from children", "content change on absorbed child re-derives parent label", "children sorted by bounds position", "X position breaks ties for same Y", "bounds change that swaps visual order triggers reorder in diff", "bounds change without order change stays on incremental path", "empty bounds nodes preserve insertion order", "added array is emitted in tree pre-order on first frame", "nodes constructed without an id receive one on addChild", "two independent SemanticManagers do not share an id space", "explicit ids are preserved and bump the manager's watermark", "explicit id that collides with a different resident node is reassigned", "mixed content+bounds dirt on one node emits into both arrays", "no-op bounds dirty mark produces no updatedGeometry entry (guarded)", "dirty mark on an unknown id is silently ignored", "content change on an absorbed child escalates to re-derivation", "removed array is emitted in previous tree pre-order"]
+note = "Twenty focused manager cases cover derivation/absorption, pinned roles, UTF-8-preserving whitespace normalization, boundary flattening, visual reorder, manager-local ids, incremental diffs, no-op dirt, removal order, and owner-mediated focus. Remaining case-for-case ports stay pending; fixture-facing assertions require #LT-1 complete SemanticsDiff arrays and ordering."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_provider_test.cpp"
 test_case_count = 6
 status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_provider.rs", "crates/nuxie-runtime/src/semantic_inference_registry.rs"]
+note = "Direct SemanticData precedence, Text inference, drawable/descendant/fallback bounds code is ported. Fixture-backed nested root-transform cases remain pending on shared lifecycle wiring and #LT-1 serialization of exact node bounds."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_state_machine_test.cpp"
 test_case_count = 15
 status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs", "crates/nuxie-runtime/src/semantic_data.rs", "crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs"]
+note = "Manager/data/listener owners are ported and existing semantic callback ordering tests pass. All 15 .riv state-machine cases remain pending on production manager installation/tree lifecycle and #LT-1 serialization of full SemanticsDiff, fired action id/type, queued listener outcome, selected/focused state, and no-op results."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/serialized_rendering_test.cpp"

@@ -371,7 +371,8 @@ mine community files; each entry either goes exact (close the row — it was
 generically handled) or diffs (new F-row with a failing entry attached —
 the cheapest possible bug discovery).
 **Gate per fixture:** corpus entry exact or a filed row; C1 empty except
-the semantic family (which waits for #LT-1).
+the semantic family. LT1SC supplies the side-channel oracle; its remaining
+data-binding and Simpsons residuals are recorded in `LT1SC-report.md`.
 
 ---
 
@@ -504,10 +505,11 @@ perf ratio measured and reported to the user.
 
 ## Phase 4 — Long tail (#LT) — P3, each gated on product need (USER-GATE to open)
 
-- **#LT-1 Semantics/accessibility (F6)** — port `semantic_manager` + data +
-  provider (~1.9k) + semantic listener groups; verification needs a
-  semantic side-channel extension. Open when embedded-flow accessibility
-  becomes a product requirement (likely App Store-driven — flag early).
+- **#LT-1 Semantics/accessibility (F6)** — ACTIVE/PARTIAL. The retained
+  manager, data, provider, inference, listener behavior, and full semantic
+  side-channel extension are present. Nested focus is exact; data-binding
+  state/removal and Simpsons provider/full-diff residuals keep the four source
+  rows pending (see `LT1SC-report.md`).
 - **#LT-2 Remaining Lua bindings (F7)** — corpus-gated as designed;
   spot-check that a scripted file touching an unported binding produces a
   NAMED import/runtime diagnostic (that check itself is an S slice worth

@@ -42,7 +42,7 @@ FEATURE_ROWS = {
     "src/semantic/semantic_manager.cpp": (
         "partial",
         "crates/nuxie-runtime/src/semantic_manager.rs",
-        "F6FID: the retained manager/tree is installed and direct upstream cases pass; #LT-1 fixture differential evidence remains pending.",
+        "F6FID/LT1SC: full semantic records are emitted; nested focus is exact, but data-binding and Simpsons full diffs remain red (LT1SC-report.md).",
     ),
     "src/lua/lua_promise.cpp": (
         "ported",
@@ -266,17 +266,17 @@ for _path, _module in {
 FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
     "partial",
     "crates/nuxie-runtime/src/semantic_data.rs",
-    "F6FID: retained semantics are integrated and focused upstream cases pass; #LT-1 fixture differential evidence remains pending.",
+    "F6FID/LT1SC: fired actions and full diffs are emitted, but data_binding_lists still differs on Selected state and removals (LT1SC-report.md).",
 )
 FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
     "absent",
     "",
-    "F6: no green retained-tree upstream fixture evidence exists yet (F6FID); promotion requires the #LT-1 full-diff Text-inference oracle case.",
+    "F6/LT1SC: Simpsons labels, ids, and hierarchy match, but the required full Text-inference diff remains red on bounds/state updates (LT1SC-report.md).",
 )
 FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
     "partial",
     "crates/nuxie-runtime/src/semantic_provider.rs",
-    "F6FID: mounted root/scroll bounds pass the four focus cases; #LT-1 provider differentials remain pending.",
+    "F6FID/LT1SC: nested focus provider bounds are exact; Simpsons provider/root bounds remain red, so the family stays partial (LT1SC-report.md).",
 )
 
 for _path in {

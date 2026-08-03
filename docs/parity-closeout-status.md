@@ -8,17 +8,17 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 
 | tier | state | number | notes |
 |---|---|---|---|
-| 1 Frame parity | PARTIAL | exact-segments 670/670; scripted 670/670; e2e-exact: gate not built | both runtime floors restored green 2026-07-21 (image-policy split); corpus 324 entries as of [OR-2] 2026-08-02; #OR-6 missing |
-| 2 Interaction parity | PARTIAL | side-channel-segments 669/669 (V11 carve-out filed); fuzz-clean-nights: 0 | #OR-1/2 closed 2026-08-02; #OR-3/7 open |
+| 1 Frame parity | PARTIAL | exact-segments 673/673; scripted 670/670; e2e-exact: gate not built | LT1SC ordinary corpus gate green at 325 exact entries / 356 total on 2026-08-03; scripted floor last verified at OR-2; #OR-6 missing |
+| 2 Interaction parity | PARTIAL | side-channel-segments 672/672 (V11 carve-out filed); fuzz-clean-nights: 0 | LT1SC adds one exact three-sample semantic provider/focus row; #OR-3/7 open |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
 Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
-C++ probe 747/747, both runtime golden gates 324/324 exact / 670/670 segments
-with the side channel ON (side-channel-segments 669; the corpus had grown to
-321/657 on main before [OR-2] added the three settle_* entries); ordinary and
-scripted both have zero failures. The workspace push gate is green
+C++ probe 747/747, ordinary runtime golden gate 325/325 exact / 673/673
+segments with the side channel ON (side-channel-segments 672); the last
+scripted gate remains 324/324 exact / 670/670 segments from OR-2. Both
+recorded gates have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
 the complete probe run rather than silently skipping it. Every remaining RB-1
 cut and every RB-1 push must run `make scripted-golden-compare` in addition to
@@ -1013,6 +1013,9 @@ upstream-sync-map registry).
 - [ ] #HD-4 TODO(golden) pair
 - [ ] #HD-5 publish the parity claim doc
 - [ ] #LT-* long tail (each opens by USER-GATE)
+  - [ ] #LT-1 semantics/accessibility — LT1SC side-channel delivered and
+    nested focus exact; four source rows remain pending on the recorded
+    data_binding_lists and Simpsons residuals (`LT1SC-report.md`).
 
 ## Canonical program federation
 

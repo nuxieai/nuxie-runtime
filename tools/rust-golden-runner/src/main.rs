@@ -9,7 +9,8 @@ use nuxie_graph::{
 use nuxie_render_api::{
     Factory as RenderFactory, NullFactory, PersistentFactory, RecordingFactory,
     Renderer as RenderRenderer, SideChannelEvent, SideChannelEventProperty,
-    SideChannelEventPropertyValue,
+    SideChannelEventPropertyValue, SideChannelSemanticsBoundsUpdate,
+    SideChannelSemanticsChildrenUpdate, SideChannelSemanticsDiff, SideChannelSemanticsNode,
 };
 use nuxie_runtime::{
     ArtboardInstance, RuntimeEventPropertyValue, RuntimeHitResult, RuntimeLayoutBoundsReport,
@@ -192,6 +193,15 @@ trait RunnerBackend {
     fn add_advance(&mut self, seconds: f32, settled: bool);
     fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize);
     fn add_side_channel_event(&mut self, event: &SideChannelEvent);
+    fn add_semantics_diff(&mut self, diff: &SideChannelSemanticsDiff);
+    fn add_semantic_action(
+        &mut self,
+        seconds: f32,
+        node_id: u32,
+        action: &str,
+        dispatched: bool,
+    );
+    fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool);
     fn add_hit_result(&mut self, result: &str);
     fn add_frame(&mut self);
     fn stream(&self) -> String;
@@ -234,6 +244,24 @@ impl RunnerBackend for RecordingFactory {
         RecordingFactory::add_side_channel_event(self, event);
     }
 
+    fn add_semantics_diff(&mut self, diff: &SideChannelSemanticsDiff) {
+        RecordingFactory::add_semantics_diff(self, diff);
+    }
+
+    fn add_semantic_action(
+        &mut self,
+        seconds: f32,
+        node_id: u32,
+        action: &str,
+        dispatched: bool,
+    ) {
+        RecordingFactory::add_semantic_action(self, seconds, node_id, action, dispatched);
+    }
+
+    fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool) {
+        RecordingFactory::add_semantic_focus(self, seconds, node_id, focused);
+    }
+
     fn add_hit_result(&mut self, result: &str) {
         RecordingFactory::add_hit_result(self, result);
     }
@@ -269,6 +297,19 @@ impl RunnerBackend for NullFactory {
     fn add_advance_with_states(&mut self, _seconds: f32, _settled: bool, _states_changed: usize) {}
 
     fn add_side_channel_event(&mut self, _event: &SideChannelEvent) {}
+
+    fn add_semantics_diff(&mut self, _diff: &SideChannelSemanticsDiff) {}
+
+    fn add_semantic_action(
+        &mut self,
+        _seconds: f32,
+        _node_id: u32,
+        _action: &str,
+        _dispatched: bool,
+    ) {
+    }
+
+    fn add_semantic_focus(&mut self, _seconds: f32, _node_id: u32, _focused: bool) {}
 
     fn add_hit_result(&mut self, _result: &str) {}
 
@@ -319,6 +360,26 @@ where
 
     fn add_side_channel_event(&mut self, event: &SideChannelEvent) {
         self.borrow_mut().add_side_channel_event(event);
+    }
+
+    fn add_semantics_diff(&mut self, diff: &SideChannelSemanticsDiff) {
+        self.borrow_mut().add_semantics_diff(diff);
+    }
+
+    fn add_semantic_action(
+        &mut self,
+        seconds: f32,
+        node_id: u32,
+        action: &str,
+        dispatched: bool,
+    ) {
+        self.borrow_mut()
+            .add_semantic_action(seconds, node_id, action, dispatched);
+    }
+
+    fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool) {
+        self.borrow_mut()
+            .add_semantic_focus(seconds, node_id, focused);
     }
 
     fn add_hit_result(&mut self, result: &str) {
@@ -393,8 +454,13 @@ fn run() -> Result<String> {
         .context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
-    if !options.layout_bounds {
-        ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
+    if !options.layout_bounds && !options.semantic_side_channel_only {
+        ensure_static_draw_supported(
+            &runtime,
+            &graph,
+            artboard,
+            input_events.iter().any(InputEvent::is_pointer),
+        )?;
     }
     // Construction evidence compares the live occurrence arena, not the
     // immutable RuntimeFile/GraphFile definition import above.
@@ -531,8 +597,11 @@ fn run() -> Result<String> {
         artboard,
         options.state_machine.as_deref(),
     )?;
-    let mut owned_view_model_context =
-        selected_artboard_owned_view_model_context(&runtime, artboard_index);
+    let mut owned_view_model_context = if options.semantic_default_view_model {
+        selected_artboard_default_owned_view_model_context(&runtime, artboard_index)
+    } else {
+        selected_artboard_owned_view_model_context(&runtime, artboard_index)
+    };
     if let Some(context) = owned_view_model_context.as_ref() {
         bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
     } else {
@@ -647,8 +716,17 @@ fn run() -> Result<String> {
         #[cfg(not(feature = "scripting"))]
         if let Some(context) = owned_view_model_context.as_ref() {
             state_machine.bind_owned_view_model_contexts(context);
+        } else {
+            // Candidate C++ creates the StateMachineInstance after the
+            // Artboard's default DataContext is populated, so the machine
+            // observes that same default instance immediately. The retained
+            // Rust machine needs the equivalent explicit lifecycle splice.
+            state_machine.bind_default_view_model_context_on_artboard(&mut instance);
         }
         state_machine.advance_data_context();
+        if options.side_channel {
+            state_machine.enable_semantics();
+        }
     }
     #[cfg(feature = "scripting")]
     if let Some(state) = script_artboard_render_state.as_ref() {
@@ -733,11 +811,11 @@ fn run() -> Result<String> {
         if options.side_channel {
             record_advance_side_channel(
                 &mut *factory,
-                &instance,
+                &mut instance,
                 state_machine.as_mut(),
                 options.samples[0],
                 keep_going,
-            );
+            )?;
         }
         instance
             .draw_artboard(
@@ -785,11 +863,11 @@ fn run() -> Result<String> {
                 if options.side_channel {
                     record_advance_side_channel(
                         &mut *factory,
-                        &instance,
+                        &mut instance,
                         state_machine.as_mut(),
                         event.seconds,
                         keep_going,
-                    );
+                    )?;
                 }
                 #[cfg(feature = "scripting")]
                 if let Some(state) = script_artboard_render_state.as_ref() {
@@ -804,6 +882,18 @@ fn run() -> Result<String> {
                     )?;
                 }
                 timed(options.benchmark, &mut input_elapsed, || {
+                    if matches!(
+                        event.kind,
+                        InputKind::SemanticAction | InputKind::SemanticFocus
+                    ) {
+                        apply_semantic_input(
+                            &mut *factory,
+                            state_machine.as_mut(),
+                            event,
+                            options.side_channel,
+                        );
+                        return;
+                    }
                     let hit_result = apply_input_event(
                         event,
                         &mut instance,
@@ -886,11 +976,11 @@ fn run() -> Result<String> {
                 // advance line is recorded here to preserve stream order.
                 record_advance_side_channel(
                     &mut *factory,
-                    &instance,
+                    &mut instance,
                     state_machine.as_mut(),
                     *sample,
                     keep_going,
-                );
+                )?;
             }
             factory.add_sample(*sample);
             timed_result(options.benchmark, &mut draw_elapsed, || {
@@ -1493,12 +1583,26 @@ fn selected_artboard_owned_view_model_context(
     Some(context)
 }
 
+fn selected_artboard_default_owned_view_model_context(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<RuntimeOwnedViewModelContext> {
+    let view_model_index = selected_artboard_view_model_index(runtime, artboard_index)?;
+    let main = RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(runtime, view_model_index))?;
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(runtime, artboard_index);
+    Some(context)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputKind {
     PointerDown,
     PointerMove,
     PointerUp,
     PointerExit,
+    SemanticAction,
+    SemanticFocus,
 }
 
 impl InputKind {
@@ -1508,6 +1612,8 @@ impl InputKind {
             "pointerMove" => Ok(Self::PointerMove),
             "pointerUp" => Ok(Self::PointerUp),
             "pointerExit" => Ok(Self::PointerExit),
+            "semanticAction" => Ok(Self::SemanticAction),
+            "semanticFocus" => Ok(Self::SemanticFocus),
             _ => bail!("unknown input event on line {line_number}: {value}"),
         }
     }
@@ -1518,6 +1624,42 @@ impl InputKind {
             Self::PointerMove => "pointerMove",
             Self::PointerUp => "pointerUp",
             Self::PointerExit => "pointerExit",
+            Self::SemanticAction => "semanticAction",
+            Self::SemanticFocus => "semanticFocus",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SemanticInputAction {
+    Tap,
+    Increase,
+    Decrease,
+}
+
+impl SemanticInputAction {
+    fn parse(value: &str, line_number: usize) -> Result<Self> {
+        match value {
+            "tap" => Ok(Self::Tap),
+            "increase" => Ok(Self::Increase),
+            "decrease" => Ok(Self::Decrease),
+            _ => bail!("unknown semantic action on line {line_number}: {value}"),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Tap => "tap",
+            Self::Increase => "increase",
+            Self::Decrease => "decrease",
+        }
+    }
+
+    fn raw(self) -> u32 {
+        match self {
+            Self::Tap => 0,
+            Self::Increase => 1,
+            Self::Decrease => 2,
         }
     }
 }
@@ -1529,7 +1671,21 @@ struct InputEvent {
     x: f32,
     y: f32,
     pointer_id: i32,
+    semantic_node_id: u32,
+    semantic_action: SemanticInputAction,
     order: usize,
+}
+
+impl InputEvent {
+    fn is_pointer(&self) -> bool {
+        matches!(
+            self.kind,
+            InputKind::PointerDown
+                | InputKind::PointerMove
+                | InputKind::PointerUp
+                | InputKind::PointerExit
+        )
+    }
 }
 
 fn load_input_script(path: &Path) -> Result<Vec<InputEvent>> {
@@ -1547,8 +1703,8 @@ fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
             continue;
         }
         let tokens = line.split_whitespace().collect::<Vec<_>>();
-        if tokens.len() != 4 && tokens.len() != 5 {
-            bail!("input script line {line_number} must be: <seconds> <event> <x> <y> [pointerId]");
+        if tokens.len() < 2 {
+            bail!("input script line {line_number} must start with: <seconds> <event>");
         }
         let seconds = parse_script_float(
             tokens[0],
@@ -1558,16 +1714,59 @@ fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
             bail!("input script line {line_number} has a negative time");
         }
         let kind = InputKind::parse(tokens[1], line_number)?;
-        let x = parse_script_float(tokens[2], &format!("input script line {line_number} x"))?;
-        let y = parse_script_float(tokens[3], &format!("input script line {line_number} y"))?;
-        let pointer_id = if let Some(pointer_id) = tokens.get(4) {
-            pointer_id.parse::<i32>().with_context(|| {
-                format!(
-                    "invalid integer for input script line {line_number} pointerId: {pointer_id}"
+        let context = format!("input script line {line_number}");
+        let (x, y, pointer_id, semantic_node_id, semantic_action) = match kind {
+            InputKind::SemanticAction => {
+                if tokens.len() != 4 {
+                    bail!(
+                        "{context} must be: <seconds> semanticAction <nodeId> <tap|increase|decrease>"
+                    );
+                }
+                (
+                    0.0,
+                    0.0,
+                    0,
+                    tokens[2]
+                        .parse::<u32>()
+                        .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?,
+                    SemanticInputAction::parse(tokens[3], line_number)?,
                 )
-            })?
-        } else {
-            0
+            }
+            InputKind::SemanticFocus => {
+                if tokens.len() != 3 {
+                    bail!("{context} must be: <seconds> semanticFocus <nodeId>");
+                }
+                (
+                    0.0,
+                    0.0,
+                    0,
+                    tokens[2]
+                        .parse::<u32>()
+                        .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?,
+                    SemanticInputAction::Tap,
+                )
+            }
+            _ => {
+                if tokens.len() != 4 && tokens.len() != 5 {
+                    bail!(
+                        "{context} must be: <seconds> <pointer-event> <x> <y> [pointerId]"
+                    );
+                }
+                let pointer_id = if let Some(pointer_id) = tokens.get(4) {
+                    pointer_id.parse::<i32>().with_context(|| {
+                        format!("invalid integer for {context} pointerId: {pointer_id}")
+                    })?
+                } else {
+                    0
+                };
+                (
+                    parse_script_float(tokens[2], &format!("{context} x"))?,
+                    parse_script_float(tokens[3], &format!("{context} y"))?,
+                    pointer_id,
+                    0,
+                    SemanticInputAction::Tap,
+                )
+            }
         };
         events.push(InputEvent {
             seconds,
@@ -1575,6 +1774,8 @@ fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
             x,
             y,
             pointer_id,
+            semantic_node_id,
+            semantic_action,
             order: events.len(),
         });
     }
@@ -1642,19 +1843,75 @@ fn side_channel_event(event: &nuxie_runtime::StateMachineReportedEvent) -> SideC
     }
 }
 
+fn side_channel_semantics_node(
+    node: &nuxie_runtime::SemanticsDiffNode,
+) -> SideChannelSemanticsNode {
+    SideChannelSemanticsNode {
+        id: node.id,
+        role: node.role,
+        label: node.label.clone(),
+        value: node.value.clone(),
+        hint: node.hint.clone(),
+        state_flags: node.state_flags,
+        trait_flags: node.trait_flags,
+        heading_level: node.heading_level,
+        min_x: node.min_x,
+        min_y: node.min_y,
+        max_x: node.max_x,
+        max_y: node.max_y,
+        parent_id: node.parent_id,
+        sibling_index: node.sibling_index,
+    }
+}
+
+fn side_channel_semantics_diff(diff: &nuxie_runtime::SemanticsDiff) -> SideChannelSemanticsDiff {
+    SideChannelSemanticsDiff {
+        frame_number: diff.frame_number,
+        tree_version: diff.tree_version,
+        root_id: diff.root_id,
+        removed: diff.removed.clone(),
+        added: diff.added.iter().map(side_channel_semantics_node).collect(),
+        moved: diff.moved.iter().map(side_channel_semantics_node).collect(),
+        children_updated: diff
+            .children_updated
+            .iter()
+            .map(|update| SideChannelSemanticsChildrenUpdate {
+                parent_id: update.parent_id,
+                child_ids: update.child_ids.clone(),
+            })
+            .collect(),
+        updated_semantic: diff
+            .updated_semantic
+            .iter()
+            .map(side_channel_semantics_node)
+            .collect(),
+        updated_geometry: diff
+            .updated_geometry
+            .iter()
+            .map(|update| SideChannelSemanticsBoundsUpdate {
+                id: update.id,
+                min_x: update.min_x,
+                min_y: update.min_y,
+                max_x: update.max_x,
+                max_y: update.max_y,
+            })
+            .collect(),
+    }
+}
+
 /// Emits the advance line (settled = !advanceAndApply return) plus one event
 /// line per event the state machine reported during that advance
 /// (docs/side-channel-format.md).
 fn record_advance_side_channel(
     factory: &mut dyn RunnerBackend,
-    instance: &ArtboardInstance,
+    instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
     target_seconds: f32,
     keep_going: bool,
-) {
+) -> Result<()> {
     let Some(state_machine) = state_machine else {
         factory.add_advance(target_seconds, !keep_going);
-        return;
+        return Ok(());
     };
     factory.add_advance_with_states(
         target_seconds,
@@ -1668,6 +1925,59 @@ fn record_advance_side_channel(
         };
         let event = side_channel_event(event);
         factory.add_side_channel_event(&event);
+    }
+    let diff = state_machine
+        .drain_semantics_diff(instance)
+        .context("failed to drain semantic side-channel diff")?;
+    factory.add_semantics_diff(&side_channel_semantics_diff(&diff));
+    Ok(())
+}
+
+fn apply_semantic_input(
+    factory: &mut dyn RunnerBackend,
+    state_machine: Option<&mut StateMachineInstance>,
+    event: &InputEvent,
+    record_side_channel: bool,
+) {
+    let Some(state_machine) = state_machine else {
+        if !record_side_channel {
+            return;
+        }
+        match event.kind {
+            InputKind::SemanticAction => factory.add_semantic_action(
+                event.seconds,
+                event.semantic_node_id,
+                event.semantic_action.name(),
+                false,
+            ),
+            InputKind::SemanticFocus => {
+                factory.add_semantic_focus(event.seconds, event.semantic_node_id, false)
+            }
+            _ => {}
+        }
+        return;
+    };
+
+    match event.kind {
+        InputKind::SemanticAction => {
+            let dispatched = state_machine
+                .fire_semantic_action(event.semantic_node_id, event.semantic_action.raw());
+            if record_side_channel {
+                factory.add_semantic_action(
+                    event.seconds,
+                    event.semantic_node_id,
+                    event.semantic_action.name(),
+                    dispatched,
+                );
+            }
+        }
+        InputKind::SemanticFocus => {
+            let focused = state_machine.request_semantic_focus(event.semantic_node_id);
+            if record_side_channel {
+                factory.add_semantic_focus(event.seconds, event.semantic_node_id, focused);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1714,6 +2024,7 @@ fn apply_input_event(
             event.pointer_id,
             context.as_deref_mut(),
         ),
+        InputKind::SemanticAction | InputKind::SemanticFocus => RuntimeHitResult::None,
     }
 }
 
@@ -1760,6 +2071,34 @@ mod tests {
     }
 
     #[test]
+    fn semantic_input_script_verbs_preserve_ids_actions_and_order() {
+        let events = parse_input_script(
+            "0.2 semanticFocus 16\n0.1 semanticAction 4 tap\n0.1 semanticAction 7 decrease\n",
+        )
+        .expect("semantic input verbs parse");
+
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| (event.seconds, event.kind, event.semantic_node_id, event.semantic_action))
+                .collect::<Vec<_>>(),
+            vec![
+                (0.1, InputKind::SemanticAction, 4, SemanticInputAction::Tap),
+                (
+                    0.1,
+                    InputKind::SemanticAction,
+                    7,
+                    SemanticInputAction::Decrease,
+                ),
+                (0.2, InputKind::SemanticFocus, 16, SemanticInputAction::Tap),
+            ]
+        );
+        assert!(parse_input_script("0 semanticAction 1 unknown\n").is_err());
+        assert!(parse_input_script("0 semanticFocus\n").is_err());
+        assert!(events.iter().all(|event| !event.is_pointer()));
+    }
+
+    #[test]
     fn sample_parser_matches_golden_runner_tolerance() {
         assert_eq!(
             parse_samples("0.1,0.0999995,0.2").expect("within epsilon is sorted"),
@@ -1782,6 +2121,20 @@ mod tests {
         assert!(!base(&[]).expect("plain parses").side_channel);
         assert!(base(&["--side-channel", "--benchmark"]).is_err());
         assert!(base(&["--side-channel", "--layout-bounds"]).is_err());
+        assert!(base(&["--semantic-default-view-model"]).is_err());
+        assert!(base(&["--semantic-side-channel-only"]).is_err());
+        let semantic_defaults = base(&[
+            "--side-channel",
+            "--semantic-default-view-model",
+        ])
+        .expect("semantic fixture defaults parse with the side channel");
+        assert!(semantic_defaults.semantic_default_view_model);
+        let semantic_projection = base(&[
+            "--side-channel",
+            "--semantic-side-channel-only",
+        ])
+        .expect("semantic projection parses with the side channel");
+        assert!(semantic_projection.semantic_side_channel_only);
     }
 
     #[test]
@@ -2092,6 +2445,8 @@ struct Options {
     benchmark_repeat: usize,
     execute_scripts: bool,
     side_channel: bool,
+    semantic_default_view_model: bool,
+    semantic_side_channel_only: bool,
 }
 
 impl Options {
@@ -2106,6 +2461,8 @@ impl Options {
         let mut benchmark_repeat = 1usize;
         let mut execute_scripts = false;
         let mut side_channel = false;
+        let mut semantic_default_view_model = false;
+        let mut semantic_side_channel_only = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -2127,12 +2484,14 @@ impl Options {
                 "--benchmark" => benchmark = true,
                 "--execute-scripts" => execute_scripts = true,
                 "--side-channel" => side_channel = true,
+                "--semantic-default-view-model" => semantic_default_view_model = true,
+                "--semantic-side-channel-only" => semantic_side_channel_only = true,
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, arg)?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--side-channel] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--side-channel] [--semantic-default-view-model] [--semantic-side-channel-only] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -2152,6 +2511,12 @@ impl Options {
         }
         if side_channel && layout_bounds {
             bail!("--side-channel cannot be combined with --layout-bounds");
+        }
+        if semantic_default_view_model && !side_channel {
+            bail!("--semantic-default-view-model requires --side-channel");
+        }
+        if semantic_side_channel_only && !side_channel {
+            bail!("--semantic-side-channel-only requires --side-channel");
         }
         if benchmark_repeat > 1 {
             if !benchmark {
@@ -2176,6 +2541,8 @@ impl Options {
             benchmark_repeat,
             execute_scripts,
             side_channel,
+            semantic_default_view_model,
+            semantic_side_channel_only,
         })
     }
 }

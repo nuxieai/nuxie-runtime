@@ -1,5 +1,8 @@
 //! Retained semantic domain state shared by mounted artboard occurrences
 //! beneath a state-machine instance; interface stays on `StateMachineInstance`.
+//! Pinned C++ correspondence (4ac7b327): `src/artboard.cpp:2155-2269` and
+//! `src/artboard_component_list.cpp:683-688` build structural boundary nodes
+//! and share the enclosing semantic manager across nested/list occurrences.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -19,6 +22,7 @@ use crate::state_machine::state_machine_instance::{RuntimeSemanticOccurrenceKey,
 pub(crate) struct RuntimeSemanticTree {
     pub(crate) manager: SemanticManager,
     pub(crate) data: BTreeMap<RuntimeSemanticOccurrenceKey, RuntimeSemanticData>,
+    boundaries: BTreeMap<u64, SemanticNodeHandle>,
     pub(crate) routes: BTreeMap<u32, RuntimeSemanticRoute>,
     pub(crate) registered_listener_groups: BTreeSet<(RuntimeSemanticOccurrenceKey, usize)>,
     pub(crate) pending_focus_scroll: Option<RuntimeSemanticRoute>,
@@ -33,7 +37,15 @@ impl RuntimeSemanticTree {
     ) {
         let root_owner_identity = artboard.instance_identity();
         let mut live = BTreeSet::new();
-        self.visit_artboard(artboard, None, Mat2D::IDENTITY, &mut live);
+        let mut live_boundaries = BTreeSet::new();
+        self.visit_artboard(
+            artboard,
+            None,
+            Mat2D::IDENTITY,
+            false,
+            &mut live,
+            &mut live_boundaries,
+        );
 
         let stale = self
             .data
@@ -44,6 +56,17 @@ impl RuntimeSemanticTree {
         for key in stale {
             if let Some(mut data) = self.data.remove(&key) {
                 data.detach(&mut self.manager);
+            }
+        }
+        let stale_boundaries = self
+            .boundaries
+            .keys()
+            .filter(|identity| !live_boundaries.contains(*identity))
+            .copied()
+            .collect::<Vec<_>>();
+        for identity in stale_boundaries {
+            if let Some(boundary) = self.boundaries.remove(&identity) {
+                self.manager.remove_child(&boundary);
             }
         }
         self.registered_listener_groups
@@ -71,9 +94,38 @@ impl RuntimeSemanticTree {
         artboard: &mut ArtboardInstance,
         inherited_parent: Option<SemanticNodeHandle>,
         root_transform: Mat2D,
+        needs_boundary: bool,
         live: &mut BTreeSet<RuntimeSemanticOccurrenceKey>,
+        live_boundaries: &mut BTreeSet<u64>,
     ) {
         let owner_identity = artboard.instance_identity();
+        let effective_parent = if needs_boundary {
+            live_boundaries.insert(owner_identity);
+            let boundary = self
+                .boundaries
+                .entry(owner_identity)
+                .or_insert_with(|| {
+                    let node = SemanticNodeHandle::new(0);
+                    node.borrow_mut().set_boundary_node(true);
+                    node
+                })
+                .clone();
+            let current_parent_id = boundary.borrow().parent_id();
+            let desired_parent_id = inherited_parent
+                .as_ref()
+                .map(|parent| parent.borrow().id());
+            if boundary.borrow().manager_identity() == Some(self.manager.identity())
+                && current_parent_id != desired_parent_id
+            {
+                self.manager.remove_child(&boundary);
+            }
+            if boundary.borrow().manager_identity().is_none() {
+                self.manager.add_child(inherited_parent.as_ref(), boundary.clone());
+            }
+            Some(boundary)
+        } else {
+            inherited_parent
+        };
         let semantic_locals = artboard
             .components()
             .iter()
@@ -115,7 +167,7 @@ impl RuntimeSemanticTree {
             let parent = target_local
                 .and_then(|target| artboard.component_parent_local(target))
                 .and_then(|parent| closest_semantic_node(artboard, parent, &nodes_by_target))
-                .or_else(|| inherited_parent.clone());
+                .or_else(|| effective_parent.clone());
             let data = self.data.get_mut(&key).expect("semantic data was retained");
             data.synchronize_from_artboard(artboard, &mut self.manager, root_transform);
             data.reconcile_tree_membership(
@@ -133,13 +185,20 @@ impl RuntimeSemanticTree {
             .collect::<Vec<_>>();
         for host_local in nested_hosts {
             let parent = closest_semantic_node(artboard, host_local, &nodes_by_target)
-                .or_else(|| inherited_parent.clone());
+                .or_else(|| effective_parent.clone());
             let host_world = artboard.runtime_component_world_transform_with_scroll(host_local);
             if let Some(nested) = artboard.nested_artboards.get_mut(&host_local) {
                 let child_root = nested
                     .child
                     .mounted_root_transform(root_transform.multiply(host_world));
-                self.visit_artboard(&mut nested.child, parent, child_root, live);
+                self.visit_artboard(
+                    &mut nested.child,
+                    parent,
+                    child_root,
+                    true,
+                    live,
+                    live_boundaries,
+                );
             }
         }
 
@@ -148,7 +207,7 @@ impl RuntimeSemanticTree {
             artboard.runtime_component_list_child_root_transforms(root_transform);
         for list_local in list_locals {
             let parent = closest_semantic_node(artboard, list_local, &nodes_by_target)
-                .or_else(|| inherited_parent.clone());
+                .or_else(|| effective_parent.clone());
             let Some(items) = artboard.component_list_items_mut(list_local) else {
                 continue;
             };
@@ -158,7 +217,14 @@ impl RuntimeSemanticTree {
                     .and_then(|roots| roots.get(item_index))
                     .copied()
                     .unwrap_or(root_transform);
-                self.visit_artboard(&mut item.child, parent.clone(), child_root, live);
+                self.visit_artboard(
+                    &mut item.child,
+                    parent.clone(),
+                    child_root,
+                    true,
+                    live,
+                    live_boundaries,
+                );
             }
         }
     }

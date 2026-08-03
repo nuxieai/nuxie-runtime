@@ -919,16 +919,16 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 upstream = "tests/unit_tests/runtime/semantic_artboard_test.cpp"
 test_case_count = 10
 status = "pending"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
-note = "P3-c phase-1 ports the underlying tree/diff code. All 10 fixture cases remain pending on the shared Artboard/StateMachineInstance lifecycle splice and #LT-1 serialization of the complete SemanticsDiff after each advance/action, including nested/component-list parentage, bounds, removals, and stable ids."
+evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+note = "LT1SC supplies complete SemanticsDiff serialization and exact nested-focus parentage, bounds, and stable ids. The suite remains pending because the data_binding_lists and Simpsons full fixture differentials still disagree on state/removal and layout geometry respectively."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"
 test_case_count = 9
 status = "partial"
-evidence = ["F6FID-report.md", "crates/nuxie-runtime/src/semantic_data.rs::tests"]
+evidence = ["F6FID-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_data.rs::tests"]
 covered_test_cases = ["hasSemanticNode flips once semanticNode() is called", "semanticNode() returns the same instance on repeated calls", "semanticNode() snapshots authored properties onto the node", "semanticNode() back-reference points at the owning SemanticData", "setter changes after first semanticNode() propagate to the node", "mutating a property does not recreate the SemanticNode", "destroying a registered SD removes its node from the manager", "destroying a registered SD emits a removed entry on the next diff"]
-note = "F6FID directly ports the eight non-side-channel lifecycle cases in semantic_data::tests, including Rust's owner-safe explicit retained-tree detach in place of a raw manager back-pointer during Drop. `SD property change authored by state machine appears in updatedSemantic` remains pending specifically on #LT-1 serialization of the fired action and complete follow-up SemanticsDiff from data_binding_lists.riv."
+note = "F6FID directly ports the eight non-side-channel lifecycle cases in semantic_data::tests, including Rust's owner-safe explicit retained-tree detach in place of a raw manager back-pointer during Drop. LT1SC now serializes the fired action and complete follow-up SemanticsDiff; `SD property change authored by state machine appears in updatedSemantic` remains pending because the exact data_binding_lists run is red on Selected state and node removals."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_dispatch_test.cpp"
@@ -941,8 +941,8 @@ note = "All 16 direct dispatch cases are ported: duplicate-preserving exact-acti
 upstream = "tests/unit_tests/runtime/semantic_focus_list_test.cpp"
 test_case_count = 2
 status = "pending"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
-note = "Visual-order and manager-local id algorithms are ported. Both .riv assertions remain pending on Artboard semantic-tree construction and #LT-1 serialization of ordered added nodes with ids and root/parent/sibling fields."
+evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+note = "Visual-order and manager-local id algorithms are ported, and LT1SC proves exact ordered added nodes with ids and root/parent/sibling fields for the nested focus oracle. Both named upstream .riv assertions remain pending because that evidence uses the fixed focus fixture rather than focus_nodes_list_order.riv and focus_nested_artboard_order.riv."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_label_inference_test.cpp"
@@ -955,16 +955,16 @@ note = "All 36 direct manager cases are ported with exact derivation/absorption,
 upstream = "tests/unit_tests/runtime/semantic_provider_test.cpp"
 test_case_count = 6
 status = "pending"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_provider.rs", "crates/nuxie-runtime/src/semantic_inference_registry.rs"]
-note = "Direct SemanticData precedence, Text inference, drawable/descendant/fallback bounds code is ported. Fixture-backed nested root-transform cases remain pending on shared lifecycle wiring and #LT-1 serialization of exact node bounds."
+evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_provider.rs", "crates/nuxie-runtime/src/semantic_inference_registry.rs"]
+note = "Direct SemanticData precedence, Text inference, drawable/descendant/fallback bounds code is ported. LT1SC proves exact nested focus bounds and post-scroll geometry; the six named upstream cases remain pending because Simpsons still differs on provider/root bounds and pre-layout geometry."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_state_machine_test.cpp"
 test_case_count = 15
 status = "partial"
-evidence = ["F6FID-report.md", "crates/nuxie-runtime/tests/semantic_focus_runtime.rs", "fixtures/semantic/semantic_list_scroll_focus_fixed.riv"]
+evidence = ["F6FID-report.md", "LT1SC-report.md", "crates/nuxie-runtime/tests/semantic_focus_runtime.rs", "fixtures/semantic/semantic_list_scroll_focus_fixed.riv"]
 covered_test_cases = ["list_scroll_focus.riv: list items expose the Focusable trait", "list_scroll_focus.riv: requestFocus sets Focused only on the target item", "list_scroll_focus.riv: moving focus hands the Focused bit between items", "list_scroll_focus.riv: focusing the bottom slot scrolls the list (all items shift upward)"]
-note = "F6FID ports the four RB-2-dependent list-focus cases through the production retained semantic/focus trees, including owner-qualified repeated-artboard routing, Focused handoff, FocusData scrollIntoView, mounted root transforms, and five geometry updates. The other 11 fixture cases remain pending specifically on #LT-1 serialization of complete SemanticsDiff/action outcomes for the simpsons, tabtest, and data_binding_lists oracle runs."
+note = "F6FID ports the four RB-2-dependent list-focus cases through the production retained semantic/focus trees. LT1SC's exact side-channel differential now verifies owner-qualified repeated-artboard routing, Focused handoff, mounted root transforms, and five geometry updates. The other 11 fixture cases remain pending: serialization exists, but Simpsons and data_binding_lists expose red semantic residuals and tabtest is not yet covered."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/serialized_rendering_test.cpp"

@@ -2050,6 +2050,84 @@ impl RecordingFactory {
         self.stream.borrow_mut().semantic_line(line);
     }
 
+    pub fn add_semantics_diff(&mut self, diff: &SideChannelSemanticsDiff) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "semantics frame={} treeVersion={} rootId={}",
+            diff.frame_number, diff.tree_version, diff.root_id
+        ));
+
+        let mut removed = String::from("semantics removed ids=[");
+        write_u32_list(&mut removed, &diff.removed);
+        removed.push(']');
+        self.stream.borrow_mut().semantic_line(removed);
+
+        self.stream
+            .borrow_mut()
+            .semantic_line(semantics_nodes_line("added", &diff.added));
+        self.stream
+            .borrow_mut()
+            .semantic_line(semantics_nodes_line("moved", &diff.moved));
+
+        let mut children = String::from("semantics childrenUpdated entries=[");
+        for (index, update) in diff.children_updated.iter().enumerate() {
+            if index != 0 {
+                children.push(',');
+            }
+            write!(children, "{{parentId={},childIds=[", update.parent_id)
+                .expect("writing to a String cannot fail");
+            write_u32_list(&mut children, &update.child_ids);
+            children.push_str("]}");
+        }
+        children.push(']');
+        self.stream.borrow_mut().semantic_line(children);
+
+        self.stream.borrow_mut().semantic_line(semantics_nodes_line(
+            "updatedSemantic",
+            &diff.updated_semantic,
+        ));
+
+        let mut geometry = String::from("semantics updatedGeometry bounds=[");
+        for (index, update) in diff.updated_geometry.iter().enumerate() {
+            if index != 0 {
+                geometry.push(',');
+            }
+            write!(geometry, "{{id={},bounds=(", update.id)
+                .expect("writing to a String cannot fail");
+            write_semantics_bounds(
+                &mut geometry,
+                update.min_x,
+                update.min_y,
+                update.max_x,
+                update.max_y,
+            );
+            geometry.push_str(")}");
+        }
+        geometry.push(']');
+        self.stream.borrow_mut().semantic_line(geometry);
+    }
+
+    pub fn add_semantic_action(
+        &mut self,
+        seconds: f32,
+        node_id: u32,
+        action: &str,
+        dispatched: bool,
+    ) {
+        let outcome = if dispatched { "dispatched" } else { "missing" };
+        self.stream.borrow_mut().semantic_line(format!(
+            "semanticAction seconds={} nodeId={node_id} action={action} outcome={outcome}",
+            float_to_string(seconds)
+        ));
+    }
+
+    pub fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool) {
+        let outcome = if focused { "focused" } else { "rejected" };
+        self.stream.borrow_mut().semantic_line(format!(
+            "semanticFocus seconds={} nodeId={node_id} outcome={outcome}",
+            float_to_string(seconds)
+        ));
+    }
+
     pub fn add_hit_result(&mut self, result: &str) {
         self.stream
             .borrow_mut()
@@ -3276,6 +3354,105 @@ pub enum SideChannelEventPropertyValue {
     String(String),
     Color(u32),
     Uint(u64),
+}
+
+/// Complete incremental semantic tree payload for the golden side-channel.
+/// Mirrors the pinned C++ `SemanticsDiff` without making render-api depend on
+/// the runtime crate.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SideChannelSemanticsDiff {
+    pub frame_number: u64,
+    pub tree_version: u64,
+    pub root_id: u32,
+    pub removed: Vec<u32>,
+    pub added: Vec<SideChannelSemanticsNode>,
+    pub moved: Vec<SideChannelSemanticsNode>,
+    pub children_updated: Vec<SideChannelSemanticsChildrenUpdate>,
+    pub updated_semantic: Vec<SideChannelSemanticsNode>,
+    pub updated_geometry: Vec<SideChannelSemanticsBoundsUpdate>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SideChannelSemanticsNode {
+    pub id: u32,
+    pub role: u32,
+    pub label: String,
+    pub value: String,
+    pub hint: String,
+    pub state_flags: u32,
+    pub trait_flags: u32,
+    pub heading_level: u32,
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    pub parent_id: i32,
+    pub sibling_index: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SideChannelSemanticsChildrenUpdate {
+    pub parent_id: i32,
+    pub child_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SideChannelSemanticsBoundsUpdate {
+    pub id: u32,
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+}
+
+fn write_u32_list(out: &mut String, values: &[u32]) {
+    for (index, value) in values.iter().enumerate() {
+        if index != 0 {
+            out.push(',');
+        }
+        write!(out, "{value}").expect("writing to a String cannot fail");
+    }
+}
+
+fn write_semantics_bounds(out: &mut String, min_x: f32, min_y: f32, max_x: f32, max_y: f32) {
+    write_float(out, min_x);
+    out.push(',');
+    write_float(out, min_y);
+    out.push(',');
+    write_float(out, max_x);
+    out.push(',');
+    write_float(out, max_y);
+}
+
+fn semantics_nodes_line(kind: &str, nodes: &[SideChannelSemanticsNode]) -> String {
+    let mut line = format!("semantics {kind} nodes=[");
+    for (index, node) in nodes.iter().enumerate() {
+        if index != 0 {
+            line.push(',');
+        }
+        write!(
+            line,
+            "{{id={},role={},label={},value={},hint={},stateFlags={},traitFlags={},headingLevel={},bounds=(",
+            node.id,
+            node.role,
+            quoted_string(&node.label),
+            quoted_string(&node.value),
+            quoted_string(&node.hint),
+            node.state_flags,
+            node.trait_flags,
+            node.heading_level,
+        )
+        .expect("writing to a String cannot fail");
+        write_semantics_bounds(&mut line, node.min_x, node.min_y, node.max_x, node.max_y);
+        write!(
+            line,
+            "),parentId={},siblingIndex={}}}",
+            node.parent_id, node.sibling_index
+        )
+        .expect("writing to a String cannot fail");
+    }
+    line.push(']');
+    line
 }
 
 fn quoted_string(value: &str) -> String {

@@ -11,6 +11,11 @@
 #include <string>
 #include <vector>
 
+namespace rive
+{
+struct SemanticsDiff;
+}
+
 namespace rive_rust::golden
 {
 class RecordingStream
@@ -153,6 +158,12 @@ public:
     void addAdvance(float seconds, bool settled);
     void addAdvanceWithStates(float seconds, bool settled, size_t statesChanged);
     void addSideChannelEvent(const SideChannelEvent& event);
+    void addSemanticsDiff(const rive::SemanticsDiff& diff);
+    void addSemanticAction(float seconds,
+                           uint32_t nodeId,
+                           const std::string& action,
+                           bool dispatched);
+    void addSemanticFocus(float seconds, uint32_t nodeId, bool focused);
     void addHitResult(const std::string& result);
     void addFrame();
     void frameSize(uint32_t width, uint32_t height);

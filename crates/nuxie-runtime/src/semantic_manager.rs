@@ -1,4 +1,4 @@
-// Pinned C++ correspondence (d788e8ec):
+// Pinned C++ correspondence (4ac7b327):
 // src/semantic/semantic_manager.cpp:1-1109 and
 // include/rive/semantic/semantic_manager.hpp:1-100.
 

@@ -1,0 +1,3 @@
+# Exercise StateMachineInstance::fireSemanticAction through the semantic id
+# emitted by data_binding_lists.riv's initial full diff.
+1 semanticAction 2 tap

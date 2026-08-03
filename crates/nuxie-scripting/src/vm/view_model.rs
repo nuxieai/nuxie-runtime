@@ -45,6 +45,7 @@ pub(crate) struct ScriptViewModelFrameContext {
     tracked: Rc<RefCell<TrackedViewModels>>,
     trigger_watches: Rc<RefCell<Vec<Weak<ScriptedTriggerWatch>>>>,
     blob_watches: Rc<RefCell<Vec<Weak<ScriptedBlobWatch>>>>,
+    property_watches: Rc<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>,
 }
 
 impl std::fmt::Debug for ScriptViewModelFrameContext {
@@ -54,6 +55,7 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
             .field("tracked_instances", &self.tracked.borrow().instances.len())
             .field("trigger_watches", &self.trigger_watches.borrow().len())
             .field("blob_watches", &self.blob_watches.borrow().len())
+            .field("property_watches", &self.property_watches.borrow().len())
             .finish()
     }
 }
@@ -136,6 +138,30 @@ impl ScriptViewModelFrameContext {
         watches.push(Rc::downgrade(watch));
     }
 
+    fn register_property_watch(&self, watch: &Rc<ScriptedPropertyWatch>) {
+        let mut watches = self.property_watches.borrow_mut();
+        if watches.iter().any(|candidate| Rc::ptr_eq(candidate, watch)) {
+            return;
+        }
+        watches.push(Rc::clone(watch));
+    }
+
+    fn dispatch_property_watches(&self) -> bool {
+        let watches = self.property_watches.borrow().clone();
+        let mut changed = false;
+        for watch in watches {
+            if watch.sink.take_dirt().is_empty() {
+                continue;
+            }
+            changed = true;
+            notify_property_listeners(&watch);
+        }
+        self.property_watches
+            .borrow_mut()
+            .retain(|watch| !watch.listeners.borrow().is_empty());
+        changed
+    }
+
     fn dispatch_trigger_watches(&self) -> bool {
         let watches = {
             let mut retained = self.trigger_watches.borrow_mut();
@@ -202,6 +228,7 @@ impl ScriptViewModelFrameContext {
     pub(crate) fn advance_detached(&self) -> bool {
         let mut changed = self.dispatch_trigger_watches();
         changed |= self.dispatch_blob_watches();
+        changed |= self.dispatch_property_watches();
         let roots = {
             let mut tracked = self.tracked.borrow_mut();
             tracked
@@ -367,6 +394,18 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
+    let get_enum_model = model.clone();
+    table.set(
+        "getEnum",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_enum_model.property(&name) {
+                Some(ScriptViewModelProperty::Enum) => lua
+                    .create_userdata(ScriptedPropertyEnum::new(get_enum_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let get_index_model = model.clone();
     table.set(
         "getIndex",
@@ -469,6 +508,9 @@ fn create_scripted_view_model_retained(
             ScriptViewModelProperty::Boolean => {
                 lua.create_userdata(ScriptedPropertyBoolean::new(model.clone(), name.clone()))?
             }
+            ScriptViewModelProperty::Enum => {
+                lua.create_userdata(ScriptedPropertyEnum::new(model.clone(), name.clone()))?
+            }
             ScriptViewModelProperty::Trigger => {
                 lua.create_userdata(ScriptedPropertyTrigger::new(model.clone(), name.clone()))?
             }
@@ -526,14 +568,94 @@ pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewMode
     Ok(handle.borrow::<ScriptedViewModelHandle>()?.model.clone())
 }
 
+struct ScriptedPropertyWatch {
+    sink: RuntimeCellDirtSink,
+    listeners: Rc<RefCell<Vec<ScriptedListener>>>,
+}
+
+fn property_watch(model: &ScriptViewModel, name: &str) -> Rc<ScriptedPropertyWatch> {
+    let listeners = Rc::new(RefCell::new(Vec::new()));
+    let callback_listeners = Rc::clone(&listeners);
+    let sink = model
+        .property_change_sink(name, move || {
+            call_property_listeners(&callback_listeners);
+        })
+        .unwrap_or_default();
+    Rc::new(ScriptedPropertyWatch { sink, listeners })
+}
+
+fn add_property_listener(
+    lua: &Lua,
+    watch: &Rc<ScriptedPropertyWatch>,
+    args: MultiValue,
+) -> luaur_rt::Result<()> {
+    let args = args.into_vec();
+    let (userdata, callback) = match args.as_slice() {
+        [Value::Function(callback)] => (None, callback.clone()),
+        [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
+        _ => {
+            return Err(luaur_rt::Error::runtime(
+                "addListener expects a callback or userdata and callback",
+            ));
+        }
+    };
+    watch
+        .listeners
+        .borrow_mut()
+        .push(ScriptedListener { callback, userdata });
+    ScriptViewModelFrameContext::for_lua(lua).register_property_watch(watch);
+    Ok(())
+}
+
+fn remove_property_listener(
+    watch: &Rc<ScriptedPropertyWatch>,
+    args: MultiValue,
+) -> luaur_rt::Result<()> {
+    let args = args.into_vec();
+    let callback = match args.as_slice() {
+        [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
+        _ => {
+            return Err(luaur_rt::Error::runtime(
+                "removeListener expects a callback or userdata and callback",
+            ));
+        }
+    };
+    let identity = callback.to_pointer();
+    watch
+        .listeners
+        .borrow_mut()
+        .retain(|listener| listener.callback.to_pointer() != identity);
+    Ok(())
+}
+
+fn notify_property_listeners(watch: &ScriptedPropertyWatch) {
+    call_property_listeners(&watch.listeners);
+    let _ = watch.sink.take_dirt();
+}
+
+fn call_property_listeners(listeners: &RefCell<Vec<ScriptedListener>>) {
+    let listeners = listeners.borrow().clone();
+    for listener in listeners.into_iter().rev() {
+        let _ = listener
+            .callback
+            .call::<()>(listener.userdata.unwrap_or(Value::Nil));
+    }
+}
+
 struct ScriptedPropertyViewModel {
     parent: ScriptViewModel,
     name: String,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 impl ScriptedPropertyViewModel {
     fn new(parent: ScriptViewModel, name: String) -> Self {
-        Self { parent, name }
+        let watch = property_watch(&parent, &name);
+        Self {
+            parent,
+            name,
+            watch,
+        }
     }
 }
 
@@ -554,21 +676,33 @@ impl UserData for ScriptedPropertyViewModel {
             Ok(())
         });
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
+        });
+    }
 }
 
 struct ScriptedPropertyNumber {
     model: ScriptViewModel,
     name: String,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 struct ScriptedPropertyColor {
     model: ScriptViewModel,
     name: String,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 impl ScriptedPropertyColor {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        let watch = property_watch(&model, &name);
+        Self { model, name, watch }
     }
 }
 
@@ -577,16 +711,27 @@ impl UserData for ScriptedPropertyColor {
         fields.add_field_method_get("value", |_, this| {
             Ok(i64::from(this.model.color(&this.name).unwrap_or_default()))
         });
-        fields.add_field_method_set("value", |_, this, value: u32| {
+        fields.add_field_method_set("value", |lua, this, value: Value| {
+            let value = super::lua_color::required_unsigned(lua, Some(&value), "color")?;
             this.model.set_color(&this.name, value);
             Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
         });
     }
 }
 
 impl ScriptedPropertyNumber {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        let watch = property_watch(&model, &name);
+        Self { model, name, watch }
     }
 }
 
@@ -595,15 +740,19 @@ impl UserData for ScriptedPropertyNumber {
         fields.add_field_method_get("value", |_, this| {
             Ok(this.model.number(&this.name).unwrap_or_default())
         });
-        fields.add_field_method_set("value", |_, this, value: f32| {
+        fields.add_field_method_set("value", |lua, this, value: Value| {
+            let value = super::lua_data_value::checked_number(lua, value)? as f32;
             this.model.set_number(&this.name, value);
             Ok(())
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("getNumber", |_, this, ()| {
-            Ok(this.model.number(&this.name).unwrap_or_default())
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
         });
     }
 }
@@ -611,16 +760,19 @@ impl UserData for ScriptedPropertyNumber {
 struct ScriptedPropertyString {
     model: ScriptViewModel,
     name: String,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 struct ScriptedPropertyBoolean {
     model: ScriptViewModel,
     name: String,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 impl ScriptedPropertyBoolean {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        let watch = property_watch(&model, &name);
+        Self { model, name, watch }
     }
 }
 
@@ -636,15 +788,19 @@ impl UserData for ScriptedPropertyBoolean {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("getBoolean", |_, this, ()| {
-            Ok(this.model.boolean(&this.name).unwrap_or_default())
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
         });
     }
 }
 
 impl ScriptedPropertyString {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        let watch = property_watch(&model, &name);
+        Self { model, name, watch }
     }
 }
 
@@ -653,17 +809,120 @@ impl UserData for ScriptedPropertyString {
         fields.add_field_method_get("value", |_, this| {
             Ok(this.model.string(&this.name).unwrap_or_default())
         });
-        fields.add_field_method_set("value", |_, this, value: String| {
-            this.model.set_string(&this.name, &value);
+        fields.add_field_method_set("value", |lua, this, value: Value| {
+            let value = super::lua_data_value::checked_string(lua, value)?;
+            this.model
+                .set_string(&this.name, &String::from_utf8_lossy(&value));
             Ok(())
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("getString", |_, this, ()| {
-            Ok(this.model.string(&this.name).unwrap_or_default())
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
         });
     }
+}
+
+struct ScriptedPropertyEnum {
+    model: ScriptViewModel,
+    name: String,
+    watch: Rc<ScriptedPropertyWatch>,
+}
+
+impl ScriptedPropertyEnum {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        let watch = property_watch(&model, &name);
+        Self { model, name, watch }
+    }
+}
+
+impl UserData for ScriptedPropertyEnum {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |_, this| {
+            Ok(this.model.enum_value(&this.name).unwrap_or_default())
+        });
+        fields.add_field_method_set("value", |lua, this, value: Value| {
+            let value = super::lua_data_value::checked_string(lua, value)?;
+            this.model
+                .set_enum_value(&this.name, &String::from_utf8_lossy(&value));
+            Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("values", |lua, this, ()| {
+            create_scripted_enum_values(lua, this.model.enum_values(&this.name).unwrap_or_default())
+        });
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
+        });
+    }
+}
+
+struct ScriptedEnumValues {
+    values: Vec<String>,
+}
+
+impl UserData for ScriptedEnumValues {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__len", |_, this, ()| Ok(this.values.len()));
+    }
+}
+
+fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Result<AnyUserData> {
+    let values = lua.create_userdata(ScriptedEnumValues { values })?;
+    let metatable: Table = unsafe {
+        lua.exec_raw(Value::UserData(values.clone()), |state| {
+            let has_metatable = lua_getmetatable(state, 1);
+            debug_assert_ne!(has_metatable, 0);
+        })?
+    };
+    metatable.set(
+        "__index",
+        lua.create_function(move |lua, (values, key): (AnyUserData, Value)| match key {
+            Value::Integer(index) => Ok(usize::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_sub(1))
+                .and_then(|index| {
+                    values
+                        .borrow::<ScriptedEnumValues>()
+                        .ok()?
+                        .values
+                        .get(index)
+                        .cloned()
+                })
+                .map(|value| Value::String(lua.create_string(value)))
+                .unwrap_or(Value::Nil)),
+            Value::Number(index) if index.fract() == 0.0 => {
+                let index = if index >= 1.0 && index <= usize::MAX as f64 {
+                    Some(index as usize - 1)
+                } else {
+                    None
+                };
+                Ok(index
+                    .and_then(|index| {
+                        values
+                            .borrow::<ScriptedEnumValues>()
+                            .ok()?
+                            .values
+                            .get(index)
+                            .cloned()
+                    })
+                    .map(|value| Value::String(lua.create_string(value)))
+                    .unwrap_or(Value::Nil))
+            }
+            Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+            _ => Ok(Value::Nil),
+        })?,
+    )?;
+    Ok(values)
 }
 
 struct ScriptedPropertyImage {
@@ -671,6 +930,7 @@ struct ScriptedPropertyImage {
     name: String,
     cached_value: Rc<RefCell<Option<AnyUserData>>>,
     _change_sink: RuntimeCellDirtSink,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 struct ScriptedBlobWatch {
@@ -751,10 +1011,7 @@ impl UserData for ScriptedPropertyBlob {
         methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
             let args = args.into_vec();
             let (userdata, callback) = match args.as_slice() {
-                [Value::Function(callback)] => (
-                    Some(Value::UserData(lua.create_userdata(this.clone())?)),
-                    callback.clone(),
-                ),
+                [Value::Function(callback)] => (None, callback.clone()),
                 [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
                 _ => {
                     return Err(luaur_rt::Error::runtime(
@@ -800,11 +1057,13 @@ impl ScriptedPropertyImage {
                 }
             })
             .unwrap_or_default();
+        let watch = property_watch(&model, &name);
         Self {
             model,
             name,
             cached_value,
             _change_sink: change_sink,
+            watch,
         }
     }
 }
@@ -845,6 +1104,15 @@ impl UserData for ScriptedPropertyImage {
             Ok(())
         });
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
+        });
+    }
 }
 
 struct ScriptedPropertyFont {
@@ -852,6 +1120,7 @@ struct ScriptedPropertyFont {
     name: String,
     cached_value: Rc<RefCell<Option<AnyUserData>>>,
     _change_sink: RuntimeCellDirtSink,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 impl ScriptedPropertyFont {
@@ -865,11 +1134,13 @@ impl ScriptedPropertyFont {
                 }
             })
             .unwrap_or_default();
+        let watch = property_watch(&model, &name);
         Self {
             model,
             name,
             cached_value,
             _change_sink: change_sink,
+            watch,
         }
     }
 }
@@ -902,20 +1173,32 @@ impl UserData for ScriptedPropertyFont {
             Ok(())
         });
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
+        });
+    }
 }
 
 struct ScriptedPropertyList {
     model: ScriptViewModel,
     name: String,
     item_refs: BTreeMap<ViewModelInstanceKey, Table>,
+    watch: Rc<ScriptedPropertyWatch>,
 }
 
 impl ScriptedPropertyList {
     fn new(model: ScriptViewModel, name: String) -> Self {
+        let watch = property_watch(&model, &name);
         Self {
             model,
             name,
             item_refs: BTreeMap::new(),
+            watch,
         }
     }
 
@@ -1065,6 +1348,12 @@ impl UserData for ScriptedPropertyList {
             };
             this.model.remove_list_item(&this.name, &item, true);
             Ok(())
+        });
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
         });
     }
 }
@@ -1255,12 +1544,25 @@ pub(super) fn install_data_global(
         let model = model.clone();
         definition.set(
             "new",
-            lua.create_function(move |lua, name: Option<String>| {
+            lua.create_function(move |lua, args: MultiValue| {
+                let name = if args.len() == 1 {
+                    match args.front() {
+                        Some(Value::Nil) => None,
+                        Some(value @ (Value::String(_) | Value::Integer(_) | Value::Number(_))) => {
+                            let value: luaur_rt::LuaString = lua.unpack(value.clone())?;
+                            Some(value.to_string_lossy())
+                        }
+                        Some(_) => return Ok(Value::Nil),
+                        None => unreachable!("one argument disappeared"),
+                    }
+                } else {
+                    None
+                };
                 let instance = model
                     .named_instance(name.as_deref())
                     .or_else(|| model.named_instance(None))
                     .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
-                create_scripted_view_model(lua, instance)
+                create_scripted_view_model(lua, instance).map(Value::Table)
             })?,
         )?;
         data.set(name.as_str(), definition)?;
@@ -1319,6 +1621,23 @@ impl UserData for ScriptedPropertyTrigger {
             ScriptViewModelFrameContext::for_lua(lua).register_trigger_watch(&this.watch);
             Ok(())
         });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            let args = args.into_vec();
+            let callback = match args.as_slice() {
+                [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
+                _ => {
+                    return Err(luaur_rt::Error::runtime(
+                        "removeListener expects a callback or userdata and callback",
+                    ));
+                }
+            };
+            let identity = callback.to_pointer();
+            this.watch
+                .listeners
+                .borrow_mut()
+                .retain(|listener| listener.callback.to_pointer() != identity);
+            Ok(())
+        });
         methods.add_method_mut("fire", |_, this, ()| {
             // C++ fires the backing ViewModelInstanceTrigger first; its
             // delegates then notify listeners synchronously. Keeping this
@@ -1338,6 +1657,7 @@ impl UserData for ScriptedPropertyTrigger {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{ScriptProgram, ScriptVm};
     use super::*;
 
     #[test]
@@ -1477,7 +1797,14 @@ mod tests {
     }
 
     fn model_with_property(kind: ScriptViewModelProperty) -> (ScriptViewModel, String) {
-        fixture_models()
+        model_with_property_from("script_create_viewmodel_instance.riv", kind)
+    }
+
+    fn model_with_property_from(
+        asset: &str,
+        kind: ScriptViewModelProperty,
+    ) -> (ScriptViewModel, String) {
+        fixture_models_from(asset)
             .into_values()
             .find_map(|model| {
                 let name = model
@@ -1487,6 +1814,122 @@ mod tests {
                 Some((model.named_instance(None)?, name))
             })
             .unwrap_or_else(|| panic!("fixture has no {kind:?} property"))
+    }
+
+    #[test]
+    fn property_listeners_survive_userdata_gc_while_subscribed() {
+        let (model, property_name) = model_with_property(ScriptViewModelProperty::Number);
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
+        lua.load(
+            "calls = 0\n\
+                 local property = model:getNumber(propertyName)\n\
+                 property:addListener(function(_) calls += 1 end)\n\
+                 property = nil",
+        )
+        .exec()
+        .expect("listener subscribes without an external wrapper owner");
+        lua.gc_collect().expect("userdata collection");
+        assert!(model.set_number(&property_name, 99.0));
+        let calls: i64 = lua
+            .load("return calls")
+            .eval()
+            .expect("listener survives wrapper collection");
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn scripted_string_boolean_and_enum_properties_match_upstream_luau_access() {
+        let (number_model, number_name) = model_with_property(ScriptViewModelProperty::Number);
+        let lua = Lua::new();
+        let table =
+            create_scripted_view_model(&lua, number_model.clone()).expect("scripted number model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals()
+            .set("propertyName", number_name.clone())
+            .unwrap();
+        let calls: i64 = lua
+            .load(
+                "local property = model:getNumber(propertyName)\n\
+                 local calls = 0\n\
+                 property:addListener(function(_) calls += 1 end)\n\
+                 property.value = '12.5'\n\
+                 return calls",
+            )
+            .eval()
+            .expect("number property surface");
+        assert_eq!(calls, 1);
+        assert_eq!(number_model.number(&number_name), Some(12.5));
+
+        let scenarios = [
+            (
+                "scripted_string.riv",
+                ScriptViewModelProperty::String,
+                "'Hello World'",
+            ),
+            (
+                "scripted_boolean.riv",
+                ScriptViewModelProperty::Boolean,
+                "true",
+            ),
+        ];
+        for (asset, kind, assigned) in scenarios {
+            let (model, property_name) = model_with_property_from(asset, kind);
+            let lua = Lua::new();
+            let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+            lua.globals().set("model", table).unwrap();
+            lua.globals()
+                .set("propertyName", property_name.clone())
+                .unwrap();
+            let source = format!(
+                "local property = model[propertyName]\n\
+                 local calls = 0\n\
+                 local function changed(value) calls += 1; assert(value == property) end\n\
+                 property:addListener(property, changed)\n\
+                 property.value = {assigned}\n\
+                 property:removeListener(property, changed)\n\
+                 return calls"
+            );
+            assert_eq!(lua.load(&source).eval::<i64>().unwrap(), 1, "{asset}");
+            match kind {
+                ScriptViewModelProperty::String => {
+                    assert_eq!(model.string(&property_name).as_deref(), Some("Hello World"));
+                }
+                ScriptViewModelProperty::Boolean => {
+                    assert_eq!(model.boolean(&property_name), Some(true));
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let (model, property_name) =
+            model_with_property_from("scripted_enum.riv", ScriptViewModelProperty::Enum);
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted enum model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
+        let result: Table = lua
+            .load(
+                "local property = model:getEnum(propertyName)\n\
+                 local values = property:values()\n\
+                 local calls = 0\n\
+                 property:addListener(function(_) calls += 1 end)\n\
+                 property.value = 'blue'\n\
+                 return { property.value, values[1], #values, calls }",
+            )
+            .eval()
+            .expect("enum property surface");
+        assert_eq!(result.get::<String>(1).unwrap(), "blue");
+        assert!(!result.get::<String>(2).unwrap().is_empty());
+        assert!(result.get::<i64>(3).unwrap() > 0);
+        assert_eq!(result.get::<i64>(4).unwrap(), 1);
+        assert_eq!(model.enum_value(&property_name).as_deref(), Some("blue"));
     }
 
     #[test]
@@ -1522,10 +1965,86 @@ mod tests {
         assert_eq!(values.get::<i64>(1).unwrap(), i64::from(expected));
         assert_eq!(values.get::<i64>(2).unwrap(), i64::from(expected));
 
-        lua.load("model[colorName].value = 0x10203040")
-            .exec()
-            .expect("color write");
-        assert_eq!(model.color(&color), Some(0x1020_3040));
+        let calls: i64 = lua
+            .load(
+                "local property = model[colorName]\n\
+                 local calls = 0\n\
+                 property:addListener(function(_) calls += 1 end)\n\
+                 property.value = -1\n\
+                 return calls",
+            )
+            .eval()
+            .expect("color write and listener");
+        assert_eq!(calls, 1);
+        assert_eq!(model.color(&color), Some(0xffff_ffff));
+    }
+
+    #[test]
+    fn data_constructor_matches_pinned_argument_count_and_type_dispatch() {
+        let (model_name, model) = fixture_models()
+            .into_iter()
+            .next()
+            .expect("fixture contains a view-model definition");
+        let lua = Lua::new();
+        install_data_global(&lua, &BTreeMap::from([(model_name.clone(), model)]))
+            .expect("Data global installs");
+        lua.globals()
+            .set("modelName", model_name)
+            .expect("model name global");
+
+        let result: Table = lua
+            .load(
+                r#"
+                local constructor = Data[modelName].new
+                return {
+                    zero = constructor() ~= nil,
+                    nilArg = constructor(nil) ~= nil,
+                    booleanArg = constructor(true) == nil,
+                    tableArg = constructor({}) == nil,
+                    numericName = constructor(123) ~= nil,
+                    extraArgs = constructor("missing", true) ~= nil,
+                }
+                "#,
+            )
+            .eval()
+            .expect("Data constructor scenario runs");
+
+        for field in [
+            "zero",
+            "nilArg",
+            "booleanArg",
+            "tableArg",
+            "numericName",
+            "extraArgs",
+        ] {
+            assert!(result.get::<bool>(field).unwrap(), "{field}");
+        }
+    }
+
+    #[test]
+    fn unported_context_binding_reports_the_script_and_binding_names() {
+        let vm = ScriptVm::new();
+        let chunk = vm
+            .load(
+                "lt2-unported-animation.luau",
+                r#"
+                return function(context)
+                    context:animation("missing")
+                    return {}
+                end
+                "#,
+            )
+            .expect("spot-check script compiles");
+        let generator: Function = chunk.call(()).expect("script returns a generator");
+        let program = ScriptProgram { generator };
+
+        let error = match vm.instantiate_registered_script_with_context(&program, None, Vec::new())
+        {
+            Ok(_) => panic!("an unported Context binding must fail loudly"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("lt2-unported-animation.luau"), "{error}");
+        assert!(error.contains("animation"), "{error}");
     }
 
     #[test]

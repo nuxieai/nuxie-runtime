@@ -987,6 +987,77 @@ impl ScriptViewModel {
             .boolean_value_by_property_path(&path)
     }
 
+    pub fn enum_value(&self, name: &str) -> Option<String> {
+        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        let value_index = usize::try_from(
+            self.context
+                .root_handle()
+                .borrow()
+                .enum_value_by_property_path(&path)?,
+        )
+        .ok()?;
+        let view_model = self.file.view_model(self.view_model_index)?;
+        let property = view_model
+            .properties
+            .iter()
+            .find(|property| property.string_property("name") == Some(name))?;
+        self.file
+            .view_model_property_enum_value_for_index_object(property, value_index)
+            .map(|value| String::from_utf8_lossy(value).into_owned())
+    }
+
+    pub fn enum_values(&self, name: &str) -> Option<Vec<String>> {
+        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
+            return None;
+        }
+        let view_model = self.file.view_model(self.view_model_index)?;
+        let property = view_model
+            .properties
+            .iter()
+            .find(|property| property.string_property("name") == Some(name))?;
+        Some(
+            (0..)
+                .map_while(|index| {
+                    self.file
+                        .view_model_property_enum_value_for_index_object(property, index)
+                })
+                .map(|value| String::from_utf8_lossy(value).into_owned())
+                .collect(),
+        )
+    }
+
+    pub fn set_enum_value(&self, name: &str, value: &str) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let Some(view_model) = self.file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(property) = view_model
+            .properties
+            .iter()
+            .find(|property| property.string_property("name") == Some(name))
+        else {
+            return false;
+        };
+        let Some(value_index) = self
+            .file
+            .view_model_property_enum_value_index_for_key_bytes_object(property, value.as_bytes())
+        else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_enum_by_property_path(&path, value_index as u64)
+    }
+
     pub fn image(&self, name: &str) -> Option<ScriptImage> {
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return None;
@@ -1472,6 +1543,7 @@ pub enum ScriptViewModelProperty {
     Color,
     String,
     Boolean,
+    Enum,
     Trigger,
     Image,
     Blob,
@@ -1643,6 +1715,9 @@ fn build_script_view_model_scoped_with_blob_assets(
                 "ViewModelPropertyColor" => ScriptViewModelProperty::Color,
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
+                "ViewModelPropertyEnum"
+                | "ViewModelPropertyEnumCustom"
+                | "ViewModelPropertyEnumSystem" => ScriptViewModelProperty::Enum,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
                 "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
                 "ViewModelPropertyAssetBlob" => ScriptViewModelProperty::Blob,

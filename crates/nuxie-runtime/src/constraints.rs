@@ -2825,6 +2825,11 @@ mod tests {
     use crate::properties::property_key_for_name;
     use crate::{ArtboardInstance, TransformProperty};
 
+    use super::draggable_constraint::runtime_draggable_proxies;
+    use super::scrolling::scroll_virtualizer::{
+        test_virtualizer_placements_for_metrics, test_virtualizer_placements_for_providers,
+        virtualized_provider_content_size,
+    };
     use super::{
         BONE_LENGTH_PROPERTY_KEY, FOLLOW_PATH_DISTANCE_PROPERTY_KEY,
         FOLLOW_PATH_OFFSET_PROPERTY_KEY, FOLLOW_PATH_ORIENT_PROPERTY_KEY,
@@ -2834,13 +2839,8 @@ mod tests {
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
         RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
         interpolated_rotation, interpolated_rotation_from_modded_base, point_length,
-        runtime_draggable_proxy_drag, runtime_draggable_proxy_end,
-        runtime_draggable_proxy_start, runtime_scroll_intent_axes, scroll_viewport_axis_size,
-    };
-    use super::draggable_constraint::runtime_draggable_proxies;
-    use super::scrolling::scroll_virtualizer::{
-        test_virtualizer_placements_for_metrics, test_virtualizer_placements_for_providers,
-        virtualized_provider_content_size,
+        runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
+        runtime_scroll_intent_axes, scroll_viewport_axis_size,
     };
 
     #[test]

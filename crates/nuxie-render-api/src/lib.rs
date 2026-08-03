@@ -64,6 +64,36 @@ impl Aabb {
     }
 }
 
+/// Pinned C++ `rive::Fit` values from `include/rive/layout.hpp`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Fit {
+    Fill = 0,
+    Contain = 1,
+    Cover = 2,
+    FitWidth = 3,
+    FitHeight = 4,
+    None = 5,
+    ScaleDown = 6,
+    Layout = 7,
+}
+
+impl Fit {
+    pub const fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Fill),
+            1 => Some(Self::Contain),
+            2 => Some(Self::Cover),
+            3 => Some(Self::FitWidth),
+            4 => Some(Self::FitHeight),
+            5 => Some(Self::None),
+            6 => Some(Self::ScaleDown),
+            7 => Some(Self::Layout),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 
@@ -77,6 +107,176 @@ impl Mat2D {
             y: yx * point.x + yy * point.y + ty,
         }
     }
+}
+
+fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
+    let a = lhs.0;
+    let b = rhs.0;
+    Mat2D([
+        a[0].mul_add(b[0], a[2] * b[1]),
+        a[1].mul_add(b[0], a[3] * b[1]),
+        a[0].mul_add(b[2], a[2] * b[3]),
+        a[1].mul_add(b[2], a[3] * b[3]),
+        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
+    ])
+}
+
+/// Align content into a destination frame with pinned Rive fit semantics.
+///
+/// Direct port of `src/renderer.cpp:7-70`. `alignment` is the two-float
+/// `rive::Alignment` value; `Vec2D` is its backend-neutral seam equivalent.
+pub fn compute_alignment(
+    fit: Fit,
+    alignment: Vec2D,
+    frame: Aabb,
+    content: Aabb,
+    scale_factor: f32,
+) -> Mat2D {
+    compute_alignment_from_origin_size(
+        fit,
+        alignment,
+        Vec2D::new(frame.min_x, frame.min_y),
+        Vec2D::new(frame.width(), frame.height()),
+        Vec2D::new(content.min_x, content.min_y),
+        Vec2D::new(content.width(), content.height()),
+        scale_factor,
+    )
+}
+
+/// `compute_alignment` for callers that already retain bounds as origin and
+/// size. This avoids a lossy origin-plus-size-to-maximum round trip.
+pub fn compute_alignment_from_origin_size(
+    fit: Fit,
+    alignment: Vec2D,
+    frame_origin: Vec2D,
+    frame_size: Vec2D,
+    content_origin: Vec2D,
+    content_size: Vec2D,
+    scale_factor: f32,
+) -> Mat2D {
+    let x = -content_origin.x - content_size.x * 0.5 - alignment.x * content_size.x * 0.5;
+    let y = -content_origin.y - content_size.y * 0.5 - alignment.y * content_size.y * 0.5;
+
+    let (scale_x, scale_y) = match fit {
+        Fit::Fill => (frame_size.x / content_size.x, frame_size.y / content_size.y),
+        Fit::Contain => {
+            let scale = (frame_size.x / content_size.x).min(frame_size.y / content_size.y);
+            (scale, scale)
+        }
+        Fit::Cover => {
+            let scale = (frame_size.x / content_size.x).max(frame_size.y / content_size.y);
+            (scale, scale)
+        }
+        Fit::FitHeight => {
+            let scale = frame_size.y / content_size.y;
+            (scale, scale)
+        }
+        Fit::FitWidth => {
+            let scale = frame_size.x / content_size.x;
+            (scale, scale)
+        }
+        Fit::Layout => (scale_factor, scale_factor),
+        Fit::None => (1.0, 1.0),
+        Fit::ScaleDown => {
+            let scale = (frame_size.x / content_size.x).min(frame_size.y / content_size.y);
+            let scale = if scale < 1.0 { scale } else { 1.0 };
+            (scale, scale)
+        }
+    };
+
+    let translation = Mat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        frame_origin.x + frame_size.x * 0.5 + alignment.x * frame_size.x * 0.5,
+        frame_origin.y + frame_size.y * 0.5 + alignment.y * frame_size.y * 0.5,
+    ]);
+    multiply_mat2d(
+        multiply_mat2d(translation, Mat2D([scale_x, 0.0, 0.0, scale_y, 0.0, 0.0])),
+        Mat2D([1.0, 0.0, 0.0, 1.0, x, y]),
+    )
+}
+
+/// Rive's intentionally narrow whitespace classification.
+///
+/// Direct port of pinned `isWhiteSpace` (`src/renderer.cpp:142-147`). In
+/// particular, U+200B is whitespace while most Unicode space characters are
+/// not part of this renderer contract.
+pub fn is_white_space(character: char) -> bool {
+    let character = character as u32;
+    character <= u32::from(b' ') || matches!(character, 0x2028 | 0x200b)
+}
+
+/// Renderer annotations attached to one shaped glyph run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlyphRunAnnotations {
+    pub breaks: Vec<u32>,
+    pub joiners: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GlyphRunAnnotationError;
+
+impl std::fmt::Display for GlyphRunAnnotationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("shaped glyph run contains an invalid text index")
+    }
+}
+
+impl std::error::Error for GlyphRunAnnotationError {}
+
+/// Attach pinned line-break and word-joiner annotations to shaped runs.
+///
+/// Direct port of the post-shape loop in `Font::shapeText`
+/// (`src/renderer.cpp:149-229`). Each text index addresses `text`; run order
+/// and glyph order remain exactly as supplied by the shaping adapter.
+pub fn annotate_glyph_runs(
+    text: &[char],
+    run_text_indices: &[&[u32]],
+) -> Result<Vec<GlyphRunAnnotations>, GlyphRunAnnotationError> {
+    let mut want_white_space = false;
+    let mut annotations = Vec::with_capacity(run_text_indices.len());
+
+    for text_indices in run_text_indices {
+        let mut breaks = Vec::with_capacity(text.len() / 4);
+        let mut joiners = Vec::with_capacity(text.len() / 4);
+        for (glyph_index, offset) in text_indices.iter().copied().enumerate() {
+            let character = usize::try_from(offset)
+                .ok()
+                .and_then(|offset| text.get(offset))
+                .copied()
+                .ok_or(GlyphRunAnnotationError)?;
+            let glyph_index = u32::try_from(glyph_index).map_err(|_| GlyphRunAnnotationError)?;
+            if matches!(character, '\n' | '\u{2028}') {
+                breaks.push(glyph_index);
+                breaks.push(glyph_index);
+            }
+            if character == '\u{2060}' {
+                joiners.push(offset);
+            }
+            if want_white_space == is_white_space(character) {
+                breaks.push(glyph_index);
+                want_white_space = !want_white_space;
+            }
+        }
+        annotations.push(GlyphRunAnnotations { breaks, joiners });
+    }
+
+    if let Some((annotation, text_indices)) = annotations.last_mut().zip(run_text_indices.last()) {
+        let glyph_count = u32::try_from(text_indices.len()).map_err(|_| GlyphRunAnnotationError)?;
+        if want_white_space {
+            annotation.breaks.push(glyph_count);
+        } else {
+            annotation
+                .breaks
+                .push(annotation.breaks.last().copied().unwrap_or(0));
+            annotation.breaks.push(glyph_count);
+        }
+    }
+
+    Ok(annotations)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -340,6 +540,16 @@ impl RawPath {
             self.mark_mutated();
             self.verbs.push(PathVerb::Close);
         }
+    }
+
+    /// Append a clockwise rectangle, matching pinned C++ `RawPath::addRect`.
+    pub fn add_rect(&mut self, bounds: Aabb) {
+        self.reserve(6, 5);
+        self.move_to(bounds.min_x, bounds.min_y);
+        self.line_to(bounds.max_x, bounds.min_y);
+        self.line_to(bounds.max_x, bounds.max_y);
+        self.line_to(bounds.min_x, bounds.max_y);
+        self.close();
     }
 
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
@@ -883,6 +1093,33 @@ impl std::fmt::Display for ImageDecodeError {
 
 impl std::error::Error for ImageDecodeError {}
 
+/// Factory-owned encoded font data validated by the runtime's HarfBuzz port.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedFont {
+    bytes: Arc<[u8]>,
+}
+
+impl DecodedFont {
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn into_bytes(self) -> Arc<[u8]> {
+        self.bytes
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontDecodeError;
+
+impl std::fmt::Display for FontDecodeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("render factory could not decode font")
+    }
+}
+
+impl std::error::Error for FontDecodeError {}
+
 pub trait RenderPaint: Any {
     fn as_any(&self) -> &dyn Any;
     fn style(&mut self, style: RenderPaintStyle);
@@ -914,6 +1151,24 @@ pub trait Renderer {
     fn save(&mut self);
     fn restore(&mut self);
     fn transform(&mut self, transform: Mat2D);
+
+    /// Direct port of pinned `Renderer::translate` (`src/renderer.cpp:72-75`).
+    fn translate(&mut self, tx: f32, ty: f32) {
+        self.transform(Mat2D([1.0, 0.0, 0.0, 1.0, tx, ty]));
+    }
+
+    /// Direct port of pinned `Renderer::scale` (`src/renderer.cpp:77-80`).
+    fn scale(&mut self, sx: f32, sy: f32) {
+        self.transform(Mat2D([sx, 0.0, 0.0, sy, 0.0, 0.0]));
+    }
+
+    /// Direct port of pinned `Renderer::rotate` (`src/renderer.cpp:82-88`).
+    fn rotate(&mut self, radians: f32) {
+        let sin = radians.sin();
+        let cos = radians.cos();
+        self.transform(Mat2D([cos, sin, -sin, cos, 0.0, 0.0]));
+    }
+
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint);
     fn clip_path(&mut self, path: &dyn RenderPath);
     fn draw_image(
@@ -1047,9 +1302,32 @@ pub trait Factory {
         stops: &[f32],
     ) -> Box<dyn RenderShader>;
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath>;
+
+    /// Build the pinned nonzero clockwise rectangle-path helper.
+    ///
+    /// Direct port of `src/factory.cpp:15-20`; the default keeps the pinned
+    /// nonvirtual behavior layered on the adapter-specific raw-path constructor.
+    fn make_render_path_from_aabb(&mut self, bounds: Aabb) -> Box<dyn RenderPath> {
+        let mut raw_path = RawPath::new();
+        raw_path.add_rect(bounds);
+        self.make_render_path(raw_path, FillRule::NonZero)
+    }
+
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
+
+    /// Validate and take ownership of encoded font bytes.
+    ///
+    /// Direct port of pinned `Factory::decodeFont` (`src/factory.cpp:22-29`).
+    /// HarfRust is the project's verified HarfBuzz port, and the owned byte
+    /// snapshot supplies the backend views that C++ retains through `HBFont`.
+    fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
+        harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
+        Ok(DecodedFont {
+            bytes: Arc::from(data),
+        })
+    }
 
     /// Validate and take ownership of encoded audio bytes.
     ///
@@ -2890,6 +3168,7 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine as _;
 
     #[test]
     fn encoded_image_metadata_reports_supported_raster_identity() {
@@ -3324,6 +3603,121 @@ mod tests {
         let _path = factory.make_render_path(raw_path, FillRule::EvenOdd);
 
         assert_eq!(&factory.bytes()[5..8], &[3, 0, 16]);
+    }
+
+    #[test]
+    fn p3g_factory_aabb_helper_builds_the_pinned_nonzero_rectangle_path() {
+        let mut factory = RecordingFactory::new();
+
+        let _path = factory.make_render_path_from_aabb(Aabb::new(-2.0, 3.0, 5.0, 11.0));
+
+        assert_eq!(
+            factory.stream(),
+            concat!(
+                "rive-golden-stream-v1\n",
+                "makeRenderPath {id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(-2,3),(5,3),(5,11),(-2,11)]}}\n",
+            )
+        );
+    }
+
+    #[test]
+    fn p3g_factory_font_helper_validates_and_owns_the_encoded_font() {
+        let mut factory = NullFactory::new();
+        let encoded = include_bytes!("../../nuxie/tests/fixtures/roboto-a.ttf.base64")
+            .iter()
+            .copied()
+            .filter(|byte| !byte.is_ascii_whitespace())
+            .collect::<Vec<_>>();
+        let mut bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("fixture font base64 decodes");
+        let expected = bytes.clone();
+
+        let font = factory.decode_font(&bytes).expect("valid font decodes");
+        bytes.fill(0);
+
+        assert_eq!(font.bytes(), expected);
+        assert_eq!(factory.decode_font(b"not a font"), Err(FontDecodeError));
+    }
+
+    #[test]
+    fn p3g_renderer_transform_helpers_emit_the_pinned_matrices() {
+        let factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let radians = 0.5_f32;
+
+        renderer.translate(3.0, -4.0);
+        renderer.scale(2.0, 5.0);
+        renderer.rotate(radians);
+
+        assert_eq!(
+            factory.stream(),
+            format!(
+                concat!(
+                    "rive-golden-stream-v1\n",
+                    "transform matrix=[1,0,0,1,3,-4]\n",
+                    "transform matrix=[2,0,0,5,0,0]\n",
+                    "transform matrix={}\n",
+                ),
+                mat_to_string(Mat2D([
+                    radians.cos(),
+                    radians.sin(),
+                    -radians.sin(),
+                    radians.cos(),
+                    0.0,
+                    0.0,
+                ])),
+            )
+        );
+    }
+
+    #[test]
+    fn p3g_compute_alignment_matches_every_pinned_fit_case() {
+        let frame = Aabb::new(10.0, 20.0, 210.0, 120.0);
+        let content = Aabb::new(-5.0, -10.0, 45.0, 10.0);
+        let alignment = Vec2D::new(0.0, 0.0);
+
+        assert_eq!(
+            [
+                compute_alignment(Fit::Fill, alignment, frame, content, 0.5),
+                compute_alignment(Fit::Contain, alignment, frame, content, 0.5),
+                compute_alignment(Fit::Cover, alignment, frame, content, 0.5),
+                compute_alignment(Fit::FitWidth, alignment, frame, content, 0.5),
+                compute_alignment(Fit::FitHeight, alignment, frame, content, 0.5),
+                compute_alignment(Fit::None, alignment, frame, content, 0.5),
+                compute_alignment(Fit::ScaleDown, alignment, frame, content, 0.5),
+                compute_alignment(Fit::Layout, alignment, frame, content, 0.5),
+            ],
+            [
+                Mat2D([4.0, 0.0, 0.0, 5.0, 30.0, 70.0]),
+                Mat2D([4.0, 0.0, 0.0, 4.0, 30.0, 70.0]),
+                Mat2D([5.0, 0.0, 0.0, 5.0, 10.0, 70.0]),
+                Mat2D([4.0, 0.0, 0.0, 4.0, 30.0, 70.0]),
+                Mat2D([5.0, 0.0, 0.0, 5.0, 10.0, 70.0]),
+                Mat2D([1.0, 0.0, 0.0, 1.0, 90.0, 70.0]),
+                Mat2D([1.0, 0.0, 0.0, 1.0, 90.0, 70.0]),
+                Mat2D([0.5, 0.0, 0.0, 0.5, 100.0, 70.0]),
+            ]
+        );
+    }
+
+    #[test]
+    fn p3g_glyph_run_annotations_match_pinned_break_and_joiner_rules() {
+        let text = "a b\nc\u{2028}d\u{200b}e\u{2060}f"
+            .chars()
+            .collect::<Vec<_>>();
+        let text_indices = (0..text.len() as u32).collect::<Vec<_>>();
+
+        let annotations = annotate_glyph_runs(&text, &[&text_indices])
+            .expect("shaper-produced indices address the source text");
+
+        assert_eq!(
+            annotations,
+            vec![GlyphRunAnnotations {
+                breaks: vec![0, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 8, 11],
+                joiners: vec![9],
+            }]
+        );
     }
 
     #[test]

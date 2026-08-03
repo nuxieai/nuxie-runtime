@@ -2,6 +2,7 @@ use crate::ArtboardInstance;
 #[cfg(test)]
 use crate::ComponentDirt;
 use nuxie_binary::RuntimeFile;
+use nuxie_render_api::{Factory as RenderFactory, NullFactory};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
@@ -63,7 +64,7 @@ impl RuntimeFontAssetOwners {
             if entry.asset.type_name == "FontAsset"
                 && let Some(bytes) = entry.contents
             {
-                let _ = owners.decode(entry.asset.id, bytes);
+                owners.decode_with_portable_factory(entry.asset.id, bytes);
             }
         }
         owners
@@ -87,7 +88,7 @@ impl RuntimeFontAssetOwners {
                 continue;
             };
             if let Some(bytes) = external_fonts.get(&asset_id) {
-                let _ = owners.decode(asset.id, bytes);
+                owners.decode_with_portable_factory(asset.id, bytes);
             }
         }
         owners
@@ -101,13 +102,18 @@ impl RuntimeFontAssetOwners {
     ///
     /// Every decode result replaces the current owner: valid bytes install a
     /// font and invalid bytes clear it. Both synchronously publish to every
-    /// live TextStyle referencer, matching `FontAsset::decode`/`font`.
-    pub fn decode(&self, asset_global: u32, bytes: &[u8]) -> bool {
-        let decoded = crate::text::embedded_font_is_parseable(bytes);
-        if decoded {
+    /// live TextStyle referencer, matching `src/assets/font_asset.cpp:8-25`;
+    /// decode itself routes through pinned `Factory::decodeFont`.
+    pub fn decode(&self, asset_global: u32, bytes: &[u8], factory: &mut dyn RenderFactory) -> bool {
+        let decoded = factory.decode_font(bytes).ok().filter(|font| {
+            // The safe Rust text adapters additionally require every outline
+            // to be consumable by Skrifa before publishing the retained font.
+            crate::text::embedded_font_is_parseable(font.bytes())
+        });
+        if let Some(decoded) = decoded {
             self.fonts
                 .borrow_mut()
-                .insert(asset_global, Arc::<[u8]>::from(bytes));
+                .insert(asset_global, decoded.into_bytes());
         } else {
             self.fonts.borrow_mut().remove(&asset_global);
         }
@@ -118,7 +124,15 @@ impl RuntimeFontAssetOwners {
             referencer.publish(asset_global);
             true
         });
-        decoded
+        self.fonts.borrow().contains_key(&asset_global)
+    }
+
+    fn decode_with_portable_factory(&self, asset_global: u32, bytes: &[u8]) {
+        // RuntimeFile construction precedes renderer selection, but pinned
+        // Factory::decodeFont is nonvirtual. The portable adapter therefore
+        // executes the same Factory default without inventing a backend.
+        let mut factory = NullFactory::new();
+        let _ = self.decode(asset_global, bytes, &mut factory);
     }
 
     pub(crate) fn register_referencer(&self, referencer: &Rc<RuntimeFontAssetReferencerQueue>) {
@@ -157,8 +171,106 @@ mod tests {
     use crate::{RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetOwners};
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
     use nuxie_graph::GraphFile;
-    use nuxie_render_api::NullFactory;
+    use nuxie_render_api::{
+        ColorInt, DecodedFont, Factory, FillRule, FontDecodeError, GpuCanvasError, GpuCanvasPlan,
+        GpuCanvasShader, ImageDecodeError, NullFactory, RawPath, RenderBuffer, RenderBufferFlags,
+        RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath,
+        RenderShader,
+    };
     use nuxie_schema::definition_by_name;
+
+    struct ObservingFontFactory {
+        inner: NullFactory,
+        decode_calls: usize,
+    }
+
+    impl ObservingFontFactory {
+        fn new() -> Self {
+            Self {
+                inner: NullFactory::new(),
+                decode_calls: 0,
+            }
+        }
+    }
+
+    impl Factory for ObservingFontFactory {
+        fn make_render_buffer(
+            &mut self,
+            buffer_type: RenderBufferType,
+            flags: RenderBufferFlags,
+            size_in_bytes: usize,
+        ) -> Box<dyn RenderBuffer> {
+            self.inner
+                .make_render_buffer(buffer_type, flags, size_in_bytes)
+        }
+
+        fn make_linear_gradient(
+            &mut self,
+            sx: f32,
+            sy: f32,
+            ex: f32,
+            ey: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.inner
+                .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        }
+
+        fn make_radial_gradient(
+            &mut self,
+            cx: f32,
+            cy: f32,
+            radius: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.inner
+                .make_radial_gradient(cx, cy, radius, colors, stops)
+        }
+
+        fn make_render_path(
+            &mut self,
+            raw_path: RawPath,
+            fill_rule: FillRule,
+        ) -> Box<dyn RenderPath> {
+            self.inner.make_render_path(raw_path, fill_rule)
+        }
+
+        fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+            self.inner.make_empty_render_path()
+        }
+
+        fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+            self.inner.make_render_paint()
+        }
+
+        fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+            self.inner.decode_image(data)
+        }
+
+        fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
+            self.decode_calls += 1;
+            self.inner.decode_font(data)
+        }
+
+        fn make_gpu_canvas_shader(
+            &mut self,
+            shader: &GpuCanvasShader,
+        ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+            self.inner.make_gpu_canvas_shader(shader)
+        }
+
+        fn make_gpu_canvas_image(
+            &mut self,
+            vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+            fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
+            plan: &GpuCanvasPlan,
+        ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+            self.inner
+                .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
+        }
+    }
 
     fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
         AuthoringRecord {
@@ -301,5 +413,16 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::TEXT_SHAPE)
         );
+    }
+
+    #[test]
+    fn p3g_font_asset_decode_routes_through_the_factory_helper() {
+        let owners = RuntimeFontAssetOwners::default();
+        let mut factory = ObservingFontFactory::new();
+
+        assert!(owners.decode(7, &fixture_font_bytes(), &mut factory));
+
+        assert_eq!(factory.decode_calls, 1);
+        assert!(owners.get(7).is_some());
     }
 }

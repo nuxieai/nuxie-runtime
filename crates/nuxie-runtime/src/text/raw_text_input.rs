@@ -723,7 +723,7 @@ impl Class {
 }
 
 fn classify(value: char) -> Class {
-    if value.is_whitespace() {
+    if nuxie_render_api::is_white_space(value) {
         Class::Whitespace
     } else if value == '_' {
         Class::Underscore

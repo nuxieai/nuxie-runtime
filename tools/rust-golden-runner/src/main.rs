@@ -195,6 +195,9 @@ trait RunnerBackend {
     fn add_set_input_trigger(&mut self, seconds: f32, name: &str);
     fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool);
     fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32);
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str);
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32);
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32);
     fn add_view_model_trigger(&mut self, seconds: f32, property: &str);
     fn add_resize(
         &mut self,
@@ -256,6 +259,18 @@ impl RunnerBackend for RecordingFactory {
 
     fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
         RecordingFactory::add_view_model_number(self, seconds, property, value);
+    }
+
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        RecordingFactory::add_view_model_string(self, seconds, property, value);
+    }
+
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        RecordingFactory::add_view_model_enum(self, seconds, property, value);
+    }
+
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        RecordingFactory::add_view_model_color(self, seconds, property, value);
     }
 
     fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
@@ -339,6 +354,12 @@ impl RunnerBackend for NullFactory {
     fn add_view_model_boolean(&mut self, _seconds: f32, _property: &str, _value: bool) {}
 
     fn add_view_model_number(&mut self, _seconds: f32, _property: &str, _value: f32) {}
+
+    fn add_view_model_string(&mut self, _seconds: f32, _property: &str, _value: &str) {}
+
+    fn add_view_model_enum(&mut self, _seconds: f32, _property: &str, _value: u32) {}
+
+    fn add_view_model_color(&mut self, _seconds: f32, _property: &str, _value: u32) {}
 
     fn add_view_model_trigger(&mut self, _seconds: f32, _property: &str) {}
 
@@ -429,6 +450,21 @@ where
     fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
         self.borrow_mut()
             .add_view_model_number(seconds, property, value);
+    }
+
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        self.borrow_mut()
+            .add_view_model_string(seconds, property, value);
+    }
+
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        self.borrow_mut()
+            .add_view_model_enum(seconds, property, value);
+    }
+
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        self.borrow_mut()
+            .add_view_model_color(seconds, property, value);
     }
 
     fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
@@ -1778,6 +1814,9 @@ enum ScriptValueKind {
 enum ViewModelKind {
     SetBoolean,
     SetNumber,
+    SetString,
+    SetEnum,
+    SetColor,
     FireTrigger,
 }
 
@@ -1841,6 +1880,8 @@ struct ViewModelEvent {
     property: String,
     bool_value: bool,
     number_value: f32,
+    string_value: String,
+    uint_value: u32,
     order: usize,
 }
 
@@ -2000,13 +2041,7 @@ fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
         events.push(event);
     }
 
-    events.sort_by(|left, right| {
-        if (left.seconds - right.seconds).abs() <= TIME_EPSILON {
-            left.order.cmp(&right.order)
-        } else {
-            left.seconds.total_cmp(&right.seconds)
-        }
-    });
+    events.sort_by(|left, right| left.seconds.total_cmp(&right.seconds));
     Ok(events)
 }
 
@@ -2034,17 +2069,23 @@ fn parse_view_model_script(contents: &str) -> Result<Vec<ViewModelEvent>> {
             bail!("{context} has a negative time");
         }
         let kind = match tokens[1] {
-            "setBoolean" => ViewModelKind::SetBoolean,
-            "setNumber" => ViewModelKind::SetNumber,
-            "fireTrigger" => ViewModelKind::FireTrigger,
+            "setVmBool" => ViewModelKind::SetBoolean,
+            "setVmNumber" => ViewModelKind::SetNumber,
+            "setVmString" => ViewModelKind::SetString,
+            "setVmEnum" => ViewModelKind::SetEnum,
+            "setVmColor" => ViewModelKind::SetColor,
+            "fireVmTrigger" => ViewModelKind::FireTrigger,
             other => bail!("unknown view-model event on line {line_number}: {other}"),
         };
         if kind == ViewModelKind::FireTrigger {
             if tokens.len() != 3 {
-                bail!("{context} must be: <seconds> fireTrigger <property>");
+                bail!("{context} must be: <seconds> fireVmTrigger <path>");
             }
         } else if tokens.len() != 4 {
-            bail!("{context} must be: <seconds> <setBoolean|setNumber> <property> <value>");
+            bail!("{context} must be: <seconds> <view-model-setter> <path> <value>");
+        }
+        if tokens[2].starts_with('/') || tokens[2].ends_with('/') || tokens[2].contains("//") {
+            bail!("{context} has an invalid property path");
         }
         let mut event = ViewModelEvent {
             seconds,
@@ -2052,6 +2093,8 @@ fn parse_view_model_script(contents: &str) -> Result<Vec<ViewModelEvent>> {
             property: tokens[2].to_owned(),
             bool_value: false,
             number_value: 0.0,
+            string_value: String::new(),
+            uint_value: 0,
             order: events.len(),
         };
         match kind {
@@ -2062,17 +2105,23 @@ fn parse_view_model_script(contents: &str) -> Result<Vec<ViewModelEvent>> {
                 event.number_value =
                     parse_finite_script_float(tokens[3], &format!("{context} value"))?;
             }
+            ViewModelKind::SetString => event.string_value = tokens[3].to_owned(),
+            ViewModelKind::SetEnum => {
+                event.uint_value = tokens[3].parse::<u32>().with_context(|| {
+                    format!(
+                        "invalid unsigned integer for {context} value: {}",
+                        tokens[3]
+                    )
+                })?;
+            }
+            ViewModelKind::SetColor => {
+                event.uint_value = parse_script_color(tokens[3], &format!("{context} value"))?;
+            }
             ViewModelKind::FireTrigger => {}
         }
         events.push(event);
     }
-    events.sort_by(|left, right| {
-        if (left.seconds - right.seconds).abs() <= TIME_EPSILON {
-            left.order.cmp(&right.order)
-        } else {
-            left.seconds.total_cmp(&right.seconds)
-        }
-    });
+    events.sort_by(|left, right| left.seconds.total_cmp(&right.seconds));
     Ok(events)
 }
 
@@ -2119,6 +2168,14 @@ fn parse_finite_script_float(value: &str, context: &str) -> Result<f32> {
         bail!("{context} must be finite");
     }
     Ok(value)
+}
+
+fn parse_script_color(value: &str, context: &str) -> Result<u32> {
+    let digits = value
+        .strip_prefix("0x")
+        .filter(|digits| digits.len() == 8)
+        .with_context(|| format!("{context} must be 0x followed by eight hex digits"))?;
+    u32::from_str_radix(digits, 16).with_context(|| format!("invalid color for {context}: {value}"))
 }
 
 fn parse_script_bool(value: &str, context: &str) -> Result<bool> {
@@ -2379,7 +2436,7 @@ fn apply_view_model_event(
     match event.kind {
         ViewModelKind::SetBoolean => {
             if main
-                .boolean_value_by_property_name(&event.property)
+                .boolean_value_by_property_name_path(&event.property)
                 .is_none()
             {
                 bail!(
@@ -2387,11 +2444,11 @@ fn apply_view_model_event(
                     event.property
                 );
             }
-            main.set_boolean_by_property_name(&event.property, event.bool_value);
+            main.set_boolean_by_property_name_path(&event.property, event.bool_value);
         }
         ViewModelKind::SetNumber => {
             if main
-                .number_value_by_property_name(&event.property)
+                .number_value_by_property_name_path(&event.property)
                 .is_none()
             {
                 bail!(
@@ -2399,11 +2456,56 @@ fn apply_view_model_event(
                     event.property
                 );
             }
-            main.set_number_by_property_name(&event.property, event.number_value);
+            main.set_number_by_property_name_path(&event.property, event.number_value);
+        }
+        ViewModelKind::SetString => {
+            if main
+                .string_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as string",
+                    event.property
+                );
+            }
+            main.set_string_by_property_name_path(&event.property, event.string_value.as_bytes());
+        }
+        ViewModelKind::SetEnum => {
+            if main
+                .enum_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as enum",
+                    event.property
+                );
+            }
+            main.set_enum_by_property_name_path(&event.property, u64::from(event.uint_value));
+            if main.enum_value_by_property_name_path(&event.property)
+                != Some(u64::from(event.uint_value))
+            {
+                bail!(
+                    "view-model property '{}' rejected enum index {}",
+                    event.property,
+                    event.uint_value
+                );
+            }
+        }
+        ViewModelKind::SetColor => {
+            if main
+                .color_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as color",
+                    event.property
+                );
+            }
+            main.set_color_by_property_name_path(&event.property, event.uint_value);
         }
         ViewModelKind::FireTrigger => {
             let value = main
-                .trigger_value_by_property_name(&event.property)
+                .trigger_value_by_property_name_path(&event.property)
                 .with_context(|| {
                     format!(
                         "view-model property '{}' was not found as trigger",
@@ -2413,7 +2515,7 @@ fn apply_view_model_event(
             let value = value
                 .checked_add(1)
                 .context("view-model trigger counter overflow")?;
-            if !main.set_trigger_by_property_name(&event.property, value) {
+            if !main.set_trigger_by_property_name_path(&event.property, value) {
                 bail!("failed to fire view-model trigger '{}'", event.property);
             }
         }
@@ -2454,6 +2556,15 @@ fn emit_view_model_mutation(factory: &mut dyn RunnerBackend, event: &ViewModelEv
         }
         ViewModelKind::SetNumber => {
             factory.add_view_model_number(event.seconds, &event.property, event.number_value);
+        }
+        ViewModelKind::SetString => {
+            factory.add_view_model_string(event.seconds, &event.property, &event.string_value);
+        }
+        ViewModelKind::SetEnum => {
+            factory.add_view_model_enum(event.seconds, &event.property, event.uint_value);
+        }
+        ViewModelKind::SetColor => {
+            factory.add_view_model_color(event.seconds, &event.property, event.uint_value);
         }
         ViewModelKind::FireTrigger => {
             factory.add_view_model_trigger(event.seconds, &event.property);
@@ -2585,7 +2696,9 @@ mod tests {
         let input = parse_input_script("0 setInput enabled bool true\n1 resize 10 20 2\n")
             .expect("input script parses");
         let view_model = parse_view_model_script(
-            "0 setBoolean visible false\n0 setNumber progress 0.5\n0 fireTrigger go\n",
+            "0 setVmBool visible false\n0 setVmNumber progress 0.5\n\
+             0 setVmString child/label ready\n0 setVmEnum status 2\n\
+             0 setVmColor tint 0xff123456\n0 fireVmTrigger go\n",
         )
         .expect("view-model script parses");
 
@@ -2593,18 +2706,34 @@ mod tests {
         assert!(!view_model[0].bool_value);
         assert_eq!(view_model[1].kind, ViewModelKind::SetNumber);
         assert_eq!(view_model[1].number_value, 0.5);
-        assert_eq!(view_model[2].kind, ViewModelKind::FireTrigger);
+        assert_eq!(view_model[2].kind, ViewModelKind::SetString);
+        assert_eq!(view_model[2].property, "child/label");
+        assert_eq!(view_model[2].string_value, "ready");
+        assert_eq!(view_model[3].kind, ViewModelKind::SetEnum);
+        assert_eq!(view_model[3].uint_value, 2);
+        assert_eq!(view_model[4].kind, ViewModelKind::SetColor);
+        assert_eq!(view_model[4].uint_value, 0xff12_3456);
+        assert_eq!(view_model[5].kind, ViewModelKind::FireTrigger);
 
         let merged = merge_script_events(input, view_model);
         assert!(matches!(merged[0].kind, ScriptEventKind::Input(_)));
         assert!(matches!(merged[1].kind, ScriptEventKind::ViewModel(_)));
         assert!(matches!(merged[2].kind, ScriptEventKind::ViewModel(_)));
         assert!(matches!(merged[3].kind, ScriptEventKind::ViewModel(_)));
-        assert!(matches!(merged[4].kind, ScriptEventKind::Input(_)));
+        assert!(matches!(merged[6].kind, ScriptEventKind::ViewModel(_)));
+        assert!(matches!(merged[7].kind, ScriptEventKind::Input(_)));
 
-        assert!(parse_view_model_script("0 setBoolean visible yes\n").is_err());
-        assert!(parse_view_model_script("0 setNumber progress inf\n").is_err());
-        assert!(parse_view_model_script("0 fireTrigger go now\n").is_err());
+        assert!(parse_view_model_script("0 setVmBool visible yes\n").is_err());
+        assert!(parse_view_model_script("0 setVmNumber progress inf\n").is_err());
+        assert!(parse_view_model_script("0 setVmColor tint ff123456\n").is_err());
+        assert!(parse_view_model_script("0 setVmString child//label x\n").is_err());
+        assert!(parse_view_model_script("0 fireVmTrigger go now\n").is_err());
+
+        let ordered =
+            parse_view_model_script("0.0000005 setVmBool later true\n0 setVmBool earlier true\n")
+                .expect("nearby distinct timestamps parse");
+        assert_eq!(ordered[0].property, "earlier");
+        assert_eq!(ordered[1].property, "later");
     }
 
     #[test]

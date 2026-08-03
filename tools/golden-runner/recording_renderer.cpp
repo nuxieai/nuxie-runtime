@@ -996,7 +996,7 @@ void RecordingFactory::addViewModelBoolean(float seconds,
 {
     std::ostringstream out;
     out << "viewModel seconds=" << floatToString(seconds)
-        << " property=" << quotedString(property)
+        << " path=" << quotedString(property)
         << " type=bool value=" << (value ? "true" : "false");
     m_stream.line(out.str());
 }
@@ -1007,8 +1007,40 @@ void RecordingFactory::addViewModelNumber(float seconds,
 {
     std::ostringstream out;
     out << "viewModel seconds=" << floatToString(seconds)
-        << " property=" << quotedString(property)
+        << " path=" << quotedString(property)
         << " type=number value=" << floatToString(value);
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelString(float seconds,
+                                          const std::string& property,
+                                          const std::string& value)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " path=" << quotedString(property)
+        << " type=string value=" << quotedString(value);
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelEnum(float seconds,
+                                        const std::string& property,
+                                        uint32_t value)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " path=" << quotedString(property) << " type=enum value=" << value;
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelColor(float seconds,
+                                         const std::string& property,
+                                         uint32_t value)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " path=" << quotedString(property)
+        << " type=color value=" << colorToString(value);
     m_stream.line(out.str());
 }
 
@@ -1017,7 +1049,7 @@ void RecordingFactory::addViewModelTrigger(float seconds,
 {
     std::ostringstream out;
     out << "viewModel seconds=" << floatToString(seconds)
-        << " property=" << quotedString(property) << " type=trigger";
+        << " path=" << quotedString(property) << " type=trigger";
     m_stream.line(out.str());
 }
 

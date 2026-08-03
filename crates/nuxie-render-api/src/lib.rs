@@ -2020,7 +2020,7 @@ impl RecordingFactory {
 
     pub fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool) {
         self.stream.borrow_mut().semantic_line(format!(
-            "viewModel seconds={} property={} type=bool value={value}",
+            "viewModel seconds={} path={} type=bool value={value}",
             float_to_string(seconds),
             quoted_string(property)
         ));
@@ -2028,16 +2028,41 @@ impl RecordingFactory {
 
     pub fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
         self.stream.borrow_mut().semantic_line(format!(
-            "viewModel seconds={} property={} type=number value={}",
+            "viewModel seconds={} path={} type=number value={}",
             float_to_string(seconds),
             quoted_string(property),
             float_to_string(value)
         ));
     }
 
+    pub fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=string value={}",
+            float_to_string(seconds),
+            quoted_string(property),
+            quoted_string(value)
+        ));
+    }
+
+    pub fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=enum value={value}",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
+    pub fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=color value=0x{value:08x}",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
     pub fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
         self.stream.borrow_mut().semantic_line(format!(
-            "viewModel seconds={} property={} type=trigger",
+            "viewModel seconds={} path={} type=trigger",
             float_to_string(seconds),
             quoted_string(property)
         ));

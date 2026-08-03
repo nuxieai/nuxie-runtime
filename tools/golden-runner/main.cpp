@@ -36,8 +36,12 @@
 #include "rive/static_scene.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_boolean.hpp"
+#include "rive/viewmodel/viewmodel_instance_color.hpp"
+#include "rive/viewmodel/viewmodel_instance_enum.hpp"
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
+#include "rive/viewmodel/viewmodel_instance_string.hpp"
 #include "rive/viewmodel/viewmodel_instance_trigger.hpp"
+#include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -173,6 +177,9 @@ enum class ViewModelKind
 {
     setBoolean,
     setNumber,
+    setString,
+    setEnum,
+    setColor,
     fireTrigger,
 };
 
@@ -202,6 +209,8 @@ struct ViewModelEvent
     std::string property;
     bool boolValue = false;
     float numberValue = 0.0f;
+    std::string stringValue;
+    uint32_t uintValue = 0;
     size_t order = 0;
 };
 
@@ -306,9 +315,12 @@ std::string usage()
            "  <seconds> resize <width> <height> <dpr>\n"
            "\n"
            "view-model script lines:\n"
-           "  <seconds> setBoolean <property> <true|false>\n"
-           "  <seconds> setNumber <property> <value>\n"
-           "  <seconds> fireTrigger <property>\n";
+           "  <seconds> setVmBool <path> <true|false>\n"
+           "  <seconds> setVmNumber <path> <value>\n"
+           "  <seconds> setVmString <path> <utf8-token>\n"
+           "  <seconds> setVmEnum <path> <u32-index>\n"
+           "  <seconds> setVmColor <path> <0xAARRGGBB>\n"
+           "  <seconds> fireVmTrigger <path>\n";
 }
 
 std::string trim(const std::string& value)
@@ -387,6 +399,23 @@ uint32_t parseUint32(const std::string& value, const std::string& context)
     {
         throw CliError("invalid unsigned integer for " + context + ": " +
                        value);
+    }
+    return static_cast<uint32_t>(parsed);
+}
+
+uint32_t parseColor(const std::string& value, const std::string& context)
+{
+    if (value.size() != 10 || value[0] != '0' || value[1] != 'x')
+    {
+        throw CliError(context + " must be 0x followed by eight hex digits");
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value.c_str() + 2, &end, 16);
+    if (end != value.c_str() + value.size() || errno == ERANGE ||
+        parsed > std::numeric_limits<uint32_t>::max())
+    {
+        throw CliError("invalid color for " + context + ": " + value);
     }
     return static_cast<uint32_t>(parsed);
 }
@@ -698,10 +727,6 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
 
     std::stable_sort(events.begin(), events.end(), [](const auto& a,
                                                       const auto& b) {
-        if (std::abs(a.seconds - b.seconds) <= kTimeEpsilon)
-        {
-            return a.order < b.order;
-        }
         return a.seconds < b.seconds;
     });
 
@@ -710,15 +735,27 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
 
 ViewModelKind parseViewModelKind(const std::string& value, size_t lineNumber)
 {
-    if (value == "setBoolean")
+    if (value == "setVmBool")
     {
         return ViewModelKind::setBoolean;
     }
-    if (value == "setNumber")
+    if (value == "setVmNumber")
     {
         return ViewModelKind::setNumber;
     }
-    if (value == "fireTrigger")
+    if (value == "setVmString")
+    {
+        return ViewModelKind::setString;
+    }
+    if (value == "setVmEnum")
+    {
+        return ViewModelKind::setEnum;
+    }
+    if (value == "setVmColor")
+    {
+        return ViewModelKind::setColor;
+    }
+    if (value == "fireVmTrigger")
     {
         return ViewModelKind::fireTrigger;
     }
@@ -779,16 +816,21 @@ std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
             if (tokens.size() != 3)
             {
                 throw CliError(lineContext +
-                               " must be: <seconds> fireTrigger <property>");
+                               " must be: <seconds> fireVmTrigger <path>");
             }
         }
         else if (tokens.size() != 4)
         {
             throw CliError(lineContext +
-                           " must be: <seconds> <setBoolean|setNumber> "
-                           "<property> <value>");
+                           " must be: <seconds> <view-model-setter> <path> "
+                           "<value>");
         }
         event.property = tokens[2];
+        if (event.property.front() == '/' || event.property.back() == '/' ||
+            event.property.find("//") != std::string::npos)
+        {
+            throw CliError(lineContext + " has an invalid property path");
+        }
         if (event.kind == ViewModelKind::setBoolean)
         {
             event.boolValue = parseBool(tokens[3], lineContext + " value");
@@ -798,16 +840,24 @@ std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
             event.numberValue =
                 parseFiniteFloat(tokens[3], lineContext + " value");
         }
+        else if (event.kind == ViewModelKind::setString)
+        {
+            event.stringValue = tokens[3];
+        }
+        else if (event.kind == ViewModelKind::setEnum)
+        {
+            event.uintValue = parseUint32(tokens[3], lineContext + " value");
+        }
+        else if (event.kind == ViewModelKind::setColor)
+        {
+            event.uintValue = parseColor(tokens[3], lineContext + " value");
+        }
         event.order = events.size();
         events.push_back(std::move(event));
     }
 
     std::stable_sort(events.begin(), events.end(), [](const auto& a,
                                                       const auto& b) {
-        if (std::abs(a.seconds - b.seconds) <= kTimeEpsilon)
-        {
-            return a.order < b.order;
-        }
         return a.seconds < b.seconds;
     });
     return events;
@@ -1369,8 +1419,38 @@ void applyViewModelEvent(rive_rust::golden::RecordingFactory& factory,
     {
         throw CliError("view-model script requires a bound main view model");
     }
-    rive::ViewModelInstanceValue* property =
-        viewModel->propertyValue(event.property);
+    rive::ViewModelInstance* owner = viewModel;
+    size_t segmentStart = 0;
+    while (true)
+    {
+        const size_t separator = event.property.find('/', segmentStart);
+        if (separator == std::string::npos)
+        {
+            break;
+        }
+        const std::string segment =
+            event.property.substr(segmentStart, separator - segmentStart);
+        auto* nested = owner->propertyValue(segment);
+        if (nested == nullptr ||
+            !nested->is<rive::ViewModelInstanceViewModel>())
+        {
+            throw CliError("view-model path '" + event.property +
+                           "' could not resolve nested property '" + segment +
+                           "'");
+        }
+        auto referenced = nested->as<rive::ViewModelInstanceViewModel>()
+                              ->referenceViewModelInstance();
+        if (referenced == nullptr)
+        {
+            throw CliError("view-model path '" + event.property +
+                           "' has an unbound nested property '" + segment +
+                           "'");
+        }
+        owner = referenced.get();
+        segmentStart = separator + 1;
+    }
+    const std::string terminal = event.property.substr(segmentStart);
+    rive::ViewModelInstanceValue* property = owner->propertyValue(terminal);
     switch (event.kind)
     {
         case ViewModelKind::setBoolean:
@@ -1403,6 +1483,54 @@ void applyViewModelEvent(rive_rust::golden::RecordingFactory& factory,
                 factory.addViewModelNumber(event.seconds,
                                            event.property,
                                            event.numberValue);
+            }
+            return;
+        case ViewModelKind::setString:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceString>())
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as string");
+            }
+            property->as<rive::ViewModelInstanceString>()->propertyValue(
+                event.stringValue);
+            if (record)
+            {
+                factory.addViewModelString(event.seconds,
+                                           event.property,
+                                           event.stringValue);
+            }
+            return;
+        case ViewModelKind::setEnum:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceEnum>() ||
+                !property->as<rive::ViewModelInstanceEnum>()->value(
+                    event.uintValue))
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as enum with that index");
+            }
+            if (record)
+            {
+                factory.addViewModelEnum(event.seconds,
+                                         event.property,
+                                         event.uintValue);
+            }
+            return;
+        case ViewModelKind::setColor:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceColor>())
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as color");
+            }
+            property->as<rive::ViewModelInstanceColor>()->propertyValue(
+                event.uintValue);
+            if (record)
+            {
+                factory.addViewModelColor(event.seconds,
+                                          event.property,
+                                          event.uintValue);
             }
             return;
         case ViewModelKind::fireTrigger:

@@ -210,15 +210,22 @@ needs-advance and listener behavior.
 Both runners additionally accept `--view-model-script <path>`. Its
 timestamped grammar is:
 
-    <seconds> setBoolean <property> <true|false>
-    <seconds> setNumber <property> <float>
-    <seconds> fireTrigger <property>
+    <seconds> setVmBool <path> <true|false>
+    <seconds> setVmNumber <path> <float>
+    <seconds> setVmString <path> <utf8-token>
+    <seconds> setVmEnum <path> <u32-index>
+    <seconds> setVmColor <path> <0xAARRGGBB>
+    <seconds> fireVmTrigger <path>
 
-`property` is one whitespace-delimited, direct property name on the main
-view-model instance bound to the selected artboard. The property must exist
-and have the declared type; otherwise the runner reports a script error.
-`fireTrigger` increments the view-model trigger through the runtime's public
-trigger surface rather than assigning an authored counter value.
+`path` is one whitespace-delimited slash-separated property path rooted at
+the main view-model instance bound to the selected artboard. Empty path
+segments are invalid. The terminal property must exist and have the declared
+type; otherwise the runner reports a script error. String values follow the
+existing whitespace-token grammar and therefore cannot contain spaces. Enum
+values are zero-based unsigned indices. Colors are exactly eight hexadecimal
+digits prefixed by `0x`. `fireVmTrigger` increments the view-model trigger
+through the runtime's public trigger surface rather than assigning an authored
+counter value.
 
 All new script floats must be finite. Resize width, height, and DPR must also
 be greater than zero. A resize sets the selected root artboard's logical
@@ -238,9 +245,12 @@ The commands emit these ordinary golden-stream records whether or not
     setInput seconds=<float> name=<quoted> type=bool value=<true|false>
     setInput seconds=<float> name=<quoted> type=number value=<float>
     setInput seconds=<float> name=<quoted> type=trigger
-    viewModel seconds=<float> property=<quoted> type=bool value=<true|false>
-    viewModel seconds=<float> property=<quoted> type=number value=<float>
-    viewModel seconds=<float> property=<quoted> type=trigger
+    viewModel seconds=<float> path=<quoted> type=bool value=<true|false>
+    viewModel seconds=<float> path=<quoted> type=number value=<float>
+    viewModel seconds=<float> path=<quoted> type=string value=<quoted>
+    viewModel seconds=<float> path=<quoted> type=enum value=<u32-index>
+    viewModel seconds=<float> path=<quoted> type=color value=<0xAARRGGBB>
+    viewModel seconds=<float> path=<quoted> type=trigger
     resize seconds=<float> logical=(<float>,<float>) dpr=<float> pixels=(<u32>,<u32>)
 
 These records identify the successfully resolved mutation. Script errors do

@@ -1,3 +1,6 @@
-# Exercise value and edge-triggered mutations on the bound main view model.
-0 setNumber num3 320
-0 fireTrigger tri
+# Exercise every directly-settable scalar view-model mutation.
+0 setVmBool bool false
+0 setVmNumber num 320
+0 setVmString str ready
+0 setVmEnum enu 1
+0 setVmColor col 0xff123456

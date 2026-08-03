@@ -168,6 +168,15 @@ public:
     void addViewModelNumber(float seconds,
                             const std::string& property,
                             float value);
+    void addViewModelString(float seconds,
+                            const std::string& property,
+                            const std::string& value);
+    void addViewModelEnum(float seconds,
+                          const std::string& property,
+                          uint32_t value);
+    void addViewModelColor(float seconds,
+                           const std::string& property,
+                           uint32_t value);
     void addViewModelTrigger(float seconds, const std::string& property);
     void addResize(float seconds,
                    float width,

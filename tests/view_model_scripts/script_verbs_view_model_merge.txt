@@ -1,0 +1,3 @@
+# Exercise equal-time cross-stream ordering on the bound main view model.
+0 setVmNumber num3 320
+0 fireVmTrigger tri

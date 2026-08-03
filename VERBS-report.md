@@ -1,7 +1,9 @@
 # Script verbs lane report
 
-Date: 2026-08-03  
-Branch: `levi/script-verbs`  
+Date: 2026-08-03
+
+Branch: `levi/script-verbs`
+
 Base: `origin/main` (`a3dc487d`)
 
 ## Outcome

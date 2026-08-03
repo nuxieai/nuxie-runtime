@@ -1,2 +1,2 @@
 # Mutate a boolean property on the bound main view model.
-0 setBoolean BoolProp true
+0 setVmBool BoolProp true

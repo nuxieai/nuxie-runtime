@@ -738,6 +738,15 @@ pub enum RuntimeArtboardOccurrenceSegment {
     },
 }
 
+/// Result of one root frame-component advance for a state-machine scene:
+/// `notified` triggers the pinned zero-time follow-up advance; `changed`
+/// feeds the `advanceAndApply` keep-going composition.
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeFrameComponentsAdvance {
+    pub notified: bool,
+    pub changed: bool,
+}
+
 /// Probe-facing snapshot of one mounted nested remap animation occurrence.
 #[cfg(feature = "tools")]
 #[doc(hidden)]
@@ -6255,7 +6264,23 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> Result<bool, ScriptError> {
-        StateMachineInstance::dispatch_nested_event_sources_with(
+        self.advance_frame_components_with_state_machine_report(elapsed_seconds, state_machine)
+            .map(|report| report.notified)
+    }
+
+    /// Like [`Self::advance_frame_components_with_state_machine`], but also
+    /// reports whether the component advance itself changed anything. The
+    /// pinned `advanceAndApply` folds that result into its keep-going return
+    /// (`state_machine_instance.cpp:2614-2620`), including the quantized
+    /// nested-artboard force-true (`nested_artboard.cpp:983-986`); callers
+    /// composing the facade bool need it alongside the notify trigger.
+    pub fn advance_frame_components_with_state_machine_report(
+        &mut self,
+        elapsed_seconds: f32,
+        state_machine: &mut StateMachineInstance,
+    ) -> Result<RuntimeFrameComponentsAdvance, ScriptError> {
+        let mut components_changed = false;
+        let notified = StateMachineInstance::dispatch_nested_event_sources_with(
             self,
             state_machine,
             |artboard, nested_event_dispatch| {
@@ -6267,9 +6292,15 @@ impl ArtboardInstance {
                         None,
                         Some(nested_event_dispatch),
                     )
-                    .map(|_| ())
+                    .map(|changed| {
+                        components_changed = changed;
+                    })
             },
-        )
+        )?;
+        Ok(RuntimeFrameComponentsAdvance {
+            notified,
+            changed: components_changed || notified,
+        })
     }
 
     /// Complete factory-bearing frame advance for several root state-machine

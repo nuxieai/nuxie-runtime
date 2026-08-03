@@ -42,6 +42,7 @@ fn run() -> Result<(), String> {
 
     let mut counts = BTreeMap::<Status, usize>::new();
     let mut exact_segments = 0usize;
+    let mut side_channel_segments = 0usize;
     let mut not_yet_rust_probed = 0usize;
     let mut not_yet_rust_exact = 0usize;
     let mut parked_by_milestone = BTreeMap::<String, usize>::new();
@@ -49,9 +50,21 @@ fn run() -> Result<(), String> {
 
     for entry in &corpus {
         let status = entry.effective_status(options.verify_scripted_diagnostics);
+        let entry_side_channel = options.side_channel && entry.side_channel_divergence().is_none();
+        if options.side_channel
+            && let Some(row) = entry.side_channel_divergence()
+        {
+            println!(
+                "[{}] {}: side-channel disabled (register row {row})",
+                status, entry.id
+            );
+        }
         *counts.entry(status).or_default() += 1;
         if status == Status::Exact && entry.verification != VerificationMode::RejectsMalformed {
             exact_segments += entry.samples.len();
+            if entry_side_channel {
+                side_channel_segments += entry.samples.len();
+            }
         }
         if status == Status::UnsupportedFeature {
             let bucket = entry
@@ -179,7 +192,7 @@ fn run() -> Result<(), String> {
                     &corpus_dir,
                     RunnerKind::Cpp,
                     options.verify_scripted_diagnostics,
-                    options.side_channel,
+                    entry_side_channel,
                 ) {
                     Ok(cpp_stream) => {
                         println!(
@@ -201,7 +214,7 @@ fn run() -> Result<(), String> {
                                         &corpus_dir,
                                         RunnerKind::Rust,
                                         options.verify_scripted_diagnostics,
-                                        options.side_channel,
+                                        entry_side_channel,
                                     ) {
                                         Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
@@ -262,11 +275,6 @@ fn run() -> Result<(), String> {
     }
 
     let exact = counts.get(&Status::Exact).copied().unwrap_or(0);
-    let side_channel_segments = if options.side_channel {
-        exact_segments
-    } else {
-        0
-    };
     println!(
         "golden-compare summary: entries={} exact={} exact-segments={} side-channel-segments={} diverges={} unsupported-feature={} not-yet={}",
         corpus.len(),
@@ -467,6 +475,16 @@ impl CorpusEntry {
             }
         }
         Ok(())
+    }
+
+    /// A filed side-channel divergence (register row named after the colon).
+    /// The entry still verifies draw-exactly, but with the side channel
+    /// suppressed so the known divergence does not fail the corpus gate while
+    /// its register row is open.
+    fn side_channel_divergence(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("side-channel-diverges:"))
     }
 
     fn import_error_feature(&self) -> Option<&str> {

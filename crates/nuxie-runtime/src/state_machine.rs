@@ -156,6 +156,7 @@ pub(crate) use state_machine_fire_trigger::RuntimeStateMachineFireTriggerPath;
 use state_machine_input::runtime_state_machine_input;
 pub use state_machine_input::{RuntimeStateMachineInput, StateMachineInputKind};
 pub use state_machine_input_instance::StateMachineInputInstance;
+pub use state_machine_instance::RuntimeHitResult;
 #[cfg(feature = "tools")]
 pub use state_machine_instance::RuntimeNestedEventChainStep;
 #[cfg(any(test, feature = "tools"))]

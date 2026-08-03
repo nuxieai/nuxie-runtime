@@ -299,17 +299,21 @@ impl AudioEventSeam for PlaybackAudioEventSeam {
     }
 }
 
-/// Exact C++ pointer result strength. Keep this tri-state internally even
-/// though the established Rust facade projects it to `bool`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum HitResult {
+/// Exact C++ pointer result strength (`HitResult`, `hit_result.hpp`).
+///
+/// The established Rust `bool` facade projects this via [`Self::is_hit`]; the
+/// tri-state itself is public so hosts and the golden side-channel can record
+/// what C++ `Scene::pointerDown/Move/Up/Exit` return (`scene.hpp:55-60`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RuntimeHitResult {
+    #[default]
     None,
     Hit,
     HitOpaque,
 }
 
-impl HitResult {
-    fn is_hit(self) -> bool {
+impl RuntimeHitResult {
+    pub fn is_hit(self) -> bool {
         self != Self::None
     }
 
@@ -317,6 +321,10 @@ impl HitResult {
         self.max(other)
     }
 }
+
+// Internal shorthand: the FL-ported listener pipeline reads like the pinned
+// C++ when the local name matches C++'s `HitResult`.
+use RuntimeHitResult as HitResult;
 
 trait HitComponent: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn HitComponent>;
@@ -7146,6 +7154,119 @@ impl StateMachineInstance {
             Some(context),
             host,
         )
+    }
+
+    /// C++ `Scene::pointerDown` returns the tri-state `HitResult`
+    /// (`scene.hpp:55`; computed by `updateListeners`,
+    /// `state_machine_instance.cpp:1494-1545`). This is that return for hosts
+    /// that need more than the established `bool` projection; script errors
+    /// are retained exactly like the `bool` facade and report `None`. The
+    /// argument chain matches `pointer_down`/
+    /// `pointer_down_with_owned_view_model_context` (timestamp 0, no event
+    /// context).
+    pub fn pointer_down_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Down,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_move`/
+    /// `pointer_move_with_owned_view_model_context` (`scene.hpp:56-58`). The
+    /// owned-context chain validates the timestamp exactly like the `bool`
+    /// facade; the plain chain forwards it unvalidated, also like the `bool`
+    /// facade.
+    pub fn pointer_move_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let validated = if owned_context.is_some() {
+            validate_pointer_timestamp(seconds)
+        } else {
+            Ok(())
+        };
+        let result = validated.and_then(|()| {
+            self.update_listeners(
+                artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                seconds,
+                owned_context,
+                None,
+                &mut NoopScriptHost,
+            )
+        });
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_up`/
+    /// `pointer_up_with_owned_view_model_context` (`scene.hpp:59`).
+    pub fn pointer_up_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Up,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    /// Tri-state twin of `pointer_exit`/
+    /// `pointer_exit_with_owned_view_model_context` (`scene.hpp:60`).
+    pub fn pointer_exit_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> RuntimeHitResult {
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Exit,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -1397,6 +1397,69 @@ impl RecordingFactory {
         ));
     }
 
+    // Event/state side-channel lines (docs/side-channel-format.md). Formats
+    // must stay byte-compatible with the C++ runner's RecordingFactory
+    // emitters in tools/golden-runner/recording_renderer.cpp.
+
+    pub fn add_advance(&mut self, seconds: f32, settled: bool) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "advance seconds={} settled={settled}",
+            float_to_string(seconds)
+        ));
+    }
+
+    pub fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "advance seconds={} settled={settled} statesChanged={states_changed}",
+            float_to_string(seconds)
+        ));
+    }
+
+    pub fn add_side_channel_event(&mut self, event: &SideChannelEvent) {
+        let mut line = format!(
+            "event type={} name={} delay={}",
+            event.core_type,
+            quoted_string(&event.name),
+            float_to_string(event.delay)
+        );
+        if let Some((url, target)) = &event.url_target {
+            line.push_str(&format!(" url={} target={target}", quoted_string(url)));
+        }
+        line.push_str(" props=[");
+        for (index, property) in event.properties.iter().enumerate() {
+            if index != 0 {
+                line.push(',');
+            }
+            line.push_str(&format!("{{name={},value=", quoted_string(&property.name)));
+            match &property.value {
+                SideChannelEventPropertyValue::Number(value) => {
+                    line.push_str(&float_to_string(*value));
+                }
+                SideChannelEventPropertyValue::Bool(value) => {
+                    line.push_str(if *value { "true" } else { "false" });
+                }
+                SideChannelEventPropertyValue::String(value) => {
+                    line.push_str(&quoted_string(value));
+                }
+                SideChannelEventPropertyValue::Color(value) => {
+                    line.push_str(&format!("0x{value:08x}"));
+                }
+                SideChannelEventPropertyValue::Uint(value) => {
+                    line.push_str(&value.to_string());
+                }
+            }
+            line.push('}');
+        }
+        line.push(']');
+        self.stream.borrow_mut().semantic_line(line);
+    }
+
+    pub fn add_hit_result(&mut self, result: &str) {
+        self.stream
+            .borrow_mut()
+            .semantic_line(format!("hit result={result}"));
+    }
+
     pub fn add_frame(&mut self) {
         self.stream.borrow_mut().semantic_line("frame");
     }
@@ -2589,6 +2652,34 @@ fn mat_to_string(mat: Mat2D) -> String {
 
 fn write_color(out: &mut String, color: ColorInt) {
     write!(out, "0x{color:08x}").expect("writing to a String cannot fail");
+}
+
+/// One reported event for the golden side-channel
+/// (docs/side-channel-format.md). Mirrors the C++ runner's SideChannelEvent
+/// in tools/golden-runner/recording_renderer.hpp.
+#[derive(Debug, Clone, Default)]
+pub struct SideChannelEvent {
+    pub core_type: u32,
+    pub name: String,
+    pub delay: f32,
+    /// `Some((url, target))` only for OpenUrlEvent.
+    pub url_target: Option<(String, String)>,
+    pub properties: Vec<SideChannelEventProperty>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SideChannelEventProperty {
+    pub name: String,
+    pub value: SideChannelEventPropertyValue,
+}
+
+#[derive(Debug, Clone)]
+pub enum SideChannelEventPropertyValue {
+    Number(f32),
+    Bool(bool),
+    String(String),
+    Color(u32),
+    Uint(u64),
 }
 
 fn quoted_string(value: &str) -> String {

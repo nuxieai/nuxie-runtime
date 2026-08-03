@@ -9,10 +9,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::artboard::ArtboardInstance;
 use crate::components::Mat2D;
 use crate::semantic_data::{RuntimeSemanticData, SemanticNodeHandle};
+use crate::semantic_manager::SemanticManager;
 use crate::state_machine::semantic_listener_group;
 use crate::state_machine::state_machine_instance::closest_semantic_node;
-use crate::semantic_manager::SemanticManager;
-use crate::state_machine::state_machine_instance::{RuntimeSemanticOccurrenceKey, RuntimeSemanticRoute};
+use crate::state_machine::state_machine_instance::{
+    RuntimeSemanticOccurrenceKey, RuntimeSemanticRoute,
+};
 
 /// One retained semantic domain shared by every mounted artboard occurrence
 /// beneath a state-machine instance. The interface stays on
@@ -23,11 +25,11 @@ pub(crate) struct RuntimeSemanticTree {
     pub(crate) manager: SemanticManager,
     pub(crate) data: BTreeMap<RuntimeSemanticOccurrenceKey, RuntimeSemanticData>,
     boundaries: BTreeMap<u64, SemanticNodeHandle>,
+    scroll_transforms: BTreeMap<(u64, usize), Mat2D>,
     pub(crate) routes: BTreeMap<u32, RuntimeSemanticRoute>,
     pub(crate) registered_listener_groups: BTreeSet<(RuntimeSemanticOccurrenceKey, usize)>,
     pub(crate) pending_focus_scroll: Option<RuntimeSemanticRoute>,
 }
-
 
 impl RuntimeSemanticTree {
     pub(crate) fn synchronize(
@@ -43,9 +45,26 @@ impl RuntimeSemanticTree {
             None,
             Mat2D::IDENTITY,
             false,
+            false,
             &mut live,
             &mut live_boundaries,
         );
+
+        // `SemanticManager::refresh` flattens a structural change from the
+        // bounds already retained on each SemanticNode. C++ SemanticData only
+        // replaces those bounds when its WorldTransform/Path dirt runs; it
+        // does not poll every Node after list layout has already advanced.
+        // Keep that ordering. ScrollConstraint is the explicit transform
+        // source that dirties semantic descendants in the focus path, so a
+        // retained scroll-transform change drives the incremental bounds pass.
+        let mut live_scroll_transforms = BTreeSet::new();
+        let scroll_transform_changed =
+            self.update_scroll_transform_snapshot(artboard, &mut live_scroll_transforms);
+        self.scroll_transforms
+            .retain(|key, _| live_scroll_transforms.contains(key));
+        if scroll_transform_changed && !self.manager.structure_is_dirty() {
+            self.refresh_bounds(artboard, Mat2D::IDENTITY);
+        }
 
         let stale = self
             .data
@@ -95,6 +114,7 @@ impl RuntimeSemanticTree {
         inherited_parent: Option<SemanticNodeHandle>,
         root_transform: Mat2D,
         needs_boundary: bool,
+        boundary_collapsed: bool,
         live: &mut BTreeSet<RuntimeSemanticOccurrenceKey>,
         live_boundaries: &mut BTreeSet<u64>,
     ) {
@@ -111,16 +131,15 @@ impl RuntimeSemanticTree {
                 })
                 .clone();
             let current_parent_id = boundary.borrow().parent_id();
-            let desired_parent_id = inherited_parent
-                .as_ref()
-                .map(|parent| parent.borrow().id());
+            let desired_parent_id = inherited_parent.as_ref().map(|parent| parent.borrow().id());
             if boundary.borrow().manager_identity() == Some(self.manager.identity())
                 && current_parent_id != desired_parent_id
             {
                 self.manager.remove_child(&boundary);
             }
             if boundary.borrow().manager_identity().is_none() {
-                self.manager.add_child(inherited_parent.as_ref(), boundary.clone());
+                self.manager
+                    .add_child(inherited_parent.as_ref(), boundary.clone());
             }
             Some(boundary)
         } else {
@@ -142,6 +161,7 @@ impl RuntimeSemanticTree {
             if !self.data.contains_key(&key) {
                 let mut data = RuntimeSemanticData::from_artboard(artboard, *local_id);
                 data.prepare_for_tree(artboard);
+                data.update_world_bounds_with_root_transform(artboard, None, root_transform);
                 self.data.insert(key, data);
             }
         }
@@ -169,12 +189,13 @@ impl RuntimeSemanticTree {
                 .and_then(|parent| closest_semantic_node(artboard, parent, &nodes_by_target))
                 .or_else(|| effective_parent.clone());
             let data = self.data.get_mut(&key).expect("semantic data was retained");
-            data.synchronize_from_artboard(artboard, &mut self.manager, root_transform);
+            data.synchronize_from_artboard(artboard, &mut self.manager);
             data.reconcile_tree_membership(
                 &mut self.manager,
                 parent.as_ref(),
                 artboard,
                 root_transform,
+                boundary_collapsed,
             );
         }
 
@@ -187,6 +208,8 @@ impl RuntimeSemanticTree {
             let parent = closest_semantic_node(artboard, host_local, &nodes_by_target)
                 .or_else(|| effective_parent.clone());
             let host_world = artboard.runtime_component_world_transform_with_scroll(host_local);
+            let child_boundary_collapsed =
+                boundary_collapsed || artboard.runtime_component_is_collapsed_for_draw(host_local);
             if let Some(nested) = artboard.nested_artboards.get_mut(&host_local) {
                 let child_root = nested
                     .child
@@ -196,6 +219,7 @@ impl RuntimeSemanticTree {
                     parent,
                     child_root,
                     true,
+                    child_boundary_collapsed,
                     live,
                     live_boundaries,
                 );
@@ -204,10 +228,12 @@ impl RuntimeSemanticTree {
 
         let list_locals = artboard.component_list_locals().collect::<Vec<_>>();
         let list_root_transforms =
-            artboard.runtime_component_list_child_root_transforms(root_transform);
+            artboard.runtime_component_list_retained_child_root_transforms(root_transform);
         for list_local in list_locals {
             let parent = closest_semantic_node(artboard, list_local, &nodes_by_target)
                 .or_else(|| effective_parent.clone());
+            let child_boundary_collapsed =
+                boundary_collapsed || artboard.runtime_component_is_collapsed_for_draw(list_local);
             let Some(items) = artboard.component_list_items_mut(list_local) else {
                 continue;
             };
@@ -222,11 +248,111 @@ impl RuntimeSemanticTree {
                     parent.clone(),
                     child_root,
                     true,
+                    child_boundary_collapsed,
                     live,
                     live_boundaries,
                 );
             }
         }
+    }
+
+    fn refresh_bounds(&mut self, artboard: &mut ArtboardInstance, root_transform: Mat2D) {
+        let owner_identity = artboard.instance_identity();
+        let semantic_locals = artboard
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "SemanticData")
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        for data_local_id in semantic_locals {
+            let key = RuntimeSemanticOccurrenceKey {
+                owner_identity,
+                data_local_id,
+            };
+            if let Some(data) = self.data.get_mut(&key) {
+                data.update_world_bounds_with_root_transform(
+                    artboard,
+                    Some(&mut self.manager),
+                    root_transform,
+                );
+            }
+        }
+
+        let nested_hosts = artboard
+            .nested_artboards
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        for host_local in nested_hosts {
+            let host_world = artboard.runtime_component_world_transform_with_scroll(host_local);
+            if let Some(nested) = artboard.nested_artboards.get_mut(&host_local) {
+                let child_root = nested
+                    .child
+                    .mounted_root_transform(root_transform.multiply(host_world));
+                self.refresh_bounds(&mut nested.child, child_root);
+            }
+        }
+
+        let list_locals = artboard.component_list_locals().collect::<Vec<_>>();
+        let list_roots =
+            artboard.runtime_component_list_retained_child_root_transforms(root_transform);
+        for list_local in list_locals {
+            let Some(items) = artboard.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for (item_index, item) in items.iter_mut().enumerate() {
+                let child_root = list_roots
+                    .get(&list_local)
+                    .and_then(|roots| roots.get(item_index))
+                    .copied()
+                    .unwrap_or(root_transform);
+                self.refresh_bounds(&mut item.child, child_root);
+            }
+        }
+    }
+
+    fn update_scroll_transform_snapshot(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        live: &mut BTreeSet<(u64, usize)>,
+    ) -> bool {
+        let owner_identity = artboard.instance_identity();
+        let mut changed = false;
+        for component in artboard.components().iter() {
+            let Some(scroll) = component.concrete.scroll.as_ref() else {
+                continue;
+            };
+            let key = (owner_identity, component.local_id);
+            live.insert(key);
+            if self
+                .scroll_transforms
+                .insert(key, scroll.scroll_transform)
+                .is_some_and(|previous| previous != scroll.scroll_transform)
+            {
+                changed = true;
+            }
+        }
+
+        let nested_hosts = artboard
+            .nested_artboards
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        for host_local in nested_hosts {
+            if let Some(nested) = artboard.nested_artboards.get_mut(&host_local) {
+                changed |= self.update_scroll_transform_snapshot(&mut nested.child, live);
+            }
+        }
+        let list_locals = artboard.component_list_locals().collect::<Vec<_>>();
+        for list_local in list_locals {
+            let Some(items) = artboard.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                changed |= self.update_scroll_transform_snapshot(&mut item.child, live);
+            }
+        }
+        changed
     }
 
     pub(crate) fn rebuild_routes(&mut self) {

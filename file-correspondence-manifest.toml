@@ -4005,19 +4005,19 @@ b6_row_id = "B6-0327"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID against 4ac7b327 integrates RuntimeSemanticData into the retained StateMachineInstance semantic tree, owner-qualifies repeated mounted occurrences, refreshes authored/focus/provider state, and passes eight direct semantic_data_lifecycle cases plus four focus fixture cases. LT1SC now serializes the fired action and complete follow-up SemanticsDiff, but its exact data_binding_lists differential is red: C++ changes Selected state and removes list nodes while Rust does neither. The row therefore remains pending—not promoted; see LT1SC-report.md."
+note = "F6FID against 4ac7b327 integrates RuntimeSemanticData into the retained StateMachineInstance semantic tree and owner-qualifies repeated mounted occurrences. SEMRES mirrors SemanticData::stateFlagsChanged/syncSemanticTreeVisibility and makes data_binding_lists exact for Selected propagation, collapsed-list removals, hierarchy patches, and every post-action frame. Four initial mounted Text glyph bounds remain red in the sampled corpus, and generic bounds dirt remains snapshot-adapted rather than owner-pushed, so this row remains pending—not promoted; see SEMRES-report.md."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/semantic_inference_registry.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0328"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "The pinned WITH_RIVE_TEXT rule is implemented as authored-order Text/TextValueRun concatenation with the same empty-label false result. LT1SC exercises that registry through the retained Simpsons tree and obtains exact inferred labels, ids, and hierarchy, but the required full SemanticsDiff is red on root bounds, pre-layout geometry, and Selected-state updates. The row therefore remains pending—not promoted; see LT1SC-report.md."
+note = "The pinned WITH_RIVE_TEXT rule is implemented as authored-order Text/TextValueRun concatenation with the same empty-label false result. SEMRES makes the semantic-only Simpsons differential exact across all initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds. This row is promoted on that exact corpus evidence; see SEMRES-report.md."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
@@ -4029,7 +4029,7 @@ b6_row_id = "B6-0329"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID installs the retained manager/tree on StateMachineInstance and all 36 semantic_label_inference plus all 16 semantic_dispatch direct cases pass. LT1SC serializes every SemanticsDiff field and action/focus outcome, and the external nested-boundary focus differential is exact, including ids, parentage, labels, focus flags, and five geometry updates. The data_binding_lists and Simpsons differentials remain red, so the row remains pending—not promoted; see LT1SC-report.md. MR exception (scatter ratchet): the retained runtime tree is required OUT of state_machine_instance.rs by state_machine_semantic_manager_internal_implementation; it lives beside the semantic owners."
+note = "F6FID installs the retained manager/tree on StateMachineInstance and serializes every SemanticsDiff field and action/focus outcome. SEMRES mirrors SemanticManager::removeChild/refresh/buildDiffFromFlats: nested focus and Simpsons are exact, while data_binding_lists matches removals, hierarchy patches, Selected propagation, and every post-action frame. Four initial mounted Text glyph bounds and snapshot-adapted generic bounds dirt keep this row pending—not promoted; see SEMRES-report.md. MR exception (scatter ratchet): the retained runtime tree is required OUT of state_machine_instance.rs by state_machine_semantic_manager_internal_implementation; it lives beside the semantic owners."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
@@ -4041,7 +4041,7 @@ b6_row_id = "B6-0330"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID maps all four bounds corners through each mounted occurrence root transform and composes live ancestor scroll transforms. LT1SC's external nested-boundary focus differential is exact, including all initial bounds and five post-scroll geometry updates. Simpsons still differs on provider/root bounds and pre-layout geometry, so the provider family is not corpus-green and this row remains pending—not promoted; see LT1SC-report.md."
+note = "F6FID maps all four bounds corners through each mounted occurrence root transform and composes live ancestor scroll transforms. SEMRES mirrors SemanticProvider::tryNodeWorldBounds/rootTransformAABB/semanticBounds and SemanticData::updateWorldBounds timing: nested focus and Simpsons are exact, including root/pre-layout bounds and action updates. Four initial mounted Text glyph bounds plus the remaining owner-pushed generic bounds-dirt port keep the provider family pending—not promoted; see SEMRES-report.md."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"

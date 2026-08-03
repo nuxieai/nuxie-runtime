@@ -1013,9 +1013,11 @@ upstream-sync-map registry).
 - [ ] #HD-4 TODO(golden) pair
 - [ ] #HD-5 publish the parity claim doc
 - [ ] #LT-* long tail (each opens by USER-GATE)
-  - [ ] #LT-1 semantics/accessibility — LT1SC side-channel delivered and
-    nested focus exact; four source rows remain pending on the recorded
-    data_binding_lists and Simpsons residuals (`LT1SC-report.md`).
+  - [ ] #LT-1 semantics/accessibility — LT1SC side-channel delivered; nested
+    focus and Simpsons are exact, and the inference row is promoted. The data,
+    manager, and provider rows remain pending on data_binding_lists' four
+    initial mounted Text glyph bounds and the owner-pushed generic semantic
+    bounds-dirt remainder (`SEMRES-report.md`).
 
 ## Canonical program federation
 

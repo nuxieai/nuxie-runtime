@@ -77,6 +77,20 @@ impl SemanticProvider {
         if !component_is_a(artboard, component_local_id, "Node") {
             return SemanticBounds::default();
         }
+        // C++ `SemanticProvider::semanticBounds` first asks the target Node
+        // for its own `localBounds` and maps that box through its world/root
+        // transforms. A LayoutComponent owns its solved border box even when
+        // it has no drawable path, so do not replace that box with a merge of
+        // inset visual descendants.
+        if let Some((min_x, min_y, max_x, max_y)) = artboard
+            .semantic_layout_world_bounds(component_local_id)
+            .or_else(|| artboard.layout_world_bounds(component_local_id))
+        {
+            return root_transform_bounds(
+                root_transform,
+                SemanticBounds::new(min_x, min_y, max_x, max_y),
+            );
+        }
         if let Some(bounds) = artboard.object_world_bounds(component_local_id) {
             return root_transform_bounds(
                 root_transform,

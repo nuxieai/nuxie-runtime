@@ -507,9 +507,13 @@ perf ratio measured and reported to the user.
 
 - **#LT-1 Semantics/accessibility (F6)** — ACTIVE/PARTIAL. The retained
   manager, data, provider, inference, listener behavior, and full semantic
-  side-channel extension are present. Nested focus is exact; data-binding
-  state/removal and Simpsons provider/full-diff residuals keep the four source
-  rows pending (see `LT1SC-report.md`).
+  side-channel extension are present. Nested focus and Simpsons are exact;
+  data-binding Selected propagation, removals, and post-action diffs are exact.
+  Four initial mounted Text glyph bounds remain the sampled corpus residual.
+  The data, manager, and provider rows also retain a structural remainder:
+  replace scroll snapshot comparison with owner-pushed generic semantic bounds
+  dirt. Those rows stay pending; inference is promoted (see
+  `SEMRES-report.md`).
 - **#LT-2 Remaining Lua bindings (F7)** — corpus-gated as designed;
   spot-check that a scripted file touching an unported binding produces a
   NAMED import/runtime diagnostic (that check itself is an S slice worth

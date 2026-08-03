@@ -8,8 +8,8 @@
 use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use crate::{
-    Factory, File, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeFileAssetLoader,
-    StateMachineInstance, ViewModelInstance,
+    Factory, File, Mat2D, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeFileAssetLoader,
+    SemanticBounds, SemanticsDiff, StateMachineInstance, Vec2D, ViewModelInstance,
     command_queue::{
         ArtboardHandle, AudioSourceHandle, Command, CommandDataType, CommandEvent, CommandQueue,
         CommandValue, DrawCallback, DrawKey, FileAssetData, FileHandle, Fit, FontHandle,
@@ -606,6 +606,162 @@ impl CommandServer {
                         }
                     }
                 }
+                Command::EnableSemantics { handle, request_id } => {
+                    match self.state_machines.get_mut(&handle) {
+                        Some(entry) => {
+                            entry.instance.enable_semantics();
+                        }
+                        None => self.state_machine_error(
+                            handle,
+                            request_id,
+                            format!("State machine {} not found for enableSemantics.", handle.get()),
+                        ),
+                    }
+                }
+                Command::DrainSemanticsDiff {
+                    handle,
+                    fit,
+                    alignment,
+                    scale_factor,
+                    view_bounds,
+                    request_id,
+                } => {
+                    let Some(artboard_handle) =
+                        self.state_machines.get(&handle).map(|entry| entry.artboard)
+                    else {
+                        self.state_machine_error(
+                            handle,
+                            request_id,
+                            format!(
+                                "State machine {} not found for drainSemanticsDiff.",
+                                handle.get()
+                            ),
+                        );
+                        continue;
+                    };
+                    if !self
+                        .state_machines
+                        .get(&handle)
+                        .is_some_and(|entry| entry.instance.semantic_manager())
+                    {
+                        self.state_machine_error(
+                            handle,
+                            request_id,
+                            format!(
+                                "Semantics not enabled on state machine {}; call enableSemantics before drainSemanticsDiff.",
+                                handle.get()
+                            ),
+                        );
+                        continue;
+                    }
+                    let result = {
+                        let machine = self.state_machines.get_mut(&handle);
+                        let artboard = self.artboards.get_mut(&artboard_handle);
+                        machine.zip(artboard).map(|(machine, artboard)| {
+                            machine
+                                .instance
+                                .drain_semantics_diff(artboard.instance.raw_mut())
+                        })
+                    };
+                    match result {
+                        Some(Ok(mut diff)) if !diff.is_empty() => {
+                            if let Some(artboard) = self.artboards.get(&artboard_handle) {
+                                map_semantics_diff_to_view_space(
+                                    &mut diff,
+                                    semantic_view_transform(
+                                        artboard.instance.artboard_bounds(),
+                                        fit,
+                                        alignment,
+                                        scale_factor,
+                                        view_bounds,
+                                    ),
+                                );
+                            }
+                            self.emit(CommandEvent::SemanticsDiffReceived {
+                                handle,
+                                request_id,
+                                diff,
+                            });
+                        }
+                        Some(Ok(_)) => {}
+                        Some(Err(error)) => {
+                            self.state_machine_error(handle, request_id, error.to_string())
+                        }
+                        None => self.state_machine_error(
+                            handle,
+                            request_id,
+                            "State machine or owning artboard not found for drainSemanticsDiff.",
+                        ),
+                    }
+                }
+                Command::FireSemanticAction {
+                    handle,
+                    semantic_node_id,
+                    action_type,
+                    request_id,
+                } => match self.state_machines.get_mut(&handle) {
+                    Some(entry) if entry.instance.semantic_manager() => {
+                        entry
+                            .instance
+                            .fire_semantic_action(semantic_node_id, action_type as u32);
+                    }
+                    Some(_) => self.state_machine_error(
+                        handle,
+                        request_id,
+                        format!(
+                            "Semantics not enabled on state machine {}; call enableSemantics before fireSemanticAction.",
+                            handle.get()
+                        ),
+                    ),
+                    None => self.state_machine_error(
+                        handle,
+                        request_id,
+                        format!(
+                            "State machine {} not found for fireSemanticAction.",
+                            handle.get()
+                        ),
+                    ),
+                },
+                Command::RequestSemanticFocus {
+                    handle,
+                    semantic_node_id,
+                    request_id,
+                } => match self.state_machines.get_mut(&handle) {
+                    Some(entry) if entry.instance.semantic_manager() => {
+                        entry.instance.request_semantic_focus(semantic_node_id);
+                    }
+                    Some(_) => self.state_machine_error(
+                        handle,
+                        request_id,
+                        format!(
+                            "Semantics not enabled on state machine {}; call enableSemantics before requestSemanticFocus.",
+                            handle.get()
+                        ),
+                    ),
+                    None => self.state_machine_error(
+                        handle,
+                        request_id,
+                        format!(
+                            "State machine {} not found for requestSemanticFocus.",
+                            handle.get()
+                        ),
+                    ),
+                },
+                Command::ClearSemanticFocus { handle, request_id } => {
+                    match self.state_machines.get_mut(&handle) {
+                        Some(entry) => {
+                            entry.instance.clear_semantic_focus();
+                        }
+                        None => self.state_machine_error(
+                            handle,
+                            request_id,
+                            format!(
+                                "State machine {} not found for clearSemanticFocus.",
+                                handle.get()
+                            ),
+                        ),
+                    }
+                }
                 Command::Pointer {
                     handle,
                     kind,
@@ -932,11 +1088,23 @@ impl CommandServer {
                     view_model,
                     request_id,
                 } => {
-                    let Some(model) = self
-                        .view_models
-                        .get(&view_model)
-                        .map(|entry| entry.instance.handle().clone())
+                    let Some((artboard, file)) = self
+                        .state_machines
+                        .get(&state_machine)
+                        .and_then(|entry| {
+                            self.artboards
+                                .get(&entry.artboard)
+                                .map(|artboard| (entry.artboard, artboard.file))
+                        })
                     else {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            "State machine not found for binding view model",
+                        );
+                        continue;
+                    };
+                    let Some(model) = self.view_models.get(&view_model) else {
                         self.state_machine_error(
                             state_machine,
                             request_id,
@@ -944,16 +1112,26 @@ impl CommandServer {
                         );
                         continue;
                     };
-                    match self.state_machines.get_mut(&state_machine) {
-                        Some(entry) => {
-                            entry.instance.bind_owned_view_model_handle(&model);
-                        }
-                        None => self.state_machine_error(
+                    let Some(file) = self.files.get(&file) else {
+                        self.state_machine_error(
                             state_machine,
                             request_id,
-                            "State machine not found for binding view model",
-                        ),
+                            "File not found for binding view model",
+                        );
+                        continue;
                     };
+                    let (machines, artboards) = (&mut self.state_machines, &mut self.artboards);
+                    if let (Some(machine), Some(artboard)) =
+                        (machines.get_mut(&state_machine), artboards.get_mut(&artboard))
+                    {
+                        machine
+                            .instance
+                            .bind_owned_view_model_handle(model.instance.handle());
+                        machine.instance.bind_for_command_queue(
+                            Some(file.runtime()),
+                            artboard.instance.raw_mut(),
+                        );
+                    }
                 }
                 Command::SetGlobalViewModel {
                     state_machine,
@@ -1966,6 +2144,7 @@ fn map_pointer(artboard: &OwnedArtboardInstance, event: PointerEvent) -> crate::
         Fit::FitHeight => sy,
         Fit::None => 1.0,
         Fit::ScaleDown => 1.0_f32.min(sx.min(sy)),
+        Fit::Layout => 1.0,
     } * event.scale_factor;
     let width = aw * scale;
     let height = ah * scale;
@@ -1975,4 +2154,68 @@ fn map_pointer(artboard: &OwnedArtboardInstance, event: PointerEvent) -> crate::
         (event.position.x - ox) / scale,
         (event.position.y - oy) / scale,
     )
+}
+
+fn render_fit(fit: Fit) -> nuxie_render_api::Fit {
+    match fit {
+        Fit::Fill => nuxie_render_api::Fit::Fill,
+        Fit::Contain => nuxie_render_api::Fit::Contain,
+        Fit::Cover => nuxie_render_api::Fit::Cover,
+        Fit::FitWidth => nuxie_render_api::Fit::FitWidth,
+        Fit::FitHeight => nuxie_render_api::Fit::FitHeight,
+        Fit::None => nuxie_render_api::Fit::None,
+        Fit::ScaleDown => nuxie_render_api::Fit::ScaleDown,
+        Fit::Layout => nuxie_render_api::Fit::Layout,
+    }
+}
+
+fn semantic_view_transform(
+    artboard_bounds: (f32, f32, f32, f32),
+    fit: Fit,
+    alignment: crate::command_queue::Alignment,
+    scale_factor: f32,
+    view_bounds: Vec2D,
+) -> Mat2D {
+    if view_bounds.x == 0.0 || view_bounds.y == 0.0 {
+        return Mat2D::IDENTITY;
+    }
+    let (x, y, width, height) = artboard_bounds;
+    nuxie_render_api::compute_alignment(
+        render_fit(fit),
+        Vec2D::new(alignment.x, alignment.y),
+        crate::Aabb::new(0.0, 0.0, view_bounds.x, view_bounds.y),
+        crate::Aabb::new(x, y, x + width, y + height),
+        scale_factor,
+    )
+}
+
+fn map_semantic_bounds(bounds: SemanticBounds, transform: Mat2D) -> SemanticBounds {
+    let corners = [
+        transform.transform_point(Vec2D::new(bounds.min_x, bounds.min_y)),
+        transform.transform_point(Vec2D::new(bounds.max_x, bounds.min_y)),
+        transform.transform_point(Vec2D::new(bounds.max_x, bounds.max_y)),
+        transform.transform_point(Vec2D::new(bounds.min_x, bounds.max_y)),
+    ];
+    let mut mapped = SemanticBounds::for_expansion();
+    for corner in corners {
+        mapped.min_x = mapped.min_x.min(corner.x);
+        mapped.min_y = mapped.min_y.min(corner.y);
+        mapped.max_x = mapped.max_x.max(corner.x);
+        mapped.max_y = mapped.max_y.max(corner.y);
+    }
+    mapped
+}
+
+fn map_semantics_diff_to_view_space(diff: &mut SemanticsDiff, transform: Mat2D) {
+    for node in diff
+        .added
+        .iter_mut()
+        .chain(&mut diff.moved)
+        .chain(&mut diff.updated_semantic)
+    {
+        node.set_bounds(map_semantic_bounds(node.bounds(), transform));
+    }
+    for bounds in &mut diff.updated_geometry {
+        bounds.set_bounds(map_semantic_bounds(bounds.bounds(), transform));
+    }
 }

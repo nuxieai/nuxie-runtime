@@ -105,8 +105,10 @@ pub use nuxie_runtime::{
     RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState, RuntimeOwnedViewModelContext,
     RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
     ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
-    ScriptingVm, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
+    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
+    SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 

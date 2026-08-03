@@ -11,7 +11,10 @@ use std::{
     sync::{Arc, Condvar, Mutex, MutexGuard, Weak},
 };
 
-use crate::{AudioSource, RawTextFont, RenderImage, Vec2D, command_server::CommandServer};
+use crate::{
+    AudioSource, RawTextFont, RenderImage, SemanticActionType, SemanticsDiff, Vec2D,
+    command_server::CommandServer,
+};
 
 macro_rules! command_handle {
     ($name:ident) => {
@@ -95,6 +98,7 @@ pub enum Fit {
     FitHeight,
     None,
     ScaleDown,
+    Layout,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -210,6 +214,11 @@ pub enum CommandEvent {
         handle: StateMachineHandle,
         request_id: u64,
         error: String,
+    },
+    SemanticsDiffReceived {
+        handle: StateMachineHandle,
+        request_id: u64,
+        diff: SemanticsDiff,
     },
     ViewModelInstantiated {
         file: FileHandle,
@@ -438,6 +447,33 @@ pub(crate) enum Command {
     AdvanceStateMachine {
         handle: StateMachineHandle,
         elapsed: f32,
+        request_id: u64,
+    },
+    EnableSemantics {
+        handle: StateMachineHandle,
+        request_id: u64,
+    },
+    DrainSemanticsDiff {
+        handle: StateMachineHandle,
+        fit: Fit,
+        alignment: Alignment,
+        scale_factor: f32,
+        view_bounds: Vec2D,
+        request_id: u64,
+    },
+    FireSemanticAction {
+        handle: StateMachineHandle,
+        semantic_node_id: u32,
+        action_type: SemanticActionType,
+        request_id: u64,
+    },
+    RequestSemanticFocus {
+        handle: StateMachineHandle,
+        semantic_node_id: u32,
+        request_id: u64,
+    },
+    ClearSemanticFocus {
+        handle: StateMachineHandle,
         request_id: u64,
     },
     Pointer {
@@ -898,6 +934,56 @@ impl CommandQueue {
             elapsed,
             request_id,
         });
+    }
+    pub fn enable_semantics(&self, handle: StateMachineHandle, request_id: u64) {
+        self.enqueue(Command::EnableSemantics { handle, request_id });
+    }
+    pub fn drain_semantics_diff(
+        &self,
+        handle: StateMachineHandle,
+        fit: Fit,
+        alignment: Alignment,
+        scale_factor: f32,
+        view_bounds: Vec2D,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::DrainSemanticsDiff {
+            handle,
+            fit,
+            alignment,
+            scale_factor,
+            view_bounds,
+            request_id,
+        });
+    }
+    pub fn fire_semantic_action(
+        &self,
+        handle: StateMachineHandle,
+        semantic_node_id: u32,
+        action_type: SemanticActionType,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::FireSemanticAction {
+            handle,
+            semantic_node_id,
+            action_type,
+            request_id,
+        });
+    }
+    pub fn request_semantic_focus(
+        &self,
+        handle: StateMachineHandle,
+        semantic_node_id: u32,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::RequestSemanticFocus {
+            handle,
+            semantic_node_id,
+            request_id,
+        });
+    }
+    pub fn clear_semantic_focus(&self, handle: StateMachineHandle, request_id: u64) {
+        self.enqueue(Command::ClearSemanticFocus { handle, request_id });
     }
     fn pointer(
         &self,
@@ -1479,7 +1565,8 @@ impl CommandEvent {
             StateMachineInstantiated { artboard, .. } => ListenerKey::Artboard(*artboard),
             StateMachineDeleted { handle, .. }
             | StateMachineSettled { handle, .. }
-            | StateMachineError { handle, .. } => ListenerKey::StateMachine(*handle),
+            | StateMachineError { handle, .. }
+            | SemanticsDiffReceived { handle, .. } => ListenerKey::StateMachine(*handle),
             ViewModelInstantiated { file, .. } => ListenerKey::File(*file),
             ViewModelDeleted { handle, .. }
             | ViewModelError { handle, .. }

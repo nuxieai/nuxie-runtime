@@ -13,7 +13,8 @@ use crate::{RuntimeScriptedInterpolatorDiagnostic, ScriptInterpolatorMethod};
 use nuxie_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{
-    CoreRegistryFieldKind, core_registry_field_kind_by_property_key, definition_by_type_key,
+    CoreRegistryFieldKind, core_registry_field_kind_by_property_key,
+    core_registry_setter_field_kind_by_property_key, definition_by_type_key,
     is_callback_property_key, object_supports_property,
 };
 use std::cell::RefCell;
@@ -72,7 +73,14 @@ fn keyed_property_target(
     }
 
     let transform_property = transform_property_for_key(property_key);
-    match core_registry_field_kind_by_property_key(property_key)? {
+    // Generated bitmask passthrough properties have no independent storage
+    // kind, but their generated setter kind still determines the keyframe
+    // representation (for example `SemanticData.isSelected` is a bool).
+    let field_kind = core_registry_field_kind_by_property_key(property_key).or_else(|| {
+        core_registry_setter_field_kind_by_property_key(property_key)
+            .and_then(CoreRegistryFieldKind::from_field_kind)
+    })?;
+    match field_kind {
         CoreRegistryFieldKind::Double => {
             Some(RuntimeKeyedPropertyTarget::Double { transform_property })
         }

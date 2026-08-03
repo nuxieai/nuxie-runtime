@@ -749,7 +749,6 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp"
 test_case_count = 1
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/renderer_bindings.rs::scripted_draw_can_allocate_and_apply_gradients", "crates/nuxie-scripting/tests/renderer_bindings.rs::gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors"]
-covered_test_cases = ["gradient can be constructed"]
 note = "LT-2 directly constructs and applies the pinned linear-gradient shape through the recording factory; the supplemental stop test fixes and locks the first-non-table and luaL_checkunsigned edge semantics."
 
 [[file]]

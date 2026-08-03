@@ -8,6 +8,22 @@ branch="$1"; body="$2"; shift 2
 # Invalidate any cargo artifacts whose sources changed without a fresh mtime
 # (regenerated codegen racing a concurrent build) so every step below builds
 # from the sources being landed, not a poisoned cache.
+# LIGHT LANDING: ledger/docs/tooling-only diffs skip the build+test battery
+# and run only the mechanical checkers. Any touch of crates/, fixtures/, or
+# probe/golden config takes the full battery.
+git fetch origin main --quiet
+if ! git diff --name-only origin/main...HEAD | grep -qEv '^(docs/|(file-correspondence-manifest|port-manifest|test-correspondence-manifest|rust-additions)\.toml$|.*\.md$|tools/(port-manifest|runtime-frame-loop-port|parity-scorecard)/)'; then
+    echo "land.sh: light landing (no runtime sources in diff)"
+    make runtime-frame-loop-port-check
+    make rust-attribution-check
+    make port-manifest-check
+    for extra in "$@"; do make "$extra"; done
+    git push -u origin "$branch"
+    gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"
+    gh pr merge --merge
+    echo "LANDED: $branch (light)"
+    exit 0
+fi
 make rust-sources-fresh
 make cpp-probe
 cargo test -p nuxie-runtime
@@ -15,6 +31,7 @@ cargo test -p nuxie --features scripting
 make runtime-frame-loop-port-check
 make rust-attribution-check
 make scripted-golden-compare
+make silver-corpus-test
 for extra in "$@"; do make "$extra"; done
 git push -u origin "$branch"
 gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"

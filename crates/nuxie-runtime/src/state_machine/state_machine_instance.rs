@@ -5786,13 +5786,21 @@ impl StateMachineInstance {
     }
 
     fn normalized_hit_position(artboard: &ArtboardInstance, x: f32, y: f32) -> (f32, f32) {
-        if artboard.frame_origin() {
+        let position = if artboard.frame_origin() {
             (
                 x - artboard.origin_x * artboard.width,
                 y - artboard.origin_y * artboard.height,
             )
         } else {
             (x, y)
+        };
+        if artboard.has_self_transform() {
+            artboard
+                .self_transform()
+                .invert_or_identity()
+                .transform_point(position.0, position.1)
+        } else {
+            position
         }
     }
 
@@ -6078,7 +6086,11 @@ impl StateMachineInstance {
                             })
                         });
                     if let Some(focus_data) = focus_data {
-                        self.set_focus(Some(focus_data));
+                        self.focus.set_focus_target_before_topology(
+                            artboard,
+                            text_input.text_input_local_id,
+                            focus_data,
+                        );
                     }
                 }
                 group.text_input = Some(text_input);
@@ -6179,7 +6191,20 @@ impl StateMachineInstance {
             }
             self.release_draggable_pointer(pointer_id);
         }
+        self.sync_text_input_focus(artboard);
         Ok(result)
+    }
+
+    fn sync_text_input_focus(&self, artboard: &mut ArtboardInstance) -> bool {
+        let artboard_identity = artboard.instance_identity();
+        let focused_local_id = self.focus.focused_listener_chain().into_iter().find_map(
+            |(owner_identity, target_local_id, _)| {
+                (owner_identity == artboard_identity
+                    && artboard.runtime_object_type_name(target_local_id) == Some("TextInput"))
+                .then_some(target_local_id)
+            },
+        );
+        artboard.sync_text_input_focus(focused_local_id)
     }
 
     fn enable_pointer_events(&mut self, pointer_id: i32) {
@@ -13130,6 +13155,7 @@ impl StateMachineInstance {
                 owned_context.as_deref_mut(),
             );
             state_machine.drop_hidden_focus_target(artboard);
+            changed |= state_machine.sync_text_input_focus(artboard);
         }
 
         let mut dispatch_nested_source =

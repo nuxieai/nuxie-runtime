@@ -479,7 +479,7 @@ pub(crate) fn static_fixed_text_constraint_bounds(
     let effective_sizing = layout_constraint
         .map(|constraint| constraint.effective_sizing(authored_sizing))
         .unwrap_or(authored_sizing);
-    if effective_sizing != TEXT_SIZING_FIXED {
+    if layout_constraint.is_none() && effective_sizing != TEXT_SIZING_FIXED {
         return None;
     }
     let double_property = |name| {
@@ -758,14 +758,19 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
                     .collect(),
             );
         }
-        "TextInputCursor" => vec![StaticTextPathBucket {
-            opacity: 1.0,
-            commands: text_input_cursor::local_clockwise_path(
-                instance,
-                text_input_local,
-                slice.text_input_fallback_cursor_height(runtime, instance)?,
-            ),
-        }],
+        "TextInputCursor" => {
+            if !instance.text_input_is_focused(text_input_local) {
+                return Ok(Vec::new());
+            }
+            vec![StaticTextPathBucket {
+                opacity: 1.0,
+                commands: text_input_cursor::local_clockwise_path(
+                    instance,
+                    text_input_local,
+                    slice.text_input_fallback_cursor_height(runtime, instance)?,
+                ),
+            }]
+        }
         "TextInputSelection" => vec![StaticTextPathBucket {
             opacity: 1.0,
             commands: text_input_selection::local_clockwise_path(instance, text_input_local),
@@ -2063,7 +2068,12 @@ impl<'a> StaticTextSlice<'a> {
             .map(|metrics| metrics.baseline + layout_info.min_y - layout_info.top_trim)
             .collect::<Vec<_>>();
         let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
-        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
+        let overflow_as_fixed = self.overflow_as_fixed(runtime, instance, layout_constraint)?;
+        let line_iteration_sizing = if overflow_as_fixed {
+            TEXT_SIZING_FIXED
+        } else {
+            self.text_uint_property(runtime, instance, "sizingValue")?
+        };
         let vertical_align = self.text_uint_property(runtime, instance, "verticalAlignValue")?;
         let fixed_height = self.effective_height(runtime, instance, layout_constraint)?;
         let modifier_coverages = self
@@ -2086,7 +2096,7 @@ impl<'a> StaticTextSlice<'a> {
             }
             match static_text_line_iteration(
                 overflow,
-                sizing,
+                line_iteration_sizing,
                 vertical_align,
                 metrics,
                 layout_info.min_y - layout_info.top_trim,
@@ -2615,11 +2625,7 @@ impl<'a> StaticTextSlice<'a> {
             (StaticTextLayoutBoundsPurpose::Measure, _) => {
                 measured_width.min(layout_constraint.width)
             }
-            (
-                StaticTextLayoutBoundsPurpose::Controlled,
-                TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED,
-            ) => self.effective_width(runtime, instance, Some(layout_constraint))?,
-            (StaticTextLayoutBoundsPurpose::Controlled, _) => measured_width,
+            (StaticTextLayoutBoundsPurpose::Controlled, _) => layout_constraint.width,
         };
         let min_y = self.static_text_min_y(runtime, instance, &line_metrics)?;
         let measured_bottom = line_metrics
@@ -2644,10 +2650,7 @@ impl<'a> StaticTextSlice<'a> {
             (StaticTextLayoutBoundsPurpose::Measure, _) => {
                 measured_height()?.min(layout_constraint.height)
             }
-            (StaticTextLayoutBoundsPurpose::Controlled, TEXT_SIZING_FIXED) => {
-                self.effective_height(runtime, instance, Some(layout_constraint))?
-            }
-            (StaticTextLayoutBoundsPurpose::Controlled, _) => measured_height()?,
+            (StaticTextLayoutBoundsPurpose::Controlled, _) => layout_constraint.height,
         };
         if purpose == StaticTextLayoutBoundsPurpose::Measure {
             return Ok(Some((0.0, 0.0, width, height)));
@@ -3121,7 +3124,8 @@ impl<'a> StaticTextSlice<'a> {
         max_size: f32,
     ) -> Result<f32> {
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
-        if max_size <= 1.0 || sizing == TEXT_SIZING_AUTO_WIDTH {
+        let overflow_as_fixed = self.overflow_as_fixed(runtime, instance, layout_constraint)?;
+        if max_size <= 1.0 || (sizing == TEXT_SIZING_AUTO_WIDTH && !overflow_as_fixed) {
             return Ok(1.0);
         }
 
@@ -3162,7 +3166,7 @@ impl<'a> StaticTextSlice<'a> {
                 .last()
                 .map(|metrics| metrics.bottom)
                 .unwrap_or(0.0);
-            Ok(max_width <= box_width && (sizing != TEXT_SIZING_FIXED || height <= box_height))
+            Ok(max_width <= box_width && (!overflow_as_fixed || height <= box_height))
         };
 
         let mut lo = 1i32;
@@ -3520,6 +3524,18 @@ impl<'a> StaticTextSlice<'a> {
             .unwrap_or(authored))
     }
 
+    fn overflow_as_fixed(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    ) -> Result<bool> {
+        Ok(
+            self.effective_sizing(runtime, instance, layout_constraint)? == TEXT_SIZING_FIXED
+                || layout_constraint.is_some(),
+        )
+    }
+
     fn authored_sizing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<u64> {
         if self.kind == StaticTextKind::TextInput {
             return Ok(if self.text_input_multiline(runtime, instance)? {
@@ -3554,7 +3570,9 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<Option<(f32, f32, f32, f32)>> {
-        if self.effective_sizing(runtime, instance, layout_constraint)? != TEXT_SIZING_FIXED {
+        if layout_constraint.is_none()
+            && self.effective_sizing(runtime, instance, layout_constraint)? != TEXT_SIZING_FIXED
+        {
             return Ok(Some((0.0, 0.0, 0.0, 0.0)));
         }
         let width = self.effective_width(runtime, instance, layout_constraint)?;
@@ -3570,7 +3588,7 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<Option<StaticTextClipBounds>> {
-        if self.effective_sizing(runtime, instance, layout_constraint)? != TEXT_SIZING_FIXED
+        if !self.overflow_as_fixed(runtime, instance, layout_constraint)?
             || self.text_uint_property(runtime, instance, "overflowValue")? != TEXT_OVERFLOW_CLIPPED
         {
             return Ok(None);
@@ -3832,11 +3850,12 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<bool> {
-        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
-        Ok(sizing == TEXT_SIZING_FIXED
-            && overflow == TEXT_OVERFLOW_ELLIPSIS
-            && self.effective_width(runtime, instance, layout_constraint)? > 0.0)
+        Ok(
+            self.overflow_as_fixed(runtime, instance, layout_constraint)?
+                && overflow == TEXT_OVERFLOW_ELLIPSIS
+                && self.effective_width(runtime, instance, layout_constraint)? > 0.0,
+        )
     }
 
     fn first_static_wrapped_line_end(
@@ -4008,11 +4027,12 @@ impl<'a> StaticTextSlice<'a> {
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<StaticTextLayoutInfo> {
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
-        let bounds_width = match sizing {
-            TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED => {
+        let bounds_width = match (layout_constraint, sizing) {
+            (Some(constraint), _) => constraint.width,
+            (None, TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED) => {
                 self.effective_width(runtime, instance, layout_constraint)?
             }
-            _ => measured_width,
+            (None, _) => measured_width,
         };
         let paragraph_width = if layout_constraint.is_some() {
             // Ported from C++ `src/text/text.cpp` `Text::update` /
@@ -4040,9 +4060,14 @@ impl<'a> StaticTextSlice<'a> {
             .last()
             .map(|metrics| min_y + metrics.bottom)
             .unwrap_or(min_y);
-        let bounds_height = match sizing {
-            TEXT_SIZING_FIXED => self.effective_height(runtime, instance, layout_constraint)?,
-            _ => (full_height - vertical_trim.top - vertical_trim.bottom).max(min_y) - min_y,
+        let bounds_height = match (layout_constraint, sizing) {
+            (Some(constraint), _) => constraint.height,
+            (None, TEXT_SIZING_FIXED) => {
+                self.effective_height(runtime, instance, layout_constraint)?
+            }
+            (None, _) => {
+                (full_height - vertical_trim.top - vertical_trim.bottom).max(min_y) - min_y
+            }
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
@@ -4076,7 +4101,7 @@ impl<'a> StaticTextSlice<'a> {
         }
 
         let mut y_offset = -bounds_height * origin_y;
-        if sizing == TEXT_SIZING_FIXED {
+        if self.overflow_as_fixed(runtime, instance, layout_constraint)? {
             // Mirrors src/text/text.cpp::buildRenderStyles fixed-size vertical
             // alignment transform for top/bottom/middle text.
             match self.text_uint_property(runtime, instance, "verticalAlignValue")? {
@@ -4126,17 +4151,22 @@ impl<'a> StaticTextSlice<'a> {
         // one uniform render transform so aspect ratio and run proportions are
         // preserved.
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
-        let bounds_width = if sizing == TEXT_SIZING_AUTO_WIDTH {
-            measured_width
-        } else {
-            self.effective_width(runtime, instance, layout_constraint)?
+        let overflow_as_fixed = self.overflow_as_fixed(runtime, instance, layout_constraint)?;
+        let bounds_width = match layout_constraint {
+            Some(constraint) => constraint.width,
+            None if sizing == TEXT_SIZING_AUTO_WIDTH => measured_width,
+            None => self.effective_width(runtime, instance, None)?,
         };
-        let bounds_height = if sizing == TEXT_SIZING_FIXED {
-            self.effective_height(runtime, instance, layout_constraint)?
-        } else {
-            total_height
+        let bounds_height = match layout_constraint {
+            Some(constraint) => constraint.height,
+            None if sizing == TEXT_SIZING_FIXED => {
+                self.effective_height(runtime, instance, None)?
+            }
+            None => total_height,
         };
-        let x_scale = if sizing != TEXT_SIZING_AUTO_WIDTH && measured_width > bounds_width {
+        let x_scale = if (sizing != TEXT_SIZING_AUTO_WIDTH || overflow_as_fixed)
+            && measured_width > bounds_width
+        {
             bounds_width / measured_width
         } else {
             1.0
@@ -4148,7 +4178,7 @@ impl<'a> StaticTextSlice<'a> {
         } else {
             0.0
         };
-        let y_scale = if sizing == TEXT_SIZING_FIXED && total_height > bounds_height {
+        let y_scale = if overflow_as_fixed && total_height > bounds_height {
             (bounds_height - fit_baseline) / (total_height - fit_baseline)
         } else {
             1.0
@@ -4176,7 +4206,7 @@ impl<'a> StaticTextSlice<'a> {
             }
         }
 
-        if sizing == TEXT_SIZING_FIXED {
+        if overflow_as_fixed {
             match self.text_uint_property(runtime, instance, "verticalAlignValue")? {
                 1 => y_offset = -bounds_height * origin_y + bounds_height - total_height * scale,
                 2 => {
@@ -5259,6 +5289,7 @@ mod tests {
 
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
+        assert_close(controlled.3, 100.0);
     }
 
     #[test]

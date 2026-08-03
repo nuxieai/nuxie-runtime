@@ -271,7 +271,7 @@ FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
 FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
     "absent",
     "",
-    "F6FID: no green retained-tree upstream fixture evidence exists yet; promotion requires the #LT-1 full-diff Text-inference oracle case.",
+    "F6: no green retained-tree upstream fixture evidence exists yet (F6FID); promotion requires the #LT-1 full-diff Text-inference oracle case.",
 )
 FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
     "partial",

@@ -1965,7 +1965,7 @@ note = "F6FID: retained semantics are integrated and focused upstream cases pass
 upstream = "src/semantic/semantic_inference_registry.cpp"
 status = "absent"
 rust_module = ""
-note = "F6FID: no green retained-tree upstream fixture evidence exists yet; promotion requires the #LT-1 full-diff Text-inference oracle case."
+note = "F6: no green retained-tree upstream fixture evidence exists yet (F6FID); promotion requires the #LT-1 full-diff Text-inference oracle case."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"

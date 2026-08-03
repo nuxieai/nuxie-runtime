@@ -1,6 +1,7 @@
 /target/
 /vendor/*/target/
 /fixtures/**/*.riv
+/fixtures/command_queue/
 !/fixtures/sync/data_bind_blob_test.riv
 !/fixtures/p2d/
 !/fixtures/p2d/scripted_interpolator.riv
@@ -12,6 +13,9 @@
 !/fixtures/univ-1278/
 !/fixtures/univ-1278/parent_child_opacity.riv
 /fuzz/seeds/**/*.riv
+/fuzz/seeds/**/OpenSans-Italic.ttf
+/fuzz/seeds/**/batdude.png
+/fuzz/seeds/**/what.wav
 /tools/cpp-probe/build/Makefile
 /tools/cpp-probe/build/*.make
 /tools/cpp-probe/build/generated/

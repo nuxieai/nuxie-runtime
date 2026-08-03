@@ -1,7 +1,7 @@
 //! Thread-safe client recorder for the pinned C++ `CommandQueue` protocol.
 //!
 //! Direct port of `include/rive/command_queue.hpp` and
-//! `src/command_queue.cpp` at `d788e8ec`. Runtime objects never cross this
+//! `src/command_queue.cpp` at `4ac7b327`. Runtime objects never cross this
 //! seam: the queue owns typed, ordered command payloads and the server owns
 //! every file/artboard/state-machine/view-model occurrence.
 
@@ -537,6 +537,22 @@ pub(crate) enum Command {
         view_model: ViewModelInstanceHandle,
         request_id: u64,
     },
+    SetGlobalViewModel {
+        state_machine: StateMachineHandle,
+        name: String,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    },
+    BindStateMachine {
+        state_machine: StateMachineHandle,
+        request_id: u64,
+    },
+    GetGlobalViewModel {
+        state_machine: StateMachineHandle,
+        name: String,
+        handle: ViewModelInstanceHandle,
+        request_id: u64,
+    },
     DecodeImage {
         handle: RenderImageHandle,
         bytes: Vec<u8>,
@@ -645,6 +661,7 @@ pub(crate) enum Command {
         callback: DrawCallback,
     },
     CancelDraw(DrawKey),
+    TestingCommandLoopBreak,
     Disconnect,
 }
 
@@ -1162,6 +1179,43 @@ impl CommandQueue {
             request_id,
         });
     }
+    pub fn set_global_view_model_instance(
+        &self,
+        state_machine: StateMachineHandle,
+        name: impl Into<String>,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::SetGlobalViewModel {
+            state_machine,
+            name: name.into(),
+            view_model,
+            request_id,
+        });
+    }
+    pub fn bind_state_machine(&self, state_machine: StateMachineHandle, request_id: u64) {
+        self.enqueue(Command::BindStateMachine {
+            state_machine,
+            request_id,
+        });
+    }
+    pub fn global_view_model_instance(
+        &self,
+        state_machine: StateMachineHandle,
+        name: impl Into<String>,
+        listener: Option<&Listener>,
+        request_id: u64,
+    ) -> ViewModelInstanceHandle {
+        let handle = self.next(|c| &mut c.view_model, ViewModelInstanceHandle);
+        self.register(ListenerKey::ViewModel(handle), listener);
+        self.enqueue(Command::GetGlobalViewModel {
+            state_machine,
+            name: name.into(),
+            handle,
+            request_id,
+        });
+        handle
+    }
 
     pub fn decode_image(
         &self,
@@ -1362,6 +1416,12 @@ impl CommandQueue {
     pub fn cancel_draw(&self, key: DrawKey) {
         self.enqueue(Command::CancelDraw(key));
     }
+    /// Test-only protocol marker matching the pinned queue's command-loop
+    /// break. Commands after this marker remain queued for the next poll.
+    #[doc(hidden)]
+    pub fn testing_command_loop_break(&self) {
+        self.enqueue(Command::TestingCommandLoopBreak);
+    }
     pub fn disconnect(&self) {
         self.enqueue(Command::Disconnect);
     }
@@ -1456,6 +1516,13 @@ impl ListenerKey {
 }
 
 impl Shared {
+    pub(crate) fn prepend_commands(&self, commands: impl DoubleEndedIterator<Item = Command>) {
+        let mut pending = lock(&self.commands);
+        for command in commands.rev() {
+            pending.push_front(command);
+        }
+    }
+
     pub(crate) fn take_commands(&self, wait: bool) -> Vec<Command> {
         let mut commands = lock(&self.commands);
         if wait {

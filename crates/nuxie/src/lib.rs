@@ -3449,6 +3449,18 @@ impl<'a> FileAsset<'a> {
         u32::try_from(self.descriptor().uint_property("assetId")?).ok()
     }
 
+    /// Runtime extension reported by the concrete C++ `FileAsset` subtype.
+    pub fn file_extension(self) -> &'static str {
+        match self.kind() {
+            FileAssetKind::Image => "png",
+            FileAssetKind::Font => "ttf",
+            FileAssetKind::Audio => "wav",
+            FileAssetKind::Blob => "blob",
+            FileAssetKind::Script => "lua",
+            FileAssetKind::Shader => "rstb",
+        }
+    }
+
     /// The final in-band payload selected by the import stack for this asset.
     pub fn contents(self) -> Option<&'a [u8]> {
         self.contents

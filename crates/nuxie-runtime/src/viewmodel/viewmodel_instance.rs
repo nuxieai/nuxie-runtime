@@ -234,6 +234,17 @@ impl RuntimeOwnedViewModelHandle {
         Some(Self::from_shared(linked))
     }
 
+    #[doc(hidden)]
+    pub fn testing_list_items_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<Vec<RuntimeOwnedViewModelHandle>> {
+        self.instance
+            .borrow()
+            .list_items_by_property_name(property_name)
+            .map(|items| items.into_iter().map(Self::from_shared).collect())
+    }
+
     /// Return the concrete retained child reached through a numeric
     /// ViewModel-property path.
     ///
@@ -1608,6 +1619,67 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         view_model.set_active_runtime_image_by_property_index(*image_index, image)
+    }
+
+    pub fn runtime_image_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeViewModelImage> {
+        let Some(source) = self.asset_source_handle_by_property_name_path(property_path) else {
+            return None;
+        };
+        self.runtime_image_by_property_path(source.path())
+    }
+
+    pub fn set_runtime_image_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        image: Option<RuntimeViewModelImage>,
+    ) -> bool {
+        let Some(source) = self.asset_source_handle_by_property_name_path(property_path) else {
+            return false;
+        };
+        self.set_runtime_image_by_property_path(source.path(), image)
+    }
+
+    pub fn runtime_artboard_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeBindableArtboard> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.artboard_runtime_state_by_property_index(property_index)?
+            .borrow()
+            .bindable_artboard
+            .clone()
+    }
+
+    pub fn set_runtime_artboard_by_property_name(
+        &mut self,
+        property_name: &str,
+        artboard: Option<RuntimeBindableArtboard>,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        let Some(state) = self.artboard_runtime_state_by_property_index(property_index) else {
+            return false;
+        };
+        let same = match (&state.borrow().bindable_artboard, &artboard) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        let _ = self.set_artboard_by_property_index(property_index, u64::from(u32::MAX));
+        let state = self
+            .artboard_runtime_state_by_property_index(property_index)
+            .expect("validated artboard property");
+        let mut state = state.borrow_mut();
+        state.bindable_artboard = artboard;
+        state.bound_view_model_instance.take();
+        true
     }
 
     pub(crate) fn artboard_runtime_state_by_property_index(

@@ -8,8 +8,8 @@
 use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use crate::{
-    Factory, File, OwnedArtboardInstance, RawTextFont, RenderImage, StateMachineInstance,
-    ViewModelInstance,
+    Factory, File, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeFileAssetLoader,
+    StateMachineInstance, ViewModelInstance,
     command_queue::{
         ArtboardHandle, AudioSourceHandle, Command, CommandDataType, CommandEvent, CommandQueue,
         CommandValue, DrawCallback, DrawKey, FileAssetData, FileHandle, Fit, FontHandle,
@@ -38,21 +38,41 @@ struct ViewModelEntry {
 }
 
 enum RenderImageEntry {
-    Unique(Box<dyn RenderImage>),
+    Unique(Rc<Box<dyn RenderImage>>),
     Shared(Rc<dyn RenderImage>),
+}
+
+struct SharedExternalImage(Rc<Box<dyn RenderImage>>);
+
+impl RenderImage for SharedExternalImage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.0.as_ref().as_ref().as_any()
+    }
+
+    fn width(&self) -> u32 {
+        self.0.as_ref().as_ref().width()
+    }
+
+    fn height(&self) -> u32 {
+        self.0.as_ref().as_ref().height()
+    }
+
+    fn uv_transform(&self) -> crate::Mat2D {
+        self.0.as_ref().as_ref().uv_transform()
+    }
 }
 
 impl RenderImageEntry {
     fn as_ref(&self) -> &dyn RenderImage {
         match self {
-            Self::Unique(image) => image.as_ref(),
+            Self::Unique(image) => image.as_ref().as_ref(),
             Self::Shared(image) => image.as_ref(),
         }
     }
 
     fn shared(&self) -> Option<Rc<dyn RenderImage>> {
         match self {
-            Self::Unique(_) => None,
+            Self::Unique(image) => Some(Rc::new(SharedExternalImage(Rc::clone(image)))),
             Self::Shared(image) => Some(Rc::clone(image)),
         }
     }
@@ -62,6 +82,7 @@ impl RenderImageEntry {
 pub struct CommandServer {
     queue: CommandQueue,
     factory: Box<dyn Factory>,
+    asset_loader: Option<Box<dyn RuntimeFileAssetLoader>>,
     disconnected: bool,
     files: BTreeMap<FileHandle, Arc<File>>,
     artboards: BTreeMap<ArtboardHandle, ArtboardEntry>,
@@ -88,6 +109,7 @@ impl CommandServer {
         Self {
             queue,
             factory,
+            asset_loader: None,
             disconnected: false,
             files: BTreeMap::new(),
             artboards: BTreeMap::new(),
@@ -101,6 +123,16 @@ impl CommandServer {
             global_fonts: BTreeMap::new(),
             subscriptions: Vec::new(),
         }
+    }
+
+    pub fn with_asset_loader(
+        queue: CommandQueue,
+        factory: Box<dyn Factory>,
+        asset_loader: Box<dyn RuntimeFileAssetLoader>,
+    ) -> Self {
+        let mut server = Self::new(queue, factory);
+        server.asset_loader = Some(asset_loader);
+        server
     }
 
     pub fn factory(&mut self) -> &mut dyn Factory {
@@ -182,6 +214,44 @@ impl CommandServer {
     ) -> Option<crate::Vec2D> {
         let artboard = self.state_machines.get(&handle)?.artboard;
         Some(map_pointer(&self.artboards.get(&artboard)?.instance, event))
+    }
+    #[doc(hidden)]
+    pub fn testing_state_machine_view_model_is(
+        &self,
+        state_machine: StateMachineHandle,
+        view_model: ViewModelInstanceHandle,
+    ) -> bool {
+        self.state_machines
+            .get(&state_machine)
+            .zip(self.view_models.get(&view_model))
+            .is_some_and(|(machine, view_model)| {
+                machine
+                    .instance
+                    .testing_main_view_model_is(view_model.instance.handle())
+            })
+    }
+    #[doc(hidden)]
+    pub fn testing_view_model_list_handles(
+        &self,
+        view_model: ViewModelInstanceHandle,
+        path: &str,
+    ) -> Option<Vec<Option<ViewModelInstanceHandle>>> {
+        let items = self
+            .view_models
+            .get(&view_model)?
+            .instance
+            .handle()
+            .testing_list_items_by_property_name(path)?;
+        Some(
+            items
+                .into_iter()
+                .map(|item| {
+                    self.view_models.iter().find_map(|(handle, candidate)| {
+                        candidate.instance.handle().ptr_eq(&item).then_some(*handle)
+                    })
+                })
+                .collect(),
+        )
     }
     #[doc(hidden)]
     pub fn pointer_down_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
@@ -284,7 +354,11 @@ impl CommandServer {
                     handle,
                     bytes,
                     request_id,
-                } => match File::import(&bytes) {
+                } => match if let Some(loader) = self.asset_loader.as_deref_mut() {
+                    File::import_with_asset_loader(&bytes, self.factory.as_mut(), loader)
+                } else {
+                    File::import(&bytes)
+                } {
                     Ok(file) => {
                         self.files.insert(handle, Arc::new(file));
                         self.emit(CommandEvent::FileLoaded { handle, request_id });
@@ -1030,7 +1104,8 @@ impl CommandServer {
                     request_id,
                 } => {
                     let image: Box<dyn RenderImage> = image;
-                    self.images.insert(handle, RenderImageEntry::Unique(image));
+                    self.images
+                        .insert(handle, RenderImageEntry::Unique(Rc::new(image)));
                     self.emit(CommandEvent::ImageDecoded { handle, request_id });
                 }
                 Command::DeleteImage { handle, request_id } => {

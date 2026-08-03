@@ -13,13 +13,13 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 
 | Upstream `TEST_CASE` | Rust evidence |
 |---|---|
-| `POD Stream RCP` | `pod_stream_rcp` — preserves non-null/null optional ownership and shared identity through the queued callback seam. |
+| `POD Stream RCP` | `pod_stream_rcp` — ports the RCP stream to Rust's owned command-enum transport and moves both non-null and null `Option<Arc<_>>` payloads through the queue while preserving shared identity. |
 | `artboard management` | `artboard_management` — uses pinned `two_artboards.riv`, covers named/missing instances, invalid deletion, and file-owned cleanup. |
 | `state machine management` | `state_machine_management` — uses pinned `multiple_state_machines.riv`, covers named/missing instances and dependent cleanup. |
 | `default artboard & state machine` | `default_artboard_and_state_machine` — uses pinned `entry.riv` and proves default helpers equal empty names, including authored names. |
 | `invalid handles` | `invalid_handles` — ports good/bad file, artboard, and state-machine handle creation, invalid deletion, non-destructive errors, and valid cleanup. |
 | `draw loops` | `draw_loops` — independently schedules both keys, each key alone, idle polls, and teardown-safe one-shot draw callbacks. |
-| `test support for all asset types` | `test_support_for_all_asset_types` — loads pinned `data_bind_test_cmdq.riv` and verifies the imported typed asset list through the queue callback. |
+| `test support for all asset types` | `test_support_for_all_asset_types` — constructs `CommandServer` with its file-asset loader, proves the pinned fixture invokes the loader only with supported image/font/audio kinds, and verifies the queued typed catalog. Script assets use the separate frozen trust/script pipeline in Rust. |
 | `wait for server race condition` | `wait_for_server_race_condition` — interleaves 100 queued callbacks and draw keys against the blocking server loop, then drains before disconnect. |
 | `stopMesssages command` | `stop_messages_command` — ports the `1`, `7`, `11` command-loop break boundaries exactly. |
 | `draw happens once per poll` | `draw_happens_once_per_poll` + `draw_is_coalesced_by_key_within_one_poll` |
@@ -35,13 +35,13 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `RenderImage` | `render_image` — covers decode, retained dimensions, and delete lifecycle. |
 | `AudioSource` | `audio_source` — covers decode identity and delete lifecycle. |
 | `Font` | `font` — covers decode face identity and delete lifecycle. |
-| `View Model Property Set/Get` | `view_model_property_set_get` — ports typed ordered set/get, nested replacement, authored enum strings, retained image/artboard identity and clearing, invalid values/paths/handles, and deletion callback/error accounting. |
+| `View Model Property Set/Get` | `view_model_property_set_get` — compares every typed get callback's request/path/value in order, covers nested replacement and authored enum strings, proves decoded/external image and artboard retained identity, clearing, failed-set retention, invalid values/paths/handles, and deletion/error accounting. |
 | `CommandServer::getHandleForInstance` | `command_server_get_handle_for_instance` — round-trips retained instance identity to its queue handle. |
 | `Set Artboard Size / Reset Artboard Size` | `set_and_reset_artboard_size` — sets an explicit size, reports it through the queue, and restores the authored dimensions. |
 | `Set Artboard Volume / Get Artboard Volume` | `set_and_get_artboard_volume` — preserves the pinned default and queued volume updates. |
-| `View Model Property Subscriptions` | `view_model_property_subscriptions` — covers initial delivery, changed-value delivery, no duplicate for an unchanged value, trigger delivery, and unsubscribe. |
+| `View Model Property Subscriptions` | `view_model_property_subscriptions` — covers the nine typed subscriptions, changed-value and trigger delivery at the end-of-poll subscription pass, invalid path/type errors, and unsubscribe. |
 | `View Model Property Async Subscriptions` | `view_model_property_async_subscriptions` — preserves ordered asynchronous subscription delivery across command/message polls. |
-| `List View Model Property Set/Get` | `list_view_model_property_set_get` — gets the authored list, replaces it through queued handles, clears it, and rejects the wrong property type. |
+| `List View Model Property Set/Get` | `list_view_model_property_set_get` — checks exact appended/inserted/swapped handle identity and order around authored entries, exact sizes, unchanged state after invalid operations, and all invalid-handle/path/index errors. |
 | `file Error Messages` | `file_error_messages` — checks invalid file operations and their request IDs without producing success callbacks. |
 | `listArtboard` | `list_artboard` — reports the pinned file's authored artboards in order and errors for an invalid file handle. |
 | `listEnums` | `list_enums` — reports authored enum names and ordered keys/values, with invalid-file error coverage. |
@@ -70,7 +70,7 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `global Listener` | `global_listener` — routes file, artboard, state-machine, view-model, image, audio, and font callbacks through global listeners; S4-45 blob messages remain WATCH. |
 | `sync pointer events` | `sync_pointer_events` — exercises synchronous move/down/up/exit calls and their queue-visible state on the server owner thread. |
 | `requestViewModelInstanceListClear` | `request_view_model_instance_list_clear` — clears a populated list property and reports the empty result. |
-| `dependency lifetime management` | `dependency_lifetime_management` — deletes file, artboard, and state-machine owners while proving dependent handle cleanup and callbacks. |
+| `dependency lifetime management` | `dependency_lifetime_management` — deletes one artboard and one state machine while proving only their dependent handles are cleaned up and siblings remain live. |
 | `file assets listed - image asset` | `file_assets_listed_image_asset` — checks every pinned image-asset field, including the concrete runtime extension and type ID. |
 | `file assets listed - font asset` | `file_assets_listed_font_asset` — checks every pinned font-asset field, including the concrete runtime extension and type ID. |
 | `file assets listed - type IDs match runtime` | `file_assets_listed_type_ids_match_runtime` — anchors image/font/audio IDs to schema keys 105/141/406. |

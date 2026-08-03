@@ -234,6 +234,17 @@ impl RuntimeOwnedViewModelHandle {
         Some(Self::from_shared(linked))
     }
 
+    #[doc(hidden)]
+    pub fn testing_list_items_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<Vec<RuntimeOwnedViewModelHandle>> {
+        self.instance
+            .borrow()
+            .list_items_by_property_name(property_name)
+            .map(|items| items.into_iter().map(Self::from_shared).collect())
+    }
+
     /// Return the concrete retained child reached through a numeric
     /// ViewModel-property path.
     ///

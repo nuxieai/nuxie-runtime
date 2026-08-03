@@ -145,7 +145,7 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 349
+faithful = 353
 adapted = 0
 divergent-by-decision = 1
 pending = 0
@@ -154,7 +154,7 @@ compensation = 0
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 35
+faithful = 36
 adapted = 40
 divergent-by-decision = 0
 pending = 0
@@ -420,6 +420,28 @@ rust_modules = [
   "crates/nuxie-runtime/src/focus.rs",
 ]
 static_closure = "State, transition, condition, listener, focus, and input subclasses are virtual-dispatch branches of StateMachineInstance advance and event processing."
+
+[[source_set]]
+id = "retained-focus-tree"
+wave = "S4"
+include = [
+  "src/focus_data.cpp",
+  "src/input/focus_manager.cpp",
+  "src/input/focus_node.cpp",
+  "src/input/focusable.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/focus_data.rs",
+  "crates/nuxie-runtime/src/input/mod.rs",
+  "crates/nuxie-runtime/src/input/focus_manager.rs",
+  "crates/nuxie-runtime/src/input/focus_node.rs",
+  "crates/nuxie-runtime/src/input/focusable.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+  "crates/nuxie-runtime/src/state_machine/focus_action_traversal.rs",
+]
+static_closure = "FocusData retains Focusable/FocusNode identity; explicit Artboard construction and structural callbacks mutate one FocusManager tree, while navigation and input consume its live retained nodes."
 
 [[source_set]]
 id = "databind-artboard-settlement"
@@ -3365,6 +3387,55 @@ wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = true
 status = "faithful"
+
+[[file]]
+upstream = "src/focus_data.cpp"
+source_set = "retained-focus-tree"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/focus_data.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/input/focus_manager.cpp"
+source_set = "retained-focus-tree"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/input/focus_manager.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/input/focus_node.cpp"
+source_set = "retained-focus-tree"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/input/focus_node.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/input/focusable.cpp"
+source_set = "retained-focus-tree"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/input/focusable.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[member]]
+id = "focus.retained_tree"
+wave = "S4"
+cpp_files = ["src/focus_data.cpp", "src/input/focus_manager.cpp", "src/input/focus_node.cpp", "src/input/focusable.cpp"]
+rust_file = "crates/nuxie-runtime/src/focus_data.rs"
+rust_anchor = "pub(crate) struct RuntimeFocusTree"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/focus_data.cpp:55-69", "cpp:src/artboard.cpp:548-572", "rust:crates/nuxie-runtime/src/focus_data.rs:100-280"]
+retain = ["cpp:include/rive/input/focus_node.hpp:21-194", "rust:crates/nuxie-runtime/src/input/focus_node.rs:1-240", "rust:crates/nuxie-runtime/src/input/focus_manager.rs:1-620"]
+dirty = ["cpp:src/focus_data.cpp:372-390", "cpp:src/focus_data.cpp:574-628", "rust:crates/nuxie-runtime/src/artboard.rs:3927-3945", "rust:crates/nuxie-runtime/src/artboard.rs:4826-4895"]
+update = ["cpp:src/focus_data.cpp:590-628", "rust:crates/nuxie-runtime/src/artboard.rs:8920-9145", "rust:crates/nuxie-runtime/src/focus_data.rs:480-980"]
+advance = ["cpp:src/input/focus_manager.cpp:1-1110", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:5180-5700", "rust:crates/nuxie-runtime/src/input/focus_manager.rs:1-620"]
+draw = ["cpp:src/input/focus_manager.cpp:1-1110", "rust:crates/nuxie-runtime/src/input/focus_manager.rs:1-620"]
+clone = ["cpp:src/focus_data.cpp:1-69", "rust:crates/nuxie-runtime/src/focus_data.rs:100-170"]
+drop = ["cpp:src/focus_data.cpp:39-54", "cpp:src/input/focus_node.cpp:8-67", "rust:crates/nuxie-runtime/src/input/focus_manager.rs:90-330"]
 
 [[member]]
 id = "component.identity"

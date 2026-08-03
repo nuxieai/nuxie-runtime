@@ -2107,14 +2107,14 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_focus_manager_switch_fallback_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+install_external_focus\\b[\\s\\S]{0,700}external_focus_manager_selected\\s*&&\\s*self\\.focus\\.shares_manager\\(parent_focus\\)[\\s\\S]{0,900}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,250}clean-tree-recorded-seam[\\s\\S]{0,500}internal_focus\\s*=\\s*Some\\(std::mem::take\\(&mut\\s+self\\.focus\\)\\)[\\s\\S]{0,500}external_focus_manager_selected\\s*=\\s*true[\\s\\S]{0,250}assign-external[\\s\\S]{0,250}rebuild-tree-recorded-seam[\\s\\S]{0,700}fn\\s+clear_external_focus_manager\\b[\\s\\S]{0,500}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,500}internal_focus\\s*\\.\\s*take\\(\\)[\\s\\S]{0,350}external_focus_manager_selected\\s*=\\s*false[\\s\\S]{0,250}assign-internal[\\s\\S]{0,250}rebuild-tree-recorded-seam"
+pattern = "fn\\s+install_external_focus\\b[\\s\\S]{0,700}external_focus_manager_selected\\s*&&\\s*self\\.focus\\.shares_manager\\(parent_focus\\)[\\s\\S]{0,900}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,250}(?:clean-tree-recorded-seam|clean-retained-tree)[\\s\\S]{0,500}internal_focus\\s*=\\s*Some\\(std::mem::take\\(&mut\\s+self\\.focus\\)\\)[\\s\\S]{0,800}external_focus_manager_selected\\s*=\\s*true[\\s\\S]{0,400}assign-external[\\s\\S]{0,400}(?:rebuild-tree-recorded-seam|select-retained-tree)[\\s\\S]{0,700}fn\\s+clear_external_focus_manager\\b[\\s\\S]{0,500}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,500}internal_focus\\s*\\.\\s*take\\(\\)[\\s\\S]{0,350}external_focus_manager_selected\\s*=\\s*false[\\s\\S]{0,250}assign-internal[\\s\\S]{0,250}(?:rebuild-tree-recorded-seam|select-retained-tree)"
 min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_focus_owner_safe_identity_projection_required"
-globs = ["crates/nuxie-runtime/src/focus.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+shares_manager\\(&self,\\s*other:\\s*&Self\\)\\s*->\\s*bool\\s*\\{\\s*Rc::ptr_eq\\(&self\\.domain,\\s*&other\\.domain\\)\\s*\\})(?=[\\s\\S]*fn\\s+has_focus_target\\b[\\s\\S]{0,350}targets[\\s\\S]{0,180}contains_key\\(&\\(self\\.owner_identity,\\s*target_local\\)\\))(?=[\\s\\S]*fn\\s+has_primary_focus\\(&self\\)\\s*->\\s*bool\\s*\\{[\\s\\S]{0,180}manager\\.primary_focus\\(\\)\\.is_some\\(\\))"
+globs = ["crates/nuxie-runtime/src/focus.rs", "crates/nuxie-runtime/src/focus_data.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+shares_manager\\(&self,\\s*other:\\s*&Self\\)\\s*->\\s*bool\\s*\\{\\s*Rc::ptr_eq\\(&self\\.domain,\\s*&other\\.domain\\)\\s*\\})(?=[\\s\\S]*fn\\s+has_focus_target\\b[\\s\\S]{0,350}(?:focus_)?targets[\\s\\S]{0,180}contains_key\\(&\\(self\\.owner_identity,\\s*target_local\\)\\))(?=[\\s\\S]*fn\\s+has_primary_focus\\(&self\\)\\s*->\\s*bool\\s*\\{[\\s\\S]{0,180}manager\\.primary_focus\\(\\)\\.is_some\\(\\))"
 min_occurrences = 1
 max_occurrences = 1
 

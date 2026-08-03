@@ -3886,6 +3886,27 @@ impl ArtboardInstance {
                 .nested_structure_epoch
                 .fetch_add(1, Ordering::Relaxed);
         }
+        if let Some(focus) = self.external_focus_domain.as_ref() {
+            focus.rebuild_after_structure_change(self);
+        }
+    }
+
+    fn refresh_retained_focusables_for_property(&self, local_id: usize, property_key: u16) {
+        if let Some(focus) = self.external_focus_domain.as_ref() {
+            focus.refresh_after_property_change(self, local_id, property_key);
+        }
+    }
+
+    fn refresh_retained_focus_data(&self, focus_data_local: usize, root_transform: Mat2D) {
+        if let Some(focus) = self.external_focus_domain.as_ref() {
+            focus.refresh_focus_data_update(self, focus_data_local, root_transform);
+        }
+    }
+
+    fn refresh_retained_focus_visibility(&self) {
+        if let Some(focus) = self.external_focus_domain.as_ref() {
+            focus.refresh_visibility_change(self);
+        }
     }
 
     pub(crate) fn runtime_graph(&self) -> Option<&ArtboardGraph> {
@@ -4144,6 +4165,27 @@ impl ArtboardInstance {
             .copied()
     }
 
+    /// LayoutComponent::worldBounds in this Artboard's coordinate space.
+    pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
+        let layout = self.layout_bounds(local_id)?;
+        let transform = self.component(local_id)?.transform.world_transform;
+        let corners = [
+            transform.transform_point(0.0, 0.0),
+            transform.transform_point(layout.width, 0.0),
+            transform.transform_point(0.0, layout.height),
+            transform.transform_point(layout.width, layout.height),
+        ];
+        let (mut min_x, mut min_y) = corners[0];
+        let (mut max_x, mut max_y) = corners[0];
+        for (x, y) in corners.into_iter().skip(1) {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        Some((min_x, min_y, max_x, max_y))
+    }
+
     /// Whether authored nested or component-list players still need a future
     /// advance. Hosts use this independently from the selected root player so
     /// a static root cannot prematurely settle a playing child artboard.
@@ -4390,6 +4432,7 @@ impl ArtboardInstance {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
         self.mark_runtime_shape_property_changed(local_id);
+        self.refresh_retained_focusables_for_property(local_id, property_key);
         true
     }
 
@@ -4787,6 +4830,7 @@ impl ArtboardInstance {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
         self.mark_runtime_shape_property_changed(local_id);
+        self.refresh_retained_focusables_for_property(local_id, property_key);
         true
     }
 
@@ -4814,6 +4858,7 @@ impl ArtboardInstance {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
         self.mark_runtime_shape_property_changed(local_id);
+        self.refresh_retained_focusables_for_property(local_id, property_key);
         true
     }
 
@@ -4851,6 +4896,7 @@ impl ArtboardInstance {
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
+        self.refresh_retained_focusables_for_property(local_id, property_key);
         true
     }
 
@@ -8998,6 +9044,13 @@ impl ArtboardInstance {
                             script_mode,
                             root_transform,
                         );
+                        if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                            && self
+                                .component(local_id)
+                                .is_some_and(|component| component.type_name == "FocusData")
+                        {
+                            self.refresh_retained_focus_data(local_id, root_transform);
+                        }
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
                             self.update_runtime_path_owner(
                                 component_handle,
@@ -10418,6 +10471,9 @@ impl ArtboardInstance {
         if let Some(existing) = self.nested_artboards.get(&local_id) {
             nested.reuse_owned_stateful_view_model_context(existing);
         }
+        if let Some(parent_focus) = self.external_focus_domain.as_ref() {
+            nested.install_external_focus_domain(parent_focus);
+        }
         nested.render_cache_revision = self.nested_artboards.get(&local_id).map_or(0, |existing| {
             if existing.child.graph_global_id == nested.child.graph_global_id {
                 existing.render_cache_revision.saturating_add(1)
@@ -10632,7 +10688,11 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
-        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
+        let changed = self.collapse_component_tree_with_ancestor(local_id, collapsed, false);
+        if changed {
+            self.refresh_retained_focus_visibility();
+        }
+        changed
     }
 
     pub(crate) fn collapse_component_tree_with_ancestor(
@@ -10745,8 +10805,19 @@ impl ArtboardInstance {
         &mut self,
         parent_focus: &crate::focus::RuntimeFocusTree,
     ) {
-        self.external_focus_domain =
-            Some(parent_focus.external_for_owner(self.instance_identity()));
+        let next = parent_focus.external_for_owner(self.instance_identity());
+        if let Some(current) = self.external_focus_domain.take() {
+            if current.shares_manager(&next) {
+                self.external_focus_domain = Some(current);
+            } else {
+                current.cleanup_focus_tree(self);
+                next.build_focus_tree(self);
+                self.external_focus_domain = Some(next);
+            }
+        } else {
+            next.build_focus_tree(self);
+            self.external_focus_domain = Some(next);
+        }
         for (_, nested) in &mut self.nested_artboards.entries {
             nested.install_external_focus_domain(parent_focus);
         }

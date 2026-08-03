@@ -35,6 +35,14 @@ path = "crates/nuxie-runtime/src/data_converter.rs"
 category = "codegen"
 
 [[addition]]
+path = "crates/nuxie-runtime/src/focus.rs"
+category = "scene-api"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/input/mod.rs"
+category = "codegen"
+
+[[addition]]
 path = "crates/nuxie-runtime/src/math/mod.rs"
 category = "codegen"
 

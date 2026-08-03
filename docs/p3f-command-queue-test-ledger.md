@@ -42,7 +42,7 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `View Model Property Subscriptions` | `view_model_property_subscriptions` — covers the nine typed subscriptions, changed-value and trigger delivery at the end-of-poll subscription pass, invalid path/type errors, and unsubscribe. |
 | `View Model Property Async Subscriptions` | `view_model_property_async_subscriptions` — delivers a changed number subscription across the background server/message boundary and then unsubscribes. |
 | `List View Model Property Set/Get` | `list_view_model_property_set_get` — checks exact appended/inserted/swapped handle identity and order around authored entries, exact sizes, unchanged state after invalid operations, and all invalid-handle/path/index errors. |
-| `file Error Messages` | `file_error_messages` — checks invalid file operations and their request IDs without producing success callbacks. |
+| `file Error Messages` | `file_error_messages` — checks the expected error counts for invalid file operations without producing success callbacks. |
 | `listArtboard` | `list_artboard` — reports the pinned file's authored artboards in order and suppresses a success callback for an invalid file handle. |
 | `listEnums` | `list_enums` — reports the authored enum name and ordered values and suppresses a success callback for an invalid file. |
 | `requestViewModelInstanceViewModelName and requestViewModelInstanceName` | `request_view_model_and_instance_name` — reports both retained view-model and instance names and rejects an invalid handle. |

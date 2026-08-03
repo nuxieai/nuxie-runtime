@@ -19,9 +19,12 @@ pin-advance remainder as one runtime-state spine:
   queue dirt or one of the named conservative-poll families.
 - Lua DataContext chains now retain `Option<ScriptViewModel>` per context node.
   `parent()` therefore preserves a real parent DataContext whose independent
-  `viewModel()` result is nil. Detached advancement queries runtime-owned
-  `has_parents()` directly; the scripting parent graph, mirror rewrites, and
-  rescans are deleted.
+  `viewModel()` result is nil. Generator-time contexts use the retained parent
+  slots as independent DataContext-presence evidence, and `rootViewModel()`
+  projects the terminal context's possibly-nil main model instead of skipping
+  nil nodes. Detached advancement queries runtime-owned `has_parents()`
+  directly; the scripting parent graph, mirror rewrites, and rescans are
+  deleted.
 
 The conservative polling residue is limited to converter, layout-computed,
 Solo, and shape-length/numeric families whose pinned dependency edges are not
@@ -41,7 +44,28 @@ producer without re-enabling the compensation flag.
 
 Direct regressions cover exact-property fanout/removal, a clean owned-context
 queue gate even when the compatibility flag is set, and the null nested-artboard
-initial swap. The scripted golden corpus proves the integrated result.
+initial swap. C6 regressions also cover generator-time retention of a nil-main
+context with a parent slot and a terminal nil root. The scripted golden corpus
+proves the integrated result.
+
+## Review closeout
+
+The required standards and spec reviews found three actionable edges, all
+fixed in `bf44e59d`:
+
+- C6 production construction had derived DataContext presence only from its
+  main model. It now also uses retained parent slots, with a regression through
+  `instantiate_registered_script_with_context` rather than only a direct
+  userdata fixture.
+- `rootViewModel()` had skipped nil parent nodes. It now selects the terminal
+  context slot exactly, including a nil main model.
+- String setters notified Core observers before their concrete generated
+  changed callback, and two unused list-rescan helpers survived the registry
+  demolition. Setter order now matches generated C++, and those facades are
+  deleted.
+
+Both review lanes were rerun through the affected focused tests and the entire
+required gate set below.
 
 ## Correspondence and residue
 
@@ -72,16 +96,14 @@ initial swap. The scripted golden corpus proves the integrated result.
 
 ## Commits
 
-Commits completed before the shared Git metadata became read-only:
-
 - `4ace1ac1` — `Port runtime-owned Lua parent edges`
 - `e29adba7` — `Port Core property observer pushes`
-
-The sandbox temporarily rejected creation of the shared `.git/index.lock`, so
-the final correction and ledgers were held as a mapped worktree diff while the
-gates ran. A later retry succeeded:
-
 - `e68b11f5` — `Close RB-1 observer remainder`
+- `76ec5680` — `Record P3-b closeout evidence`
+- `bf44e59d` — `Address P3-b closeout review`
+
+The sandbox temporarily rejected creation of the shared `.git/index.lock`;
+later retries succeeded, so no mapped diff remains.
 
 No file was written outside this worktree and no `/tmp` worktree was used.
 
@@ -89,7 +111,7 @@ No file was written outside this worktree and no `/tmp` worktree was used.
 
 - `cargo test -p nuxie-runtime` — green: 931/931 library tests plus all
   integration and doc tests.
-- `cargo test -p nuxie --features scripting` — green: 246/246 library tests
+- `cargo test -p nuxie --features scripting` — green: 247/247 library tests
   (one fixture generator ignored) plus all integration and doc tests.
 - `make runtime-frame-loop-port-check` — green: 112 checker tests; test ledger
   157 files / 1,404 TEST_CASEs; frame-loop files 353 faithful + 1 approved

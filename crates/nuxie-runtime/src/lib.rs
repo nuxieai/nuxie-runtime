@@ -40,6 +40,7 @@ mod context_value_symbol_list_index;
 mod context_value_trigger;
 #[path = "data_bind/context/context_value_viewmodel.rs"]
 mod context_value_viewmodel;
+mod core;
 mod custom_property_container;
 mod data_bind_container;
 #[path = "data_bind/data_bind_container.rs"]

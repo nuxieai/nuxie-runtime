@@ -2836,6 +2836,7 @@ fn initialize_nested_scripted_drawables(
                 .iter()
                 .rev()
                 .filter_map(Clone::clone)
+                .map(Some)
                 .collect();
             let has_scripted_interpolator = child_instance
                 .linear_animations()
@@ -2938,7 +2939,7 @@ fn initialize_scripted_drawables_for_artboard(
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     context_model: Option<ScriptViewModel>,
-    parent_context_models: Vec<ScriptViewModel>,
+    parent_context_models: Vec<Option<ScriptViewModel>>,
     script_context_is_bound: bool,
     initialize_only_missing: bool,
     registered_file: Option<&RegisteredScriptFile>,
@@ -3202,7 +3203,7 @@ fn initialize_scripted_data_converters(
     factory: &mut dyn RenderFactory,
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
     context_model: Option<&ScriptViewModel>,
-    context_parent_view_models: &[ScriptViewModel],
+    context_parent_view_models: &[Option<ScriptViewModel>],
     vm: &ScriptVm,
     script_programs: &BTreeMap<u64, ScriptProgram>,
     host: &mut NoopScriptHost,
@@ -4596,7 +4597,7 @@ fn instantiate_extracted_script_with_context(
     host: &mut dyn nuxie_runtime::ScriptHost,
     factory: Option<&mut dyn RenderFactory>,
     context_view_model: Option<ScriptViewModel>,
-    context_parent_view_models: Vec<ScriptViewModel>,
+    context_parent_view_models: Vec<Option<ScriptViewModel>>,
 ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, ScriptError> {
     let program = extracted_script_program(script_programs, script)?;
     match factory {

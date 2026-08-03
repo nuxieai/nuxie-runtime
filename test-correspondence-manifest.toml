@@ -711,9 +711,10 @@ note = "corpus_require_dependency_chain_registers_and_resolves proves module reg
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_detached_viewmodel_advance_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "D1 owner tests cover trigger advancement and retained parents, but none of the three wrapper/tracking lifecycle TEST_CASEs is fully ported."
+status = "partial"
+evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::registrations_retain_until_the_last_owner_and_then_stop_advancing", "crates/nuxie-scripting/src/vm/view_model.rs::only_parentless_roots_advance_and_registered_roots_recurse_to_children", "crates/nuxie-scripting/src/vm/view_model.rs::runtime_list_parent_edges_change_without_a_scripting_rescan"]
+covered_test_cases = ["advanceDetachedViewModels advances only parentless instances", "tracked instance outlives its wrapper while another owner holds it"]
+note = "P3-b directly covers the two non-null wrapper/tracking lifecycle cases: owner-counted registrations retain until the last wrapper drops, attached instances are skipped via runtime has_parents(), and detached roots advance recursively. The pinned null-wrapper case has no safe Rust construction because ScriptViewModel always owns a non-null retained instance, so this three-case row remains honestly partial."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_direct_field_benchmark.cpp"

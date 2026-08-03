@@ -38,6 +38,12 @@ impl RuntimeOwnedViewModelParentRelay {
             .retain(|candidate| !candidate.ptr_eq(&parent) && candidate.strong_count() != 0);
     }
 
+    pub(super) fn has_parents(&self) -> bool {
+        let mut parents = self.parents.borrow_mut();
+        parents.retain(|candidate| candidate.strong_count() != 0);
+        !parents.is_empty()
+    }
+
     pub(super) fn add_dependent(&self, sink: &RuntimeCellDirtSink) {
         let dependent = sink.downgrade();
         let mut dependents = self.dependents.borrow_mut();

@@ -2,29 +2,18 @@
 
 ## C++ → Rust file correspondence
 
-Files: 448
-Status counts: `divergent-by-decision`: 4; `faithful`: 425; `pending`: 19
-Named pending files: 19
-
-### focus-input
-
-- `src/input/focus_manager.cpp`
-- `src/input/focus_node.cpp`
-- `src/input/focusable.cpp`
+Files: 456
+Status counts: `divergent-by-decision`: 4; `faithful`: 438; `pending`: 14
+Named pending files: 14
 
 ### lua-scripting
 
-- `src/lua/lua_data_context.cpp`
 - `src/lua/lua_data_value.cpp`
 - `src/lua/lua_properties.cpp`
 - `src/lua/lua_state.cpp`
+- `src/lua/renderer/lua_gpu.cpp`
 - `src/lua/renderer/lua_gradient.cpp`
 - `src/lua/rive_lua_libs.cpp`
-
-### misc-core
-
-- `src/core.cpp`
-- `src/focus_data.cpp`
 
 ### scripted
 
@@ -33,8 +22,8 @@ Named pending files: 19
 ### unavailable
 
 - `src/command_queue.cpp`
+- `src/command_server.cpp`
 - `src/lua/lua_scripted_context.cpp`
-- `src/lua/renderer/lua_gpu.cpp`
 - `src/semantic/semantic_data.cpp`
 - `src/semantic/semantic_inference_registry.cpp`
 - `src/semantic/semantic_manager.cpp`
@@ -42,14 +31,14 @@ Named pending files: 19
 
 ## Rust → C++ attribution
 
-Ledger coverage: 442 Rust files (411 attributed by manifest inversion; 31 classified additions)
-Addition categories: `codegen`: 18; `flowsession-abi`: 7; `retained-render`: 2; `scene-api`: 3; `test-infra`: 1
+Ledger coverage: 458 Rust files (428 attributed by manifest inversion; 30 classified additions)
+Addition categories: `codegen`: 17; `flowsession-abi`: 7; `retained-render`: 1; `scene-api`: 4; `test-infra`: 1
 
 ## Test correspondence
 
-Files: 148
-Test cases: 1316
-Status counts: `n-a`: 2; `partial`: 21; `pending`: 83; `ported-differential`: 5; `ported-direct`: 37
+Files: 157
+Test cases: 1404
+Status counts: `n-a`: 2; `partial`: 32; `pending`: 80; `ported-differential`: 5; `ported-direct`: 38
 
 ## Silver corpus
 
@@ -59,12 +48,12 @@ Exact ratchet: 76/76 (met)
 
 ## Golden corpus
 
-Entries: 321
+Entries: 353
 
 ## Runtime frame-loop ledger
 
-Files: 342 (`divergent-by-decision`: 1; `faithful`: 341)
-Members: 34 (`adapted`: 4; `faithful`: 30)
+Files: 354 (`divergent-by-decision`: 1; `faithful`: 353)
+Members: 35 (`adapted`: 4; `faithful`: 31)
 Gaps: 10 (`closed`: 10; `open`: 0)
 
 ## D-row register — approved divergences and adaptations

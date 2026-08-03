@@ -878,8 +878,8 @@ note = "Consolidated runtime port."
 [[file]]
 upstream = "src/core.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-runtime/src/core.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/artboard.rs"
+note = "P3-b: retained exact-property observers replace Artboard mutation/processed epoch compensation; arena keys adapt C++ intrusive Core ownership."
 
 [[file]]
 upstream = "src/core/binary_data_reader.cpp"
@@ -1585,9 +1585,9 @@ note = "F7: this Lua binding is absent."
 
 [[file]]
 upstream = "src/lua/lua_data_context.cpp"
-status = "partial"
-rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
-note = "F7/P1G: DataContext methods are present; parent contexts without a main view model remain unrepresentable."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+note = "P3-b: DataContext userdata preserves parent occurrences independently from optional main view models, including a nil-model parent in a longer chain."
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"

@@ -295,7 +295,7 @@ pub enum ScriptListenerInputSnapshotValue {
 /// the table field is the authored callback itself.
 pub struct ScriptListenerActionHydration {
     context_view_model: Option<ScriptViewModel>,
-    context_parent_view_models: Vec<ScriptViewModel>,
+    context_parent_view_models: Vec<Option<ScriptViewModel>>,
     context_resolved: bool,
     inputs: Vec<ScriptListenerInputHydration>,
 }
@@ -315,7 +315,7 @@ impl ScriptListenerActionHydration {
 
     pub fn new_with_context_chain(
         context_view_model: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
         inputs: Vec<ScriptListenerInputHydration>,
     ) -> Self {
         Self {
@@ -828,6 +828,11 @@ impl ScriptImage {
 }
 
 impl ScriptViewModel {
+    /// Read the retained runtime's structural parent topology.
+    pub fn has_parents(&self) -> bool {
+        self.context.root_handle().borrow().has_parents()
+    }
+
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
         self.properties.get(name).copied()
     }
@@ -1249,16 +1254,6 @@ impl ScriptViewModel {
             changed |= advance_owned_view_model_instance(instance, &mut visited);
         }
         changed
-    }
-
-    /// Snapshot the shared instances currently parented through this
-    /// instance's list properties. The scripting registry refreshes these
-    /// edges at frame end so host/data-binding list mutations cannot leave a
-    /// retained wrapper incorrectly classified as attached or detached.
-    pub fn owned_list_children(
-        instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-    ) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
-        instance.borrow().script_list_children()
     }
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
@@ -2208,7 +2203,7 @@ pub trait ScriptInstance {
     fn set_context_view_model_chain(
         &mut self,
         view_model: Option<ScriptViewModel>,
-        _parents: Vec<ScriptViewModel>,
+        _parents: Vec<Option<ScriptViewModel>>,
     ) -> Result<(), ScriptError> {
         self.set_context_view_model(view_model)
     }

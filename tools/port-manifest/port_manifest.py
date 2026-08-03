@@ -24,7 +24,11 @@ FEATURE_ROWS = {
         "crates/nuxie-runtime/src/text/cursor.rs",
         "FL-E6: retained cursor editing and selection behavior is ported.",
     ),
-    "src/command_queue.cpp": ("absent", "", "F3: command queue is absent."),
+    "src/command_queue.cpp": (
+        "partial",
+        "crates/nuxie/src/command_queue.rs",
+        "P3F: typed queued transport, callbacks, resources, view models, draw coalescing, and lifecycle commands are present; semantics and unexecuted fixture-specific parity rows remain pending.",
+    ),
     "src/constraints/scrolling/elastic_scroll_physics.cpp": (
         "absent",
         "",
@@ -109,7 +113,11 @@ FEATURE_ROWS.update(
             "crates/nuxie-runtime/src/audio_event.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs; crates/nuxie/src/lib.rs",
             "P2F2: dense-ordinal AudioEvent resolution, multiplied asset/Artboard volume, configured/default-engine event-unwind playback, and Artboard-scoped teardown are ported.",
         ),
-        "src/command_server.cpp": ("absent", "", "F3: command server is absent."),
+        "src/command_server.cpp": (
+            "partial",
+            "crates/nuxie/src/command_server.rs",
+            "P3F: the server-thread owner, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure are present; full 79-case promotion awaits remaining evidence and F6.",
+        ),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
             "partial",
             "crates/nuxie-runtime/src/constraints.rs",

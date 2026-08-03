@@ -7,6 +7,7 @@
 
 use std::{
     any::Any,
+    cell::RefCell,
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -765,10 +766,12 @@ fn view_model_property_set_get() {
         queue.instantiate_view_model_named(file, "Nested VM", "Alternate Nested", None, 0);
 
     let mut request = 1;
-    let mut expected_values = Vec::new();
+    let expected_values = RefCell::new(Vec::new());
     let mut set_and_get = |path: &str, value: CommandValue, data_type| {
         request += 1;
-        expected_values.push((request, path.to_owned(), value.clone()));
+        expected_values
+            .borrow_mut()
+            .push((request, path.to_owned(), value.clone()));
         queue.set_view_model_value(root, path, value, request);
         queue.request_view_model_value(root, path, data_type, request);
     };
@@ -835,6 +838,12 @@ fn view_model_property_set_get() {
         CommandValue::Image(Some(external_image)),
         0,
     );
+    queue.request_view_model_value(root, "Test Image", CommandDataType::AssetImage, 70);
+    expected_values.borrow_mut().push((
+        70,
+        "Test Image".to_owned(),
+        CommandValue::Image(Some(external_image)),
+    ));
     queue.run_once(move |server| {
         let expected = server.image(external_image).expect("external image");
         let actual = server
@@ -908,6 +917,19 @@ fn view_model_property_set_get() {
     });
     queue.set_view_model_value(root, "Test Image", CommandValue::Image(None), 0);
     queue.set_view_model_value(root, "Test Artboard", CommandValue::Artboard(None), 0);
+    queue.run_once(move |server| {
+        let root = server.view_model(root).expect("root view model");
+        let raw = root.raw();
+        assert!(
+            raw.runtime_image_by_property_name_path("Test Image")
+                .and_then(|image| image.render_image())
+                .is_none()
+        );
+        assert!(
+            raw.runtime_artboard_by_property_name("Test Artboard")
+                .is_none()
+        );
+    });
 
     for index in 0..10 {
         set_and_get(
@@ -948,7 +970,7 @@ fn view_model_property_set_get() {
     queue.set_view_model_value(root, "Test Enum", CommandValue::Enum("Blah".to_owned()), 30);
     queue.set_view_model_value(root, "Test Nested", CommandValue::ViewModel(blank), 31);
     queue.request_view_model_value(root, "Test Enum", CommandDataType::Enum, 33);
-    expected_values.push((
+    expected_values.borrow_mut().push((
         33,
         "Test Enum".to_owned(),
         CommandValue::Enum("Value 2".to_owned()),
@@ -959,7 +981,7 @@ fn view_model_property_set_get() {
         CommandDataType::Number,
         34,
     );
-    expected_values.push((
+    expected_values.borrow_mut().push((
         34,
         "Test Nested/Nested Number".to_owned(),
         CommandValue::Number(10.0),
@@ -1001,7 +1023,7 @@ fn view_model_property_set_get() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(actual_values, expected_values);
+    assert_eq!(actual_values, expected_values.into_inner());
     assert!(captured.iter().any(|event| matches!(
         event,
         CommandEvent::ViewModelDeleted { handle, request_id: 40 } if *handle == root

@@ -38,7 +38,10 @@ struct ViewModelEntry {
 }
 
 enum RenderImageEntry {
-    Unique(Rc<Box<dyn RenderImage>>),
+    External {
+        original: Rc<Box<dyn RenderImage>>,
+        shared: Rc<dyn RenderImage>,
+    },
     Shared(Rc<dyn RenderImage>),
 }
 
@@ -65,14 +68,14 @@ impl RenderImage for SharedExternalImage {
 impl RenderImageEntry {
     fn as_ref(&self) -> &dyn RenderImage {
         match self {
-            Self::Unique(image) => image.as_ref().as_ref(),
+            Self::External { original, .. } => original.as_ref().as_ref(),
             Self::Shared(image) => image.as_ref(),
         }
     }
 
     fn shared(&self) -> Option<Rc<dyn RenderImage>> {
         match self {
-            Self::Unique(image) => Some(Rc::new(SharedExternalImage(Rc::clone(image)))),
+            Self::External { shared, .. } => Some(Rc::clone(shared)),
             Self::Shared(image) => Some(Rc::clone(image)),
         }
     }
@@ -1104,8 +1107,11 @@ impl CommandServer {
                     request_id,
                 } => {
                     let image: Box<dyn RenderImage> = image;
+                    let original = Rc::new(image);
+                    let shared: Rc<dyn RenderImage> =
+                        Rc::new(SharedExternalImage(Rc::clone(&original)));
                     self.images
-                        .insert(handle, RenderImageEntry::Unique(Rc::new(image)));
+                        .insert(handle, RenderImageEntry::External { original, shared });
                     self.emit(CommandEvent::ImageDecoded { handle, request_id });
                 }
                 Command::DeleteImage { handle, request_id } => {

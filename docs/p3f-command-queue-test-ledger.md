@@ -32,43 +32,43 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `View Model Listener` | `view_model_listener` — asserts the pinned instance-name ordering and all ten typed property definitions, including enum and nested-model metadata. |
 | `View Model Instance Listener` | `view_model_instance_listener` — preserves delete callbacks for all valid and invalid named/artboard instance handles. |
 | `External Resources` | `external_resources` — covers external image/audio/font identity and delete cleanup; the S4-45 blob assertions remain on WATCH. |
-| `RenderImage` | `render_image` — covers decode, retained dimensions, and delete lifecycle. |
-| `AudioSource` | `audio_source` — covers decode identity and delete lifecycle. |
-| `Font` | `font` — covers decode face identity and delete lifecycle. |
+| `RenderImage` | `render_image` — retains a successfully decoded handle, rejects invalid bytes, and removes both handles on delete. |
+| `AudioSource` | `audio_source` — retains a successful decode, rejects invalid bytes, removes both handles, and delivers the matching delete callback. |
+| `Font` | `font` — retains a successful decode, rejects invalid bytes, removes both handles, and delivers the matching delete callback. |
 | `View Model Property Set/Get` | `view_model_property_set_get` — compares every typed get callback's request/path/value in order, covers nested replacement and authored enum strings, proves decoded/external image and artboard retained identity, clearing, failed-set retention, invalid values/paths/handles, and deletion/error accounting. |
 | `CommandServer::getHandleForInstance` | `command_server_get_handle_for_instance` — round-trips retained instance identity to its queue handle. |
-| `Set Artboard Size / Reset Artboard Size` | `set_and_reset_artboard_size` — sets an explicit size, reports it through the queue, and restores the authored dimensions. |
-| `Set Artboard Volume / Get Artboard Volume` | `set_and_get_artboard_volume` — preserves the pinned default and queued volume updates. |
+| `Set Artboard Size / Reset Artboard Size` | `set_and_reset_artboard_size` — observes explicit size and scale changes on the server-owned artboard and restores the authored dimensions. |
+| `Set Artboard Volume / Get Artboard Volume` | `set_and_get_artboard_volume` — observes queued server-side volume updates and the requested `0.75` callback with its request ID. |
 | `View Model Property Subscriptions` | `view_model_property_subscriptions` — covers the nine typed subscriptions, changed-value and trigger delivery at the end-of-poll subscription pass, invalid path/type errors, and unsubscribe. |
-| `View Model Property Async Subscriptions` | `view_model_property_async_subscriptions` — preserves ordered asynchronous subscription delivery across command/message polls. |
+| `View Model Property Async Subscriptions` | `view_model_property_async_subscriptions` — delivers a changed number subscription across the background server/message boundary and then unsubscribes. |
 | `List View Model Property Set/Get` | `list_view_model_property_set_get` — checks exact appended/inserted/swapped handle identity and order around authored entries, exact sizes, unchanged state after invalid operations, and all invalid-handle/path/index errors. |
 | `file Error Messages` | `file_error_messages` — checks invalid file operations and their request IDs without producing success callbacks. |
-| `listArtboard` | `list_artboard` — reports the pinned file's authored artboards in order and errors for an invalid file handle. |
-| `listEnums` | `list_enums` — reports authored enum names and ordered keys/values, with invalid-file error coverage. |
+| `listArtboard` | `list_artboard` — reports the pinned file's authored artboards in order and suppresses a success callback for an invalid file handle. |
+| `listEnums` | `list_enums` — reports the authored enum name and ordered values and suppresses a success callback for an invalid file. |
 | `requestViewModelInstanceViewModelName and requestViewModelInstanceName` | `request_view_model_and_instance_name` — reports both retained view-model and instance names and rejects an invalid handle. |
 | `render image / audio source / font error` | `render_image_audio_source_font_error` — exercises invalid decode payload errors for all three resource kinds. |
 | `state machine error` | `state_machine_error` — covers missing names and invalid dependent handles with the pinned error callback contract. |
 | `artboard errors` | `artboard_errors` — covers missing artboard names and invalid file/artboard operations. |
 | `Set Artboard Volume / Get Artboard Volume errors on invalid handles` | `invalid_artboard_volume_errors` — checks both set and request failures for an invalid artboard handle. |
-| `Set Artboard Size / Reset Artboard Size errors on invalid handles` | `invalid_artboard_size_errors` — checks set, reset, and request failures for an invalid artboard handle. |
-| `listStateMachine` | `list_state_machine` — reports ordered state-machine names and errors for an invalid artboard handle. |
+| `Set Artboard Size / Reset Artboard Size errors on invalid handles` | `invalid_artboard_size_errors` — checks the ordered set and reset failures for an invalid artboard handle. |
+| `listStateMachine` | `list_state_machine` — reports ordered state-machine names and suppresses a success callback for an invalid artboard handle. |
 | `requestArtboardSize` | `request_artboard_size` — reports authored and updated dimensions with matching request IDs. |
 | `requestDefaultViewModel` | `request_default_view_model` — reports the artboard's authored default view model and the absent-default case. |
 | `bindViewModelInstance` | `bind_view_model_instance` — binds a retained instance to a state machine and rejects invalid handles. |
-| `advanceStateMachine` | `advance_state_machine` — advances the live state machine through the queued command and covers invalid-handle errors. |
-| `listenerDeleteCallbacks` | `listener_delete_callbacks` — verifies delete callbacks for listener-owned file, artboard, state-machine, and view-model handles. |
+| `advanceStateMachine` | `advance_state_machine` — advances the live state machine to its settled callback and suppresses a settled callback for an invalid handle. |
+| `listenerDeleteCallbacks` | `listener_delete_callbacks` — verifies delete callbacks for listener-owned file, artboard, state-machine, and image handles. |
 | `fileLoadedCallback` | `file_loaded_callback` — delivers the file-loaded callback once with the allocated handle. |
 | `artboardInstantiatedCallback` | `artboard_instantiated_callback` — delivers the instantiated callback once with the allocated artboard handle. |
 | `stateMachineInstantiatedCallback` | `state_machine_instantiated_callback` — delivers the instantiated callback once with the allocated state-machine handle. |
 | `viewModelInstanceInstantiatedCallback` | `view_model_instance_instantiated_callback` — delivers the instantiated callback once with the allocated view-model handle. |
 | `decodedCallbacks` | `decoded_callbacks` — verifies successful image, audio, and font decode callbacks and their handles. |
 | `listenerLifeTimes` | `listener_lifetimes` — proves queued listeners are retained until delivery and released after teardown. |
-| `empty test for code cove` | `empty_listener_code_coverage` — exercises default no-op listener methods across the complete event surface. |
+| `empty test for code cove` | `empty_listener_code_coverage` — sends file-load error and file-delete events through a no-op listener. |
 | `pointer input` | `pointer_input` — ports pointer move/down/up/exit dispatch and the bound Boolean results from the pinned fixture. |
 | `pointer down advances before rapid pointer up` | `pointer_down_advances_before_rapid_pointer_up` — proves the down transition advances before the immediately queued up event. |
 | `pointer input translation` | `pointer_input_translation` — applies the pinned contain-fit/alignment transform before pointer dispatch. |
 | `global Listener` | `global_listener` — routes file, artboard, state-machine, view-model, image, audio, and font callbacks through global listeners; S4-45 blob messages remain WATCH. |
-| `sync pointer events` | `sync_pointer_events` — exercises synchronous move/down/up/exit calls and their queue-visible state on the server owner thread. |
+| `sync pointer events` | `sync_pointer_events` — interleaves 20 queued and synchronous move/down/up calls on the server owner thread and safely ignores calls after deletion. |
 | `requestViewModelInstanceListClear` | `request_view_model_instance_list_clear` — clears a populated list property and reports the empty result. |
 | `dependency lifetime management` | `dependency_lifetime_management` — deletes one artboard and one state machine while proving only their dependent handles are cleaned up and siblings remain live. |
 | `file assets listed - image asset` | `file_assets_listed_image_asset` — checks every pinned image-asset field, including the concrete runtime extension and type ID. |
@@ -77,8 +77,8 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `file assets listed - empty file` | `file_assets_listed_empty_file` — reports an empty catalog for the pinned no-assets file. |
 | `file assets listed - invalid handle` | `file_assets_listed_invalid_handle` — suppresses the success callback and emits the matching file error. |
 | `file assets listed - all assets returned` | `file_assets_listed_all_assets_returned` — compares the queued catalog count with the imported file's full asset catalog. |
-| `Global View Model Names Listed` | `global_view_model_names_listed` — reports the pinned global model names in order and errors for an invalid file. |
-| `Set/Bind/Get Global View Model Instance` | `set_bind_get_global_view_model_instance` — sets a global instance, binds the state machine, retrieves the retained instance, and covers invalid handles. |
+| `Global View Model Names Listed` | `global_view_model_names_listed` — reports non-empty global model names and suppresses a success callback for an invalid file. |
+| `Set/Bind/Get Global View Model Instance` | `set_bind_get_global_view_model_instance` — sets a global instance, binds the state machine, retrieves a handle with the expected model name, and errors for an invalid global name. |
 
 The focused Rust suite has additional supporting assertions for typed monotonic
 handles, ordered `runOnce` callbacks, bounded command/message polling,

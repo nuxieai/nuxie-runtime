@@ -28,6 +28,16 @@ the runners retain the ordinary golden-runner behavior of binding a fresh
 view-model instance. The selector adds no stream line of its own: its effects
 must appear in the complete semantic diff and subsequent action/focus diffs.
 
+Fixtures whose drawing belongs to a separately tracked parity family may also
+pass `--semantic-side-channel-only` (again valid only with `--side-channel`).
+Both runners still execute the complete scene and emit the ordinary stream;
+the corpus comparator projects that stream to `advance`, `semantics`,
+`semanticAction`, and `semanticFocus` records before applying the entry's
+ordinary exact/numeric comparison. This is an evidence-scope selector, not a
+tolerance or a filed divergence: every semantic payload field and every
+semantic transition remains oracle-compared, while unrelated draw records
+cannot block promotion of the semantic source rows.
+
 ## Oracle contract
 
 Every value records what the **pinned C++ embedder surface** returns
@@ -208,6 +218,10 @@ channel enabled, or each divergence localized and filed as a register row.
 Corpus entries set `semantic_default_view_model = true` when they need the
 pinned semantic-test fixture setup; the comparator forwards
 `--semantic-default-view-model` to both runners only for those entries.
+They set `semantic_side_channel_only = true` to request the semantic record
+projection and forward `--semantic-side-channel-only` to both runners. Such
+entries remain `status = "exact"`; they cannot carry a relaxed verification
+mode or a side-channel-divergence feature.
 
 ## Sampling caveat (register V2)
 

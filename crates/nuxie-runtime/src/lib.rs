@@ -257,6 +257,7 @@ pub use scripted_data_converter::{
     RuntimeScriptedDataConverterDataBindSnapshot, RuntimeScriptedDataConverterOccurrenceSnapshot,
 };
 pub use scripted_interpolator::{
+    RuntimeScriptedInterpolatorBindingDefinition, RuntimeScriptedInterpolatorBindingOccurrence,
     RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
 };
 pub use scripting::{

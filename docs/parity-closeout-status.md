@@ -32,11 +32,9 @@ an event created during layer advance is delivered at the next frame start,
 where chained notifications drain to completion (`state_machine_instance.cpp:
 2320-2343`).
 NOTE: the `RIVE_RUNTIME_DIR` checkout governs probe/runner builds — it must
-be at pin `d788e8ec`; unpinned checkouts poisoned two earlier floor runs.
+be at pin `4ac7b327`; unpinned checkouts poisoned two earlier floor runs.
 
-Upstream pins: runtime `d788e8ec` (cycle-3 cut `b73bc675`, 3 commits ahead,
-awaiting #B-1 approval). Upstream advanced after that completed inventory to
-`ba2b6434`; it is next-cycle drift, not part of the pending authorization.
+Upstream pins: runtime `4ac7b327` (S4 cycle closed 2026-08-02).
 Renderer pixel-oracle `7c778d13` (historical, do not advance casually — see
 upstream-sync-map registry).
 

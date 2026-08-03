@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-d788e8ec6e8b598526607d6a1e8818e8b637b60c}
+ref=${RIVE_RUNTIME_REF:-4ac7b32798da0482e441ef09304dc3b480ed3ee5}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -22,6 +22,8 @@ assets=(
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944|0a2e478ac331586387308068e01306225ecbb20d"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
   "sync/stateful_component_image_test.riv|47dcbcd02cd228f0e4ec71eaac84748f46f95b24737818f61b04d46242b48393|353ef4fccbf6f1801def7d737a4103657dc63a1c"
+  "sync/layout_text_match.riv|1fea1a6102259aacd9b164cfac0b4a2f67d4fa4587b78f5eb25a2f195de7bcdb|f5cfee3a5d6a6728167b58a71b47455ace063690"
+  "sync/artboard_opacity_and_transform_test.riv|100dbf5c04159ea7e8e6f12ce16daf1ee6f15a74c2d3dc074e2dbde4e877af80|e0d4913fa0f88d9f4b57c53006e7f9712417205f"
   "sync/databind_null_artboard_swap.riv|0160b4572f217271df84072b08476d433a71c5bf78a9917f39fbc03239560a1f|30a0e2d42e2e6d091350d6edb816e165e27f7988"
   "sync/component_list_clipped_viewport.riv|a20c9fd4936c2b7f435011e7afddd276797e95d68b574ec2c914331afd092bac|482b24a188bb9e367e983bf05235761707a89718"
   "sync/vm_listener_fire_event.riv|683a8ed1ad102fa9dd1020d61df301594a9a9fd20b97655c1f0da62e7b994838|482b24a188bb9e367e983bf05235761707a89718"

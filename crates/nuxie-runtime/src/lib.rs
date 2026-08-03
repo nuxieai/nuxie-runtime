@@ -16,6 +16,8 @@ mod context_target_value;
 mod context_value_any;
 #[path = "data_bind/context/context_value_artboard.rs"]
 mod context_value_artboard;
+#[path = "data_bind/context/context_value_asset_blob.rs"]
+mod context_value_asset_blob;
 #[path = "data_bind/context/context_value_asset_font.rs"]
 mod context_value_asset_font;
 #[path = "data_bind/context/context_value_asset_image.rs"]

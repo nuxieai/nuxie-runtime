@@ -91709,6 +91709,39 @@ fn upstream_new_text_load_body_is_ported() {
 }
 
 #[test]
+fn upstream_layout_text_match_fit_font_size_measurement_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout_text_match.riv", None);
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, &graph.artboards[index])
+        .expect("layout_text_match layout report");
+    let fit_font_size = report
+        .iter()
+        .find(|item| item.local_id == 61)
+        .expect("fit-font-size layout component");
+    let following = report
+        .iter()
+        .find(|item| item.local_id == 69)
+        .expect("layout component following fit-font-size text");
+
+    assert_close(fit_font_size.height, 24.199219, "fit-font-size.height");
+    assert_close(following.y, 297.792969, "following.y");
+}
+
+#[test]
+fn upstream_layout_controlled_text_alignment_uses_parent_border_box() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("data_binding_test.riv", None);
+    artboard.update_pass();
+    let report = artboard
+        .debug_text_layout_report(&runtime, &graph.artboards[index], 787)
+        .expect("layout-controlled result text report");
+
+    assert_close(report.local_transform[5], 5.0, "result.local_transform.ty");
+}
+
+#[test]
 fn upstream_query_all_text_runs_body_is_ported() {
     let (_runtime, _graph, _index, artboard) = upstream_layout_fixture("new_text.riv", None);
     assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 22);

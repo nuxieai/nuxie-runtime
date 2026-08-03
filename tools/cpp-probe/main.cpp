@@ -134,7 +134,9 @@ size_t randomProviderTotalCalls();
 #include "rive/assets/audio_asset.hpp"
 #include "rive/audio_event.hpp"
 #endif
+#ifdef RIVE_PROBE_HAS_LEGACY_UINT64_FIELDS
 #include "rive/assets/library_asset.hpp"
+#endif
 #include "rive/bones/skin.hpp"
 #include "rive/bones/tendon.hpp"
 #include "rive/component.hpp"

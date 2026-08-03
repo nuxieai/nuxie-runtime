@@ -664,6 +664,10 @@ impl RawTextInput {
         })
     }
 
+    pub(crate) fn clear_selection(&mut self) -> bool {
+        self.set_cursor(Cursor::collapsed(self.cursor.end))
+    }
+
     pub(crate) fn undo(&mut self) -> bool {
         if self.journal_index == 0 || self.journal.is_empty() {
             return false;
@@ -810,6 +814,21 @@ mod tests {
         assert_eq!(cursor(&raw), (6, 11));
         raw.select_all();
         assert_eq!(cursor(&raw), (0, 11));
+    }
+
+    #[test]
+    fn upstream_clear_selection_collapses_to_the_selection_end() {
+        let mut raw = RawTextInput::default();
+        raw.insert("hello world");
+        raw.set_cursor(Cursor {
+            start: CursorPosition::unresolved(2),
+            end: CursorPosition::unresolved(7),
+        });
+
+        assert!(raw.clear_selection());
+        assert_eq!(cursor(&raw), (7, 7));
+        assert!(!raw.clear_selection());
+        assert_eq!(cursor(&raw), (7, 7));
     }
 
     #[test]

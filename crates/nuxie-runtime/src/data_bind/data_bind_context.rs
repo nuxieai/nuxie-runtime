@@ -4931,10 +4931,12 @@ impl ArtboardInstance {
                 .component(host_local_id)
                 .map(|component| component.transform.world_transform)
                 .unwrap_or(Mat2D::IDENTITY);
-            let child_root_transform = root_transform.multiply(host_world);
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            let child_root_transform = nested
+                .child
+                .mounted_root_transform(root_transform.multiply(host_world));
             let child_has_direct_context_sources =
                 nested.child.has_artboard_context_source_bindings();
             let child_has_nested_context_sources = !nested.child.nested_artboard_locals.is_empty();

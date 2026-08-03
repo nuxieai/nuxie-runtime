@@ -62,7 +62,7 @@ PERF_MAX_RATIO ?= 1.0
 PERF_BENCHMARK_REPEAT ?= 10000
 PERF_JSON_OUT ?= $(CURDIR)/target/perf-compare.json
 PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-parse HEAD 2>/dev/null || echo unknown) --meta timestamp=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-PERF_EXPECTED_RIVE_RUNTIME_REF ?= d788e8ec6e8b598526607d6a1e8818e8b637b60c
+PERF_EXPECTED_RIVE_RUNTIME_REF ?= 4ac7b32798da0482e441ef09304dc3b480ed3ee5
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner

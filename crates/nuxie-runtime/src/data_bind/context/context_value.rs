@@ -425,7 +425,7 @@ pub(crate) fn runtime_graph_value_from_cell_value(
             RuntimeDataBindGraphValue::Asset(value.file_asset_index())
         }
         (RuntimeViewModelCellValue::AssetBlob(value), RuntimeDataBindGraphValue::AssetBlob(_)) => {
-            RuntimeDataBindGraphValue::AssetBlob(value.clone())
+            crate::context_value_asset_blob::graph_from_cell(value)
         }
         (RuntimeViewModelCellValue::Artboard(value), RuntimeDataBindGraphValue::Artboard(_)) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
@@ -467,7 +467,7 @@ pub(crate) fn runtime_graph_value_from_bound_cell(
             RuntimeDataBindGraphValue::Asset(value.file_asset_index())
         }
         RuntimeViewModelCellValue::AssetBlob(value) => {
-            RuntimeDataBindGraphValue::AssetBlob(value.clone())
+            crate::context_value_asset_blob::graph_from_cell(value)
         }
         RuntimeViewModelCellValue::Artboard(value) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
@@ -507,7 +507,7 @@ pub(crate) fn runtime_cell_value_from_graph_value(
             _ => RuntimeViewModelCellValue::AssetImage(u32_payload(*value)),
         },
         RuntimeDataBindGraphValue::AssetBlob(value) => {
-            RuntimeViewModelCellValue::AssetBlob(value.clone())
+            crate::context_value_asset_blob::cell_from_graph(value)
         }
         RuntimeDataBindGraphValue::Artboard(value) => {
             RuntimeViewModelCellValue::Artboard(u32_payload(*value))
@@ -565,17 +565,7 @@ fn matching_graph_source_value(
         // when it is written back.
         RuntimeDataBindGraphValue::Asset(_) => crate::context_value_asset_font::matching(next)
             .or_else(|| crate::context_value_asset_image::matching(next)),
-        RuntimeDataBindGraphValue::AssetBlob(_) => match next {
-            RuntimeDataBindGraphValue::AssetBlob(value) => {
-                Some(RuntimeDataBindGraphValue::AssetBlob(value.clone()))
-            }
-            RuntimeDataBindGraphValue::Integer(value) => {
-                Some(RuntimeDataBindGraphValue::AssetBlob(
-                    RuntimeBlobAssetValue::from_file_asset_index(*value),
-                ))
-            }
-            _ => None,
-        },
+        RuntimeDataBindGraphValue::AssetBlob(_) => crate::context_value_asset_blob::matching(next),
         RuntimeDataBindGraphValue::Artboard(_) => crate::context_value_artboard::matching(next),
         RuntimeDataBindGraphValue::Trigger(_) => crate::context_value_trigger::matching(next),
         RuntimeDataBindGraphValue::ViewModel(_) => crate::context_value_viewmodel::matching(next),

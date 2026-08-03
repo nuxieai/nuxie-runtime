@@ -3,12 +3,8 @@
 ## C++ → Rust file correspondence
 
 Files: 456
-Status counts: `divergent-by-decision`: 4; `faithful`: 443; `pending`: 9
-Named pending files: 9
-
-### lua-scripting
-
-- `src/lua/renderer/lua_gpu.cpp`
+Status counts: `divergent-by-decision`: 4; `faithful`: 444; `pending`: 8
+Named pending files: 8
 
 ### scripted
 
@@ -26,24 +22,24 @@ Named pending files: 9
 
 ## Rust → C++ attribution
 
-Ledger coverage: 458 Rust files (428 attributed by manifest inversion; 30 classified additions)
+Ledger coverage: 459 Rust files (429 attributed by manifest inversion; 30 classified additions)
 Addition categories: `codegen`: 17; `flowsession-abi`: 7; `retained-render`: 1; `scene-api`: 4; `test-infra`: 1
 
 ## Test correspondence
 
 Files: 157
 Test cases: 1404
-Status counts: `n-a`: 2; `partial`: 32; `pending`: 79; `ported-differential`: 5; `ported-direct`: 39
+Status counts: `n-a`: 2; `partial`: 31; `pending`: 78; `ported-differential`: 5; `ported-direct`: 41
 
 ## Silver corpus
 
-Entries: 238
-Status counts: `divergent`: 94; `exact`: 76; `pending-scripted`: 41; `provenance-unknown`: 2; `unsupported`: 25
+Entries: 252
+Status counts: `divergent`: 102; `exact`: 76; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 30
 Exact ratchet: 76/76 (met)
 
 ## Golden corpus
 
-Entries: 353
+Entries: 356
 
 ## Runtime frame-loop ledger
 
@@ -53,7 +49,7 @@ Gaps: 10 (`closed`: 10; `open`: 0)
 
 ## D-row register — approved divergences and adaptations
 
-Rows: 13
+Rows: 14
 
 - D1 — `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 - D2 — Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
@@ -68,3 +64,4 @@ Rows: 13
 - D11 — **Bounded host decoded-image policy (2026-07-21).** The high-level `nuxie::File` import path caps the aggregate decoded RGBA bytes retained by one artboard-tree render cache at 64 MiB by default (`FileImportLimits::max_retained_decoded_image_bytes`); pinned C++ has no aggregate ceiling.
 - D16 — **Pure-Rust profiler capture backend (user-approved P1-m decomposition question 4, 2026-08-01).** The pinned 16-line `src/profiler/profiler.cpp` MicroProfile wrapper is replaced by a pluggable Rust `ProfileCapture` trait, with no MicroProfile or C++ FFI dependency.
 - D17 — **Symphonia audio decoder/resampler (Levi-approved P2-f decomposition question 5, 2026-08-01).** The pinned miniaudio memory decoder/channel converter/resampler is replaced by pure-Rust Symphonia decode plus the Rive-owned headless engine glue.
+- D18 — **wgpu Lua GPU execution contract (Levi-approved GPUCEIL D-row, 2026-08-03).** The pinned ORE-backed objects in `src/lua/renderer/lua_gpu.cpp` are represented by Rust userdata, immutable backend-neutral submission snapshots, and retained wgpu resources.

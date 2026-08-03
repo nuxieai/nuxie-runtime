@@ -3444,8 +3444,7 @@ note = "P2B faithful candidate under the immutable-file/per-VM asset-registry ad
 
 [[file]]
 upstream = "src/lua/renderer/lua_gpu.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
 rust_module = "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0280"

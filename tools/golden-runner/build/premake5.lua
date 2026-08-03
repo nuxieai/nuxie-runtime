@@ -30,6 +30,10 @@ local include_dirs = {
 if shared_dependencies then
     table.insert(include_dirs, shared_dependencies)
 end
+-- The pinned runtime's build config force-includes rive_yoga_renames.h
+-- (and siblings) from its dependencies root; the runner compiles against
+-- the same config, so that root must be searchable here too.
+table.insert(include_dirs, rive_runtime .. '/dependencies')
 
 local harfbuzz = (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_harfbuzz_*/src')) or
     first_dir(rive_runtime .. '/dependencies/rive-app_harfbuzz_*/src') or

@@ -104,6 +104,12 @@ fn generate(options: Options) -> Result<()> {
         if previous.is_some_and(|entry| entry.rust_execute_scripts) {
             output.push_str("rust_execute_scripts = true\n");
         }
+        if previous.is_some_and(|entry| entry.semantic_default_view_model) {
+            output.push_str("semantic_default_view_model = true\n");
+        }
+        if previous.is_some_and(|entry| entry.semantic_side_channel_only) {
+            output.push_str("semantic_side_channel_only = true\n");
+        }
         let samples = previous
             .map(|entry| entry.samples.clone())
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
@@ -204,6 +210,8 @@ struct ExistingEntry {
     state_machine: Option<String>,
     input_script: Option<String>,
     rust_execute_scripts: bool,
+    semantic_default_view_model: bool,
+    semantic_side_channel_only: bool,
     samples: Vec<String>,
     status: String,
     verification: Option<String>,
@@ -241,6 +249,12 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "state_machine" => entry.state_machine = Some(parse_string(value)?),
             "input_script" => entry.input_script = Some(parse_string(value)?),
             "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value)?,
+            "semantic_default_view_model" => {
+                entry.semantic_default_view_model = parse_bool(value)?
+            }
+            "semantic_side_channel_only" => {
+                entry.semantic_side_channel_only = parse_bool(value)?
+            }
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
             "verification" => entry.verification = Some(parse_string(value)?),

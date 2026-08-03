@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::{Display, Formatter};
@@ -241,9 +242,16 @@ fn run() -> Result<(), String> {
                                             }
                                         }
                                         Ok(rust_stream) => {
+                                            let rust_comparison =
+                                                entry.comparison_stream(&rust_stream);
+                                            let cpp_comparison =
+                                                entry.comparison_stream(&cpp_stream);
                                             if let Some(difference) = entry
                                                 .verification
-                                                .stream_difference(&rust_stream, &cpp_stream)
+                                                .stream_difference(
+                                                    &rust_comparison,
+                                                    &cpp_comparison,
+                                                )
                                             {
                                                 failures.push(format!(
                                                     "{}: stream differs from C++ under {} verification: {difference}",
@@ -418,6 +426,8 @@ struct CorpusEntry {
     state_machine: Option<String>,
     input_script: Option<String>,
     rust_execute_scripts: bool,
+    semantic_default_view_model: bool,
+    semantic_side_channel_only: bool,
     samples: Vec<f32>,
     status: Status,
     verification: VerificationMode,
@@ -434,6 +444,8 @@ impl CorpusEntry {
             state_machine: None,
             input_script: None,
             rust_execute_scripts: false,
+            semantic_default_view_model: false,
+            semantic_side_channel_only: false,
             samples: vec![0.0],
             status: Status::NotYet,
             verification: VerificationMode::Exact,
@@ -474,7 +486,35 @@ impl CorpusEntry {
                 ));
             }
         }
+        if self.semantic_side_channel_only
+            && (self.status != Status::Exact
+                || self.verification != VerificationMode::Exact
+                || self.side_channel_divergence().is_some())
+        {
+            return Err(format!(
+                "entry {} semantic-side-channel-only evidence must be exact with no filed side-channel divergence",
+                self.id
+            ));
+        }
         Ok(())
+    }
+
+    fn comparison_stream<'a>(&self, stream: &'a str) -> Cow<'a, str> {
+        if !self.semantic_side_channel_only {
+            return Cow::Borrowed(stream);
+        }
+        let mut projected = String::from("rive-golden-stream-v1\n");
+        for line in stream.lines().skip(1) {
+            if line.starts_with("advance ")
+                || line.starts_with("semantics ")
+                || line.starts_with("semanticAction ")
+                || line.starts_with("semanticFocus ")
+            {
+                projected.push_str(line);
+                projected.push('\n');
+            }
+        }
+        Cow::Owned(projected)
     }
 
     /// A filed side-channel divergence (register row named after the colon).
@@ -665,6 +705,12 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "state_machine" => entry.state_machine = Some(parse_string(value, line_number)?),
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
             "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value, line_number)?,
+            "semantic_default_view_model" => {
+                entry.semantic_default_view_model = parse_bool(value, line_number)?
+            }
+            "semantic_side_channel_only" => {
+                entry.semantic_side_channel_only = parse_bool(value, line_number)?
+            }
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
             "verification" => {
@@ -1009,6 +1055,32 @@ fn unsupported_diagnostic_matches(stderr: &str, expected_feature: &str) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn semantic_fixture_projection_keeps_only_oracle_observation_records() {
+        let mut entry = CorpusEntry::new();
+        entry.semantic_side_channel_only = true;
+        let stream = concat!(
+            "rive-golden-stream-v1\n",
+            "makeRenderPaint {id=1}\n",
+            "advance seconds=0 settled=false statesChanged=1\n",
+            "semantics frame=0 treeVersion=1 rootId=1\n",
+            "semanticAction seconds=0 nodeId=1 action=tap outcome=dispatched\n",
+            "drawPath ignored\n",
+            "semanticFocus seconds=0 nodeId=1 outcome=focused\n",
+        );
+
+        assert_eq!(
+            entry.comparison_stream(stream),
+            concat!(
+                "rive-golden-stream-v1\n",
+                "advance seconds=0 settled=false statesChanged=1\n",
+                "semantics frame=0 treeVersion=1 rootId=1\n",
+                "semanticAction seconds=0 nodeId=1 action=tap outcome=dispatched\n",
+                "semanticFocus seconds=0 nodeId=1 outcome=focused\n",
+            )
+        );
+    }
 
     #[test]
     fn options_can_filter_and_probe_not_yet_entries() {
@@ -1653,6 +1725,12 @@ fn stream_command(
         // The event/state side channel is part of the diffed stream; it must
         // be on for BOTH runners or every segment fails (stub baseline).
         command.arg("--side-channel");
+        if entry.semantic_default_view_model {
+            command.arg("--semantic-default-view-model");
+        }
+        if entry.semantic_side_channel_only {
+            command.arg("--semantic-side-channel-only");
+        }
     }
     command
 }

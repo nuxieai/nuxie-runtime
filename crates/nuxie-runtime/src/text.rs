@@ -1674,6 +1674,11 @@ impl<'a> StaticTextSlice<'a> {
                         | "LayoutComponent"
                         | "LayoutComponentStyle"
                         | "ForegroundLayoutDrawable"
+                        // SemanticData is metadata owned by its parent Node.
+                        // It neither participates in shaping nor narrows the
+                        // supported static Text draw subset.
+                        | "SemanticData"
+                        | "SemanticInput"
                         | "FocusData"
                         | "KeyboardInput"
                         | "GamepadInput"
@@ -5221,6 +5226,30 @@ mod tests {
             format!("{error:#}").contains("does not support data binding target Text"),
             "{error:#}"
         );
+    }
+
+    #[test]
+    fn semantic_metadata_siblings_do_not_narrow_the_static_text_subset() {
+        let (runtime, mut graphs) = baseline_origin_text_runtime();
+        let graph = graphs
+            .artboards
+            .first_mut()
+            .expect("fixture has an artboard");
+        for (offset, type_name) in ["SemanticData", "SemanticInput"].into_iter().enumerate() {
+            let mut metadata = graph
+                .local_objects
+                .iter()
+                .find(|object| object.local_id == 1)
+                .expect("fixture Text object")
+                .clone();
+            metadata.local_id = graph.local_objects.len();
+            metadata.global_id = 10_005 + offset as u32;
+            metadata.type_name = Some(type_name);
+            graph.local_objects.push(metadata);
+        }
+
+        StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("semantic metadata cannot invalidate Text drawing");
     }
 
     #[test]

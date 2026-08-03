@@ -2014,6 +2014,28 @@ impl RecordingFactory {
         self.stream.borrow_mut().semantic_line(geometry);
     }
 
+    pub fn add_semantic_action(
+        &mut self,
+        seconds: f32,
+        node_id: u32,
+        action: &str,
+        dispatched: bool,
+    ) {
+        let outcome = if dispatched { "dispatched" } else { "missing" };
+        self.stream.borrow_mut().semantic_line(format!(
+            "semanticAction seconds={} nodeId={node_id} action={action} outcome={outcome}",
+            float_to_string(seconds)
+        ));
+    }
+
+    pub fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool) {
+        let outcome = if focused { "focused" } else { "rejected" };
+        self.stream.borrow_mut().semantic_line(format!(
+            "semanticFocus seconds={} nodeId={node_id} outcome={outcome}",
+            float_to_string(seconds)
+        ));
+    }
+
     pub fn add_hit_result(&mut self, result: &str) {
         self.stream
             .borrow_mut()

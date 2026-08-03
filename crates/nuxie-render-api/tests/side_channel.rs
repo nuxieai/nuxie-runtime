@@ -79,3 +79,23 @@ fn semantic_side_channel_emits_all_vectors_for_an_empty_diff() {
         )
     );
 }
+
+#[test]
+fn semantic_input_outcomes_use_the_shared_stream_float_and_status_grammar() {
+    let mut factory = RecordingFactory::new();
+    factory.add_semantic_action(0.25, 9, "increase", true);
+    factory.add_semantic_action(0.5, 99, "tap", false);
+    factory.add_semantic_focus(0.75, 7, true);
+    factory.add_semantic_focus(1.0, 8, false);
+
+    assert_eq!(
+        factory.stream(),
+        concat!(
+            "rive-golden-stream-v1\n",
+            "semanticAction seconds=0.25 nodeId=9 action=increase outcome=dispatched\n",
+            "semanticAction seconds=0.5 nodeId=99 action=tap outcome=missing\n",
+            "semanticFocus seconds=0.75 nodeId=7 outcome=focused\n",
+            "semanticFocus seconds=1 nodeId=8 outcome=rejected\n",
+        )
+    );
+}

@@ -4341,7 +4341,7 @@ impl File {
             let _ = self
                 .file_asset_owners
                 .font_assets()
-                .decode(asset_global, &bytes);
+                .decode_with_portable_factory(asset_global, &bytes);
         }
         Ok(changed)
     }

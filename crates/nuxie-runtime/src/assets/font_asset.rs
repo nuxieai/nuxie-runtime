@@ -127,7 +127,7 @@ impl RuntimeFontAssetOwners {
         self.fonts.borrow().contains_key(&asset_global)
     }
 
-    fn decode_with_portable_factory(&self, asset_global: u32, bytes: &[u8]) {
+    pub fn decode_with_portable_factory(&self, asset_global: u32, bytes: &[u8]) {
         // RuntimeFile construction precedes renderer selection, but pinned
         // Factory::decodeFont is nonvirtual. The portable adapter therefore
         // executes the same Factory default without inventing a backend.

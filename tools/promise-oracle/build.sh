@@ -5,7 +5,9 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 config="${1:-release}"
-runtime_out="$rive_runtime/out/rive-rust-golden-scripting-$config"
+# Reuses the golden runner's per-repo librive tree (tools/golden-runner/
+# build.sh default); the shared pinned checkout stays read-only for builds.
+runtime_out="$repo_root/target/golden-runner-librive/scripted-$config"
 luau_root="$rive_runtime/dependencies/luigi-rosso_luau_rive_0_728_vec3"
 output_dir="$repo_root/target/promise-oracle"
 output="$output_dir/rive_cpp_promise_oracle"

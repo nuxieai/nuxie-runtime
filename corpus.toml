@@ -776,7 +776,7 @@ id = "global_variables_test"
 path = "tests/unit_tests/assets/global_variables_test.riv"
 samples = [0.0]
 status = "exact"
-features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:452:NestedArtboardLayout", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
+features = ["side-channel-diverges:V11", "type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:452:NestedArtboardLayout", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:484:TransitionValueNumberComparator", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:642:ManifestAsset", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:95:NestedStateMachine"]
 
 [[file]]
 id = "global_viewmodels_test"
@@ -2313,3 +2313,30 @@ samples = [0.0, 0.5, 1.0]
 status = "exact"
 milestone = "UNIV-1278"
 features = ["type-key:31:LinearAnimation", "type-key:3:Shape", "parent-child-render-opacity"]
+
+# Settling differentials (docs/side-channel-format.md; register V4/V2).
+# Post-first-frame samples so the settled bool is observable past the
+# zero-second force-true: a one-shot that settles and stays settled, a loop
+# that never settles, and a quantized nested artboard whose held frames keep
+# demanding redraws (nested_artboard.cpp:983-986).
+
+[[file]]
+id = "settle_one_shot_reports_settled"
+path = "tests/unit_tests/assets/event_on_listener.riv"
+samples = [0.0, 1.0, 2.0, 3.0]
+status = "exact"
+features = ["type-key:114:StateMachineListenerSingle", "type-key:127:CustomPropertyNumber", "type-key:128:Event", "type-key:129:CustomPropertyBoolean", "type-key:130:CustomPropertyString", "type-key:131:OpenUrlEvent", "type-key:168:ListenerFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:58:StateMachineTrigger", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+
+[[file]]
+id = "settle_loop_never_settles"
+path = "tests/unit_tests/assets/looping_timeline_events.riv"
+samples = [0.0, 1.0, 2.0, 3.0]
+status = "exact"
+features = ["type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+
+[[file]]
+id = "settle_quantized_nested_keeps_going"
+path = "tests/unit_tests/assets/nested_artboard_quantize_and_speed.riv"
+samples = [0.0, 0.9, 1.0, 1.1, 2.0]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]

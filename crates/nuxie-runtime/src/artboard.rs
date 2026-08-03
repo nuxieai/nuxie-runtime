@@ -10935,11 +10935,14 @@ impl ArtboardInstance {
                 self.external_focus_domain = Some(current);
             } else {
                 current.cleanup_focus_tree(self);
-                next.build_focus_tree(self);
+                // `NestedArtboard::syncNestedFocusTree` re-homes under the
+                // recorded placement as the final write after a manager
+                // switch (`src/nested_artboard.cpp:369-376`).
+                next.sync_mounted_focus_tree(self);
                 self.external_focus_domain = Some(next);
             }
         } else {
-            next.build_focus_tree(self);
+            next.sync_mounted_focus_tree(self);
             self.external_focus_domain = Some(next);
         }
         for (_, nested) in &mut self.nested_artboards.entries {

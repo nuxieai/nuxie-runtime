@@ -53,6 +53,14 @@ impl RuntimeFocusActionTarget {
         let Some(focus_data_local_id) = focus_data_local_id else {
             return false;
         };
+        // `FocusManager::setFocus` gates on the same live
+        // `isEligibleForFocusTraversal` walk as traversal
+        // (`src/input/focus_manager.cpp:118-141`), so retained eligibility is
+        // resynchronized from live component state at this query boundary
+        // too. Before the first full build (constructor-time entry actions)
+        // this occurrence has no mount and the refresh is a no-op, preserving
+        // the pinned lazy unattached-node path.
+        focus.refresh_visibility_change(artboard);
         focus.set_focus_target_before_topology(artboard, target_local_id, focus_data_local_id)
     }
 }

@@ -607,8 +607,10 @@ pub struct WgpuFrameMetrics {
 }
 
 pub use gpu_canvas::{
-    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
-    GpuCanvasVertexLayout,
+    GpuCanvasBlendState, GpuCanvasColorTarget, GpuCanvasDepthStencilState, GpuCanvasIndexBuffer,
+    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasRenderPlan,
+    GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use surface::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};

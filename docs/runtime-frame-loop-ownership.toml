@@ -3938,9 +3938,9 @@ retain = ["cpp:include/rive/command_server.hpp:210-213", "cpp:include/rive/lua/r
 # dirty/update state to reconstruct. Callback phases all consume the same
 # context:shader path below.
 dirty = ["cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543", "rust:crates/nuxie-scripting/src/vm/command_server.rs:30-40"]
-update = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
-advance = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
-draw = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/lua_renderer.rs:140-168", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:725-739"]
+update = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/src/gpu_canvas.rs:1485-1494", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
+advance = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/src/gpu_canvas.rs:1485-1494", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
+draw = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/lua_renderer.rs:140-168", "rust:crates/nuxie-scripting/src/gpu_canvas.rs:1496-1514", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:725-739"]
 clone = ["cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543", "rust:crates/nuxie-render-api/src/lib.rs:830-835", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:700-701"]
 drop = ["cpp:src/command_server.cpp:283-283", "rust:crates/nuxie-render-api/src/lib.rs:826-828", "rust:crates/nuxie-scripting/src/vm/command_server.rs:14-17"]
 

@@ -64,6 +64,51 @@ return function(context)
 end
 "#;
 
+const LUA_GPU_FULL_SURFACE: &str = include_str!("fixtures/lua-gpu-full-surface.luau");
+
+#[test]
+fn authored_lua_gpu_full_surface_reaches_the_wgpu_plan() {
+    let mut program =
+        GpuCanvasProgram::compile(LUA_GPU_FULL_SURFACE).expect("full-surface fixture compiles");
+    let plan = program
+        .draw()
+        .expect("full-surface fixture produces a plan");
+
+    assert_eq!((plan.width, plan.height), (16, 16));
+    assert_eq!(plan.clear_color, [0.125, 0.25, 0.5, 1.0]);
+    assert_eq!(plan.vertex_buffers.len(), 1);
+    assert_eq!(plan.uniform_buffers.len(), 1);
+    assert_eq!(plan.uniform_buffers[0].bytes.len(), 256);
+    assert_eq!(plan.vertex_layouts[0].step_mode, "vertex");
+    assert_eq!(plan.index_buffer.as_ref().unwrap().format, "uint16");
+    assert_eq!(plan.index_buffer.as_ref().unwrap().bytes.len(), 6);
+    let indexed = plan
+        .indexed_draw
+        .as_ref()
+        .expect("indexed draw is retained");
+    assert_eq!((indexed.index_count, indexed.instance_count), (3, 1));
+    assert_eq!(plan.texture_bindings.len(), 1);
+    assert_eq!(plan.texture_bindings[0].uploads.len(), 1);
+    assert_eq!(plan.texture_bindings[0].uploads[0].bytes_per_row, 8);
+    assert_eq!(plan.sampler_bindings.len(), 1);
+    assert_eq!(plan.sampler_bindings[0].address_mode_u, "repeat");
+    assert_eq!(plan.sampler_bindings[0].compare.as_deref(), Some("always"));
+    assert_eq!(plan.pipeline_state.color_targets[0].write_mask, "rgba");
+    assert_eq!(plan.pipeline_state.topology, "triangle-list");
+    assert_eq!(
+        plan.pipeline_state
+            .depth_stencil
+            .as_ref()
+            .unwrap()
+            .depth_compare,
+        "less-equal"
+    );
+    assert_eq!(plan.pass_state.viewport, Some([0.0, 0.0, 16.0, 16.0]));
+    assert_eq!(plan.pass_state.scissor_rect, Some([0, 0, 16, 16]));
+    assert_eq!(plan.pass_state.stencil_reference, 7);
+    assert_eq!(plan.pass_state.blend_color, [1.0, 0.5, 0.25, 1.0]);
+}
+
 #[test]
 fn gpu_canvas_transport_types_remain_public_at_the_scripting_seam() {
     let attribute = GpuCanvasVertexAttribute {
@@ -73,6 +118,7 @@ fn gpu_canvas_transport_types_remain_public_at_the_scripting_seam() {
     };
     let layout = GpuCanvasVertexLayout {
         stride: 16,
+        step_mode: "vertex".into(),
         attributes: vec![attribute.clone()],
     };
     let vertices = GpuCanvasVertexBuffer {

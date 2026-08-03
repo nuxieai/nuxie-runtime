@@ -56,11 +56,14 @@ enum ScriptExecutionAuthorization {
 }
 
 pub use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasBlendState, GpuCanvasColorTarget,
+    GpuCanvasDepthStencilState, GpuCanvasError, GpuCanvasIndexBuffer, GpuCanvasIndexedDraw,
+    GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasSamplerBinding,
+    GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
     GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
-    GpuCanvasShaderTextureViewDimension, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
-    Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace, GpuCanvasTextureBinding,
+    GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D,
+    PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
     RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };

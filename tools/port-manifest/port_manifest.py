@@ -46,9 +46,9 @@ FEATURE_ROWS = {
         "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
     ),
     "src/lua/renderer/lua_gpu.cpp": (
-        "absent",
-        "",
-        "F7/F8: Lua GPU binding and ORE GPU host are absent.",
+        "partial",
+        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs",
+        "P3E: GPU-prefixed Lua surface is implemented through the approved wgpu adaptation; mixed-file Canvas 2D/Image:view residue remains F7/F8.",
     ),
     "src/joystick.cpp": (
         "ported",

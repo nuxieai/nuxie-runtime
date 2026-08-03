@@ -8,17 +8,21 @@ use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+pub use nuxie_render_api::{
+    GpuCanvasBlendState, GpuCanvasColorTarget, GpuCanvasDepthStencilState, GpuCanvasIndexBuffer,
+    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasSamplerBinding,
+    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+};
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
-    RenderGpuCanvasShader, RenderImage,
-};
-pub use nuxie_render_api::{
-    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader,
+    RenderImage,
 };
 use wgpu::util::DeviceExt;
 
-use super::{align_to, map_buffer, RendererError, WgpuFactory, WgpuImage, WgpuImageTexture};
+use super::{RendererError, WgpuFactory, WgpuImage, WgpuImageTexture, align_to, map_buffer};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
 const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;
@@ -27,8 +31,8 @@ const MAX_DRAW_INVOCATIONS: u64 = 1_000_000;
 const MAX_VERTEX_BUFFERS: usize = 8;
 const MAX_VERTEX_ATTRIBUTES: usize = 16;
 const MAX_BIND_GROUPS: u32 = 4;
-const MAX_UNIFORM_BINDINGS_PER_GROUP: usize = 12;
-const MAX_BINDING_INDEX: u32 = 255;
+const MAX_UNIFORM_BINDINGS_PER_GROUP: usize = 8;
+const MAX_BINDING_INDEX: u32 = 7;
 const MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES: usize = 16;
 // Retain at least one maximally valid public plan while bounding aggregate
 // cached input buffers across distinct shader/layout keys.
@@ -175,7 +179,7 @@ pub struct GpuCanvasRenderPlan {
 struct PreparedImportedGpuCanvas {
     vertex_entry_point: String,
     fragment_entry_point: String,
-    uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
 }
 
 #[derive(Clone)]
@@ -187,6 +191,41 @@ struct ImportedGpuCanvasPipelineKey {
     uniform_bindings: Vec<(u32, u32, usize)>,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
     vertex_buffers: Vec<(u32, usize)>,
+    index_buffer: Option<(usize, String)>,
+    texture_bindings: Vec<ImportedTextureBindingKey>,
+    sampler_bindings: Vec<(
+        u32,
+        u32,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        u32,
+        u32,
+        u16,
+    )>,
+    pipeline_state: nuxie_render_api::GpuCanvasPipelineState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ImportedTextureBindingKey {
+    group: u32,
+    binding: u32,
+    width: u32,
+    height: u32,
+    depth_or_array_layers: u32,
+    format: String,
+    texture_type: String,
+    sample_count: u32,
+    mip_level_count: u32,
+    view_dimension: String,
+    base_mip_level: u32,
+    mip_level_count_in_view: u32,
+    base_array_layer: u32,
+    array_layer_count: u32,
 }
 
 impl ImportedGpuCanvasPipelineKey {
@@ -224,6 +263,51 @@ impl ImportedGpuCanvasPipelineKey {
                 .iter()
                 .map(|buffer| (buffer.slot, buffer.bytes.len()))
                 .collect(),
+            index_buffer: plan
+                .index_buffer
+                .as_ref()
+                .map(|buffer| (buffer.bytes.len(), buffer.format.clone())),
+            texture_bindings: plan
+                .texture_bindings
+                .iter()
+                .map(|texture| ImportedTextureBindingKey {
+                    group: texture.group,
+                    binding: texture.binding,
+                    width: texture.width,
+                    height: texture.height,
+                    depth_or_array_layers: texture.depth_or_array_layers,
+                    format: texture.format.clone(),
+                    texture_type: texture.texture_type.clone(),
+                    sample_count: texture.sample_count,
+                    mip_level_count: texture.mip_level_count,
+                    view_dimension: texture.view_dimension.clone(),
+                    base_mip_level: texture.base_mip_level,
+                    mip_level_count_in_view: texture.mip_level_count_in_view,
+                    base_array_layer: texture.base_array_layer,
+                    array_layer_count: texture.array_layer_count,
+                })
+                .collect(),
+            sampler_bindings: plan
+                .sampler_bindings
+                .iter()
+                .map(|sampler| {
+                    (
+                        sampler.group,
+                        sampler.binding,
+                        sampler.min_filter.clone(),
+                        sampler.mag_filter.clone(),
+                        sampler.mipmap_filter.clone(),
+                        sampler.address_mode_u.clone(),
+                        sampler.address_mode_v.clone(),
+                        sampler.address_mode_w.clone(),
+                        sampler.compare.clone(),
+                        sampler.lod_min_clamp.to_bits(),
+                        sampler.lod_max_clamp.to_bits(),
+                        sampler.max_anisotropy,
+                    )
+                })
+                .collect(),
+            pipeline_state: plan.pipeline_state.clone(),
         }
     }
 
@@ -232,6 +316,13 @@ impl ImportedGpuCanvasPipelineKey {
             .iter()
             .map(|(_, _, bytes)| *bytes)
             .chain(self.vertex_buffers.iter().map(|(_, bytes)| *bytes))
+            .chain(self.index_buffer.iter().map(|(bytes, _)| *bytes))
+            .chain(self.texture_bindings.iter().map(|texture| {
+                (texture.width as usize)
+                    .saturating_mul(texture.height as usize)
+                    .saturating_mul(texture.depth_or_array_layers as usize)
+                    .saturating_mul(4)
+            }))
             .fold(0, usize::saturating_add)
     }
 }
@@ -245,6 +336,10 @@ impl PartialEq for ImportedGpuCanvasPipelineKey {
             && self.uniform_bindings == other.uniform_bindings
             && self.vertex_layouts == other.vertex_layouts
             && self.vertex_buffers == other.vertex_buffers
+            && self.index_buffer == other.index_buffer
+            && self.texture_bindings == other.texture_bindings
+            && self.sampler_bindings == other.sampler_bindings
+            && self.pipeline_state == other.pipeline_state
     }
 }
 
@@ -300,10 +395,14 @@ impl ImportedWgpuGpuCanvasCache {
 
 struct ImportedWgpuGpuCanvasPipeline {
     key: ImportedGpuCanvasPipelineKey,
-    uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
     bind_groups: Vec<wgpu::BindGroup>,
     uniform_buffers: Vec<wgpu::Buffer>,
+    textures: Vec<wgpu::Texture>,
+    _texture_views: Vec<wgpu::TextureView>,
+    _samplers: Vec<wgpu::Sampler>,
     vertex_buffers: Vec<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
     pipeline: wgpu::RenderPipeline,
 }
 
@@ -329,6 +428,38 @@ impl ImportedUniformRequirement {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ImportedResourceRequirement {
+    Uniform(ImportedUniformRequirement),
+    Texture {
+        stage_mask: u8,
+        view_dimension: GpuCanvasShaderTextureViewDimension,
+        sample_type: GpuCanvasShaderTextureSampleType,
+        multisampled: bool,
+    },
+    Sampler {
+        stage_mask: u8,
+        comparison: bool,
+    },
+}
+
+impl ImportedResourceRequirement {
+    fn stage_mask(self) -> u8 {
+        match self {
+            Self::Uniform(requirement) => requirement.stage_mask,
+            Self::Texture { stage_mask, .. } | Self::Sampler { stage_mask, .. } => stage_mask,
+        }
+    }
+
+    fn visibility(self) -> wgpu::ShaderStages {
+        ImportedUniformRequirement {
+            required_size: 0,
+            stage_mask: self.stage_mask(),
+        }
+        .visibility()
+    }
+}
+
 struct ParsedAuthoredWgsl {
     module: naga::Module,
     info: naga::valid::ModuleInfo,
@@ -340,6 +471,7 @@ struct WgpuGpuCanvasShader {
     shader: GpuCanvasShader,
     parsed: ParsedAuthoredWgsl,
     uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
     module: wgpu::ShaderModule,
 }
 
@@ -348,6 +480,7 @@ struct ImportedGpuCanvasShaderRef<'a> {
     shader: &'a GpuCanvasShader,
     parsed: &'a ParsedAuthoredWgsl,
     uniform_requirements: &'a BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    resource_requirements: &'a BTreeMap<(u32, u32), ImportedResourceRequirement>,
 }
 
 impl WgpuGpuCanvasShader {
@@ -356,6 +489,7 @@ impl WgpuGpuCanvasShader {
             shader: &self.shader,
             parsed: &self.parsed,
             uniform_requirements: &self.uniform_requirements,
+            resource_requirements: &self.resource_requirements,
         }
     }
 }
@@ -406,18 +540,130 @@ fn prepare_imported_gpu_canvas_modules(
         plan.fragment_entry.as_ref(),
         "fragment",
     )?;
-    let uniform_requirements = validate_imported_interface(
+    validate_imported_interface(
         vertex_shader,
         fragment_shader,
         plan,
         vertex_record,
         fragment_record,
     )?;
+    let resource_requirements =
+        merge_imported_resource_requirements(vertex_shader, fragment_shader)?;
+    validate_imported_resource_plan(&resource_requirements, plan)?;
     Ok(PreparedImportedGpuCanvas {
         vertex_entry_point: vertex_record.physical_entry_point.clone(),
         fragment_entry_point: fragment_record.physical_entry_point.clone(),
-        uniform_requirements,
+        resource_requirements,
     })
+}
+
+fn validate_imported_resource_plan(
+    requirements: &BTreeMap<(u32, u32), ImportedResourceRequirement>,
+    plan: &GpuCanvasPlan,
+) -> Result<(), GpuCanvasError> {
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let planned = plan
+        .uniform_buffers
+        .iter()
+        .map(|resource| {
+            (
+                (resource.group, resource.binding),
+                GpuCanvasShaderResourceKind::UniformBuffer,
+            )
+        })
+        .chain(plan.texture_bindings.iter().map(|resource| {
+            (
+                (resource.group, resource.binding),
+                GpuCanvasShaderResourceKind::SampledTexture,
+            )
+        }))
+        .chain(plan.sampler_bindings.iter().map(|resource| {
+            (
+                (resource.group, resource.binding),
+                if resource.compare.is_some() {
+                    GpuCanvasShaderResourceKind::ComparisonSampler
+                } else {
+                    GpuCanvasShaderResourceKind::Sampler
+                },
+            )
+        }))
+        .collect::<BTreeMap<_, _>>();
+    if requirements.keys().ne(planned.keys()) {
+        return Err(invalid(format!(
+            "shader resource bindings {:?} do not exactly match planned bindings {:?}",
+            requirements.keys().collect::<Vec<_>>(),
+            planned.keys().collect::<Vec<_>>()
+        )));
+    }
+    for (&binding, requirement) in requirements {
+        let planned_kind = planned[&binding];
+        let expected_kind = match requirement {
+            ImportedResourceRequirement::Uniform(_) => GpuCanvasShaderResourceKind::UniformBuffer,
+            ImportedResourceRequirement::Texture { .. } => {
+                GpuCanvasShaderResourceKind::SampledTexture
+            }
+            ImportedResourceRequirement::Sampler {
+                comparison: false, ..
+            } => GpuCanvasShaderResourceKind::Sampler,
+            ImportedResourceRequirement::Sampler {
+                comparison: true, ..
+            } => GpuCanvasShaderResourceKind::ComparisonSampler,
+        };
+        if planned_kind != expected_kind {
+            return Err(invalid(format!(
+                "planned resource group {} binding {} has kind {planned_kind:?}; shader requires {expected_kind:?}",
+                binding.0, binding.1
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn merge_imported_resource_requirements(
+    vertex_shader: ImportedGpuCanvasShaderRef<'_>,
+    fragment_shader: ImportedGpuCanvasShaderRef<'_>,
+) -> Result<BTreeMap<(u32, u32), ImportedResourceRequirement>, GpuCanvasError> {
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let mut requirements = vertex_shader.resource_requirements.clone();
+    let fragment_stage_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
+    for (&binding, fragment_requirement) in fragment_shader
+        .resource_requirements
+        .iter()
+        .filter(|(_, requirement)| requirement.stage_mask() & fragment_stage_mask != 0)
+    {
+        let Some(vertex_requirement) = requirements.get_mut(&binding) else {
+            return Err(invalid(format!(
+                "fragment resource group {} binding {} is absent from the vertex-authoritative target-16 map",
+                binding.0, binding.1
+            )));
+        };
+        if vertex_requirement.stage_mask() & fragment_stage_mask == 0 {
+            return Err(invalid(format!(
+                "fragment resource group {} binding {} is not fragment-visible in the vertex-authoritative target-16 map",
+                binding.0, binding.1
+            )));
+        }
+        match (&mut *vertex_requirement, fragment_requirement) {
+            (
+                ImportedResourceRequirement::Uniform(vertex),
+                ImportedResourceRequirement::Uniform(fragment),
+            ) => {
+                vertex.required_size = vertex.required_size.max(fragment.required_size);
+            }
+            (vertex, fragment) if *vertex == *fragment => {}
+            _ => {
+                return Err(invalid(format!(
+                    "resource group {} binding {} differs between shader modules",
+                    binding.0, binding.1
+                )));
+            }
+        }
+    }
+    Ok(requirements)
 }
 
 fn resolve_imported_entry<'a>(
@@ -762,11 +1008,11 @@ fn imported_format(value: &str) -> Result<&'static str, GpuCanvasError> {
     }
 }
 
-fn imported_uniform_requirements(
+fn imported_resource_requirements(
     shader: &GpuCanvasShader,
     module: &naga::Module,
     info: &naga::valid::ModuleInfo,
-) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
+) -> Result<BTreeMap<(u32, u32), ImportedResourceRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
     };
@@ -774,26 +1020,16 @@ fn imported_uniform_requirements(
     layouter
         .update(module.to_ctx())
         .map_err(|error| invalid(format!("uniform layout failed: {error}")))?;
-    let mut uniform_sizes = BTreeMap::new();
-    let mut uniform_stage_masks = BTreeMap::new();
+    let mut authored_resources = BTreeMap::new();
     for (handle, global) in module.global_variables.iter() {
         match global.space {
             naga::AddressSpace::Private => {}
-            naga::AddressSpace::Uniform => {
+            naga::AddressSpace::Uniform | naga::AddressSpace::Handle => {
                 let binding = global
                     .binding
                     .as_ref()
-                    .ok_or_else(|| invalid("uniform global has no group and binding".into()))?;
+                    .ok_or_else(|| invalid("GPU resource has no group and binding".into()))?;
                 let key = (binding.group, binding.binding);
-                if uniform_sizes
-                    .insert(key, layouter[global.ty].size)
-                    .is_some()
-                {
-                    return Err(invalid(format!(
-                        "uniform group {} binding {} appears more than once",
-                        key.0, key.1
-                    )));
-                }
                 let mut stage_mask = 0;
                 for (index, entry) in module.entry_points.iter().enumerate() {
                     if info.get_entry_point(index)[handle].is_empty() {
@@ -811,11 +1047,21 @@ fn imported_uniform_requirements(
                         }
                     };
                 }
-                uniform_stage_masks.insert(key, stage_mask);
+                let uniform_size = (global.space == naga::AddressSpace::Uniform)
+                    .then_some(layouter[global.ty].size);
+                if authored_resources
+                    .insert(key, (global.space, uniform_size, stage_mask))
+                    .is_some()
+                {
+                    return Err(invalid(format!(
+                        "resource group {} binding {} appears more than once",
+                        key.0, key.1
+                    )));
+                }
             }
             ref unsupported => {
                 return Err(invalid(format!(
-                    "global address space {unsupported:?} is outside the uniform-only imported contract"
+                    "global address space {unsupported:?} is outside the Lua GPU binding contract"
                 )));
             }
         }
@@ -823,7 +1069,12 @@ fn imported_uniform_requirements(
 
     let mut requirements = BTreeMap::new();
     for binding in &shader.bindings {
-        if binding.kind != GpuCanvasShaderResourceKind::UniformBuffer {
+        if matches!(
+            binding.kind,
+            GpuCanvasShaderResourceKind::StorageBufferReadOnly
+                | GpuCanvasShaderResourceKind::StorageBufferReadWrite
+                | GpuCanvasShaderResourceKind::StorageTexture
+        ) {
             return Err(invalid(format!(
                 "binding group {} binding {} has unsupported resource kind {:?}",
                 binding.group, binding.binding, binding.kind
@@ -851,22 +1102,71 @@ fn imported_uniform_requirements(
         }
 
         let key = (u32::from(binding.group), u32::from(binding.binding));
-        let required_size = uniform_sizes.get(&key).copied().ok_or_else(|| {
-            invalid(format!(
-                "binding map contains group {} binding {} absent from authored WGSL",
-                binding.group, binding.binding
-            ))
-        })?;
-        let actual_stage_mask = uniform_stage_masks[&key];
+        let (address_space, uniform_size, actual_stage_mask) =
+            authored_resources.get(&key).copied().ok_or_else(|| {
+                invalid(format!(
+                    "binding map contains group {} binding {} absent from authored WGSL",
+                    binding.group, binding.binding
+                ))
+            })?;
+        let expected_space = match binding.kind {
+            GpuCanvasShaderResourceKind::UniformBuffer => naga::AddressSpace::Uniform,
+            GpuCanvasShaderResourceKind::SampledTexture
+            | GpuCanvasShaderResourceKind::Sampler
+            | GpuCanvasShaderResourceKind::ComparisonSampler => naga::AddressSpace::Handle,
+            unsupported => {
+                return Err(invalid(format!(
+                    "binding group {} binding {} uses unsupported resource kind {unsupported:?}",
+                    binding.group, binding.binding
+                )));
+            }
+        };
+        if address_space != expected_space {
+            return Err(invalid(format!(
+                "binding group {} binding {} kind {:?} disagrees with authored WGSL address space {address_space:?}",
+                binding.group, binding.binding, binding.kind
+            )));
+        }
         if actual_stage_mask & !binding.stage_mask != 0 {
             return Err(invalid(format!(
                 "binding group {} binding {} target-16 visibility {:#x} underdeclares authored WGSL usage {:#x}",
                 binding.group, binding.binding, binding.stage_mask, actual_stage_mask
             )));
         }
-        let requirement = ImportedUniformRequirement {
-            required_size,
-            stage_mask: binding.stage_mask,
+        let requirement = match binding.kind {
+            GpuCanvasShaderResourceKind::UniformBuffer => {
+                ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
+                    required_size: uniform_size.ok_or_else(|| {
+                        invalid(format!(
+                            "uniform group {} binding {} has no layout size",
+                            binding.group, binding.binding
+                        ))
+                    })?,
+                    stage_mask: binding.stage_mask,
+                })
+            }
+            GpuCanvasShaderResourceKind::SampledTexture => ImportedResourceRequirement::Texture {
+                stage_mask: binding.stage_mask,
+                view_dimension: binding.texture_view_dimension,
+                sample_type: binding.texture_sample_type,
+                multisampled: binding.texture_multisampled,
+            },
+            GpuCanvasShaderResourceKind::Sampler => ImportedResourceRequirement::Sampler {
+                stage_mask: binding.stage_mask,
+                comparison: false,
+            },
+            GpuCanvasShaderResourceKind::ComparisonSampler => {
+                ImportedResourceRequirement::Sampler {
+                    stage_mask: binding.stage_mask,
+                    comparison: true,
+                }
+            }
+            unsupported => {
+                return Err(invalid(format!(
+                    "binding group {} binding {} uses unsupported resource kind {unsupported:?}",
+                    binding.group, binding.binding
+                )));
+            }
         };
         if requirements.insert(key, requirement).is_some() {
             return Err(invalid(format!(
@@ -875,11 +1175,11 @@ fn imported_uniform_requirements(
             )));
         }
     }
-    if requirements.keys().ne(uniform_sizes.keys()) {
+    if requirements.keys().ne(authored_resources.keys()) {
         return Err(invalid(format!(
-            "binding-map uniforms {:?} do not exactly match authored WGSL uniforms {:?}",
+            "binding-map resources {:?} do not exactly match authored WGSL resources {:?}",
             requirements.keys().collect::<Vec<_>>(),
-            uniform_sizes.keys().collect::<Vec<_>>()
+            authored_resources.keys().collect::<Vec<_>>()
         )));
     }
     Ok(requirements)
@@ -887,7 +1187,7 @@ fn imported_uniform_requirements(
 
 fn validate_imported_wgpu_limits(
     plan: &GpuCanvasPlan,
-    uniform_requirements: &BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    resource_requirements: &BTreeMap<(u32, u32), ImportedResourceRequirement>,
     limits: &wgpu::Limits,
 ) -> Result<(), GpuCanvasError> {
     let invalid = |message: String| {
@@ -895,10 +1195,9 @@ fn validate_imported_wgpu_limits(
             "invalid imported GPU-canvas device limits: {message}"
         ))
     };
-    let required_bind_groups = plan
-        .uniform_buffers
-        .iter()
-        .map(|buffer| buffer.group.saturating_add(1))
+    let required_bind_groups = resource_requirements
+        .keys()
+        .map(|(group, _)| group.saturating_add(1))
         .max()
         .unwrap_or(0);
     if required_bind_groups > limits.max_bind_groups {
@@ -914,14 +1213,43 @@ fn validate_imported_wgpu_limits(
         ("compute", GpuCanvasShaderStage::Compute),
     ] {
         let stage_bit = 1 << stage as u8;
-        let count = uniform_requirements
+        let uniform_count = resource_requirements
             .values()
-            .filter(|requirement| requirement.stage_mask & stage_bit != 0)
+            .filter(|requirement| {
+                matches!(requirement, ImportedResourceRequirement::Uniform(_))
+                    && requirement.stage_mask() & stage_bit != 0
+            })
             .count();
-        if count > limits.max_uniform_buffers_per_shader_stage as usize {
+        if uniform_count > limits.max_uniform_buffers_per_shader_stage as usize {
             return Err(invalid(format!(
-                "{label} stage requires {count} uniform buffers across bind groups but the device supports {} per stage",
+                "{label} stage requires {uniform_count} uniform buffers across bind groups but the device supports {} per stage",
                 limits.max_uniform_buffers_per_shader_stage
+            )));
+        }
+        let texture_count = resource_requirements
+            .values()
+            .filter(|requirement| {
+                matches!(requirement, ImportedResourceRequirement::Texture { .. })
+                    && requirement.stage_mask() & stage_bit != 0
+            })
+            .count();
+        if texture_count > limits.max_sampled_textures_per_shader_stage as usize {
+            return Err(invalid(format!(
+                "{label} stage requires {texture_count} sampled textures but the device supports {} per stage",
+                limits.max_sampled_textures_per_shader_stage
+            )));
+        }
+        let sampler_count = resource_requirements
+            .values()
+            .filter(|requirement| {
+                matches!(requirement, ImportedResourceRequirement::Sampler { .. })
+                    && requirement.stage_mask() & stage_bit != 0
+            })
+            .count();
+        if sampler_count > limits.max_samplers_per_shader_stage as usize {
+            return Err(invalid(format!(
+                "{label} stage requires {sampler_count} samplers but the device supports {} per stage",
+                limits.max_samplers_per_shader_stage
             )));
         }
     }
@@ -974,8 +1302,15 @@ impl WgpuFactory {
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         let parsed = parse_authored_wgsl(&shader.source)?;
-        let uniform_requirements =
-            imported_uniform_requirements(shader, &parsed.module, &parsed.info)?;
+        let resource_requirements =
+            imported_resource_requirements(shader, &parsed.module, &parsed.info)?;
+        let uniform_requirements = resource_requirements
+            .iter()
+            .filter_map(|(&binding, requirement)| match requirement {
+                ImportedResourceRequirement::Uniform(requirement) => Some((binding, *requirement)),
+                _ => None,
+            })
+            .collect();
         let module = self
             .context
             .device
@@ -989,6 +1324,7 @@ impl WgpuFactory {
             shader: shader.clone(),
             parsed,
             uniform_requirements,
+            resource_requirements,
             module,
         }))
     }
@@ -1018,7 +1354,7 @@ impl WgpuFactory {
             .position(|pipeline| pipeline.key == key);
         let prepared_pipeline = if pipeline_index.is_none() {
             let prepared = prepare_imported_gpu_canvas(vertex_shader, fragment_shader, plan)?;
-            validate_imported_wgpu_limits(plan, &prepared.uniform_requirements, &device.limits())?;
+            validate_imported_wgpu_limits(plan, &prepared.resource_requirements, &device.limits())?;
             let vertex_attributes = plan
                 .vertex_layouts
                 .iter()
@@ -1044,7 +1380,7 @@ impl WgpuFactory {
                 .pipelines
                 .get(pipeline_index.expect("cached imported pipeline index exists"))
                 .expect("cached imported GPU-canvas pipeline exists");
-            validate_imported_wgpu_limits(plan, &cached.uniform_requirements, &device.limits())?;
+            validate_imported_wgpu_limits(plan, &cached.resource_requirements, &device.limits())?;
             None
         };
         #[cfg(not(target_arch = "wasm32"))]
@@ -1052,25 +1388,33 @@ impl WgpuFactory {
         let mut built_pipeline = None;
         if let Some((prepared, vertex_attributes)) = prepared_pipeline {
             let mut bind_group_layouts = Vec::new();
-            if let Some(max_group) = plan.uniform_buffers.iter().map(|buffer| buffer.group).max() {
+            if let Some(max_group) = prepared
+                .resource_requirements
+                .keys()
+                .map(|(group, _)| *group)
+                .max()
+            {
                 for group in 0..=max_group {
-                    let entries = plan
-                        .uniform_buffers
+                    let entries = prepared
+                        .resource_requirements
                         .iter()
-                        .filter(|buffer| buffer.group == group)
-                        .map(|buffer| wgpu::BindGroupLayoutEntry {
-                            binding: buffer.binding,
-                            visibility: prepared.uniform_requirements
-                                [&(buffer.group, buffer.binding)]
-                                .visibility(),
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: NonZeroU64::new(buffer.bytes.len() as u64),
-                            },
-                            count: None,
+                        .filter(|((resource_group, _), _)| *resource_group == group)
+                        .map(|(&(resource_group, binding), &requirement)| {
+                            let uniform_size = plan
+                                .uniform_buffers
+                                .iter()
+                                .find(|buffer| {
+                                    buffer.group == resource_group && buffer.binding == binding
+                                })
+                                .map(|buffer| buffer.bytes.len());
+                            Ok(wgpu::BindGroupLayoutEntry {
+                                binding,
+                                visibility: requirement.visibility(),
+                                ty: imported_binding_type(requirement, uniform_size)?,
+                                count: None,
+                            })
                         })
-                        .collect::<Vec<_>>();
+                        .collect::<Result<Vec<_>, GpuCanvasError>>()?;
                     bind_group_layouts.push(device.create_bind_group_layout(
                         &wgpu::BindGroupLayoutDescriptor {
                             label: Some("nuxie-imported-gpu-canvas-bind-group-layout"),
@@ -1090,13 +1434,18 @@ impl WgpuFactory {
                 .iter()
                 .zip(&vertex_attributes)
                 .map(|(layout, attributes)| {
-                    Some(wgpu::VertexBufferLayout {
+                    Ok(Some(wgpu::VertexBufferLayout {
                         array_stride: layout.stride,
-                        step_mode: wgpu::VertexStepMode::Vertex,
+                        step_mode: vertex_step_mode(&layout.step_mode)?,
                         attributes,
-                    })
+                    }))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, RendererError>>()
+                .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+            let color_target =
+                plan.pipeline_state.color_targets.first().ok_or_else(|| {
+                    GpuCanvasError::new("GPU-canvas pipeline has no color target")
+                })?;
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("nuxie-imported-gpu-canvas-pipeline"),
                 layout: Some(&pipeline_layout),
@@ -1106,17 +1455,34 @@ impl WgpuFactory {
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &vertex_layouts,
                 },
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
+                primitive: primitive_state(&plan.pipeline_state)
+                    .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                depth_stencil: plan
+                    .pipeline_state
+                    .depth_stencil
+                    .as_ref()
+                    .map(depth_stencil_state)
+                    .transpose()
+                    .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                multisample: wgpu::MultisampleState {
+                    count: plan.pipeline_state.sample_count,
+                    ..Default::default()
+                },
                 fragment: Some(wgpu::FragmentState {
                     module: &fragment_shader.module,
                     entry_point: Some(&prepared.fragment_entry_point),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
+                        format: texture_format(&color_target.format)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        blend: color_target
+                            .blend
+                            .as_ref()
+                            .map(blend_state)
+                            .transpose()
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        write_mask: color_writes(&color_target.write_mask)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
                     })],
                 }),
                 multiview_mask: None,
@@ -1133,27 +1499,141 @@ impl WgpuFactory {
                     })
                 })
                 .collect::<Vec<_>>();
+            let textures = plan
+                .texture_bindings
+                .iter()
+                .map(|texture| {
+                    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING;
+                    if texture.sample_count == 1 {
+                        usage |= wgpu::TextureUsages::COPY_DST;
+                    }
+                    if texture.render_target {
+                        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+                    }
+                    Ok(device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("nuxie-imported-gpu-canvas-texture"),
+                        size: wgpu::Extent3d {
+                            width: texture.width,
+                            height: texture.height,
+                            depth_or_array_layers: texture.depth_or_array_layers,
+                        },
+                        mip_level_count: texture.mip_level_count,
+                        sample_count: texture.sample_count,
+                        dimension: texture_dimension(&texture.texture_type)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        format: texture_format(&texture.format)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        usage,
+                        view_formats: &[],
+                    }))
+                })
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+            let texture_views = plan
+                .texture_bindings
+                .iter()
+                .zip(&textures)
+                .map(|(texture, gpu_texture)| {
+                    Ok(gpu_texture.create_view(&wgpu::TextureViewDescriptor {
+                        label: Some("nuxie-imported-gpu-canvas-texture-view"),
+                        format: None,
+                        dimension: Some(
+                            texture_view_dimension(&texture.view_dimension)
+                                .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        ),
+                        usage: None,
+                        aspect: wgpu::TextureAspect::All,
+                        base_mip_level: texture.base_mip_level,
+                        mip_level_count: Some(texture.mip_level_count_in_view),
+                        base_array_layer: texture.base_array_layer,
+                        array_layer_count: Some(texture.array_layer_count),
+                    }))
+                })
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+            let samplers = plan
+                .sampler_bindings
+                .iter()
+                .map(|sampler| {
+                    Ok(device.create_sampler(&wgpu::SamplerDescriptor {
+                        label: Some("nuxie-imported-gpu-canvas-sampler"),
+                        address_mode_u: sampler_address_mode(&sampler.address_mode_u)?,
+                        address_mode_v: sampler_address_mode(&sampler.address_mode_v)?,
+                        address_mode_w: sampler_address_mode(&sampler.address_mode_w)?,
+                        mag_filter: sampler_filter_mode(&sampler.mag_filter)?,
+                        min_filter: sampler_filter_mode(&sampler.min_filter)?,
+                        mipmap_filter: sampler_mipmap_filter_mode(&sampler.mipmap_filter)?,
+                        lod_min_clamp: sampler.lod_min_clamp,
+                        lod_max_clamp: sampler.lod_max_clamp,
+                        compare: sampler
+                            .compare
+                            .as_deref()
+                            .map(compare_function)
+                            .transpose()
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        anisotropy_clamp: sampler.max_anisotropy,
+                        border_color: None,
+                    }))
+                })
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
             let bind_groups = bind_group_layouts
                 .iter()
                 .enumerate()
                 .map(|(group, layout)| {
-                    let entries = plan
-                        .uniform_buffers
+                    let entries = prepared
+                        .resource_requirements
                         .iter()
-                        .enumerate()
-                        .filter(|(_, buffer)| buffer.group == group as u32)
-                        .map(|(index, buffer)| wgpu::BindGroupEntry {
-                            binding: buffer.binding,
-                            resource: uniform_buffers[index].as_entire_binding(),
+                        .filter(|((resource_group, _), _)| *resource_group == group as u32)
+                        .map(|(&(resource_group, binding), requirement)| {
+                            let resource = match requirement {
+                                ImportedResourceRequirement::Uniform(_) => {
+                                    let index = plan
+                                        .uniform_buffers
+                                        .iter()
+                                        .position(|buffer| {
+                                            buffer.group == resource_group
+                                                && buffer.binding == binding
+                                        })
+                                        .ok_or_else(|| {
+                                            GpuCanvasError::new("uniform resource disappeared")
+                                        })?;
+                                    uniform_buffers[index].as_entire_binding()
+                                }
+                                ImportedResourceRequirement::Texture { .. } => {
+                                    let index = plan
+                                        .texture_bindings
+                                        .iter()
+                                        .position(|texture| {
+                                            texture.group == resource_group
+                                                && texture.binding == binding
+                                        })
+                                        .ok_or_else(|| {
+                                            GpuCanvasError::new("texture resource disappeared")
+                                        })?;
+                                    wgpu::BindingResource::TextureView(&texture_views[index])
+                                }
+                                ImportedResourceRequirement::Sampler { .. } => {
+                                    let index = plan
+                                        .sampler_bindings
+                                        .iter()
+                                        .position(|sampler| {
+                                            sampler.group == resource_group
+                                                && sampler.binding == binding
+                                        })
+                                        .ok_or_else(|| {
+                                            GpuCanvasError::new("sampler resource disappeared")
+                                        })?;
+                                    wgpu::BindingResource::Sampler(&samplers[index])
+                                }
+                            };
+                            Ok(wgpu::BindGroupEntry { binding, resource })
                         })
-                        .collect::<Vec<_>>();
-                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+                    Ok(device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("nuxie-imported-gpu-canvas-bind-group"),
                         layout,
                         entries: &entries,
-                    })
+                    }))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
             let vertex_buffers = plan
                 .vertex_buffers
                 .iter()
@@ -1165,12 +1645,23 @@ impl WgpuFactory {
                     })
                 })
                 .collect::<Vec<_>>();
+            let index_buffer = plan.index_buffer.as_ref().map(|buffer| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-index-buffer"),
+                    contents: &buffer.bytes,
+                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                })
+            });
             built_pipeline = Some(ImportedWgpuGpuCanvasPipeline {
                 key,
-                uniform_requirements: prepared.uniform_requirements,
+                resource_requirements: prepared.resource_requirements,
                 bind_groups,
                 uniform_buffers,
+                textures,
+                _texture_views: texture_views,
+                _samplers: samplers,
                 vertex_buffers,
+                index_buffer,
                 pipeline,
             });
         }
@@ -1185,6 +1676,41 @@ impl WgpuFactory {
         }
         for (buffer, gpu_buffer) in plan.vertex_buffers.iter().zip(&cached.vertex_buffers) {
             queue.write_buffer(gpu_buffer, 0, &buffer.bytes);
+        }
+        if let (Some(buffer), Some(gpu_buffer)) = (&plan.index_buffer, &cached.index_buffer) {
+            queue.write_buffer(gpu_buffer, 0, &buffer.bytes);
+        }
+        for (texture, gpu_texture) in plan.texture_bindings.iter().zip(&cached.textures) {
+            for upload in &texture.uploads {
+                let origin_z = if texture.texture_type == "3d" {
+                    upload.z
+                } else {
+                    upload.array_layer
+                };
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: gpu_texture,
+                        mip_level: upload.mip_level,
+                        origin: wgpu::Origin3d {
+                            x: upload.x,
+                            y: upload.y,
+                            z: origin_z,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &upload.bytes,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(upload.bytes_per_row),
+                        rows_per_image: Some(upload.rows_per_image),
+                    },
+                    wgpu::Extent3d {
+                        width: upload.width,
+                        height: upload.height,
+                        depth_or_array_layers: upload.depth,
+                    },
+                );
+            }
         }
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-imported-gpu-canvas-target"),
@@ -1201,6 +1727,69 @@ impl WgpuFactory {
             view_formats: &[],
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let multisample_target = (plan.pipeline_state.sample_count > 1).then(|| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-imported-gpu-canvas-multisample-target"),
+                size: wgpu::Extent3d {
+                    width: plan.width,
+                    height: plan.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: plan.pipeline_state.sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+        });
+        let multisample_view = multisample_target
+            .as_ref()
+            .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()));
+        let depth_texture = plan
+            .pipeline_state
+            .depth_stencil
+            .as_ref()
+            .map(|depth| {
+                Ok(device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-depth-stencil"),
+                    size: wgpu::Extent3d {
+                        width: plan.width,
+                        height: plan.height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: plan.pipeline_state.sample_count,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: texture_format(&depth.format)
+                        .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                }))
+            })
+            .transpose()?;
+        let depth_view = depth_texture
+            .as_ref()
+            .map(|texture| texture.create_view(&wgpu::TextureViewDescriptor::default()));
+        let depth_stencil_attachment = depth_view
+            .as_ref()
+            .zip(plan.pipeline_state.depth_stencil.as_ref())
+            .map(
+                |(depth_view, depth)| wgpu::RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: depth
+                        .format
+                        .contains("stencil")
+                        .then_some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                },
+            );
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("nuxie-imported-gpu-canvas-encoder"),
         });
@@ -1208,8 +1797,8 @@ impl WgpuFactory {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-imported-gpu-canvas-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: multisample_view.as_ref().unwrap_or(&view),
+                    resolve_target: multisample_view.as_ref().map(|_| &view),
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -1221,7 +1810,7 @@ impl WgpuFactory {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
@@ -1233,10 +1822,43 @@ impl WgpuFactory {
             for (buffer, gpu_buffer) in plan.vertex_buffers.iter().zip(&cached.vertex_buffers) {
                 pass.set_vertex_buffer(buffer.slot, gpu_buffer.slice(..));
             }
-            pass.draw(
-                plan.first_vertex..plan.first_vertex.saturating_add(plan.vertex_count),
-                plan.first_instance..plan.first_instance.saturating_add(plan.instance_count),
-            );
+            if let Some(viewport) = plan.pass_state.viewport {
+                pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
+            }
+            if let Some(scissor) = plan.pass_state.scissor_rect {
+                pass.set_scissor_rect(scissor[0], scissor[1], scissor[2], scissor[3]);
+            }
+            pass.set_stencil_reference(plan.pass_state.stencil_reference);
+            pass.set_blend_constant(wgpu::Color {
+                r: plan.pass_state.blend_color[0],
+                g: plan.pass_state.blend_color[1],
+                b: plan.pass_state.blend_color[2],
+                a: plan.pass_state.blend_color[3],
+            });
+            if let Some(draw) = &plan.indexed_draw {
+                let index_buffer = cached.index_buffer.as_ref().ok_or_else(|| {
+                    GpuCanvasError::new("indexed GPU-canvas draw has no wgpu index buffer")
+                })?;
+                let format = index_format(
+                    &plan
+                        .index_buffer
+                        .as_ref()
+                        .ok_or_else(|| GpuCanvasError::new("indexed draw has no index buffer"))?
+                        .format,
+                )
+                .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+                pass.set_index_buffer(index_buffer.slice(..), format);
+                pass.draw_indexed(
+                    draw.first_index..draw.first_index.saturating_add(draw.index_count),
+                    draw.base_vertex,
+                    draw.first_instance..draw.first_instance.saturating_add(draw.instance_count),
+                );
+            } else {
+                pass.draw(
+                    plan.first_vertex..plan.first_vertex.saturating_add(plan.vertex_count),
+                    plan.first_instance..plan.first_instance.saturating_add(plan.instance_count),
+                );
+            }
         }
         queue.submit(Some(encoder.finish()));
         #[cfg(not(target_arch = "wasm32"))]
@@ -1363,13 +1985,13 @@ impl WgpuFactory {
             .iter()
             .zip(&vertex_attributes)
             .map(|(layout, attributes)| {
-                Some(wgpu::VertexBufferLayout {
+                Ok(Some(wgpu::VertexBufferLayout {
                     array_stride: layout.stride,
-                    step_mode: wgpu::VertexStepMode::Vertex,
+                    step_mode: vertex_step_mode(&layout.step_mode)?,
                     attributes,
-                })
+                }))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, RendererError>>()?;
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-gpu-canvas-pipeline"),
             layout: Some(&pipeline_layout),
@@ -1529,6 +2151,8 @@ struct GpuCanvasPlanRef<'a> {
     uniform_buffers: &'a [GpuCanvasUniformBuffer],
     vertex_layouts: &'a [GpuCanvasVertexLayout],
     vertex_buffers: &'a [GpuCanvasVertexBuffer],
+    index_buffer: Option<&'a GpuCanvasIndexBuffer>,
+    indexed_draw: Option<&'a GpuCanvasIndexedDraw>,
 }
 
 impl<'a> From<&'a GpuCanvasRenderPlan> for GpuCanvasPlanRef<'a> {
@@ -1544,23 +2168,28 @@ impl<'a> From<&'a GpuCanvasRenderPlan> for GpuCanvasPlanRef<'a> {
             uniform_buffers: &plan.uniform_buffers,
             vertex_layouts: &plan.vertex_layouts,
             vertex_buffers: &plan.vertex_buffers,
+            index_buffer: None,
+            indexed_draw: None,
         }
     }
 }
 
 impl<'a> From<&'a GpuCanvasPlan> for GpuCanvasPlanRef<'a> {
     fn from(plan: &'a GpuCanvasPlan) -> Self {
+        let indexed_draw = plan.indexed_draw.as_ref();
         Self {
             width: plan.width,
             height: plan.height,
             clear_color: &plan.clear_color,
-            vertex_count: plan.vertex_count,
-            instance_count: plan.instance_count,
-            first_vertex: plan.first_vertex,
-            first_instance: plan.first_instance,
+            vertex_count: indexed_draw.map_or(plan.vertex_count, |draw| draw.index_count),
+            instance_count: indexed_draw.map_or(plan.instance_count, |draw| draw.instance_count),
+            first_vertex: indexed_draw.map_or(plan.first_vertex, |draw| draw.first_index),
+            first_instance: indexed_draw.map_or(plan.first_instance, |draw| draw.first_instance),
             uniform_buffers: &plan.uniform_buffers,
             vertex_layouts: &plan.vertex_layouts,
             vertex_buffers: &plan.vertex_buffers,
+            index_buffer: plan.index_buffer.as_ref(),
+            indexed_draw,
         }
     }
 }
@@ -1616,6 +2245,26 @@ fn validate_gpu_canvas_plan_ref(plan: GpuCanvasPlanRef<'_>) -> Result<(), Render
         return Err(invalid(format!(
             "draw ranges may cover at most {MAX_DRAW_INVOCATIONS} invocations"
         )));
+    }
+    if let Some(draw) = plan.indexed_draw {
+        let buffer = plan
+            .index_buffer
+            .ok_or_else(|| invalid("indexed draw requires an index buffer".into()))?;
+        let index_size = match buffer.format.as_str() {
+            "uint16" => 2_u64,
+            "uint32" => 4_u64,
+            value => return Err(invalid(format!("invalid index format '{value}'"))),
+        };
+        let required_bytes = u64::from(draw.first_index)
+            .checked_add(u64::from(draw.index_count))
+            .and_then(|indices| indices.checked_mul(index_size))
+            .ok_or_else(|| invalid("index buffer byte range overflow".into()))?;
+        if required_bytes > buffer.bytes.len() as u64 {
+            return Err(invalid(format!(
+                "index buffer requires {required_bytes} bytes but contains {}",
+                buffer.bytes.len()
+            )));
+        }
     }
 
     let mut bindings = BTreeSet::new();
@@ -1701,13 +2350,15 @@ fn validate_gpu_canvas_plan_ref(plan: GpuCanvasPlanRef<'_>) -> Result<(), Render
             .iter()
             .find(|buffer| buffer.slot == slot)
             .ok_or_else(|| invalid(format!("vertex buffer slot {slot} is not bound")))?;
-        let required_bytes = u64::from(vertex_end)
-            .checked_mul(layout.stride)
-            .ok_or_else(|| invalid("vertex buffer byte range overflow".into()))?;
-        if required_bytes > buffer.bytes.len() as u64 {
-            return Err(invalid(format!(
-                "vertex buffer slot {slot} requires {required_bytes} bytes"
-            )));
+        if plan.indexed_draw.is_none() {
+            let required_bytes = u64::from(vertex_end)
+                .checked_mul(layout.stride)
+                .ok_or_else(|| invalid("vertex buffer byte range overflow".into()))?;
+            if required_bytes > buffer.bytes.len() as u64 {
+                return Err(invalid(format!(
+                    "vertex buffer slot {slot} requires {required_bytes} bytes"
+                )));
+            }
         }
         for attribute in &layout.attributes {
             attribute_count += 1;
@@ -1746,6 +2397,8 @@ fn vertex_format_size(name: &str) -> Result<u64, RendererError> {
         "float32x2" => Ok(8),
         "float32x3" => Ok(12),
         "float32x4" => Ok(16),
+        "uint8x4" | "unorm8x4" | "snorm8x4" | "float16x2" => Ok(4),
+        "float16x4" => Ok(8),
         _ => Err(RendererError::InvalidGpuCanvas(format!(
             "unsupported vertex format '{name}'"
         ))),
@@ -1758,9 +2411,376 @@ fn vertex_format(name: &str) -> Result<wgpu::VertexFormat, RendererError> {
         "float32x2" => Ok(wgpu::VertexFormat::Float32x2),
         "float32x3" => Ok(wgpu::VertexFormat::Float32x3),
         "float32x4" => Ok(wgpu::VertexFormat::Float32x4),
+        "uint8x4" => Ok(wgpu::VertexFormat::Uint8x4),
+        "unorm8x4" => Ok(wgpu::VertexFormat::Unorm8x4),
+        "snorm8x4" => Ok(wgpu::VertexFormat::Snorm8x4),
+        "float16x2" => Ok(wgpu::VertexFormat::Float16x2),
+        "float16x4" => Ok(wgpu::VertexFormat::Float16x4),
         _ => Err(RendererError::Unsupported(
             "GPU-canvas vertex format is not implemented",
         )),
+    }
+}
+
+fn vertex_step_mode(value: &str) -> Result<wgpu::VertexStepMode, RendererError> {
+    match value {
+        "vertex" => Ok(wgpu::VertexStepMode::Vertex),
+        "instance" => Ok(wgpu::VertexStepMode::Instance),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid vertex step mode '{value}'"
+        ))),
+    }
+}
+
+fn index_format(value: &str) -> Result<wgpu::IndexFormat, RendererError> {
+    match value {
+        "uint16" => Ok(wgpu::IndexFormat::Uint16),
+        "uint32" => Ok(wgpu::IndexFormat::Uint32),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid index format '{value}'"
+        ))),
+    }
+}
+
+fn texture_format(value: &str) -> Result<wgpu::TextureFormat, RendererError> {
+    match value {
+        "r8unorm" => Ok(wgpu::TextureFormat::R8Unorm),
+        "rg8unorm" => Ok(wgpu::TextureFormat::Rg8Unorm),
+        "rgba8unorm" => Ok(wgpu::TextureFormat::Rgba8Unorm),
+        "bgra8unorm" => Ok(wgpu::TextureFormat::Bgra8Unorm),
+        "r16float" => Ok(wgpu::TextureFormat::R16Float),
+        "rg16float" => Ok(wgpu::TextureFormat::Rg16Float),
+        "rgba16float" => Ok(wgpu::TextureFormat::Rgba16Float),
+        "r32float" => Ok(wgpu::TextureFormat::R32Float),
+        "rg32float" => Ok(wgpu::TextureFormat::Rg32Float),
+        "rgba32float" => Ok(wgpu::TextureFormat::Rgba32Float),
+        "rgb10a2unorm" => Ok(wgpu::TextureFormat::Rgb10a2Unorm),
+        "rg11b10ufloat" => Ok(wgpu::TextureFormat::Rg11b10Ufloat),
+        "depth16unorm" => Ok(wgpu::TextureFormat::Depth16Unorm),
+        "depth24plus-stencil8" => Ok(wgpu::TextureFormat::Depth24PlusStencil8),
+        "depth32float" => Ok(wgpu::TextureFormat::Depth32Float),
+        "depth32float-stencil8" => Ok(wgpu::TextureFormat::Depth32FloatStencil8),
+        "bc1-rgba-unorm" => Ok(wgpu::TextureFormat::Bc1RgbaUnorm),
+        "bc3-rgba-unorm" => Ok(wgpu::TextureFormat::Bc3RgbaUnorm),
+        "bc7-rgba-unorm" => Ok(wgpu::TextureFormat::Bc7RgbaUnorm),
+        "etc2-rgb8unorm" => Ok(wgpu::TextureFormat::Etc2Rgb8Unorm),
+        "etc2-rgba8unorm" => Ok(wgpu::TextureFormat::Etc2Rgba8Unorm),
+        "astc-4x4-unorm" => Ok(wgpu::TextureFormat::Astc {
+            block: wgpu::AstcBlock::B4x4,
+            channel: wgpu::AstcChannel::Unorm,
+        }),
+        "astc-6x6-unorm" => Ok(wgpu::TextureFormat::Astc {
+            block: wgpu::AstcBlock::B6x6,
+            channel: wgpu::AstcChannel::Unorm,
+        }),
+        "astc-8x8-unorm" => Ok(wgpu::TextureFormat::Astc {
+            block: wgpu::AstcBlock::B8x8,
+            channel: wgpu::AstcChannel::Unorm,
+        }),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid texture format '{value}'"
+        ))),
+    }
+}
+
+fn texture_dimension(value: &str) -> Result<wgpu::TextureDimension, RendererError> {
+    match value {
+        "2d" | "2d-array" | "cube" => Ok(wgpu::TextureDimension::D2),
+        "3d" => Ok(wgpu::TextureDimension::D3),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid texture type '{value}'"
+        ))),
+    }
+}
+
+fn texture_view_dimension(value: &str) -> Result<wgpu::TextureViewDimension, RendererError> {
+    match value {
+        "2d" => Ok(wgpu::TextureViewDimension::D2),
+        "2d-array" => Ok(wgpu::TextureViewDimension::D2Array),
+        "cube" => Ok(wgpu::TextureViewDimension::Cube),
+        "cube-array" => Ok(wgpu::TextureViewDimension::CubeArray),
+        "3d" => Ok(wgpu::TextureViewDimension::D3),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid texture view dimension '{value}'"
+        ))),
+    }
+}
+
+fn reflected_texture_view_dimension(
+    value: GpuCanvasShaderTextureViewDimension,
+) -> Result<wgpu::TextureViewDimension, GpuCanvasError> {
+    match value {
+        GpuCanvasShaderTextureViewDimension::D1 => Ok(wgpu::TextureViewDimension::D1),
+        GpuCanvasShaderTextureViewDimension::D2 => Ok(wgpu::TextureViewDimension::D2),
+        GpuCanvasShaderTextureViewDimension::D2Array => Ok(wgpu::TextureViewDimension::D2Array),
+        GpuCanvasShaderTextureViewDimension::Cube => Ok(wgpu::TextureViewDimension::Cube),
+        GpuCanvasShaderTextureViewDimension::CubeArray => Ok(wgpu::TextureViewDimension::CubeArray),
+        GpuCanvasShaderTextureViewDimension::D3 => Ok(wgpu::TextureViewDimension::D3),
+        GpuCanvasShaderTextureViewDimension::Undefined => Err(GpuCanvasError::new(
+            "sampled texture binding has no reflected view dimension",
+        )),
+    }
+}
+
+fn reflected_texture_sample_type(
+    value: GpuCanvasShaderTextureSampleType,
+) -> Result<wgpu::TextureSampleType, GpuCanvasError> {
+    match value {
+        GpuCanvasShaderTextureSampleType::Float => {
+            Ok(wgpu::TextureSampleType::Float { filterable: true })
+        }
+        GpuCanvasShaderTextureSampleType::UnfilterableFloat => {
+            Ok(wgpu::TextureSampleType::Float { filterable: false })
+        }
+        GpuCanvasShaderTextureSampleType::Depth => Ok(wgpu::TextureSampleType::Depth),
+        GpuCanvasShaderTextureSampleType::Sint => Ok(wgpu::TextureSampleType::Sint),
+        GpuCanvasShaderTextureSampleType::Uint => Ok(wgpu::TextureSampleType::Uint),
+        GpuCanvasShaderTextureSampleType::Undefined => Err(GpuCanvasError::new(
+            "sampled texture binding has no reflected sample type",
+        )),
+    }
+}
+
+fn sampler_address_mode(value: &str) -> Result<wgpu::AddressMode, GpuCanvasError> {
+    match value {
+        "repeat" => Ok(wgpu::AddressMode::Repeat),
+        "mirror-repeat" => Ok(wgpu::AddressMode::MirrorRepeat),
+        "clamp-to-edge" => Ok(wgpu::AddressMode::ClampToEdge),
+        _ => Err(GpuCanvasError::new(format!(
+            "invalid sampler address mode '{value}'"
+        ))),
+    }
+}
+
+fn sampler_filter_mode(value: &str) -> Result<wgpu::FilterMode, GpuCanvasError> {
+    match value {
+        "nearest" => Ok(wgpu::FilterMode::Nearest),
+        "linear" => Ok(wgpu::FilterMode::Linear),
+        _ => Err(GpuCanvasError::new(format!(
+            "invalid sampler filter mode '{value}'"
+        ))),
+    }
+}
+
+fn sampler_mipmap_filter_mode(value: &str) -> Result<wgpu::MipmapFilterMode, GpuCanvasError> {
+    match value {
+        "nearest" => Ok(wgpu::MipmapFilterMode::Nearest),
+        "linear" => Ok(wgpu::MipmapFilterMode::Linear),
+        _ => Err(GpuCanvasError::new(format!(
+            "invalid sampler mipmap filter mode '{value}'"
+        ))),
+    }
+}
+
+fn imported_binding_type(
+    requirement: ImportedResourceRequirement,
+    uniform_size: Option<usize>,
+) -> Result<wgpu::BindingType, GpuCanvasError> {
+    match requirement {
+        ImportedResourceRequirement::Uniform(_) => Ok(wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: uniform_size.and_then(|size| NonZeroU64::new(size as u64)),
+        }),
+        ImportedResourceRequirement::Texture {
+            view_dimension,
+            sample_type,
+            multisampled,
+            ..
+        } => Ok(wgpu::BindingType::Texture {
+            sample_type: reflected_texture_sample_type(sample_type)?,
+            view_dimension: reflected_texture_view_dimension(view_dimension)?,
+            multisampled,
+        }),
+        ImportedResourceRequirement::Sampler { comparison, .. } => {
+            Ok(wgpu::BindingType::Sampler(if comparison {
+                wgpu::SamplerBindingType::Comparison
+            } else {
+                wgpu::SamplerBindingType::Filtering
+            }))
+        }
+    }
+}
+
+fn primitive_state(
+    state: &nuxie_render_api::GpuCanvasPipelineState,
+) -> Result<wgpu::PrimitiveState, RendererError> {
+    let topology = match state.topology.as_str() {
+        "triangle-list" => wgpu::PrimitiveTopology::TriangleList,
+        "triangle-strip" => wgpu::PrimitiveTopology::TriangleStrip,
+        "line-list" => wgpu::PrimitiveTopology::LineList,
+        "line-strip" => wgpu::PrimitiveTopology::LineStrip,
+        "point-list" => wgpu::PrimitiveTopology::PointList,
+        value => {
+            return Err(RendererError::InvalidGpuCanvas(format!(
+                "invalid primitive topology '{value}'"
+            )));
+        }
+    };
+    let front_face = match state.winding.as_str() {
+        "cw" => wgpu::FrontFace::Cw,
+        "ccw" => wgpu::FrontFace::Ccw,
+        value => {
+            return Err(RendererError::InvalidGpuCanvas(format!(
+                "invalid front-face winding '{value}'"
+            )));
+        }
+    };
+    let cull_mode = match state.cull_mode.as_str() {
+        "none" => None,
+        "front" => Some(wgpu::Face::Front),
+        "back" => Some(wgpu::Face::Back),
+        value => {
+            return Err(RendererError::InvalidGpuCanvas(format!(
+                "invalid cull mode '{value}'"
+            )));
+        }
+    };
+    Ok(wgpu::PrimitiveState {
+        topology,
+        strip_index_format: None,
+        front_face,
+        cull_mode,
+        ..Default::default()
+    })
+}
+
+fn blend_state(
+    state: &nuxie_render_api::GpuCanvasBlendState,
+) -> Result<wgpu::BlendState, RendererError> {
+    Ok(wgpu::BlendState {
+        color: wgpu::BlendComponent {
+            src_factor: blend_factor(&state.src_color)?,
+            dst_factor: blend_factor(&state.dst_color)?,
+            operation: blend_operation(&state.color_op)?,
+        },
+        alpha: wgpu::BlendComponent {
+            src_factor: blend_factor(&state.src_alpha)?,
+            dst_factor: blend_factor(&state.dst_alpha)?,
+            operation: blend_operation(&state.alpha_op)?,
+        },
+    })
+}
+
+fn blend_factor(value: &str) -> Result<wgpu::BlendFactor, RendererError> {
+    match value {
+        "zero" => Ok(wgpu::BlendFactor::Zero),
+        "one" => Ok(wgpu::BlendFactor::One),
+        "src" => Ok(wgpu::BlendFactor::Src),
+        "one-minus-src" => Ok(wgpu::BlendFactor::OneMinusSrc),
+        "src-alpha" => Ok(wgpu::BlendFactor::SrcAlpha),
+        "one-minus-src-alpha" => Ok(wgpu::BlendFactor::OneMinusSrcAlpha),
+        "dst" => Ok(wgpu::BlendFactor::Dst),
+        "one-minus-dst" => Ok(wgpu::BlendFactor::OneMinusDst),
+        "dst-alpha" => Ok(wgpu::BlendFactor::DstAlpha),
+        "one-minus-dst-alpha" => Ok(wgpu::BlendFactor::OneMinusDstAlpha),
+        "src-alpha-saturated" => Ok(wgpu::BlendFactor::SrcAlphaSaturated),
+        "constant" => Ok(wgpu::BlendFactor::Constant),
+        "one-minus-constant" => Ok(wgpu::BlendFactor::OneMinusConstant),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid blend factor '{value}'"
+        ))),
+    }
+}
+
+fn blend_operation(value: &str) -> Result<wgpu::BlendOperation, RendererError> {
+    match value {
+        "add" => Ok(wgpu::BlendOperation::Add),
+        "subtract" => Ok(wgpu::BlendOperation::Subtract),
+        "reverse-subtract" => Ok(wgpu::BlendOperation::ReverseSubtract),
+        "min" => Ok(wgpu::BlendOperation::Min),
+        "max" => Ok(wgpu::BlendOperation::Max),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid blend operation '{value}'"
+        ))),
+    }
+}
+
+fn color_writes(value: &str) -> Result<wgpu::ColorWrites, RendererError> {
+    if matches!(value, "all" | "rgba") {
+        return Ok(wgpu::ColorWrites::ALL);
+    }
+    if matches!(value, "" | "none") {
+        return Ok(wgpu::ColorWrites::empty());
+    }
+    let mut writes = wgpu::ColorWrites::empty();
+    for channel in value.chars().map(|value| value.to_ascii_lowercase()) {
+        writes |= match channel {
+            'r' => wgpu::ColorWrites::RED,
+            'g' => wgpu::ColorWrites::GREEN,
+            'b' => wgpu::ColorWrites::BLUE,
+            'a' => wgpu::ColorWrites::ALPHA,
+            _ => {
+                return Err(RendererError::InvalidGpuCanvas(format!(
+                    "invalid color write mask '{value}'"
+                )));
+            }
+        };
+    }
+    Ok(writes)
+}
+
+fn depth_stencil_state(
+    state: &nuxie_render_api::GpuCanvasDepthStencilState,
+) -> Result<wgpu::DepthStencilState, RendererError> {
+    Ok(wgpu::DepthStencilState {
+        format: texture_format(&state.format)?,
+        depth_write_enabled: Some(state.depth_write_enabled),
+        depth_compare: Some(compare_function(&state.depth_compare)?),
+        stencil: wgpu::StencilState {
+            front: stencil_face_state(&state.stencil_front)?,
+            back: stencil_face_state(&state.stencil_back)?,
+            read_mask: state.stencil_read_mask,
+            write_mask: state.stencil_write_mask,
+        },
+        bias: wgpu::DepthBiasState {
+            constant: state.depth_bias,
+            slope_scale: state.depth_bias_slope_scale,
+            clamp: state.depth_bias_clamp,
+        },
+    })
+}
+
+fn compare_function(value: &str) -> Result<wgpu::CompareFunction, RendererError> {
+    match value {
+        "never" => Ok(wgpu::CompareFunction::Never),
+        "less" => Ok(wgpu::CompareFunction::Less),
+        "equal" => Ok(wgpu::CompareFunction::Equal),
+        "less-equal" => Ok(wgpu::CompareFunction::LessEqual),
+        "greater" => Ok(wgpu::CompareFunction::Greater),
+        "not-equal" => Ok(wgpu::CompareFunction::NotEqual),
+        "greater-equal" => Ok(wgpu::CompareFunction::GreaterEqual),
+        "always" => Ok(wgpu::CompareFunction::Always),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid compare function '{value}'"
+        ))),
+    }
+}
+
+fn stencil_face_state(
+    state: &nuxie_render_api::GpuCanvasStencilFace,
+) -> Result<wgpu::StencilFaceState, RendererError> {
+    Ok(wgpu::StencilFaceState {
+        compare: compare_function(&state.compare)?,
+        fail_op: stencil_operation(&state.fail_op)?,
+        depth_fail_op: stencil_operation(&state.depth_fail_op)?,
+        pass_op: stencil_operation(&state.pass_op)?,
+    })
+}
+
+fn stencil_operation(value: &str) -> Result<wgpu::StencilOperation, RendererError> {
+    match value {
+        "keep" => Ok(wgpu::StencilOperation::Keep),
+        "zero" => Ok(wgpu::StencilOperation::Zero),
+        "replace" => Ok(wgpu::StencilOperation::Replace),
+        "increment-clamp" => Ok(wgpu::StencilOperation::IncrementClamp),
+        "decrement-clamp" => Ok(wgpu::StencilOperation::DecrementClamp),
+        "invert" => Ok(wgpu::StencilOperation::Invert),
+        "increment-wrap" => Ok(wgpu::StencilOperation::IncrementWrap),
+        "decrement-wrap" => Ok(wgpu::StencilOperation::DecrementWrap),
+        _ => Err(RendererError::InvalidGpuCanvas(format!(
+            "invalid stencil operation '{value}'"
+        ))),
     }
 }
 
@@ -1925,6 +2945,12 @@ fn fs_main() -> @location(0) vec4<f32> {
             uniform_buffers: Vec::new(),
             vertex_layouts: Vec::new(),
             vertex_buffers: Vec::new(),
+            index_buffer: None,
+            indexed_draw: None,
+            texture_bindings: Vec::new(),
+            sampler_bindings: Vec::new(),
+            pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
+            pass_state: nuxie_render_api::GpuCanvasPassState::default(),
         }
     }
 
@@ -1941,27 +2967,43 @@ fn fs_main() -> @location(0) vec4<f32> {
         plan: &GpuCanvasPlan,
     ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
         let vertex_parsed = parse_authored_wgsl(&vertex_shader.source)?;
-        let vertex_requirements = imported_uniform_requirements(
+        let vertex_resources = imported_resource_requirements(
             vertex_shader,
             &vertex_parsed.module,
             &vertex_parsed.info,
         )?;
+        let vertex_requirements = vertex_resources
+            .iter()
+            .filter_map(|(&binding, requirement)| match requirement {
+                ImportedResourceRequirement::Uniform(requirement) => Some((binding, *requirement)),
+                _ => None,
+            })
+            .collect::<BTreeMap<_, _>>();
         let fragment_parsed = parse_authored_wgsl(&fragment_shader.source)?;
-        let fragment_requirements = imported_uniform_requirements(
+        let fragment_resources = imported_resource_requirements(
             fragment_shader,
             &fragment_parsed.module,
             &fragment_parsed.info,
         )?;
+        let fragment_requirements = fragment_resources
+            .iter()
+            .filter_map(|(&binding, requirement)| match requirement {
+                ImportedResourceRequirement::Uniform(requirement) => Some((binding, *requirement)),
+                _ => None,
+            })
+            .collect::<BTreeMap<_, _>>();
         prepare_imported_gpu_canvas_modules(
             ImportedGpuCanvasShaderRef {
                 shader: vertex_shader,
                 parsed: &vertex_parsed,
                 uniform_requirements: &vertex_requirements,
+                resource_requirements: &vertex_resources,
             },
             ImportedGpuCanvasShaderRef {
                 shader: fragment_shader,
                 parsed: &fragment_parsed,
                 uniform_requirements: &fragment_requirements,
+                resource_requirements: &fragment_resources,
             },
             plan,
         )
@@ -1984,6 +3026,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         let mut matching_plan = imported_plan();
         matching_plan.vertex_layouts.push(GpuCanvasVertexLayout {
             stride: 8,
+            step_mode: "vertex".into(),
             attributes: vec![GpuCanvasVertexAttribute {
                 shader_location: 0,
                 offset: 0,
@@ -2193,7 +3236,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         assert_eq!(prepared.vertex_entry_point, "vs_main");
         assert_eq!(prepared.fragment_entry_point, "fs_main");
         assert_eq!(
-            prepared.uniform_requirements[&(0, 0)].visibility(),
+            prepared.resource_requirements[&(0, 0)].visibility(),
             wgpu::ShaderStages::VERTEX_FRAGMENT,
         );
     }
@@ -2266,11 +3309,11 @@ fn fs_main() -> @location(0) vec4<f32> {
         let prepared = prepare_test_gpu_canvas_stages(&vertex_shader, &fragment_shader, &max_sized)
             .expect("the larger explicit fragment uniform determines the preflight size");
         assert_eq!(
-            prepared.uniform_requirements[&(0, 0)],
-            ImportedUniformRequirement {
+            prepared.resource_requirements[&(0, 0)],
+            ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
                 required_size: 32,
                 stage_mask: vertex_mask,
-            },
+            }),
             "layout identity and visibility remain vertex target-16 authoritative"
         );
 
@@ -2457,6 +3500,164 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn imported_wgpu_executes_sampled_texture_sampler_and_indexed_draw() {
+        let source = r#"
+@group(0) @binding(0) var color_texture: texture_2d<f32>;
+@group(0) @binding(1) var color_sampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let positions = array(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+        vec2<f32>(-1.0, 3.0),
+    );
+    return vec4<f32>(positions[index], 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return textureSample(color_texture, color_sampler, vec2<f32>(0.5));
+}
+"#;
+        let fragment_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
+        let mut shader = imported_shader(source);
+        shader.bindings = vec![
+            GpuCanvasShaderBinding {
+                group: 0,
+                binding: 0,
+                kind: GpuCanvasShaderResourceKind::SampledTexture,
+                stage_mask: fragment_mask,
+                backend_space: 0,
+                backend_slots: [None, Some(0), None],
+                texture_view_dimension: GpuCanvasShaderTextureViewDimension::D2,
+                texture_sample_type: GpuCanvasShaderTextureSampleType::Float,
+                texture_multisampled: false,
+            },
+            GpuCanvasShaderBinding {
+                group: 0,
+                binding: 1,
+                kind: GpuCanvasShaderResourceKind::Sampler,
+                stage_mask: fragment_mask,
+                backend_space: 0,
+                backend_slots: [None, Some(1), None],
+                texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
+                texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
+                texture_multisampled: false,
+            },
+        ];
+        let mut plan = imported_plan();
+        plan.vertex_count = 0;
+        plan.index_buffer = Some(nuxie_render_api::GpuCanvasIndexBuffer {
+            bytes: [0_u16, 1, 2]
+                .into_iter()
+                .flat_map(u16::to_le_bytes)
+                .collect(),
+            format: "uint16".into(),
+        });
+        plan.indexed_draw = Some(nuxie_render_api::GpuCanvasIndexedDraw {
+            index_count: 3,
+            instance_count: 1,
+            first_index: 0,
+            base_vertex: 0,
+            first_instance: 0,
+        });
+        plan.texture_bindings = vec![nuxie_render_api::GpuCanvasTextureBinding {
+            group: 0,
+            binding: 0,
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+            format: "rgba8unorm".into(),
+            texture_type: "2d".into(),
+            render_target: false,
+            sample_count: 1,
+            mip_level_count: 1,
+            view_dimension: "2d".into(),
+            base_mip_level: 0,
+            mip_level_count_in_view: 1,
+            base_array_layer: 0,
+            array_layer_count: 1,
+            uploads: vec![nuxie_render_api::GpuCanvasTextureUpload {
+                bytes: vec![255, 0, 0, 255],
+                width: 1,
+                height: 1,
+                depth: 1,
+                x: 0,
+                y: 0,
+                z: 0,
+                mip_level: 0,
+                array_layer: 0,
+                bytes_per_row: 4,
+                rows_per_image: 1,
+            }],
+        }];
+        plan.sampler_bindings = vec![nuxie_render_api::GpuCanvasSamplerBinding {
+            group: 0,
+            binding: 1,
+            min_filter: "nearest".into(),
+            mag_filter: "nearest".into(),
+            mipmap_filter: "nearest".into(),
+            address_mode_u: "clamp-to-edge".into(),
+            address_mode_v: "clamp-to-edge".into(),
+            address_mode_w: "clamp-to-edge".into(),
+            compare: None,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 32.0,
+            max_anisotropy: 1,
+        }];
+        let stencil_face = nuxie_render_api::GpuCanvasStencilFace {
+            compare: "always".into(),
+            fail_op: "keep".into(),
+            depth_fail_op: "keep".into(),
+            pass_op: "keep".into(),
+        };
+        plan.pipeline_state.sample_count = 4;
+        plan.pipeline_state.depth_stencil = Some(nuxie_render_api::GpuCanvasDepthStencilState {
+            format: "depth32float".into(),
+            depth_compare: "always".into(),
+            depth_write_enabled: true,
+            depth_bias: 0,
+            depth_bias_slope_scale: 0.0,
+            depth_bias_clamp: 0.0,
+            stencil_front: stencil_face.clone(),
+            stencil_back: stencil_face,
+            stencil_read_mask: u32::MAX,
+            stencil_write_mask: u32::MAX,
+        });
+        plan.pass_state.viewport = Some([0.0, 0.0, 8.0, 8.0]);
+        plan.pass_state.scissor_rect = Some([0, 0, 8, 8]);
+
+        let prepared = prepare_test_gpu_canvas(&shader, &plan)
+            .expect("reflected texture and sampler bindings match the indexed plan");
+        assert!(matches!(
+            prepared.resource_requirements[&(0, 0)],
+            ImportedResourceRequirement::Texture { .. }
+        ));
+        assert!(matches!(
+            prepared.resource_requirements[&(0, 1)],
+            ImportedResourceRequirement::Sampler {
+                comparison: false,
+                ..
+            }
+        ));
+
+        let Ok(mut factory) = WgpuFactory::new(8, 8) else {
+            eprintln!("GPU adapter unavailable; reflected resource validation remains covered");
+            return;
+        };
+
+        let handle = factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("sampled shader imports");
+        let image = factory
+            .make_imported_gpu_canvas_image(&handle, &handle, &plan)
+            .expect("texture, sampler, upload, and indexed draw execute on wgpu");
+        assert_eq!((image.width(), image.height()), (8, 8));
+    }
+
     #[test]
     fn imported_webgpu_limits_count_reflected_uniforms_per_stage_across_groups() {
         let mut plan = imported_plan();
@@ -2473,10 +3674,10 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
             .map(|buffer| {
                 (
                     (buffer.group, buffer.binding),
-                    ImportedUniformRequirement {
+                    ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
                         required_size: 16,
                         stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
-                    },
+                    }),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -2497,11 +3698,13 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
             .into_iter()
             .enumerate()
             .map(|(index, (binding, mut requirement))| {
-                requirement.stage_mask = if index < 7 {
-                    1 << GpuCanvasShaderStage::Vertex as u8
-                } else {
-                    1 << GpuCanvasShaderStage::Fragment as u8
-                };
+                if let ImportedResourceRequirement::Uniform(uniform) = &mut requirement {
+                    uniform.stage_mask = if index < 7 {
+                        1 << GpuCanvasShaderStage::Vertex as u8
+                    } else {
+                        1 << GpuCanvasShaderStage::Fragment as u8
+                    };
+                }
                 (binding, requirement)
             })
             .collect::<BTreeMap<_, _>>();
@@ -2567,6 +3770,7 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
         plan.vertex_layouts = vec![
             GpuCanvasVertexLayout {
                 stride: 4,
+                step_mode: "vertex".into(),
                 attributes: vec![GpuCanvasVertexAttribute {
                     shader_location: 0,
                     offset: 0,
@@ -2575,6 +3779,7 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
             },
             GpuCanvasVertexLayout {
                 stride: 4,
+                step_mode: "vertex".into(),
                 attributes: vec![GpuCanvasVertexAttribute {
                     shader_location: 1,
                     offset: 0,
@@ -2686,6 +3891,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             }],
             vertex_layouts: vec![GpuCanvasVertexLayout {
                 stride: 8,
+                step_mode: "vertex".into(),
                 attributes: vec![GpuCanvasVertexAttribute {
                     shader_location: 0,
                     offset: 0,
@@ -2696,6 +3902,12 @@ fn fs_main() -> @location(0) vec4<f32> {
                 slot: 0,
                 bytes: encode_f32s(&[0.0; 6]),
             }],
+            index_buffer: None,
+            indexed_draw: None,
+            texture_bindings: Vec::new(),
+            sampler_bindings: Vec::new(),
+            pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
+            pass_state: nuxie_render_api::GpuCanvasPassState::default(),
         };
 
         for mode in [crate::RenderMode::ClockwiseAtomic, crate::RenderMode::Msaa] {
@@ -2792,6 +4004,12 @@ fn fs_main() -> @location(0) vec4<f32> {
             uniform_buffers: Vec::new(),
             vertex_layouts: Vec::new(),
             vertex_buffers: Vec::new(),
+            index_buffer: None,
+            indexed_draw: None,
+            texture_bindings: Vec::new(),
+            sampler_bindings: Vec::new(),
+            pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
+            pass_state: nuxie_render_api::GpuCanvasPassState::default(),
         };
         for mode in [crate::RenderMode::ClockwiseAtomic, crate::RenderMode::Msaa] {
             let Ok(mut factory) = WgpuFactory::new_with_mode(160, 100, mode) else {

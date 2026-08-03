@@ -1024,6 +1024,7 @@ pub struct GpuCanvasVertexAttribute {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasVertexLayout {
     pub stride: u64,
+    pub step_mode: String,
     pub attributes: Vec<GpuCanvasVertexAttribute>,
 }
 
@@ -1032,6 +1033,169 @@ pub struct GpuCanvasVertexLayout {
 pub struct GpuCanvasVertexBuffer {
     pub slot: u32,
     pub bytes: Vec<u8>,
+}
+
+/// One index buffer and format selected by an authored render pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasIndexBuffer {
+    pub bytes: Vec<u8>,
+    pub format: String,
+}
+
+/// One uploaded region retained by an authored GPU texture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasTextureUpload {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+    pub mip_level: u32,
+    pub array_layer: u32,
+    pub bytes_per_row: u32,
+    pub rows_per_image: u32,
+}
+
+/// One sampled texture view bound by an authored GPU-canvas pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasTextureBinding {
+    pub group: u32,
+    pub binding: u32,
+    pub width: u32,
+    pub height: u32,
+    pub depth_or_array_layers: u32,
+    pub format: String,
+    pub texture_type: String,
+    pub render_target: bool,
+    pub sample_count: u32,
+    pub mip_level_count: u32,
+    pub view_dimension: String,
+    pub base_mip_level: u32,
+    pub mip_level_count_in_view: u32,
+    pub base_array_layer: u32,
+    pub array_layer_count: u32,
+    pub uploads: Vec<GpuCanvasTextureUpload>,
+}
+
+/// One sampler bound by an authored GPU-canvas pass.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasSamplerBinding {
+    pub group: u32,
+    pub binding: u32,
+    pub min_filter: String,
+    pub mag_filter: String,
+    pub mipmap_filter: String,
+    pub address_mode_u: String,
+    pub address_mode_v: String,
+    pub address_mode_w: String,
+    pub compare: Option<String>,
+    pub lod_min_clamp: f32,
+    pub lod_max_clamp: f32,
+    pub max_anisotropy: u16,
+}
+
+/// Blend state for one color target in the backend-neutral pipeline contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasBlendState {
+    pub src_color: String,
+    pub dst_color: String,
+    pub color_op: String,
+    pub src_alpha: String,
+    pub dst_alpha: String,
+    pub alpha_op: String,
+}
+
+/// One authored color-target declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasColorTarget {
+    pub format: String,
+    pub write_mask: String,
+    pub blend: Option<GpuCanvasBlendState>,
+}
+
+/// One authored stencil face.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasStencilFace {
+    pub compare: String,
+    pub fail_op: String,
+    pub depth_fail_op: String,
+    pub pass_op: String,
+}
+
+/// Authored depth/stencil state carried to the wgpu pipeline.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasDepthStencilState {
+    pub format: String,
+    pub depth_compare: String,
+    pub depth_write_enabled: bool,
+    pub depth_bias: i32,
+    pub depth_bias_slope_scale: f32,
+    pub depth_bias_clamp: f32,
+    pub stencil_front: GpuCanvasStencilFace,
+    pub stencil_back: GpuCanvasStencilFace,
+    pub stencil_read_mask: u32,
+    pub stencil_write_mask: u32,
+}
+
+/// Pipeline state that is not encoded in shader modules or vertex layouts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPipelineState {
+    pub color_targets: Vec<GpuCanvasColorTarget>,
+    pub depth_stencil: Option<GpuCanvasDepthStencilState>,
+    pub cull_mode: String,
+    pub winding: String,
+    pub topology: String,
+    pub sample_count: u32,
+}
+
+impl Default for GpuCanvasPipelineState {
+    fn default() -> Self {
+        Self {
+            color_targets: vec![GpuCanvasColorTarget {
+                format: "rgba8unorm".into(),
+                write_mask: "rgba".into(),
+                blend: None,
+            }],
+            depth_stencil: None,
+            cull_mode: "none".into(),
+            winding: "ccw".into(),
+            topology: "triangle-list".into(),
+            sample_count: 1,
+        }
+    }
+}
+
+/// Dynamic pass state retained at the draw site.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPassState {
+    pub viewport: Option<[f32; 4]>,
+    pub scissor_rect: Option<[u32; 4]>,
+    pub stencil_reference: u32,
+    pub blend_color: [f64; 4],
+}
+
+impl Default for GpuCanvasPassState {
+    fn default() -> Self {
+        Self {
+            viewport: None,
+            scissor_rect: None,
+            stencil_reference: 0,
+            blend_color: [0.0; 4],
+        }
+    }
+}
+
+/// Indexed draw arguments. When absent, the legacy non-indexed fields on
+/// [`GpuCanvasPlan`] describe the draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasIndexedDraw {
+    pub index_count: u32,
+    pub instance_count: u32,
+    pub first_index: u32,
+    pub base_vertex: i32,
+    pub first_instance: u32,
 }
 
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
@@ -1049,6 +1213,12 @@ pub struct GpuCanvasPlan {
     pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
     pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
     pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
+    pub index_buffer: Option<GpuCanvasIndexBuffer>,
+    pub indexed_draw: Option<GpuCanvasIndexedDraw>,
+    pub texture_bindings: Vec<GpuCanvasTextureBinding>,
+    pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
+    pub pipeline_state: GpuCanvasPipelineState,
+    pub pass_state: GpuCanvasPassState,
 }
 
 /// A render factory cannot turn an authored GPU-canvas plan into an image.

@@ -19,7 +19,10 @@ use nuxie_render_api::{
     GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
-    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasBlendState, GpuCanvasColorTarget, GpuCanvasDepthStencilState, GpuCanvasIndexBuffer,
+    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasSamplerBinding,
+    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 
 use crate::shader_asset::ShaderAsset;
@@ -40,8 +43,8 @@ pub const MAX_GPU_CANVAS_DRAW_INVOCATIONS: u64 = 1_000_000;
 pub const MAX_GPU_CANVAS_VERTEX_BUFFERS: usize = 8;
 pub const MAX_GPU_CANVAS_VERTEX_ATTRIBUTES: usize = 16;
 pub const MAX_GPU_CANVAS_BIND_GROUPS: u32 = 4;
-pub const MAX_GPU_CANVAS_UNIFORM_BINDINGS_PER_GROUP: usize = 12;
-pub const MAX_GPU_CANVAS_BINDING_INDEX: u32 = 255;
+pub const MAX_GPU_CANVAS_UNIFORM_BINDINGS_PER_GROUP: usize = 8;
+pub const MAX_GPU_CANVAS_BINDING_INDEX: u32 = 7;
 
 #[derive(Debug, Default)]
 struct GpuCanvasResourceBudget {
@@ -71,6 +74,7 @@ pub type GpuCanvasDrawPlan = GpuCanvasPlan;
 #[derive(Debug, Clone)]
 struct GpuBuffer {
     usage: GpuBufferUsage,
+    immutable: bool,
     bytes: Rc<RefCell<Vec<u8>>>,
 }
 
@@ -78,30 +82,363 @@ struct GpuBuffer {
 enum GpuBufferUsage {
     Uniform,
     Vertex,
+    Index,
 }
 
 impl UserData for GpuBuffer {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("size", |_, this| Ok(this.bytes.borrow().len()));
+    }
+
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut(
             "write",
-            |_, this, (source, offset): (LuaBuffer, Option<usize>)| {
-                if this.usage != GpuBufferUsage::Uniform {
+            |_,
+             this,
+             (source, destination_offset, source_offset, byte_length): (
+                LuaBuffer,
+                Option<usize>,
+                Option<usize>,
+                Option<usize>,
+            )| {
+                if this.immutable {
                     return Err(Error::runtime(
-                        "GPUBuffer:write is supported only for uniform buffers",
+                        "GPUBuffer:write: buffer was created with immutable=true",
                     ));
                 }
-                let offset = offset.unwrap_or(0);
+                let destination_offset = destination_offset.unwrap_or(0);
+                let source_offset = source_offset.unwrap_or(0);
+                if source_offset > source.len() {
+                    return Err(Error::runtime(format!(
+                        "GPUBuffer:write srcOffset {source_offset} exceeds {} source bytes",
+                        source.len()
+                    )));
+                }
+                let byte_length = byte_length.unwrap_or(source.len() - source_offset);
+                let source_end = source_offset
+                    .checked_add(byte_length)
+                    .ok_or_else(|| Error::runtime("GPUBuffer:write source range overflow"))?;
+                if source_end > source.len() {
+                    return Err(Error::runtime(format!(
+                        "GPUBuffer:write source range {source_offset}..{source_end} exceeds {} bytes",
+                        source.len()
+                    )));
+                }
                 let destination_len = this.bytes.borrow().len();
-                let (offset, end) =
-                    checked_gpu_buffer_write_range(source.len(), offset, destination_len)?;
+                let (destination_offset, destination_end) = checked_gpu_buffer_write_range(
+                    byte_length,
+                    destination_offset,
+                    destination_len,
+                )?;
                 // LuaBuffer::to_vec performs a host allocation. Only copy
                 // after the source length and destination range are accepted.
                 let source = source.to_vec();
                 let mut destination = this.bytes.borrow_mut();
-                destination[offset..end].copy_from_slice(&source);
+                destination[destination_offset..destination_end]
+                    .copy_from_slice(&source[source_offset..source_end]);
                 Ok(())
             },
         );
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GpuTexture {
+    width: u32,
+    height: u32,
+    depth_or_array_layers: u32,
+    format: String,
+    texture_type: String,
+    render_target: bool,
+    sample_count: u32,
+    mip_level_count: u32,
+    uploads: Rc<RefCell<Vec<GpuCanvasTextureUpload>>>,
+}
+
+#[derive(Debug, Clone)]
+struct GpuTextureView {
+    texture: Option<GpuTexture>,
+    canvas: Option<Rc<RefCell<GpuCanvasState>>>,
+    dimension: String,
+    base_mip_level: u32,
+    mip_level_count: u32,
+    base_array_layer: u32,
+    array_layer_count: u32,
+}
+
+impl GpuTextureView {
+    fn format(&self) -> String {
+        self.texture
+            .as_ref()
+            .map(|texture| texture.format.clone())
+            .unwrap_or_else(|| "rgba8unorm".into())
+    }
+
+    fn to_binding(&self, group: u32, binding: u32) -> Result<GpuCanvasTextureBinding> {
+        let texture = self
+            .texture
+            .as_ref()
+            .ok_or_else(|| Error::runtime("the GPU canvas presentation view cannot be sampled"))?;
+        Ok(GpuCanvasTextureBinding {
+            group,
+            binding,
+            width: texture.width,
+            height: texture.height,
+            depth_or_array_layers: texture.depth_or_array_layers,
+            format: texture.format.clone(),
+            texture_type: texture.texture_type.clone(),
+            render_target: texture.render_target,
+            sample_count: texture.sample_count,
+            mip_level_count: texture.mip_level_count,
+            view_dimension: self.dimension.clone(),
+            base_mip_level: self.base_mip_level,
+            mip_level_count_in_view: self.mip_level_count,
+            base_array_layer: self.base_array_layer,
+            array_layer_count: self.array_layer_count,
+            uploads: texture.uploads.borrow().clone(),
+        })
+    }
+}
+
+impl UserData for GpuTextureView {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("format", |_, this| Ok(this.format()));
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GpuSampler {
+    min_filter: String,
+    mag_filter: String,
+    mipmap_filter: String,
+    address_mode_u: String,
+    address_mode_v: String,
+    address_mode_w: String,
+    compare: Option<String>,
+    lod_min_clamp: f32,
+    lod_max_clamp: f32,
+    max_anisotropy: u16,
+}
+
+impl GpuSampler {
+    fn to_binding(&self, group: u32, binding: u32) -> GpuCanvasSamplerBinding {
+        GpuCanvasSamplerBinding {
+            group,
+            binding,
+            min_filter: self.min_filter.clone(),
+            mag_filter: self.mag_filter.clone(),
+            mipmap_filter: self.mipmap_filter.clone(),
+            address_mode_u: self.address_mode_u.clone(),
+            address_mode_v: self.address_mode_v.clone(),
+            address_mode_w: self.address_mode_w.clone(),
+            compare: self.compare.clone(),
+            lod_min_clamp: self.lod_min_clamp,
+            lod_max_clamp: self.lod_max_clamp,
+            max_anisotropy: self.max_anisotropy,
+        }
+    }
+}
+
+impl UserData for GpuSampler {}
+
+impl UserData for GpuTexture {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("width", |_, this| Ok(this.width));
+        fields.add_field_method_get("height", |_, this| Ok(this.height));
+        fields.add_field_method_get("format", |_, this| Ok(this.format.clone()));
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("view", |lua, this, descriptor: Option<Table>| {
+            let default_dimension = match this.texture_type.as_str() {
+                "cube" => "cube",
+                "3d" => "3d",
+                "2d-array" => "2d-array",
+                _ => "2d",
+            };
+            let (dimension, base_mip_level, mip_level_count, base_array_layer, array_layer_count) =
+                if let Some(descriptor) = descriptor {
+                    reject_unknown_fields(
+                        &descriptor,
+                        &[
+                            "dimension",
+                            "baseMipLevel",
+                            "mipCount",
+                            "baseLayer",
+                            "layerCount",
+                        ],
+                        "GPUTexture view",
+                    )?;
+                    (
+                        descriptor
+                            .get::<Option<String>>("dimension")?
+                            .unwrap_or_else(|| default_dimension.into()),
+                        descriptor.get::<Option<u32>>("baseMipLevel")?.unwrap_or(0),
+                        descriptor
+                            .get::<Option<u32>>("mipCount")?
+                            .unwrap_or(this.mip_level_count),
+                        descriptor.get::<Option<u32>>("baseLayer")?.unwrap_or(0),
+                        descriptor
+                            .get::<Option<u32>>("layerCount")?
+                            .unwrap_or(this.depth_or_array_layers),
+                    )
+                } else {
+                    (
+                        default_dimension.into(),
+                        0,
+                        this.mip_level_count,
+                        0,
+                        this.depth_or_array_layers,
+                    )
+                };
+            validate_texture_view(
+                this,
+                &dimension,
+                base_mip_level,
+                mip_level_count,
+                base_array_layer,
+                array_layer_count,
+            )?;
+            lua.create_userdata(GpuTextureView {
+                texture: Some(this.clone()),
+                canvas: None,
+                dimension,
+                base_mip_level,
+                mip_level_count,
+                base_array_layer,
+                array_layer_count,
+            })
+        });
+        methods.add_method_mut("upload", |_, this, descriptor: Table| {
+            reject_unknown_fields(
+                &descriptor,
+                &[
+                    "data",
+                    "width",
+                    "height",
+                    "depth",
+                    "x",
+                    "y",
+                    "z",
+                    "mipLevel",
+                    "layer",
+                    "bytesPerRow",
+                    "rowsPerImage",
+                ],
+                "GPUTexture upload",
+            )?;
+            if this.sample_count != 1 {
+                return Err(Error::runtime(
+                    "GPUTexture:upload cannot write a multisampled texture",
+                ));
+            }
+            let data: LuaBuffer = descriptor.get("data")?;
+            let mip_level = descriptor.get::<Option<u32>>("mipLevel")?.unwrap_or(0);
+            if mip_level >= this.mip_level_count {
+                return Err(Error::runtime(format!(
+                    "upload mipLevel {mip_level} is outside {} levels",
+                    this.mip_level_count
+                )));
+            }
+            let mip_width = (this.width >> mip_level).max(1);
+            let mip_height = (this.height >> mip_level).max(1);
+            let width = descriptor.get::<Option<u32>>("width")?.unwrap_or(mip_width);
+            let height = descriptor
+                .get::<Option<u32>>("height")?
+                .unwrap_or(mip_height);
+            let depth = descriptor.get::<Option<u32>>("depth")?.unwrap_or(1);
+            let x = descriptor.get::<Option<u32>>("x")?.unwrap_or(0);
+            let y = descriptor.get::<Option<u32>>("y")?.unwrap_or(0);
+            let z = descriptor.get::<Option<u32>>("z")?.unwrap_or(0);
+            let array_layer = descriptor.get::<Option<u32>>("layer")?.unwrap_or(0);
+            if x.checked_add(width).is_none_or(|end| end > mip_width)
+                || y.checked_add(height).is_none_or(|end| end > mip_height)
+                || array_layer >= this.depth_or_array_layers
+            {
+                return Err(Error::runtime("GPUTexture upload region is out of bounds"));
+            }
+            let bytes_per_texel =
+                texture_format_bytes_per_texel(&this.format).ok_or_else(|| {
+                    Error::runtime(
+                        "GPUTexture upload requires bytesPerRow for a block-compressed format",
+                    )
+                })?;
+            let bytes_per_row = descriptor
+                .get::<Option<u32>>("bytesPerRow")?
+                .unwrap_or_else(|| width.saturating_mul(bytes_per_texel));
+            let rows_per_image = descriptor
+                .get::<Option<u32>>("rowsPerImage")?
+                .unwrap_or(height);
+            let required_bytes = usize::try_from(bytes_per_row)
+                .ok()
+                .and_then(|bytes| bytes.checked_mul(rows_per_image as usize))
+                .and_then(|bytes| bytes.checked_mul(depth.max(1) as usize))
+                .ok_or_else(|| Error::runtime("GPUTexture upload byte length overflow"))?;
+            if data.len() < required_bytes {
+                return Err(Error::runtime(format!(
+                    "GPUTexture upload has {} bytes but requires {required_bytes}",
+                    data.len()
+                )));
+            }
+            this.uploads.borrow_mut().push(GpuCanvasTextureUpload {
+                bytes: data.to_vec(),
+                width,
+                height,
+                depth,
+                x,
+                y,
+                z,
+                mip_level,
+                array_layer,
+                bytes_per_row,
+                rows_per_image,
+            });
+            Ok(())
+        });
+    }
+}
+
+fn validate_texture_view(
+    texture: &GpuTexture,
+    dimension: &str,
+    base_mip_level: u32,
+    mip_level_count: u32,
+    base_array_layer: u32,
+    array_layer_count: u32,
+) -> Result<()> {
+    if !matches!(dimension, "2d" | "cube" | "3d" | "2d-array") {
+        return Err(Error::runtime(format!(
+            "invalid GPUTextureView dimension '{dimension}'"
+        )));
+    }
+    if mip_level_count == 0
+        || base_mip_level
+            .checked_add(mip_level_count)
+            .is_none_or(|end| end > texture.mip_level_count)
+        || array_layer_count == 0
+        || base_array_layer
+            .checked_add(array_layer_count)
+            .is_none_or(|end| end > texture.depth_or_array_layers)
+    {
+        return Err(Error::runtime("GPUTexture view range is out of bounds"));
+    }
+    if dimension == "cube" && array_layer_count != 6 {
+        return Err(Error::runtime(
+            "GPUTexture cube views require exactly six array layers",
+        ));
+    }
+    Ok(())
+}
+
+fn texture_format_bytes_per_texel(format: &str) -> Option<u32> {
+    match format {
+        "r8unorm" => Some(1),
+        "rg8unorm" | "r16float" => Some(2),
+        "rgba8unorm" | "bgra8unorm" | "rg16float" | "rgb10a2unorm" | "rg11b10ufloat"
+        | "depth32float" => Some(4),
+        "rgba16float" | "rg32float" => Some(8),
+        "rgba32float" => Some(16),
+        _ => None,
     }
 }
 
@@ -148,13 +485,38 @@ struct GpuPipeline {
     vertex_entry: GpuCanvasShaderEntrySelection,
     fragment_entry: GpuCanvasShaderEntrySelection,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
+    state: GpuCanvasPipelineState,
+    bind_group_layouts: Vec<GpuBindGroupLayout>,
+    explicit_bind_group_layouts: bool,
 }
 
-impl UserData for GpuPipeline {}
+impl UserData for GpuPipeline {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("getBindGroupLayout", |lua, this, group: u32| {
+            if this.explicit_bind_group_layouts {
+                return Err(Error::runtime(
+                    "getBindGroupLayout: pipeline uses explicit bindGroupLayouts",
+                ));
+            }
+            let layout = this
+                .bind_group_layouts
+                .iter()
+                .find(|layout| layout.group == group)
+                .cloned()
+                .ok_or_else(|| {
+                    Error::runtime(format!(
+                        "getBindGroupLayout: group {group} not present in shader"
+                    ))
+                })?;
+            lua.create_userdata(layout)
+        });
+    }
+}
 
 #[derive(Debug, Clone)]
 struct GpuBindGroupLayout {
     group: u32,
+    dynamic_uniform_bindings: Vec<u32>,
 }
 
 impl UserData for GpuBindGroupLayout {}
@@ -163,12 +525,29 @@ impl UserData for GpuBindGroupLayout {}
 struct GpuUniformBinding {
     binding: u32,
     buffer: GpuBuffer,
+    offset: usize,
+    size: usize,
+}
+
+#[derive(Debug, Clone)]
+struct GpuTextureBinding {
+    binding: u32,
+    view: GpuTextureView,
+}
+
+#[derive(Debug, Clone)]
+struct GpuSamplerResourceBinding {
+    binding: u32,
+    sampler: GpuSampler,
 }
 
 #[derive(Debug, Clone)]
 struct GpuBindGroup {
     group: u32,
     uniforms: Vec<GpuUniformBinding>,
+    textures: Vec<GpuTextureBinding>,
+    samplers: Vec<GpuSamplerResourceBinding>,
+    dynamic_uniform_bindings: Vec<u32>,
 }
 
 impl UserData for GpuBindGroup {}
@@ -216,26 +595,50 @@ impl UserData for GpuCanvas {
             })
             .map(Value::UserData)
         });
+        fields.add_field_method_get("width", |_, this| Ok(this.state.borrow().width));
+        fields.add_field_method_get("height", |_, this| Ok(this.state.borrow().height));
+        fields.add_field_method_get("format", |_, _| Ok("rgba8unorm"));
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("resize", |_, this, (width, height): (u32, u32)| {
-            if width == 0
-                || height == 0
-                || width > MAX_GPU_CANVAS_DIMENSION
-                || height > MAX_GPU_CANVAS_DIMENSION
-            {
+            if width > MAX_GPU_CANVAS_DIMENSION || height > MAX_GPU_CANVAS_DIMENSION {
                 return Err(Error::runtime(format!(
-                    "GPUCanvas:resize dimensions must be between 1 and {MAX_GPU_CANVAS_DIMENSION}"
+                    "GPUCanvas:resize dimensions must be at most {MAX_GPU_CANVAS_DIMENSION}"
                 )));
             }
             let mut state = this.state.borrow_mut();
             state.width = width;
             state.height = height;
+            if width == 0 || height == 0 {
+                state.image = None;
+            }
             Ok(())
         });
+        methods.add_method("colorView", |lua, this, ()| {
+            let state = this.state.borrow();
+            if state.width == 0 || state.height == 0 {
+                return Err(Error::runtime(
+                    "GPUCanvas:colorView requires a non-zero canvas size",
+                ));
+            }
+            drop(state);
+            lua.create_userdata(GpuTextureView {
+                texture: None,
+                canvas: Some(Rc::clone(&this.state)),
+                dimension: "2d".into(),
+                base_mip_level: 0,
+                mip_level_count: 1,
+                base_array_layer: 0,
+                array_layer_count: 1,
+            })
+        });
         methods.add_method("beginRenderPass", |lua, this, descriptor: Table| {
-            reject_unknown_fields(&descriptor, &["color"], "GPU render-pass descriptor")?;
+            reject_unknown_fields(
+                &descriptor,
+                &["color", "depthStencil", "label"],
+                "GPU render-pass descriptor",
+            )?;
             let colors: Table = descriptor.get("color")?;
             if colors.raw_len() != 1 {
                 return Err(Error::runtime(
@@ -245,10 +648,21 @@ impl UserData for GpuCanvas {
             let color: Table = colors.get(1)?;
             reject_unknown_fields(
                 &color,
-                &["loadOp", "storeOp", "clearColor"],
+                &["view", "resolveTarget", "loadOp", "storeOp", "clearColor"],
                 "GPU color attachment",
             )?;
-            let load_op: String = color.get("loadOp")?;
+            let view: Option<AnyUserData> = color.get("view")?;
+            if let Some(view) = view {
+                let view = view.borrow::<GpuTextureView>()?;
+                if view.canvas.as_ref().is_none_or(|state| !Rc::ptr_eq(state, &this.state)) {
+                    return Err(Error::runtime(
+                        "the adapted GPU-canvas contract currently presents through canvas:colorView()",
+                    ));
+                }
+            }
+            let load_op = color
+                .get::<Option<String>>("loadOp")?
+                .unwrap_or_else(|| "clear".into());
             let store_op: String = color.get("storeOp")?;
             if load_op != "clear" || store_op != "store" {
                 return Err(Error::runtime(
@@ -266,8 +680,11 @@ impl UserData for GpuCanvas {
                 clear_color: [clear.get(1)?, clear.get(2)?, clear.get(3)?, clear.get(4)?],
                 pipeline: None,
                 bind_groups: BTreeMap::new(),
+                dynamic_offsets: BTreeMap::new(),
                 vertex_buffers: BTreeMap::new(),
+                index_buffer: None,
                 draw: None,
+                pass_state: GpuCanvasPassState::default(),
                 finished: false,
             })
         });
@@ -503,11 +920,20 @@ pub(crate) fn with_gpu_canvas_image<R>(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct GpuDrawCall {
-    vertex_count: u32,
-    instance_count: u32,
-    first_vertex: u32,
-    first_instance: u32,
+enum GpuDrawCall {
+    NonIndexed {
+        vertex_count: u32,
+        instance_count: u32,
+        first_vertex: u32,
+        first_instance: u32,
+    },
+    Indexed {
+        index_count: u32,
+        instance_count: u32,
+        first_index: u32,
+        base_vertex: i32,
+        first_instance: u32,
+    },
 }
 
 #[derive(Debug)]
@@ -516,8 +942,11 @@ struct GpuRenderPass {
     clear_color: [f64; 4],
     pipeline: Option<GpuPipeline>,
     bind_groups: BTreeMap<u32, GpuBindGroup>,
+    dynamic_offsets: BTreeMap<u32, Vec<u32>>,
     vertex_buffers: BTreeMap<u32, GpuBuffer>,
+    index_buffer: Option<(GpuBuffer, String)>,
     draw: Option<GpuDrawCall>,
+    pass_state: GpuCanvasPassState,
     finished: bool,
 }
 
@@ -540,7 +969,7 @@ impl UserData for GpuRenderPass {
         });
         methods.add_method_mut(
             "setBindGroup",
-            |_, this, (index, bind_group): (u32, AnyUserData)| {
+            |_, this, (index, bind_group, dynamic_offsets): (u32, AnyUserData, Option<Table>)| {
                 this.ensure_open()?;
                 if this.draw.is_some() {
                     return Err(Error::runtime(
@@ -564,10 +993,89 @@ impl UserData for GpuRenderPass {
                         bind_group.group
                     )));
                 }
+                let mut decoded_offsets = Vec::new();
+                if let Some(dynamic_offsets) = dynamic_offsets {
+                    for offset in dynamic_offsets.sequence_values::<u32>() {
+                        let offset = offset?;
+                        if offset % 256 != 0 {
+                            return Err(Error::runtime(
+                                "setBindGroup dynamic offsets must be 256-byte aligned",
+                            ));
+                        }
+                        decoded_offsets.push(offset);
+                    }
+                }
+                if decoded_offsets.len() != bind_group.dynamic_uniform_bindings.len() {
+                    return Err(Error::runtime(format!(
+                        "setBindGroup received {} dynamic offsets for {} dynamic UBOs",
+                        decoded_offsets.len(),
+                        bind_group.dynamic_uniform_bindings.len()
+                    )));
+                }
+                this.dynamic_offsets.insert(index, decoded_offsets);
                 this.bind_groups.insert(index, bind_group);
                 Ok(())
             },
         );
+        methods.add_method_mut(
+            "setIndexBuffer",
+            |_, this, (buffer, format): (AnyUserData, Option<String>)| {
+                this.ensure_open()?;
+                let buffer = buffer.borrow::<GpuBuffer>()?.clone();
+                if buffer.usage != GpuBufferUsage::Index {
+                    return Err(Error::runtime("setIndexBuffer requires an index GPUBuffer"));
+                }
+                let format = format.unwrap_or_else(|| "uint16".into());
+                if !matches!(format.as_str(), "uint16" | "uint32") {
+                    return Err(Error::runtime(format!(
+                        "unsupported GPU index format '{format}'"
+                    )));
+                }
+                this.index_buffer = Some((buffer, format));
+                Ok(())
+            },
+        );
+        methods.add_method_mut(
+            "setViewport",
+            |_, this, (x, y, width, height): (f32, f32, f32, f32)| {
+                this.ensure_open()?;
+                if ![x, y, width, height].iter().all(|value| value.is_finite())
+                    || width <= 0.0
+                    || height <= 0.0
+                {
+                    return Err(Error::runtime(
+                        "setViewport requires finite coordinates and positive dimensions",
+                    ));
+                }
+                this.pass_state.viewport = Some([x, y, width, height]);
+                Ok(())
+            },
+        );
+        methods.add_method_mut("setScissorRect", |_, this, rect: (u32, u32, u32, u32)| {
+            this.ensure_open()?;
+            let (x, y, width, height) = rect;
+            if width == 0 || height == 0 {
+                return Err(Error::runtime(
+                    "setScissorRect requires positive dimensions",
+                ));
+            }
+            this.pass_state.scissor_rect = Some([x, y, width, height]);
+            Ok(())
+        });
+        methods.add_method_mut("setStencilReference", |_, this, reference: u32| {
+            this.ensure_open()?;
+            this.pass_state.stencil_reference = reference;
+            Ok(())
+        });
+        methods.add_method_mut("setBlendColor", |_, this, color: (f64, f64, f64, f64)| {
+            this.ensure_open()?;
+            let color = [color.0, color.1, color.2, color.3];
+            if color.iter().any(|value| !value.is_finite()) {
+                return Err(Error::runtime("setBlendColor requires finite components"));
+            }
+            this.pass_state.blend_color = color;
+            Ok(())
+        });
         methods.add_method_mut(
             "setVertexBuffer",
             |_, this, (slot, buffer): (u32, AnyUserData)| {
@@ -643,10 +1151,73 @@ impl UserData for GpuRenderPass {
                         "GPU render pass draw ranges may cover at most {MAX_GPU_CANVAS_DRAW_INVOCATIONS} invocations"
                     )));
                 }
-                this.draw = Some(GpuDrawCall {
+                this.draw = Some(GpuDrawCall::NonIndexed {
                     vertex_count,
                     instance_count,
                     first_vertex,
+                    first_instance,
+                });
+                Ok(())
+            },
+        );
+        methods.add_method_mut(
+            "drawIndexed",
+            |_,
+             this,
+             (index_count, instance_count, first_index, base_vertex, first_instance): (
+                u32,
+                Option<u32>,
+                Option<u32>,
+                Option<i32>,
+                Option<u32>,
+            )| {
+                this.ensure_open()?;
+                if this.draw.is_some() {
+                    return Err(Error::runtime(
+                        "GPU render pass supports exactly one draw call",
+                    ));
+                }
+                if this.pipeline.is_none() {
+                    return Err(Error::runtime(
+                        "GPU render pass must set a pipeline before drawIndexed",
+                    ));
+                }
+                if this.index_buffer.is_none() {
+                    return Err(Error::runtime(
+                        "GPU render pass must set an index buffer before drawIndexed",
+                    ));
+                }
+                let instance_count = instance_count.unwrap_or(1);
+                let first_index = first_index.unwrap_or(0);
+                let base_vertex = base_vertex.unwrap_or(0);
+                let first_instance = first_instance.unwrap_or(0);
+                let index_end = first_index
+                    .checked_add(index_count)
+                    .ok_or_else(|| Error::runtime("GPU indexed draw range overflow"))?;
+                let instance_end = first_instance
+                    .checked_add(instance_count)
+                    .ok_or_else(|| Error::runtime("GPU indexed instance range overflow"))?;
+                let invocation_count = u64::from(index_count)
+                    .checked_mul(u64::from(instance_count))
+                    .ok_or_else(|| Error::runtime("GPU indexed invocation count overflow"))?;
+                if index_count == 0 || instance_count == 0 {
+                    return Err(Error::runtime(
+                        "GPU indexed draw counts must be positive",
+                    ));
+                }
+                if invocation_count > MAX_GPU_CANVAS_DRAW_INVOCATIONS
+                    || u64::from(index_end) > MAX_GPU_CANVAS_DRAW_INVOCATIONS
+                    || u64::from(instance_end) > MAX_GPU_CANVAS_DRAW_INVOCATIONS
+                {
+                    return Err(Error::runtime(format!(
+                        "GPU render pass draw ranges may cover at most {MAX_GPU_CANVAS_DRAW_INVOCATIONS} invocations"
+                    )));
+                }
+                this.draw = Some(GpuDrawCall::Indexed {
+                    index_count,
+                    instance_count,
+                    first_index,
+                    base_vertex,
                     first_instance,
                 });
                 Ok(())
@@ -673,16 +1244,23 @@ impl UserData for GpuRenderPass {
                 let buffer = this.vertex_buffers.get(&slot).ok_or_else(|| {
                     Error::runtime(format!("GPU vertex buffer slot {slot} is not bound"))
                 })?;
-                let vertex_end = u64::from(draw.first_vertex)
-                    .checked_add(u64::from(draw.vertex_count))
-                    .ok_or_else(|| Error::runtime("GPU vertex byte range overflow"))?;
-                let required_bytes = vertex_end
-                    .checked_mul(layout.stride)
-                    .ok_or_else(|| Error::runtime("GPU vertex byte range overflow"))?;
-                if required_bytes > buffer.bytes.borrow().len() as u64 {
-                    return Err(Error::runtime(format!(
-                        "GPU vertex buffer slot {slot} requires {required_bytes} bytes"
-                    )));
+                if let GpuDrawCall::NonIndexed {
+                    vertex_count,
+                    first_vertex,
+                    ..
+                } = draw
+                {
+                    let vertex_end = u64::from(first_vertex)
+                        .checked_add(u64::from(vertex_count))
+                        .ok_or_else(|| Error::runtime("GPU vertex byte range overflow"))?;
+                    let required_bytes = vertex_end
+                        .checked_mul(layout.stride)
+                        .ok_or_else(|| Error::runtime("GPU vertex byte range overflow"))?;
+                    if required_bytes > buffer.bytes.borrow().len() as u64 {
+                        return Err(Error::runtime(format!(
+                            "GPU vertex buffer slot {slot} requires {required_bytes} bytes"
+                        )));
+                    }
                 }
             }
             let state = this.state.borrow();
@@ -697,13 +1275,53 @@ impl UserData for GpuRenderPass {
                 ));
             }
             let mut uniform_buffers = Vec::new();
+            let mut texture_bindings = Vec::new();
+            let mut sampler_bindings = Vec::new();
             for bind_group in this.bind_groups.values() {
+                let dynamic_offsets = this
+                    .dynamic_offsets
+                    .get(&bind_group.group)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
                 for uniform in &bind_group.uniforms {
+                    let dynamic_offset = bind_group
+                        .dynamic_uniform_bindings
+                        .iter()
+                        .position(|binding| *binding == uniform.binding)
+                        .and_then(|index| dynamic_offsets.get(index))
+                        .copied()
+                        .unwrap_or(0) as usize;
+                    let start = uniform
+                        .offset
+                        .checked_add(dynamic_offset)
+                        .ok_or_else(|| Error::runtime("GPU uniform offset overflow"))?;
+                    let end = start
+                        .checked_add(uniform.size)
+                        .ok_or_else(|| Error::runtime("GPU uniform range overflow"))?;
+                    let bytes = uniform.buffer.bytes.borrow();
+                    if end > bytes.len() {
+                        return Err(Error::runtime(format!(
+                            "GPU uniform binding {} range {start}..{end} exceeds {} bytes",
+                            uniform.binding,
+                            bytes.len()
+                        )));
+                    }
                     uniform_buffers.push(GpuCanvasUniformBuffer {
                         group: bind_group.group,
                         binding: uniform.binding,
-                        bytes: uniform.buffer.bytes.borrow().clone(),
+                        bytes: bytes[start..end].to_vec(),
                     });
+                }
+                for texture in &bind_group.textures {
+                    texture_bindings
+                        .push(texture.view.to_binding(bind_group.group, texture.binding)?);
+                }
+                for sampler in &bind_group.samplers {
+                    sampler_bindings.push(
+                        sampler
+                            .sampler
+                            .to_binding(bind_group.group, sampler.binding),
+                    );
                 }
             }
             let vertex_buffers = this
@@ -714,19 +1332,66 @@ impl UserData for GpuRenderPass {
                     bytes: buffer.bytes.borrow().clone(),
                 })
                 .collect();
+            let (vertex_count, instance_count, first_vertex, first_instance, indexed_draw) =
+                match draw {
+                    GpuDrawCall::NonIndexed {
+                        vertex_count,
+                        instance_count,
+                        first_vertex,
+                        first_instance,
+                    } => (
+                        vertex_count,
+                        instance_count,
+                        first_vertex,
+                        first_instance,
+                        None,
+                    ),
+                    GpuDrawCall::Indexed {
+                        index_count,
+                        instance_count,
+                        first_index,
+                        base_vertex,
+                        first_instance,
+                    } => (
+                        0,
+                        instance_count,
+                        0,
+                        first_instance,
+                        Some(GpuCanvasIndexedDraw {
+                            index_count,
+                            instance_count,
+                            first_index,
+                            base_vertex,
+                            first_instance,
+                        }),
+                    ),
+                };
+            let index_buffer =
+                this.index_buffer
+                    .as_ref()
+                    .map(|(buffer, format)| GpuCanvasIndexBuffer {
+                        bytes: buffer.bytes.borrow().clone(),
+                        format: format.clone(),
+                    });
             let plan = GpuCanvasDrawPlan {
                 vertex_entry: Some(pipeline.vertex_entry.clone()),
                 fragment_entry: Some(pipeline.fragment_entry.clone()),
                 width: state.width,
                 height: state.height,
                 clear_color: this.clear_color,
-                vertex_count: draw.vertex_count,
-                instance_count: draw.instance_count,
-                first_vertex: draw.first_vertex,
-                first_instance: draw.first_instance,
+                vertex_count,
+                instance_count,
+                first_vertex,
+                first_instance,
                 uniform_buffers,
                 vertex_layouts: pipeline.vertex_layouts.clone(),
                 vertex_buffers,
+                index_buffer,
+                indexed_draw,
+                texture_bindings,
+                sampler_bindings,
+                pipeline_state: pipeline.state.clone(),
+                pass_state: this.pass_state.clone(),
             };
             drop(state);
             this.state.borrow_mut().completed = Some(CompletedGpuCanvasPass {
@@ -995,11 +1660,17 @@ fn install_gpu_canvas_globals_with_budget(
 
     let gpu_buffer_budget = Rc::clone(&resource_budget);
     install_constructor(lua, "GPUBuffer", move |lua, descriptor| {
-        reject_unknown_fields(&descriptor, &["size", "usage", "data"], "GPUBuffer")?;
+        reject_unknown_fields(
+            &descriptor,
+            &["size", "usage", "data", "immutable", "label"],
+            "GPUBuffer",
+        )?;
         let size: usize = descriptor.get("size")?;
-        let usage = match descriptor.get::<String>("usage")?.as_str() {
+        let usage_name = decode_buffer_usage(&descriptor)?;
+        let usage = match usage_name.as_str() {
             "uniform" => GpuBufferUsage::Uniform,
             "vertex" => GpuBufferUsage::Vertex,
+            "index" => GpuBufferUsage::Index,
             usage => {
                 return Err(Error::runtime(format!(
                     "unsupported GPUBuffer usage '{usage}'"
@@ -1008,15 +1679,25 @@ fn install_gpu_canvas_globals_with_budget(
         };
         let max_size = match usage {
             GpuBufferUsage::Uniform => MAX_UNIFORM_BUFFER_BYTES,
-            GpuBufferUsage::Vertex => MAX_VERTEX_BUFFER_BYTES,
+            GpuBufferUsage::Vertex | GpuBufferUsage::Index => MAX_VERTEX_BUFFER_BYTES,
         };
         if size == 0 || size > max_size {
             return Err(Error::runtime(format!(
                 "GPUBuffer {usage:?} size must be between 1 and {max_size} bytes"
             )));
         }
-        let source: LuaBuffer = descriptor.get("data")?;
-        if source.len() != size {
+        let immutable = descriptor
+            .get::<Option<bool>>("immutable")?
+            .unwrap_or(false);
+        let source: Option<LuaBuffer> = descriptor.get("data")?;
+        if immutable && source.is_none() {
+            return Err(Error::runtime(
+                "GPUBuffer immutable=true requires initial data",
+            ));
+        }
+        if let Some(source) = &source
+            && source.len() != size
+        {
             return Err(Error::runtime(format!(
                 "GPUBuffer size {size} does not match {} source bytes",
                 source.len()
@@ -1025,16 +1706,162 @@ fn install_gpu_canvas_globals_with_budget(
         gpu_buffer_budget.borrow_mut().reserve(size)?;
         // Validate both the descriptor and aggregate budget before copying
         // Luau-owned bytes into the retained host buffer.
-        let source = source.to_vec();
+        let source = source.map_or_else(|| vec![0; size], |source| source.to_vec());
         lua.create_userdata(GpuBuffer {
             usage,
+            immutable,
             bytes: Rc::new(RefCell::new(source)),
+        })
+    })?;
+    install_constructor(lua, "GPUTexture", |lua, descriptor| {
+        reject_unknown_fields(
+            &descriptor,
+            &[
+                "width",
+                "height",
+                "format",
+                "type",
+                "renderTarget",
+                "sampleCount",
+                "mipmaps",
+                "layers",
+                "label",
+            ],
+            "GPUTexture",
+        )?;
+        let width: u32 = descriptor.get("width")?;
+        let height: u32 = descriptor.get("height")?;
+        if width == 0
+            || height == 0
+            || width > MAX_GPU_CANVAS_DIMENSION
+            || height > MAX_GPU_CANVAS_DIMENSION
+        {
+            return Err(Error::runtime(format!(
+                "GPUTexture dimensions must be between 1 and {MAX_GPU_CANVAS_DIMENSION}"
+            )));
+        }
+        let format = descriptor
+            .get::<Option<String>>("format")?
+            .unwrap_or_else(|| "rgba8unorm".into());
+        validate_texture_format(&format)?;
+        let texture_type = descriptor
+            .get::<Option<String>>("type")?
+            .unwrap_or_else(|| "2d".into());
+        if !matches!(texture_type.as_str(), "2d" | "cube" | "3d" | "2d-array") {
+            return Err(Error::runtime(format!(
+                "invalid GPUTexture type '{texture_type}'"
+            )));
+        }
+        let render_target = descriptor
+            .get::<Option<bool>>("renderTarget")?
+            .unwrap_or(false);
+        let sample_count = descriptor.get::<Option<u32>>("sampleCount")?.unwrap_or(1);
+        if sample_count == 0 || !sample_count.is_power_of_two() || sample_count > 16 {
+            return Err(Error::runtime(
+                "GPUTexture sampleCount must be a power of two from 1 through 16",
+            ));
+        }
+        if sample_count > 1 && !render_target {
+            return Err(Error::runtime(
+                "multisampled GPUTexture resources must be render targets",
+            ));
+        }
+        let mip_level_count = descriptor.get::<Option<u32>>("mipmaps")?.unwrap_or(1);
+        let depth_or_array_layers = descriptor
+            .get::<Option<u32>>("layers")?
+            .unwrap_or_else(|| if texture_type == "cube" { 6 } else { 1 });
+        if mip_level_count == 0 || depth_or_array_layers == 0 {
+            return Err(Error::runtime(
+                "GPUTexture mipmaps and layers must be positive",
+            ));
+        }
+        lua.create_userdata(GpuTexture {
+            width,
+            height,
+            depth_or_array_layers,
+            format,
+            texture_type,
+            render_target,
+            sample_count,
+            mip_level_count,
+            uploads: Rc::new(RefCell::new(Vec::new())),
+        })
+    })?;
+    install_constructor(lua, "GPUSampler", |lua, descriptor| {
+        reject_unknown_fields(
+            &descriptor,
+            &[
+                "min",
+                "mag",
+                "mipmap",
+                "wrapU",
+                "wrapV",
+                "wrapW",
+                "compare",
+                "minLod",
+                "maxLod",
+                "maxAnisotropy",
+                "label",
+            ],
+            "GPUSampler",
+        )?;
+        let min_filter = optional_enum(&descriptor, "min", "nearest", &["nearest", "linear"])?;
+        let mag_filter = optional_enum(&descriptor, "mag", "nearest", &["nearest", "linear"])?;
+        let mipmap_filter =
+            optional_enum(&descriptor, "mipmap", "nearest", &["nearest", "linear"])?;
+        let wraps = &["repeat", "mirror-repeat", "clamp-to-edge"];
+        let address_mode_u = optional_enum(&descriptor, "wrapU", "clamp-to-edge", wraps)?;
+        let address_mode_v = optional_enum(&descriptor, "wrapV", "clamp-to-edge", wraps)?;
+        let address_mode_w = optional_enum(&descriptor, "wrapW", "clamp-to-edge", wraps)?;
+        let compare = descriptor.get::<Option<String>>("compare")?;
+        if let Some(compare) = compare.as_deref() {
+            validate_compare(compare)?;
+        }
+        let lod_min_clamp = descriptor.get::<Option<f32>>("minLod")?.unwrap_or(0.0);
+        let lod_max_clamp = descriptor.get::<Option<f32>>("maxLod")?.unwrap_or(32.0);
+        if !lod_min_clamp.is_finite() || !lod_max_clamp.is_finite() || lod_min_clamp > lod_max_clamp
+        {
+            return Err(Error::runtime("GPUSampler minLod must not exceed maxLod"));
+        }
+        let max_anisotropy = descriptor.get::<Option<u16>>("maxAnisotropy")?.unwrap_or(1);
+        if !(1..=16).contains(&max_anisotropy) || !max_anisotropy.is_power_of_two() {
+            return Err(Error::runtime(
+                "GPUSampler maxAnisotropy must be a power of two in [1, 16]",
+            ));
+        }
+        lua.create_userdata(GpuSampler {
+            min_filter,
+            mag_filter,
+            mipmap_filter,
+            address_mode_u,
+            address_mode_v,
+            address_mode_w,
+            compare,
+            lod_min_clamp,
+            lod_max_clamp,
+            max_anisotropy,
         })
     })?;
     install_constructor(lua, "GPUPipeline", |lua, descriptor| {
         reject_unknown_fields(
             &descriptor,
-            &["vertex", "fragment", "vertexLayout", "colorTargets"],
+            &[
+                "vertex",
+                "fragment",
+                "vertexLayout",
+                "colorTargets",
+                "depthStencil",
+                "stencilFront",
+                "stencilBack",
+                "stencilReadMask",
+                "stencilWriteMask",
+                "bindGroupLayouts",
+                "cullMode",
+                "winding",
+                "topology",
+                "sampleCount",
+                "label",
+            ],
             "GPUPipeline",
         )?;
         let (vertex, vertex_entry) = decode_pipeline_stage(
@@ -1057,11 +1884,29 @@ fn install_gpu_canvas_globals_with_budget(
             ));
         }
         let target: Table = targets.get(1)?;
-        reject_unknown_fields(&target, &["format"], "GPU color target")?;
+        reject_unknown_fields(
+            &target,
+            &["format", "writeMask", "blend"],
+            "GPU color target",
+        )?;
         if target.get::<String>("format")? != "rgba8unorm" {
             return Err(Error::runtime(
                 "GPU-canvas product snapshots require rgba8unorm",
             ));
+        }
+        let state = decode_pipeline_state(&descriptor, &target)?;
+        let explicit_layouts: Option<Table> = descriptor.get("bindGroupLayouts")?;
+        let explicit_bind_group_layouts = explicit_layouts.is_some();
+        let mut bind_group_layouts = Vec::new();
+        if let Some(layouts) = explicit_layouts {
+            for layout in layouts.sequence_values::<AnyUserData>() {
+                bind_group_layouts.push(layout?.borrow::<GpuBindGroupLayout>()?.clone());
+            }
+        } else {
+            bind_group_layouts.push(GpuBindGroupLayout {
+                group: 0,
+                dynamic_uniform_bindings: Vec::new(),
+            });
         }
         lua.create_userdata(GpuPipeline {
             vertex_shader: vertex,
@@ -1069,10 +1914,17 @@ fn install_gpu_canvas_globals_with_budget(
             vertex_entry,
             fragment_entry,
             vertex_layouts: decode_vertex_layouts(&descriptor)?,
+            state,
+            bind_group_layouts,
+            explicit_bind_group_layouts,
         })
     })?;
     install_constructor(lua, "GPUBindGroupLayout", |lua, descriptor| {
-        reject_unknown_fields(&descriptor, &["groupIndex", "shader"], "GPUBindGroupLayout")?;
+        reject_unknown_fields(
+            &descriptor,
+            &["groupIndex", "shader", "dynamicUBOs"],
+            "GPUBindGroupLayout",
+        )?;
         let shader: AnyUserData = descriptor.get("shader")?;
         let _shader = shader.borrow::<GpuShader>()?;
         let group: u32 = descriptor.get("groupIndex")?;
@@ -1081,23 +1933,47 @@ fn install_gpu_canvas_globals_with_budget(
                 "GPUBindGroupLayout groupIndex must be less than {MAX_GPU_CANVAS_BIND_GROUPS}"
             )));
         }
-        lua.create_userdata(GpuBindGroupLayout { group })
+        let mut dynamic_uniform_bindings = Vec::new();
+        if let Some(dynamic) = descriptor.get::<Option<Table>>("dynamicUBOs")? {
+            for binding in dynamic.sequence_values::<u32>() {
+                let binding = binding?;
+                if !dynamic_uniform_bindings.contains(&binding) {
+                    dynamic_uniform_bindings.push(binding);
+                }
+            }
+            dynamic_uniform_bindings.sort_unstable();
+        }
+        lua.create_userdata(GpuBindGroupLayout {
+            group,
+            dynamic_uniform_bindings,
+        })
     })?;
     install_constructor(lua, "GPUBindGroup", |lua, descriptor| {
-        reject_unknown_fields(&descriptor, &["layout", "ubos"], "GPUBindGroup")?;
+        reject_unknown_fields(
+            &descriptor,
+            &["layout", "ubos", "textures", "samplers"],
+            "GPUBindGroup",
+        )?;
         let layout: AnyUserData = descriptor.get("layout")?;
         let layout = layout.borrow::<GpuBindGroupLayout>()?;
-        let ubos: Table = descriptor.get("ubos")?;
+        let ubos = descriptor.get::<Option<Table>>("ubos")?;
         let mut uniforms = Vec::new();
         let mut bindings = BTreeSet::new();
-        for entry in ubos.sequence_values::<Table>() {
+        for entry in ubos
+            .into_iter()
+            .flat_map(|table| table.sequence_values::<Table>())
+        {
             if uniforms.len() >= MAX_GPU_CANVAS_UNIFORM_BINDINGS_PER_GROUP {
                 return Err(Error::runtime(format!(
                     "GPUBindGroup supports at most {MAX_GPU_CANVAS_UNIFORM_BINDINGS_PER_GROUP} uniform bindings"
                 )));
             }
             let entry = entry?;
-            reject_unknown_fields(&entry, &["slot", "buffer"], "GPUBindGroup UBO")?;
+            reject_unknown_fields(
+                &entry,
+                &["slot", "buffer", "offset", "size"],
+                "GPUBindGroup UBO",
+            )?;
             let binding: u32 = entry.get("slot")?;
             if binding > MAX_GPU_CANVAS_BINDING_INDEX {
                 return Err(Error::runtime(format!(
@@ -1116,11 +1992,84 @@ fn install_gpu_canvas_globals_with_budget(
                     "GPUBindGroup UBO entry requires a uniform GPUBuffer",
                 ));
             }
-            uniforms.push(GpuUniformBinding { binding, buffer });
+            let offset = entry.get::<Option<usize>>("offset")?.unwrap_or(0);
+            let size = entry
+                .get::<Option<usize>>("size")?
+                .unwrap_or_else(|| buffer.bytes.borrow().len().saturating_sub(offset));
+            if size == 0
+                || offset
+                    .checked_add(size)
+                    .is_none_or(|end| end > buffer.bytes.borrow().len())
+            {
+                return Err(Error::runtime(format!(
+                    "GPUBindGroup UBO binding {binding} range is out of bounds"
+                )));
+            }
+            uniforms.push(GpuUniformBinding {
+                binding,
+                buffer,
+                offset,
+                size,
+            });
+        }
+        let mut textures = Vec::new();
+        if let Some(entries) = descriptor.get::<Option<Table>>("textures")? {
+            for entry in entries.sequence_values::<Table>() {
+                if textures.len() >= 8 {
+                    return Err(Error::runtime(
+                        "GPUBindGroup supports at most 8 texture bindings",
+                    ));
+                }
+                let entry = entry?;
+                reject_unknown_fields(&entry, &["slot", "view"], "GPUBindGroup texture")?;
+                let binding: u32 = entry.get("slot")?;
+                if binding > MAX_GPU_CANVAS_BINDING_INDEX {
+                    return Err(Error::runtime("GPUBindGroup texture slot must be 0-7"));
+                }
+                if !bindings.insert(binding) {
+                    return Err(Error::runtime(format!(
+                        "GPUBindGroup binding {binding} is duplicated"
+                    )));
+                }
+                let view: AnyUserData = entry.get("view")?;
+                textures.push(GpuTextureBinding {
+                    binding,
+                    view: view.borrow::<GpuTextureView>()?.clone(),
+                });
+            }
+        }
+        let mut samplers = Vec::new();
+        if let Some(entries) = descriptor.get::<Option<Table>>("samplers")? {
+            for entry in entries.sequence_values::<Table>() {
+                if samplers.len() >= 8 {
+                    return Err(Error::runtime(
+                        "GPUBindGroup supports at most 8 sampler bindings",
+                    ));
+                }
+                let entry = entry?;
+                reject_unknown_fields(&entry, &["slot", "sampler"], "GPUBindGroup sampler")?;
+                let binding: u32 = entry.get("slot")?;
+                if binding > MAX_GPU_CANVAS_BINDING_INDEX {
+                    return Err(Error::runtime("GPUBindGroup sampler slot must be 0-7"));
+                }
+                if !bindings.insert(binding) {
+                    return Err(Error::runtime(format!(
+                        "GPUBindGroup binding {binding} is duplicated"
+                    )));
+                }
+                let sampler: AnyUserData = entry.get("sampler")?;
+                samplers.push(GpuSamplerResourceBinding {
+                    binding,
+                    sampler: sampler.borrow::<GpuSampler>()?.clone(),
+                });
+            }
         }
         lua.create_userdata(GpuBindGroup {
             group: layout.group,
             uniforms,
+            textures,
+            samplers,
+            dynamic_uniform_bindings: layout.dynamic_uniform_bindings.clone(),
         })
     })?;
     Ok(())
@@ -1134,6 +2083,271 @@ fn install_constructor(
     let table = lua.create_table();
     table.set("new", lua.create_function(constructor)?)?;
     lua.globals().set(name, table)
+}
+
+fn decode_buffer_usage(descriptor: &Table) -> Result<String> {
+    match descriptor.get::<Value>("usage")? {
+        Value::String(value) => Ok(value.to_str()?.to_owned()),
+        Value::Table(values) if values.raw_len() == 1 => values.get(1),
+        Value::Table(_) => Err(Error::runtime(
+            "GPUBuffer usage array must contain exactly one string",
+        )),
+        _ => Err(Error::runtime(
+            "GPUBuffer usage must be a string or one-element string array",
+        )),
+    }
+}
+
+fn validate_texture_format(format: &str) -> Result<()> {
+    if matches!(
+        format,
+        "r8unorm"
+            | "rg8unorm"
+            | "rgba8unorm"
+            | "bgra8unorm"
+            | "rgba16float"
+            | "rg16float"
+            | "r16float"
+            | "rgba32float"
+            | "rg32float"
+            | "r32float"
+            | "rgb10a2unorm"
+            | "rg11b10ufloat"
+            | "depth16unorm"
+            | "depth24plus-stencil8"
+            | "depth32float"
+            | "depth32float-stencil8"
+            | "bc1-rgba-unorm"
+            | "bc3-rgba-unorm"
+            | "bc7-rgba-unorm"
+            | "etc2-rgb8unorm"
+            | "etc2-rgba8unorm"
+            | "astc-4x4-unorm"
+            | "astc-6x6-unorm"
+            | "astc-8x8-unorm"
+    ) {
+        Ok(())
+    } else {
+        Err(Error::runtime(format!(
+            "invalid GPU texture format '{format}'"
+        )))
+    }
+}
+
+fn optional_enum(
+    descriptor: &Table,
+    field: &str,
+    default: &str,
+    allowed: &[&str],
+) -> Result<String> {
+    let value = descriptor
+        .get::<Option<String>>(field)?
+        .unwrap_or_else(|| default.into());
+    if allowed.contains(&value.as_str()) {
+        Ok(value)
+    } else {
+        Err(Error::runtime(format!("invalid {field} value '{value}'")))
+    }
+}
+
+fn validate_compare(value: &str) -> Result<()> {
+    if matches!(
+        value,
+        "never"
+            | "less"
+            | "equal"
+            | "less-equal"
+            | "greater"
+            | "not-equal"
+            | "greater-equal"
+            | "always"
+    ) {
+        Ok(())
+    } else {
+        Err(Error::runtime(format!(
+            "invalid GPU compare function '{value}'"
+        )))
+    }
+}
+
+fn decode_pipeline_state(descriptor: &Table, target: &Table) -> Result<GpuCanvasPipelineState> {
+    let format: String = target.get("format")?;
+    validate_texture_format(&format)?;
+    let write_mask = target
+        .get::<Option<String>>("writeMask")?
+        .unwrap_or_else(|| "rgba".into());
+    if !matches!(write_mask.as_str(), "" | "none" | "all" | "rgba")
+        && write_mask
+            .chars()
+            .any(|channel| !matches!(channel.to_ascii_lowercase(), 'r' | 'g' | 'b' | 'a'))
+    {
+        return Err(Error::runtime(format!(
+            "invalid GPU color writeMask '{write_mask}'"
+        )));
+    }
+    let blend = target
+        .get::<Option<Table>>("blend")?
+        .map(|blend| decode_blend_state(&blend))
+        .transpose()?;
+    let depth_stencil = descriptor
+        .get::<Option<Table>>("depthStencil")?
+        .map(|depth| decode_depth_stencil(descriptor, &depth))
+        .transpose()?;
+    let cull_mode = optional_enum(descriptor, "cullMode", "none", &["none", "front", "back"])?;
+    let winding = optional_enum(descriptor, "winding", "ccw", &["cw", "ccw"])?;
+    let topology = optional_enum(
+        descriptor,
+        "topology",
+        "triangle-list",
+        &[
+            "triangle-list",
+            "triangle-strip",
+            "line-list",
+            "line-strip",
+            "point-list",
+        ],
+    )?;
+    let sample_count = descriptor.get::<Option<u32>>("sampleCount")?.unwrap_or(1);
+    if sample_count == 0 || !sample_count.is_power_of_two() || sample_count > 16 {
+        return Err(Error::runtime(
+            "GPUPipeline sampleCount must be a power of two from 1 through 16",
+        ));
+    }
+    Ok(GpuCanvasPipelineState {
+        color_targets: vec![GpuCanvasColorTarget {
+            format,
+            write_mask,
+            blend,
+        }],
+        depth_stencil,
+        cull_mode,
+        winding,
+        topology,
+        sample_count,
+    })
+}
+
+fn decode_blend_state(descriptor: &Table) -> Result<GpuCanvasBlendState> {
+    reject_unknown_fields(
+        descriptor,
+        &[
+            "srcColor", "dstColor", "colorOp", "srcAlpha", "dstAlpha", "alphaOp",
+        ],
+        "GPU blend",
+    )?;
+    let factors = &[
+        "zero",
+        "one",
+        "src",
+        "one-minus-src",
+        "src-alpha",
+        "one-minus-src-alpha",
+        "dst",
+        "one-minus-dst",
+        "dst-alpha",
+        "one-minus-dst-alpha",
+        "src-alpha-saturated",
+        "constant",
+        "one-minus-constant",
+    ];
+    let operations = &["add", "subtract", "reverse-subtract", "min", "max"];
+    Ok(GpuCanvasBlendState {
+        src_color: optional_enum(descriptor, "srcColor", "one", factors)?,
+        dst_color: optional_enum(descriptor, "dstColor", "zero", factors)?,
+        color_op: optional_enum(descriptor, "colorOp", "add", operations)?,
+        src_alpha: optional_enum(descriptor, "srcAlpha", "one", factors)?,
+        dst_alpha: optional_enum(descriptor, "dstAlpha", "zero", factors)?,
+        alpha_op: optional_enum(descriptor, "alphaOp", "add", operations)?,
+    })
+}
+
+fn decode_depth_stencil(
+    pipeline: &Table,
+    descriptor: &Table,
+) -> Result<GpuCanvasDepthStencilState> {
+    reject_unknown_fields(
+        descriptor,
+        &[
+            "format",
+            "compare",
+            "write",
+            "depthBias",
+            "depthBiasSlopeScale",
+            "depthBiasClamp",
+        ],
+        "GPU depthStencil",
+    )?;
+    let format = descriptor
+        .get::<Option<String>>("format")?
+        .unwrap_or_else(|| "depth32float".into());
+    if !matches!(
+        format.as_str(),
+        "depth16unorm" | "depth24plus-stencil8" | "depth32float" | "depth32float-stencil8"
+    ) {
+        return Err(Error::runtime(format!(
+            "invalid depth/stencil format '{format}'"
+        )));
+    }
+    let depth_compare = descriptor
+        .get::<Option<String>>("compare")?
+        .unwrap_or_else(|| "always".into());
+    validate_compare(&depth_compare)?;
+    Ok(GpuCanvasDepthStencilState {
+        format,
+        depth_compare,
+        depth_write_enabled: descriptor.get::<Option<bool>>("write")?.unwrap_or(false),
+        depth_bias: descriptor.get::<Option<i32>>("depthBias")?.unwrap_or(0),
+        depth_bias_slope_scale: descriptor
+            .get::<Option<f32>>("depthBiasSlopeScale")?
+            .unwrap_or(0.0),
+        depth_bias_clamp: descriptor
+            .get::<Option<f32>>("depthBiasClamp")?
+            .unwrap_or(0.0),
+        stencil_front: decode_stencil_face(pipeline.get::<Option<Table>>("stencilFront")?)?,
+        stencil_back: decode_stencil_face(pipeline.get::<Option<Table>>("stencilBack")?)?,
+        stencil_read_mask: pipeline
+            .get::<Option<u32>>("stencilReadMask")?
+            .unwrap_or(0xff),
+        stencil_write_mask: pipeline
+            .get::<Option<u32>>("stencilWriteMask")?
+            .unwrap_or(0xff),
+    })
+}
+
+fn decode_stencil_face(descriptor: Option<Table>) -> Result<GpuCanvasStencilFace> {
+    let Some(descriptor) = descriptor else {
+        return Ok(GpuCanvasStencilFace {
+            compare: "always".into(),
+            fail_op: "keep".into(),
+            depth_fail_op: "keep".into(),
+            pass_op: "keep".into(),
+        });
+    };
+    reject_unknown_fields(
+        &descriptor,
+        &["compare", "failOp", "depthFailOp", "passOp"],
+        "GPU stencil face",
+    )?;
+    let compare = descriptor
+        .get::<Option<String>>("compare")?
+        .unwrap_or_else(|| "always".into());
+    validate_compare(&compare)?;
+    let operations = &[
+        "keep",
+        "zero",
+        "replace",
+        "increment-clamp",
+        "decrement-clamp",
+        "invert",
+        "increment-wrap",
+        "decrement-wrap",
+    ];
+    Ok(GpuCanvasStencilFace {
+        compare,
+        fail_op: optional_enum(&descriptor, "failOp", "keep", operations)?,
+        depth_fail_op: optional_enum(&descriptor, "depthFailOp", "keep", operations)?,
+        pass_op: optional_enum(&descriptor, "passOp", "keep", operations)?,
+    })
 }
 
 fn reject_unknown_fields(table: &Table, allowed: &[&str], label: &str) -> Result<()> {
@@ -1160,7 +2374,11 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
             )));
         }
         let layout = layout?;
-        reject_unknown_fields(&layout, &["stride", "attributes"], "GPU vertex layout")?;
+        reject_unknown_fields(
+            &layout,
+            &["stride", "stepMode", "attributes"],
+            "GPU vertex layout",
+        )?;
         let stride: u64 = layout.get("stride")?;
         if stride == 0 || stride > 2_048 {
             return Err(Error::runtime(
@@ -1188,6 +2406,8 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
                 "float32x2" => 8,
                 "float32x3" => 12,
                 "float32x4" => 16,
+                "uint8x4" | "unorm8x4" | "snorm8x4" | "float16x2" => 4,
+                "float16x4" => 8,
                 _ => {
                     return Err(Error::runtime(format!(
                         "unsupported GPU vertex format '{format}'"
@@ -1225,7 +2445,12 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
                 "GPU vertex layouts must contain at least one attribute",
             ));
         }
-        decoded.push(GpuCanvasVertexLayout { stride, attributes });
+        let step_mode = optional_enum(&layout, "stepMode", "vertex", &["vertex", "instance"])?;
+        decoded.push(GpuCanvasVertexLayout {
+            stride,
+            step_mode,
+            attributes,
+        });
     }
     Ok(decoded)
 }

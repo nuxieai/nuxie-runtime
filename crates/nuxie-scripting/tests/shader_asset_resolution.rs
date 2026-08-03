@@ -326,6 +326,12 @@ fn empty_plan() -> GpuCanvasPlan {
         uniform_buffers: Vec::new(),
         vertex_layouts: Vec::new(),
         vertex_buffers: Vec::new(),
+        index_buffer: None,
+        indexed_draw: None,
+        texture_bindings: Vec::new(),
+        sampler_bindings: Vec::new(),
+        pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
+        pass_state: nuxie_render_api::GpuCanvasPassState::default(),
     }
 }
 

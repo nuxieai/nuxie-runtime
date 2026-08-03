@@ -3392,33 +3392,33 @@ status = "faithful"
 upstream = "src/focus_data.cpp"
 source_set = "retained-focus-tree"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/focus_data.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+rust_modules = ["crates/nuxie-runtime/src/focus_data.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/input/focus_manager.cpp"
 source_set = "retained-focus-tree"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/input/mod.rs", "crates/nuxie-runtime/src/input/focus_manager.rs", "crates/nuxie-runtime/src/focus_data.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs", "crates/nuxie-runtime/src/state_machine/focus_action_traversal.rs", "crates/nuxie-runtime/tests/focus_retained_tree.rs"]
+rust_modules = ["crates/nuxie-runtime/src/input/focus_manager.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/input/focus_node.cpp"
 source_set = "retained-focus-tree"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/input/mod.rs", "crates/nuxie-runtime/src/input/focus_node.rs", "crates/nuxie-runtime/src/input/focus_manager.rs", "crates/nuxie-runtime/tests/focus_retained_tree.rs"]
+rust_modules = ["crates/nuxie-runtime/src/input/focus_node.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/input/focusable.cpp"
 source_set = "retained-focus-tree"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/input/mod.rs", "crates/nuxie-runtime/src/input/focusable.rs"]
+rust_modules = ["crates/nuxie-runtime/src/input/focusable.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[member]]
 id = "focus.retained_tree"
@@ -3426,7 +3426,7 @@ wave = "FL-C"
 cpp_files = ["src/focus_data.cpp", "src/input/focus_manager.cpp", "src/input/focus_node.cpp", "src/input/focusable.cpp"]
 rust_file = "crates/nuxie-runtime/src/focus_data.rs"
 rust_anchor = "pub(crate) struct RuntimeFocusTree"
-status = "pending"
+status = "faithful"
 [member.lifecycle]
 construct = ["cpp:src/focus_data.cpp:55-69", "cpp:src/artboard.cpp:548-572", "rust:crates/nuxie-runtime/src/focus_data.rs:100-280"]
 retain = ["cpp:include/rive/input/focus_node.hpp:21-194", "rust:crates/nuxie-runtime/src/input/focus_node.rs:1-240", "rust:crates/nuxie-runtime/src/input/focus_manager.rs:1-620"]

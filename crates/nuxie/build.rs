@@ -1176,6 +1176,10 @@ fn render_scene_schema() -> String {
         property_by_key_in_hierarchy(layout_component_style.type_key.int, 515)
             .expect("paddingBottom key")
             .1;
+    let layout_display_value =
+        property_by_key_in_hierarchy(layout_component_style.type_key.int, 596)
+            .expect("displayValue key")
+            .1;
     let linear_animation = concrete_definition("LinearAnimation");
     let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
     let cubic_value_interpolator = concrete_definition("CubicValueInterpolator");
@@ -3337,7 +3341,8 @@ fn render_scene_schema() -> String {
          scene_layout_enum!(SceneLayoutFlexDirection { Column = 0, ColumnReverse = 1, Row = 2, RowReverse = 3 });\n\
          scene_layout_enum!(SceneLayoutDirection { Inherit = 0, LeftToRight = 1, RightToLeft = 2 });\n\
          scene_layout_enum!(SceneLayoutAlign { Auto = 0, FlexStart = 1, Center = 2, FlexEnd = 3, Stretch = 4, Baseline = 5, SpaceBetween = 6, SpaceAround = 7 });\n\
-         scene_layout_enum!(SceneLayoutJustify { FlexStart = 0, Center = 1, FlexEnd = 2, SpaceBetween = 3, SpaceAround = 4, SpaceEvenly = 5 });\n\
+         scene_layout_enum!(SceneLayoutJustify { FlexStart = 0, Center = 1, FlexEnd = 2, SpaceBetween = 3, SpaceAround = 4, SpaceEvenly = 5, Auto = 6, Stretch = 7, Start = 8, End = 9 });\n\
+         scene_layout_enum!(SceneLayoutType { Flex = 0, Grid = 1, Stack = 2 });\n\
          scene_layout_enum!(SceneLayoutWrap { NoWrap = 0, Wrap = 1, WrapReverse = 2 });\n\
          scene_layout_enum!(SceneLayoutOverflow { Visible = 0, Hidden = 1, Scroll = 2 });\n\
          scene_layout_enum!(SceneLayoutUnit { Undefined = 0, Point = 1, Percent = 2, Auto = 3 });\n\
@@ -3683,6 +3688,20 @@ fn render_scene_schema() -> String {
             "set_runtime_double",
             "read_runtime_double",
         ),
+        // displayValue is a uint8 enum upstream (Flex=0, None=1) and is
+        // bindable there; the authoring surface carries it as a number the
+        // way data binds do, and the runtime coerces on apply.
+        (
+            "LAYOUT_DISPLAY",
+            "f32",
+            layout_display_value.key.int,
+            "displayValue",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
         (
             "ANIMATION_FPS",
             "u32",
@@ -3728,7 +3747,14 @@ fn render_scene_schema() -> String {
 }
 
 fn render_layout_component_style_vocabulary(output: &mut String, definition: &Definition) {
-    for property in definition.properties {
+    let sizing_definition = definition_by_name("LayoutSizingStyle")
+        .expect("LayoutComponentStyle must retain its LayoutSizingStyle base");
+    let properties = sizing_definition
+        .properties
+        .iter()
+        .chain(definition.properties.iter())
+        .collect::<Vec<_>>();
+    for property in &properties {
         assert!(
             property.stores_data
                 && property.deserializes
@@ -3750,8 +3776,8 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
         );
     }
     assert_eq!(
-        definition.properties.len(),
-        75,
+        properties.len(),
+        71,
         "the complete pinned LayoutComponentStyleBase domain changed"
     );
 
@@ -3761,7 +3787,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
              /// Optional authored Component name; defaults to `<layout name> Style`.\n\
              pub name: Option<String>,\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         writeln!(
             output,
             "    pub {}: {},",
@@ -3781,7 +3807,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
                  Self {\n\
                      name: None,\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         writeln!(
             output,
             "            {}: {},",
@@ -3796,7 +3822,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
         "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
          pub enum LayoutComponentStyleField {\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         writeln!(output, "    {},", layout_style_variant_name(property.name))
             .expect("write generated layout style field identity");
     }
@@ -3806,7 +3832,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
         "impl LayoutComponentStyleSpec {\n\
              fn first_non_finite_property(&self) -> Option<&'static str> {\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         if property.runtime_type == FieldKind::Double {
             let field = layout_style_field_name(property.name);
             writeln!(
@@ -3831,7 +3857,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
      ) -> Vec<LayoutComponentStyleProperty> {\n\
          let mut properties = Vec::new();\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         let field = layout_style_field_name(property.name);
         let variant = layout_style_variant_name(property.name);
         if property.name == "interpolatorId" {
@@ -3875,7 +3901,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
     output.push_str(
         "#[derive(Debug, Clone, Copy, PartialEq)]\npub enum LayoutComponentStyleProperty {\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         let rust_type = if property.name == "interpolatorId" {
             "u32".to_owned()
         } else {
@@ -3889,7 +3915,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
         .expect("write generated layout style property variant");
     }
     output.push_str("}\n\nimpl LayoutComponentStyleProperty {\n    fn schema_key(&self) -> u16 {\n        match self {\n");
-    for property in definition.properties {
+    for property in &properties {
         writeln!(
             output,
             "            Self::{}(_) => {},",
@@ -3905,7 +3931,7 @@ fn render_layout_component_style_vocabulary(output: &mut String, definition: &De
          let key = self.schema_key();\n\
          let value = match self {\n",
     );
-    for property in definition.properties {
+    for property in &properties {
         let variant = layout_style_variant_name(property.name);
         let conversion = match property.runtime_type {
             FieldKind::Double => "AuthoringValue::Double(value)",
@@ -3998,7 +4024,10 @@ fn layout_style_rust_type(property: &Property) -> String {
             "flexDirectionValue" => "SceneLayoutFlexDirection",
             "directionValue" => "SceneLayoutDirection",
             "alignContentValue" | "alignItemsValue" | "alignSelfValue" => "SceneLayoutAlign",
-            "justifyContentValue" => "SceneLayoutJustify",
+            "justifyContentValue" | "justifyItemsValue" | "justifySelfValue" => {
+                "SceneLayoutJustify"
+            }
+            "layoutTypeValue" => "SceneLayoutType",
             "flexWrapValue" => "SceneLayoutWrap",
             "overflowValue" => "SceneLayoutOverflow",
             name if name.ends_with("UnitsValue") => "SceneLayoutUnit",
@@ -4078,16 +4107,21 @@ fn layout_style_enum_variant(property_name: &str, value: u64) -> &'static str {
         ]
         .get(value as usize)
         .copied(),
-        "justifyContentValue" => [
+        "justifyContentValue" | "justifyItemsValue" | "justifySelfValue" => [
             "FlexStart",
             "Center",
             "FlexEnd",
             "SpaceBetween",
             "SpaceAround",
             "SpaceEvenly",
+            "Auto",
+            "Stretch",
+            "Start",
+            "End",
         ]
         .get(value as usize)
         .copied(),
+        "layoutTypeValue" => ["Flex", "Grid", "Stack"].get(value as usize).copied(),
         "flexWrapValue" => ["NoWrap", "Wrap", "WrapReverse"]
             .get(value as usize)
             .copied(),

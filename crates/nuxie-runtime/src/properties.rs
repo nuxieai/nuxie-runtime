@@ -75,6 +75,13 @@ pub(crate) fn runtime_object_explicit_uint_property_by_key(
     runtime_object_property_value_by_key(object, property_key).and_then(FieldValue::as_uint)
 }
 
+pub(crate) fn runtime_object_explicit_int_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<i32> {
+    runtime_object_property_value_by_key(object, property_key).and_then(FieldValue::as_int)
+}
+
 pub(crate) fn runtime_object_explicit_bool_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
@@ -117,6 +124,20 @@ pub(crate) fn runtime_object_uint_property_by_key(
 
     match runtime_object_stored_field_initializer_by_key(object, property_key)? {
         StoredFieldInitializer::Uint(value) => Some(u64::from(value)),
+        _ => None,
+    }
+}
+
+pub(crate) fn runtime_object_int_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<i32> {
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return value.as_int();
+    }
+
+    match runtime_object_stored_field_initializer_by_key(object, property_key)? {
+        StoredFieldInitializer::Int(value) => Some(value),
         _ => None,
     }
 }

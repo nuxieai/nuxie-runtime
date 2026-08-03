@@ -1,31 +1,31 @@
 {
   "allocation_counts": {
     "cpp": {
-      "advance_blend_mode": 148,
-      "ai_assitant": 2144,
-      "align_target": 397,
-      "animated_clipping": 365,
-      "animation_reset_cases": 738,
-      "spotify_kids_demo": 3216
+      "advance_blend_mode": 152,
+      "ai_assitant": 2178,
+      "align_target": 401,
+      "animated_clipping": 367,
+      "animation_reset_cases": 734,
+      "spotify_kids_demo": 3218
     },
     "rust": {
-      "advance_blend_mode": 707,
-      "ai_assitant": 225297,
-      "align_target": 6689,
-      "animated_clipping": 3060,
+      "advance_blend_mode": 721,
+      "ai_assitant": 225399,
+      "align_target": 7134,
+      "animated_clipping": 3601,
       "animation_reset_cases": 3203,
-      "spotify_kids_demo": 25398
+      "spotify_kids_demo": 25406
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "f97319d2916ed69e9aa8b6a1e5c1f7f0926a3c326ff39f4ba761ab9364d285b3",
-    "cpp_coverage_sha256": "2ace80c0a216d19f6e39c4ab3fa0896d4ceb5936342eca6a7e7a7ef42d46b92c",
-    "cpp_mechanism_coverage_sha256": "8c97dcb8b02eed5f2d639e29b9dbb0aa8172fab53251a794e48ff4055bd908a2",
-    "cpp_steady_coverage_sha256": "91852c9ce675252d715a268f23155cedc1d8aaac1be90cdda983e9d809b7807e",
-    "rust_binary_sha256": "28b574e28ff712afdf1a020eee2b4d08825bdbe0707860a0a9b930fec8e446c8",
-    "rust_coverage_sha256": "c5ef814a67603f20c862a4307949a511df722c1bb2d21b15be8301701c5e905c",
-    "rust_mechanism_coverage_sha256": "f24cae1472fa315f0a0299c9ed92604c29872d0ae979d9d638df010a121ab19d",
-    "rust_steady_coverage_sha256": "90d82a22ae11775218cd45b35c47afddb11557dea19927107d7bd2b3fb3768f2"
+    "cpp_binary_sha256": "760c91d700585bc566db3261c12adeb18570a3e94be5f7413a65a0532491b380",
+    "cpp_coverage_sha256": "b70d760ccb04847c33e7d4b8a7f38c26cbb74e767972f73d720fbc2ae0881db0",
+    "cpp_mechanism_coverage_sha256": "ec7c9dbfb35d6080143f989000be87e2e8a07f19b532c5602303f8ec05bec21d",
+    "cpp_steady_coverage_sha256": "2d1c23294012193b71fbdf4ef14d952911070ea3cddf5512192d78016915a8ad",
+    "rust_binary_sha256": "a914b21d6fb35c7ec42f55a3d8a75310019f3363f43ff637f601aee726ee6f4a",
+    "rust_coverage_sha256": "f691901f3bea402c4d5049b4bbf26704480b96a4c0d52d108c230ca26830ab85",
+    "rust_mechanism_coverage_sha256": "0b694863d6ac8fbcfe4ae3d809826f9f9f939e6b1a2b98a98694f7685aac4faf",
+    "rust_steady_coverage_sha256": "51d12f79f9a037d18a6d75f7d55fb1bb0cf47b837a96c1970009338a2bd38048"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -587,6 +587,10 @@
           "name": "rive::Artboard::host() const"
         },
         {
+          "count": 18,
+          "name": "rive::Artboard::hostOpacity(float)"
+        },
+        {
           "count": 30,
           "name": "rive::Artboard::internalDrawCanvases()"
         },
@@ -631,7 +635,7 @@
           "name": "rive::Artboard::reset()"
         },
         {
-          "count": 75,
+          "count": 81,
           "name": "rive::Artboard::resolve(unsigned int) const"
         },
         {
@@ -744,6 +748,10 @@
         },
         {
           "count": 66,
+          "name": "rive::DataBind::toSource()"
+        },
+        {
+          "count": 66,
           "name": "rive::DataBind::toTarget()"
         },
         {
@@ -793,7 +801,25 @@
           "name": "rive::Joystick::yChanged()"
         }
       ],
+      "src/layout/grid_track.cpp": [
+        {
+          "count": 24,
+          "name": "grid_track.cpp:resolveItemJustifySelf(unsigned int, bool, unsigned int)"
+        },
+        {
+          "count": 24,
+          "name": "rive::GridTrack::syncContainerStyle(rive_YGStyle&, rive::ContainerComponent*, unsigned int)"
+        },
+        {
+          "count": 24,
+          "name": "rive::GridTrack::syncItemJustifySelf(rive_YGStyle&, unsigned int, bool, bool, unsigned int)"
+        }
+      ],
       "src/layout/layout_component_style.cpp": [
+        {
+          "count": 96,
+          "name": "layout_component_style.cpp:rive::LayoutComponentStyle::applyItemStyle(rive_YGStyle&, rive::LayoutSyncContext const&)::$_0::operator()(YGUnit) const"
+        },
         {
           "count": 48,
           "name": "rive::LayoutComponentStyle::alignmentType()"
@@ -801,6 +827,14 @@
         {
           "count": 132,
           "name": "rive::LayoutComponentStyle::animationStyle()"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutComponentStyle::applyContainerStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutComponentStyle::applyItemStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
         },
         {
           "count": 24,
@@ -856,19 +890,19 @@
         },
         {
           "count": 24,
-          "name": "rive::LayoutComponentStyle::maxHeightUnits()"
+          "name": "rive::LayoutComponentStyle::marginBottomUnits()"
         },
         {
           "count": 24,
-          "name": "rive::LayoutComponentStyle::maxWidthUnits()"
+          "name": "rive::LayoutComponentStyle::marginLeftUnits()"
         },
         {
           "count": 24,
-          "name": "rive::LayoutComponentStyle::minHeightUnits()"
+          "name": "rive::LayoutComponentStyle::marginRightUnits()"
         },
         {
           "count": 24,
-          "name": "rive::LayoutComponentStyle::minWidthUnits()"
+          "name": "rive::LayoutComponentStyle::marginTopUnits()"
         },
         {
           "count": 24,
@@ -907,7 +941,7 @@
           "name": "rive::LayoutComponentStyle::positionType()"
         },
         {
-          "count": 48,
+          "count": 72,
           "name": "rive::LayoutComponentStyle::widthScaleType()"
         },
         {
@@ -917,11 +951,41 @@
       ],
       "src/layout/layout_node_provider.cpp": [
         {
-          "count": 410,
+          "count": 1584,
           "name": "rive::LayoutNodeProvider::from(rive::Component*)"
         }
       ],
+      "src/layout/layout_sizing_style.cpp": [
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::applyBaseStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::applyItemStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::maxHeightUnits()"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::maxWidthUnits()"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::minHeightUnits()"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutSizingStyle::minWidthUnits()"
+        }
+      ],
       "src/layout_component.cpp": [
+        {
+          "count": 1584,
+          "name": "layout_component.cpp:(anonymous namespace)::isTransparentLayoutContainer(rive::Component*)"
+        },
         {
           "count": 24,
           "name": "layout_component.cpp:layoutFromYoga(rive_YGLayout const&)"
@@ -932,7 +996,31 @@
         },
         {
           "count": 48,
-          "name": "layout_component.cpp:rive::LayoutComponent::syncStyle()::$_0::operator()(rive::LayoutScaleType, YGUnit) const"
+          "name": "layout_component.cpp:rive::LayoutComponent::applyBaseStyle(rive_YGStyle&, rive::LayoutSyncContext const&)::$_0::operator()(rive::LayoutScaleType, YGUnit) const"
+        },
+        {
+          "count": 151,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::cascadeLayoutStyle(rive::LayoutStyleInterpolation, rive::KeyFrameInterpolator*, float, rive::LayoutDirection)::$_0&>(rive::Component*, rive::LayoutComponent::cascadeLayoutStyle(rive::LayoutStyleInterpolation, rive::KeyFrameInterpolator*, float, rive::LayoutDirection)::$_0&, bool)"
+        },
+        {
+          "count": 24,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::cascadeLayoutStyle(rive::LayoutStyleInterpolation, rive::KeyFrameInterpolator*, float, rive::LayoutDirection)::$_0>(rive::Component*, rive::LayoutComponent::cascadeLayoutStyle(rive::LayoutStyleInterpolation, rive::KeyFrameInterpolator*, float, rive::LayoutDirection)::$_0&&, bool)"
+        },
+        {
+          "count": 151,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::syncStyle()::$_0&>(rive::Component*, rive::LayoutComponent::syncStyle()::$_0&, bool)"
+        },
+        {
+          "count": 24,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::syncStyle()::$_0>(rive::Component*, rive::LayoutComponent::syncStyle()::$_0&&, bool)"
+        },
+        {
+          "count": 151,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::updateLayoutBounds(bool)::$_0&>(rive::Component*, rive::LayoutComponent::updateLayoutBounds(bool)::$_0&, bool)"
+        },
+        {
+          "count": 24,
+          "name": "layout_component.cpp:void (anonymous namespace)::forEachLayoutProvider<rive::LayoutComponent::updateLayoutBounds(bool)::$_0>(rive::Component*, rive::LayoutComponent::updateLayoutBounds(bool)::$_0&&, bool)"
         },
         {
           "count": 48,
@@ -945,6 +1033,14 @@
         {
           "count": 36,
           "name": "rive::LayoutComponent::animates()"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutComponent::applyBaseStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
+        },
+        {
+          "count": 24,
+          "name": "rive::LayoutComponent::applyContainerStyle(rive_YGStyle&, rive::LayoutSyncContext const&)"
         },
         {
           "count": 30,
@@ -968,6 +1064,10 @@
         },
         {
           "count": 24,
+          "name": "rive::LayoutComponent::effectiveParentIsRow()"
+        },
+        {
+          "count": 24,
           "name": "rive::LayoutComponent::interpolation()"
         },
         {
@@ -985,10 +1085,6 @@
         {
           "count": 12,
           "name": "rive::LayoutComponent::localPath()"
-        },
-        {
-          "count": 24,
-          "name": "rive::LayoutComponent::mainAxisIsRow()"
         },
         {
           "count": 2,
@@ -1107,7 +1203,7 @@
       ],
       "src/math/raw_path.cpp": [
         {
-          "count": 356,
+          "count": 355,
           "name": "rive::RawPath::addPath(rive::RawPath const&, rive::Mat2D const*)"
         },
         {
@@ -1441,6 +1537,10 @@
       ],
       "src/shapes/paint/feather.cpp": [
         {
+          "count": 48,
+          "name": "rive::Feather::isInner() const"
+        },
+        {
           "count": 16,
           "name": "rive::Feather::update(rive::ComponentDirt)"
         }
@@ -1683,8 +1783,16 @@
           "name": "rive::Shape::canDeferPathUpdate()"
         },
         {
+          "count": 104,
+          "name": "rive::Shape::composeWorldTransform()"
+        },
+        {
           "count": 120,
           "name": "rive::Shape::draw(rive::Renderer*)"
+        },
+        {
+          "count": 6,
+          "name": "rive::Shape::invalidateIntrinsicBounds()"
         },
         {
           "count": 58,
@@ -1693,6 +1801,10 @@
         {
           "count": 312,
           "name": "rive::Shape::isFlagged(rive::PathFlags) const"
+        },
+        {
+          "count": 522,
+          "name": "rive::Shape::layoutParticipant() const"
         },
         {
           "count": 4,
@@ -1773,6 +1885,12 @@
         {
           "count": 98,
           "name": "rive::Vertex::yChanged()"
+        }
+      ],
+      "src/solo.cpp": [
+        {
+          "count": 6,
+          "name": "rive::Solo::activeComponent()"
         }
       ],
       "src/text/font_hb.cpp": [
@@ -1892,6 +2010,10 @@
         },
         {
           "count": 2,
+          "name": "rive::Text::composeWorldTransform()"
+        },
+        {
+          "count": 2,
           "name": "rive::Text::computeBoundsInfo()"
         },
         {
@@ -1901,6 +2023,14 @@
         {
           "count": 6,
           "name": "rive::Text::effectiveSizing() const"
+        },
+        {
+          "count": 6,
+          "name": "rive::Text::isParticipatingInLayout() const"
+        },
+        {
+          "count": 14,
+          "name": "rive::Text::layoutParticipant() const"
         },
         {
           "count": 2,
@@ -2037,6 +2167,10 @@
       ],
       "src/transform_component.cpp": [
         {
+          "count": 457,
+          "name": "rive::TransformComponent::composeWorldTransform()"
+        },
+        {
           "count": 85,
           "name": "rive::TransformComponent::markTransformDirty()"
         },
@@ -2105,7 +2239,7 @@
           "name": "rive::WorldTransformComponent::mutableWorldTransform()"
         },
         {
-          "count": 19,
+          "count": 1,
           "name": "rive::WorldTransformComponent::opacityChanged()"
         },
         {
@@ -2115,7 +2249,181 @@
       ]
     },
     "rust": {
-      "crates/nuxie-runtime/src/animation.rs": [
+      "crates/nuxie-runtime/src/animation/cubic_interpolator.rs": [
+        {
+          "count": 416,
+          "name": "nuxie_runtime::animation::cubic_interpolator_calc_bezier"
+        },
+        {
+          "count": 130,
+          "name": "nuxie_runtime::animation::cubic_interpolator_slope"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/cubic_interpolator_solver.rs": [
+        {
+          "count": 26,
+          "name": "nuxie_runtime::animation::cubic_interpolator_get_t"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyed_property.rs": [
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::bool_value_at"
+        },
+        {
+          "count": 134,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::closest_frame_index"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::color_frame_value_at_with_script_context"
+        },
+        {
+          "count": 124,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::double_frame_value_at_with_script_context"
+        },
+        {
+          "count": 1,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::first_double_value"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::uint_value_at"
+        },
+        {
+          "count": 4,
+          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>"
+        },
+        {
+          "count": 4,
+          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>::{closure#0}"
+        },
+        {
+          "count": 124,
+          "name": "nuxie_runtime::animation::apply_key_frame_double_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#0}>"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyframe.rs": [
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_bool"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_color"
+        },
+        {
+          "count": 169,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_double"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_uint"
+        },
+        {
+          "count": 344,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::seconds"
+        },
+        {
+          "count": 134,
+          "name": "nuxie_runtime::animation::closest_key_frame_index"
+        },
+        {
+          "count": 134,
+          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset"
+        },
+        {
+          "count": 43,
+          "name": "nuxie_runtime::animation::frame_mix"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyframe_bool.rs": [
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameBool>::effective_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyframe_color.rs": [
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameColor>::effective_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyframe_double.rs": [
+        {
+          "count": 167,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameDouble>::effective_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/keyframe_interpolator.rs": [
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::animation::RuntimeInterpolator>::transform"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::animation::RuntimeInterpolator>::transform_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/linear_animation.rs": [
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::boolean"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::color"
+        },
+        {
+          "count": 167,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::number"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply"
+        },
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::duration_seconds"
+        },
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::end_frame"
+        },
+        {
+          "count": 41,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::end_seconds"
+        },
+        {
+          "count": 84,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::fps_as_f32"
+        },
+        {
+          "count": 73,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::frame_to_seconds"
+        },
+        {
+          "count": 43,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_frame"
+        },
+        {
+          "count": 32,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_seconds"
+        },
+        {
+          "count": 27,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_time_with_speed"
+        }
+      ],
+      "crates/nuxie-runtime/src/animation/linear_animation_instance.rs": [
         {
           "count": 47,
           "name": "<nuxie_runtime::animation::AnimationLoop>::from_loop_value"
@@ -2185,126 +2493,6 @@
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::retained_definition"
         },
         {
-          "count": 26,
-          "name": "<nuxie_runtime::animation::RuntimeInterpolator>::transform"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::animation::RuntimeInterpolator>::transform_value"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_bool"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_color"
-        },
-        {
-          "count": 169,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_double"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_uint"
-        },
-        {
-          "count": 344,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::seconds"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameBool>::effective_value"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameColor>::effective_value"
-        },
-        {
-          "count": 167,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameDouble>::effective_value"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::boolean"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::color"
-        },
-        {
-          "count": 167,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameValueContext>::number"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::bool_value_at"
-        },
-        {
-          "count": 134,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::closest_frame_index"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::color_frame_value_at"
-        },
-        {
-          "count": 124,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::double_frame_value_at"
-        },
-        {
-          "count": 1,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::first_double_value"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::uint_value_at"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply"
-        },
-        {
-          "count": 38,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::duration_seconds"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::end_frame"
-        },
-        {
-          "count": 41,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::end_seconds"
-        },
-        {
-          "count": 84,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::fps_as_f32"
-        },
-        {
-          "count": 73,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::frame_to_seconds"
-        },
-        {
-          "count": 43,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_frame"
-        },
-        {
-          "count": 32,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_seconds"
-        },
-        {
-          "count": 27,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_time_with_speed"
-        },
-        {
           "count": 38,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::definition_index"
         },
@@ -2313,53 +2501,21 @@
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::index"
         },
         {
-          "count": 127,
+          "count": 150,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::resolve"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>::{closure#0}"
-        },
-        {
-          "count": 124,
-          "name": "nuxie_runtime::animation::apply_key_frame_double_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#0}>"
-        },
-        {
-          "count": 134,
-          "name": "nuxie_runtime::animation::closest_key_frame_index"
-        },
-        {
-          "count": 134,
-          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset"
-        },
-        {
-          "count": 416,
-          "name": "nuxie_runtime::animation::cubic_interpolator_calc_bezier"
-        },
-        {
-          "count": 26,
-          "name": "nuxie_runtime::animation::cubic_interpolator_get_t"
-        },
-        {
-          "count": 130,
-          "name": "nuxie_runtime::animation::cubic_interpolator_slope"
-        },
-        {
-          "count": 43,
-          "name": "nuxie_runtime::animation::frame_mix"
         }
       ],
       "crates/nuxie-runtime/src/artboard.rs": [
         {
-          "count": 157,
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance as core::ops::drop::Drop>::drop"
+        },
+        {
+          "count": 159,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::add_component_dirt"
         },
         {
-          "count": 73,
+          "count": 75,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::add_dirt"
         },
         {
@@ -2368,11 +2524,15 @@
         },
         {
           "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine_report"
         },
         {
           "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine::{closure#0}"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine_report::{closure#0}"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine_report::{closure#0}::{closure#0}"
         },
         {
           "count": 4,
@@ -2427,51 +2587,63 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_state_machine_instance_with_context"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::after_double_property_set"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed"
         },
         {
-          "count": 50,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#14}"
+          "count": 32,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#10}"
         },
         {
-          "count": 44,
+          "count": 32,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#11}"
+        },
+        {
+          "count": 32,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#12}"
+        },
+        {
+          "count": 42,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#17}"
+        },
+        {
+          "count": 36,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#1}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#2}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#3}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#4}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#5}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#6}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#7}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#8}"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_double_property_changed::{closure#9}"
         },
         {
@@ -2523,11 +2695,19 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_uint_property_changed::{closure#6}"
         },
         {
-          "count": 1216,
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_uint_property_changed::{closure#7}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::apply_uint_property_changed::{closure#8}"
+        },
+        {
+          "count": 1264,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::authored_transform"
         },
         {
-          "count": 1216,
+          "count": 1264,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::authored_transform::{closure#0}"
         },
         {
@@ -2563,7 +2743,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::begin_draw_frame"
         },
         {
-          "count": 14156,
+          "count": 14159,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::bool_property"
         },
         {
@@ -2571,15 +2751,23 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::cache_epoch"
         },
         {
+          "count": 34,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::child_opacity"
+        },
+        {
+          "count": 34,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::child_opacity::{closure#0}"
+        },
+        {
           "count": 30,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::clear_script_update_error_tree"
         },
         {
-          "count": 225,
+          "count": 227,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::color_property"
         },
         {
-          "count": 20453,
+          "count": 28453,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component"
         },
         {
@@ -2591,7 +2779,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component_at_mut"
         },
         {
-          "count": 950,
+          "count": 1563,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component_handle"
         },
         {
@@ -2607,11 +2795,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component_local_id"
         },
         {
-          "count": 307,
+          "count": 363,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component_parent_handle"
         },
         {
-          "count": 307,
+          "count": 363,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component_parent_local"
         },
         {
@@ -2622,6 +2810,604 @@
           "count": 18,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::compute_runtime_nested_artboard_layout_bounds::{closure#0}"
         },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::detach_active_nested_state_machines"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::dispatch_component_on_dirty"
+        },
+        {
+          "count": 24595,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property"
+        },
+        {
+          "count": 24595,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#1}"
+        },
+        {
+          "count": 24595,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#2}"
+        },
+        {
+          "count": 380,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::fill_rule"
+        },
+        {
+          "count": 113,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::flush_runtime_list_path_changes"
+        },
+        {
+          "count": 37,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::frame_origin"
+        },
+        {
+          "count": 583,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_artboard_data_bindings"
+        },
+        {
+          "count": 188,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt"
+        },
+        {
+          "count": 188,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt::{closure#0}"
+        },
+        {
+          "count": 188,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt::{closure#1}"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_self_transform"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::initialize_clone_backend_if_pending"
+        },
+        {
+          "count": 51,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::layout_revision"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_definition"
+        },
+        {
+          "count": 14,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_keep_going"
+        },
+        {
+          "count": 174,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed_unless_view_model_instance"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed_unless_view_model_instance::{closure#1}"
+        },
+        {
+          "count": 136,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_components_dirty"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed::{closure#0}"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed::{closure#1}"
+        },
+        {
+          "count": 6,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_points_path_skin_dirty"
+        },
+        {
+          "count": 6,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_points_path_skin_dirty::{closure#0}"
+        },
+        {
+          "count": 501,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed"
+        },
+        {
+          "count": 32,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_property"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_solid_color_visibility"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_solid_color_visibility::{closure#0}"
+        },
+        {
+          "count": 469,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_render_opacity_changed"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_runtime_shape_property_changed"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_stateful_nested_view_model_contexts_dirty_for_local"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_stateful_nested_view_model_contexts_dirty_for_local::{closure#1}"
+        },
+        {
+          "count": 44,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_text_changed_for_local"
+        },
+        {
+          "count": 84,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_transform_dirty_handle"
+        },
+        {
+          "count": 501,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_tree_paint_preparation_changed"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mounted_root_transform"
+        },
+        {
+          "count": 81,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch"
+        },
+        {
+          "count": 81,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch::{closure#0}"
+        },
+        {
+          "count": 130,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::on_component_dirty_handle"
+        },
+        {
+          "count": 46,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::prepared_epoch"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::reset_retained_components_for_state_machine_settlement"
+        },
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::resolved_image_asset_global"
+        },
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::resolved_image_asset_global::{closure#0}"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::restore_active_nested_state_machines"
+        },
+        {
+          "count": 28,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file"
+        },
+        {
+          "count": 28,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file::{closure#0}"
+        },
+        {
+          "count": 207,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc"
+        },
+        {
+          "count": 207,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc::{closure#0}"
+        },
+        {
+          "count": 50,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_font_asset_bytes"
+        },
+        {
+          "count": 199,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_graph"
+        },
+        {
+          "count": 217,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_graph_for_global"
+        },
+        {
+          "count": 105,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_list_path_vertices"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_nested_artboard_layout_bounds_frame"
+        },
+        {
+          "count": 1,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_nested_artboard_layout_bounds_frame::{closure#0}"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_object_type_name"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::self_transform"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_bool_property"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_double_property"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_frame_origin"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_host_opacity"
+        },
+        {
+          "count": 57,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_keyed_double_property"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_keyed_solid_color_property"
+        },
+        {
+          "count": 72,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_transform_property_with_key"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_uint_property"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_runtime_solid_color_callback"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_errors"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset::{closure#0}"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_script_errors"
+        },
+        {
+          "count": 168,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_blend_mode_value"
+        },
+        {
+          "count": 186,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_is_visible"
+        },
+        {
+          "count": 39668,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::slot"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::solid_color_paint_revision"
+        },
+        {
+          "count": 100,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::solid_color_value"
+        },
+        {
+          "count": 60,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::state_machine_definition_owner"
+        },
+        {
+          "count": 12,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::string_property"
+        },
+        {
+          "count": 72,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::stroke_thickness"
+        },
+        {
+          "count": 154,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::stroke_transform_affects_stroke"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::sync_nested_artboard_root_opacity"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::sync_nested_artboard_root_opacity::{closure#0}"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::take_script_update_error_tree"
+        },
+        {
+          "count": 12,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::text_list_runs"
+        },
+        {
+          "count": 50,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::text_style_font_override"
+        },
+        {
+          "count": 7584,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property"
+        },
+        {
+          "count": 6132,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property_with_key"
+        },
+        {
+          "count": 22,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::tree_paint_preparation_epoch"
+        },
+        {
+          "count": 22,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::tree_paint_preparation_epoch::{closure#0}"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance_unconditionally"
+        },
+        {
+          "count": 3926,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::uint_property"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_list_layout_bounds"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#0}"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#10}"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#11}"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#12}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#13}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#14}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#15}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#16}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#17}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#18}"
+        },
+        {
+          "count": 80,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#19}"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#1}"
+        },
+        {
+          "count": 583,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#2}"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#5}"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#6}"
+        },
+        {
+          "count": 456,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#8}"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#9}"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#0}"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#1}"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#2}"
+        },
+        {
+          "count": 53,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_data_binds_for_update_pass"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#0}"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#1}"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#1}::{closure#0}"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#2}"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}::{closure#0}"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_script_component_in_dependency_order"
+        },
+        {
+          "count": 607,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_script_component_in_dependency_order::{closure#0}"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::advance_after_animation_owners"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::advance_outer_update"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::begin_advance"
+        },
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::calculate_local_elapsed_seconds"
+        },
+        {
+          "count": 18,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::set_root_opacity"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::artboard::component_dirt_affects_path_epoch"
+        },
+        {
+          "count": 32,
+          "name": "nuxie_runtime::artboard::property_may_affect_prepared_frame"
+        }
+      ],
+      "crates/nuxie-runtime/src/assets/font_asset.rs": [
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_runtime_font_asset_updates"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::font_asset::RuntimeFontAssetReferencerQueue>::take"
+        }
+      ],
+      "crates/nuxie-runtime/src/assets/image_asset.rs": [
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_runtime_image_asset_updates"
+        },
+        {
+          "count": 94,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer"
+        },
+        {
+          "count": 1194,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer::{closure#0}"
+        },
+        {
+          "count": 644,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer::{closure#1}"
+        },
+        {
+          "count": 94,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::clear"
+        },
+        {
+          "count": 94,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::replace_images::<core::iter::adapters::filter_map::FilterMap<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<core::option::Option<alloc::rc::Rc<core::cell::RefCell<nuxie_runtime::draw::image::RuntimeImageOwner>>>>>, <nuxie_runtime::draw::image::RuntimeImageList>::register_asset_referencers::{closure#0}>>"
+        },
+        {
+          "count": 29,
+          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::take"
+        }
+      ],
+      "crates/nuxie-runtime/src/audio_event.rs": [
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::audio_event::RuntimeAudioEventPlayback>::engine"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::audio_event::RuntimeAudioEventPlayback>::stop_artboard"
+        }
+      ],
+      "crates/nuxie-runtime/src/bones/root_bone.rs": [
+        {
+          "count": 42,
+          "name": "nuxie_runtime::components::bones::root_bone::x_property_key"
+        },
+        {
+          "count": 42,
+          "name": "nuxie_runtime::components::bones::root_bone::y_property_key"
+        }
+      ],
+      "crates/nuxie-runtime/src/bones/weight.rs": [
         {
           "count": 80,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::deform_runtime_vertex_weight"
@@ -2695,551 +3481,23 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::deform_runtime_vertex_weight::{closure#9}"
         },
         {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::detach_active_nested_state_machines"
-        },
-        {
-          "count": 24259,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property"
-        },
-        {
-          "count": 24259,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#1}"
-        },
-        {
-          "count": 24259,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#2}"
-        },
-        {
-          "count": 380,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::fill_rule"
-        },
-        {
-          "count": 37,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::frame_origin"
-        },
-        {
-          "count": 583,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_artboard_data_bindings"
-        },
-        {
-          "count": 188,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt"
-        },
-        {
-          "count": 188,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt::{closure#0}"
-        },
-        {
-          "count": 188,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_dirt::{closure#1}"
-        },
-        {
-          "count": 29,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::initialize_clone_backend_if_pending"
-        },
-        {
-          "count": 51,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::layout_revision"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_definition"
-        },
-        {
-          "count": 14,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_keep_going"
-        },
-        {
-          "count": 180,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed_unless_view_model_instance"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed_unless_view_model_instance::{closure#1}"
-        },
-        {
-          "count": 134,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_components_dirty"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed::{closure#0}"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_layout_node_changed::{closure#1}"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_points_path_skin_dirty"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_points_path_skin_dirty::{closure#0}"
-        },
-        {
-          "count": 509,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed"
-        },
-        {
-          "count": 40,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_property"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_solid_color_visibility"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_prepared_changed_for_solid_color_visibility::{closure#0}"
-        },
-        {
-          "count": 469,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_render_opacity_changed"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_runtime_shape_property_changed"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_stateful_nested_view_model_contexts_dirty_for_local"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_stateful_nested_view_model_contexts_dirty_for_local::{closure#1}"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_text_changed_for_local"
-        },
-        {
-          "count": 84,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_transform_dirty_handle"
-        },
-        {
-          "count": 509,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_tree_paint_preparation_changed"
-        },
-        {
-          "count": 81,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch"
-        },
-        {
-          "count": 81,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch::{closure#0}"
-        },
-        {
-          "count": 128,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::on_component_dirty_handle"
-        },
-        {
-          "count": 46,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::prepared_epoch"
-        },
-        {
-          "count": 30,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::reset_retained_components_for_state_machine_settlement"
-        },
-        {
-          "count": 38,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::resolved_image_asset_global"
-        },
-        {
-          "count": 38,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::resolved_image_asset_global::{closure#0}"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::restore_active_nested_state_machines"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file::{closure#0}"
-        },
-        {
-          "count": 207,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc"
-        },
-        {
-          "count": 207,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc::{closure#0}"
-        },
-        {
-          "count": 199,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_graph"
-        },
-        {
-          "count": 217,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_graph_for_global"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_nested_artboard_layout_bounds_frame"
-        },
-        {
-          "count": 1,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_nested_artboard_layout_bounds_frame::{closure#0}"
-        },
-        {
-          "count": 210,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin"
-        },
-        {
-          "count": 210,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin::{closure#0}"
-        },
-        {
-          "count": 142,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin::{closure#1}"
-        },
-        {
           "count": 160,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_vertex_weight_state"
         },
         {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_bool_property"
-        },
-        {
-          "count": 82,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_double_property"
-        },
-        {
-          "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_frame_origin"
-        },
-        {
-          "count": 57,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_keyed_double_property"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_keyed_solid_color_property"
-        },
-        {
-          "count": 72,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_transform_property_with_key"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::set_uint_property"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_runtime_solid_color_callback"
-        },
-        {
-          "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_errors"
-        },
-        {
-          "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset"
-        },
-        {
-          "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset::{closure#0}"
-        },
-        {
-          "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_script_errors"
-        },
-        {
-          "count": 168,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_blend_mode_value"
-        },
-        {
-          "count": 186,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_is_visible"
-        },
-        {
-          "count": 38772,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::slot"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::solid_color_paint_revision"
-        },
-        {
-          "count": 100,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::solid_color_value"
-        },
-        {
-          "count": 60,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::state_machine_definition_owner"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::string_property"
-        },
-        {
-          "count": 72,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::stroke_thickness"
-        },
-        {
-          "count": 154,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::stroke_transform_affects_stroke"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::sync_nested_artboard_root_opacity"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::sync_nested_artboard_root_opacity::{closure#0}"
-        },
-        {
-          "count": 30,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::take_script_update_error_tree"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::text_list_runs"
-        },
-        {
-          "count": 25,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::text_style_font_override"
-        },
-        {
-          "count": 7296,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property"
-        },
-        {
-          "count": 5844,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property_with_key"
-        },
-        {
-          "count": 22,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::tree_paint_preparation_epoch"
-        },
-        {
-          "count": 22,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::tree_paint_preparation_epoch::{closure#0}"
-        },
-        {
-          "count": 30,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance"
-        },
-        {
-          "count": 30,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance_unconditionally"
-        },
-        {
-          "count": 3745,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::uint_property"
-        },
-        {
-          "count": 24,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_list_layout_bounds"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#0}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#10}"
-        },
-        {
-          "count": 24,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#11}"
-        },
-        {
-          "count": 24,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#12}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#13}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#14}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#15}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#16}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#17}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#18}"
-        },
-        {
-          "count": 80,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#19}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#1}"
-        },
-        {
-          "count": 583,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#2}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#5}"
-        },
-        {
-          "count": 24,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#6}"
-        },
-        {
-          "count": 456,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#8}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_component_with_script_mode::{closure#9}"
-        },
-        {
-          "count": 29,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>"
-        },
-        {
-          "count": 29,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#0}"
-        },
-        {
-          "count": 24,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#1}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_components_with_hook_recording::<<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}>::{closure#2}"
-        },
-        {
-          "count": 53,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_data_binds_for_update_pass"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt"
-        },
-        {
-          "count": 18,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#0}"
-        },
-        {
-          "count": 18,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#0}::{closure#0}"
-        },
-        {
-          "count": 18,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_from_host_dirt::{closure#1}"
-        },
-        {
-          "count": 29,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}"
-        },
-        {
-          "count": 18,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode::{closure#0}::{closure#0}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_script_component_in_dependency_order"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_script_component_in_dependency_order::{closure#0}"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::advance_after_animation_owners"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::advance_outer_update"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::begin_advance"
-        },
-        {
-          "count": 38,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::calculate_local_elapsed_seconds"
-        },
-        {
-          "count": 18,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::set_root_opacity"
-        },
-        {
           "count": 240,
           "name": "nuxie_runtime::artboard::deform_point_from_skin"
-        },
-        {
-          "count": 40,
-          "name": "nuxie_runtime::artboard::property_may_affect_prepared_frame"
         }
       ],
-      "crates/nuxie-runtime/src/assets/image_asset.rs": [
+      "crates/nuxie-runtime/src/component_origin.rs": [
         {
-          "count": 29,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_runtime_image_asset_updates"
-        },
-        {
-          "count": 94,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer"
-        },
-        {
-          "count": 1194,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer::{closure#0}"
-        },
-        {
-          "count": 644,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetOwners>::register_referencer::{closure#1}"
-        },
-        {
-          "count": 94,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::clear"
-        },
-        {
-          "count": 94,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::replace_images::<core::iter::adapters::filter_map::FilterMap<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<core::option::Option<alloc::rc::Rc<core::cell::RefCell<nuxie_runtime::draw::image::RuntimeImageOwner>>>>>, <nuxie_runtime::draw::image::RuntimeImageList>::register_asset_referencers::{closure#0}>>"
-        },
-        {
-          "count": 29,
-          "name": "<nuxie_runtime::draw::image_asset::RuntimeImageAssetReferencerQueue>::take"
+          "count": 32,
+          "name": "nuxie_runtime::artboard::component_origin_double_property_changed"
         }
       ],
       "crates/nuxie-runtime/src/components.rs": [
         {
-          "count": 1955,
+          "count": 1975,
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::BitAnd>::bitand"
         },
         {
@@ -3247,11 +3505,11 @@
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::BitAndAssign>::bitand_assign"
         },
         {
-          "count": 4513,
+          "count": 4553,
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::BitOr>::bitor"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::BitOrAssign>::bitor_assign"
         },
         {
@@ -3259,71 +3517,31 @@
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::Not>::not"
         },
         {
-          "count": 10038,
+          "count": 10703,
           "name": "<nuxie_runtime::components::ComponentDirt>::contains"
         },
         {
-          "count": 3014,
+          "count": 3033,
           "name": "<nuxie_runtime::components::ComponentDirt>::is_empty"
         },
         {
-          "count": 68643,
+          "count": 82242,
           "name": "<nuxie_runtime::components::ComponentHandle>::index"
         },
         {
-          "count": 128,
+          "count": 132,
           "name": "<nuxie_runtime::components::GraphOrder>::index"
-        },
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::components::Mat2D>::compose"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::components::Mat2D>::decompose"
-        },
-        {
-          "count": 418,
-          "name": "<nuxie_runtime::components::Mat2D>::determinant"
-        },
-        {
-          "count": 493,
-          "name": "<nuxie_runtime::components::Mat2D>::from_rotation"
-        },
-        {
-          "count": 314,
-          "name": "<nuxie_runtime::components::Mat2D>::invert_or_identity"
-        },
-        {
-          "count": 1168,
-          "name": "<nuxie_runtime::components::Mat2D>::map_point"
-        },
-        {
-          "count": 1342,
-          "name": "<nuxie_runtime::components::Mat2D>::multiply"
-        },
-        {
-          "count": 493,
-          "name": "<nuxie_runtime::components::Mat2D>::scale_by_values"
-        },
-        {
-          "count": 544,
-          "name": "<nuxie_runtime::components::Mat2D>::transform_point"
         },
         {
           "count": 456,
           "name": "<nuxie_runtime::components::RuntimeComponent>::child_opacity"
         },
         {
-          "count": 870,
+          "count": 886,
           "name": "<nuxie_runtime::components::RuntimeComponent>::is_collapsed"
         },
         {
-          "count": 5,
-          "name": "<nuxie_runtime::components::RuntimeComponent>::path_revision"
-        },
-        {
-          "count": 6228,
+          "count": 6516,
           "name": "<nuxie_runtime::components::RuntimeComponent>::transform_property_key"
         },
         {
@@ -3339,11 +3557,11 @@
           "name": "<nuxie_runtime::components::RuntimeComponent>::update_world_transform"
         },
         {
-          "count": 30,
+          "count": 54,
           "name": "<nuxie_runtime::components::RuntimeLayoutComponentState>::animates"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::components::RuntimeLayoutComponentState>::mark_layout_node_dirty"
         },
         {
@@ -3355,6 +3573,14 @@
           "name": "<nuxie_runtime::components::RuntimeLayoutComponentState>::retain_bounds"
         },
         {
+          "count": 24,
+          "name": "<nuxie_runtime::components::RuntimeLayoutComponentState>::should_force_update_layout_bounds"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::components::RuntimeLayoutComponentState>::target_bounds"
+        },
+        {
           "count": 384,
           "name": "<nuxie_runtime::components::RuntimeNodeState>::mark_computed_local_dirty"
         },
@@ -3363,7 +3589,7 @@
           "name": "<nuxie_runtime::components::RuntimePathState>::is_flagged"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::components::RuntimeTextState>::retain_bounds"
         },
         {
@@ -3371,51 +3597,43 @@
           "name": "<nuxie_runtime::components::TransformProperty>::default_value"
         },
         {
-          "count": 450,
+          "count": 378,
           "name": "<nuxie_runtime::components::TransformProperty>::property_key_for_type"
         },
         {
-          "count": 6228,
+          "count": 6516,
           "name": "<nuxie_runtime::components::TransformPropertyKeys>::is_for_type"
         },
         {
-          "count": 6228,
+          "count": 6516,
           "name": "<nuxie_runtime::components::TransformPropertyKeys>::key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::artboard_opacity_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::node_x_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::node_y_property_key"
         },
         {
-          "count": 50,
-          "name": "nuxie_runtime::components::root_bone_x_property_key"
-        },
-        {
-          "count": 50,
-          "name": "nuxie_runtime::components::root_bone_y_property_key"
-        },
-        {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::transform_component_opacity_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::transform_component_rotation_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::transform_component_scale_x_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::components::transform_component_scale_y_property_key"
         }
       ],
@@ -3423,26 +3641,6 @@
         {
           "count": 18,
           "name": "<nuxie_runtime::constraints::TransformSpace>::from_value"
-        },
-        {
-          "count": 6,
-          "name": "nuxie_runtime::constraints::apply_constraint"
-        },
-        {
-          "count": 607,
-          "name": "nuxie_runtime::constraints::apply_constraints"
-        },
-        {
-          "count": 6,
-          "name": "nuxie_runtime::constraints::apply_constraints::{closure#0}"
-        },
-        {
-          "count": 607,
-          "name": "nuxie_runtime::constraints::apply_list_constraints"
-        },
-        {
-          "count": 607,
-          "name": "nuxie_runtime::constraints::apply_list_constraints::{closure#0}"
         },
         {
           "count": 607,
@@ -3455,22 +3653,6 @@
         {
           "count": 24,
           "name": "nuxie_runtime::constraints::apply_parent_layout_constraints::{closure#0}::{closure#1}"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::constraints::apply_rotation_constraint"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::constraints::apply_rotation_constraint::{closure#0}"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::constraints::apply_translation_constraint"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::constraints::apply_translation_constraint::{closure#0}"
         },
         {
           "count": 2,
@@ -3509,15 +3691,15 @@
           "name": "nuxie_runtime::constraints::retained_constraint_uint"
         },
         {
-          "count": 24259,
+          "count": 24595,
           "name": "nuxie_runtime::constraints::runtime_scroll_double_property"
         },
         {
-          "count": 24398,
+          "count": 24716,
           "name": "nuxie_runtime::constraints::runtime_scroll_property"
         },
         {
-          "count": 24398,
+          "count": 24716,
           "name": "nuxie_runtime::constraints::runtime_scroll_property_keys"
         },
         {
@@ -3525,12 +3707,56 @@
           "name": "nuxie_runtime::constraints::runtime_scroll_property_keys::{closure#0}"
         },
         {
-          "count": 139,
+          "count": 121,
           "name": "nuxie_runtime::constraints::set_runtime_scroll_double_property"
         },
         {
           "count": 6,
           "name": "nuxie_runtime::constraints::write_world_transform"
+        }
+      ],
+      "crates/nuxie-runtime/src/constraints/constrainable_list.rs": [
+        {
+          "count": 607,
+          "name": "nuxie_runtime::constraints::constrainable_list::apply_list_constraints"
+        },
+        {
+          "count": 607,
+          "name": "nuxie_runtime::constraints::constrainable_list::apply_list_constraints::{closure#0}"
+        }
+      ],
+      "crates/nuxie-runtime/src/constraints/constraint.rs": [
+        {
+          "count": 6,
+          "name": "nuxie_runtime::constraints::constraint::apply_constraint"
+        },
+        {
+          "count": 607,
+          "name": "nuxie_runtime::constraints::constraint::apply_constraints"
+        },
+        {
+          "count": 6,
+          "name": "nuxie_runtime::constraints::constraint::apply_constraints::{closure#0}"
+        }
+      ],
+      "crates/nuxie-runtime/src/constraints/rotation_constraint.rs": [
+        {
+          "count": 2,
+          "name": "nuxie_runtime::constraints::rotation_constraint::apply"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::constraints::rotation_constraint::apply::{closure#0}"
+        }
+      ],
+      "crates/nuxie-runtime/src/constraints/translation_constraint.rs": [
+        {
+          "count": 4,
+          "name": "nuxie_runtime::constraints::translation_constraint::apply"
+        },
+        {
+          "count": 4,
+          "name": "nuxie_runtime::constraints::translation_constraint::apply::{closure#0}"
         }
       ],
       "crates/nuxie-runtime/src/data_bind/context/context_value.rs": [
@@ -3639,7 +3865,7 @@
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::applies_source_to_target"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::applies_target_to_source"
         },
         {
@@ -3687,7 +3913,7 @@
           "name": "nuxie_runtime::data_bind_graph::data_bind_flags_apply_source_to_target"
         },
         {
-          "count": 130,
+          "count": 132,
           "name": "nuxie_runtime::data_bind_graph::data_bind_flags_apply_target_to_source"
         },
         {
@@ -3885,6 +4111,10 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::converted_artboard_property_binding_value::{closure#1}"
         },
         {
+          "count": 113,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::flush_runtime_text_run_listener_changes"
+        },
+        {
           "count": 18,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::has_artboard_context_source_bindings"
         },
@@ -3905,7 +4135,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_artboard_tree_has_context_source_bindings::{closure#0}::{closure#0}"
         },
         {
-          "count": 105,
+          "count": 97,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::notify_artboard_data_bind_target_property_changed"
         },
         {
@@ -4005,7 +4235,7 @@
           "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardDataBindSourceQueues>::has_numeric_source_update_indices"
         },
         {
-          "count": 105,
+          "count": 97,
           "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardDataBindSourceQueues>::has_target_properties"
         },
         {
@@ -4091,16 +4321,16 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard"
         },
         {
+          "count": 11,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_entry"
+        },
+        {
           "count": 30,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache"
         },
         {
-          "count": 30,
+          "count": 5,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#0}"
-        },
-        {
-          "count": 1,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#1}"
         },
         {
           "count": 21,
@@ -4115,24 +4345,20 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::initialize_artboard_renderer"
         },
         {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::invalidate_runtime_non_shape_paint_container_effects"
         },
         {
-          "count": 10,
+          "count": 20,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::invalidate_runtime_non_shape_paint_container_effects::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::invalidate_runtime_non_shape_paint_container_effects::{closure#2}"
         },
         {
           "count": 4,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::prepare_artboard_occurrence_resources"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::prepare_artboard_occurrence_resources::{closure#0}"
         },
         {
           "count": 18,
@@ -4227,7 +4453,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_component_list_assigned_layout_bounds"
         },
         {
-          "count": 782,
+          "count": 784,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_component_world_transform_with_bounds"
         },
         {
@@ -4283,24 +4509,44 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_axis_scale"
         },
         {
-          "count": 240,
+          "count": 507,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_component_is_display_none"
+        },
+        {
+          "count": 795,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_component_style_local"
         },
         {
-          "count": 240,
+          "count": 795,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_component_style_local::{closure#0}"
         },
         {
-          "count": 240,
+          "count": 795,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_component_style_local::{closure#1}"
         },
         {
-          "count": 240,
+          "count": 288,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_component_style_local::{closure#3}"
         },
         {
           "count": 105,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_control_size_for_path"
+        },
+        {
+          "count": 603,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_node_style_local"
+        },
+        {
+          "count": 507,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_node_style_local::{closure#0}"
+        },
+        {
+          "count": 2458,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_participant_local"
+        },
+        {
+          "count": 4909,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_participant_local::{closure#0}"
         },
         {
           "count": 96,
@@ -4323,15 +4569,15 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_style_is_row"
         },
         {
-          "count": 1824,
+          "count": 1872,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_style_uint"
         },
         {
-          "count": 1824,
+          "count": 1872,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_style_uint::{closure#0}"
         },
         {
-          "count": 1728,
+          "count": 1776,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_layout_style_uint_default"
         },
         {
@@ -4373,26 +4619,6 @@
         {
           "count": 35,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_owned_shape_paint_command_report::{closure#8}"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#0}"
-        },
-        {
-          "count": 237,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#1}"
-        },
-        {
-          "count": 237,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#1}::{closure#0}"
-        },
-        {
-          "count": 105,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_geometry_with_layout_control"
         },
         {
           "count": 38,
@@ -4447,7 +4673,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_taffy_layout_bounds"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_text_layout_constraint"
         },
         {
@@ -4460,7 +4686,7 @@
         },
         {
           "count": 37,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_will_draw::{closure#3}"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_will_draw::{closure#4}"
         },
         {
           "count": 174,
@@ -4547,7 +4773,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_artboard_backend_tree_internal::{closure#3}"
         },
         {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_artboard_render_paths"
         },
         {
@@ -4563,56 +4789,8 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_artboard_render_paths::{closure#3}"
         },
         {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_clipping_shape_owner"
-        },
-        {
-          "count": 12,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_clipping_shape_owner::{closure#0}"
-        },
-        {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_mesh_owner"
-        },
-        {
-          "count": 104,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_composer"
-        },
-        {
-          "count": 121,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_composer::{closure#0}"
-        },
-        {
-          "count": 607,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner"
-        },
-        {
-          "count": 17511,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#0}"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#1}"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#3}"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#4}"
-        },
-        {
-          "count": 109,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#5}"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#6}"
-        },
-        {
-          "count": 105,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#7}"
         },
         {
           "count": 41,
@@ -4659,7 +4837,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_shape_paint_mutator::{closure#1}"
         },
         {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_shape_paints_at_dependency_node"
         },
         {
@@ -4675,11 +4853,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_shape_paints_at_dependency_node::{closure#5}"
         },
         {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_text_render_styles"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_text_render_styles::{closure#4}"
         },
         {
@@ -4689,10 +4867,6 @@
         {
           "count": 1,
           "name": "<nuxie_runtime::draw::RuntimeArtboardPaintDirtState>::can_skip_prepared_frame::{closure#0}"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::draw::RuntimeArtboardPathState>::artboard_clip_path::<<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#1}>"
         },
         {
           "count": 21,
@@ -4729,14 +4903,6 @@
         {
           "count": 21,
           "name": "<nuxie_runtime::draw::RuntimeArtboardPathState>::live_traversal_frame"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::draw::RuntimeArtboardPathState>::retained_render_path_key"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::draw::RuntimeArtboardPathState>::retained_render_path_key::{closure#0}"
         },
         {
           "count": 643,
@@ -4831,6 +4997,10 @@
           "name": "<nuxie_runtime::draw::RuntimeDrawableList>::iter"
         },
         {
+          "count": 2,
+          "name": "<nuxie_runtime::draw::RuntimeDrawableList>::mark_text_resource_dirty_for_local"
+        },
+        {
           "count": 607,
           "name": "<nuxie_runtime::draw::RuntimeDrawableList>::reset_proxy_drawables"
         },
@@ -4875,7 +5045,7 @@
           "name": "<nuxie_runtime::draw::RuntimeGradientPreparationFrame>::has_paints"
         },
         {
-          "count": 3024,
+          "count": 3072,
           "name": "<nuxie_runtime::draw::RuntimeLayoutStyleProperty>::key"
         },
         {
@@ -4899,20 +5069,32 @@
           "name": "<nuxie_runtime::draw::RuntimePaintOwnerSlots>::get_mut"
         },
         {
+          "count": 5,
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), <nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#0}>"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), <nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#0}>::{closure#0}"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), <nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#0}>::{closure#1}"
+        },
+        {
           "count": 12,
           "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::draw::runtime_draw_live_clip_start::{closure#0}>"
         },
         {
           "count": 146,
-          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#9}>"
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#9}>"
         },
         {
-          "count": 27,
-          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#9}>::{closure#0}"
+          "count": 28,
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#9}>::{closure#0}"
         },
         {
-          "count": 27,
-          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#9}>::{closure#1}"
+          "count": 28,
+          "name": "<nuxie_runtime::draw::RuntimePathBackendSlot>::with_path::<(), nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#9}>::{closure#1}"
         },
         {
           "count": 16,
@@ -4951,23 +5133,27 @@
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::backend_paints_need_realization"
         },
         {
-          "count": 2652,
+          "count": 2663,
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::get"
         },
         {
-          "count": 2,
+          "count": 6,
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::invalidate_container_stroke_effects"
         },
         {
-          "count": 2,
+          "count": 6,
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::invalidate_container_stroke_effects::{closure#0}"
         },
         {
-          "count": 52,
+          "count": 44,
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::mark_property_changed"
         },
         {
-          "count": 146,
+          "count": 2,
+          "name": "<nuxie_runtime::draw::RuntimeShapeList>::on_component_dirty"
+        },
+        {
+          "count": 151,
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::paint_path_owner"
         },
         {
@@ -4983,11 +5169,11 @@
           "name": "<nuxie_runtime::draw::RuntimeShapeList>::take_pending_backend_paints"
         },
         {
-          "count": 131,
+          "count": 135,
           "name": "<nuxie_runtime::draw::RuntimeShapePaintOwner>::invalidate_all_effects"
         },
         {
-          "count": 131,
+          "count": 135,
           "name": "<nuxie_runtime::draw::RuntimeShapePaintOwner>::invalidate_effects_from"
         },
         {
@@ -5007,19 +5193,19 @@
           "name": "<nuxie_runtime::draw::RuntimeShapePaintOwner>::record_gradient_update"
         },
         {
-          "count": 333,
-          "name": "<nuxie_runtime::draw::RuntimeShapePaintPathOwner>::replace_retained"
-        },
-        {
           "count": 4,
           "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::is_dirty"
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::mark_paths_retained_dirty"
+        },
+        {
+          "count": 4,
           "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::mark_render_styles_dirty_unless_paths_retained"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::rebuild::<<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_text_render_styles::{closure#4}>"
         },
         {
@@ -5027,7 +5213,7 @@
           "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::retained_frame"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::draw::RuntimeTextDrawOwner>::retained_or_build::<<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_text_render_styles::{closure#4}>"
         },
         {
@@ -5053,10 +5239,6 @@
         {
           "count": 48,
           "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::build_node::{closure#1}"
-        },
-        {
-          "count": 6082,
-          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::build_node::{closure#2}"
         },
         {
           "count": 48,
@@ -5095,24 +5277,20 @@
           "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_component_registers_measure_func"
         },
         {
-          "count": 48,
+          "count": 96,
           "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children"
         },
         {
-          "count": 48,
-          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::{closure#0}"
+          "count": 700,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::visit"
         },
         {
-          "count": 190,
-          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::{closure#1}"
+          "count": 55060,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::visit::{closure#0}"
         },
         {
-          "count": 6082,
-          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::{closure#1}::{closure#0}"
-        },
-        {
-          "count": 190,
-          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::{closure#1}::{closure#1}"
+          "count": 190916,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::visit::{closure#1}"
         },
         {
           "count": 192,
@@ -5133,6 +5311,18 @@
         {
           "count": 48,
           "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::needs_unimplemented_measure"
+        },
+        {
+          "count": 48,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::parent_layout_type"
+        },
+        {
+          "count": 48,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::parent_layout_type::{closure#0}"
+        },
+        {
+          "count": 48,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::parent_layout_type::{closure#1}"
         },
         {
           "count": 192,
@@ -5161,6 +5351,10 @@
         {
           "count": 48,
           "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::style_for_node::{closure#0}"
+        },
+        {
+          "count": 48,
+          "name": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::style_for_node::{closure#1}"
         },
         {
           "count": 13700,
@@ -5219,11 +5413,11 @@
           "name": "nuxie_runtime::draw::append_transformed_path_commands"
         },
         {
-          "count": 21,
+          "count": 23,
           "name": "nuxie_runtime::draw::assign_shape_paint_path_slot_indices"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::assign_shape_paint_path_slot_indices::{closure#1}"
         },
         {
@@ -5235,7 +5429,7 @@
           "name": "nuxie_runtime::draw::color_lerp"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::draw::color_modulate_opacity"
         },
         {
@@ -5303,16 +5497,8 @@
           "name": "nuxie_runtime::draw::path_commands"
         },
         {
-          "count": 6,
-          "name": "nuxie_runtime::draw::path_commands_backwards"
-        },
-        {
           "count": 104,
           "name": "nuxie_runtime::draw::path_needs_clockwise_reversal"
-        },
-        {
-          "count": 2606,
-          "name": "nuxie_runtime::draw::path_points_match"
         },
         {
           "count": 83,
@@ -5331,22 +5517,6 @@
           "name": "nuxie_runtime::draw::polygon_path_commands"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::draw::positive_unit_mod"
-        },
-        {
-          "count": 459,
-          "name": "nuxie_runtime::draw::prune_empty_path_segments"
-        },
-        {
-          "count": 771,
-          "name": "nuxie_runtime::draw::prune_empty_path_segments_from"
-        },
-        {
-          "count": 2592,
-          "name": "nuxie_runtime::draw::prune_empty_path_segments_from::{closure#0}"
-        },
-        {
           "count": 335,
           "name": "nuxie_runtime::draw::push_cubic"
         },
@@ -5359,14 +5529,6 @@
           "name": "nuxie_runtime::draw::push_move"
         },
         {
-          "count": 6,
-          "name": "nuxie_runtime::draw::raw_path_parts"
-        },
-        {
-          "count": 6,
-          "name": "nuxie_runtime::draw::raw_path_parts_to_commands"
-        },
-        {
           "count": 16,
           "name": "nuxie_runtime::draw::record_runtime_dash_path_effect_rebuild"
         },
@@ -5375,36 +5537,32 @@
           "name": "nuxie_runtime::draw::rectangle_path_commands"
         },
         {
-          "count": 452,
-          "name": "nuxie_runtime::draw::runtime_append_commands_to_raw_path"
-        },
-        {
           "count": 137,
           "name": "nuxie_runtime::draw::runtime_blend_mode"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_build_text_draw_frame"
         },
         {
-          "count": 7,
+          "count": 14,
           "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#1}"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#1}::{closure#0}"
         },
         {
-          "count": 71,
+          "count": 142,
           "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#1}::{closure#0}::{closure#0}"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#6}"
+          "count": 4,
+          "name": "nuxie_runtime::draw::runtime_build_text_draw_frame::{closure#7}"
         },
         {
           "count": 35,
@@ -5413,14 +5571,6 @@
         {
           "count": 16,
           "name": "nuxie_runtime::draw::runtime_cached_path_slot_index::{closure#0}"
-        },
-        {
-          "count": 5,
-          "name": "nuxie_runtime::draw::runtime_cached_retained_render_path_with_commands::<<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#1}>"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::draw::runtime_cached_retained_render_path_with_commands::<<nuxie_runtime::artboard::ArtboardInstance>::draw_artboard_internal_internal_with_path_cache::{closure#1}>::{closure#0}"
         },
         {
           "count": 18,
@@ -5519,50 +5669,6 @@
           "name": "nuxie_runtime::draw::runtime_draw_live_owned_artboard_paints::{closure#0}"
         },
         {
-          "count": 120,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape"
-        },
-        {
-          "count": 120,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape::{closure#0}"
-        },
-        {
-          "count": 137,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape::{closure#1}"
-        },
-        {
-          "count": 137,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape::{closure#4}"
-        },
-        {
-          "count": 146,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint"
-        },
-        {
-          "count": 18,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#0}"
-        },
-        {
-          "count": 18,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#1}"
-        },
-        {
-          "count": 18,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#2}"
-        },
-        {
-          "count": 18,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#3}"
-        },
-        {
-          "count": 106,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#8}"
-        },
-        {
-          "count": 146,
-          "name": "nuxie_runtime::draw::runtime_draw_live_owned_shape_paint::{closure#9}"
-        },
-        {
           "count": 2,
           "name": "nuxie_runtime::draw::runtime_draw_live_text_family"
         },
@@ -5575,7 +5681,7 @@
           "name": "nuxie_runtime::draw::runtime_draw_live_text_family::{closure#9}"
         },
         {
-          "count": 29073,
+          "count": 29079,
           "name": "nuxie_runtime::draw::runtime_draw_property_key_for_name"
         },
         {
@@ -5583,7 +5689,7 @@
           "name": "nuxie_runtime::draw::runtime_drawable_dispatch_is_nested_artboard"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_effect_path_commands"
         },
         {
@@ -5607,7 +5713,7 @@
           "name": "nuxie_runtime::draw::runtime_feather_has_offset"
         },
         {
-          "count": 34,
+          "count": 36,
           "name": "nuxie_runtime::draw::runtime_feather_state"
         },
         {
@@ -5627,7 +5733,7 @@
           "name": "nuxie_runtime::draw::runtime_feather_uses_world_space"
         },
         {
-          "count": 484,
+          "count": 490,
           "name": "nuxie_runtime::draw::runtime_fill_rule_for_value"
         },
         {
@@ -5715,15 +5821,15 @@
           "name": "nuxie_runtime::draw::runtime_live_owned_shape_paint_path_kind"
         },
         {
-          "count": 89,
+          "count": 95,
           "name": "nuxie_runtime::draw::runtime_live_shape_paint_fill_rule"
         },
         {
-          "count": 89,
+          "count": 95,
           "name": "nuxie_runtime::draw::runtime_live_shape_paint_fill_rule::{closure#0}"
         },
         {
-          "count": 201,
+          "count": 205,
           "name": "nuxie_runtime::draw::runtime_live_shape_paint_path_kind"
         },
         {
@@ -5731,7 +5837,7 @@
           "name": "nuxie_runtime::draw::runtime_live_shape_paint_path_kind::{closure#0}"
         },
         {
-          "count": 3,
+          "count": 2,
           "name": "nuxie_runtime::draw::runtime_make_path_from_raw_path"
         },
         {
@@ -5779,18 +5885,6 @@
           "name": "nuxie_runtime::draw::runtime_path_bool_property::{closure#0}"
         },
         {
-          "count": 452,
-          "name": "nuxie_runtime::draw::runtime_path_command_counts"
-        },
-        {
-          "count": 413,
-          "name": "nuxie_runtime::draw::runtime_path_commands_from_raw_path"
-        },
-        {
-          "count": 413,
-          "name": "nuxie_runtime::draw::runtime_path_commands_from_raw_path::{closure#0}"
-        },
-        {
           "count": 4865,
           "name": "nuxie_runtime::draw::runtime_path_double_property"
         },
@@ -5817,10 +5911,6 @@
         {
           "count": 434,
           "name": "nuxie_runtime::draw::runtime_path_uint_property::{closure#0}"
-        },
-        {
-          "count": 452,
-          "name": "nuxie_runtime::draw::runtime_raw_path_from_commands"
         },
         {
           "count": 32,
@@ -5859,15 +5949,7 @@
           "name": "nuxie_runtime::draw::runtime_realize_owned_shape_paints::{closure#6}"
         },
         {
-          "count": 452,
-          "name": "nuxie_runtime::draw::runtime_rebuild_raw_path_from_commands"
-        },
-        {
-          "count": 452,
-          "name": "nuxie_runtime::draw::runtime_rebuild_raw_path_from_commands::{closure#0}"
-        },
-        {
-          "count": 15,
+          "count": 14,
           "name": "nuxie_runtime::draw::runtime_rect_commands"
         },
         {
@@ -5907,47 +5989,39 @@
           "name": "nuxie_runtime::draw::runtime_retained_text_draw_frame"
         },
         {
-          "count": 170,
+          "count": 172,
           "name": "nuxie_runtime::draw::runtime_shape_paint_blend_mode_value"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_shape_paint_command"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_shape_paint_command_with_effect_path"
         },
         {
-          "count": 64,
-          "name": "nuxie_runtime::draw::runtime_shape_paint_container_is_occurrence_owned"
-        },
-        {
-          "count": 64,
-          "name": "nuxie_runtime::draw::runtime_shape_paint_container_is_occurrence_owned::{closure#0}"
-        },
-        {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_shape_paint_is_visible"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_shape_paint_kind"
         },
         {
-          "count": 645,
+          "count": 650,
           "name": "nuxie_runtime::draw::runtime_shape_paint_path_kind_slot"
         },
         {
-          "count": 37,
+          "count": 39,
           "name": "nuxie_runtime::draw::runtime_shape_paint_space_transform"
         },
         {
-          "count": 161,
+          "count": 163,
           "name": "nuxie_runtime::draw::runtime_shape_paint_state"
         },
         {
-          "count": 97,
+          "count": 99,
           "name": "nuxie_runtime::draw::runtime_shape_paint_state::{closure#0}"
         },
         {
@@ -5955,7 +6029,7 @@
           "name": "nuxie_runtime::draw::runtime_shape_paint_state::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_shape_paint_state_is_effectively_visible"
         },
         {
@@ -5967,51 +6041,19 @@
           "name": "nuxie_runtime::draw::runtime_shape_paint_state_with_endpoints"
         },
         {
-          "count": 41,
-          "name": "nuxie_runtime::draw::runtime_stroke_cap"
-        },
-        {
-          "count": 18,
-          "name": "nuxie_runtime::draw::runtime_stroke_effect_path_commands"
-        },
-        {
-          "count": 41,
-          "name": "nuxie_runtime::draw::runtime_stroke_join"
-        },
-        {
-          "count": 41,
-          "name": "nuxie_runtime::draw::runtime_stroke_thickness"
-        },
-        {
-          "count": 41,
-          "name": "nuxie_runtime::draw::runtime_stroke_thickness_for_local"
-        },
-        {
-          "count": 41,
-          "name": "nuxie_runtime::draw::runtime_stroke_thickness_for_local::{closure#0}"
-        },
-        {
-          "count": 82,
-          "name": "nuxie_runtime::draw::runtime_stroke_uint_property"
-        },
-        {
-          "count": 82,
-          "name": "nuxie_runtime::draw::runtime_stroke_uint_property::{closure#0}"
-        },
-        {
           "count": 2,
           "name": "nuxie_runtime::draw::runtime_text_gradient_state"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_text_owned_raw_paths"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_text_owned_raw_paths::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::draw::runtime_text_owned_raw_paths::{closure#0}::{closure#0}"
         },
         {
@@ -6023,36 +6065,16 @@
           "name": "nuxie_runtime::draw::runtime_text_paint_shape_world::{closure#0}"
         },
         {
-          "count": 8,
+          "count": 4,
+          "name": "nuxie_runtime::draw::runtime_text_replay_order"
+        },
+        {
+          "count": 12,
           "name": "nuxie_runtime::draw::runtime_text_style_path_owner_local"
         },
         {
-          "count": 8,
+          "count": 12,
           "name": "nuxie_runtime::draw::runtime_text_style_path_owner_local::{closure#1}"
-        },
-        {
-          "count": 6,
-          "name": "nuxie_runtime::draw::runtime_trim_path_double_property"
-        },
-        {
-          "count": 6,
-          "name": "nuxie_runtime::draw::runtime_trim_path_double_property::{closure#0}"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::draw::runtime_trim_path_line_effect_commands"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::draw::runtime_trim_path_mode_value"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::draw::runtime_trim_path_mode_value::{closure#0}"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::draw::runtime_trim_path_mode_value::{closure#1}"
         },
         {
           "count": 1,
@@ -6081,10 +6103,6 @@
         {
           "count": 730,
           "name": "nuxie_runtime::draw::trim_contour_dot30_t"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::draw::trim_path_sequential"
         },
         {
           "count": 148,
@@ -6179,7 +6197,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::joystick_axis_seconds::{closure#0}"
         },
         {
-          "count": 607,
+          "count": 609,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_joystick"
         },
         {
@@ -6207,7 +6225,7 @@
           "name": "<nuxie_runtime::joystick::RuntimeJoystick>::y_animation_index"
         },
         {
-          "count": 44,
+          "count": 36,
           "name": "nuxie_runtime::joystick::double_property_changed"
         },
         {
@@ -6229,7 +6247,7 @@
       ],
       "crates/nuxie-runtime/src/layout/artboard_component_list_override.rs": [
         {
-          "count": 42,
+          "count": 34,
           "name": "nuxie_runtime::artboard_component_list_override::double_property_changed"
         },
         {
@@ -6239,11 +6257,11 @@
       ],
       "crates/nuxie-runtime/src/layout/layout_component_style.rs": [
         {
-          "count": 42,
+          "count": 34,
           "name": "nuxie_runtime::layout_component_style::changed"
         },
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::layout_component_style::double_property_changed"
         },
         {
@@ -6253,15 +6271,15 @@
       ],
       "crates/nuxie-runtime/src/layout/layout_node_provider.rs": [
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::layout_node_provider::mark_layout_node_dirty"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::layout_node_provider::mark_layout_node_dirty::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::layout_node_provider::mark_layout_node_dirty::{closure#1}"
         }
       ],
@@ -6281,11 +6299,11 @@
       ],
       "crates/nuxie-runtime/src/layout_component.rs": [
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::layout_component::double_property_changed"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::layout_component::mark_layout_node_dirty"
         },
         {
@@ -6293,9 +6311,105 @@
           "name": "nuxie_runtime::layout_component::uint_property_changed"
         }
       ],
+      "crates/nuxie-runtime/src/math/mat2d.rs": [
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::compose"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::decompose"
+        },
+        {
+          "count": 420,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::determinant"
+        },
+        {
+          "count": 522,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::from_rotation"
+        },
+        {
+          "count": 316,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::invert_or_identity"
+        },
+        {
+          "count": 1168,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::map_point"
+        },
+        {
+          "count": 810,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::multiply"
+        },
+        {
+          "count": 522,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::scale_by_values"
+        },
+        {
+          "count": 544,
+          "name": "<nuxie_runtime::math::mat2d::Mat2D>::transform_point"
+        }
+      ],
+      "crates/nuxie-runtime/src/math/raw_path.rs": [
+        {
+          "count": 6,
+          "name": "nuxie_runtime::math::raw_path::path_commands_backwards"
+        },
+        {
+          "count": 2859,
+          "name": "nuxie_runtime::math::raw_path::path_points_match"
+        },
+        {
+          "count": 463,
+          "name": "nuxie_runtime::math::raw_path::prune_empty_path_segments"
+        },
+        {
+          "count": 775,
+          "name": "nuxie_runtime::math::raw_path::prune_empty_path_segments_from"
+        },
+        {
+          "count": 2845,
+          "name": "nuxie_runtime::math::raw_path::prune_empty_path_segments_from::{closure#0}"
+        },
+        {
+          "count": 6,
+          "name": "nuxie_runtime::math::raw_path::raw_path_parts"
+        },
+        {
+          "count": 6,
+          "name": "nuxie_runtime::math::raw_path::raw_path_parts_to_commands"
+        },
+        {
+          "count": 453,
+          "name": "nuxie_runtime::math::raw_path::runtime_append_commands_to_raw_path"
+        },
+        {
+          "count": 453,
+          "name": "nuxie_runtime::math::raw_path::runtime_path_command_counts"
+        },
+        {
+          "count": 413,
+          "name": "nuxie_runtime::math::raw_path::runtime_path_commands_from_raw_path"
+        },
+        {
+          "count": 413,
+          "name": "nuxie_runtime::math::raw_path::runtime_path_commands_from_raw_path::{closure#0}"
+        },
+        {
+          "count": 453,
+          "name": "nuxie_runtime::math::raw_path::runtime_raw_path_from_commands"
+        },
+        {
+          "count": 453,
+          "name": "nuxie_runtime::math::raw_path::runtime_rebuild_raw_path_from_commands"
+        },
+        {
+          "count": 453,
+          "name": "nuxie_runtime::math::raw_path::runtime_rebuild_raw_path_from_commands::{closure#0}"
+        }
+      ],
       "crates/nuxie-runtime/src/nested_artboard.rs": [
         {
-          "count": 2086,
+          "count": 2693,
           "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::get"
         },
         {
@@ -6331,47 +6445,47 @@
       ],
       "crates/nuxie-runtime/src/objects.rs": [
         {
-          "count": 67742,
+          "count": 81337,
           "name": "<nuxie_runtime::objects::ComponentAddress>::object"
         },
         {
-          "count": 11060,
+          "count": 16031,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::address"
         },
         {
-          "count": 22148,
+          "count": 22151,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::bool_property"
         },
         {
-          "count": 22148,
+          "count": 22151,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::bool_property::{closure#0}"
         },
         {
-          "count": 225,
+          "count": 227,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::color_property"
         },
         {
-          "count": 225,
+          "count": 227,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::color_property::{closure#0}"
         },
         {
-          "count": 54606,
+          "count": 63228,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component"
         },
         {
-          "count": 20453,
+          "count": 28453,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_for_local"
         },
         {
-          "count": 950,
+          "count": 1563,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_handle"
         },
         {
-          "count": 10159,
+          "count": 15126,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_local_id"
         },
         {
-          "count": 2977,
+          "count": 2983,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_mut"
         },
         {
@@ -6395,11 +6509,11 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::dependency_order"
         },
         {
-          "count": 24731,
+          "count": 25067,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::double_property"
         },
         {
-          "count": 24731,
+          "count": 25067,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::double_property::{closure#0}"
         },
         {
@@ -6407,19 +6521,19 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::fill_rule"
         },
         {
-          "count": 128,
+          "count": 130,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::graph_order"
         },
         {
-          "count": 52279,
+          "count": 52795,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::object"
         },
         {
-          "count": 202,
+          "count": 184,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::object_mut"
         },
         {
-          "count": 70,
+          "count": 76,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::property_kind"
         },
         {
@@ -6427,11 +6541,11 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::replace_solid_color_value"
         },
         {
-          "count": 348,
+          "count": 350,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::root"
         },
         {
-          "count": 764,
+          "count": 761,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::scheduled_at"
         },
         {
@@ -6439,7 +6553,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::set_bool_property"
         },
         {
-          "count": 82,
+          "count": 64,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::set_double_property"
         },
         {
@@ -6451,7 +6565,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::set_generated_double_property::{closure#0}"
         },
         {
-          "count": 88,
+          "count": 70,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::set_property_value"
         },
         {
@@ -6471,7 +6585,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::solid_color_value"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::string_property"
         },
         {
@@ -6487,23 +6601,23 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::take_clone_backend_initialization_pending"
         },
         {
-          "count": 3951,
+          "count": 4132,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::uint_property"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "<nuxie_runtime::objects::InstanceString>::bytes"
         },
         {
-          "count": 68034,
+          "count": 81629,
           "name": "<nuxie_runtime::objects::ObjectHandle>::local_id"
         },
         {
-          "count": 176,
+          "count": 140,
           "name": "nuxie_runtime::objects::field_value_matches_kind"
         },
         {
-          "count": 158,
+          "count": 146,
           "name": "nuxie_runtime::objects::runtime_property_metadata_by_key"
         },
         {
@@ -6515,11 +6629,11 @@
           "name": "nuxie_runtime::objects::set_optional_field::<bool>::{closure#0}"
         },
         {
-          "count": 192,
+          "count": 174,
           "name": "nuxie_runtime::objects::set_optional_field::<f32>"
         },
         {
-          "count": 192,
+          "count": 174,
           "name": "nuxie_runtime::objects::set_optional_field::<f32>::{closure#0}"
         },
         {
@@ -6539,13 +6653,19 @@
           "name": "nuxie_runtime::objects::set_optional_field::<u64>::{closure#0}"
         }
       ],
+      "crates/nuxie-runtime/src/profiler.rs": [
+        {
+          "count": 26,
+          "name": "nuxie_runtime::profiler::record_global_transition"
+        }
+      ],
       "crates/nuxie-runtime/src/properties.rs": [
         {
-          "count": 37856,
+          "count": 37842,
           "name": "nuxie_runtime::properties::cached_property_key_for_name"
         },
         {
-          "count": 549,
+          "count": 555,
           "name": "nuxie_runtime::properties::cached_property_key_for_name::{closure#0}"
         },
         {
@@ -6553,23 +6673,23 @@
           "name": "nuxie_runtime::properties::layout_component_style_display_value_property_key"
         },
         {
-          "count": 2964,
+          "count": 3111,
           "name": "nuxie_runtime::properties::property_key_for_name"
         },
         {
-          "count": 19113,
+          "count": 18889,
           "name": "nuxie_runtime::properties::property_key_for_name::{closure#0}"
         },
         {
-          "count": 1077,
+          "count": 1149,
           "name": "nuxie_runtime::properties::property_key_for_name::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::properties::shape_paint_is_visible_property_key"
         },
         {
-          "count": 97,
+          "count": 99,
           "name": "nuxie_runtime::properties::solid_color_value_property_key"
         },
         {
@@ -6577,11 +6697,11 @@
           "name": "nuxie_runtime::properties::solo_active_component_id_property_key"
         },
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::properties::transform_property_for_key"
         },
         {
-          "count": 250,
+          "count": 186,
           "name": "nuxie_runtime::properties::transform_property_for_key::{closure#0}"
         }
       ],
@@ -6589,6 +6709,16 @@
         {
           "count": 46,
           "name": "<nuxie_runtime::scripting::ScriptArtboardParentContext>::from_runtime"
+        }
+      ],
+      "crates/nuxie-runtime/src/shapes/clipping_shape.rs": [
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_clipping_shape_owner"
+        },
+        {
+          "count": 12,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_clipping_shape_owner::{closure#0}"
         }
       ],
       "crates/nuxie-runtime/src/shapes/cubic_mirrored_vertex.rs": [
@@ -6623,19 +6753,19 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::control_runtime_layout_images::{closure#0}"
         },
         {
-          "count": 139,
+          "count": 121,
           "name": "<nuxie_runtime::draw::image::RuntimeImageList>::has_public_scale"
         },
         {
-          "count": 192,
+          "count": 174,
           "name": "<nuxie_runtime::draw::image::RuntimeImageList>::mark_public_scale_written"
         },
         {
-          "count": 24590,
+          "count": 24890,
           "name": "<nuxie_runtime::draw::image::RuntimeImageList>::owner"
         },
         {
-          "count": 24259,
+          "count": 24595,
           "name": "<nuxie_runtime::draw::image::RuntimeImageList>::public_scale"
         },
         {
@@ -6645,13 +6775,29 @@
       ],
       "crates/nuxie-runtime/src/shapes/mesh.rs": [
         {
+          "count": 210,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin"
+        },
+        {
+          "count": 210,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin::{closure#0}"
+        },
+        {
+          "count": 142,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_skinnable_handle_has_skin::{closure#1}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::draw::mesh::RuntimeMeshList>::mark_component_dirt"
+        },
+        {
           "count": 607,
           "name": "<nuxie_runtime::draw::mesh::RuntimeMeshList>::slice"
         }
       ],
       "crates/nuxie-runtime/src/shapes/mod.rs": [
         {
-          "count": 50,
+          "count": 42,
           "name": "nuxie_runtime::shapes::double_property_changed"
         },
         {
@@ -6661,19 +6807,19 @@
       ],
       "crates/nuxie-runtime/src/shapes/paint/color.rs": [
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::alpha"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::argb"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::blue"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::green"
         },
         {
@@ -6685,27 +6831,27 @@
           "name": "nuxie_runtime::shapes::paint::color::lerp::{closure#0}"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::modulate_opacity"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::opacity"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::opacity_to_alpha"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::red"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::with_alpha"
         },
         {
-          "count": 325,
+          "count": 327,
           "name": "nuxie_runtime::shapes::paint::color::with_opacity"
         }
       ],
@@ -6717,32 +6863,66 @@
       ],
       "crates/nuxie-runtime/src/shapes/paint/effects_container.rs": [
         {
-          "count": 131,
+          "count": 135,
           "name": "nuxie_runtime::shapes::paint::effects_container::first_dirty_effect"
         },
         {
-          "count": 131,
+          "count": 135,
           "name": "nuxie_runtime::shapes::paint::effects_container::first_dirty_effect::{closure#0}"
         },
         {
-          "count": 131,
+          "count": 135,
           "name": "nuxie_runtime::shapes::paint::effects_container::invalidate_suffix::<nuxie_runtime::draw::RuntimeShapeEffectPathOwner, <nuxie_runtime::draw::RuntimeShapePaintOwner>::invalidate_effects_from::{closure#0}>"
+        }
+      ],
+      "crates/nuxie-runtime/src/shapes/paint/feather.rs": [
+        {
+          "count": 32,
+          "name": "nuxie_runtime::shapes::paint::feather::is_inner"
         }
       ],
       "crates/nuxie-runtime/src/shapes/paint/fill.rs": [
         {
-          "count": 484,
+          "count": 490,
           "name": "nuxie_runtime::shapes::paint::fill::fill_rule"
         },
         {
-          "count": 361,
+          "count": 365,
           "name": "nuxie_runtime::shapes::paint::fill::pick_path"
         }
       ],
       "crates/nuxie-runtime/src/shapes/paint/shape_paint.rs": [
         {
-          "count": 170,
+          "count": 172,
           "name": "nuxie_runtime::shapes::paint::shape_paint::blend_mode"
+        },
+        {
+          "count": 146,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint"
+        },
+        {
+          "count": 18,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#0}"
+        },
+        {
+          "count": 18,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#1}"
+        },
+        {
+          "count": 18,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#2}"
+        },
+        {
+          "count": 18,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#3}"
+        },
+        {
+          "count": 106,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#8}"
+        },
+        {
+          "count": 146,
+          "name": "nuxie_runtime::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint::{closure#9}"
         }
       ],
       "crates/nuxie-runtime/src/shapes/paint/shape_paint_mutator.rs": [
@@ -6753,7 +6933,11 @@
       ],
       "crates/nuxie-runtime/src/shapes/paint/shape_paint_path.rs": [
         {
-          "count": 158,
+          "count": 333,
+          "name": "<nuxie_runtime::shapes::paint::shape_paint_path::RuntimeShapePaintPathOwner>::replace_retained"
+        },
+        {
+          "count": 163,
           "name": "nuxie_runtime::shapes::paint::shape_paint_path::materialization"
         }
       ],
@@ -6763,7 +6947,139 @@
           "name": "nuxie_runtime::shapes::paint::solid_color::authored_color_is_visible"
         }
       ],
+      "crates/nuxie-runtime/src/shapes/paint/stroke.rs": [
+        {
+          "count": 41,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_cap"
+        },
+        {
+          "count": 41,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_join"
+        },
+        {
+          "count": 41,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_thickness"
+        },
+        {
+          "count": 41,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_thickness_for_local"
+        },
+        {
+          "count": 41,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_thickness_for_local::{closure#0}"
+        },
+        {
+          "count": 82,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_uint_property"
+        },
+        {
+          "count": 82,
+          "name": "nuxie_runtime::shapes::paint::stroke::runtime_stroke_uint_property::{closure#0}"
+        }
+      ],
+      "crates/nuxie-runtime/src/shapes/paint/stroke_effect.rs": [
+        {
+          "count": 18,
+          "name": "nuxie_runtime::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands"
+        }
+      ],
+      "crates/nuxie-runtime/src/shapes/paint/trim_path.rs": [
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::positive_unit_mod"
+        },
+        {
+          "count": 6,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_double_property"
+        },
+        {
+          "count": 6,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_double_property::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_line_effect_commands"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_mode_value"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_mode_value::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::runtime_trim_path_mode_value::{closure#1}"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::shapes::paint::trim_path::trim_path_sequential"
+        }
+      ],
+      "crates/nuxie-runtime/src/shapes/path.rs": [
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update"
+        },
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#0}"
+        },
+        {
+          "count": 237,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#1}"
+        },
+        {
+          "count": 237,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_can_defer_update::{closure#1}::{closure#0}"
+        },
+        {
+          "count": 105,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_path_geometry_with_layout_control"
+        },
+        {
+          "count": 609,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner"
+        },
+        {
+          "count": 17518,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#0}"
+        },
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#1}"
+        },
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#3}"
+        },
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#4}"
+        },
+        {
+          "count": 109,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#5}"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#6}"
+        },
+        {
+          "count": 105,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_owner::{closure#7}"
+        }
+      ],
       "crates/nuxie-runtime/src/shapes/path_composer.rs": [
+        {
+          "count": 104,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_composer"
+        },
+        {
+          "count": 121,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_composer::{closure#0}"
+        },
         {
           "count": 104,
           "name": "nuxie_runtime::shapes::path_composer::needs_clockwise_reversal"
@@ -6795,6 +7111,22 @@
         {
           "count": 120,
           "name": "nuxie_runtime::shapes::shape::needs_save_operation"
+        },
+        {
+          "count": 120,
+          "name": "nuxie_runtime::shapes::shape::runtime_draw_live_owned_shape"
+        },
+        {
+          "count": 120,
+          "name": "nuxie_runtime::shapes::shape::runtime_draw_live_owned_shape::{closure#0}"
+        },
+        {
+          "count": 137,
+          "name": "nuxie_runtime::shapes::shape::runtime_draw_live_owned_shape::{closure#1}"
+        },
+        {
+          "count": 137,
+          "name": "nuxie_runtime::shapes::shape::runtime_draw_live_owned_shape::{closure#4}"
         }
       ],
       "crates/nuxie-runtime/src/shapes/shape_paint_container.rs": [
@@ -6819,15 +7151,15 @@
           "name": "nuxie_runtime::shapes::shape_paint_container::invalidate_stroke_effects::<nuxie_runtime::draw::RuntimeShapePaintOwner, <nuxie_runtime::artboard::ArtboardInstance>::update_runtime_path_composer::{closure#0}>"
         },
         {
-          "count": 2,
+          "count": 6,
           "name": "nuxie_runtime::shapes::shape_paint_container::invalidate_stroke_effects::<nuxie_runtime::draw::RuntimeShapePaintOwner, <nuxie_runtime::draw::RuntimeShapeList>::invalidate_container_stroke_effects::{closure#0}>"
         },
         {
-          "count": 20287,
+          "count": 20291,
           "name": "nuxie_runtime::shapes::shape_paint_container::opacity_owner_local"
         },
         {
-          "count": 5228149,
+          "count": 5228181,
           "name": "nuxie_runtime::shapes::shape_paint_container::opacity_owner_local::{closure#0}"
         },
         {
@@ -6845,6 +7177,14 @@
         {
           "count": 113,
           "name": "nuxie_runtime::shapes::shape_paint_container::propagate_opacity::<nuxie_runtime::draw::RuntimeShapePaintOwner, <nuxie_runtime::artboard::ArtboardInstance>::propagate_runtime_shape_paint_container_opacity::{closure#2}>"
+        },
+        {
+          "count": 64,
+          "name": "nuxie_runtime::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned"
+        },
+        {
+          "count": 64,
+          "name": "nuxie_runtime::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned::{closure#0}"
         }
       ],
       "crates/nuxie-runtime/src/shapes/vertex.rs": [
@@ -7105,7 +7445,7 @@
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::spilled_time"
         },
         {
-          "count": 240,
+          "count": 266,
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::state_index"
         },
         {
@@ -7229,6 +7569,10 @@
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance"
         },
         {
+          "count": 11,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_and_apply_return"
+        },
+        {
           "count": 60,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_key_frame_data_bind_enrollment"
         },
@@ -7294,7 +7638,7 @@
         },
         {
           "count": 11,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::dispatch_nested_event_sources_with::<<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine::{closure#0}>"
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::dispatch_nested_event_sources_with::<<nuxie_runtime::artboard::ArtboardInstance>::advance_frame_components_with_state_machine_report::{closure#0}>"
         },
         {
           "count": 24,
@@ -7479,6 +7823,10 @@
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::change_state::{closure#0}"
         },
         {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::change_state::{closure#1}"
+        },
+        {
           "count": 124,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::collect_key_frame_data_bind_occurrence_ids"
         },
@@ -7505,6 +7853,18 @@
         {
           "count": 125,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::is_transitioning"
+        },
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::profile_state_name"
+        },
+        {
+          "count": 23,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::profile_state_name::{closure#0}"
+        },
+        {
+          "count": 23,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::profile_state_name::{closure#1}"
         },
         {
           "count": 145,
@@ -7615,16 +7975,16 @@
           "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate_direct_input"
         }
       ],
-      "crates/nuxie-runtime/src/state_machine/transition_condition_op.rs": [
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::state_machine::transition_condition_op::TransitionConditionOp>::compare_bool"
-        }
-      ],
       "crates/nuxie-runtime/src/state_machine/transition_input_condition.rs": [
         {
           "count": 10,
           "name": "<nuxie_runtime::state_machine::transition_input_condition::RuntimeTransitionInputCondition>::input_index"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/transition_number_condition.rs": [
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::transition_number_condition::TransitionConditionOp>::compare_bool"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs": [
@@ -7635,507 +7995,563 @@
       ],
       "crates/nuxie-runtime/src/text.rs": [
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextLayoutInfo>::line_start_x"
         },
         {
-          "count": 12,
+          "count": 28,
           "name": "<nuxie_runtime::text::StaticTextSlice>::authored_sizing"
         },
         {
-          "count": 12,
+          "count": 24,
           "name": "<nuxie_runtime::text::StaticTextSlice>::base_style"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::clip_bounds"
         },
         {
-          "count": 3,
+          "count": 6,
           "name": "<nuxie_runtime::text::StaticTextSlice>::effective_height"
         },
         {
-          "count": 12,
+          "count": 28,
           "name": "<nuxie_runtime::text::StaticTextSlice>::effective_sizing"
         },
         {
-          "count": 3,
+          "count": 6,
           "name": "<nuxie_runtime::text::StaticTextSlice>::effective_width"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextSlice>::first_static_wrapped_line_end"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextSlice>::first_static_wrapped_line_end::{closure#0}"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextSlice>::first_static_wrapped_line_end::{closure#1}"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::fit_font_scale"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph"
         },
         {
-          "count": 21,
+          "count": 42,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#0}"
         },
         {
-          "count": 21,
-          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#11}"
+          "count": 42,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#10}"
         },
         {
-          "count": 3,
-          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#12}"
+          "count": 42,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#13}"
         },
         {
-          "count": 162,
+          "count": 6,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#14}"
+        },
+        {
+          "count": 324,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#3}"
         },
         {
-          "count": 162,
+          "count": 324,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#3}::{closure#0}"
         },
         {
-          "count": 162,
+          "count": 324,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#4}"
         },
         {
-          "count": 21,
+          "count": 324,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#5}"
         },
         {
-          "count": 63,
+          "count": 324,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#5}::{closure#0}"
+        },
+        {
+          "count": 324,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#6}"
         },
         {
-          "count": 513,
-          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#6}::{closure#0}"
-        },
-        {
-          "count": 21,
+          "count": 42,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#7}"
         },
         {
-          "count": 21,
+          "count": 126,
           "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#8}"
         },
         {
-          "count": 2,
+          "count": 1026,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#8}::{closure#0}"
+        },
+        {
+          "count": 42,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::from_graph::{closure#9}"
+        },
+        {
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::layout_static_text_lines"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::letter_spacing"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::local_bounds"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::local_bounds::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::local_bounds::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::local_bounds::{closure#2}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::local_bounds::{closure#3}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::ordered_style_indices"
         },
         {
-          "count": 2,
+          "count": 16,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::overflow_as_fixed"
+        },
+        {
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::render_data"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::render_data_filtered"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::render_data_filtered::{closure#0}"
         },
         {
-          "count": 6,
+          "count": 60,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::render_data_filtered::{closure#1}"
+        },
+        {
+          "count": 12,
           "name": "<nuxie_runtime::text::StaticTextSlice>::resolved_runs"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#0}"
         },
         {
-          "count": 13,
+          "count": 26,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#10}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#2}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#3}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#5}"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#6}"
         },
         {
-          "count": 15,
+          "count": 30,
           "name": "<nuxie_runtime::text::StaticTextSlice>::shaped_layout_from_resolved_runs::{closure#9}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::should_apply_static_ellipsis"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_layout_info"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_layout_info::{closure#0}"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_line_metrics"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_render_transform"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_text_min_y"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::static_vertical_trim"
         },
         {
-          "count": 10,
+          "count": 20,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_font_size"
         },
         {
-          "count": 8,
+          "count": 16,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_index_for_local"
         },
         {
-          "count": 8,
+          "count": 16,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_index_for_local::{closure#0}"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_indices_for_line"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_letter_spacing"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::style_line_height"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_line_glyph_range"
         },
         {
-          "count": 16,
+          "count": 32,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_line_glyph_range::{closure#0}"
         },
         {
-          "count": 16,
+          "count": 32,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_line_glyph_range::{closure#1}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_line_glyphs"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_line_width"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs"
         },
         {
-          "count": 2,
-          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style"
-        },
-        {
-          "count": 15,
-          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style::{closure#1}"
+          "count": 4,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs::{closure#0}"
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs::{closure#1}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs::{closure#2}"
+        },
+        {
+          "count": 20,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs::{closure#3}"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style_with_strengths"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style_with_strengths::{closure#3}"
+        },
+        {
+          "count": 4,
           "name": "<nuxie_runtime::text::StaticTextSlice>::text_blend_mode_value"
         },
         {
-          "count": 8,
+          "count": 16,
           "name": "<nuxie_runtime::text::StaticTextSlice>::text_double_property"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::text_height"
         },
         {
-          "count": 37,
+          "count": 80,
           "name": "<nuxie_runtime::text::StaticTextSlice>::text_uint_property"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextSlice>::text_width"
         },
         {
-          "count": 25,
+          "count": 50,
           "name": "<nuxie_runtime::text::StaticTextStyle>::font_bytes"
         },
         {
-          "count": 6,
+          "count": 50,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::font_bytes::{closure#0}"
+        },
+        {
+          "count": 12,
           "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph"
         },
         {
-          "count": 12,
+          "count": 24,
           "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph::{closure#0}"
         },
         {
-          "count": 27,
+          "count": 54,
           "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph::{closure#3}"
         },
         {
-          "count": 18,
+          "count": 36,
           "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph::{closure#4}"
         },
         {
-          "count": 225,
+          "count": 450,
           "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph::{closure#4}::{closure#0}"
         },
         {
-          "count": 6,
-          "name": "<nuxie_runtime::text::StaticTextStyle>::harf_variations"
+          "count": 36,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::from_graph::{closure#7}"
         },
         {
           "count": 12,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::harf_features"
+        },
+        {
+          "count": 12,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::harf_variations"
+        },
+        {
+          "count": 24,
           "name": "<nuxie_runtime::text::StaticTextStyle>::harf_variations::{closure#0}"
         },
         {
-          "count": 19,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextStyle>::skrifa_variations"
         },
         {
-          "count": 38,
+          "count": 16,
           "name": "<nuxie_runtime::text::StaticTextStyle>::skrifa_variations::{closure#0}"
         },
         {
-          "count": 25,
+          "count": 28,
           "name": "<nuxie_runtime::text::StaticTextStyle>::variation_values"
         },
         {
-          "count": 50,
+          "count": 56,
           "name": "<nuxie_runtime::text::StaticTextStyle>::variation_values::{closure#0}"
         },
         {
-          "count": 50,
+          "count": 56,
           "name": "<nuxie_runtime::text::StaticTextStyle>::variation_values::{closure#0}::{closure#0}"
         },
         {
-          "count": 6,
+          "count": 56,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::variation_values::{closure#0}::{closure#1}"
+        },
+        {
+          "count": 56,
+          "name": "<nuxie_runtime::text::StaticTextStyle>::variation_values::{closure#0}::{closure#2}"
+        },
+        {
+          "count": 12,
           "name": "nuxie_runtime::text::component_for_local"
         },
         {
-          "count": 51,
+          "count": 102,
           "name": "nuxie_runtime::text::component_for_local::{closure#0}"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "nuxie_runtime::text::embedded_file_asset_bytes"
         },
         {
-          "count": 36,
+          "count": 72,
           "name": "nuxie_runtime::text::global_for_local"
         },
         {
-          "count": 234,
+          "count": 468,
           "name": "nuxie_runtime::text::global_for_local::{closure#0}"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "nuxie_runtime::text::runtime_bool_property"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "nuxie_runtime::text::runtime_double_property"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::text::runtime_text_shape_paint_commands"
+          "count": 4,
+          "name": "nuxie_runtime::text::runtime_text_draw_data"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::text::runtime_text_shape_paint_commands::{closure#1}"
+          "count": 4,
+          "name": "nuxie_runtime::text::runtime_text_draw_data::{closure#1}"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::text::runtime_text_shape_paint_commands::{closure#2}"
+          "count": 4,
+          "name": "nuxie_runtime::text::runtime_text_draw_data::{closure#2}"
         },
         {
-          "count": 2,
-          "name": "nuxie_runtime::text::runtime_text_shape_paint_commands::{closure#3}"
+          "count": 4,
+          "name": "nuxie_runtime::text::runtime_text_draw_data::{closure#3}"
         },
         {
-          "count": 26,
+          "count": 52,
           "name": "nuxie_runtime::text::runtime_uint_property"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::text::static_text_clip_bounds"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "nuxie_runtime::text::static_text_parent_chain_supported"
         },
         {
-          "count": 3,
+          "count": 42,
           "name": "nuxie_runtime::text::type_for_local"
         },
         {
-          "count": 27,
+          "count": 504,
           "name": "nuxie_runtime::text::type_for_local::{closure#0}"
         }
       ],
       "crates/nuxie-runtime/src/text/font_hb.rs": [
         {
-          "count": 24,
+          "count": 48,
           "name": "<nuxie_runtime::text::TextOutlinePen as read_fonts::model::pen::OutlinePen>::close"
         },
         {
-          "count": 107,
+          "count": 214,
           "name": "<nuxie_runtime::text::TextOutlinePen as read_fonts::model::pen::OutlinePen>::line_to"
         },
         {
-          "count": 24,
+          "count": 48,
           "name": "<nuxie_runtime::text::TextOutlinePen as read_fonts::model::pen::OutlinePen>::move_to"
         },
         {
-          "count": 253,
+          "count": 506,
           "name": "<nuxie_runtime::text::TextOutlinePen as read_fonts::model::pen::OutlinePen>::quad_to"
         },
         {
-          "count": 131,
+          "count": 262,
           "name": "<nuxie_runtime::text::TextOutlinePen>::map"
         },
         {
-          "count": 890,
+          "count": 1780,
           "name": "<nuxie_runtime::text::TextOutlinePen>::map_normalized"
         },
         {
-          "count": 15,
+          "count": 30,
           "name": "<nuxie_runtime::text::TextOutlinePen>::new"
         },
         {
-          "count": 637,
+          "count": 1274,
           "name": "<nuxie_runtime::text::TextOutlinePen>::normalize_outline_point"
         },
         {
-          "count": 5,
+          "count": 10,
           "name": "nuxie_runtime::text::cxx_script_runs"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "nuxie_runtime::text::disable_legacy_kern_for_advances"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "nuxie_runtime::text::harfbuzz_line_metrics"
         },
         {
-          "count": 34,
+          "count": 68,
           "name": "nuxie_runtime::text::harfrust_script_for_unicode_script"
         },
         {
-          "count": 5,
-          "name": "nuxie_runtime::text::shape_cxx_script_run_glyphs"
-        },
-        {
-          "count": 5,
+          "count": 10,
           "name": "nuxie_runtime::text::shape_cxx_script_run_glyphs_in_direction"
         },
         {
-          "count": 34,
+          "count": 68,
           "name": "nuxie_runtime::text::shape_cxx_script_run_glyphs_in_direction::{closure#0}"
         },
         {
-          "count": 5,
-          "name": "nuxie_runtime::text::shape_text_glyphs"
+          "count": 10,
+          "name": "nuxie_runtime::text::shape_cxx_script_run_glyphs_with_features"
+        },
+        {
+          "count": 10,
+          "name": "nuxie_runtime::text::shape_text_glyphs_with_features"
         }
       ],
       "crates/nuxie-runtime/src/text/glyph_lookup.rs": [
         {
-          "count": 15,
+          "count": 30,
           "name": "nuxie_runtime::text::glyph_character_len"
         },
         {
-          "count": 13,
+          "count": 26,
           "name": "nuxie_runtime::text::glyph_character_len::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::text::glyph_character_len::{closure#1}"
         },
         {
-          "count": 11,
+          "count": 22,
           "name": "nuxie_runtime::text::glyph_coverage"
         }
       ],
       "crates/nuxie-runtime/src/text/line_breaker.rs": [
         {
-          "count": 6,
+          "count": 16,
           "name": "nuxie_runtime::text::split_static_text_lines"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::text::static_text_line_iteration"
         },
         {
-          "count": 3,
+          "count": 6,
           "name": "nuxie_runtime::text::text_glyph_width"
         },
         {
-          "count": 19,
+          "count": 38,
           "name": "nuxie_runtime::text::text_glyph_width::{closure#0}"
         }
       ],
       "crates/nuxie-runtime/src/text/text.rs": [
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::text_owner::double_property_changed"
         },
         {
@@ -8145,120 +8561,126 @@
       ],
       "crates/nuxie-runtime/src/text/text_engine.rs": [
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::text::build_static_text_constraint_bounds"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "nuxie_runtime::text::byte_index_for_glyph_end"
-        }
-      ],
-      "crates/nuxie-runtime/src/text/text_modifier.rs": [
+        },
         {
-          "count": 162,
-          "name": "nuxie_runtime::text::static_text_modifier_is_unsupported"
+          "count": 30,
+          "name": "nuxie_runtime::text::runtime_classify_color_glyph"
+        },
+        {
+          "count": 30,
+          "name": "nuxie_runtime::text::runtime_classify_color_glyph_face"
         }
       ],
       "crates/nuxie-runtime/src/text/text_modifier_group.rs": [
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextModifierGroup>::coverage_by_character"
         },
         {
-          "count": 3,
+          "count": 6,
           "name": "<nuxie_runtime::text::StaticTextModifierGroup>::from_graph"
         },
         {
-          "count": 11,
+          "count": 2,
+          "name": "<nuxie_runtime::text::StaticTextModifierGroup>::has_shape_modifiers"
+        },
+        {
+          "count": 22,
           "name": "<nuxie_runtime::text::StaticTextModifierGroup>::modifies_opacity"
         },
         {
-          "count": 11,
+          "count": 22,
           "name": "<nuxie_runtime::text::StaticTextModifierGroup>::transform"
         },
         {
-          "count": 15,
+          "count": 30,
           "name": "nuxie_runtime::text::append_opacity_bucket"
         },
         {
-          "count": 13,
+          "count": 26,
           "name": "nuxie_runtime::text::append_opacity_bucket::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::text::order_opacity_buckets_like_cpp"
+        },
+        {
+          "count": 32,
+          "name": "nuxie_runtime::text::text_modifier_group_double_property_changed"
+        },
+        {
+          "count": 2,
+          "name": "nuxie_runtime::text::text_modifier_group_uint_property_changed"
         }
       ],
       "crates/nuxie-runtime/src/text/text_modifier_range.rs": [
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::apply_coverage"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::bool_property"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::character_range"
         },
         {
-          "count": 11,
+          "count": 22,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::coverage_at"
         },
         {
-          "count": 6,
+          "count": 12,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::double_property"
         },
         {
-          "count": 3,
+          "count": 6,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::from_graph"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::range_units"
         },
         {
-          "count": 11,
+          "count": 22,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::range_units::{closure#0}"
         },
         {
-          "count": 4,
+          "count": 8,
           "name": "<nuxie_runtime::text::StaticTextModifierRange>::uint_property"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<str as nuxie_runtime::text::StaticTextWords>::split_word_bound_indices"
         }
       ],
       "crates/nuxie-runtime/src/text/text_style.rs": [
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::text_style_owner::double_property_changed"
         }
       ],
       "crates/nuxie-runtime/src/text/text_style_axis.rs": [
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::text::text_style_axis_double_property_changed"
-        }
-      ],
-      "crates/nuxie-runtime/src/text/text_style_feature.rs": [
+        },
         {
-          "count": 162,
-          "name": "nuxie_runtime::text::static_text_style_feature_is_unsupported"
+          "count": 2,
+          "name": "nuxie_runtime::text::text_style_axis_uint_property_changed"
         }
       ],
       "crates/nuxie-runtime/src/text/text_style_paint.rs": [
         {
-          "count": 40,
+          "count": 32,
           "name": "nuxie_runtime::text_style_paint_owner::double_property_changed"
-        }
-      ],
-      "crates/nuxie-runtime/src/text/text_target_modifier.rs": [
-        {
-          "count": 162,
-          "name": "nuxie_runtime::text::static_text_target_modifier_is_unsupported"
         }
       ],
       "crates/nuxie-runtime/src/text/text_value_run.rs": [
@@ -8269,8 +8691,8 @@
       ],
       "crates/nuxie-runtime/src/text/text_variation_helper.rs": [
         {
-          "count": 2,
-          "name": "nuxie_runtime::text::shape_text_glyphs_for_style"
+          "count": 4,
+          "name": "nuxie_runtime::text::shape_text_glyphs_for_style_with_variations"
         },
         {
           "count": 2,
@@ -8279,17 +8701,17 @@
       ],
       "crates/nuxie-runtime/src/text/text_variation_modifier.rs": [
         {
-          "count": 162,
-          "name": "nuxie_runtime::text::static_text_variation_modifier_is_unsupported"
+          "count": 32,
+          "name": "nuxie_runtime::text::text_variation_modifier_double_property_changed"
         }
       ],
       "crates/nuxie-runtime/src/text/utf.rs": [
         {
-          "count": 43,
+          "count": 86,
           "name": "nuxie_runtime::text::character_index_for_cluster"
         },
         {
-          "count": 263,
+          "count": 526,
           "name": "nuxie_runtime::text::character_index_for_cluster::{closure#0}"
         }
       ],
@@ -8385,7 +8807,7 @@
       "decodeImage": 1,
       "drawPath": 148,
       "frame": 11,
-      "makeEmptyRenderPath": 134,
+      "makeEmptyRenderPath": 133,
       "makeLinearGradient": 32,
       "makeRenderPaint": 283,
       "restore": 152,
@@ -8397,7 +8819,7 @@
       "decodeImage": 1,
       "drawPath": 148,
       "frame": 11,
-      "makeEmptyRenderPath": 134,
+      "makeEmptyRenderPath": 133,
       "makeLinearGradient": 32,
       "makeRenderPaint": 283,
       "restore": 152,
@@ -8428,11 +8850,11 @@
     },
     "component_add_dirt": {
       "cpp": 4,
-      "rust": 2
+      "rust": 4
     },
     "component_dirt_consumptions": {
       "cpp": 714,
-      "rust": 713
+      "rust": 715
     },
     "databind_artboard_batch": {
       "cpp": 90,
@@ -8467,8 +8889,8 @@
       "rust": 38
     },
     "per_frame_allocations": {
-      "cpp": 7008,
-      "rust": 264354
+      "cpp": 7050,
+      "rust": 265464
     },
     "state_machine_advance": {
       "cpp": 30,
@@ -8485,18 +8907,18 @@
   },
   "mechanism_allocation_counts": {
     "cpp": {
-      "complex_ik_dependency": 86,
-      "component_list_follow_path": 119,
-      "component_list_virtualized": 84,
-      "scroll_intent": 3637,
-      "scroll_test": 292
+      "complex_ik_dependency": 80,
+      "component_list_follow_path": 121,
+      "component_list_virtualized": 78,
+      "scroll_intent": 3649,
+      "scroll_test": 306
     },
     "rust": {
-      "complex_ik_dependency": 305,
-      "component_list_follow_path": 620,
-      "component_list_virtualized": 459,
-      "scroll_intent": 79993,
-      "scroll_test": 1356
+      "complex_ik_dependency": 301,
+      "component_list_follow_path": 626,
+      "component_list_virtualized": 540,
+      "scroll_intent": 88194,
+      "scroll_test": 1521
     }
   },
   "mechanism_construction_landmarks": {
@@ -8537,7 +8959,7 @@
       "drawPath": 147,
       "frame": 11,
       "input": 4,
-      "makeEmptyRenderPath": 35,
+      "makeEmptyRenderPath": 33,
       "makeLinearGradient": 3,
       "makeRenderPaint": 82,
       "restore": 224,
@@ -8549,7 +8971,7 @@
       "drawPath": 147,
       "frame": 11,
       "input": 4,
-      "makeEmptyRenderPath": 35,
+      "makeEmptyRenderPath": 33,
       "makeLinearGradient": 3,
       "makeRenderPaint": 82,
       "restore": 224,
@@ -8567,11 +8989,11 @@
     },
     "component_add_dirt": {
       "cpp": 159,
-      "rust": 156
+      "rust": 173
     },
     "component_dirt_consumptions": {
       "cpp": 234,
-      "rust": 234
+      "rust": 243
     },
     "constraint_applications": {
       "cpp": 21,
@@ -8590,8 +9012,8 @@
       "rust": 0
     },
     "per_frame_allocations": {
-      "cpp": 4218,
-      "rust": 82733
+      "cpp": 4234,
+      "rust": 91182
     },
     "resetting_dispatches": {
       "cpp": 6,
@@ -8616,16 +9038,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7533,
+    "file_count": 7763,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "15c576ebb4a64430da9cf8f8139c5ce1a78d03bb23263a8b6234e7d935fcffa2"
+    "sha256": "038493543a2465c588b6fb9e602f5ee9cbca3ed0789bc6034a0109b87c3d48a5"
   },
-  "rust_ref": "696d7015a818828fe62be2420dfd2bf1cb7b11cf",
+  "rust_ref": "6ee73e49921a7af18d57f87d7e7c487519e00ca9",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7533,
+      "file_count": 7763,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "15c576ebb4a64430da9cf8f8139c5ce1a78d03bb23263a8b6234e7d935fcffa2"
+      "sha256": "038493543a2465c588b6fb9e602f5ee9cbca3ed0789bc6034a0109b87c3d48a5"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -8639,19 +9061,20 @@
   },
   "schema": "nuxie-runtime-frame-loop-trace/v2",
   "scope": {
-    "dynamic_cpp_files": 103,
+    "dynamic_cpp_files": 106,
     "dynamic_cpp_files_by_source_set": {
       "animation-values": 14,
       "blend-animation-states": 6,
       "component-update-graph": 16,
       "databind-artboard-settlement": 11,
-      "live-draw-boundary": 49,
+      "live-draw-boundary": 50,
+      "s4-pin-advance-extensions": 2,
       "state-machine": 7
     },
-    "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 85,
-    "dynamic_rust_functions": 1523,
-    "static_cpp_files": 342
+    "dynamic_cpp_functions": 493,
+    "dynamic_rust_files": 109,
+    "dynamic_rust_functions": 1583,
+    "static_cpp_files": 350
   },
   "steady_allocation_counts": {
     "cpp": {
@@ -8663,8 +9086,8 @@
     "rust": {
       "complex_ik_dependency": 0,
       "component_list_follow_path": 86,
-      "component_list_virtualized": 28,
-      "scroll_test": 28
+      "component_list_virtualized": 29,
+      "scroll_test": 34
     }
   },
   "steady_corpus": [
@@ -8708,12 +9131,12 @@
     },
     "per_frame_allocations": {
       "cpp": 0,
-      "rust": 142
+      "rust": 149
     },
     "skin_buffer_rebuilds": {
       "cpp": 0,
       "rust": 0
     }
   },
-  "upstream_ref": "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 }

@@ -59,6 +59,9 @@ struct TextGlyph {
     advance: f32,
     offset_x: f32,
     offset_y: f32,
+    renderer_breaks_before: u8,
+    renderer_breaks_after: u8,
+    renderer_joiners: Vec<u32>,
 }
 fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
     HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
@@ -114,6 +117,7 @@ fn shape_text_glyphs_with_features(
         }
         glyphs.extend(run_glyphs);
     }
+    let _ = materialize_renderer_glyph_run_annotations(text, &mut glyphs);
     glyphs
 }
 fn shape_bidi_text_glyphs(
@@ -160,6 +164,7 @@ fn shape_bidi_text_glyphs_with_features(
     // Line breaking and style lookup consume logical order. Equal clusters
     // retain HarfBuzz's within-cluster visual order.
     glyphs.sort_by_key(|glyph| glyph.cluster);
+    let _ = materialize_renderer_glyph_run_annotations(text, &mut glyphs);
     glyphs
 }
 fn shape_cxx_script_run_glyphs(
@@ -220,6 +225,9 @@ fn shape_cxx_script_run_glyphs_in_direction(
             advance: position.x_advance as f32,
             offset_x: position.x_offset as f32,
             offset_y: -position.y_offset as f32,
+            renderer_breaks_before: 0,
+            renderer_breaks_after: 0,
+            renderer_joiners: Vec::new(),
         })
         .collect()
 }

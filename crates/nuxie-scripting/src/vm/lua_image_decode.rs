@@ -9,7 +9,7 @@ use luaur_rt::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
 use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba_unbounded};
 use nuxie_runtime::{WorkTask, WorkTaskRef, WorkTaskState, with_global_work_pool};
 
-use super::promise;
+use super::lua_promise;
 
 const DECODE_ERROR: &str = "failed to decode image data";
 
@@ -197,7 +197,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     }
 
     let registry = registry(lua)?;
-    let promise = promise::new_pending(lua)?;
+    let promise = lua_promise::new_pending(lua)?;
     let promise_ref = lua.create_registry_value(promise.clone())?;
     let request_id = registry.next_request_id();
     let task = Arc::new(ImageDecodeTask::new(
@@ -220,7 +220,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         cancel_registry.cancel(request_id);
         Ok(())
     })?;
-    promise::set_on_cancel(lua, promise.clone(), on_cancel)?;
+    lua_promise::set_on_cancel(lua, promise.clone(), on_cancel)?;
     with_global_work_pool(|pool| {
         pool.submit(Some(task));
     });
@@ -258,12 +258,12 @@ pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
                     Result::Ok(Value::Table(result))
                 })();
                 match result {
-                    Ok(result) => promise::resolve(lua, promise, result)?,
-                    Err(_) => promise::reject(lua, promise, DECODE_ERROR.to_owned())?,
+                    Ok(result) => lua_promise::resolve(lua, promise, result)?,
+                    Err(_) => lua_promise::reject(lua, promise, DECODE_ERROR.to_owned())?,
                 }
             }
             DecodeCompletion::Failure { message, .. } => {
-                promise::reject(lua, promise, message)?;
+                lua_promise::reject(lua, promise, message)?;
             }
         }
     }
@@ -283,7 +283,7 @@ mod tests {
 
     fn lua_with_context() -> Lua {
         let lua = Lua::new();
-        promise::install_promise_globals(&lua).unwrap();
+        lua_promise::install_promise_globals(&lua).unwrap();
         install(&lua);
         let context = lua
             .create_userdata(ScriptedContext::new(

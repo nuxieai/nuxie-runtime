@@ -9412,6 +9412,17 @@ fn compare_cpp_property_value_result(
                 return Err(format!("{label} mismatch: C++ {expected}, Rust {actual:?}"));
             }
         }
+        CppProbeFieldKind::Int => {
+            let expected = cpp_property
+                .value
+                .as_i64()
+                .and_then(|value| i32::try_from(value).ok())
+                .ok_or_else(|| format!("{label} C++ value is not int"))?;
+            let actual = rust_object.int_property(name);
+            if actual != Some(expected) {
+                return Err(format!("{label} mismatch: C++ {expected}, Rust {actual:?}"));
+            }
+        }
         CppProbeFieldKind::String => {
             let expected = cpp_property
                 .value
@@ -12336,7 +12347,6 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     let mut ids = BTreeMap::new();
     for (class_name, header_name) in [
         ("CoreUintType", "core_uint_type.hpp"),
-        ("CoreUint64Type", "core_uint64_type.hpp"),
         ("CoreStringType", "core_string_type.hpp"),
         ("CoreBytesType", "core_bytes_type.hpp"),
         ("CoreDoubleType", "core_double_type.hpp"),
@@ -12348,16 +12358,11 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     }
 
     assert_eq!(ids["CoreUintType"], 0);
-    assert_eq!(ids["CoreUint64Type"], 0);
     assert_eq!(ids["CoreStringType"], 1);
     assert_eq!(ids["CoreBytesType"], 1);
     assert_eq!(ids["CoreDoubleType"], 2);
     assert_eq!(ids["CoreColorType"], 3);
     assert_eq!(ids["CoreBoolType"], 4);
-    assert_eq!(
-        ids["CoreUintType"], ids["CoreUint64Type"],
-        "uint32 and uint64 must share the runtime-header field id"
-    );
     assert_eq!(
         ids["CoreStringType"], ids["CoreBytesType"],
         "C++ runtime header only stores one two-bit field id for string/bytes payloads"
@@ -12705,15 +12710,11 @@ fn cpp_file_facade_catalog_and_script_wiring_matches_runtime_model() {
         &register,
         &[
             "std::vector<ScriptAsset*>scripts;",
-            "std::vector<LibraryAsset*>libraries;",
             "for(autoasset:m_fileAssets){",
             "if(asset->is<ScriptAsset>()){scripts.push_back(asset->as<ScriptAsset>());}",
-            "elseif(asset->is<LibraryAsset>()){libraries.push_back(asset->as<LibraryAsset>());}",
             "if(!scripts.empty()){",
             "if(m_scriptingVM==nullptr){makeScriptingVM();}",
             "initializeLuaData(vm->state(),m_ViewModels);",
-            "for(autolibrary:libraries){",
-            "vm->context()->addImport(",
             "for(autoscriptAsset:scripts){",
             "if(scriptAsset->verified()){vm->addModule(scriptAsset);}",
             "vm->performRegistration();",
@@ -12741,11 +12742,6 @@ fn cpp_core_field_deserializers_match_binary_reader_model() {
             "CoreUintType",
             "core_uint_type.cpp",
             "returnreader.readVarUintAs<unsignedint>();",
-        ),
-        (
-            "CoreUint64Type",
-            "core_uint64_type.cpp",
-            "returnreader.readVarUint64();",
         ),
         (
             "CoreStringType",
@@ -15737,6 +15733,7 @@ struct CppProbePropertyValue {
 #[serde(rename_all = "camelCase")]
 enum CppProbeFieldKind {
     Uint,
+    Int,
     String,
     Double,
     Color,
@@ -15747,6 +15744,7 @@ impl CppProbeFieldKind {
     fn from_field_kind(kind: FieldKind) -> Option<Self> {
         match kind {
             FieldKind::Uint => Some(Self::Uint),
+            FieldKind::Int => Some(Self::Int),
             FieldKind::String => Some(Self::String),
             FieldKind::Double => Some(Self::Double),
             FieldKind::Color => Some(Self::Color),

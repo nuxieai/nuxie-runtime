@@ -8,15 +8,17 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 
 | tier | state | number | notes |
 |---|---|---|---|
-| 1 Frame parity | PARTIAL | exact-segments 647/647; scripted 647/647; e2e-exact: gate not built | both runtime floors restored green 2026-07-21 (image-policy split); #OR-6 missing |
-| 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
+| 1 Frame parity | PARTIAL | exact-segments 670/670; scripted 670/670; e2e-exact: gate not built | both runtime floors restored green 2026-07-21 (image-policy split); corpus 324 entries as of [OR-2] 2026-08-02; #OR-6 missing |
+| 2 Interaction parity | PARTIAL | side-channel-segments 669/669 (V11 carve-out filed); fuzz-clean-nights: 0 | #OR-1/2 closed 2026-08-02; #OR-3/7 open |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
 Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
-C++ probe 747/747, both runtime golden gates 317/317 exact / 647/647 segments;
-ordinary and scripted both have zero failures. The workspace push gate is green
+C++ probe 747/747, both runtime golden gates 324/324 exact / 670/670 segments
+with the side channel ON (side-channel-segments 669; the corpus had grown to
+321/657 on main before [OR-2] added the three settle_* entries); ordinary and
+scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
 the complete probe run rather than silently skipping it. Every remaining RB-1
 cut and every RB-1 push must run `make scripted-golden-compare` in addition to
@@ -30,11 +32,9 @@ an event created during layer advance is delivered at the next frame start,
 where chained notifications drain to completion (`state_machine_instance.cpp:
 2320-2343`).
 NOTE: the `RIVE_RUNTIME_DIR` checkout governs probe/runner builds — it must
-be at pin `d788e8ec`; unpinned checkouts poisoned two earlier floor runs.
+be at pin `4ac7b327`; unpinned checkouts poisoned two earlier floor runs.
 
-Upstream pins: runtime `d788e8ec` (cycle-3 cut `b73bc675`, 3 commits ahead,
-awaiting #B-1 approval). Upstream advanced after that completed inventory to
-`ba2b6434`; it is next-cycle drift, not part of the pending authorization.
+Upstream pins: runtime `4ac7b327` (S4 cycle closed 2026-08-02).
 Renderer pixel-oracle `7c778d13` (historical, do not advance casually — see
 upstream-sync-map registry).
 
@@ -962,8 +962,27 @@ upstream-sync-map registry).
   canonical five-floor evidence and CI publication wired; first main CI green
   blocked by the decoded-image policy gate and seven freshly exposed d788
   C++-probe parity assertions
-- [ ] #OR-1 side-channel spec + C++ emit
-- [ ] #OR-2 Rust emit + corpus-wide side-channel exact
+- [x] #OR-1 side-channel spec + C++ emit — landed 2026-08-02 ([OR-1]):
+  `docs/side-channel-format.md`; golden-runner emits settled/hit/event/
+  statesChanged behind `--side-channel` from the pinned embedder surface;
+  golden-compare forwards the flag to both runners and publishes
+  `side-channel-segments`; stub baseline verified live (Rust absent → every
+  requested entry fails).
+- [x] #OR-2 Rust emit + corpus-wide side-channel exact — landed 2026-08-02
+  ([OR-2]): rust-golden-runner emits the identical channel (new public
+  `RuntimeHitResult` pointer variants; facade bool composed through
+  `advance_and_apply_return`). The moment-of-truth run found and fixed one
+  real keep-going drop (`advance_frame_components_with_state_machine`
+  discarded the components' changed bool — quantized nesteds and solo-hidden
+  nested machines reported settled while C++ kept going) and filed register
+  row V11 (`global_variables_test` missing root-layer transition at t=0,
+  draw-visible ≥32px at t>0; carve-out tag `side-channel-diverges:V11`).
+  Gate: ordinary corpus 324/324 exact, 670/670 exact-segments,
+  side-channel-segments 669/669; three new `settle_*` differential entries
+  pin settles-and-stays-settled, never-settles (loop), and quantized-hold
+  keep-going classes byte-exact. Settling assessment for UNIV-1353/
+  UNIV-1343: `docs/evidence/or2-settling-assessment.md` — a stop-when-settled
+  embedder loop is implementable on today's surface.
 - [ ] #OR-3 script verbs (setInput/VM-mutation/resize; key/textInput reserved)
 - [ ] #OR-4 sampling densification (237 t=0-only entries)
 - [ ] #OR-5 input-script coverage (all listener-bearing files)

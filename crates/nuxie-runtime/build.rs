@@ -27,6 +27,7 @@ enum FieldStorageKind {
     Bytes,
     Color,
     Double,
+    Int,
     String,
     Uint,
 }
@@ -39,6 +40,7 @@ impl FieldStorageKind {
             FieldKind::Callback => None,
             FieldKind::Color => Some(Self::Color),
             FieldKind::Double => Some(Self::Double),
+            FieldKind::Int => Some(Self::Int),
             FieldKind::String => Some(Self::String),
             FieldKind::Uint => Some(Self::Uint),
         }
@@ -50,6 +52,7 @@ impl FieldStorageKind {
             Self::Bytes => "Vec<u8>",
             Self::Color => "u32",
             Self::Double => "f32",
+            Self::Int => "i32",
             Self::String => "super::InstanceString",
             Self::Uint => "u64",
         }
@@ -61,6 +64,7 @@ impl FieldStorageKind {
             Self::Bytes => "bytes_property",
             Self::Color => "color_property",
             Self::Double => "double_property",
+            Self::Int => "int_property",
             Self::String => "string_property",
             Self::Uint => "uint_property",
         }
@@ -72,6 +76,7 @@ impl FieldStorageKind {
             Self::Bytes => None,
             Self::Color => Some("set_color_property"),
             Self::Double => Some("set_double_property"),
+            Self::Int => Some("set_int_property"),
             Self::String => Some("set_string_property"),
             Self::Uint => Some("set_uint_property"),
         }
@@ -83,6 +88,7 @@ impl FieldStorageKind {
             Self::Bytes => "FieldValue::Bytes(value)",
             Self::Color => "FieldValue::Color(value)",
             Self::Double => "FieldValue::Double(value)",
+            Self::Int => "FieldValue::Int(value)",
             Self::String => "FieldValue::String(value)",
             Self::Uint => "FieldValue::Uint(value)",
         }
@@ -90,7 +96,7 @@ impl FieldStorageKind {
 
     fn runtime_assignment(self, field_name: &str) -> String {
         match self {
-            Self::Bool | Self::Color | Self::Double => {
+            Self::Bool | Self::Color | Self::Double | Self::Int => {
                 format!("self.{field_name} = Some(*value);")
             }
             Self::Bytes => format!("self.{field_name} = Some(value.raw.clone());"),
@@ -105,7 +111,7 @@ impl FieldStorageKind {
 
     fn getter_expression(self, field_name: &str) -> String {
         match self {
-            Self::Bool | Self::Color | Self::Double | Self::Uint => {
+            Self::Bool | Self::Color | Self::Double | Self::Int | Self::Uint => {
                 format!("self.{field_name}")
             }
             Self::Bytes => format!("self.{field_name}.as_deref()"),
@@ -304,6 +310,7 @@ fn render_runtime_objects() -> String {
         FieldStorageKind::Uint,
         "Option<u64>",
     );
+    render_enum_getter(&mut out, &definitions, FieldStorageKind::Int, "Option<i32>");
     render_enum_getter(
         &mut out,
         &definitions,
@@ -341,6 +348,13 @@ fn render_runtime_objects() -> String {
         &definitions,
         FieldStorageKind::Uint,
         "value: u64",
+        "value",
+    );
+    render_enum_setter(
+        &mut out,
+        &definitions,
+        FieldStorageKind::Int,
+        "value: i32",
         "value",
     );
     render_enum_setter(
@@ -498,6 +512,7 @@ fn render_object_getters(
     for (kind, return_type) in [
         (FieldStorageKind::Double, "Option<f32>"),
         (FieldStorageKind::Uint, "Option<u64>"),
+        (FieldStorageKind::Int, "Option<i32>"),
         (FieldStorageKind::Bool, "Option<bool>"),
         (FieldStorageKind::Color, "Option<u32>"),
         (FieldStorageKind::String, "Option<&[u8]>"),
@@ -533,6 +548,7 @@ fn render_object_setters(
     for (kind, value_type) in [
         (FieldStorageKind::Double, "f32"),
         (FieldStorageKind::Uint, "u64"),
+        (FieldStorageKind::Int, "i32"),
         (FieldStorageKind::Bool, "bool"),
         (FieldStorageKind::Color, "u32"),
         (FieldStorageKind::String, "super::InstanceString"),
@@ -648,6 +664,7 @@ fn setter_kind_matches(property: &Property, kind: FieldStorageKind) -> bool {
         (Some(FieldKind::Bool), FieldStorageKind::Bool)
             | (Some(FieldKind::Color), FieldStorageKind::Color)
             | (Some(FieldKind::Double), FieldStorageKind::Double)
+            | (Some(FieldKind::Int), FieldStorageKind::Int)
             | (Some(FieldKind::String), FieldStorageKind::String)
             | (Some(FieldKind::Uint), FieldStorageKind::Uint)
     )
@@ -666,6 +683,7 @@ fn default_initializer(definition: &Definition, property: &Property) -> String {
         Some(StoredFieldInitializer::Bool(value)) => format!("Some({value})"),
         Some(StoredFieldInitializer::Color(value)) => format!("Some({value}u32)"),
         Some(StoredFieldInitializer::Double(value)) => format!("Some({value:?}f32)"),
+        Some(StoredFieldInitializer::Int(value)) => format!("Some({value}i32)"),
         Some(StoredFieldInitializer::String(value)) => {
             format!(
                 "Some(super::InstanceString::from_static({}))",

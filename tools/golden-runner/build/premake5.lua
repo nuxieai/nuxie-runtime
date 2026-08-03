@@ -3,6 +3,7 @@ configurations({ 'debug', 'release' })
 
 local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-runtime'
 local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
+local shared_dependencies = os.getenv('DEPENDENCIES')
 local with_scripting = os.getenv('RIVE_GOLDEN_WITH_SCRIPTING') == '1'
 local runtime_libdir = os.getenv('RIVE_GOLDEN_RUNTIME_LIBDIR') or
     (rive_runtime .. '/out/%{cfg.buildcfg}')
@@ -26,17 +27,32 @@ local include_dirs = {
     '/usr/local/include',
     '/usr/include',
 }
+if shared_dependencies then
+    table.insert(include_dirs, shared_dependencies)
+end
+-- The pinned runtime's build config force-includes rive_yoga_renames.h
+-- (and siblings) from its dependencies root; the runner compiles against
+-- the same config, so that root must be searchable here too.
+table.insert(include_dirs, rive_runtime .. '/dependencies')
 
-local harfbuzz = first_dir(rive_runtime .. '/dependencies/rive-app_harfbuzz_*/src') or
+local harfbuzz = (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_harfbuzz_*/src')) or
+    first_dir(rive_runtime .. '/dependencies/rive-app_harfbuzz_*/src') or
     first_dir(dep_cache .. '/*/harfbuzz-*/src')
-local sheenbidi = first_dir(rive_runtime .. '/dependencies/Tehreer_SheenBidi_*/Headers') or
+local sheenbidi = (shared_dependencies and first_dir(shared_dependencies .. '/Tehreer_SheenBidi_*/Headers')) or
+    first_dir(rive_runtime .. '/dependencies/Tehreer_SheenBidi_*/Headers') or
     first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
-local yoga = first_dir(rive_runtime .. '/dependencies/rive-app_yoga_*') or
+local yoga = os.getenv('RIVE_GOLDEN_YOGA_DIR') or
+    (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_yoga_*')) or
+    first_dir(rive_runtime .. '/dependencies/rive-app_yoga_*') or
     first_dir(dep_cache .. '/*/yoga-*')
-local miniaudio = first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*') or
+local miniaudio = (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_miniaudio_*')) or
+    first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*') or
     first_dir(dep_cache .. '/*/miniaudio-*')
-local luau = first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
-local libhydrogen = first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
+local luau = os.getenv('RIVE_GOLDEN_LUAU_DIR') or
+    (shared_dependencies and first_dir(shared_dependencies .. '/luigi-rosso_luau_*')) or
+    first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
+local libhydrogen = (shared_dependencies and first_dir(shared_dependencies .. '/luigi-rosso_libhydrogen_*')) or
+    first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
 
 if harfbuzz then
     table.insert(include_dirs, harfbuzz)
@@ -68,11 +84,15 @@ local runner_defines = {
     'RIVE_MACOSX',
     'YOGA_EXPORT=',
 }
+local runner_forceincludes = {
+    'rive_yoga_renames.h',
+}
 
 if with_scripting then
     table.insert(runner_defines, 'WITH_RIVE_SCRIPTING')
     table.insert(runner_defines, 'RIVE_DECODERS')
     table.insert(runner_defines, 'HYDRO_SIGN_VERIFY_ONLY=1')
+    table.insert(runner_forceincludes, 'rive_luau.hpp')
 end
 
 local lib_dirs = {
@@ -143,9 +163,7 @@ includedirs(include_dirs)
 -- compiling our translation units with different defines than the library
 -- would silently break the ABI (vtable layouts / object sizes).
 defines(runner_defines)
-if with_scripting then
-    forceincludes({ 'rive_luau.hpp' })
-end
+forceincludes(runner_forceincludes)
 
 files({
     '../main.cpp',

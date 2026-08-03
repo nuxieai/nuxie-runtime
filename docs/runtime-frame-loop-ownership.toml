@@ -1,6 +1,6 @@
 version = 1
 title = "C++-corresponding runtime frame-loop ownership ledger"
-upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
@@ -19,14 +19,14 @@ provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "reaccepted"
 
 [expected_trace_artifacts]
-cpp_binary_sha256 = "f97319d2916ed69e9aa8b6a1e5c1f7f0926a3c326ff39f4ba761ab9364d285b3"
-cpp_coverage_sha256 = "2ace80c0a216d19f6e39c4ab3fa0896d4ceb5936342eca6a7e7a7ef42d46b92c"
-cpp_mechanism_coverage_sha256 = "8c97dcb8b02eed5f2d639e29b9dbb0aa8172fab53251a794e48ff4055bd908a2"
-cpp_steady_coverage_sha256 = "91852c9ce675252d715a268f23155cedc1d8aaac1be90cdda983e9d809b7807e"
-rust_binary_sha256 = "28b574e28ff712afdf1a020eee2b4d08825bdbe0707860a0a9b930fec8e446c8"
-rust_coverage_sha256 = "c5ef814a67603f20c862a4307949a511df722c1bb2d21b15be8301701c5e905c"
-rust_mechanism_coverage_sha256 = "f24cae1472fa315f0a0299c9ed92604c29872d0ae979d9d638df010a121ab19d"
-rust_steady_coverage_sha256 = "90d82a22ae11775218cd45b35c47afddb11557dea19927107d7bd2b3fb3768f2"
+cpp_binary_sha256 = "760c91d700585bc566db3261c12adeb18570a3e94be5f7413a65a0532491b380"
+cpp_coverage_sha256 = "b70d760ccb04847c33e7d4b8a7f38c26cbb74e767972f73d720fbc2ae0881db0"
+cpp_mechanism_coverage_sha256 = "ec7c9dbfb35d6080143f989000be87e2e8a07f19b532c5602303f8ec05bec21d"
+cpp_steady_coverage_sha256 = "2d1c23294012193b71fbdf4ef14d952911070ea3cddf5512192d78016915a8ad"
+rust_binary_sha256 = "a914b21d6fb35c7ec42f55a3d8a75310019f3363f43ff637f601aee726ee6f4a"
+rust_coverage_sha256 = "f691901f3bea402c4d5049b4bbf26704480b96a4c0d52d108c230ca26830ab85"
+rust_mechanism_coverage_sha256 = "0b694863d6ac8fbcfe4ae3d809826f9f9f939e6b1a2b98a98694f7685aac4faf"
+rust_steady_coverage_sha256 = "51d12f79f9a037d18a6d75f7d55fb1bb0cf47b837a96c1970009338a2bd38048"
 
 [active_owner_family]
 id = "FL-E8-static-text-list-path-raw-text"
@@ -145,7 +145,7 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 341
+faithful = 349
 adapted = 0
 divergent-by-decision = 1
 pending = 0
@@ -195,6 +195,12 @@ id = "FL-E8"
 sequence = 6
 depends_on = ["FL-E"]
 boundary = "Static-text extensions, dynamic ListPath, standalone RawText, and shared color-glyph parity."
+
+[[wave]]
+id = "S4"
+sequence = 7
+depends_on = ["FL-E8"]
+boundary = "Post-audit 4ac7b327 pin additions: signed keyframes, blob data binding, and layout-grid/participant owners."
 
 [[frozen_wave_scope]]
 wave = "FL-B"
@@ -333,6 +339,7 @@ exclude = [
   "src/animation/system_state_instance.cpp",
   "src/animation/blend_state*.cpp",
   "src/animation/animation_state*.cpp",
+  "src/animation/keyframe_int.cpp",
 ]
 rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
@@ -433,7 +440,11 @@ include = [
   "src/nested_artboard*.cpp",
   "src/script_input_artboard.cpp",
 ]
-exclude = []
+exclude = [
+  "src/data_bind/context/context_value_asset_blob.cpp",
+  "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp",
+  "src/viewmodel/viewmodel_instance_asset_blob.cpp",
+]
 rust_modules = [
   "crates/nuxie-runtime/src/lib.rs",
   "crates/nuxie-runtime/src/artboard.rs",
@@ -441,15 +452,13 @@ rust_modules = [
   "crates/nuxie-runtime/src/artboard_component_list_order.rs",
   "crates/nuxie-runtime/src/artboard_list_map_rule.rs",
   "crates/nuxie-runtime/src/artboard_referencer.rs",
-  "crates/nuxie-runtime/src/artboard_data_bind.rs",
   "crates/nuxie-runtime/src/bindable_artboard.rs",
-  "crates/nuxie-runtime/src/data_bind_graph.rs",
   "crates/nuxie-runtime/src/event.rs",
   "crates/nuxie-runtime/src/listener_group.rs",
   "crates/nuxie-runtime/src/nested_artboard.rs",
   "crates/nuxie-runtime/src/nested_artboard_layout.rs",
   "crates/nuxie-runtime/src/nested_artboard_leaf.rs",
-  "crates/nuxie-runtime/src/nested_artboard_origin.rs",
+  "crates/nuxie-runtime/src/component_origin.rs",
   "crates/nuxie-runtime/src/script_input_artboard.rs",
   "crates/nuxie-runtime/src/retained_data_bind.rs",
   "crates/nuxie-runtime/src/view_model.rs",
@@ -493,7 +502,12 @@ include = [
   "src/solo.cpp",
   "src/assets/image_asset.cpp",
 ]
-exclude = []
+exclude = [
+  "src/layout/grid_item_placement.cpp",
+  "src/layout/grid_track.cpp",
+  "src/layout/layout_participant.cpp",
+  "src/layout/layout_sizing_style.cpp",
+]
 rust_modules = [
   "crates/nuxie-runtime/src/lib.rs",
   "crates/nuxie-runtime/src/objects.rs",
@@ -511,6 +525,31 @@ rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
 ]
 static_closure = "Drawable, shape, text, layout, image, and related virtual update/draw owners are reachable from live Artboard traversal before the Renderer boundary."
+
+[[source_set]]
+id = "s4-pin-advance-extensions"
+wave = "S4"
+include = [
+  "src/component_origin.cpp",
+  "src/animation/keyframe_int.cpp",
+  "src/data_bind/context/context_value_asset_blob.cpp",
+  "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp",
+  "src/viewmodel/viewmodel_instance_asset_blob.cpp",
+  "src/layout/grid_item_placement.cpp",
+  "src/layout/grid_track.cpp",
+  "src/layout/layout_participant.cpp",
+  "src/layout/layout_sizing_style.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/component_origin.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_int.rs",
+  "crates/nuxie-runtime/src/data_bind/context/context_value_asset_blob.rs",
+  "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.rs",
+  "crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_blob.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
+static_closure = "Cycle S4 ports the pin-introduced signed-keyframe, blob, grid, and layout-participant owners; the ordinary and scripted golden corpora exercise their runtime integration."
 
 [[file]]
 upstream = "src/advancing_component.cpp"
@@ -822,6 +861,14 @@ source_set = "animation-values"
 wave = "FL-B"
 rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_interpolator.rs"]
 dynamically_reached = true
+status = "faithful"
+
+[[file]]
+upstream = "src/animation/keyframe_int.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_int.rs"]
+dynamically_reached = false
 status = "faithful"
 
 [[file]]
@@ -1268,7 +1315,7 @@ status = "faithful"
 upstream = "src/artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/state_machine/listener_action_owner.rs", "crates/nuxie/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie/src/lib.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -1366,6 +1413,14 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
+status = "faithful"
+
+[[file]]
+upstream = "src/component_origin.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/component_origin.rs"]
+dynamically_reached = false
 status = "faithful"
 
 [[file]]
@@ -1591,6 +1646,14 @@ upstream = "src/data_bind/context/context_value_asset_font.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
 rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_asset_font.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_asset_blob.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_asset_blob.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2045,10 +2108,42 @@ dynamically_reached = false
 status = "faithful"
 
 [[file]]
+upstream = "src/layout/grid_item_placement.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/layout/grid_track.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "faithful"
+
+[[file]]
 upstream = "src/layout/layout_component_style.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout/layout_component_style.rs", "crates/nuxie-runtime/src/layout_component.rs"]
+dynamically_reached = true
+status = "faithful"
+
+[[file]]
+upstream = "src/layout/layout_participant.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/layout/layout_sizing_style.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2245,14 +2340,6 @@ upstream = "src/nested_artboard_leaf.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
 rust_modules = ["crates/nuxie-runtime/src/nested_artboard_leaf.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
-dynamically_reached = false
-status = "faithful"
-
-[[file]]
-upstream = "src/nested_artboard_origin.cpp"
-source_set = "databind-artboard-settlement"
-wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/nested_artboard_origin.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2693,7 +2780,7 @@ upstream = "src/solo.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/solo.rs"]
-dynamically_reached = false
+dynamically_reached = true
 status = "faithful"
 
 [[file]]
@@ -2740,7 +2827,7 @@ status = "faithful"
 upstream = "src/text/raw_text.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E8"
-rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/text/font_hb.rs", "crates/nuxie-runtime/src/text/text_engine.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie/src/raw_text.rs"]
+rust_modules = ["crates/nuxie/src/raw_text.rs", "crates/nuxie-runtime/src/text/raw_text.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2985,6 +3072,14 @@ dynamically_reached = false
 status = "faithful"
 
 [[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
 upstream = "src/viewmodel/runtime/viewmodel_instance_asset_image_runtime.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
@@ -3117,6 +3212,14 @@ upstream = "src/viewmodel/viewmodel_instance_asset_font.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
 rust_modules = ["crates/nuxie-binary/src/lib.rs", "crates/nuxie-runtime/src/view_model_cell.rs", "crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_font.rs"]
+dynamically_reached = false
+status = "faithful"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_asset_blob.cpp"
+source_set = "s4-pin-advance-extensions"
+wave = "S4"
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_blob.rs"]
 dynamically_reached = false
 status = "faithful"
 

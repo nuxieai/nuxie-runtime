@@ -260,7 +260,7 @@ MECHANISM_LANDMARKS = {
             "rive::TransformConstraint::constrain(rive::TransformComponent*)",
             "rive::TranslationConstraint::constrain(rive::TransformComponent*)",
         ],
-        "rust": "nuxie_runtime::constraints::apply_constraint",
+        "rust": "nuxie_runtime::constraints::constraint::apply_constraint",
     },
     "follow_path_measure_rebuilds": {
         "cpp": {
@@ -268,7 +268,7 @@ MECHANISM_LANDMARKS = {
             "anchor": "m_pathMeasure = PathMeasure(&m_rawPath);",
         },
         "rust": {
-            "source": "crates/nuxie-runtime/src/constraints.rs",
+            "source": "crates/nuxie-runtime/src/constraints/follow_path_constraint.rs",
             "anchor": (
                 "retained.path_measure = "
                 "RuntimePathMeasure::from_raw_path(&retained.raw_path);"
@@ -300,7 +300,10 @@ MECHANISM_LANDMARKS = {
             "rive::VirtualizedDirection)"
         ),
         "rust": {
-            "source": "crates/nuxie-runtime/src/constraints.rs",
+            "source": (
+                "crates/nuxie-runtime/src/constraints/scrolling/"
+                "scroll_virtualizer.rs"
+            ),
             "anchor": "let computed_layout_bounds = artboard",
             "occurrence": 1,
         },

@@ -28,7 +28,7 @@ from source_fingerprint import (
 )
 
 
-PINNED_CPP = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+PINNED_CPP = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 CANONICAL_IDS = (
     "advance_blend_mode",
     "ai_assitant",

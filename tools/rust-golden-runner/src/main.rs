@@ -8,12 +8,13 @@ use nuxie_graph::{
 };
 use nuxie_render_api::{
     Factory as RenderFactory, NullFactory, PersistentFactory, RecordingFactory,
-    Renderer as RenderRenderer,
+    Renderer as RenderRenderer, SideChannelEvent, SideChannelEventProperty,
+    SideChannelEventPropertyValue,
 };
 use nuxie_runtime::{
-    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, StateMachineInstance, set_runtime_deterministic_mode,
-    static_text_support_error,
+    ArtboardInstance, RuntimeEventPropertyValue, RuntimeHitResult, RuntimeLayoutBoundsReport,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, StateMachineInstance,
+    set_runtime_deterministic_mode, static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
@@ -22,7 +23,7 @@ use nuxie_runtime::{
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
+use nuxie_scripting::vm::{DetachedViewModelFrame, ScriptProgram, ScriptVm};
 #[cfg(feature = "coverage-trace")]
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::{BTreeMap, BTreeSet};
@@ -188,6 +189,10 @@ trait RunnerBackend {
     fn frame_size(&mut self, width: u32, height: u32);
     fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32);
     fn add_sample(&mut self, seconds: f32);
+    fn add_advance(&mut self, seconds: f32, settled: bool);
+    fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize);
+    fn add_side_channel_event(&mut self, event: &SideChannelEvent);
+    fn add_hit_result(&mut self, result: &str);
     fn add_frame(&mut self);
     fn stream(&self) -> String;
 }
@@ -217,6 +222,22 @@ impl RunnerBackend for RecordingFactory {
         RecordingFactory::add_sample(self, seconds);
     }
 
+    fn add_advance(&mut self, seconds: f32, settled: bool) {
+        RecordingFactory::add_advance(self, seconds, settled);
+    }
+
+    fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize) {
+        RecordingFactory::add_advance_with_states(self, seconds, settled, states_changed);
+    }
+
+    fn add_side_channel_event(&mut self, event: &SideChannelEvent) {
+        RecordingFactory::add_side_channel_event(self, event);
+    }
+
+    fn add_hit_result(&mut self, result: &str) {
+        RecordingFactory::add_hit_result(self, result);
+    }
+
     fn add_frame(&mut self) {
         RecordingFactory::add_frame(self);
     }
@@ -242,6 +263,14 @@ impl RunnerBackend for NullFactory {
     fn add_input_event(&mut self, _kind: &str, _seconds: f32, _x: f32, _y: f32, _pointer_id: i32) {}
 
     fn add_sample(&mut self, _seconds: f32) {}
+
+    fn add_advance(&mut self, _seconds: f32, _settled: bool) {}
+
+    fn add_advance_with_states(&mut self, _seconds: f32, _settled: bool, _states_changed: usize) {}
+
+    fn add_side_channel_event(&mut self, _event: &SideChannelEvent) {}
+
+    fn add_hit_result(&mut self, _result: &str) {}
 
     fn add_frame(&mut self) {}
 
@@ -277,6 +306,23 @@ where
 
     fn add_sample(&mut self, seconds: f32) {
         self.borrow_mut().add_sample(seconds);
+    }
+
+    fn add_advance(&mut self, seconds: f32, settled: bool) {
+        self.borrow_mut().add_advance(seconds, settled);
+    }
+
+    fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize) {
+        self.borrow_mut()
+            .add_advance_with_states(seconds, settled, states_changed);
+    }
+
+    fn add_side_channel_event(&mut self, event: &SideChannelEvent) {
+        self.borrow_mut().add_side_channel_event(event);
+    }
+
+    fn add_hit_result(&mut self, result: &str) {
+        self.borrow_mut().add_hit_result(result);
     }
 
     fn add_frame(&mut self) {
@@ -664,7 +710,7 @@ fn run() -> Result<String> {
 
     let mut current_seconds = 0.0;
     if env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some() {
-        advance_scene_to(
+        let keep_going = advance_scene_to(
             &mut instance,
             &runtime,
             state_machine.as_mut(),
@@ -684,6 +730,15 @@ fn run() -> Result<String> {
             factory.as_factory(),
             None,
         )?;
+        if options.side_channel {
+            record_advance_side_channel(
+                &mut *factory,
+                &instance,
+                state_machine.as_mut(),
+                options.samples[0],
+                keep_going,
+            );
+        }
         instance
             .draw_artboard(
                 &runtime,
@@ -713,7 +768,7 @@ fn run() -> Result<String> {
                 && input_events[next_input].seconds <= *sample + TIME_EPSILON
             {
                 let event = &input_events[next_input];
-                timed_result(options.benchmark, &mut advance_elapsed, || {
+                let keep_going = timed_result(options.benchmark, &mut advance_elapsed, || {
                     advance_scene_to(
                         &mut instance,
                         &runtime,
@@ -727,6 +782,15 @@ fn run() -> Result<String> {
                         &mut current_seconds,
                     )
                 })?;
+                if options.side_channel {
+                    record_advance_side_channel(
+                        &mut *factory,
+                        &instance,
+                        state_machine.as_mut(),
+                        event.seconds,
+                        keep_going,
+                    );
+                }
                 #[cfg(feature = "scripting")]
                 if let Some(state) = script_artboard_render_state.as_ref() {
                     initialize_nested_scripted_drawables(
@@ -740,7 +804,7 @@ fn run() -> Result<String> {
                     )?;
                 }
                 timed(options.benchmark, &mut input_elapsed, || {
-                    apply_input_event(
+                    let hit_result = apply_input_event(
                         event,
                         &mut instance,
                         state_machine.as_mut(),
@@ -753,10 +817,13 @@ fn run() -> Result<String> {
                         event.y,
                         event.pointer_id,
                     );
+                    if options.side_channel {
+                        factory.add_hit_result(hit_result_name(hit_result));
+                    }
                 });
                 next_input += 1;
             }
-            timed_result(options.benchmark, &mut advance_elapsed, || {
+            let keep_going = timed_result(options.benchmark, &mut advance_elapsed, || {
                 advance_scene_to(
                     &mut instance,
                     &runtime,
@@ -812,6 +879,19 @@ fn run() -> Result<String> {
                     None,
                 )
             })?;
+            if options.side_channel {
+                // C++ emits backend-object lines during advanceAndApply's
+                // update pass, before its advance line; the Rust runner
+                // materializes the same objects in synchronize above, so the
+                // advance line is recorded here to preserve stream order.
+                record_advance_side_channel(
+                    &mut *factory,
+                    &instance,
+                    state_machine.as_mut(),
+                    *sample,
+                    keep_going,
+                );
+            }
             factory.add_sample(*sample);
             timed_result(options.benchmark, &mut draw_elapsed, || {
                 instance
@@ -1515,83 +1595,125 @@ fn parse_script_float(value: &str, context: &str) -> Result<f32> {
         .with_context(|| format!("invalid float for {context}: {value}"))
 }
 
+fn hit_result_name(result: RuntimeHitResult) -> &'static str {
+    match result {
+        RuntimeHitResult::None => "none",
+        RuntimeHitResult::Hit => "hit",
+        RuntimeHitResult::HitOpaque => "hitOpaque",
+    }
+}
+
+fn side_channel_event(event: &nuxie_runtime::StateMachineReportedEvent) -> SideChannelEvent {
+    SideChannelEvent {
+        core_type: event.event_core_type(),
+        name: event.name().unwrap_or_default().to_owned(),
+        delay: event.seconds_delay(),
+        url_target: match (event.url(), event.target()) {
+            (Some(url), Some(target)) => Some((url.to_owned(), target.to_owned())),
+            _ => None,
+        },
+        properties: event
+            .properties()
+            .iter()
+            .map(|property| SideChannelEventProperty {
+                name: property.name.clone().unwrap_or_default(),
+                value: match &property.value {
+                    RuntimeEventPropertyValue::Number(value) => {
+                        SideChannelEventPropertyValue::Number(*value)
+                    }
+                    RuntimeEventPropertyValue::Bool(value) => {
+                        SideChannelEventPropertyValue::Bool(*value)
+                    }
+                    RuntimeEventPropertyValue::String(bytes) => SideChannelEventPropertyValue::String(
+                        String::from_utf8_lossy(bytes).into_owned(),
+                    ),
+                    RuntimeEventPropertyValue::Color(value) => {
+                        SideChannelEventPropertyValue::Color(*value)
+                    }
+                    RuntimeEventPropertyValue::Enum(value) => {
+                        SideChannelEventPropertyValue::Uint(*value)
+                    }
+                    RuntimeEventPropertyValue::Trigger(value) => {
+                        SideChannelEventPropertyValue::Uint(*value)
+                    }
+                },
+            })
+            .collect(),
+    }
+}
+
+/// Emits the advance line (settled = !advanceAndApply return) plus one event
+/// line per event the state machine reported during that advance
+/// (docs/side-channel-format.md).
+fn record_advance_side_channel(
+    factory: &mut dyn RunnerBackend,
+    instance: &ArtboardInstance,
+    state_machine: Option<&mut StateMachineInstance>,
+    target_seconds: f32,
+    keep_going: bool,
+) {
+    let Some(state_machine) = state_machine else {
+        factory.add_advance(target_seconds, !keep_going);
+        return;
+    };
+    factory.add_advance_with_states(
+        target_seconds,
+        !keep_going,
+        state_machine.changed_state_count(),
+    );
+    let reported_count = state_machine.reported_event_count();
+    for index in 0..reported_count {
+        let Some(event) = state_machine.reported_event(instance, index) else {
+            continue;
+        };
+        let event = side_channel_event(event);
+        factory.add_side_channel_event(&event);
+    }
+}
+
+/// Applies one scripted pointer input and returns the tri-state
+/// `HitResult` C++ `Scene::pointerDown/Move/Up/Exit` return
+/// (`scene.hpp:55-60`; base `Scene` returns `none`, `scene.cpp:18-24`).
 fn apply_input_event(
     event: &InputEvent,
     instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
     owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
-) {
+) -> RuntimeHitResult {
     let Some(state_machine) = state_machine else {
-        return;
+        return RuntimeHitResult::None;
     };
+    let mut context = owned_view_model_context.and_then(|context| context.main_mut());
     match event.kind {
-        InputKind::PointerDown => {
-            if let Some(mut context) =
-                owned_view_model_context.and_then(|context| context.main_mut())
-            {
-                state_machine.pointer_down_with_owned_view_model_context(
-                    instance,
-                    event.x,
-                    event.y,
-                    event.pointer_id,
-                    &mut context,
-                );
-            } else {
-                state_machine.pointer_down(instance, event.x, event.y, event.pointer_id);
-            }
-        }
-        InputKind::PointerMove => {
-            if let Some(mut context) =
-                owned_view_model_context.and_then(|context| context.main_mut())
-            {
-                state_machine.pointer_move_with_owned_view_model_context(
-                    instance,
-                    event.x,
-                    event.y,
-                    event.seconds,
-                    event.pointer_id,
-                    &mut context,
-                );
-            } else {
-                state_machine.pointer_move(
-                    instance,
-                    event.x,
-                    event.y,
-                    event.seconds,
-                    event.pointer_id,
-                );
-            }
-        }
-        InputKind::PointerUp => {
-            if let Some(mut context) =
-                owned_view_model_context.and_then(|context| context.main_mut())
-            {
-                state_machine.pointer_up_with_owned_view_model_context(
-                    instance,
-                    event.x,
-                    event.y,
-                    event.pointer_id,
-                    &mut context,
-                );
-            } else {
-                state_machine.pointer_up(instance, event.x, event.y, event.pointer_id);
-            }
-        }
-        InputKind::PointerExit => {
-            if let Some(mut context) =
-                owned_view_model_context.and_then(|context| context.main_mut())
-            {
-                state_machine.pointer_exit_with_owned_view_model_context(
-                    instance,
-                    event.x,
-                    event.y,
-                    event.pointer_id,
-                    &mut context,
-                );
-            } else {
-                state_machine.pointer_exit(instance, event.x, event.y, event.pointer_id);
-            }
-        }
+        InputKind::PointerDown => state_machine.pointer_down_hit_result(
+            instance,
+            event.x,
+            event.y,
+            event.pointer_id,
+            context.as_deref_mut(),
+        ),
+        InputKind::PointerMove => state_machine.pointer_move_hit_result(
+            instance,
+            event.x,
+            event.y,
+            event.seconds,
+            event.pointer_id,
+            context.as_deref_mut(),
+        ),
+        InputKind::PointerUp => state_machine.pointer_up_hit_result(
+            instance,
+            event.x,
+            event.y,
+            event.pointer_id,
+            context.as_deref_mut(),
+        ),
+        InputKind::PointerExit => state_machine.pointer_exit_hit_result(
+            instance,
+            event.x,
+            event.y,
+            event.pointer_id,
+            context.as_deref_mut(),
+        ),
     }
 }
 
@@ -1645,6 +1767,21 @@ mod tests {
         );
         assert!(parse_samples("-0.1").is_err());
         assert!(parse_samples("0.1,0.099").is_err());
+    }
+
+    #[test]
+    fn side_channel_is_stream_mode_only() {
+        let base = |extra: &[&str]| {
+            let mut args = vec!["--file".to_owned(), "file.riv".to_owned()];
+            args.extend(extra.iter().map(|value| (*value).to_owned()));
+            Options::parse(args)
+        };
+
+        let options = base(&["--side-channel"]).expect("side-channel parses");
+        assert!(options.side_channel);
+        assert!(!base(&[]).expect("plain parses").side_channel);
+        assert!(base(&["--side-channel", "--benchmark"]).is_err());
+        assert!(base(&["--side-channel", "--layout-bounds"]).is_err());
     }
 
     #[test]
@@ -1878,6 +2015,13 @@ fn select_scene(
     })
 }
 
+/// Advances the scene and returns the `Scene::advanceAndApply` facade bool
+/// (true = keep going / needs another frame). State-machine scenes compose
+/// the runner's decomposed advance results through
+/// `StateMachineInstance::advance_and_apply_return` (the pinned facade terms,
+/// including the zero-second force-true; `state_machine_instance.cpp:
+/// 2601-2665`). Scenes without a state machine mirror `StaticScene::
+/// advanceAndApply`'s unconditional true (`static_scene.cpp:22-28`).
 fn advance_scene_to(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
@@ -1886,33 +2030,35 @@ fn advance_scene_to(
     #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     target_seconds: f32,
     current_seconds: &mut f32,
-) -> Result<()> {
+) -> Result<bool> {
     if target_seconds + TIME_EPSILON < *current_seconds {
         bail!("cannot move timeline backwards");
     }
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
+    let mut changed = false;
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance.advance_state_machine_instance(state_machine, elapsed_seconds);
-        if instance
-            .advance_frame_components_with_state_machine(elapsed_seconds, state_machine)
-            .context("retained frame-component advance failed")?
-        {
-            instance.advance_state_machine_instance(state_machine, 0.0);
+        changed |= instance.advance_state_machine_instance(state_machine, elapsed_seconds);
+        let components = instance
+            .advance_frame_components_with_state_machine_report(elapsed_seconds, state_machine)
+            .context("retained frame-component advance failed")?;
+        changed |= components.changed;
+        if components.notified {
+            changed |= instance.advance_state_machine_instance(state_machine, 0.0);
         }
     } else {
-        instance
+        changed |= instance
             .advance_frame_components(elapsed_seconds)
             .context("retained frame-component advance failed")?;
     }
     let _ = (runtime, owned_view_model_context);
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance
+        changed |= instance
             .settle_state_machine_update_passes_after_main_advance_with_script_errors(
                 std::slice::from_mut(state_machine),
             )
             .context("dependency-ordered scripted drawable update failed")?;
     } else {
-        instance
+        changed |= instance
             .update_pass_with_script_errors()
             .context("dependency-ordered scripted drawable update failed")?;
     }
@@ -1920,10 +2066,18 @@ fn advance_scene_to(
     if state_machine.is_some()
         && let Some(script_frame_tail) = script_frame_tail
     {
-        script_frame_tail.advance_detached_view_models();
+        changed |= script_frame_tail.advance_detached_view_models();
     }
     *current_seconds = target_seconds;
-    Ok(())
+    let keep_going = match state_machine.as_deref() {
+        Some(state_machine) => StateMachineInstance::advance_and_apply_return(
+            changed,
+            elapsed_seconds,
+            std::slice::from_ref(state_machine),
+        ),
+        None => true,
+    };
+    Ok(keep_going)
 }
 
 #[derive(Debug)]
@@ -1937,6 +2091,7 @@ struct Options {
     benchmark: bool,
     benchmark_repeat: usize,
     execute_scripts: bool,
+    side_channel: bool,
 }
 
 impl Options {
@@ -1950,6 +2105,7 @@ impl Options {
         let mut benchmark = false;
         let mut benchmark_repeat = 1usize;
         let mut execute_scripts = false;
+        let mut side_channel = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -1970,12 +2126,13 @@ impl Options {
                 "--layout-bounds" => layout_bounds = true,
                 "--benchmark" => benchmark = true,
                 "--execute-scripts" => execute_scripts = true,
+                "--side-channel" => side_channel = true,
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, arg)?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--side-channel] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -1989,6 +2146,12 @@ impl Options {
 
         if layout_bounds && benchmark {
             bail!("--benchmark cannot be combined with --layout-bounds");
+        }
+        if side_channel && benchmark {
+            bail!("--side-channel cannot be combined with --benchmark");
+        }
+        if side_channel && layout_bounds {
+            bail!("--side-channel cannot be combined with --layout-bounds");
         }
         if benchmark_repeat > 1 {
             if !benchmark {
@@ -2012,6 +2175,7 @@ impl Options {
             benchmark,
             benchmark_repeat,
             execute_scripts,
+            side_channel,
         })
     }
 }
@@ -2092,7 +2256,6 @@ struct ExtractedScriptAsset {
     asset_id: u64,
     global_id: u32,
     name: String,
-    scope: ScopeKey,
     is_module: bool,
     payload: Vec<u8>,
 }
@@ -4332,13 +4495,6 @@ fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScript
                     } else {
                         format!("{folder}/{name}")
                     },
-                    scope: ScopeKey::new(
-                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                        entry
-                            .asset
-                            .uint_property("scopeLibraryVersionId")
-                            .unwrap_or(0),
-                    ),
                     is_module: entry.asset.bool_property("isModule").unwrap_or(false),
                     payload: payload.to_vec(),
                 },
@@ -4357,30 +4513,6 @@ fn prepare_script_vm(
     vm.install_render_factory(factory)?;
     vm.set_view_models(nuxie_runtime::script_view_models(runtime));
 
-    // LibraryAsset records are serialized, caller-relative dependency pins.
-    // Seed every edge before module top-level code runs so eager and lazy
-    // requires both resolve in the same scope as the C++ scripting context.
-    for entry in runtime
-        .scripting_file_assets_with_contents()
-        .into_iter()
-        .filter(|entry| entry.asset.type_name == "LibraryAsset")
-    {
-        vm.add_import(
-            ScopeKey::new(
-                entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                entry
-                    .asset
-                    .uint_property("scopeLibraryVersionId")
-                    .unwrap_or(0),
-            ),
-            entry.asset.string_property("name").unwrap_or_default(),
-            ScopeKey::new(
-                entry.asset.uint_property("libraryId").unwrap_or(0),
-                entry.asset.uint_property("libraryVersionId").unwrap_or(0),
-            ),
-        );
-    }
-
     // C++ retries module registration until the dependency graph converges.
     // Preserve the original FileAsset ordering within each pass.
     let mut pending = script_assets
@@ -4391,12 +4523,9 @@ fn prepare_script_vm(
         let before = pending.len();
         let mut failures = Vec::new();
         for asset in pending {
-            if let Err(error) = vm.register_module_with_factory_scoped(
-                &asset.name,
-                asset.scope,
-                &asset.payload,
-                factory,
-            ) {
+            if let Err(error) =
+                vm.register_module_with_factory(&asset.name, &asset.payload, factory)
+            {
                 failures.push((asset, error));
             }
         }
@@ -4404,13 +4533,11 @@ fn prepare_script_vm(
             break;
         }
         if failures.len() == before {
-            let (asset, error) = failures.remove(0);
-            return Err(anyhow!(
-                "failed to register scoped ScriptAsset module '{}' ({}-{}): {error}",
-                asset.name,
-                asset.scope.library_id,
-                asset.scope.library_version_id,
-            ));
+            // C++ `ScriptingContext::performRegistration` reports unresolved
+            // module errors but does not reject the File. Preserve the
+            // partially registered VM so non-scripted artboard content still
+            // renders and later protocol lookup remains safely absent.
+            break;
         }
         pending = failures.into_iter().map(|(asset, _)| asset).collect();
     }
@@ -4427,20 +4554,15 @@ fn register_script_file(
     let vm = prepare_script_vm(runtime, script_assets, factory)?;
     let mut script_programs = BTreeMap::new();
     for script in script_assets.values().filter(|asset| !asset.is_module) {
-        let program = vm
-            .register_protocol_script_with_factory_scoped(
-                &script.name,
-                script.scope,
-                &script.payload,
-                factory,
-            )
-            .with_context(|| {
-                format!(
-                    "failed to register protocol ScriptAsset '{}' ({}-{})",
-                    script.name, script.scope.library_id, script.scope.library_version_id,
-                )
-            })?;
-        script_programs.insert(script.asset_id, program);
+        // The C++ file-registration pass reports unresolved ScriptAsset
+        // dependencies but keeps the File usable. A protocol is only required
+        // if an artboard actually references it, so preserve the background
+        // render instead of rejecting unrelated test/library scripts.
+        if let Ok(program) =
+            vm.register_protocol_script_with_factory(&script.name, &script.payload, factory)
+        {
+            script_programs.insert(script.asset_id, program);
+        }
     }
     Ok(RegisteredScriptFile {
         vm: Rc::new(vm),

@@ -30,6 +30,15 @@ impl RuntimeSoloState {
     }
 }
 
+fn is_solo_set_member(type_name: &str) -> bool {
+    definition_by_name(type_name).is_none_or(|definition| {
+        !definition.is_a("Constraint")
+            && !definition.is_a("ClippingShape")
+            && !definition.is_a("FocusData")
+            && !definition.is_a("SemanticData")
+    })
+}
+
 impl crate::artboard::ArtboardInstance {
     pub(crate) fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
         let Some(solo) = self.component_handle(local_id) else {
@@ -50,15 +59,27 @@ impl crate::artboard::ArtboardInstance {
         let Some(solo) = self.component_handle(solo_local_id) else {
             return false;
         };
-        let child_index = rounded as usize;
-        let is_child = self
+        let solo_index = rounded as usize;
+        let child_index = self
             .objects
             .component(solo)
             .and_then(|component| component.concrete.solo.as_ref().map(|_| component))
-            .is_some_and(|component| child_index < component.children.len());
-        if !is_child {
+            .and_then(|component| {
+                component
+                    .children
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, child)| {
+                        self.objects
+                            .component(**child)
+                            .is_some_and(|child| is_solo_set_member(child.type_name))
+                    })
+                    .nth(solo_index)
+                    .map(|(index, _)| index)
+            });
+        let Some(child_index) = child_index else {
             return false;
-        }
+        };
         self.set_solo_active_child(solo, child_index)
     }
 
@@ -82,12 +103,18 @@ impl crate::artboard::ArtboardInstance {
             })
             .unwrap_or(0);
         for child_index in 0..child_count {
-            let child_local_id = self
+            let child = self
                 .objects
                 .component(solo)
-                .and_then(|component| component.children.get(child_index).copied())
-                .and_then(|child| self.objects.component_local_id(child));
-            if child_local_id
+                .and_then(|component| component.children.get(child_index).copied());
+            if child
+                .and_then(|child| self.objects.component(child))
+                .is_none_or(|child| !is_solo_set_member(child.type_name))
+            {
+                continue;
+            }
+            if child
+                .and_then(|child| self.objects.component_local_id(child))
                 .and_then(|local_id| self.slot(local_id))
                 .and_then(|slot| slot.name.as_deref())
                 .is_some_and(|name| name.as_bytes() == value)
@@ -154,10 +181,8 @@ impl crate::artboard::ArtboardInstance {
                         .as_ref()?
                         .cpp_local_ids
                         .get(child_index)?;
-                    let child_type = self.objects.component(child)?.type_name;
-                    let participates = definition_by_name(child_type).is_none_or(|definition| {
-                        !definition.is_a("Constraint") && !definition.is_a("ClippingShape")
-                    });
+                    let participates =
+                        is_solo_set_member(self.objects.component(child)?.type_name);
                     Some((child, cpp_local_id, participates))
                 })
             else {

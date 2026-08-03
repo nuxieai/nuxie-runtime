@@ -944,19 +944,19 @@ note = "Consolidated runtime port."
 [[file]]
 upstream = "src/data_bind/context/context_target_value.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_any.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
@@ -968,241 +968,241 @@ note = "F13: artboard context values are ported; live nested-host ceilings remai
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_font.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_image.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_boolean.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_color.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_enum.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_list.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_number.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_string.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_symbol_list_index.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_trigger.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_viewmodel.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_boolean_negate.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_formula.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group_item.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_interpolator.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_list_to_length.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_number_to_list.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_value.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_viewmodel.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_range_mapper.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_rounder.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_pad.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_remove_zeros.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_trim.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_degs_to_rads.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_normalizer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_number.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_string.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_trigger.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/converters/formula/formula_token.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind_container.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind_context.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind_list_item_consumer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_bind_viewmodel_consumer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/data_context.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 note = "Consolidated Rust port for data_bind."
 
 [[file]]
@@ -1244,8 +1244,8 @@ note = "Consolidated runtime port."
 [[file]]
 upstream = "src/factory.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-render-api/src/lib.rs"
+note = "Backend-neutral render seam owner."
 
 [[file]]
 upstream = "src/file.cpp"
@@ -1868,8 +1868,8 @@ note = "P1-m/F12 faithful RiveProfile records, lifecycle, nested-host paths, tra
 [[file]]
 upstream = "src/renderer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-render-api/src/lib.rs"
+note = "Backend-neutral render seam owner."
 
 [[file]]
 upstream = "src/resetting_component.cpp"

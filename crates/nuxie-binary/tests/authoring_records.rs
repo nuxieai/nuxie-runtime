@@ -476,36 +476,6 @@ fn authoring_records_reject_uints_that_cannot_round_trip_through_the_wire_format
 }
 
 #[test]
-fn authoring_records_preserve_uint64_library_scope_values() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
-            type_key: 23,
-            properties: vec![],
-        },
-        AuthoringRecord {
-            type_key: 558,
-            properties: vec![uint(798, u64::MAX), uint(799, u64::from(u32::MAX) + 1)],
-        },
-    ])
-    .expect("LibraryAsset uint64 values should retain the full wire range");
-
-    let library = file.object(1).expect("authored LibraryAsset");
-    assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
-    assert_eq!(
-        library.uint_property("libraryVersionId"),
-        Some(u64::from(u32::MAX) + 1)
-    );
-    assert_eq!(
-        file.header.property_field_ids.get(&798),
-        Some(&HeaderFieldKind::Uint)
-    );
-    assert_eq!(
-        file.header.property_field_ids.get(&799),
-        Some(&HeaderFieldKind::Uint)
-    );
-}
-
-#[test]
 fn authoring_records_apply_uint8_member_truncation_after_uint_wire_validation() {
     let file = RuntimeFile::from_authoring_records(vec![
         AuthoringRecord {

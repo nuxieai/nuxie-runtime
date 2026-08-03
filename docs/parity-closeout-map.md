@@ -524,10 +524,11 @@ single Rust file, 158 scatter across 2+; hotspots `nuxie-binary/src/lib.rs`
   commits only (no behavior edits, no signature changes); the
   correspondence manifest `rust_module` field updates in lockstep in the
   same commit; full gate battery green per landing; goldens byte-stable.
-- **#MR-3 Ratchet** — add a scatter ratchet to the manifest checker:
-  rows-mapping-to->1-rust-file may only decrease (target: exceptions
-  only). Wire into `runtime-frame-loop-port-check` alongside the existing
-  count ratchets.
+- **#MR-3 Ratchet — DONE (2026-08-02; floor: 154 multi-module rows).**
+  The manifest checker rejects any increase above the committed floor and
+  requires every multi-module row's note to carry an `MR` or `exception`
+  justification marker. It runs in `runtime-frame-loop-port-check` alongside
+  the existing count ratchets; the count may decrease toward exceptions only.
 - **Attribution invariant:** every move preserves the `rust_ref` trace —
   move commits carry the same ticket tag and the manifest row's
   `audit_record` is not invalidated (pure moves keep B6 verdicts).

@@ -105,3 +105,139 @@ fn text_glyph_width(glyphs: &[TextGlyph], scale: f32, letter_spacing: f32) -> f3
         .map(|glyph| glyph.advance * scale + letter_spacing)
         .sum()
 }
+
+fn materialize_renderer_glyph_run_annotations(
+    text: &str,
+    glyphs: &mut [TextGlyph],
+) -> Result<nuxie_render_api::GlyphRunAnnotations> {
+    let characters = text.chars().collect::<Vec<_>>();
+    let text_indices = glyphs
+        .iter()
+        .map(|glyph| {
+            u32::try_from(character_index_for_cluster(text, glyph.cluster))
+                .context("glyph character index exceeds the renderer annotation format")
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let annotation = nuxie_render_api::annotate_glyph_runs(&characters, &[&text_indices])
+        .context("glyph clusters do not address the shaped text")?
+        .pop()
+        .context("renderer did not return the shaped run annotation")?;
+
+    for glyph in glyphs.iter_mut() {
+        glyph.renderer_breaks_before = 0;
+        glyph.renderer_breaks_after = 0;
+        glyph.renderer_joiners.clear();
+    }
+    for glyph_index in annotation.breaks.iter().copied() {
+        let glyph_index = usize::try_from(glyph_index).unwrap_or(usize::MAX);
+        if let Some(glyph) = glyphs.get_mut(glyph_index) {
+            glyph.renderer_breaks_before = glyph.renderer_breaks_before.saturating_add(1);
+        } else if glyph_index == glyphs.len()
+            && let Some(glyph) = glyphs.last_mut()
+        {
+            glyph.renderer_breaks_after = glyph.renderer_breaks_after.saturating_add(1);
+        }
+    }
+    for joiner in annotation.joiners.iter().copied() {
+        let glyph_index = glyphs
+            .iter()
+            .position(|glyph| {
+                u32::try_from(character_index_for_cluster(text, glyph.cluster))
+                    .is_ok_and(|index| index >= joiner)
+            })
+            .or_else(|| (!glyphs.is_empty()).then_some(glyphs.len() - 1));
+        if let Some(glyph) = glyph_index.and_then(|index| glyphs.get_mut(index)) {
+            glyph.renderer_joiners.push(joiner);
+        }
+    }
+    Ok(annotation)
+}
+
+fn materialized_renderer_glyph_run_annotations(
+    glyphs: &[TextGlyph],
+) -> nuxie_render_api::GlyphRunAnnotations {
+    let mut breaks = Vec::new();
+    let mut joiners = Vec::new();
+    for (glyph_index, glyph) in glyphs.iter().enumerate() {
+        let glyph_index = u32::try_from(glyph_index).unwrap_or(u32::MAX);
+        breaks.extend(std::iter::repeat_n(
+            glyph_index,
+            usize::from(glyph.renderer_breaks_before),
+        ));
+        joiners.extend(glyph.renderer_joiners.iter().copied());
+    }
+    if let Some(glyph) = glyphs.last() {
+        let glyph_count = u32::try_from(glyphs.len()).unwrap_or(u32::MAX);
+        breaks.extend(std::iter::repeat_n(
+            glyph_count,
+            usize::from(glyph.renderer_breaks_after),
+        ));
+    }
+    nuxie_render_api::GlyphRunAnnotations { breaks, joiners }
+}
+
+/// Single-run equivalent of pinned `RunIterator::back`/`forward` around
+/// `GlyphRun::joiners` (`src/text/line_breaker.cpp:152-309`).
+fn glyph_end_avoiding_word_joiner(
+    text: &str,
+    glyphs: &[TextGlyph],
+    glyph_end: usize,
+    joiners: &[u32],
+) -> usize {
+    if glyph_end == 0 || glyph_end >= glyphs.len() {
+        return glyph_end;
+    }
+    let next_text_index =
+        u32::try_from(character_index_for_cluster(text, glyphs[glyph_end].cluster))
+            .unwrap_or(u32::MAX);
+    let adjacent_joiner = joiners.iter().position(|joiner| {
+        *joiner == next_text_index || joiner.checked_add(1) == Some(next_text_index)
+    });
+    let Some(mut first_joiner) = adjacent_joiner else {
+        return glyph_end;
+    };
+    let mut last_joiner = first_joiner;
+    while first_joiner > 0
+        && joiners[first_joiner - 1].checked_add(1) == Some(joiners[first_joiner])
+    {
+        first_joiner -= 1;
+    }
+    while last_joiner + 1 < joiners.len()
+        && joiners[last_joiner].checked_add(1) == Some(joiners[last_joiner + 1])
+    {
+        last_joiner += 1;
+    }
+
+    let left_text_index = joiners[first_joiner].saturating_sub(1);
+    let left_cluster = glyphs
+        .iter()
+        .filter_map(|glyph| {
+            u32::try_from(character_index_for_cluster(text, glyph.cluster))
+                .ok()
+                .filter(|index| *index <= left_text_index)
+        })
+        .max();
+    let left_glyph_index = glyphs
+        .iter()
+        .position(|glyph| {
+            u32::try_from(character_index_for_cluster(text, glyph.cluster)).ok() == left_cluster
+        })
+        .unwrap_or(0);
+    if left_glyph_index != 0 {
+        return left_glyph_index;
+    }
+
+    let right_text_index = joiners[last_joiner].saturating_add(1);
+    let Some(right_glyph_index) = glyphs.iter().position(|glyph| {
+        u32::try_from(character_index_for_cluster(text, glyph.cluster))
+            .is_ok_and(|index| index >= right_text_index)
+    }) else {
+        return glyphs.len();
+    };
+    let right_cluster = glyphs[right_glyph_index].cluster;
+    right_glyph_index
+        + glyphs[right_glyph_index..]
+            .iter()
+            .take_while(|glyph| glyph.cluster == right_cluster)
+            .count()
+}

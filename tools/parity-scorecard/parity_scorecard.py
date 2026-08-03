@@ -20,8 +20,9 @@ from ledger_scorecard import aggregate_ledger_scorecard, render_ledger_scorecard
 
 EVIDENCE_SCHEMA = "nuxie-parity-gate-evidence-v1"
 REPORT_SCHEMA = "nuxie-parity-scorecard-v1"
-MIN_RUNTIME_ENTRIES = 317
-MIN_RUNTIME_EXACT_SEGMENTS = 647
+MIN_RUNTIME_ENTRIES = 324
+MIN_RUNTIME_EXACT_SEGMENTS = 670
+MIN_RUNTIME_SIDE_CHANNEL_SEGMENTS = 669
 MIN_RENDERER_ENTRIES = 1468
 GATE_COMMANDS = {
     "golden-compare": ("make", "golden-compare"),
@@ -38,6 +39,7 @@ MIB = 1024 * 1024
 GOLDEN_SUMMARY = re.compile(
     r"^golden-compare summary: entries=(?P<entries>\d+) "
     r"exact=(?P<exact>\d+) exact-segments=(?P<exact_segments>\d+) "
+    r"side-channel-segments=(?P<side_channel_segments>\d+) "
     r"diverges=(?P<diverges>\d+) unsupported-feature=(?P<unsupported>\d+) "
     r"not-yet=(?P<not_yet>\d+)$",
     re.MULTILINE,
@@ -213,9 +215,12 @@ def check_scorecard(options: argparse.Namespace) -> int:
     minimum_entries, minimum_segments, minimum_pixels = floor_requirements(
         definition, errors
     )
-    expected_entries, expected_segments, runtime_floor_valid = runtime_ratchet(
-        corpus, minimum_entries, minimum_segments, errors
-    )
+    (
+        expected_entries,
+        expected_segments,
+        expected_side_channel_segments,
+        runtime_floor_valid,
+    ) = runtime_ratchet(corpus, minimum_entries, minimum_segments, errors)
     expected_pixels, renderer_floor_valid = renderer_ratchet(
         renderer_corpus, minimum_pixels, errors
     )
@@ -226,6 +231,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         source_sha,
         expected_entries,
         expected_segments,
+        expected_side_channel_segments,
         errors,
     )
     scripted_evidence = validate_golden_evidence(
@@ -234,6 +240,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         source_sha,
         expected_entries,
         expected_segments,
+        expected_side_channel_segments,
         errors,
     )
     renderer_evidence = validate_renderer_evidence(
@@ -274,6 +281,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
     tiers = build_tiers(
         definition,
         expected_segments,
+        expected_side_channel_segments,
         expected_pixels,
         golden,
         scripted,
@@ -380,12 +388,12 @@ def runtime_ratchet(
     minimum_entries: int,
     minimum_segments: int,
     errors: list[str],
-) -> tuple[int, int, bool]:
+) -> tuple[int, int, int, bool]:
     valid = True
     rows = corpus.get("file")
     if not isinstance(rows, list) or not rows:
         errors.append("runtime corpus must contain at least one [[file]] row")
-        return 0, 0, False
+        return 0, 0, 0, False
     exact_rows = [row for row in rows if isinstance(row, dict) and row.get("status") == "exact"]
     if len(exact_rows) != len(rows):
         errors.append(
@@ -394,6 +402,7 @@ def runtime_ratchet(
         )
         valid = False
     segments = 0
+    side_channel_segments = 0
     for row in exact_rows:
         samples = row.get("samples")
         if not isinstance(samples, list) or not samples:
@@ -402,6 +411,14 @@ def runtime_ratchet(
             continue
         if row.get("verification") != "rejects-malformed":
             segments += len(samples)
+            features = row.get("features")
+            has_filed_divergence = isinstance(features, list) and any(
+                isinstance(feature, str)
+                and feature.startswith("side-channel-diverges:")
+                for feature in features
+            )
+            if not has_filed_divergence:
+                side_channel_segments += len(samples)
     if len(rows) < minimum_entries:
         errors.append(
             f"runtime corpus entry ratchet regressed: {len(rows)} < {minimum_entries}"
@@ -412,7 +429,13 @@ def runtime_ratchet(
             f"runtime exact-segments ratchet regressed: {segments} < {minimum_segments}"
         )
         valid = False
-    return len(rows), segments, valid
+    if side_channel_segments < MIN_RUNTIME_SIDE_CHANNEL_SEGMENTS:
+        errors.append(
+            "runtime side-channel-segments ratchet regressed: "
+            f"{side_channel_segments} < {MIN_RUNTIME_SIDE_CHANNEL_SEGMENTS}"
+        )
+        valid = False
+    return len(rows), segments, side_channel_segments, valid
 
 
 def renderer_ratchet(
@@ -519,6 +542,7 @@ def validate_golden_evidence(
     source_sha: str,
     expected_entries: int,
     expected_segments: int,
+    expected_side_channel_segments: int,
     errors: list[str],
 ) -> bool:
     evidence = read_evidence(path, gate, errors)
@@ -532,6 +556,8 @@ def validate_golden_evidence(
         "entries": expected_entries,
         "exact": expected_entries,
         "exact_segments": expected_segments,
+        "side_channel_segments": expected_side_channel_segments,
+        "side_channel_segments": expected_side_channel_segments,
         "diverges": 0,
         "unsupported": 0,
         "not_yet": 0,
@@ -581,6 +607,7 @@ def validate_exit_evidence(
 def build_tiers(
     definition: dict[str, Any],
     expected_segments: int,
+    expected_side_channel_segments: int,
     expected_pixels: int,
     golden: bool,
     scripted: bool,
@@ -659,8 +686,12 @@ def build_tiers(
             [
                 ratchet(
                     "side-channel-segments",
-                    "NOT_BUILT",
-                    "side-channel-segments not built (#OR-1/#OR-2)",
+                    "GREEN" if golden and scripted else "RED",
+                    f"side-channel-segments "
+                    f"{expected_side_channel_segments}/{expected_side_channel_segments}"
+                    " (V11 carve-out filed)"
+                    if golden and scripted
+                    else "side-channel-segments unavailable/red",
                 ),
                 ratchet(
                     "script-verbs",

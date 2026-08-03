@@ -300,19 +300,19 @@ notes: "Event payloads are owned values and are emitted from the active state-ma
 ~~~yaml
 row_id: B6-0207
 cpp_files: ["src/factory.cpp"]
-rust_module: "crates/nuxie-runtime/src/lib.rs"
+rust_module: "crates/nuxie-render-api/src/lib.rs"
 subsystem_cluster: misc-core
-sibling_files_swept: ["src/renderer.cpp", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/scripting.rs", "crates/nuxie-runtime/src/lib.rs"]
+sibling_files_swept: ["src/renderer.cpp", "crates/nuxie-render-api/src/lib.rs", "crates/nuxie-runtime/src/assets/font_asset.rs", "crates/nuxie/tests/audio_core.rs"]
 verdict: ADAPTED
 axes:
-  retained_identity: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["src/factory.cpp:7-39", "crates/nuxie-runtime/src/scripting.rs:109-180"]}
-  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["src/factory.cpp:7-39", "crates/nuxie-runtime/src/scripting.rs:109-180"]}
-  update_ordering: {status: isomorphic, phases_cpp: ["allocate renderer object"], phases_rust: ["allocate through RenderFactory trait"]}
-  ownership: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["crates/nuxie-runtime/src/scripting.rs:109-180"]}
+  retained_identity: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["src/factory.cpp:15-40", "crates/nuxie-render-api/src/lib.rs:Factory"]}
+  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["src/factory.cpp:15-40", "crates/nuxie-render-api/src/lib.rs:p3g_factory_aabb_helper_builds_the_pinned_nonzero_rectangle_path", "crates/nuxie-render-api/src/lib.rs:p3g_factory_font_helper_validates_and_owns_the_encoded_font"]}
+  update_ordering: {status: isomorphic, phases_cpp: ["build path or decode owned resource"], phases_rust: ["build path or decode owned resource through Factory trait"]}
+  ownership: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["crates/nuxie-runtime/src/assets/font_asset.rs:decode_with_portable_factory", "crates/nuxie-runtime/src/assets/font_asset.rs:p3g_font_asset_decode_routes_through_the_factory_helper", "crates/nuxie/tests/audio_core.rs:factory_decode_audio_owns_and_decodes_the_pinned_wav"]}
   compensation: {status: adapted, mechanisms: [], import_time_constants: []}
 idiom_rules_invoked: ["AF-3 trait object for real polymorphism"]
 confidence: high
-notes: "Factory polymorphism remains runtime polymorphism through a trait; no representation-repair lifecycle is present."
+notes: "P3-g closed the remaining factory.cpp surface at the backend-neutral trait seam: rectangle-path, font, and audio helpers retain the pinned call ordering and owned-resource result. Factory polymorphism remains runtime polymorphism; no representation-repair lifecycle is present."
 ~~~
 
 ## B6-0208
@@ -537,19 +537,19 @@ notes: "Parent traversal uses stable imported ids; visited guards mirror C++ dep
 ~~~yaml
 row_id: B6-0311
 cpp_files: ["src/renderer.cpp"]
-rust_module: "crates/nuxie-runtime/src/lib.rs"
+rust_module: "crates/nuxie-render-api/src/lib.rs"
 subsystem_cluster: misc-core
-sibling_files_swept: ["src/factory.cpp", "src/drawable.cpp", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/scripting.rs"]
+sibling_files_swept: ["src/factory.cpp", "src/drawable.cpp", "crates/nuxie-render-api/src/lib.rs", "crates/nuxie-runtime/src/nested_artboard_leaf.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/text/text_modifier_range.rs"]
 verdict: ADAPTED
 axes:
-  retained_identity: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["src/renderer.cpp:7-82", "src/renderer.cpp:102-234", "crates/nuxie-runtime/src/draw.rs:1-180"]}
-  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["src/renderer.cpp:7-82", "crates/nuxie-runtime/src/draw.rs:1-180"]}
-  update_ordering: {status: adapted, phases_cpp: ["prepare render data", "draw"], phases_rust: ["prepare command data", "renderer trait draw"]}
-  ownership: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["crates/nuxie-runtime/src/scripting.rs:109-180"]}
+  retained_identity: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["src/renderer.cpp:7-229", "crates/nuxie-render-api/src/lib.rs:Renderer", "crates/nuxie-render-api/src/lib.rs:RenderBuffer"]}
+  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["src/renderer.cpp:7-229", "crates/nuxie-render-api/src/lib.rs:p3g_compute_alignment_matches_every_pinned_fit_case", "crates/nuxie-render-api/src/lib.rs:p3g_renderer_transform_helpers_emit_the_pinned_matrices"]}
+  update_ordering: {status: adapted, phases_cpp: ["compute alignment or annotate shaped run", "dispatch renderer operation"], phases_rust: ["compute alignment or annotate shaped run", "dispatch renderer trait operation"]}
+  ownership: {status: adapted, idiom_rule: "AF-3 trait object for real polymorphism", evidence: ["crates/nuxie-render-api/src/lib.rs:records_buffers_gradients_images_and_meshes", "crates/nuxie-render-api/src/lib.rs:p3g_glyph_run_annotations_match_pinned_break_and_joiner_rules", "crates/nuxie-runtime/src/text/line_breaker.rs:materialize_renderer_glyph_run_annotations", "crates/nuxie-runtime/src/text/line_breaker.rs:materialized_renderer_glyph_run_annotations", "crates/nuxie-runtime/src/text.rs:p3g_renderer_whitespace_contract_drives_runtime_word_units"]}
   compensation: {status: adapted, mechanisms: [], import_time_constants: []}
 idiom_rules_invoked: ["AF-3 trait object for real polymorphism"]
-confidence: medium
-notes: "The C++ renderer file spans alignment, buffers, and text helpers that Rust splits across draw/text/backend traits; no extra authoritative-state reconciliation was found for the facade row."
+confidence: high
+notes: "P3-g closed the facade row at the backend-neutral renderer seam: alignment, transform helpers, buffer/resource contracts, exact whitespace classification, and shaped-run break/joiner annotation now have direct source-cited owners and focused evidence. RenderBuffer's exclusive mutable slice owns the map access window and its adapter bytes are authoritative, replacing the C++ dirty mirror without a reconciliation loop; map/unmap debug assertions remain an adapter contract. Runtime consumers otherwise preserve adapted storage without an extra authoritative-state reconciliation loop."
 ~~~
 
 ## B6-0312

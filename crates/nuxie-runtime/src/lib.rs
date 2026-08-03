@@ -16,6 +16,8 @@ mod context_target_value;
 mod context_value_any;
 #[path = "data_bind/context/context_value_artboard.rs"]
 mod context_value_artboard;
+#[path = "data_bind/context/context_value_asset_blob.rs"]
+mod context_value_asset_blob;
 #[path = "data_bind/context/context_value_asset_font.rs"]
 mod context_value_asset_font;
 #[path = "data_bind/context/context_value_asset_image.rs"]
@@ -179,7 +181,7 @@ pub use animation::{
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
-    artboard_draw_frame_id,
+    RuntimeFrameComponentsAdvance, artboard_draw_frame_id,
 };
 pub use audio_asset::RuntimeAudioAssetOwners;
 pub use components::{
@@ -259,7 +261,7 @@ pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
     ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
-    ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
+    ScriptFont, ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
     ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
     ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
     ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule,
@@ -286,7 +288,7 @@ pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVert
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
     FocusState, GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
-    RuntimeLayerState, RuntimeNestedStateMachineReport,
+    RuntimeHitResult, RuntimeLayerState, RuntimeNestedStateMachineReport,
     RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
     RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
@@ -324,19 +326,19 @@ pub use text::{
     static_text_support_error,
 };
 pub use view_model::{
-    RuntimeBindableArtboard, RuntimeDataContext, RuntimeDataContextInstanceRef,
-    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDataContextValueRef,
-    RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
-    RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
-    RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
-    RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
-    RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
-    RuntimeDefaultViewModelViewModelSourceHandle, RuntimeFontAssetValue,
-    RuntimeImportedViewModelArtboardSourceHandle, RuntimeImportedViewModelAssetSourceHandle,
-    RuntimeImportedViewModelBooleanSourceHandle, RuntimeImportedViewModelColorSourceHandle,
-    RuntimeImportedViewModelEnumSourceHandle, RuntimeImportedViewModelInstanceContext,
-    RuntimeImportedViewModelListSourceHandle, RuntimeImportedViewModelNumberSourceHandle,
-    RuntimeImportedViewModelStringSourceHandle,
+    RuntimeBindableArtboard, RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeDataContext,
+    RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
+    RuntimeDataContextValueRef, RuntimeDefaultViewModelArtboardSourceHandle,
+    RuntimeDefaultViewModelAssetSourceHandle, RuntimeDefaultViewModelBooleanSourceHandle,
+    RuntimeDefaultViewModelColorSourceHandle, RuntimeDefaultViewModelEnumSourceHandle,
+    RuntimeDefaultViewModelListSourceHandle, RuntimeDefaultViewModelNumberSourceHandle,
+    RuntimeDefaultViewModelStringSourceHandle, RuntimeDefaultViewModelSymbolListIndexSourceHandle,
+    RuntimeDefaultViewModelTriggerSourceHandle, RuntimeDefaultViewModelViewModelSourceHandle,
+    RuntimeFontAssetValue, RuntimeImportedViewModelArtboardSourceHandle,
+    RuntimeImportedViewModelAssetSourceHandle, RuntimeImportedViewModelBooleanSourceHandle,
+    RuntimeImportedViewModelColorSourceHandle, RuntimeImportedViewModelEnumSourceHandle,
+    RuntimeImportedViewModelInstanceContext, RuntimeImportedViewModelListSourceHandle,
+    RuntimeImportedViewModelNumberSourceHandle, RuntimeImportedViewModelStringSourceHandle,
     RuntimeImportedViewModelSymbolListIndexSourceHandle,
     RuntimeImportedViewModelTriggerSourceHandle, RuntimeImportedViewModelViewModelSourceHandle,
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
@@ -348,14 +350,15 @@ pub use view_model::{
     RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
     RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
     RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelImage, RuntimeViewModelLinkError,
-    ViewModelInstanceArtboardRuntime, ViewModelInstanceAssetFontRuntime,
-    ViewModelInstanceAssetImageRuntime, ViewModelInstanceBooleanRuntime,
-    ViewModelInstanceColorRuntime, ViewModelInstanceEnumRuntime, ViewModelInstanceListIndexRuntime,
-    ViewModelInstanceListRuntime, ViewModelInstanceNumberRuntime, ViewModelInstanceRuntime,
-    ViewModelInstanceRuntimeProperty, ViewModelInstanceStringRuntime,
-    ViewModelInstanceTriggerRuntime, ViewModelInstanceValueRuntime, ViewModelRuntime,
-    ViewModelRuntimeDataType, ViewModelRuntimeProperty, runtime_data_context_lookup_reports,
-    runtime_global_view_model_indices, runtime_global_view_model_names,
+    ViewModelInstanceArtboardRuntime, ViewModelInstanceAssetBlobRuntime,
+    ViewModelInstanceAssetFontRuntime, ViewModelInstanceAssetImageRuntime,
+    ViewModelInstanceBooleanRuntime, ViewModelInstanceColorRuntime, ViewModelInstanceEnumRuntime,
+    ViewModelInstanceListIndexRuntime, ViewModelInstanceListRuntime,
+    ViewModelInstanceNumberRuntime, ViewModelInstanceRuntime, ViewModelInstanceRuntimeProperty,
+    ViewModelInstanceStringRuntime, ViewModelInstanceTriggerRuntime, ViewModelInstanceValueRuntime,
+    ViewModelRuntime, ViewModelRuntimeDataType, ViewModelRuntimeProperty,
+    runtime_data_context_lookup_reports, runtime_global_view_model_indices,
+    runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

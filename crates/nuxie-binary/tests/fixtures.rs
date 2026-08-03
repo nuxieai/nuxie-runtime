@@ -37,6 +37,19 @@ fn read_fixture(path: &str) -> RuntimeFile {
     })
 }
 
+fn upstream_unit_fixture(path: &str) -> Vec<u8> {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
+    let path = root.join("tests/unit_tests/assets").join(path);
+    std::fs::read(&path).unwrap_or_else(|error| {
+        panic!(
+            "failed to read required upstream fixture {}: {error} (set RIVE_RUNTIME_DIR)",
+            path.display()
+        )
+    })
+}
+
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut byte = (value & 0x7f) as u8;
@@ -49,6 +62,21 @@ fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
             break;
         }
     }
+}
+
+#[test]
+fn truncated_file_import_never_crashes_and_the_full_file_still_imports() {
+    let bytes = upstream_unit_fixture("data_binding_test_2.riv");
+
+    // Exercise every prefix, including the empty input and the complete file.
+    // Rust's Result cannot pair a failed import with a partially-owned file;
+    // dropping every success and error here covers both cleanup paths.
+    for length in 0..=bytes.len() {
+        drop(read_runtime_file(&bytes[..length]));
+    }
+
+    let file = read_runtime_file(&bytes).expect("the full guarded file still imports");
+    assert!(file.default_artboard().is_some());
 }
 
 fn push_overwide_noncanonical_var_uint(bytes: &mut Vec<u8>, value: u8) {

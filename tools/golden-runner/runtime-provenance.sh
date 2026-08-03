@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 schema="nuxie-golden-librive-provenance-v2"
 
 usage() {

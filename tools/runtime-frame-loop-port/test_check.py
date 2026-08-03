@@ -107,6 +107,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             textwrap.dedent(
                 f"""
                 upstream_ref = "{self.ref}"
+                [scatter_ratchet]
+                max_multi_module_rows = 0
                 [[file]]
                 upstream = "src/animation/linear_animation.cpp"
                 status = "pending"
@@ -632,6 +634,53 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("assigned by both animation and duplicate", result.stderr)
 
+    def test_scatter_ratchet_rejects_increased_multi_module_row_count(self) -> None:
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/animation_extra.rs"\n'
+                'note = "MR-3 exception: fixture split."',
+            )
+        )
+        (self.repo / "crates/runtime/src/animation_extra.rs").write_text(
+            "struct RuntimeAnimationExtra;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "scatter ratchet increased to 1 > 0",
+            result.stderr,
+        )
+
+    def test_scatter_ratchet_rejects_multi_module_row_without_justification(
+        self,
+    ) -> None:
+        self.manifest.write_text(
+            self.manifest.read_text()
+            .replace("max_multi_module_rows = 0", "max_multi_module_rows = 1")
+            .replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/animation_extra.rs"\n'
+                'note = "Split across two files."',
+            )
+        )
+        (self.repo / "crates/runtime/src/animation_extra.rs").write_text(
+            "struct RuntimeAnimationExtra;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "multi-module row src/animation/linear_animation.cpp must have an "
+            "MR or exception marker in note",
+            result.stderr,
+        )
+
     def test_adaptation_requires_binding_rule(self) -> None:
         self.write_files(file_status="adapted")
         content = self.ledger.read_text().replace('rule = "AF-1"', 'rule = "AF-999"')
@@ -838,6 +887,40 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         )
         self.assertIn(
             "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
+        )
+
+    def test_fl_e8_frozen_total_is_additive_after_a_later_wave(self) -> None:
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase="fl-e8-wave-candidate",
+            waves=[
+                {"id": "FL-E8", "sequence": 6, "depends_on": ["FL-E"]},
+                {"id": "S4", "sequence": 7, "depends_on": ["FL-E8"]},
+            ],
+            file_rows=[
+                *[
+                    {"upstream": path, "wave": "FL-E8", "status": "faithful"}
+                    for path in sorted(FL_E8_FILES)
+                ],
+                {"upstream": "src/s4_owner.cpp", "wave": "S4", "status": "faithful"},
+            ],
+            expected_counts={
+                "faithful": 343,
+                "divergent-by-decision": 1,
+                "pending": 0,
+            },
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "layout-engine"}],
+            porting_rules=(
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register="12. retained history\n",
+            candidate_paths=set(FL_E8_FILES),
+            errors=errors,
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-wave-candidate requires faithful=342, got 343", errors
         )
 
     def test_fl_e8_wave_requires_all_seven_promotions(self) -> None:
@@ -2720,7 +2803,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         },
                     );
                 }
-                pub fn advance_frame_components_with_state_machine() {
+                pub fn advance_frame_components_with_state_machine_report() {
                     StateMachineInstance::dispatch_nested_event_sources_with(
                         |artboard, nested_event_dispatch| {
                             artboard.advance_frame_components_collect_events_with_mode(
@@ -2812,8 +2895,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_hit_result_tristate_required",
-                "enum HitResult { None, Hit, HitOpaque }\n",
-                "type HitResult = bool;\n",
+                "enum RuntimeHitResult { #[default] None, Hit, HitOpaque }\n",
+                "type RuntimeHitResult = bool;\n",
             ),
             (
                 "state_machine_hit_three_pass_order_required",

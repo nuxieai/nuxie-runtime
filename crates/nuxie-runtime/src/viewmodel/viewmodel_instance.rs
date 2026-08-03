@@ -21,6 +21,7 @@ pub struct RuntimeOwnedViewModelInstance {
     lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
+    blob_assets: Vec<RuntimeOwnedViewModelBlobAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
@@ -722,6 +723,7 @@ impl RuntimeOwnedViewModelInstance {
             lists: self.lists.clone(),
             assets: self.assets.clone(),
             font_assets: self.font_assets.clone(),
+            blob_assets: self.blob_assets.clone(),
             artboards: self.artboards.clone(),
             triggers: self.triggers.clone(),
             view_models: self.view_models.clone(),
@@ -1651,6 +1653,17 @@ impl RuntimeOwnedViewModelInstance {
             .map(|number| number.cell.clone())
     }
 
+    pub(crate) fn string_cell_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeViewModelCell> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.strings
+            .iter()
+            .find(|string| string.property_index == property_index)
+            .map(|string| string.cell.clone())
+    }
+
     pub fn color_value_by_property_name(&self, property_name: &str) -> Option<u32> {
         let property_index = self.property_index_by_name(property_name)?;
         self.color_value_by_property_index(property_index)
@@ -2125,6 +2138,11 @@ impl RuntimeOwnedViewModelInstance {
                 runtime_owned_view_model_font_assets_for_instance(file, view_model_index, instance)
             })
             .unwrap_or_else(|| runtime_owned_view_model_font_assets(file, view_model_index));
+        let blob_assets = instance
+            .map(|instance| {
+                runtime_owned_view_model_blob_assets_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_blob_assets(file, view_model_index));
         let artboards = instance
             .map(|instance| {
                 runtime_owned_view_model_artboards_for_instance(file, view_model_index, instance)
@@ -2165,6 +2183,7 @@ impl RuntimeOwnedViewModelInstance {
             lists,
             assets,
             font_assets,
+            blob_assets,
             artboards,
             triggers,
             view_models,
@@ -2220,6 +2239,7 @@ impl RuntimeOwnedViewModelInstance {
             RuntimeOwnedViewModelValueKind::List => remove_slot!(self.lists),
             RuntimeOwnedViewModelValueKind::Asset => remove_slot!(self.assets),
             RuntimeOwnedViewModelValueKind::FontAsset => remove_slot!(self.font_assets),
+            RuntimeOwnedViewModelValueKind::BlobAsset => remove_slot!(self.blob_assets),
             RuntimeOwnedViewModelValueKind::Artboard => remove_slot!(self.artboards),
             RuntimeOwnedViewModelValueKind::Trigger => remove_slot!(self.triggers),
             RuntimeOwnedViewModelValueKind::ViewModel => {
@@ -4803,6 +4823,35 @@ impl RuntimeOwnedViewModelInstance {
         changed
     }
 
+    pub(crate) fn apply_blob_asset_data_bind_value_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: &RuntimeBlobAssetValue,
+    ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.apply_blob_asset_data_bind_value_by_property_path(path, value)
+        }) {
+            return changed;
+        }
+        if property_path.len() == 1 {
+            let Some(asset) = self
+                .blob_assets
+                .iter_mut()
+                .find(|asset| asset.property_index == property_path[0])
+            else {
+                return false;
+            };
+            return asset.apply_data_bind_value(value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        view_model.apply_blob_asset_data_bind_value_by_property_index(*property_index, value)
+    }
+
     pub(crate) fn sync_artboard_by_property_path(
         &mut self,
         property_path: &[usize],
@@ -4941,6 +4990,9 @@ impl RuntimeOwnedViewModelInstance {
             }
             RuntimeOwnedViewModelValueKind::FontAsset => {
                 self.font_assets.get(occurrence.slot_index)?.cell.clone()
+            }
+            RuntimeOwnedViewModelValueKind::BlobAsset => {
+                self.blob_assets.get(occurrence.slot_index)?.cell.clone()
             }
             RuntimeOwnedViewModelValueKind::Artboard => {
                 self.artboards.get(occurrence.slot_index)?.cell.clone()
@@ -5462,6 +5514,46 @@ impl RuntimeOwnedViewModelInstance {
             name_based,
         )?;
         self.font_asset_value_by_property_path(&property_path)
+    }
+
+    fn blob_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeBlobAssetValue> {
+        self.blob_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(RuntimeOwnedViewModelBlobAsset::value)
+    }
+
+    pub(crate) fn blob_asset_value_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeBlobAssetValue> {
+        if property_path.len() == 1 {
+            return self.blob_asset_value_by_property_index(property_path[0]);
+        }
+        let (view_model_index, rest) = property_path.split_first()?;
+        self.view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *view_model_index)?
+            .active_blob_asset_value_by_property_path(rest)
+    }
+
+    pub(crate) fn blob_asset_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<RuntimeBlobAssetValue> {
+        let property_path = self.property_path_for_context_source_path(
+            file,
+            context_path,
+            source_path,
+            name_based,
+        )?;
+        self.blob_asset_value_by_property_path(&property_path)
     }
 
     fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {

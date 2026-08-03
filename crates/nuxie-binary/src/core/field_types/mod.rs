@@ -2,12 +2,12 @@ mod core_bool_type;
 mod core_bytes_type;
 mod core_color_type;
 mod core_double_type;
+mod core_int_type;
 mod core_string_type;
-mod core_uint64_type;
 mod core_uint_type;
 
 use crate::{FieldValue, core::binary_reader::BinaryReader};
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use nuxie_schema::{FieldKind, Property, UintStorage};
 
 pub(crate) fn read_string_or_bytes_value(
@@ -31,9 +31,21 @@ pub(crate) fn read_field_value(
         FieldKind::Callback => FieldValue::Callback,
         FieldKind::Color => FieldValue::Color(core_color_type::deserialize(reader)?),
         FieldKind::Double => FieldValue::Double(core_double_type::deserialize(reader)?),
+        FieldKind::Int => FieldValue::Int(read_known_int_field(reader, property, "int field")?),
         FieldKind::String => FieldValue::String(core_string_type::deserialize(reader)?),
         FieldKind::Uint => FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?),
     })
+}
+
+pub(crate) fn read_known_int_field(
+    reader: &mut BinaryReader<'_>,
+    property: &Property,
+    label: &str,
+) -> Result<i32> {
+    let storage = property
+        .int_storage()
+        .with_context(|| format!("{label} schema property is not int-like"))?;
+    core_int_type::deserialize(reader, storage, label)
 }
 
 pub(crate) fn read_known_uint_field(
@@ -42,7 +54,6 @@ pub(crate) fn read_known_uint_field(
     label: &str,
 ) -> Result<u64> {
     match property.uint_storage() {
-        Some(UintStorage::Uint64) => core_uint64_type::deserialize(reader),
         Some(UintStorage::Uint8) => core_uint_type::deserialize_uint8(reader, label),
         Some(UintStorage::Uint32) => core_uint_type::deserialize(reader, label),
         None => bail!("{label} schema property is not uint-like"),

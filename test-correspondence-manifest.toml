@@ -4,17 +4,17 @@
 schema = "nuxie-test-correspondence/v1"
 schema_version = 1
 upstream_repository = "rive-app/rive-runtime"
-upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 source_globs = ["tests/unit_tests/runtime/*.cpp", "tests/unit_tests/runtime/scripting/*.cpp"]
-row_count = 148
-test_case_count = 1316
+row_count = 157
+test_case_count = 1404
 status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
 
 # Status counts are recensused from the [[file]] rows on every check; only the
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 83
+max_pending = 85
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -29,6 +29,13 @@ test_case_count = 14
 status = "ported-direct"
 evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/animation.rs::upstream_animation_state_speed_start_and_spilled_time_matrix"]
 note = "All 14 cases and 30 assertions are mapped directly in the FL-B/FL-C backfill."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/artboard_transform_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "The S4 runtime port covers the transform mechanism, but no completed correspondence executes every assertion sequence in this newly enrolled file."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/audio_test.cpp"
@@ -46,7 +53,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/binary_reader_test.cpp"
-test_case_count = 3
+test_case_count = 5
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
@@ -102,17 +109,25 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/command_queue_test.cpp"
-test_case_count = 79
+test_case_count = 83
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/component_list_test.cpp"
-test_case_count = 29
+test_case_count = 30
 status = "ported-direct"
 evidence = ["docs/runtime-frame-loop-fl-d5-d7-tests.md", "crates/nuxie-runtime/{src/artboard.rs,src/artboard_component_list.rs,src/nested_artboard.rs,tests/cpp_probe.rs}"]
 note = "The completed D5-D7 checklist explicitly absorbs all 29 cases with direct owner assertions; unsupported silver action streams are not treated as differential coverage."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/component_origin_test.cpp"
+test_case_count = 3
+status = "partial"
+evidence = ["silver-corpus.toml::{nested_artboard_origin_override_test}"]
+covered_test_cases = ["Animated origin and click events"]
+note = "The previously tracked animated-origin silver moved here at the new pin; the two new direct ComponentOrigin cases are not claimed by that differential."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/component_test.cpp"
@@ -158,14 +173,22 @@ note = "All four literal action streams execute through the pinned C++ silver pr
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
-test_case_count = 9
+test_case_count = 10
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
 
 [[file]]
+upstream = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"
+test_case_count = 5
+status = "partial"
+evidence = ["crates/nuxie-runtime/tests/blob_view_model.rs", "crates/nuxie-runtime/src/state_machine/bindables.rs::bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds"]
+covered_test_cases = ["Blob data bind stores and clears the blob on the property", "Blob data value applies to the instance property", "Blob data value with only an id applies the id", "Directly-set blob yields a non-null asset even when empty"]
+note = "S4-42 directly covers the four value, identity, id-bind, empty-payload, and clearing cases. The newly enrolled silver remains not-yet in corpus.toml."
+
+[[file]]
 upstream = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
-test_case_count = 1
+test_case_count = 2
 status = "ported-differential"
 evidence = ["silver-corpus.toml::computed_values_test"]
 note = "The sole literal action stream executes through both runtimes and currently records a genuine divergence."
@@ -193,7 +216,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_images_test.cpp"
-test_case_count = 9
+test_case_count = 10
 status = "partial"
 evidence = ["silver-corpus.toml::{image_fit_alignment_2,image_fit_alignment_3,image_fit_alignment_updated_test,viewmodel_based_condition}"]
 covered_test_cases = ["Image fit & alignment with databound images 2", "Image fit & alignment images 3", "Image fit & alignment with image scaling", "Image based conditions work"]
@@ -216,7 +239,7 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
-test_case_count = 2
+test_case_count = 3
 status = "partial"
 evidence = ["silver-corpus.toml::{unbound_stateful_component}"]
 covered_test_cases = ["Stateful component is bound before binding the view model instance"]
@@ -274,7 +297,7 @@ note = "The listed public File facade cases are direct Rust ports over the same 
 
 [[file]]
 upstream = "tests/unit_tests/runtime/focus_test.cpp"
-test_case_count = 81
+test_case_count = 85
 status = "partial"
 evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/state_machine/focus.rs"]
 covered_test_cases = ["FocusNode property setters", "FocusNode hierarchy", "FocusManager basic focus operations", "FocusManager focus change notifications", "FocusManager respects canFocus", "FocusManager hierarchy", "FocusManager hasFocus with descendants", "FocusManager removeChild clears focus", "List row reparent: FocusNode removeFromParent preserves primary focus", "FocusManager input routing", "FocusManager traversal basic", "FocusManager traversal with tabIndex", "FocusManager traversal skips non-traversable", "FocusManager edge behavior closedLoop", "FocusManager edge behavior stop", "FocusManager ancestor notification on focus", "FocusManager common ancestor optimization", "FocusManager traversal focuses leaves only", "FocusManager nested scopes focus deepest leaf", "FocusManager edge behavior parentScope exits to parent", "FocusManager clearFocus clears hasFocus flag chain", "FocusManager removeChild clears manager reference", "Freeing a FocusNode clears the parent pointer of a child that outlives it", "FocusManager::addChild removes a migrating root from its previous manager", "A migrated focus scope survives destruction of its previous manager", "FocusManager traversal backward from first leaf exits scope", "FocusManager closedLoop wraps backward", "FocusManager stop prevents backward traversal", "StateMachineInstance hasFocusNodes ignores non-traversable scopes", "StateMachineInstance hasFocusNodes sees leaves under a transparent scope", "StateMachineInstance hasFocusNodes counts focus data that is currently ineligible for traversal", "FocusManager traversal descends through a transparent scope and keeps sibling order", "FocusManager drops focus when a leaf under a transparent scope becomes hidden", "FocusManager rebuilding one scope's subtree preserves focus in a sibling scope", "FocusActionTraversal perform advances focus with traversalKind next", "FocusActionTraversal perform moves focus back with traversalKind previous", "FocusActionTraversal perform unknown traversalKind defaults to next", "StateMachineInstance exposes hasFocusNodes, focusNext, focusPrevious from focusManager", "FocusActionTraversal perform ignores null StateMachineInstance", "Focusable::acceptsKeyboardInput defaults to false", "StateMachineInstance::focusState reports no focus when nothing is focused", "StateMachineInstance::focusState reports focused non-keyboard focusable", "StateMachineInstance::focusState reports keyboard expectation when focused focusable accepts keys", "StateMachineInstance::focusState clears when focus is cleared", "StateMachineInstance::focusState tracks switches between focusables", "StateMachineInstance::focusState uses external focus manager when set", "StateMachineInstance::clearFocus clears internal focus manager", "FocusManager setFocus on a scope descends to first leaf", "FocusManager setFocus on a scope descends depth-first", "FocusManager setFocus on a scope with no eligible leaf falls back", "FocusManager setFocus on an ineligible scope is a no-op", "FocusManager setFocus on a leaf is unchanged", "FocusManager Tab after focusing a scope traverses leaf siblings", "FocusActionClear perform clears the primary focus", "FocusActionClear perform is a no-op when nothing is focused", "FocusActionClear perform ignores null StateMachineInstance", "TransitionFocusCondition uses the reassigned core type key", "TransitionFocusCondition evaluate returns false for a null StateMachineInstance", "TransitionFocusCondition evaluate returns false when no target comparator is configured", "Focus based transitions work"]
@@ -304,7 +327,7 @@ note = "The six focused decoder/device-lifecycle cases are direct Rust ports. Th
 
 [[file]]
 upstream = "tests/unit_tests/runtime/global_view_model_binding_test.cpp"
-test_case_count = 9
+test_case_count = 15
 status = "partial"
 evidence = ["crates/nuxie/src/lib.rs::upstream_file_global_view_model_names_lists_globals_in_file_order"]
 covered_test_cases = ["File::globalViewModelNames lists globals in file order"]
@@ -383,6 +406,29 @@ evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "crates/nuxie-runtime/test
 note = "The sole fixture action sequence and all authored masks are directly ported."
 
 [[file]]
+upstream = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "The combined grid/stack fixture is enrolled as not-yet; no complete direct or differential correspondence is claimed for these six silver cases."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/layout_grid_test.cpp"
+test_case_count = 5
+status = "partial"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
+covered_test_cases = ["grid layout places cells from a .riv file", "grid auto rows size overflow cells", "grid track types (minmax/percent/fr) size their columns"]
+note = "S4-38 directly asserts the three listed fixture layouts. Animated track reflow and exposed line-offset assertions remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/layout_participant_test.cpp"
+test_case_count = 19
+status = "partial"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
+covered_test_cases = ["a fill participant fills a stack cell from a .riv file", "a Solo's active child is laid out through it from a .riv file", "a hug participant hugs its content from a .riv file", "a fixed-size participant keeps its size from a .riv file", "a display:none participant collapses and leaves the flow from a .riv file", "min/max constraints clamp a participant slot from a .riv file", "participants size to grid cells from a .riv file"]
+note = "S4-38 directly asserts the seven listed fixture outcomes; animation retargeting, transparent-container, component-list, and custom-path cases remain unclaimed."
+
+[[file]]
 upstream = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 test_case_count = 23
 status = "pending"
@@ -390,8 +436,16 @@ evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
 
 [[file]]
+upstream = "tests/unit_tests/runtime/layout_stack_test.cpp"
+test_case_count = 3
+status = "partial"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
+covered_test_cases = ["stack overlaps children and aligns from a .riv file"]
+note = "S4-38 directly asserts the stack fixture's overlapping layout. The fixed-child alignment and display-fold cases remain unclaimed."
+
+[[file]]
 upstream = "tests/unit_tests/runtime/layout_test.cpp"
-test_case_count = 22
+test_case_count = 23
 status = "partial"
 evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_layout_*"]
 covered_test_cases = ["LayoutComponent FlexDirection row", "LayoutComponent FlexDirection column", "LayoutComponent FlexDirection row with gap", "LayoutComponent FlexDirection row with wrap", "LayoutComponent Center using alignItems and justifyContent", "LayoutComponent with intrinsic size gets measured correctly", "LayoutComponent Padding Px", "LayoutComponent Margin Px", "LayoutComponent Corner Radius", "LayoutComponent Direction", "LayoutComponent forcedWidth/Height dirt test", "LayoutComponent Alignment", "Prevent Margin Pct on Artboard", "Multiple layout collapsing and soloing in hierarchy.", "Layout animation time databound", "Layout animation artboard component list", "Layout animation nested artboards", "Layout aspect ratio", "Animating layout display", "Layout background & foreground shape paints."]
@@ -455,6 +509,13 @@ evidence = []
 note = "This C++ support/runner translation unit declares no active TEST_CASE at the pinned revision."
 
 [[file]]
+upstream = "tests/unit_tests/runtime/malformed_file_import_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["crates/nuxie-binary/tests/fixtures.rs::truncated_file_import_never_crashes_and_the_full_file_still_imports"]
+note = "The S4-26 regression exhaustively imports every truncated prefix and then verifies the complete fixture, directly covering both upstream cases."
+
+[[file]]
 upstream = "tests/unit_tests/runtime/mat2d_test.cpp"
 test_case_count = 3
 status = "pending"
@@ -470,18 +531,10 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_artboard_opacity_test.cpp"
-test_case_count = 1
+test_case_count = 3
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
-
-[[file]]
-upstream = "tests/unit_tests/runtime/nested_artboard_origin_test.cpp"
-test_case_count = 2
-status = "partial"
-evidence = ["silver-corpus.toml::{nested_artboard_origin_override_test}"]
-covered_test_cases = ["Animated origin and click events"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_artboard_test.cpp"
@@ -536,7 +589,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_text_input_test.cpp"
-test_case_count = 16
+test_case_count = 17
 status = "ported-direct"
 evidence = ["docs/runtime-frame-loop-fl-e6-tests.md", "crates/nuxie-runtime/src/text/{cursor.rs,raw_text_input.rs}"]
 note = "All 16 raw cursor, edit, selection, measurement, and journal cases are direct Rust ports."
@@ -582,6 +635,14 @@ test_case_count = 1
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/rounded_rect_path_test.cpp"
+test_case_count = 3
+status = "partial"
+evidence = ["crates/nuxie-runtime/src/draw.rs::layout_background_raw_path_matches_the_previous_rectangle_path"]
+covered_test_cases = ["rounded rect matches Rectangle"]
+note = "S4-41 directly compares the new raw rounded-rectangle path against the prior Rectangle construction. Offset-origin and ShapePaintPath cases remain unclaimed."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scale_constraint_test.cpp"
@@ -739,6 +800,14 @@ evidence = ["crates/nuxie-scripting/tests/wrapper_bindings.rs::{upstream_mesh_co
 note = "P2B ports both inline Luau cases without weakening their userdata assertions; supplemental wrapper and renderer tests cover sampler vocabulary, u16 bounds, lazy factory allocation, buffer invalidation/reuse, and drawImageMesh validation."
 
 [[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_nested_viewmodel_test.cpp"
+test_case_count = 2
+status = "partial"
+evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::nested_view_model_property_mints_the_referenced_type"]
+covered_test_cases = ["nested view model property mints the referenced type"]
+note = "S4-17 directly covers referenced-type minting. Refresh after a reference relink remains unclaimed."
+
+[[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"
 test_case_count = 2
 status = "pending"
@@ -761,14 +830,14 @@ note = "Both construction cases are covered directly."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_promise_test.cpp"
-test_case_count = 47
+test_case_count = 48
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
-test_case_count = 16
+test_case_count = 22
 status = "partial"
 evidence = ["corpus.toml::scripted_property_image", "corpus.toml::image_scripting_property_value", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_images_round_trip_between_context_and_view_model_properties", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs::factory_backed_view_model_image_reaches_the_bound_image_draw_owner"]
 covered_test_cases = ["Scripted image properties", "Image read from propertyValue"]
@@ -790,7 +859,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"
-test_case_count = 7
+test_case_count = 5
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
@@ -935,7 +1004,7 @@ note = "AF-7 ports the meaningful empty, owned-copy, slice, iteration, growth, r
 
 [[file]]
 upstream = "tests/unit_tests/runtime/solo_test.cpp"
-test_case_count = 7
+test_case_count = 9
 status = "pending"
 evidence = []
 note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
@@ -949,7 +1018,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/state_machine_event_test.cpp"
-test_case_count = 10
+test_case_count = 11
 status = "partial"
 evidence = ["silver-corpus.toml::{target_event}"]
 covered_test_cases = ["event targetting an event object triggers correctly"]
@@ -964,7 +1033,7 @@ note = "The sole 17-assertion fixture-loading case is directly ported."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/state_machine_test.cpp"
-test_case_count = 18
+test_case_count = 19
 status = "partial"
 evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::state_machine_test.cpp provenance findings"]
 covered_test_cases = ["file with state machine be read", "file with blend states loads correctly", "Blend state animations with reset applied to them.", "Transitions with reset applied to them.", "Transition with list index can be compared to a number"]
@@ -979,7 +1048,7 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 
 [[file]]
 upstream = "tests/unit_tests/runtime/text_input_test.cpp"
-test_case_count = 19
+test_case_count = 20
 status = "ported-direct"
 evidence = ["docs/runtime-frame-loop-fl-e6-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_text_input_*"]
 note = "All 19 authored TextInput cases are direct Rust ports; the serialized rendering case is additionally exercised by silver."
@@ -993,7 +1062,7 @@ note = "Both assertion sequences are direct Rust ports; the animated draw remain
 
 [[file]]
 upstream = "tests/unit_tests/runtime/text_test.cpp"
-test_case_count = 17
+test_case_count = 18
 status = "partial"
 evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_*text*_body_is_ported"]
 covered_test_cases = ["file with text loads correctly", "can query for all text runs", "can query for a text run at a given index", "simple text loads", "vertical trim shrinks the box to the chosen band", "vertical trim top/bottom uint passthroughs pack into the mask", "ellipsis is shown", "fitFontSize shrinks the font to fit the bounds", "range mapper maps words", "run modifier ranges select runs", "run modifier ranges select runs with varying text size", "double new line type works", "can load and run opacity modifiers", "Vertical Trim"]

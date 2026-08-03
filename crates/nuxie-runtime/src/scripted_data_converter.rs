@@ -1480,7 +1480,7 @@ mod tests {
     }
 
     #[test]
-    fn conversion_and_advance_are_inert_after_cpp_table_disposal() {
+    fn conversion_and_advance_are_inert_while_cpp_self_is_unhydrated() {
         let calls = Rc::new(RefCell::new(Vec::new()));
         let handle = RuntimeScriptInstanceHandle::new(Box::new(ConverterProbe {
             fail: Rc::new(Cell::new(false)),
@@ -1512,7 +1512,7 @@ mod tests {
         );
         assert!(
             calls.borrow().is_empty(),
-            "a disposed C++ m_self cannot receive convert or advance"
+            "an unhydrated or disposed C++ m_self cannot receive convert or advance"
         );
     }
 

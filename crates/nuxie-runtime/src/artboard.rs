@@ -343,6 +343,9 @@ pub struct ArtboardInstance {
     pub(crate) origin_x: f32,
     pub(crate) origin_y: f32,
     pub(crate) clip: bool,
+    /// C++ `Artboard::m_hostOpacity`: opacity imposed by a mounted
+    /// `NestedArtboard`, kept separate from the artboard's authored opacity.
+    pub(crate) host_opacity: f32,
     /// C++ `Artboard::m_FrameOrigin`: clone-owned draw state. Root artboards
     /// default true; mounted nested/scripted/component-list occurrences set it
     /// false at the same ownership boundary as C++.
@@ -525,6 +528,7 @@ impl Clone for ArtboardInstance {
             origin_x: self.origin_x,
             origin_y: self.origin_y,
             clip: self.clip,
+            host_opacity: self.host_opacity,
             frame_origin: self.frame_origin.clone(),
             frame_id: self.frame_id.clone(),
             slots: self.slots.clone(),
@@ -715,7 +719,7 @@ include!("artboard_referencer.rs");
 include!("bindable_artboard.rs");
 include!("nested_artboard_layout.rs");
 include!("nested_artboard_leaf.rs");
-include!("nested_artboard_origin.rs");
+include!("component_origin.rs");
 include!("bones/weight.rs");
 include!("profiler/rive_profile.rs");
 
@@ -736,6 +740,15 @@ pub enum RuntimeArtboardOccurrenceSegment {
         /// may be reused after a list replacement or reorder.
         occurrence_identity: u64,
     },
+}
+
+/// Result of one root frame-component advance for a state-machine scene:
+/// `notified` triggers the pinned zero-time follow-up advance; `changed`
+/// feeds the `advanceAndApply` keep-going composition.
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeFrameComponentsAdvance {
+    pub notified: bool,
+    pub changed: bool,
 }
 
 /// Probe-facing snapshot of one mounted nested remap animation occurrence.
@@ -2277,6 +2290,7 @@ impl ArtboardInstance {
             origin_x: dimensions.origin_x,
             origin_y: dimensions.origin_y,
             clip: dimensions.clip,
+            host_opacity: 1.0,
             frame_origin: Cell::new(true),
             frame_id: Cell::new(0),
             slots,
@@ -4694,6 +4708,22 @@ impl ArtboardInstance {
         self.after_double_property_set(local_id, property_key, value)
     }
 
+    pub(crate) fn set_int_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: i32,
+    ) -> bool {
+        let changed = self.objects.set_int_property(local_id, property_key, value);
+        if changed {
+            self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+            self.mark_changed_unless_view_model_instance(local_id);
+            self.mark_prepared_changed_for_property(local_id, property_key);
+            self.mark_layout_changed();
+        }
+        changed
+    }
+
     pub(crate) fn set_keyed_double_property(
         &mut self,
         local_id: usize,
@@ -5014,6 +5044,52 @@ impl ArtboardInstance {
     /// artboard, when it was bound through the composite context API.
     pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
         self.artboard_owned_view_model_context.as_ref()
+    }
+
+    /// Stage or clear one file-global view-model slot on this artboard. A
+    /// valid clear against an artboard with no context is an allocation-free
+    /// success, matching upstream `Artboard::setGlobalViewModelInstance`.
+    #[doc(hidden)]
+    pub(crate) fn set_global_view_model_instance(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+        instance: Option<RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        let mut validation = RuntimeOwnedViewModelContext::default();
+        let valid = match instance.as_ref() {
+            Some(instance) => validation.set_global_named_handle(file, name, instance.clone()),
+            None => validation.unset_global_named(file, name),
+        };
+        if !valid {
+            return false;
+        }
+        if instance.is_none() && self.artboard_owned_view_model_context.is_none() {
+            return true;
+        }
+        let context = self
+            .artboard_owned_view_model_context
+            .get_or_insert_with(RuntimeOwnedViewModelContext::default);
+        match instance {
+            Some(instance) => context.set_global_named_handle(file, name, instance),
+            None => context.unset_global_named(file, name),
+        }
+    }
+
+    #[doc(hidden)]
+    pub(crate) fn global_view_model_instance(
+        &self,
+        file: &RuntimeFile,
+        name: &str,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        let slot = file
+            .view_models()
+            .iter()
+            .position(|view_model| view_model.object.string_property("name") == Some(name))?;
+        self.artboard_owned_view_model_context
+            .as_ref()?
+            .global_slot_handle(slot)
+            .cloned()
     }
 
     /// Resolve a named input on the selected state machine attached to one
@@ -6239,7 +6315,23 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> Result<bool, ScriptError> {
-        StateMachineInstance::dispatch_nested_event_sources_with(
+        self.advance_frame_components_with_state_machine_report(elapsed_seconds, state_machine)
+            .map(|report| report.notified)
+    }
+
+    /// Like [`Self::advance_frame_components_with_state_machine`], but also
+    /// reports whether the component advance itself changed anything. The
+    /// pinned `advanceAndApply` folds that result into its keep-going return
+    /// (`state_machine_instance.cpp:2614-2620`), including the quantized
+    /// nested-artboard force-true (`nested_artboard.cpp:983-986`); callers
+    /// composing the facade bool need it alongside the notify trigger.
+    pub fn advance_frame_components_with_state_machine_report(
+        &mut self,
+        elapsed_seconds: f32,
+        state_machine: &mut StateMachineInstance,
+    ) -> Result<RuntimeFrameComponentsAdvance, ScriptError> {
+        let mut components_changed = false;
+        let notified = StateMachineInstance::dispatch_nested_event_sources_with(
             self,
             state_machine,
             |artboard, nested_event_dispatch| {
@@ -6251,9 +6343,15 @@ impl ArtboardInstance {
                         None,
                         Some(nested_event_dispatch),
                     )
-                    .map(|_| ())
+                    .map(|changed| {
+                        components_changed = changed;
+                    })
             },
-        )
+        )?;
+        Ok(RuntimeFrameComponentsAdvance {
+            notified,
+            changed: components_changed || notified,
+        })
     }
 
     /// Complete factory-bearing frame advance for several root state-machine
@@ -7313,6 +7411,37 @@ impl ArtboardInstance {
 
     pub fn set_frame_origin(&self, frame_origin: bool) {
         self.frame_origin.set(frame_origin);
+    }
+
+    pub(crate) fn has_self_transform(&self) -> bool {
+        let authored = self.authored_transform(0);
+        authored.rotation != 0.0 || authored.scale_x != 1.0 || authored.scale_y != 1.0
+    }
+
+    pub(crate) fn self_transform(&self) -> Mat2D {
+        let authored = self.authored_transform(0);
+        let mut transform = Mat2D::from_rotation(authored.rotation);
+        transform.scale_by_values(authored.scale_x, authored.scale_y);
+        transform
+    }
+
+    pub(crate) fn mounted_root_transform(&self, host_transform: Mat2D) -> Mat2D {
+        host_transform.multiply(self.self_transform())
+    }
+
+    pub(crate) fn child_opacity(&self) -> f32 {
+        self.component(0)
+            .map(|component| component.transform.render_opacity * self.host_opacity)
+            .unwrap_or(self.host_opacity)
+    }
+
+    pub(crate) fn set_host_opacity(&mut self, opacity: f32) -> bool {
+        if self.host_opacity == opacity {
+            return false;
+        }
+        self.host_opacity = opacity;
+        self.add_dirt(0, ComponentDirt::RENDER_OPACITY, true);
+        true
     }
 
     pub fn frame_id(&self) -> u64 {
@@ -8598,6 +8727,7 @@ impl ArtboardInstance {
     ) -> bool {
         if !dirt.contains(ComponentDirt::RENDER_OPACITY)
             && !dirt.contains(ComponentDirt::COMPONENTS)
+            && !dirt.contains(ComponentDirt::WORLD_TRANSFORM)
         {
             return false;
         }
@@ -8605,7 +8735,13 @@ impl ArtboardInstance {
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             changed |= self.sync_nested_artboard_root_opacity(host_local_id);
         }
-        if dirt.contains(ComponentDirt::COMPONENTS) {
+        let paused_child_has_component_dirt = self
+            .nested_artboards
+            .get(&host_local_id)
+            .is_some_and(|nested| {
+                nested.is_paused && nested.child.has_dirt(ComponentDirt::COMPONENTS)
+            });
+        if dirt.contains(ComponentDirt::COMPONENTS) || paused_child_has_component_dirt {
             let newly_uncollapsed = self
                 .newly_uncollapsed_nested_artboards
                 .remove(&host_local_id);
@@ -8629,12 +8765,14 @@ impl ArtboardInstance {
             {
                 return changed;
             }
-            let child_root_transform = root_transform.multiply(
-                self.component(host_local_id)
-                    .map(|component| component.transform.world_transform)
-                    .unwrap_or(Mat2D::IDENTITY),
-            );
+            let host_world = self
+                .component(host_local_id)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
+                let child_root_transform = nested
+                    .child
+                    .mounted_root_transform(root_transform.multiply(host_world));
                 changed |= nested
                     .child
                     .update_pass_with_script_mode(script_mode, child_root_transform);
@@ -8663,6 +8801,42 @@ impl ArtboardInstance {
                         nested.child.retain_latest_unrealized_shape_gradient_state();
                     }
                 }
+            }
+        }
+        if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+            && self.runtime_object_type_name(host_local_id) == Some("NestedArtboardLeaf")
+            && property_key_for_name("NestedArtboardLeaf", "fit")
+                .and_then(|key| self.uint_property(host_local_id, key))
+                == Some(7)
+        {
+            let child_dimensions = self
+                .nested_artboards
+                .get(&host_local_id)
+                .map(|nested| nested.child.artboard_dimensions());
+            let frame_dimensions = self
+                .component_parent_local(host_local_id)
+                .filter(|parent_local| {
+                    self.runtime_object_type_name(*parent_local) == Some("LayoutComponent")
+                })
+                .and_then(|parent_local| self.layout_bounds(parent_local))
+                .map(|bounds| (bounds.width, bounds.height))
+                .or(child_dimensions);
+            let child_root_transform = root_transform.multiply(
+                self.component(host_local_id)
+                    .map(|component| component.transform.world_transform)
+                    .unwrap_or(Mat2D::IDENTITY),
+            );
+            if let (Some((width, height)), Some(nested)) = (
+                frame_dimensions,
+                self.nested_artboards.get_mut(&host_local_id),
+            ) && nested.child.set_artboard_dimensions(width, height)
+            {
+                // The mounted instance already advanced; use one non-root
+                // child update pass to reflow now or this frame would draw
+                // the old layout at the new bounds.
+                changed |= nested
+                    .child
+                    .update_pass_with_script_mode(script_mode, child_root_transform);
             }
         }
         changed
@@ -9130,7 +9304,11 @@ impl ArtboardInstance {
                         .objects
                         .double_property(component.local_id, key)
                         .unwrap_or(1.0);
-                    Some(component.child_opacity(authored_opacity))
+                    Some(if component.type_name == "Artboard" {
+                        component.child_opacity(authored_opacity) * self.host_opacity
+                    } else {
+                        component.child_opacity(authored_opacity)
+                    })
                 })
                 .unwrap_or(1.0);
             self.objects
@@ -9359,6 +9537,9 @@ impl ArtboardInstance {
         });
         let owner_callback = owner_callback.or_else(|| {
             crate::draw_target::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            nested_artboard_leaf_uint_property_changed(self, local_id, type_name, property_key)
         });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
@@ -9863,6 +10044,14 @@ impl ArtboardInstance {
                     )
                 })
                 .or_else(|| {
+                    component_origin_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
                     (type_name == Some("TextInput")
                         && property_key_for_name("TextInput", "selectionRadius")
                             == Some(property_key))
@@ -10011,46 +10200,6 @@ impl ArtboardInstance {
                     ComponentDirt::PATH | ComponentDirt::COMPONENTS,
                     false,
                 )
-            }
-            Some("NestedArtboardOrigin")
-                if property_key_for_name("NestedArtboardOrigin", "originX")
-                    == Some(property_key)
-                    || property_key_for_name("NestedArtboardOrigin", "originY")
-                        == Some(property_key) =>
-            {
-                let Some(host_local_id) = self.component_parent_local(local_id) else {
-                    return false;
-                };
-                let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
-                    return false;
-                };
-                let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
-                    return false;
-                };
-                let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let changed = self
-                    .nested_artboards
-                    .get_mut(&host_local_id)
-                    .is_some_and(|nested| {
-                        let mut changed =
-                            nested.child.set_double_property(0, origin_x_key, origin_x);
-                        changed |= nested.child.set_double_property(0, origin_y_key, origin_y);
-                        changed
-                    });
-                if changed {
-                    self.add_dirt(host_local_id, ComponentDirt::TRANSFORM, false);
-                    self.add_dirt(host_local_id, ComponentDirt::WORLD_TRANSFORM, true);
-                }
-                changed
             }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "speed") == Some(property_key) =>
@@ -10236,7 +10385,12 @@ impl ArtboardInstance {
         // cannot be resolved (including the owning artboard itself) leaves the
         // outgoing child untouched.
         if value == u64::from(u32::MAX) {
-            let changed = self.nested_artboards.remove(&local_id).is_some();
+            // Keep the owned occurrence alive through the hosting artboard's
+            // layout cleanup. This is the Rust ownership twin of leaving
+            // `m_host` attached while C++ destroys `m_Instance`: teardown may
+            // use that host to unregister pending layout work.
+            let removed = self.nested_artboards.remove(&local_id);
+            let changed = removed.is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
                 self.mark_nested_structure_changed();
@@ -10246,6 +10400,7 @@ impl ArtboardInstance {
                 self.mark_changed();
                 self.mark_prepared_changed();
             }
+            drop(removed);
             return changed;
         }
         let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
@@ -10874,10 +11029,7 @@ impl RuntimeNestedArtboardInstance {
     }
 
     fn set_root_opacity(&mut self, opacity: f32) -> bool {
-        let Some(opacity_key) = property_key_for_name("Artboard", "opacity") else {
-            return false;
-        };
-        self.child.set_double_property(0, opacity_key, opacity)
+        self.child.set_host_opacity(opacity)
     }
 
     fn set_remap_time(&mut self, remap_local_id: usize, time: f32) -> bool {
@@ -12084,6 +12236,7 @@ mod tests {
             origin_x: 0.0,
             origin_y: 0.0,
             clip: true,
+            host_opacity: 1.0,
             frame_origin: Cell::new(true),
             frame_id: Cell::new(0),
             slots,
@@ -12207,6 +12360,59 @@ mod tests {
             quantize: -1.0,
             cumulated_seconds: 0.0,
         }
+    }
+
+    #[test]
+    fn layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame() {
+        let mut root = synthetic_component_for_type(0, "Artboard");
+        root.dirt = ComponentDirt::COMPONENTS;
+        let mut layout = synthetic_component_for_type(1, "LayoutComponent");
+        layout.dirt = ComponentDirt::COMPONENTS;
+        let mut leaf = synthetic_component_for_type(2, "NestedArtboardLeaf");
+        leaf.dirt = ComponentDirt::WORLD_TRANSFORM;
+        let mut instance = synthetic_instance(vec![root, layout, leaf], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+
+        let bounds = Arc::new(BTreeMap::from([(
+            1,
+            RuntimeLayoutBounds {
+                x: 11.0,
+                y: 13.0,
+                width: 120.0,
+                height: 80.0,
+            },
+        )]));
+        instance.layout_constraint_bounds_enabled = true;
+        instance.layout_constraint_bounds = Some(Arc::clone(&bounds));
+        instance.solved_layout_bounds = Some(bounds);
+
+        let mut child =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
+        child.set_artboard_dimensions(10.0, 20.0);
+        child.update_pass_data_bind_call_count = 0;
+        let mut nested = synthetic_nested_artboard_instance(7);
+        nested.child = Box::new(child);
+        instance.nested_artboards.insert(2, nested);
+        instance.nested_artboard_locals.push(2);
+
+        let fit_key = property_key_for_name("NestedArtboardLeaf", "fit").unwrap();
+        assert!(instance.set_uint_property(2, fit_key, 7));
+        assert!(
+            instance
+                .component(2)
+                .is_some_and(|component| component.dirt.contains(ComponentDirt::WORLD_TRANSFORM))
+        );
+
+        instance.update_pass();
+
+        let child = &instance.nested_artboards[&2].child;
+        assert_eq!(child.artboard_dimensions(), (120.0, 80.0));
+        assert_eq!(
+            child.update_pass_data_bind_call_count, 2,
+            "NestedArtboard::update performs the ordinary mounted-child pass, then the resized \
+             layout-fit leaf performs exactly one same-frame reflow pass"
+        );
     }
 
     #[test]
@@ -13574,6 +13780,39 @@ mod tests {
         assert!(!parent.set_nested_artboard_artboard_id(3, 0));
         assert!(!parent.nested_artboards.contains_key(&3));
         assert!(parent.nested_artboard_locals.is_empty());
+    }
+
+    #[test]
+    fn null_bound_artboard_swap_survives_pending_layout_sync() {
+        // The swap host has a static artboard and an artboardId bind whose
+        // view-model artboard property is never set. The first advance applies
+        // the bind as an explicit null while the statically nested occurrence
+        // still participates in hosting-artboard layout work.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/sync/databind_null_artboard_swap.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+        let file = read_runtime_file(&bytes).expect("null-artboard fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("null-artboard fixture graphs");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("null-artboard fixture instance");
+        let host_local_id = artboard
+            .slots
+            .iter()
+            .find(|slot| slot.name.as_deref() == Some("swap host"))
+            .map(|slot| slot.local_id)
+            .expect("named swap host");
+
+        assert!(artboard.nested_artboards.get(&host_local_id).is_some());
+        artboard.advance(0.0).expect("first advance survives");
+        artboard.advance(0.0).expect("second advance survives");
+
+        assert!(artboard.nested_artboards.get(&host_local_id).is_none());
     }
 
     #[test]
@@ -15824,7 +16063,7 @@ mod tests {
     }
 
     #[test]
-    fn state_machine_outer_settlement_clears_deep_nested_render_opacity_dirt() {
+    fn state_machine_outer_settlement_preserves_deep_nested_artboard_opacity() {
         let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
             let mut component = synthetic_component(local_id, graph_order);
             component.type_name = type_name;
@@ -15880,7 +16119,9 @@ mod tests {
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
         assert_eq!(leaf_root.transform.render_opacity, 0.0);
-        assert!(leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
+        assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
 
         root.settle_state_machine_update_passes();
 
@@ -15896,8 +16137,63 @@ mod tests {
             .next()
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
-        assert_eq!(leaf_root.transform.render_opacity, 1.0);
+        assert_eq!(leaf_root.transform.render_opacity, 0.0);
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
         assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+    }
+
+    #[test]
+    fn paused_nested_artboard_flushes_child_dirt_after_host_opacity_changes() {
+        let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
+            let mut component = synthetic_component(local_id, graph_order);
+            component.type_name = type_name;
+            component.transform_property_keys =
+                crate::components::TransformPropertyKeys::for_type(type_name);
+            component
+        };
+
+        let mut child_root = typed_component(0, 0, "Artboard");
+        child_root.transform.render_opacity = 1.0;
+        let mut child_content = typed_component(1, 1, "Shape");
+        child_content.transform.render_opacity = 1.0;
+        let mut child = synthetic_instance(vec![child_root, child_content], vec![0, 1]);
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_add_dependent(&mut child, 0, 1);
+        child.clear_component_dirt(0);
+        child.clear_component_dirt(1);
+        child.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+        let root = typed_component(0, 0, "Artboard");
+        let mut host = typed_component(1, 1, "NestedArtboard");
+        host.transform.render_opacity = 0.5;
+        let mut parent = synthetic_instance(vec![root, host], vec![1]);
+        synthetic_link_parent(&mut parent, 1, 0);
+        let mut nested = synthetic_nested_artboard_instance(2);
+        nested.child = Box::new(child);
+        nested.is_paused = true;
+        parent.nested_artboards.insert(1, nested);
+
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        assert!(parent.update_nested_artboard_from_host_dirt(
+            1,
+            ComponentDirt::RENDER_OPACITY,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+        ));
+
+        let child = &parent.nested_artboards.get(&1).unwrap().child;
+        assert_eq!(child.component(0).unwrap().transform.render_opacity, 1.0);
+        assert_eq!(child.host_opacity, 0.5);
+        assert_eq!(child.child_opacity(), 0.5);
+        assert_eq!(child.component(1).unwrap().transform.render_opacity, 0.5);
+        assert!(!child.has_dirt(ComponentDirt::COMPONENTS));
+        assert!(
+            child
+                .components()
+                .iter()
+                .all(|component| !component.dirt.contains(ComponentDirt::RENDER_OPACITY))
+        );
     }
 
     #[test]
@@ -18677,6 +18973,65 @@ mod tests {
     }
 
     #[test]
+    fn host_opacity_multiplies_without_overwriting_artboard_opacity() {
+        let artboard_opacity_key =
+            property_key_for_name("Artboard", "opacity").expect("Artboard.opacity key");
+        let mut root = synthetic_component_for_type(0, "Artboard");
+        root.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+
+        assert!(instance.set_double_property(0, artboard_opacity_key, 0.4));
+        instance.update_components();
+        instance.clear_component_dirt(0);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+        assert!(instance.set_host_opacity(0.5));
+        assert_eq!(instance.double_property(0, artboard_opacity_key), Some(0.4));
+        assert_eq!(instance.child_opacity(), 0.2);
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::RENDER_OPACITY)
+        );
+    }
+
+    #[test]
+    fn artboard_self_transform_combines_rotation_and_scale() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+
+        assert!(!instance.has_self_transform());
+        assert!(instance.set_transform_property(
+            0,
+            TransformProperty::Rotation,
+            std::f32::consts::FRAC_PI_2,
+        ));
+        assert!(instance.set_transform_property(0, TransformProperty::ScaleX, 2.0));
+        assert!(instance.set_transform_property(0, TransformProperty::ScaleY, 3.0));
+
+        assert!(instance.has_self_transform());
+        let transform = instance.self_transform().0;
+        assert!(transform[0].abs() < 1e-6);
+        assert!((transform[1] - 2.0).abs() < 1e-6);
+        assert!((transform[2] + 3.0).abs() < 1e-6);
+        assert!(transform[3].abs() < 1e-6);
+        assert_eq!(&transform[4..], &[0.0, 0.0]);
+        assert_eq!(
+            instance.mounted_root_transform(Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 5.0])),
+            Mat2D([
+                transform[0],
+                transform[1],
+                transform[2],
+                transform[3],
+                4.0,
+                5.0,
+            ])
+        );
+    }
+
+    #[test]
     fn update_reads_mutated_instance_transform_state() {
         let mut component = synthetic_component(0, 0);
         component.dirt = ComponentDirt::NONE;
@@ -19464,6 +19819,20 @@ mod tests {
             u64::from(schema_property_key(type_name, property_name)),
         );
         push_var_uint(bytes, value);
+    }
+
+    fn push_synthetic_string_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: &str,
+    ) {
+        push_var_uint(
+            bytes,
+            u64::from(schema_property_key(type_name, property_name)),
+        );
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value.as_bytes());
     }
 
     fn push_synthetic_f32_property(
@@ -21481,6 +21850,52 @@ mod tests {
         assert_collapsed(&instance, 6, false);
     }
 
+    #[test]
+    fn solo_index_and_name_selection_skip_property_like_children() {
+        let bytes = synthetic_riv(0, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 4)]);
+            push_synthetic_object(bytes, "ClippingShape", &[("parentId", 1), ("sourceId", 4)]);
+            push_synthetic_object(bytes, "TranslationConstraint", &[("parentId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Shape", |bytes| {
+                push_synthetic_uint_property(bytes, "Shape", "parentId", 1);
+                push_synthetic_string_property(bytes, "Shape", "name", "Blue");
+            });
+            push_synthetic_object(bytes, "FocusData", &[("parentId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Shape", |bytes| {
+                push_synthetic_uint_property(bytes, "Shape", "parentId", 1);
+                push_synthetic_string_property(bytes, "Shape", "name", "Green");
+            });
+            push_synthetic_object(bytes, "SemanticData", &[("parentId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Shape", |bytes| {
+                push_synthetic_uint_property(bytes, "Shape", "parentId", 1);
+                push_synthetic_string_property(bytes, "Shape", "name", "Red");
+            });
+        });
+        let file = read_runtime_file(&bytes).expect("solo member fixture imports");
+        let graph = GraphFile::from_runtime_file(&file)
+            .expect("solo member graph builds")
+            .artboards
+            .remove(0);
+        let mut instance = ArtboardInstance::from_graph(&file, &graph).expect("artboard builds");
+
+        assert!(instance.set_solo_active_child_by_index(1, 1.0));
+        assert_collapsed(&instance, 4, true);
+        assert_collapsed(&instance, 6, false);
+        assert_collapsed(&instance, 8, true);
+        for property_like in [2, 3, 5, 7] {
+            assert_collapsed(&instance, property_like, false);
+        }
+
+        assert!(instance.set_solo_active_child_by_name(1, b"Red"));
+        assert_collapsed(&instance, 4, true);
+        assert_collapsed(&instance, 6, true);
+        assert_collapsed(&instance, 8, false);
+        assert!(!instance.set_solo_active_child_by_index(1, 3.0));
+        assert!(!instance.set_solo_active_child_by_name(1, b""));
+    }
+
     // Regression for the M8 audit finding: apply_initial_solo_collapses only
     // flagged DIRECT solo children, so Solo -> Group -> Shape left the Shape
     // un-collapsed (and drawing) on a fresh instance without a state machine.
@@ -21598,7 +22013,7 @@ mod tests {
     }
 
     #[test]
-    fn state_machine_frame_settles_deep_nested_render_opacity() {
+    fn state_machine_frame_preserves_deep_nested_artboard_opacity() {
         let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
             let mut component = synthetic_component(local_id, graph_order);
             component.type_name = type_name;
@@ -21654,7 +22069,9 @@ mod tests {
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
         assert_eq!(leaf_root.transform.render_opacity, 0.0);
-        assert!(leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
+        assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
 
         root.settle_state_machine_update_passes();
 
@@ -21670,7 +22087,9 @@ mod tests {
             .next()
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
-        assert_eq!(leaf_root.transform.render_opacity, 1.0);
+        assert_eq!(leaf_root.transform.render_opacity, 0.0);
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
         assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
     }
 

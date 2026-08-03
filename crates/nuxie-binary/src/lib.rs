@@ -31,7 +31,9 @@ mod core;
 
 use core::{
     binary_reader::BinaryReader,
-    field_types::{read_field_value, read_known_uint_field, read_string_or_bytes_value},
+    field_types::{
+        read_field_value, read_known_int_field, read_known_uint_field, read_string_or_bytes_value,
+    },
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
@@ -55,6 +57,7 @@ pub enum RuntimeDataType {
     AssetImage = 11,
     Artboard = 12,
     AssetFont = 13,
+    AssetBlob = 14,
     Input = 99,
     Any = 100,
 }
@@ -471,6 +474,7 @@ pub enum AuthoringValue {
     Bytes(Vec<u8>),
     Color(u32),
     Double(f32),
+    Int(i32),
     String(String),
     Uint(u64),
 }
@@ -4560,6 +4564,24 @@ impl RuntimeFile {
         value.uint_property("propertyValue")
     }
 
+    pub fn view_model_instance_blob_asset_index(&self, value_id: usize) -> Option<u64> {
+        let value = self.object(value_id)?;
+        self.view_model_instance_blob_asset_index_for_object(value)
+    }
+
+    pub fn view_model_instance_blob_asset_index_for_object(
+        &self,
+        value: &RuntimeObject,
+    ) -> Option<u64> {
+        if self.view_model_instance_value_data_type_for_object(value)
+            != Some(RuntimeDataType::AssetBlob)
+        {
+            return None;
+        }
+
+        value.uint_property("propertyValue")
+    }
+
     pub fn view_model_instance_artboard_index(&self, value_id: usize) -> Option<u64> {
         let value = self.object(value_id)?;
         self.view_model_instance_artboard_index_for_object(value)
@@ -4631,6 +4653,9 @@ impl RuntimeFile {
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::AssetFont => Some(RuntimeDataValue::AssetFont(
+                value.uint_property("propertyValue")?,
+            )),
+            RuntimeDataType::AssetBlob => Some(RuntimeDataValue::AssetBlob(
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::Artboard => Some(RuntimeDataValue::Artboard(
@@ -6411,6 +6436,7 @@ pub enum RuntimeDataValue<'a> {
     SymbolListIndex(u64),
     AssetImage(u64),
     AssetFont(u64),
+    AssetBlob(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -6429,6 +6455,7 @@ impl RuntimeDataValue<'_> {
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
             Self::AssetFont(_) => RuntimeDataType::AssetFont,
+            Self::AssetBlob(_) => RuntimeDataType::AssetBlob,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -6453,6 +6480,7 @@ pub enum RuntimeConvertedDataValue<'a> {
     SymbolListIndex(u64),
     AssetImage(u64),
     AssetFont(u64),
+    AssetBlob(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -6854,6 +6882,7 @@ impl<'a> From<&RuntimeDataValue<'a>> for RuntimeConvertedDataValue<'a> {
             RuntimeDataValue::SymbolListIndex(value) => Self::SymbolListIndex(*value),
             RuntimeDataValue::AssetImage(value) => Self::AssetImage(*value),
             RuntimeDataValue::AssetFont(value) => Self::AssetFont(*value),
+            RuntimeDataValue::AssetBlob(value) => Self::AssetBlob(*value),
             RuntimeDataValue::Artboard(value) => Self::Artboard(*value),
             RuntimeDataValue::ViewModel(value) => Self::ViewModel(value.clone()),
         }
@@ -6875,6 +6904,7 @@ impl RuntimeConvertedDataValue<'_> {
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
             Self::AssetFont(_) => RuntimeDataType::AssetFont,
+            Self::AssetBlob(_) => RuntimeDataType::AssetBlob,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -6894,6 +6924,7 @@ impl RuntimeConvertedDataValue<'_> {
             | Self::Trigger(value)
             | Self::AssetImage(value)
             | Self::AssetFont(value)
+            | Self::AssetBlob(value)
             | Self::Artboard(value) => Some(*value as u32),
             _ => None,
         }
@@ -7422,6 +7453,17 @@ impl RuntimeObject {
         }
     }
 
+    pub fn int_property(&self, name: &str) -> Option<i32> {
+        if let Some(property) = self.property(name) {
+            return property.value.as_int();
+        }
+
+        match self.stored_field_initializer(name)? {
+            StoredFieldInitializer::Int(value) => Some(value),
+            _ => None,
+        }
+    }
+
     pub fn bool_property(&self, name: &str) -> Option<bool> {
         if let Some(property) = self.property(name) {
             return property.value.as_bool();
@@ -7537,6 +7579,7 @@ pub enum FieldValue {
     Callback,
     Color(u32),
     Double(f32),
+    Int(i32),
     String(StringValue),
     Uint(u64),
 }
@@ -7603,6 +7646,13 @@ impl FieldValue {
     pub fn as_uint(&self) -> Option<u64> {
         match self {
             Self::Uint(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i32> {
+        match self {
+            Self::Int(value) => Some(*value),
             _ => None,
         }
     }
@@ -7876,8 +7926,7 @@ fn authoring_record_to_runtime_object(
                 authored_property.value.kind_name()
             );
         }
-        if property.uint_storage() != Some(UintStorage::Uint64)
-            && let AuthoringValue::Uint(value) = &authored_property.value
+        if let AuthoringValue::Uint(value) = &authored_property.value
             && u32::try_from(*value).is_err()
         {
             bail!(
@@ -7935,6 +7984,7 @@ impl AuthoringValue {
                 | (Self::Bytes(_), FieldKind::Bytes)
                 | (Self::Color(_), FieldKind::Color)
                 | (Self::Double(_), FieldKind::Double)
+                | (Self::Int(_), FieldKind::Int)
                 | (Self::String(_), FieldKind::String)
                 | (Self::Uint(_), FieldKind::Uint)
         )
@@ -7946,6 +7996,7 @@ impl AuthoringValue {
             Self::Bytes(_) => "bytes",
             Self::Color(_) => "color",
             Self::Double(_) => "double",
+            Self::Int(_) => "int",
             Self::String(_) => "string",
             Self::Uint(_) => "uint",
         }
@@ -7957,6 +8008,7 @@ impl AuthoringValue {
             Self::Bytes(value) => FieldValue::Bytes(BytesValue::new(value)),
             Self::Color(value) => FieldValue::Color(value),
             Self::Double(value) => FieldValue::Double(value),
+            Self::Int(value) => FieldValue::Int(value),
             Self::String(value) => {
                 let raw = value.as_bytes().to_vec();
                 FieldValue::String(StringValue {
@@ -7979,6 +8031,7 @@ fn header_field_kind_for_property(
 
     let header_kind = match (property.runtime_type, core_kind) {
         (FieldKind::Uint, CoreRegistryFieldKind::Uint) => Some(HeaderFieldKind::Uint),
+        (FieldKind::Int, CoreRegistryFieldKind::Int) => Some(HeaderFieldKind::Uint),
         (FieldKind::String, CoreRegistryFieldKind::StringOrBytes) => {
             Some(HeaderFieldKind::StringOrBytes)
         }
@@ -8327,6 +8380,7 @@ fn cpp_data_bind_context_value_type(output_type: RuntimeDataType) -> Option<Runt
         | RuntimeDataType::SymbolListIndex
         | RuntimeDataType::AssetImage
         | RuntimeDataType::AssetFont
+        | RuntimeDataType::AssetBlob
         | RuntimeDataType::Artboard
         | RuntimeDataType::ViewModel
         | RuntimeDataType::Any => Some(output_type),
@@ -9002,7 +9056,7 @@ fn cpp_data_bind_target_supports_push(
     )
 }
 
-fn cpp_data_bind_polling_property_keys() -> [u64; 16] {
+fn cpp_data_bind_polling_property_keys() -> [u64; 18] {
     [
         cpp_property_key("Solo", "activeComponentId"),
         cpp_property_key("Node", "computedLocalX"),
@@ -9020,7 +9074,27 @@ fn cpp_data_bind_polling_property_keys() -> [u64; 16] {
         cpp_property_key("ScrollConstraint", "velocityX"),
         cpp_property_key("ScrollConstraint", "velocityY"),
         cpp_property_key("ScrollConstraint", "scrollActive"),
+        cpp_property_key("ScrollConstraint", "computedContentWidth"),
+        cpp_property_key("ScrollConstraint", "computedContentHeight"),
     ]
+}
+
+#[cfg(test)]
+mod computed_scroll_polling_tests {
+    use super::{cpp_data_bind_polling_property_keys, cpp_property_key};
+
+    #[test]
+    fn computed_scroll_extents_are_polled_data_bind_targets() {
+        let polling = cpp_data_bind_polling_property_keys();
+        assert!(polling.contains(&cpp_property_key(
+            "ScrollConstraint",
+            "computedContentWidth"
+        )));
+        assert!(polling.contains(&cpp_property_key(
+            "ScrollConstraint",
+            "computedContentHeight"
+        )));
+    }
 }
 
 fn cpp_property_key(definition_name: &str, property_name: &str) -> u64 {
@@ -9910,6 +9984,7 @@ fn cpp_view_model_instance_value_data_type(type_name: &str) -> RuntimeDataType {
         "ViewModelInstanceSymbolListIndex" => RuntimeDataType::SymbolListIndex,
         "ViewModelInstanceAssetImage" => RuntimeDataType::AssetImage,
         "ViewModelInstanceAssetFont" => RuntimeDataType::AssetFont,
+        "ViewModelInstanceAssetBlob" => RuntimeDataType::AssetBlob,
         "ViewModelInstanceArtboard" => RuntimeDataType::Artboard,
         _ => RuntimeDataType::None,
     }
@@ -9930,6 +10005,7 @@ fn cpp_view_model_property_instance_type_key(type_name: &str) -> Option<u16> {
         "ViewModelPropertySymbolListIndex" => "ViewModelInstanceSymbolListIndex",
         "ViewModelPropertyAssetImage" => "ViewModelInstanceAssetImage",
         "ViewModelPropertyAssetFont" => "ViewModelInstanceAssetFont",
+        "ViewModelPropertyAssetBlob" => "ViewModelInstanceAssetBlob",
         "ViewModelPropertyArtboard" => "ViewModelInstanceArtboard",
         _ => return None,
     };
@@ -11693,6 +11769,9 @@ fn skip_core_registry_value(
             // so consume the full raw varuint64 just like File::readRuntimeObject.
             reader.read_var_uint()?;
         }
+        CoreRegistryFieldKind::Int => {
+            reader.read_var_uint()?;
+        }
         CoreRegistryFieldKind::StringOrBytes => {
             reader.read_string()?;
         }
@@ -11723,6 +11802,9 @@ fn read_core_registry_fallback_value(
         CoreRegistryFieldKind::Uint => {
             FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?)
         }
+        CoreRegistryFieldKind::Int => {
+            FieldValue::Int(read_known_int_field(reader, property, "int field")?)
+        }
         CoreRegistryFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         CoreRegistryFieldKind::Double => FieldValue::Double(reader.read_f32()?),
         CoreRegistryFieldKind::Color => FieldValue::Color(reader.read_u32()?),
@@ -11745,6 +11827,9 @@ fn read_header_fallback_value(
     property: &Property,
 ) -> Result<FieldValue> {
     Ok(match field {
+        HeaderFieldKind::Uint if property.runtime_type == FieldKind::Int => {
+            FieldValue::Int(read_known_int_field(reader, property, "header int field")?)
+        }
         HeaderFieldKind::Uint => FieldValue::Uint(read_known_uint_field(
             reader,
             property,
@@ -11837,6 +11922,7 @@ fn read_cpp_embedded_var_uint64(bytes: &[u8]) -> (u64, usize) {
 fn core_registry_field_name(kind: CoreRegistryFieldKind) -> &'static str {
     match kind {
         CoreRegistryFieldKind::Uint => "uint",
+        CoreRegistryFieldKind::Int => "int",
         CoreRegistryFieldKind::StringOrBytes => "stringOrBytes",
         CoreRegistryFieldKind::Double => "double",
         CoreRegistryFieldKind::Color => "color",
@@ -12620,11 +12706,6 @@ mod uint_wire_tests {
             .iter()
             .find(|property| property.name == "assetId")
             .expect("FileAsset.assetId schema");
-        let uint64_property = file_asset
-            .properties
-            .iter()
-            .find(|property| property.name == "scopeLibraryId")
-            .expect("FileAsset.scopeLibraryId schema");
         let uint8_property = definition_by_name("LayoutComponentStyle")
             .expect("LayoutComponentStyle schema")
             .properties
@@ -12645,14 +12726,6 @@ mod uint_wire_tests {
                 .contains("does not fit in C++ unsigned int")
         );
 
-        let wide_bytes = encoded_var_uint(u64::MAX);
-        let mut wide_reader = BinaryReader::new(&wide_bytes);
-        assert_eq!(
-            read_known_uint_field(&mut wide_reader, uint64_property, "uint64 field")
-                .expect("known uint64"),
-            u64::MAX
-        );
-
         // uint8 changes only generated member storage. Registry dispatch and
         // deserialization accept the complete uint32 wire range, then the
         // generated uint8_t member assignment truncates to its low byte.
@@ -12662,32 +12735,6 @@ mod uint_wire_tests {
             read_known_uint_field(&mut compact_reader, uint8_property, "uint8 field")
                 .expect("known uint8 alias"),
             u64::from(u8::MAX)
-        );
-    }
-
-    #[test]
-    fn runtime_object_decode_preserves_known_uint64_values() {
-        let mut bytes = b"RIVE".to_vec();
-        // A legacy 7.0 header remains importable after advertising 7.2.
-        bytes.extend_from_slice(&[7, 0, 0, 0]); // version, file id, empty header ToC.
-
-        bytes.extend(encoded_var_uint(23)); // Backboard.
-        bytes.push(0); // End Backboard properties.
-
-        bytes.extend(encoded_var_uint(558)); // LibraryAsset.
-        bytes.extend(encoded_var_uint(798)); // libraryId.
-        bytes.extend(encoded_var_uint(u64::MAX));
-        bytes.extend(encoded_var_uint(799)); // libraryVersionId.
-        bytes.extend(encoded_var_uint(u64::from(u32::MAX) + 1));
-        bytes.push(0); // End LibraryAsset properties.
-
-        let file = read_runtime_file_with_error_kind(&bytes)
-            .expect("known uint64 fields should import through the full runtime reader");
-        let library = file.object(1).expect("decoded LibraryAsset");
-        assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
-        assert_eq!(
-            library.uint_property("libraryVersionId"),
-            Some(u64::from(u32::MAX) + 1)
         );
     }
 }

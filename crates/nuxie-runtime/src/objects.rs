@@ -770,6 +770,11 @@ impl InstanceObjectArena {
         object.uint_property(property_key)
     }
 
+    pub(crate) fn int_property(&self, local_id: usize, property_key: u16) -> Option<i32> {
+        self.object(local_id)
+            .and_then(|object| object.int_property(property_key))
+    }
+
     /// Read generated storage through the retained authored Component owner.
     /// This corresponds to invoking a generated C++ base getter on the same
     /// concrete object; no serialized local-id owner lookup is repeated.
@@ -856,6 +861,15 @@ impl InstanceObjectArena {
         self.set_property_value(local_id, property_key, FieldValue::Uint(value))
     }
 
+    pub(crate) fn set_int_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: i32,
+    ) -> bool {
+        self.set_property_value(local_id, property_key, FieldValue::Int(value))
+    }
+
     pub(crate) fn string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
         let object = self.object(local_id)?;
         match self.property_kind(local_id, property_key)? {
@@ -933,6 +947,7 @@ impl InstanceObjectArena {
             FieldValue::Bytes(_) | FieldValue::Callback => false,
             FieldValue::Color(value) => object.set_color_property(property_key, value),
             FieldValue::Double(value) => object.set_double_property(property_key, value),
+            FieldValue::Int(value) => object.set_int_property(property_key, value),
             FieldValue::String(value) => {
                 object.set_string_property(property_key, InstanceString::from_string_value(&value))
             }
@@ -978,6 +993,7 @@ fn field_value_matches_kind(value: &FieldValue, kind: FieldKind) -> bool {
             | (FieldValue::Callback, FieldKind::Callback)
             | (FieldValue::Color(_), FieldKind::Color)
             | (FieldValue::Double(_), FieldKind::Double)
+            | (FieldValue::Int(_), FieldKind::Int)
             | (FieldValue::String(_), FieldKind::String)
             | (FieldValue::Uint(_), FieldKind::Uint)
     )

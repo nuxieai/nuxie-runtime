@@ -2,7 +2,7 @@
 
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
 keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
-migration completes. M8, renderer Phase R, and two clean manual Phase S cycles
+migration completes. M8, renderer Phase R, and three clean manual Phase S cycles
 are complete. A read-only weekly drift scout is active. The write-capable
 parity worker is also active after meeting its trust-count threshold. With no
 standing approvals recorded, its prompt fails closed and permits blocker-only
@@ -142,28 +142,59 @@ worker may act on that category.
 
 ## State
 
-- LAST_SYNCED_SHA: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`
-- Clean manual cycles completed: 2
+- LAST_SYNCED_SHA: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
+- 2026-08-02: **S4 cycle-scoped authorization (Levi), completed.** All 30 PORT rows of
+  `docs/sync/triage-2026-08-02-e0d4913f.md` approved as listed (including the
+  partial-port splits S4-27, S4-43, S4-47 and the reviewed waves S4-23,
+  S4-38, S4-42). Luau/luaur decision (firmed by Levi 2026-08-02): the engine pin is
+  FROZEN until the parity closeout completes — "if it works today, don't
+  break it." Upstream Luau 0.730-0.732 revs stay WATCH rows with staleness
+  counters, but no sync cycle re-opens the engine question before the
+  closeout scorecard is green; skew evidence in scripted differentials is
+  the only early-reopen trigger.
+  The approved ports landed through PRs #195, #196, #199, #201, and #202,
+  followed by the S4C shared-file closeout on `levi/s4-ports-s4c`. The product
+  pin advanced to `4ac7b327` only after the full ordinary, scripted, runtime,
+  frame-loop, and attribution ratchets were green.
+- Clean manual cycles completed: 3
 - Standing approvals: none
-- Current cycle authorization: closed. The user-authorized manual cycle 2
-  local Luau hardening and closeout at
-  `d788e8ec6e8b598526607d6a1e8818e8b637b60c` completed on 2026-07-19; no
-  cycle-scoped authorization remains active.
-- Current cycle status: manual cycle 3 triage is submitted for the fixed
-  `d788e8ec..b73bc675` cut and is stopped at its hard approval gate; see
-  `docs/sync/triage-2026-07-20-b73bc675.md`. S3-1 and S3-3 are recommended
-  PORT, S3-2 is recommended WATCH, and the two dependency WATCH rows have
-  advanced to staleness 2. Every active pin and `LAST_SYNCED_SHA` remain at
-  `d788e8ec`; clean manual cycles completed remains 2. Upstream advanced after
-  the completed inventory to `ba2b6434` (`add unset methods`), which is
-  explicitly post-cut drift for the next cycle or a user-requested replacement
-  triage, not part of the pending authorization. With Standing approvals at
-  `none`, the write-capable worker remains fail-closed for mutations.
+- Current cycle authorization: closed. The S4 authorization was exhausted by
+  the 30/30 approved PORT rows and pin-advance closeout; no cycle-scoped
+  authorization remains active.
+- Current cycle status: S4 behavior and all required ratchets are closed at
+  `4ac7b32798da0482e441ef09304dc3b480ed3ee5`; see the appended cycle summary
+  in `docs/sync/triage-2026-08-02-e0d4913f.md`. The uncommitted closeout handoff
+  records one remaining standards item: extract the four new layout owners
+  from `draw.rs` into direct FLR-16 files before landing. Deferred WATCH rows
+  remain queued with updated staleness counters. With Standing approvals at
+  `none`, the write-capable worker is fail-closed until a new inventory is
+  explicitly authorized.
 - Current-revision pin registry (advance with each completed Phase S cycle):
+  - `.github/workflows/_trusted-macos.yml` `RIVE_RUNTIME_REF`
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
+  - `.github/workflows/ci.yml` `RIVE_SHADER_RUNTIME_REF`
+  - `.github/workflows/ci.yml` `RIVE_SAME_RUNNER_RUNTIME_REF`
+  - `Makefile` `PERF_EXPECTED_RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`
   - `tools/check-renderer-decoder-provenance.sh`
   - `tools/generate-renderer-shaders.sh`
+  - `tools/golden-runner/runtime-provenance.sh`
+  - `tools/renderer-dawn-live-reference-bootstrap.sh`
+  - `tools/runtime-frame-loop-port/build-trace-runners.sh`
+  - `tools/runtime-frame-loop-port/capture_trace.py`
+  - `docs/runtime-drawing-gaps.toml` `upstream_ref`
+  - `docs/runtime-drawing-ownership.toml` `upstream_ref`
+  - `docs/runtime-frame-loop-gaps.toml` `upstream_ref`
+  - `docs/runtime-frame-loop-ownership.toml` `upstream_ref`
+  - `docs/runtime-frame-loop-status.md` current `Pinned C++` statement
+  - `tools/runtime-frame-loop-port/README.md` trace-runner checkout contract
+  - `.claude/commands/closeout-executor.md` session-start checkout gate
+  - `docs/parity-closeout-status.md` current runner and upstream-pin statements
+  - `file-correspondence-manifest.toml` `upstream_ref` (not
+    `audit_upstream_ref`)
+  - `test-correspondence-manifest.toml` `upstream_ref`
+  - `docs/parity-gap-register.md` current upstream-reference statement
+  - `tools/parity-scorecard/test_parity_scorecard.py` current-pin assertion
 - Port-manifest inventory registry (advance these two together whenever an
   approved manifest classification update changes its upstream cut; never
   strand CI and the generated manifest at different revisions):

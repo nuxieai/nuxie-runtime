@@ -17,6 +17,27 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
 
+unsafe fn create_async_thread(state: *mut luaur_rt::lua_State) -> core::ffi::c_int {
+    luaur_vm::functions::lua_l_checktype::lua_l_checktype(
+        state,
+        1,
+        luaur_vm::enums::lua_type::lua_Type::LUA_TFUNCTION as core::ffi::c_int,
+    );
+
+    // SAFETY: `state` is the live Luau state supplied to this C-function. The
+    // new thread belongs to the same VM and is still suspended while its host
+    // pointer and initial function are installed.
+    unsafe {
+        let thread = luaur_vm::functions::lua_newthread::lua_newthread(state);
+        luaur_vm::functions::lua_setthreaddata::lua_setthreaddata(
+            thread,
+            luaur_vm::functions::lua_getthreaddata::lua_getthreaddata(state),
+        );
+        luaur_vm::functions::lua_xpush::lua_xpush(state, thread, 1);
+    }
+    1
+}
+
 fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {
     let engine: Table = lua.named_registry_value(PROMISE_ENGINE_REGISTRY_KEY)?;
     let function: Function = engine.get(method)?;
@@ -74,8 +95,12 @@ impl UserData for ScriptedPromise {
 
 pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     let new_promise = lua.create_function(|lua, ()| lua.create_userdata(ScriptedPromise))?;
+    // SAFETY: `create_async_thread` follows the Luau C-function convention. It
+    // validates its function argument, creates and returns one child thread,
+    // and copies the invoking thread's host data before the child can resume.
+    let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
     let install: Function = lua.load(PROMISE_LIBRARY).set_name("rive_promise").eval()?;
-    let exports: Table = install.call(new_promise)?;
+    let exports: Table = install.call((new_promise, new_async_thread))?;
 
     let engine: Table = exports.get("engine")?;
     lua.set_named_registry_value(PROMISE_ENGINE_REGISTRY_KEY, engine)?;
@@ -89,7 +114,7 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
 }
 
 const PROMISE_LIBRARY: &str = r##"
-return function(newPromise)
+return function(newPromise, newAsyncThread)
     local PENDING = "Pending"
     local FULFILLED = "Fulfilled"
     local REJECTED = "Rejected"
@@ -515,7 +540,7 @@ return function(newPromise)
         end
 
         local resultPromise = newPending()
-        local thread = coroutine.create(body)
+        local thread = newAsyncThread(body)
         local resumeThread
 
         resumeThread = function(...)

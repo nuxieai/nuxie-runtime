@@ -1,6 +1,7 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::{error::Error, fmt};
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
@@ -16,7 +17,7 @@ use crate::data_bind_graph::{
 };
 use crate::properties::property_key_for_name;
 use crate::state_machine::ScriptListenerInvocation;
-use crate::view_model_cell::RuntimeCellDirtSink;
+use crate::view_model_cell::{RuntimeBlobAsset, RuntimeCellDirtSink, RuntimeViewModelCellValue};
 use crate::{
     ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
@@ -778,6 +779,7 @@ pub struct ScriptViewModel {
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     ancestors: Rc<Vec<usize>>,
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
 }
 
 /// An image selected from the runtime file's dense asset registry.
@@ -789,6 +791,29 @@ pub struct ScriptViewModel {
 pub struct ScriptImage {
     file_asset_index: u64,
     asset_global_id: u32,
+}
+
+/// A retained font selected from a view-model property.
+///
+/// File-backed values preserve their asset identity until the scripting VM
+/// resolves them through its file-owned font registry. Live values retain the
+/// exact byte owner installed by the host or another scripted property.
+#[derive(Debug, Clone)]
+pub struct ScriptFont {
+    asset_global_id: Option<u32>,
+    live_font_bytes: Option<Arc<[u8]>>,
+}
+
+impl ScriptFont {
+    #[doc(hidden)]
+    pub fn asset_global_id(&self) -> Option<u32> {
+        self.asset_global_id
+    }
+
+    #[doc(hidden)]
+    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
+        self.live_font_bytes.as_ref()
+    }
 }
 
 impl ScriptImage {
@@ -827,6 +852,30 @@ impl ScriptViewModel {
         Some(sink)
     }
 
+    /// Retain a property observer whose callback runs synchronously before
+    /// the change is published to ordinary dirty queues.
+    ///
+    /// Script asset wrappers use this as the Rust counterpart of
+    /// `ScriptedProperty::valueChanged()`: cached Lua registry references are
+    /// released at the mutation boundary, even when several writes coalesce
+    /// before the next scripted read.
+    #[doc(hidden)]
+    pub fn property_change_sink(
+        &self,
+        name: &str,
+        callback: impl Fn() + 'static,
+    ) -> Option<RuntimeCellDirtSink> {
+        let sink = self.property_dirt_sink(name)?;
+        sink.set_before_notify(Some(Rc::new(move |_| {
+            callback();
+            // The callback is the complete notification path for this
+            // observer. Staying clean makes every later valueChanged edge
+            // release the then-current cached wrapper immediately.
+            false
+        })));
+        Some(sink)
+    }
+
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
         let instance = match name {
             Some(name) => {
@@ -849,11 +898,12 @@ impl ScriptViewModel {
             }
             None => RuntimeOwnedViewModelInstance::new(&self.file, self.view_model_index)?,
         };
-        build_script_view_model(
+        build_script_view_model_with_blob_assets(
             Rc::clone(&self.file),
             self.view_model_index,
             instance,
             self.ancestors.as_slice(),
+            Rc::clone(&self.blob_assets),
         )
     }
 
@@ -951,6 +1001,41 @@ impl ScriptViewModel {
         })
     }
 
+    pub fn font(&self, name: &str) -> Option<ScriptFont> {
+        if self.property(name) != Some(ScriptViewModelProperty::Font) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        let value = self
+            .context
+            .root_handle()
+            .borrow()
+            .font_asset_value_by_property_path(&path)?;
+        let asset_global_id = usize::try_from(value.file_asset_index())
+            .ok()
+            .and_then(|index| self.file.file_asset(index))
+            .filter(|asset| asset.type_name == "FontAsset")
+            .map(|asset| asset.id);
+        (asset_global_id.is_some() || value.live_font_bytes_arc().is_some()).then(|| ScriptFont {
+            asset_global_id,
+            live_font_bytes: value.live_font_bytes_arc().cloned(),
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn set_font_bytes(&self, name: &str, font_bytes: Option<Arc<[u8]>>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Font) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_live_font_bytes_by_property_path(&path, font_bytes)
+    }
+
     pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return None;
@@ -1015,6 +1100,83 @@ impl ScriptViewModel {
                 &path,
                 image.map(RuntimeViewModelImage::from_render_image),
             )
+    }
+
+    pub fn blob_asset(&self, name: &str) -> Option<Arc<RuntimeBlobAsset>> {
+        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        let cell = self
+            .context
+            .root_handle()
+            .borrow()
+            .cell_by_property_path(&path)?;
+        let RuntimeViewModelCellValue::AssetBlob(value) = cell.value() else {
+            return None;
+        };
+        if let Some(asset) = value.live_blob_asset() {
+            return Some(Arc::clone(asset));
+        }
+        let asset = self
+            .file
+            .file_asset(usize::try_from(value.file_asset_index()).ok()?)?;
+        if asset.type_name != "BlobAsset" {
+            return None;
+        }
+        if let Some(retained) = self.blob_assets.borrow().get(&asset.id) {
+            return Some(Arc::clone(retained));
+        }
+        let bytes = self
+            .file
+            .imported_file_asset_contents(asset.id)
+            .map(Arc::<[u8]>::from)?;
+        let name = asset.string_property("name").unwrap_or_default();
+        let retained = Arc::new(RuntimeBlobAsset::new(name, bytes));
+        self.blob_assets
+            .borrow_mut()
+            .insert(asset.id, Arc::clone(&retained));
+        Some(retained)
+    }
+
+    pub fn blob(&self, name: &str) -> Option<Arc<[u8]>> {
+        self.blob_asset(name).map(|asset| asset.bytes_arc())
+    }
+
+    pub fn set_blob(&self, name: &str, bytes: Option<Arc<[u8]>>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let Some(cell) = self
+            .context
+            .root_handle()
+            .borrow()
+            .cell_by_property_path(&path)
+        else {
+            return false;
+        };
+        cell.set_live_blob_bytes(bytes)
+    }
+
+    pub fn set_blob_asset(&self, name: &str, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let Some(cell) = self
+            .context
+            .root_handle()
+            .borrow()
+            .cell_by_property_path(&path)
+        else {
+            return false;
+        };
+        cell.set_live_blob_asset(asset)
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
@@ -1114,11 +1276,12 @@ impl ScriptViewModel {
             .linked_view_model_by_property_path(&property_path);
         if let Some(concrete) = concrete {
             let view_model_index = concrete.borrow().view_model_index();
-            return build_script_view_model_shared(
+            return build_script_view_model_shared_with_blob_assets(
                 Rc::clone(&self.file),
                 view_model_index,
                 concrete,
                 self.ancestors.as_slice(),
+                Rc::clone(&self.blob_assets),
             );
         }
         // Generated schema-only contexts are still represented inline by the
@@ -1168,11 +1331,12 @@ impl ScriptViewModel {
             .get(index)
             .cloned()?;
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared(
+        build_script_view_model_shared_with_blob_assets(
             Rc::clone(&self.file),
             view_model_index,
             item,
             self.ancestors.as_slice(),
+            Rc::clone(&self.blob_assets),
         )
     }
 
@@ -1208,11 +1372,12 @@ impl ScriptViewModel {
             .borrow_mut()
             .pop_list_item_by_property_path(&path)?;
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared(
+        build_script_view_model_shared_with_blob_assets(
             Rc::clone(&self.file),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
+            Rc::clone(&self.blob_assets),
         )
     }
 
@@ -1224,11 +1389,12 @@ impl ScriptViewModel {
             .borrow_mut()
             .shift_list_item_by_property_path(&path)?;
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared(
+        build_script_view_model_shared_with_blob_assets(
             Rc::clone(&self.file),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
+            Rc::clone(&self.blob_assets),
         )
     }
 
@@ -1313,6 +1479,8 @@ pub enum ScriptViewModelProperty {
     Boolean,
     Trigger,
     Image,
+    Blob,
+    Font,
     List,
     ViewModel,
     SymbolListIndex,
@@ -1320,6 +1488,7 @@ pub enum ScriptViewModelProperty {
 
 pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewModel> {
     let file = Rc::new(file.clone());
+    let blob_assets = Rc::new(RefCell::new(BTreeMap::new()));
     file.view_models()
         .into_iter()
         .enumerate()
@@ -1328,7 +1497,13 @@ pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewMode
             let instance = RuntimeOwnedViewModelInstance::new(&file, view_model_index)?;
             Some((
                 name,
-                build_script_view_model(Rc::clone(&file), view_model_index, instance, &[])?,
+                build_script_view_model_with_blob_assets(
+                    Rc::clone(&file),
+                    view_model_index,
+                    instance,
+                    &[],
+                    Rc::clone(&blob_assets),
+                )?,
             ))
         })
         .collect()
@@ -1384,11 +1559,28 @@ pub(crate) fn build_script_view_model(
     instance: RuntimeOwnedViewModelInstance,
     ancestors: &[usize],
 ) -> Option<ScriptViewModel> {
-    build_script_view_model_shared(
+    build_script_view_model_with_blob_assets(
+        file,
+        view_model_index,
+        instance,
+        ancestors,
+        Rc::new(RefCell::new(BTreeMap::new())),
+    )
+}
+
+fn build_script_view_model_with_blob_assets(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    instance: RuntimeOwnedViewModelInstance,
+    ancestors: &[usize],
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+) -> Option<ScriptViewModel> {
+    build_script_view_model_shared_with_blob_assets(
         file,
         view_model_index,
         RuntimeOwnedViewModelHandle::new(instance),
         ancestors,
+        blob_assets,
     )
 }
 
@@ -1398,8 +1590,30 @@ fn build_script_view_model_shared(
     instance: RuntimeOwnedViewModelHandle,
     ancestors: &[usize],
 ) -> Option<ScriptViewModel> {
+    build_script_view_model_shared_with_blob_assets(
+        file,
+        view_model_index,
+        instance,
+        ancestors,
+        Rc::new(RefCell::new(BTreeMap::new())),
+    )
+}
+
+fn build_script_view_model_shared_with_blob_assets(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    instance: RuntimeOwnedViewModelHandle,
+    ancestors: &[usize],
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+) -> Option<ScriptViewModel> {
     let context = RuntimeOwnedViewModelContextHandle::root(&file, instance);
-    build_script_view_model_scoped(file, view_model_index, context, ancestors)
+    build_script_view_model_scoped_with_blob_assets(
+        file,
+        view_model_index,
+        context,
+        ancestors,
+        blob_assets,
+    )
 }
 
 pub(crate) fn build_script_view_model_scoped(
@@ -1407,6 +1621,22 @@ pub(crate) fn build_script_view_model_scoped(
     view_model_index: usize,
     context: RuntimeOwnedViewModelContextHandle,
     ancestors: &[usize],
+) -> Option<ScriptViewModel> {
+    build_script_view_model_scoped_with_blob_assets(
+        file,
+        view_model_index,
+        context,
+        ancestors,
+        Rc::new(RefCell::new(BTreeMap::new())),
+    )
+}
+
+fn build_script_view_model_scoped_with_blob_assets(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    context: RuntimeOwnedViewModelContextHandle,
+    ancestors: &[usize],
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
 ) -> Option<ScriptViewModel> {
     let view_model = file.view_model(view_model_index)?;
     let properties = view_model
@@ -1420,6 +1650,8 @@ pub(crate) fn build_script_view_model_scoped(
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
                 "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
+                "ViewModelPropertyAssetBlob" => ScriptViewModelProperty::Blob,
+                "ViewModelPropertyAssetFont" => ScriptViewModelProperty::Font,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
                 "ViewModelPropertySymbolListIndex" => ScriptViewModelProperty::SymbolListIndex,
@@ -1446,11 +1678,12 @@ pub(crate) fn build_script_view_model_scoped(
             }
             Some((
                 name,
-                build_script_view_model_scoped(
+                build_script_view_model_scoped_with_blob_assets(
                     Rc::clone(&file),
                     nested_index,
                     nested_context,
                     &child_ancestors,
+                    Rc::clone(&blob_assets),
                 )?,
             ))
         })
@@ -1462,6 +1695,7 @@ pub(crate) fn build_script_view_model_scoped(
         file,
         view_model_index,
         ancestors: Rc::new(ancestors.to_vec()),
+        blob_assets,
     })
 }
 

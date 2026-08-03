@@ -627,6 +627,10 @@ fn encode_authoring_records(records: &[AuthoringRecord]) -> Vec<u8> {
                 }
                 AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
                 AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                AuthoringValue::Int(value) => {
+                    let encoded = ((*value as u32) << 1) ^ ((*value >> 31) as u32);
+                    push_var_uint(&mut bytes, u64::from(encoded));
+                }
                 AuthoringValue::String(value) => {
                     push_var_uint(&mut bytes, value.len() as u64);
                     bytes.extend_from_slice(value.as_bytes());
@@ -1234,7 +1238,7 @@ impl Schema {
         ));
         out.push_str(&format!(
             "        parentable: {},\n",
-            option_u64(property.raw.parentable)
+            option_i64(property.raw.parentable)
         ));
         out.push_str(&format!(
             "        records: {},\n",
@@ -1595,6 +1599,7 @@ fn core_registry_field_kind_variant(
 
     Ok(match field_kind_for_entry(property)? {
         FieldKind::Uint => Some("Uint"),
+        FieldKind::Int => Some("Int"),
         FieldKind::String | FieldKind::Bytes => Some("StringOrBytes"),
         FieldKind::Double => Some("Double"),
         FieldKind::Color => Some("Color"),
@@ -1661,7 +1666,7 @@ struct RawProperty {
     #[serde(default)]
     computed: bool,
     journal: Option<bool>,
-    parentable: Option<u64>,
+    parentable: Option<i64>,
     records: Option<bool>,
     #[serde(default, rename = "exportsToRuntimeConditionally")]
     exports_to_runtime_conditionally: bool,
@@ -1719,6 +1724,7 @@ enum FieldKind {
     Callback,
     Color,
     Double,
+    Int,
     String,
     Uint,
 }
@@ -1736,7 +1742,8 @@ impl FieldKind {
             // the same varuint registry/wire family. The declared type stays
             // in generated metadata so import can retain the known-field
             // width contract.
-            "uint" | "uint8" | "uint64" => Some(Self::Uint),
+            "uint" | "uint8" | "uint16" | "uint64" => Some(Self::Uint),
+            "int" | "int16" => Some(Self::Int),
             _ => None,
         }
     }
@@ -1752,6 +1759,7 @@ impl FieldKind {
             Self::Callback => "Callback",
             Self::Color => "Color",
             Self::Double => "Double",
+            Self::Int => "Int",
             Self::String => "String",
             Self::Uint => "Uint",
         }
@@ -1799,7 +1807,7 @@ fn option_bool(value: Option<bool>) -> String {
     }
 }
 
-fn option_u64(value: Option<u64>) -> String {
+fn option_i64(value: Option<i64>) -> String {
     match value {
         Some(value) => format!("Some({value})"),
         None => "None".to_string(),

@@ -85,6 +85,7 @@ pub enum ViewModelInstanceRuntimeProperty {
     List(ViewModelInstanceListRuntime),
     AssetImage(ViewModelInstanceAssetImageRuntime),
     AssetFont(ViewModelInstanceAssetFontRuntime),
+    AssetBlob(ViewModelInstanceAssetBlobRuntime),
     Artboard(ViewModelInstanceArtboardRuntime),
 }
 
@@ -101,6 +102,7 @@ impl ViewModelInstanceRuntimeProperty {
             Self::List(value) => value.value_runtime(),
             Self::AssetImage(value) => value.value_runtime(),
             Self::AssetFont(value) => value.value_runtime(),
+            Self::AssetBlob(value) => value.value_runtime(),
             Self::Artboard(value) => value.value_runtime(),
         }
     }

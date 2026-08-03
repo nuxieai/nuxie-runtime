@@ -28,6 +28,10 @@ pub(crate) struct RuntimeOwnedViewModelListItemEntry {
 }
 
 impl RuntimeOwnedViewModelListHandle {
+    pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.value, &other.value)
+    }
+
     fn notify_value_changed(&self) {
         // C++ `ViewModelInstanceList::propertyValueChanged()` dirties the
         // retained property for every successful structural mutation. The

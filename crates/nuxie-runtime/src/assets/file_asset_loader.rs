@@ -57,7 +57,9 @@ impl RuntimeFileAsset {
             RuntimeFileAssetOwner::Image(owners) => {
                 owners.decode(self.descriptor.id, bytes, factory).is_ok()
             }
-            RuntimeFileAssetOwner::Font(owners) => owners.decode(self.descriptor.id, bytes),
+            RuntimeFileAssetOwner::Font(owners) => {
+                owners.decode(self.descriptor.id, bytes, factory)
+            }
             RuntimeFileAssetOwner::Audio(owners) => {
                 owners.decode(self.descriptor.id, bytes, factory)
             }

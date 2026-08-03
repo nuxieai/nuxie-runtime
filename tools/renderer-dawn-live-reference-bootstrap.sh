@@ -9,7 +9,7 @@ dawn_dir="$runtime_dir/renderer/dependencies/dawn"
 dawn_patch="$repo_root/tools/cpp-atlas-mask-oracle/dawn-apple-visibility.patch"
 dependency_pins="$repo_root/tools/renderer-dawn-live-reference-dependencies.txt"
 build_out="out/cpp-atlas-mask-oracle"
-expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 expected_naga_version="30.0.0"
 

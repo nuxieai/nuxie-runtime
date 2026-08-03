@@ -348,7 +348,7 @@ PREFIX_MODULES = (
     ("src/bones/", "crates/nuxie-runtime/src/components.rs"),
     ("src/constraints/", "crates/nuxie-runtime/src/constraints.rs"),
     ("src/core/", "crates/nuxie-binary/src/lib.rs"),
-    ("src/data_bind/", "crates/nuxie-runtime/src/artboard_data_bind.rs"),
+    ("src/data_bind/", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"),
     ("src/importers/", "crates/nuxie-runtime/src/objects.rs"),
     ("src/input/", "crates/nuxie-runtime/src/focus.rs"),
     ("src/inputs/", "crates/nuxie-runtime/src/state_machine.rs"),
@@ -412,6 +412,13 @@ def classify(upstream: str) -> dict[str, str]:
                 "rust_module": rust_module,
                 "note": f"Consolidated Rust port for {prefix.removeprefix('src/').rstrip('/')}.",
             }
+    if upstream in {"src/factory.cpp", "src/renderer.cpp"}:
+        return {
+            "upstream": upstream,
+            "status": "ported",
+            "rust_module": "crates/nuxie-render-api/src/lib.rs",
+            "note": "Backend-neutral render seam owner.",
+        }
     if upstream.startswith("src/") and upstream.count("/") == 1:
         return {
             "upstream": upstream,

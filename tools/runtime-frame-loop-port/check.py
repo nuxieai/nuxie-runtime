@@ -689,6 +689,50 @@ def duplicate_values(values: Iterable[str]) -> list[str]:
     return sorted(value for value, count in counts.items() if count > 1)
 
 
+def manifest_rust_modules(row: dict[str, Any]) -> list[str]:
+    return [
+        value.strip()
+        for value in str(row.get("rust_module", "")).split(";")
+        if value.strip()
+    ]
+
+
+def validate_scatter_ratchet(
+    *,
+    manifest: dict[str, Any],
+    rows: list[dict[str, Any]],
+    errors: list[str],
+) -> tuple[int, int | None]:
+    multi_module_rows = [
+        row for row in rows if len(manifest_rust_modules(row)) >= 2
+    ]
+    for row in multi_module_rows:
+        note = str(row.get("note", ""))
+        if re.search(r"\b(?:MR|exception)\b", note, re.IGNORECASE) is not None:
+            continue
+        upstream = str(row.get("upstream", "")) or "<missing upstream>"
+        row_id = str(row.get("b6_row_id", ""))
+        row_name = f"{row_id} ({upstream})" if row_id else upstream
+        errors.append(
+            f"multi-module row {row_name} must have an MR or exception marker in note"
+        )
+
+    count = len(multi_module_rows)
+    ratchet = manifest.get("scatter_ratchet")
+    if not isinstance(ratchet, dict):
+        errors.append("file correspondence scatter_ratchet table is missing")
+        return count, None
+    maximum = ratchet.get("max_multi_module_rows")
+    if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 0:
+        errors.append(
+            "scatter_ratchet.max_multi_module_rows must be a non-negative integer"
+        )
+        return count, None
+    if count > maximum:
+        errors.append(f"scatter ratchet increased to {count} > {maximum}")
+    return count, maximum
+
+
 def validate_citation(
     citation: str,
     repo_root: pathlib.Path,
@@ -1020,11 +1064,7 @@ def validate_file_rows(
                 errors.append(f"file {path} Rust module does not exist: {rust_module}")
 
         manifest = manifest_files.get(path, {})
-        mapped = {
-            value.strip()
-            for value in str(manifest.get("rust_module", "")).split(";")
-            if value.strip()
-        }
+        mapped = set(manifest_rust_modules(manifest))
         if mapped and mapped != set(rust_modules):
             errors.append(
                 f"file {path} maps to {sorted(rust_modules)}, "
@@ -1130,6 +1170,36 @@ def validate_fl_e8_policy(
         if wave.get("depends_on") != ["FL-E"]:
             errors.append("FL-E8 must depend exactly on FL-E")
 
+    wave_sequence = {
+        str(wave.get("id", "")): int(wave.get("sequence", 0))
+        for wave in waves
+        if isinstance(wave.get("sequence"), int)
+    }
+    post_fl_e8_faithful = sum(
+        1
+        for row in file_rows
+        if wave_sequence.get(str(row.get("wave", "")), 0) > 6
+        and row.get("status") == "faithful"
+    )
+    post_fl_e8_replacements = sum(
+        1
+        for old_path, new_path in {
+            ("src/nested_artboard_origin.cpp", "src/component_origin.cpp"),
+        }
+        if not any(row.get("upstream") == old_path for row in file_rows)
+        and any(
+            row.get("upstream") == new_path
+            and wave_sequence.get(str(row.get("wave", "")), 0) > 6
+            for row in file_rows
+        )
+    )
+
+    def phase_faithful_count(baseline: int) -> int:
+        # FL-E8's frozen phase total remains the baseline. Later waves are
+        # additive rather than permission to replace that historical ratchet
+        # with the current manifest's self-declared expected total.
+        return baseline + post_fl_e8_faithful - post_fl_e8_replacements
+
     rows = {
         str(row.get("upstream", "")): row
         for row in file_rows
@@ -1149,7 +1219,11 @@ def validate_fl_e8_policy(
         )
         if wrong:
             errors.append(f"FL-E8 WP0 rows must all be pending: {wrong!r}")
-        required_counts = {"faithful": 334, "divergent-by-decision": 1, "pending": 7}
+        required_counts = {
+            "faithful": phase_faithful_count(334),
+            "divergent-by-decision": 1,
+            "pending": 7,
+        }
         if candidate_paths:
             errors.append("FL-E8 WP0 must not have a candidate allowlist")
     elif phase == "fl-e8-wp1-candidate":
@@ -1168,7 +1242,11 @@ def validate_fl_e8_policy(
                 "FL-E8 WP1 statuses are incoherent: "
                 f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
             )
-        required_counts = {"faithful": 339, "divergent-by-decision": 1, "pending": 2}
+        required_counts = {
+            "faithful": phase_faithful_count(339),
+            "divergent-by-decision": 1,
+            "pending": 2,
+        }
         if candidate_paths != FL_E8_WP1_FILES:
             errors.append("FL-E8 WP1 candidate allowlist must be exactly the five promoted rows")
     else:
@@ -1187,7 +1265,11 @@ def validate_fl_e8_policy(
                 "FL-E8 wave statuses are incoherent: "
                 f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
             )
-        required_counts = {"faithful": 341, "divergent-by-decision": 1, "pending": 0}
+        required_counts = {
+            "faithful": phase_faithful_count(341),
+            "divergent-by-decision": 1,
+            "pending": 0,
+        }
         if candidate_paths != FL_E8_WAVE_FILES:
             errors.append(
                 "FL-E8 wave candidate allowlist must be exactly the seven promoted rows"
@@ -1519,6 +1601,11 @@ def check(
     manifest_files = {str(row.get("upstream", "")): row for row in manifest_rows}
     if len(manifest_files) != len(manifest_rows):
         errors.append("file correspondence contains duplicate upstream paths")
+    scatter_count, scatter_maximum = validate_scatter_ratchet(
+        manifest=file_manifest,
+        rows=manifest_rows,
+        errors=errors,
+    )
     assignments, source_set_waves = expand_source_sets(
         source_sets=list(ledger.get("source_set", [])),
         manifest_files=manifest_files,
@@ -2276,6 +2363,7 @@ def check(
         f"runtime-frame-loop-port: files={len(assignments)} ({files}); "
         f"members={len(members) + imported_member_count} ({member_summary}); "
         f"gaps={len(gap_rows)}; waves={' -> '.join(wave_order)}; "
+        f"scatter={scatter_count}/{scatter_maximum}; "
         f"ratchets[{ratchets}]"
     )
 

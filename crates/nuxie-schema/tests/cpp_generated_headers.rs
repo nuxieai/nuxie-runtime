@@ -1773,6 +1773,8 @@ fn parse_cpp_core_registry_property_field_ids(
             || line.contains("return CoreUint64Type::id")
         {
             Some(CoreRegistryFieldKind::Uint)
+        } else if line.contains("return CoreIntType::id") {
+            Some(CoreRegistryFieldKind::Int)
         } else if line.contains("return CoreStringType::id")
             || line.contains("return CoreBytesType::id")
         {
@@ -1822,6 +1824,7 @@ fn parse_cpp_core_registry_setter_field_kinds(
 
         current_kind = match line {
             line if line.starts_with("static void setUint") => Some(FieldKind::Uint),
+            line if line.starts_with("static void setInt") => Some(FieldKind::Int),
             line if line.starts_with("static void setString") => Some(FieldKind::String),
             line if line.starts_with("static void setColor") => Some(FieldKind::Color),
             line if line.starts_with("static void setBool") => Some(FieldKind::Bool),
@@ -1892,6 +1895,7 @@ fn parse_cpp_core_registry_getter_field_kinds(
         current_kind = match line {
             line if line.starts_with("static uint32_t getUint") => Some(FieldKind::Uint),
             line if line.starts_with("static uint64_t getUint64") => Some(FieldKind::Uint),
+            line if line.starts_with("static int32_t getInt") => Some(FieldKind::Int),
             line if line.starts_with("static std::string getString") => Some(FieldKind::String),
             line if line.starts_with("static int getColor") => Some(FieldKind::Color),
             line if line.starts_with("static bool getBool") => Some(FieldKind::Bool),
@@ -2162,6 +2166,7 @@ fn parse_cpp_stored_field_initializer(
         FieldKind::String => {
             StoredFieldInitializer::String(parse_string_initializer(cpp_value, label))
         }
+        FieldKind::Int => StoredFieldInitializer::Int(parse_int_initializer(cpp_value, label)),
         FieldKind::Uint => StoredFieldInitializer::Uint(parse_uint_initializer(cpp_value, label)),
         FieldKind::Bytes | FieldKind::Callback => {
             panic!("{label} unexpectedly has a stored-field initializer for {kind:?}");
@@ -2205,6 +2210,12 @@ fn parse_string_initializer(value: &str, label: &str) -> &'static str {
         "\"https://public.rive.app/cdn/uuid\"" => "https://public.rive.app/cdn/uuid",
         _ => panic!("{label} has unsupported string initializer {value:?}"),
     }
+}
+
+fn parse_int_initializer(value: &str, label: &str) -> i32 {
+    value
+        .parse::<i32>()
+        .unwrap_or_else(|err| panic!("{label} has bad int initializer {value:?}: {err}"))
 }
 
 fn parse_uint_initializer(value: &str, label: &str) -> u64 {

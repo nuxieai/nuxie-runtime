@@ -1,6 +1,7 @@
 /target/
 /vendor/*/target/
 /fixtures/**/*.riv
+!/fixtures/sync/data_bind_blob_test.riv
 !/fixtures/p2d/
 !/fixtures/p2d/scripted_interpolator.riv
 !/fixtures/fl-e8/

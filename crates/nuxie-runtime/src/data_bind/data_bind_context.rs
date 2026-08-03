@@ -1516,6 +1516,7 @@ enum RuntimeArtboardDataBindTargetRef {
     Property(usize),
     ImageAsset(usize),
     ConverterProperty(usize),
+    NestedHost(usize),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1531,6 +1532,8 @@ pub(super) struct RuntimeArtboardDataBindTargetQueues {
     dirty_image_asset_flags: Vec<bool>,
     dirty_converter_properties: Vec<usize>,
     dirty_converter_property_flags: Vec<bool>,
+    dirty_nested_hosts: Vec<usize>,
+    dirty_nested_host_flags: Vec<bool>,
 }
 
 impl RuntimeArtboardDataBindTargetQueues {
@@ -1538,18 +1541,21 @@ impl RuntimeArtboardDataBindTargetQueues {
         !self.dirty_properties.is_empty()
             || !self.dirty_image_assets.is_empty()
             || !self.dirty_converter_properties.is_empty()
+            || !self.dirty_nested_hosts.is_empty()
     }
 
     pub(super) fn new(
         property_bindings: &[RuntimeArtboardPropertyBindingInstance],
         image_asset_bindings: &[RuntimeArtboardImageAssetBindingInstance],
         converter_property_bindings: &[RuntimeArtboardConverterPropertyBindingInstance],
+        nested_host_bindings: &[RuntimeArtboardNestedHostBindingInstance],
         list_bindings: &[RuntimeArtboardListBindingInstance],
     ) -> Self {
         let mut queues = Self {
             dirty_property_flags: vec![false; property_bindings.len()],
             dirty_image_asset_flags: vec![false; image_asset_bindings.len()],
             dirty_converter_property_flags: vec![false; converter_property_bindings.len()],
+            dirty_nested_host_flags: vec![false; nested_host_bindings.len()],
             ..Self::default()
         };
         for (index, binding) in property_bindings.iter().enumerate() {
@@ -1604,6 +1610,21 @@ impl RuntimeArtboardDataBindTargetQueues {
                 .or_default()
                 .push(target);
             queues.enqueue_converter_property(index);
+        }
+        for (index, binding) in nested_host_bindings.iter().enumerate() {
+            let target = RuntimeArtboardDataBindTargetRef::NestedHost(index);
+            queues
+                .by_path
+                .entry(binding.path.clone())
+                .or_default()
+                .push(target);
+            if queues.by_data_bind_index.len() <= binding.data_bind_index {
+                queues
+                    .by_data_bind_index
+                    .resize_with(binding.data_bind_index + 1, Vec::new);
+            }
+            queues.by_data_bind_index[binding.data_bind_index].push(target);
+            queues.enqueue_nested_host(index);
         }
         for (index, binding) in list_bindings.iter().enumerate() {
             if queues.list_by_data_bind_index.len() <= binding.data_bind_index {
@@ -1663,6 +1684,9 @@ impl RuntimeArtboardDataBindTargetQueues {
                 RuntimeArtboardDataBindTargetRef::ConverterProperty(index) => {
                     self.enqueue_converter_property(index);
                 }
+                RuntimeArtboardDataBindTargetRef::NestedHost(index) => {
+                    self.enqueue_nested_host(index);
+                }
             }
         }
         enqueued_properties
@@ -1677,6 +1701,8 @@ impl RuntimeArtboardDataBindTargetQueues {
             dirty_image_asset_flags,
             dirty_converter_properties,
             dirty_converter_property_flags,
+            dirty_nested_hosts,
+            dirty_nested_host_flags,
             ..
         } = self;
         let Some(targets) = by_data_bind_index.get(data_bind_index) else {
@@ -1712,6 +1738,15 @@ impl RuntimeArtboardDataBindTargetQueues {
                     if !*flag {
                         *flag = true;
                         dirty_converter_properties.push(index);
+                    }
+                }
+                RuntimeArtboardDataBindTargetRef::NestedHost(index) => {
+                    let Some(flag) = dirty_nested_host_flags.get_mut(index) else {
+                        continue;
+                    };
+                    if !*flag {
+                        *flag = true;
+                        dirty_nested_hosts.push(index);
                     }
                 }
             }
@@ -1751,6 +1786,17 @@ impl RuntimeArtboardDataBindTargetQueues {
         }
         *flag = true;
         self.dirty_converter_properties.push(index);
+    }
+
+    fn enqueue_nested_host(&mut self, index: usize) {
+        let Some(flag) = self.dirty_nested_host_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_nested_hosts.push(index);
     }
 
     fn drain_dirty_properties(&mut self) -> Vec<usize> {
@@ -1797,6 +1843,16 @@ impl RuntimeArtboardDataBindTargetQueues {
         let dirty = std::mem::take(&mut self.dirty_converter_properties);
         for index in &dirty {
             if let Some(flag) = self.dirty_converter_property_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+
+    fn drain_dirty_nested_hosts(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_nested_hosts);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_nested_host_flags.get_mut(*index) {
                 *flag = false;
             }
         }
@@ -2397,6 +2453,7 @@ pub(super) struct RuntimeArtboardSoloSourceBindingInstance {
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardNestedHostBindingInstance {
+    data_bind_index: usize,
     target_local_id: usize,
     property: RuntimeArtboardNestedHostProperty,
     path: Vec<u32>,
@@ -3627,7 +3684,8 @@ pub(super) fn build_artboard_nested_host_bindings(
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| {
+        .enumerate()
+        .filter_map(|(data_bind_index, data_bind)| {
             if !data_bind_flags_apply_source_to_target(
                 data_bind.object.uint_property("flags").unwrap_or(0),
             ) {
@@ -3651,6 +3709,7 @@ pub(super) fn build_artboard_nested_host_bindings(
                 return None;
             };
             Some(RuntimeArtboardNestedHostBindingInstance {
+                data_bind_index,
                 target_local_id: data_bind.target_local_id?,
                 property,
                 path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
@@ -6922,7 +6981,6 @@ impl ArtboardInstance {
                 .artboard_retained_subordinate_converter_operands
                 .iter()
                 .any(RuntimeArtboardRetainedSubordinateConverterOperands::has_dirt)
-            || self.stateful_nested_view_model_contexts_dirty
     }
 
     fn flush_runtime_text_run_listener_changes(&mut self) -> bool {
@@ -8636,7 +8694,10 @@ impl ArtboardInstance {
 
     fn apply_artboard_nested_host_bindings(&mut self) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_nested_host_bindings.len() {
+        let indices = self
+            .artboard_data_bind_target_queues
+            .drain_dirty_nested_hosts();
+        for index in indices {
             let Some((target_local_id, property, value, first_artboard_apply)) = self
                 .artboard_nested_host_bindings
                 .get_mut(index)
@@ -9516,6 +9577,13 @@ mod tests {
             "C++ DataBindContainer returns before reconciliation when its retained dirty lists are empty, even while it owns a DataContext (`data_bind_container.cpp:156-171`)"
         );
 
+        artboard.stateful_nested_view_model_contexts_dirty = true;
+        assert!(
+            !artboard.has_artboard_data_bind_queue_work(),
+            "a compatibility rescan flag is not retained DataBind dirt"
+        );
+        assert!(!artboard.advance_artboard_data_binds());
+
         artboard
             .artboard_owned_view_model_rebind_sink
             .add_dirt(RuntimeCellDirt::BINDINGS);
@@ -9646,7 +9714,7 @@ mod tests {
             &[],
         );
         artboard.artboard_data_bind_target_queues =
-            RuntimeArtboardDataBindTargetQueues::new(&[], &[], &[], &[]);
+            RuntimeArtboardDataBindTargetQueues::new(&[], &[], &[], &[], &[]);
         artboard
             .artboard_formula_random_source
             .set_values(&[0.25, 0.75]);
@@ -9746,6 +9814,7 @@ mod tests {
             &[],
             &[],
             &artboard.artboard_converter_property_bindings,
+            &[],
             &[],
         );
         artboard
@@ -10008,7 +10077,7 @@ mod tests {
             generated_view_model_id: None,
             generated_items: Vec::new(),
         }];
-        let queues = RuntimeArtboardDataBindTargetQueues::new(&[], &[], &[], &lists);
+        let queues = RuntimeArtboardDataBindTargetQueues::new(&[], &[], &[], &[], &lists);
 
         assert_eq!(queues.list_index_for_data_bind(7), Some(0));
         assert_eq!(queues.list_index_for_data_bind(0), None);
@@ -10059,6 +10128,7 @@ mod tests {
         artboard.artboard_property_bindings = vec![first, second];
         artboard.artboard_data_bind_target_queues = RuntimeArtboardDataBindTargetQueues::new(
             &artboard.artboard_property_bindings,
+            &[],
             &[],
             &[],
             &[],
@@ -10128,7 +10198,7 @@ mod tests {
         );
 
         artboard.artboard_data_bind_target_queues =
-            RuntimeArtboardDataBindTargetQueues::new(&properties, &[], &[], &[]);
+            RuntimeArtboardDataBindTargetQueues::new(&properties, &[], &[], &[], &[]);
         artboard.artboard_data_bind_source_queues =
             RuntimeArtboardDataBindSourceQueues::new(&custom, &[], &[], &[]);
         artboard.artboard_property_bindings = properties;
@@ -11868,7 +11938,7 @@ mod tests {
             property_binding(1, 1 << 1),
             property_binding(2, 0),
         ];
-        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[], &[]);
+        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[], &[], &[]);
 
         assert_eq!(
             queues.drain_dirty_properties_for_precedence(&bindings, true),
@@ -11951,7 +12021,7 @@ mod tests {
         let mut observer = property_binding(8, 0);
         observer.path = origin.path.clone();
         let bindings = vec![origin, observer];
-        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[], &[]);
+        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[], &[], &[]);
 
         assert_eq!(queues.drain_dirty_properties(), vec![0, 1]);
         assert_eq!(
@@ -12307,6 +12377,7 @@ mod tests {
             &property_bindings,
             &image_asset_bindings,
             &converter_property_bindings,
+            &[],
             &[],
         );
 

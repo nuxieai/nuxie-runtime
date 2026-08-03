@@ -2213,15 +2213,16 @@ impl ArtboardInstance {
             build_artboard_converter_property_bindings(file, graph, &mut converter_cache);
         let artboard_list_bindings =
             build_artboard_list_bindings(file, graph, &mut converter_cache);
+        let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_data_bind_target_queues = RuntimeArtboardDataBindTargetQueues::new(
             &artboard_property_bindings,
             &artboard_image_asset_bindings,
             &artboard_converter_property_bindings,
+            &artboard_nested_host_bindings,
             &artboard_list_bindings,
         );
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
-        let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_text_list_bindings = build_artboard_text_list_bindings(file, graph);
         let artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
             &artboard_custom_property_bindings,

@@ -412,6 +412,20 @@ byproduct; if any stays red it is a fresh divergence to localize on the new
 foundation. Editor-team changes to this layer freeze until #RB-1 lands
 (or route through the same floor gates).
 
+**2026-08-03 P3-b pin-advance remainder:** pinned `src/core.cpp` now owns an
+intrusive exact-property observer list that was added after the original RB-1
+closure. Rust ports that ownership with retained `(local_id, property_key)`
+observer entries at the arena seam: target setters synchronously enqueue only
+their dependents, the empty-observer path returns immediately, and the old
+Artboard mutation/processed epochs no longer wake whole-context work. The C6
+Lua correspondence remainder closes in the same serialized lane: retained
+DataContext chains preserve nodes whose main ViewModel is nil, and detached
+script advancement reads runtime-owned parent edges directly instead of a
+copied scripting graph. Polling survives only for explicitly named
+converter/layout/solo/shape-length families whose pinned dependency edges are
+not modeled; those are crate-boundary residue, not a general reconciliation
+fallback.
+
 ## Phase RD — C++ runtime drawing port (#RD, historical internal code) — P0 after #RB-1 (user-directed 2026-07-21)
 
 ### #RD-1 Runtime objects own drawing state; renderer backend unchanged — SPINE, XL (own mini-map before execution)

@@ -2229,3 +2229,21 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   retains its decoded bitmap cache. Verification remains
   `pending-verification`; the RawText GM family is still a documented
   nonblocking follow-up lane.
+- 2026-08-03 — P3-b closes the RB-1 pin-advance remainder as one serialized
+  runtime-state lane. Pinned `src/core.cpp` exact-property observer pushes now
+  map to an arena-owned Rust observer registry; setter notifications enqueue
+  retained DataBind source work synchronously, while the Artboard
+  mutation/processed epoch pair and its unconditional reconciliation wakeups
+  are deleted. A late scripted `stateful_nested` mismatch proved that the
+  compatibility `stateful_nested_view_model_contexts_dirty` flag must not
+  impersonate retained queue dirt; it remains consumable only inside a pass
+  opened by a real retained queue or an explicit conservative-poll family.
+  The C6 Lua DataContext chain now preserves nil-main-model context nodes, and
+  detached ScriptViewModels query runtime `has_parents()` directly with no
+  scripting parent mirror or rescan. `src/core.cpp` (B6-0146) and
+  `src/lua/lua_data_context.cpp` (B6-0264) move from pending to faithful;
+  `scripting_detached_viewmodel_advance_test.cpp` moves only to partial because
+  its null-wrapper TEST_CASE has no constructible safe-Rust counterpart. The
+  umbrella `lua_properties.cpp` and `rive_lua_libs.cpp` rows remain pending for
+  their unrelated residue. Full gate evidence and the sandbox commit map are
+  recorded in `P3B-report.md`.

@@ -298,9 +298,14 @@ FEATURE_ROWS.update(
             "P3-b: DataContext userdata preserves parent occurrences independently from optional main view models, including a nil-model parent in a longer chain.",
         ),
         "src/lua/lua_data_value.cpp": (
-            "partial",
-            "crates/nuxie-scripting/src/vm.rs",
-            "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps.",
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_data_value.rs",
+            "LT-2: DataValue constructors, check/coercion rules, index/newindex behavior, and signed/spill color channels are ported.",
+        ),
+        "src/lua/lua_properties.cpp": (
+            "ported",
+            "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+            "LT-2: cached property identity, authored enum values, synchronous post-borrow listeners, list operations, and asset/view-model values are ported across the binary/runtime/scripting crate boundary.",
         ),
         "src/lua/lua_audio.cpp": (
             "ported",
@@ -328,9 +333,9 @@ FEATURE_ROWS.update(
             "P2B faithful candidate under the backend-neutral render-factory adaptation: callable vertex/triangle userdata, add/reset invalidation, mapped-once native buffer upload, u16 index bounds, and renderer drawImageMesh wiring are present; both upstream cases are direct ports.",
         ),
         "src/lua/lua_state.cpp": (
-            "partial",
+            "ported",
             "crates/nuxie-scripting/src/vm/view_model.rs",
-            "F7/P1G: Data initialization is ported with tracked constructor-arity gaps.",
+            "LT-2: Data initialization and exact constructor argument-count/type dispatch are ported.",
         ),
         "src/lua/math/lua_color.cpp": (
             "ported",
@@ -338,9 +343,14 @@ FEATURE_ROWS.update(
             "F7/P1G: the complete Color binding is ported.",
         ),
         "src/lua/renderer/lua_gradient.cpp": (
-            "partial",
+            "ported",
             "crates/nuxie-scripting/src/vm/renderer.rs",
-            "F7/P1G: Gradient constructors are present with tracked non-table stop and unsigned-color conversion gaps.",
+            "LT-2: Gradient constructors, first-non-table termination, and pinned numeric/unsigned stop decoding are ported.",
+        ),
+        "src/lua/rive_lua_libs.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+            "LT-2: the corpus-gated Rive library umbrella installs completed bindings before sandboxing and produces named diagnostics for unavailable binding access.",
         ),
         "src/lua/logging_scripting_context.cpp": (
             "ported",

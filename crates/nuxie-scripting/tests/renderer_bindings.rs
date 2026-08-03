@@ -130,3 +130,27 @@ fn scripted_draw_can_allocate_and_apply_gradients() {
     );
     assert!(stream.contains("shader=1"), "{stream}");
 }
+
+#[test]
+fn gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors() {
+    let vm = ScriptVm::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    vm.install_render_factory(&mut factory).unwrap();
+    vm.install_rive_globals().unwrap();
+
+    vm.eval::<()>(
+        "Gradient.linear(\n\
+             Vector(0, 0), Vector(10, 0),\n\
+             { { position = '0.25', color = -1 }, false,\n\
+               { position = 1, color = 0xff000000 } })",
+    )
+    .expect("the pinned stop parser accepts the valid prefix");
+
+    let stream = factory.borrow().stream();
+    assert!(
+        stream.contains(
+            "makeLinearGradient id=1 start=(0,0) end=(10,0) stops=[{color=0xffffffff,stop=0.25}]"
+        ),
+        "{stream}"
+    );
+}

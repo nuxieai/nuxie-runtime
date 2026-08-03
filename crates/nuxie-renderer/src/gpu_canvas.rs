@@ -188,6 +188,7 @@ struct PreparedImportedGpuCanvas {
 struct ImportedGpuCanvasPipelineKey {
     vertex_occurrence_id: u64,
     fragment_occurrence_id: u64,
+    pipeline_snapshot_index: usize,
     vertex_entry: Option<GpuCanvasShaderEntrySelection>,
     fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     uniform_bindings: Vec<(u32, u32, usize)>,
@@ -540,6 +541,17 @@ impl ImportedGpuCanvasPipelineKey {
         )
     }
 
+    fn at_snapshot(
+        vertex_shader: &WgpuGpuCanvasShader,
+        fragment_shader: &WgpuGpuCanvasShader,
+        plan: &GpuCanvasPlan,
+        pipeline_snapshot_index: usize,
+    ) -> Self {
+        let mut key = Self::new(vertex_shader, fragment_shader, plan);
+        key.pipeline_snapshot_index = pipeline_snapshot_index;
+        key
+    }
+
     fn from_occurrence_ids(
         vertex_occurrence_id: u64,
         fragment_occurrence_id: u64,
@@ -553,6 +565,7 @@ impl ImportedGpuCanvasPipelineKey {
         Self {
             vertex_occurrence_id,
             fragment_occurrence_id,
+            pipeline_snapshot_index: 0,
             vertex_entry: plan.vertex_entry.clone(),
             fragment_entry: plan.fragment_entry.clone(),
             uniform_bindings,
@@ -631,6 +644,7 @@ impl PartialEq for ImportedGpuCanvasPipelineKey {
     fn eq(&self, other: &Self) -> bool {
         self.vertex_occurrence_id == other.vertex_occurrence_id
             && self.fragment_occurrence_id == other.fragment_occurrence_id
+            && self.pipeline_snapshot_index == other.pipeline_snapshot_index
             && self.vertex_entry == other.vertex_entry
             && self.fragment_entry == other.fragment_entry
             && self.uniform_bindings == other.uniform_bindings
@@ -651,6 +665,7 @@ impl std::fmt::Debug for ImportedGpuCanvasPipelineKey {
             .debug_struct("ImportedGpuCanvasPipelineKey")
             .field("vertex_occurrence_id", &self.vertex_occurrence_id)
             .field("fragment_occurrence_id", &self.fragment_occurrence_id)
+            .field("pipeline_snapshot_index", &self.pipeline_snapshot_index)
             .field("vertex_entry", &self.vertex_entry)
             .field("fragment_entry", &self.fragment_entry)
             .field("uniform_bindings", &self.uniform_bindings)
@@ -1923,11 +1938,18 @@ impl WgpuFactory {
             .map(|pipeline| materialize_pipeline_plan(plan, pipeline))
             .collect::<Vec<_>>();
         let mut keys = Vec::with_capacity(pipelines.len());
-        for (shaders, pipeline_plan) in pipelines.iter().zip(&materialized_plans) {
+        for (pipeline_snapshot_index, (shaders, pipeline_plan)) in
+            pipelines.iter().zip(&materialized_plans).enumerate()
+        {
             let vertex = imported_shader_for_context(&self.context, &shaders.vertex, "vertex")?;
             let fragment_handle = shaders.fragment.as_ref().unwrap_or(&shaders.vertex);
             let fragment = imported_shader_for_context(&self.context, fragment_handle, "fragment")?;
-            let key = ImportedGpuCanvasPipelineKey::new(vertex, fragment, pipeline_plan);
+            let key = ImportedGpuCanvasPipelineKey::at_snapshot(
+                vertex,
+                fragment,
+                pipeline_plan,
+                pipeline_snapshot_index,
+            );
             if !self
                 .imported_gpu_canvas
                 .pipelines
@@ -5146,6 +5168,19 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
             ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &first),
             ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &second),
             "resource-size changes require a fresh backend allocation"
+        );
+    }
+
+    #[test]
+    fn imported_pipeline_key_keeps_concurrent_resource_snapshots_distinct() {
+        let plan = imported_plan();
+        let first = ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &plan);
+        let mut second = first.clone();
+        second.pipeline_snapshot_index = 1;
+
+        assert_ne!(
+            first, second,
+            "distinct submission snapshots need distinct mutable backend buffers"
         );
     }
 

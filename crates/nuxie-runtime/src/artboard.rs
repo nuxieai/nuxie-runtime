@@ -11575,36 +11575,70 @@ mod tests {
 
     #[test]
     fn root_artboard_advance_polls_global_async_work_before_advancing() {
-        let task = ArtboardPollTask {
-            state: crate::WorkTaskState::default(),
-            completed: AtomicBool::new(false),
-            callback_thread: std::sync::Mutex::new(None),
-        };
-        let task = std::sync::Arc::new(task);
-        crate::with_global_work_pool(|pool| {
-            pool.submit(Some(task.clone()));
-        });
-
-        #[cfg(feature = "threading")]
-        while matches!(
-            task.state.status(),
-            crate::WorkStatus::Pending | crate::WorkStatus::Running
-        ) {
-            std::thread::yield_now();
-        }
-        assert!(!task.completed.load(Ordering::Acquire));
-
-        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        // The pool behind the advance seam is process-global (upstream
+        // assumes one main thread polls it; `src/artboard.cpp` pollAsyncWork
+        // at d788e8ec), but this harness runs tests concurrently and every
+        // root advance drains that pool. Two interleavings can therefore
+        // separate one submit from one advance without saying anything about
+        // the seam under test:
+        //   - a concurrently advancing test pops this task and delivers its
+        //     callback on a foreign thread before our own advance runs
+        //     (reproducible: ~half of parallel `advance`-filter runs with
+        //     `threading` enabled), and
+        //   - the worker publishes `Completed` status before it enqueues the
+        //     task in the completed queue, so our advance can poll an empty
+        //     queue even under `--test-threads=1`; the task is then drained
+        //     by the next trial's advance.
+        // Each trial that failed to observe its own delivery is discarded
+        // and rerun with a fresh task. A pass still requires the full
+        // authored property — the callback delivered on the advancing
+        // thread — and a regressed advance (not polling, or dispatching
+        // off-thread) can never produce a pass verdict.
         let polling_thread = std::thread::current().id();
-        let _ = artboard.advance(0.0).expect("advance empty artboard");
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        for _ in 0..32 {
+            let task = std::sync::Arc::new(ArtboardPollTask {
+                state: crate::WorkTaskState::default(),
+                completed: AtomicBool::new(false),
+                callback_thread: std::sync::Mutex::new(None),
+            });
+            crate::with_global_work_pool(|pool| {
+                pool.submit(Some(task.clone()));
+            });
 
-        assert!(task.completed.load(Ordering::Acquire));
-        assert_eq!(
-            *task
+            #[cfg(feature = "threading")]
+            while matches!(
+                task.state.status(),
+                crate::WorkStatus::Pending | crate::WorkStatus::Running
+            ) {
+                std::thread::yield_now();
+            }
+
+            let _ = artboard.advance(0.0).expect("advance empty artboard");
+
+            // A foreign poller pops the task before it delivers the
+            // callback, so give an in-flight steal a bounded window to
+            // publish its thread id before judging the trial. (A trial lost
+            // to the status-before-enqueue gap exhausts this window with
+            // `completed` still false and retries.)
+            let mut spins = 0u32;
+            while !task.completed.load(Ordering::Acquire) && spins < 1 << 16 {
+                spins += 1;
+                std::thread::yield_now();
+            }
+            if *task
                 .callback_thread
                 .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner()),
-            Some(polling_thread)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                == Some(polling_thread)
+            {
+                return;
+            }
+        }
+        panic!(
+            "async-work callback was never delivered on the advancing \
+             thread: advance() stopped polling the global pool before \
+             advancing, or callbacks are dispatched off-thread"
         );
     }
 

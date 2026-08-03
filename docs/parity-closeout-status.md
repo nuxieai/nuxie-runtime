@@ -2245,5 +2245,5 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   `scripting_detached_viewmodel_advance_test.cpp` moves only to partial because
   its null-wrapper TEST_CASE has no constructible safe-Rust counterpart. The
   umbrella `lua_properties.cpp` and `rive_lua_libs.cpp` rows remain pending for
-  their unrelated residue. Full gate evidence and the sandbox commit map are
-  recorded in `P3B-report.md`.
+  their unrelated residue. Full gate evidence and the commit map are recorded
+  in `P3B-report.md`.

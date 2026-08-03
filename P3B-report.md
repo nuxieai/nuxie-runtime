@@ -70,19 +70,20 @@ initial swap. The scripted golden corpus proves the integrated result.
 - The umbrella `lua_properties.cpp` and `rive_lua_libs.cpp` rows remain pending
   for their unrelated whole-file residue.
 
-## Commits and sandbox handoff
+## Commits
 
 Commits completed before the shared Git metadata became read-only:
 
 - `4ace1ac1` — `Port runtime-owned Lua parent edges`
 - `e29adba7` — `Port Core property observer pushes`
 
-The final queue-gate/nested-host correction, ledgers, scorecard, status/map,
-and this report remain as a clean worktree diff because the sandbox rejects
-creation of the shared `.git/index.lock` (and rejects an alternate index when
-Git tries to write objects under the shared worktree metadata). The landing
-worker should commit the remaining worktree diff as one P3-b closeout commit;
-no file was written outside this worktree and no `/tmp` worktree was used.
+The sandbox temporarily rejected creation of the shared `.git/index.lock`, so
+the final correction and ledgers were held as a mapped worktree diff while the
+gates ran. A later retry succeeded:
+
+- `e68b11f5` — `Close RB-1 observer remainder`
+
+No file was written outside this worktree and no `/tmp` worktree was used.
 
 ## Required gates
 
@@ -101,3 +102,7 @@ no file was written outside this worktree and no `/tmp` worktree was used.
 - `make parity-scorecard` — green: 26/26 generator tests; snapshot regenerated.
 - `git diff --check` — green.
 
+The supplemental, non-required `make port-manifest-check` still has four
+pre-existing test failures around the already-landed command-queue/server rows;
+the P3-b production rows themselves parse and are limited to Core and Lua
+DataContext. No required P3-b gate depends on that stale generator expectation.

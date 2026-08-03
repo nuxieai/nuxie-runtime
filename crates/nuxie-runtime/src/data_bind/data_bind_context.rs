@@ -928,6 +928,9 @@ impl RuntimeOwnedDataContext {
                 is_main: index == 0,
             })
             .collect::<Vec<_>>();
+        if instances.is_empty() {
+            return parent.cloned().unwrap_or_default();
+        }
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {
                 instances,
@@ -949,9 +952,27 @@ impl RuntimeOwnedDataContext {
                 is_main: index == 0,
             })
             .collect::<Vec<_>>();
+        if instances.is_empty() {
+            return parent.cloned().unwrap_or_default();
+        }
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {
                 instances,
+                parent: parent.cloned(),
+            }),
+        }
+    }
+
+    /// Retain a DataContext node whose main ViewModel is null.
+    ///
+    /// C++ `DataContext::parent()` traverses this node even though
+    /// `DataContext::viewModelInstance()` returns null for it. Keep this
+    /// constructor explicit because the empty `with_local_*` helpers mean
+    /// "inherit the parent" at their existing call sites.
+    pub(crate) fn empty_local_node(parent: Option<&Self>) -> Self {
+        Self {
+            state: Rc::new(RuntimeOwnedDataContextState {
+                instances: Vec::new(),
                 parent: parent.cloned(),
             }),
         }
@@ -1513,6 +1534,12 @@ pub(super) struct RuntimeArtboardDataBindTargetQueues {
 }
 
 impl RuntimeArtboardDataBindTargetQueues {
+    fn has_pending_work(&self) -> bool {
+        !self.dirty_properties.is_empty()
+            || !self.dirty_image_assets.is_empty()
+            || !self.dirty_converter_properties.is_empty()
+    }
+
     pub(super) fn new(
         property_bindings: &[RuntimeArtboardPropertyBindingInstance],
         image_asset_bindings: &[RuntimeArtboardImageAssetBindingInstance],
@@ -1777,7 +1804,7 @@ impl RuntimeArtboardDataBindTargetQueues {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeArtboardDataBindSourceRef {
     CustomProperty {
         index: usize,
@@ -1791,7 +1818,8 @@ enum RuntimeArtboardDataBindSourceRef {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct RuntimeArtboardDataBindSourceQueues {
-    by_target_property: BTreeMap<(usize, u16), Vec<RuntimeArtboardDataBindSourceRef>>,
+    target_property_observers:
+        crate::core::RuntimeCorePropertyObservers<RuntimeArtboardDataBindSourceRef>,
     custom_property_by_data_bind_index: Vec<Option<usize>>,
     dirty_custom_properties: Vec<usize>,
     dirty_custom_property_flags: Vec<bool>,
@@ -1808,14 +1836,20 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
 }
 
 impl RuntimeArtboardDataBindSourceQueues {
-    #[inline]
-    fn has_target_properties(&self) -> bool {
-        !self.by_target_property.is_empty()
+    fn has_pending_push_work(&self) -> bool {
+        !self.dirty_custom_properties.is_empty() || !self.dirty_numeric_sources.is_empty()
+    }
+
+    pub(super) fn has_persisting_sources(&self) -> bool {
+        !self.persisting_custom_properties.is_empty()
+            || !self.persisting_layout_computed.is_empty()
+            || !self.persisting_solo_sources.is_empty()
+            || !self.persisting_numeric_sources.is_empty()
     }
 
     pub(crate) fn observes_target_property(&self, local_id: usize, property_key: u16) -> bool {
-        self.by_target_property
-            .contains_key(&(local_id, property_key))
+        self.target_property_observers
+            .observes_property(local_id, property_key)
     }
 
     pub(super) fn new(
@@ -1842,14 +1876,14 @@ impl RuntimeArtboardDataBindSourceQueues {
                 queues.custom_property_by_data_bind_index[binding.data_bind_index].is_none()
             );
             queues.custom_property_by_data_bind_index[binding.data_bind_index] = Some(index);
-            queues
-                .by_target_property
-                .entry((binding.target_local_id, binding.property_key))
-                .or_default()
-                .push(RuntimeArtboardDataBindSourceRef::CustomProperty {
+            queues.target_property_observers.add_property_observer(
+                binding.target_local_id,
+                binding.property_key,
+                RuntimeArtboardDataBindSourceRef::CustomProperty {
                     index,
                     data_bind_index: binding.data_bind_index,
-                });
+                },
+            );
             // A two-way binding initializes target from source. Only a
             // target-to-source-only binding may seed the source from the
             // serialized target before the target has observed its context.
@@ -1868,14 +1902,14 @@ impl RuntimeArtboardDataBindSourceQueues {
         for (index, binding) in numeric_source_bindings.iter().enumerate() {
             match binding.property {
                 RuntimeArtboardNumericSourceProperty::DirectDouble => {
-                    queues
-                        .by_target_property
-                        .entry((binding.target_local_id, binding.property_key))
-                        .or_default()
-                        .push(RuntimeArtboardDataBindSourceRef::NumericSource {
+                    queues.target_property_observers.add_property_observer(
+                        binding.target_local_id,
+                        binding.property_key,
+                        RuntimeArtboardDataBindSourceRef::NumericSource {
                             index,
                             data_bind_index: binding.data_bind_index,
-                        });
+                        },
+                    );
                     queues.enqueue_numeric_source(index);
                     queues.push_numeric_sources.push(index);
                 }
@@ -1902,31 +1936,29 @@ impl RuntimeArtboardDataBindSourceQueues {
         suppressed_data_bind_index: Option<usize>,
     ) -> Vec<usize> {
         let Self {
-            by_target_property,
+            target_property_observers,
             dirty_custom_properties,
             dirty_custom_property_flags,
             dirty_numeric_sources,
             dirty_numeric_source_flags,
             ..
         } = self;
-        let Some(sources) = by_target_property.get(&(local_id, property_key)) else {
-            return Vec::new();
-        };
         let mut enqueued_data_binds = Vec::new();
-        for source in sources.iter().copied() {
+        target_property_observers.notify_property_changed(local_id, property_key, |source| {
+            let source = *source;
             match source {
                 RuntimeArtboardDataBindSourceRef::CustomProperty {
                     index,
                     data_bind_index,
                 } => {
                     if Some(data_bind_index) == suppressed_data_bind_index {
-                        continue;
+                        return;
                     }
                     let Some(flag) = dirty_custom_property_flags.get_mut(index) else {
-                        continue;
+                        return;
                     };
                     if *flag {
-                        continue;
+                        return;
                     }
                     *flag = true;
                     dirty_custom_properties.push(index);
@@ -1937,20 +1969,20 @@ impl RuntimeArtboardDataBindSourceQueues {
                     data_bind_index,
                 } => {
                     if Some(data_bind_index) == suppressed_data_bind_index {
-                        continue;
+                        return;
                     }
                     let Some(flag) = dirty_numeric_source_flags.get_mut(index) else {
-                        continue;
+                        return;
                     };
                     if *flag {
-                        continue;
+                        return;
                     }
                     *flag = true;
                     dirty_numeric_sources.push(index);
                     enqueued_data_binds.push(data_bind_index);
                 }
             }
-        }
+        });
         enqueued_data_binds
     }
 
@@ -4603,12 +4635,9 @@ impl ArtboardInstance {
         data_bind: DataBindHandle,
         collapsed: bool,
     ) {
-        if self
+        let _ = self
             .artboard_authored_data_bind_states
-            .collapse(data_bind, collapsed)
-        {
-            self.mark_artboard_data_bind_work_dirty();
-        }
+            .collapse(data_bind, collapsed);
     }
 
     pub fn has_scripted_data_converter_instance_for_global(&self, global_id: u32) -> bool {
@@ -4692,9 +4721,6 @@ impl ArtboardInstance {
         let attached = self.refresh_artboard_converter_dependents(|converter| {
             converter.attach_scripted_instance(global_id, &handle)
         });
-        if attached {
-            self.mark_artboard_data_bind_work_dirty();
-        }
         attached
     }
 
@@ -4704,7 +4730,6 @@ impl ArtboardInstance {
         // their exact authored DataBind occurrences before Artboard advances
         // DataBinds (`scripted_data_converter.cpp:200-211`;
         // `data_converter.cpp:34-47`).
-        let mut dirtied = false;
         for data_bind_index in 0..self.artboard_authored_data_bind_states.len() {
             let contains_global = self.artboard_authored_data_bind_states[data_bind_index]
                 .shared_converter
@@ -4718,11 +4743,7 @@ impl ArtboardInstance {
             if contains_global {
                 self.artboard_authored_data_bind_states
                     .mark_source_changed(data_bind_index);
-                dirtied = true;
             }
-        }
-        if dirtied {
-            self.mark_artboard_data_bind_work_dirty();
         }
     }
 
@@ -4869,12 +4890,6 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
-        if !self
-            .artboard_data_bind_source_queues
-            .has_target_properties()
-        {
-            return false;
-        }
         let enqueued = self
             .artboard_data_bind_source_queues
             .enqueue_target_property(
@@ -4893,9 +4908,6 @@ impl ArtboardInstance {
             {
                 state.retained.mark_target_changed();
             }
-        }
-        if did_enqueue {
-            self.mark_artboard_data_bind_work_dirty();
         }
         did_enqueue
     }
@@ -5211,7 +5223,6 @@ impl ArtboardInstance {
             // work. In particular, a converter operand may change while the
             // primary cached value stays equal; that exact outer bind still
             // has to execute this pass (`data_bind_container.cpp:115-147`).
-            self.mark_artboard_data_bind_work_dirty();
             let value_changed = value.as_ref().is_some_and(|value| {
                 self.artboard_data_bind_values.get(path.as_ref()) != Some(value)
             });
@@ -5429,7 +5440,6 @@ impl ArtboardInstance {
             }
 
             consumed_source_dirt = true;
-            self.mark_artboard_data_bind_work_dirty();
             if let Some(value) = value {
                 if let Some(cached) = self.artboard_data_bind_values.get_mut(path.as_ref()) {
                     *cached = value;
@@ -5586,7 +5596,6 @@ impl ArtboardInstance {
             );
         }
         if rebind_self {
-            self.mark_artboard_data_bind_work_dirty();
             self.stateful_nested_view_model_contexts_dirty = true;
         }
         let mut changed = if bind_self && rebind_self {
@@ -6786,7 +6795,6 @@ impl ArtboardInstance {
         if self.artboard_data_bind_values.get(path) == Some(&value) {
             return false;
         }
-        self.mark_artboard_data_bind_work_dirty();
         if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
             for binding in self
                 .artboard_image_asset_bindings
@@ -6864,7 +6872,6 @@ impl ArtboardInstance {
             self.retain_owned_view_model_data_context(&data_context);
             self.bind_artboard_authored_data_bind_sources(&file, &data_context, true);
         }
-        self.mark_artboard_data_bind_work_dirty();
         if structural_rebind {
             self.stateful_nested_view_model_contexts_dirty = true;
         }
@@ -6899,9 +6906,13 @@ impl ArtboardInstance {
         changed
     }
 
-    fn has_retained_owned_view_model_artboard_work(&self) -> bool {
+    fn has_artboard_data_bind_queue_work(&self) -> bool {
         self.artboard_authored_data_bind_states
             .has_pending_source_dirt()
+            || self.artboard_data_bind_target_queues.has_pending_work()
+            || self
+                .artboard_data_bind_source_queues
+                .has_pending_push_work()
             || self.artboard_formula_token_bindings.has_source_dirt()
             || self
                 .artboard_owned_view_model_rebind_sink
@@ -6911,6 +6922,7 @@ impl ArtboardInstance {
                 .artboard_retained_subordinate_converter_operands
                 .iter()
                 .any(RuntimeArtboardRetainedSubordinateConverterOperands::has_dirt)
+            || self.stateful_nested_view_model_contexts_dirty
     }
 
     fn flush_runtime_text_run_listener_changes(&mut self) -> bool {
@@ -6938,6 +6950,22 @@ impl ArtboardInstance {
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
+        let poll_persisting_sources = self
+            .artboard_data_bind_source_queues
+            .has_persisting_sources();
+        self.advance_artboard_data_binds_with_root_transform_and_persisting_poll(
+            root_transform,
+            elapsed_seconds,
+            poll_persisting_sources,
+        )
+    }
+
+    pub(super) fn advance_artboard_data_binds_with_root_transform_and_persisting_poll(
+        &mut self,
+        root_transform: Mat2D,
+        elapsed_seconds: f32,
+        poll_persisting_sources: bool,
+    ) -> bool {
         // PropertySymbolDependent callbacks are delivered in retained cell
         // mutation order before list reconciliation. This preserves C++'s
         // old-source-write-then-remap behavior within one advance turn.
@@ -6951,9 +6979,9 @@ impl ArtboardInstance {
         // `data_bind.cpp:502-547`).
         let clean_identity_pass = elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
-            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && !poll_persisting_sources
             && self.artboard_list_bindings.is_empty();
-        if clean_identity_pass && !self.has_retained_owned_view_model_artboard_work() {
+        if clean_identity_pass && !self.has_artboard_data_bind_queue_work() {
             return list_path_property_changed || text_run_property_changed;
         }
         // Subordinate converter-property/formula operands push their own
@@ -6969,8 +6997,9 @@ impl ArtboardInstance {
             || text_run_property_changed;
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
-            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && !poll_persisting_sources
             && self.artboard_list_bindings.is_empty()
+            && !self.has_artboard_data_bind_queue_work()
         {
             return refreshed_owned_context;
         }
@@ -6988,7 +7017,6 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         refreshed_owned_context: bool,
     ) -> bool {
-        let dirty_epoch_at_start = self.artboard_data_bind_dirty_epoch;
         let mut changed = refreshed_owned_context;
         // C++ removes queued dirt before running any dependent/converter
         // work, so writes produced during this pass can relatch for the next
@@ -7116,9 +7144,6 @@ impl ArtboardInstance {
         changed |= self.apply_artboard_solo_bindings();
         changed |= self.apply_artboard_nested_host_bindings();
         changed |= self.sync_nested_child_artboard_data_contexts();
-        if self.artboard_data_bind_dirty_epoch == dirty_epoch_at_start {
-            self.artboard_data_bind_processed_epoch = dirty_epoch_at_start;
-        }
         changed
     }
 
@@ -8135,7 +8160,6 @@ impl ArtboardInstance {
         if !changed {
             return false;
         }
-        self.mark_artboard_data_bind_work_dirty();
         true
     }
 
@@ -9095,10 +9119,11 @@ impl ArtboardInstance {
                 local_handles.push(context);
             }
             local_handles.extend(nested.stateful_global_view_model_contexts.values().cloned());
-            let nested_data_context = RuntimeOwnedDataContext::with_local_handles(
-                local_handles,
-                Some(&inherited_context),
-            );
+            let nested_data_context = if local_handles.is_empty() {
+                inherited_context
+            } else {
+                RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&inherited_context))
+            };
             changed = true;
             changed |= nested.bind_owned_view_model_animation_data_context(&nested_data_context);
             changed |= nested.child.bind_owned_view_model_artboard_data_context(
@@ -9485,7 +9510,7 @@ mod tests {
         while artboard.advance_artboard_data_binds() {}
 
         assert!(artboard.artboard_owned_data_context.is_some());
-        assert!(!artboard.has_retained_owned_view_model_artboard_work());
+        assert!(!artboard.has_artboard_data_bind_queue_work());
         assert!(
             !artboard.advance_artboard_data_binds(),
             "C++ DataBindContainer returns before reconciliation when its retained dirty lists are empty, even while it owns a DataContext (`data_bind_container.cpp:156-171`)"
@@ -9494,7 +9519,7 @@ mod tests {
         artboard
             .artboard_owned_view_model_rebind_sink
             .add_dirt(RuntimeCellDirt::BINDINGS);
-        assert!(artboard.has_retained_owned_view_model_artboard_work());
+        assert!(artboard.has_artboard_data_bind_queue_work());
         assert!(artboard.advance_artboard_data_binds());
     }
 
@@ -11108,7 +11133,7 @@ mod tests {
         );
 
         let modeled_parent = RuntimeOwnedDataContext::from_root_handle(fallback);
-        let empty_parent = RuntimeOwnedDataContext::with_local_handles([], Some(&modeled_parent));
+        let empty_parent = RuntimeOwnedDataContext::empty_local_node(Some(&modeled_parent));
         let local_context =
             RuntimeOwnedDataContext::with_local_handles([local], Some(&empty_parent));
         let slots = local_context.main_context_slots(&file);

@@ -452,8 +452,6 @@ pub struct ArtboardInstance {
     /// so clean frames do not reconcile detached copies. Rust only needs the
     /// full ordered reconciliation after a source value or context changes.
     pub(crate) stateful_nested_view_model_contexts_dirty: bool,
-    pub(crate) artboard_data_bind_dirty_epoch: u64,
-    pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) image_render_overrides: BTreeMap<usize, crate::RuntimeViewModelImage>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
@@ -608,8 +606,6 @@ impl Clone for ArtboardInstance {
                 .clone(),
             stateful_nested_view_model_contexts_dirty: self
                 .stateful_nested_view_model_contexts_dirty,
-            artboard_data_bind_dirty_epoch: self.artboard_data_bind_dirty_epoch,
-            artboard_data_bind_processed_epoch: self.artboard_data_bind_processed_epoch,
             image_asset_overrides: self.image_asset_overrides.clone(),
             image_render_overrides: self.image_render_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
@@ -2366,8 +2362,6 @@ impl ArtboardInstance {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
-            artboard_data_bind_dirty_epoch: 1,
-            artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
@@ -4126,7 +4120,6 @@ impl ArtboardInstance {
         for text_local in controlled_text {
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
-        self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_layout_changed();
         // C++ layout settlement adds Path dirt when the solved width or
@@ -4504,7 +4497,6 @@ impl ArtboardInstance {
         self.runtime_images
             .set_asset(local_id, asset_global, dimensions);
         self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
-        self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_prepared_changed();
         true
@@ -7549,10 +7541,6 @@ impl ArtboardInstance {
         }
     }
 
-    pub(crate) fn mark_artboard_data_bind_work_dirty(&mut self) {
-        self.artboard_data_bind_dirty_epoch = self.artboard_data_bind_dirty_epoch.wrapping_add(1);
-    }
-
     fn mark_stateful_nested_view_model_contexts_dirty_for_local(&mut self, local_id: usize) {
         if self
             .slot(local_id)
@@ -8345,19 +8333,9 @@ impl ArtboardInstance {
             did_update |= nested_did_update;
         }
         if did_update {
-            // C++ `Artboard::updatePass` polls derived target-to-source
-            // bindings after `updateComponents`. The clean-frame epoch may
-            // already have been consumed by the pre-component binding pass,
-            // so wake this post-component pass when a computed numeric source
-            // (currently `Shape.length`) needs the settled transforms.
-            if !self
-                .artboard_data_bind_source_queues
-                .persisting_numeric_sources()
-                .is_empty()
-                && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
-            {
-                self.mark_artboard_data_bind_work_dirty();
-            }
+            // C++ keeps only the enumerated computed-target exceptions in the
+            // persisting list. Poll that list explicitly after component
+            // settlement; pushed Core properties remain queue-driven.
             self.update_data_binds_for_update_pass(root_transform);
         }
         if did_update
@@ -10453,7 +10431,6 @@ impl ArtboardInstance {
                 self.mark_nested_structure_changed();
                 self.mark_nested_artboard_layout_changed(local_id);
                 self.stateful_nested_view_model_contexts_dirty = true;
-                self.mark_artboard_data_bind_work_dirty();
                 self.mark_changed();
                 self.mark_prepared_changed();
             }
@@ -10493,7 +10470,6 @@ impl ArtboardInstance {
             self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
         }
         self.stateful_nested_view_model_contexts_dirty = true;
-        self.mark_artboard_data_bind_work_dirty();
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
         self.mark_prepared_changed();
@@ -12375,8 +12351,6 @@ mod tests {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
-            artboard_data_bind_dirty_epoch: 1,
-            artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),

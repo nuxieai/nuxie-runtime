@@ -62,11 +62,12 @@ for entry in "${assets[@]}"; do
   destination="$repo_root/fixtures/$relative"
   mkdir -p "$(dirname "$destination")"
 
-  source_path="tests/unit_tests/assets/$name"
-  if [[ -n "$runtime_dir" ]] \
-    && git -C "$runtime_dir" cat-file -e "$source_ref:$source_path" 2>/dev/null; then
-    git -C "$runtime_dir" show "$source_ref:$source_path" > "$destination"
-  if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/assets/$source_path" ]]; then
+  if [[ -n "$runtime_dir" && -n "$source_ref" ]] \
+    && git -C "$runtime_dir" cat-file -e "$source_ref:tests/unit_tests/assets/$source_path" 2>/dev/null; then
+    # Fetch at the recorded source ref: the pinned working tree may hold a
+    # different revision of the same asset than the ref that vendored it.
+    git -C "$runtime_dir" show "$source_ref:tests/unit_tests/assets/$source_path" > "$destination"
+  elif [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/assets/$source_path" ]]; then
     cp "$runtime_dir/tests/unit_tests/assets/$source_path" "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
     curl --fail --location --silent --show-error \

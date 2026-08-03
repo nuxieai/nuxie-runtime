@@ -10455,8 +10455,8 @@ impl StateMachineInstance {
     }
 
     /// C++ `setGlobalViewModelInstance`: validate the named file slot, then
-    /// replace exactly that slot. The occupying instance may belong to a
-    /// different ViewModel; slot identity comes from `name`.
+    /// replace or empty exactly that slot. The occupying instance may belong
+    /// to a different ViewModel; slot identity comes from `name`.
     #[doc(hidden)]
     pub(crate) fn set_global_view_model_instance(
         &mut self,
@@ -10464,15 +10464,28 @@ impl StateMachineInstance {
         name: &str,
         view_model_instance: Option<RuntimeOwnedViewModelHandle>,
     ) -> bool {
-        let (Some(file), Some(view_model_instance)) = (file, view_model_instance) else {
+        let Some(file) = file else {
             return false;
         };
         let mut validated_slot = RuntimeOwnedViewModelContext::default();
-        if !validated_slot.set_global_named_handle(file, name, view_model_instance.clone()) {
+        let valid = match view_model_instance.as_ref() {
+            Some(instance) => {
+                validated_slot.set_global_named_handle(file, name, instance.clone())
+            }
+            None => validated_slot.unset_global_named(file, name),
+        };
+        if !valid {
             return false;
         }
+        if view_model_instance.is_none() && self.primary_data_context.is_none() {
+            return true;
+        }
         let context = self.ensure_primary_data_context();
-        if !context.set_global_named(file, name, view_model_instance) {
+        let changed = view_model_instance.map_or_else(
+            || context.unset_global_named(file, name),
+            |instance| context.set_global_named(file, name, instance),
+        );
+        if !changed {
             return false;
         }
         true
@@ -10503,17 +10516,15 @@ impl StateMachineInstance {
         true
     }
 
-    /// C++ `bind`: no retained context is a no-op; otherwise complete missing
-    /// defaults, bind the artboard, then bind this machine.
+    /// C++ `bind`: create an empty retained context when needed, complete
+    /// missing defaults, bind the artboard, then bind this machine.
     #[doc(hidden)]
     pub(crate) fn bind(
         &mut self,
         file: Option<&RuntimeFile>,
         artboard: &mut ArtboardInstance,
     ) -> Result<bool, RuntimeDataContextBindError> {
-        if self.primary_data_context.is_none() {
-            return Ok(false);
-        }
+        self.ensure_primary_data_context();
         self.record_bind_phase("complete-view-models");
         self.complete_view_model_instances(file, artboard);
         let data_context = self
@@ -20135,7 +20146,12 @@ mod scripted_listener_action_tests {
                 .is_some_and(|bound| bound.ptr_eq(&main))
         );
 
-        assert!(!machine.set_global_view_model_instance(Some(&file), "Global A", None,));
+        assert!(machine.set_global_view_model_instance(Some(&file), "Global A", None,));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_none()
+        );
         assert!(!machine.set_global_view_model_instance(
             None,
             "Global A",
@@ -20172,6 +20188,18 @@ mod scripted_listener_action_tests {
                 .global_view_model_instance(Some(&file), "Global A")
                 .is_some_and(|bound| bound.ptr_eq(&replacement_a))
         );
+        assert!(machine.set_global_view_model_instance(Some(&file), "Global A", None));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_none(),
+            "a null instance empties the named slot"
+        );
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            "Global A",
+            Some(replacement_a.clone()),
+        ));
         assert!(
             machine
                 .global_view_model_instance(Some(&file), "Standard")
@@ -20191,6 +20219,51 @@ mod scripted_listener_action_tests {
             "the pure getter reads an occupied numeric slot even when the named ViewModel is non-global"
         );
         assert_eq!(machine.data_bind_graph.context_kind, initial_context_kind);
+
+        let mut empty_machine = scripted_listener_machine();
+        empty_machine.view_model_listeners.clear();
+        assert!(empty_machine.data_context().is_none());
+        assert!(empty_machine.set_global_view_model_instance(Some(&file), "Global A", None));
+        assert!(
+            empty_machine.data_context().is_none(),
+            "clearing an empty valid slot must not allocate a DataContext"
+        );
+
+        let (fresh_file, mut fresh_artboard) = fl_c5_bind_file_and_artboard();
+        let mut fresh_machine = scripted_listener_machine();
+        fresh_machine.view_model_listeners.clear();
+        fresh_machine
+            .bind(Some(&fresh_file), &mut fresh_artboard)
+            .expect("bind without a prior context completes defaults");
+        assert!(fresh_machine.data_context().is_some());
+        assert!(
+            fresh_machine
+                .global_view_model_instance(Some(&fresh_file), "Global A")
+                .is_some()
+        );
+
+        let mut staged_artboard = fresh_artboard;
+        let artboard_global = fl_c5_bind_handle(&fresh_file, 2);
+        assert!(staged_artboard.set_global_view_model_instance(
+            &fresh_file,
+            "Global A",
+            Some(artboard_global.clone()),
+        ));
+        assert!(
+            staged_artboard
+                .global_view_model_instance(&fresh_file, "Global A")
+                .is_some_and(|bound| bound.ptr_eq(&artboard_global))
+        );
+        assert!(staged_artboard.set_global_view_model_instance(
+            &fresh_file,
+            "Global A",
+            None,
+        ));
+        assert!(
+            staged_artboard
+                .global_view_model_instance(&fresh_file, "Global A")
+                .is_none()
+        );
 
         machine.bind_phase_trace.clear();
         machine

@@ -1616,7 +1616,7 @@ note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass ex
 [[file]]
 upstream = "src/lua/lua_properties.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 note = "LT-2: retained property userdata, enum values, listeners, list operations, and asset/view-model values are ported across the runtime/scripting crate boundary."
 
 [[file]]

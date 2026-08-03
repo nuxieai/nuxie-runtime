@@ -3314,13 +3314,13 @@ note = "P1-i faithful candidate: all 47 pinned upstream Promise scenarios pass e
 upstream = "src/lua/lua_properties.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0269"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "LUABIND-report.md"
-note = "2026-08-03 LT-2 faithful candidate: the retained runtime facade now exposes enum keys/value mutation, and view_model.rs ports the pinned property userdata surface for scalar, enum/values, list, nested view-model, image, font, blob, and trigger values. Generic addListener/removeListener callbacks are synchronous, reverse ordered, survive wrapper GC while subscribed, and preserve optional userdata. Direct tests property_listeners_survive_userdata_gc_while_subscribed, scripted_string_boolean_and_enum_properties_match_upstream_luau_access, scripted_color_property_supports_direct_and_named_access, plus the existing list/image/blob/font/view-model tests cite the supported branches. MR-2/C08 exception remains justified: runtime cell/enum ownership belongs in nuxie-runtime while Luau userdata projection belongs in nuxie-scripting."
+note = "2026-08-03 LT-2 faithful candidate: the binary/runtime facades expose authored enum keys and value mutation, and view_model.rs ports the pinned property userdata surface for scalar, enum/values, list, nested view-model, image, font, blob, and trigger values. Generic addListener/removeListener callbacks are synchronous, reverse ordered, survive wrapper GC while subscribed, and preserve optional userdata. Direct tests property_listeners_survive_userdata_gc_while_subscribed, scripted_string_boolean_and_enum_properties_match_upstream_luau_access, scripted_color_property_supports_direct_and_named_access, plus the existing list/image/blob/font/view-model tests cite the supported branches. MR-2/C08 exception remains justified: enum metadata/runtime cells belong in nuxie-binary/nuxie-runtime while Luau userdata projection belongs in nuxie-scripting."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"

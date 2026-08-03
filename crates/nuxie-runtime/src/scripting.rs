@@ -1005,7 +1005,7 @@ impl ScriptViewModel {
             .iter()
             .find(|property| property.string_property("name") == Some(name))?;
         self.file
-            .view_model_property_enum_value_for_index_object(property, value_index)
+            .view_model_property_enum_value_key_for_index_object(property, value_index)
             .map(|value| String::from_utf8_lossy(value).into_owned())
     }
 
@@ -1022,7 +1022,7 @@ impl ScriptViewModel {
             (0..)
                 .map_while(|index| {
                     self.file
-                        .view_model_property_enum_value_for_index_object(property, index)
+                        .view_model_property_enum_value_key_for_index_object(property, index)
                 })
                 .map(|value| String::from_utf8_lossy(value).into_owned())
                 .collect(),

@@ -6187,6 +6187,18 @@ impl ArtboardInstance {
         let component = self.component(local_id)?;
         if component.type_name != "LayoutComponent" {
             let world = self.runtime_component_world_transform(local_id, graph);
+            let image_computed_size = (component.type_name == "Image")
+                .then(|| {
+                    let scale_x = property_key_for_name("Node", "scaleX")
+                        .and_then(|key| self.double_property(local_id, key))
+                        .unwrap_or(1.0);
+                    let scale_y = property_key_for_name("Node", "scaleY")
+                        .and_then(|key| self.double_property(local_id, key))
+                        .unwrap_or(1.0);
+                    self.runtime_images
+                        .computed_size(local_id, scale_x, scale_y)
+                })
+                .flatten();
             return match property {
                 RuntimeLayoutComputedProperty::LocalX => Some(
                     self.runtime_node_computed_local_transform(local_id)
@@ -6204,8 +6216,11 @@ impl ArtboardInstance {
                 RuntimeLayoutComputedProperty::WorldY | RuntimeLayoutComputedProperty::RootY => {
                     Some(world.0[5])
                 }
-                RuntimeLayoutComputedProperty::Width | RuntimeLayoutComputedProperty::Height => {
-                    Some(0.0)
+                RuntimeLayoutComputedProperty::Width => {
+                    Some(image_computed_size.map_or(0.0, |size| size.0))
+                }
+                RuntimeLayoutComputedProperty::Height => {
+                    Some(image_computed_size.map_or(0.0, |size| size.1))
                 }
             };
         }
@@ -25457,6 +25472,148 @@ mod tests {
             Mat2D([8.0, 0.0, 0.0, 15.0, 7.0, 11.0])
         );
         assert_eq!((state.render_scale_x, state.render_scale_y), (8.0, 15.0));
+    }
+
+    #[test]
+    fn image_computed_size_uses_intrinsic_dimensions_and_composed_render_scale() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9713);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 0.5);
+            push_uint(bytes, "Image", "fit", 4);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic image imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance
+            .runtime_images
+            .set_asset(1, Some(99), Some((128, 128)));
+
+        assert_eq!(
+            instance.runtime_layout_computed_property(
+                1,
+                RuntimeLayoutComputedProperty::Width,
+                graph,
+            ),
+            Some(256.0),
+        );
+        assert_eq!(
+            instance.runtime_layout_computed_property(
+                1,
+                RuntimeLayoutComputedProperty::Height,
+                graph,
+            ),
+            Some(64.0),
+        );
+
+        instance.runtime_images.control_size(1, 300.0, 250.0);
+        assert_eq!(
+            instance.runtime_layout_computed_property(
+                1,
+                RuntimeLayoutComputedProperty::Width,
+                graph,
+            ),
+            Some(500.0),
+        );
+        assert_eq!(
+            instance.runtime_layout_computed_property(
+                1,
+                RuntimeLayoutComputedProperty::Height,
+                graph,
+            ),
+            Some(125.0),
+        );
+    }
+
+    #[test]
+    fn upstream_image_computed_transform_fixture_tracks_layout_resize() {
+        let file = read_runtime_file(include_bytes!(
+            "../../../fixtures/sync/image_computed_transform_bind.riv"
+        ))
+        .expect("upstream image-computed-size fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs.artboards.first().expect("default artboard graph");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("default artboard instantiates");
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let _resources = preallocate_render_paint_cache_for_artboard_tree(
+            &file,
+            &instance,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        instance.refresh_layout_constraint_bounds();
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("fixture state machine");
+        assert!(machine.bind_default_view_model_context_on_artboard(&mut instance));
+
+        instance.advance_state_machine_instance(&mut machine, 0.0);
+        instance.advance_state_machine_instance(&mut machine, 0.016);
+        let image_locals = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Image")
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        assert_eq!(image_locals.len(), 2);
+        for &local_id in &image_locals {
+            assert_eq!(
+                instance.runtime_layout_computed_property(
+                    local_id,
+                    RuntimeLayoutComputedProperty::Width,
+                    graph,
+                ),
+                Some(150.0),
+            );
+            assert_eq!(
+                instance.runtime_layout_computed_property(
+                    local_id,
+                    RuntimeLayoutComputedProperty::Height,
+                    graph,
+                ),
+                Some(150.0),
+            );
+        }
+
+        for _ in 0..(2.0_f32 / 0.032) as usize {
+            instance.advance_state_machine_instance(&mut machine, 0.032);
+            instance.refresh_layout_constraint_bounds();
+        }
+        let settled = image_locals
+            .iter()
+            .map(|&local_id| {
+                (
+                    instance
+                        .runtime_layout_computed_property(
+                            local_id,
+                            RuntimeLayoutComputedProperty::Width,
+                            graph,
+                        )
+                        .expect("computed image width"),
+                    instance
+                        .runtime_layout_computed_property(
+                            local_id,
+                            RuntimeLayoutComputedProperty::Height,
+                            graph,
+                        )
+                        .expect("computed image height"),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(settled.contains(&(200.0, 200.0)), "{settled:?}");
+        assert!(settled.contains(&(250.0, 250.0)), "{settled:?}");
     }
 
     #[test]

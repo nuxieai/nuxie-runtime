@@ -18,6 +18,8 @@ assets=(
   "minimal/long_name.riv|9f4b5f73afdd9223e7351fe853afa587f242868298576320ac6556ae91c54e9f"
   "minimal/two_artboards.riv|480472d9942711492ce37cdba9aea6266f254633f5a2ac4a9e30f9d0eca70e8c"
   "sync/databind_null_artboard_swap.riv|0160b4572f217271df84072b08476d433a71c5bf78a9917f39fbc03239560a1f|30a0e2d42e2e6d091350d6edb816e165e27f7988"
+  "sync/layout_text_match.riv|1fea1a6102259aacd9b164cfac0b4a2f67d4fa4587b78f5eb25a2f195de7bcdb|f5cfee3a5d6a6728167b58a71b47455ace063690"
+  "sync/artboard_opacity_and_transform_test.riv|100dbf5c04159ea7e8e6f12ce16daf1ee6f15a74c2d3dc074e2dbde4e877af80|e0d4913fa0f88d9f4b57c53006e7f9712417205f"
 )
 
 sha256() {

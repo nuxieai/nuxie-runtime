@@ -758,12 +758,13 @@ impl ArtboardInstance {
             return Vec::new();
         };
         cache.retain_instance(self);
+        let artboard_to_root = self.self_transform();
         self.geometry_path_segments_with_path_cache(
             runtime,
             graph,
             None,
             &mut cache.paths,
-            Mat2D::IDENTITY,
+            artboard_to_root,
             false,
             false,
             &[graph.global_id],
@@ -789,12 +790,13 @@ impl ArtboardInstance {
             return Vec::new();
         };
         cache.retain_instance(self);
+        let artboard_to_root = self.self_transform();
         self.geometry_path_segments_with_path_cache(
             runtime,
             graph,
             None,
             &mut cache.paths,
-            Mat2D::IDENTITY,
+            artboard_to_root,
             true,
             false,
             &[graph.global_id],
@@ -819,12 +821,13 @@ impl ArtboardInstance {
             return Vec::new();
         };
         cache.retain_instance(self);
+        let artboard_to_root = self.self_transform();
         self.geometry_path_segments_with_path_cache(
             runtime,
             graph,
             None,
             &mut cache.paths,
-            Mat2D::IDENTITY,
+            artboard_to_root,
             false,
             true,
             &[graph.global_id],
@@ -884,12 +887,17 @@ impl ArtboardInstance {
         cache: &mut RuntimeGeometryState,
     ) -> Vec<RuntimeGeometryHit> {
         cache.retain_instance(self);
+        let artboard_to_root = self.self_transform();
+        let Some(root_to_artboard) = runtime_mat2d_invert(artboard_to_root) else {
+            return Vec::new();
+        };
+        let (point_x, point_y) = root_to_artboard.transform_point(point.x, point.y);
         self.geometry_path_segments_with_path_cache(
             runtime,
             graph,
-            Some(point),
+            Some(RenderVec2D::new(point_x, point_y)),
             &mut cache.paths,
-            Mat2D::IDENTITY,
+            artboard_to_root,
             false,
             false,
             &[graph.global_id],
@@ -1051,18 +1059,19 @@ impl ArtboardInstance {
                         layout_bounds,
                     ),
                 };
+                let child_world = nested.child.mounted_root_transform(host_world);
                 let child_point = match point {
                     Some(point) => {
-                        let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
+                        let Some(inverse_child_world) = runtime_mat2d_invert(child_world) else {
                             continue;
                         };
                         let (child_x, child_y) =
-                            inverse_host_world.transform_point(point.x, point.y);
+                            inverse_child_world.transform_point(point.x, point.y);
                         Some(RenderVec2D::new(child_x, child_y))
                     }
                     None => None,
                 };
-                let child_to_root = artboard_to_root.multiply(host_world);
+                let child_to_root = artboard_to_root.multiply(child_world);
                 let cache_key = nested_render_cache_key(
                     command.global_id,
                     command.local_id,
@@ -1232,7 +1241,8 @@ impl ArtboardInstance {
                     let Some(item_transform) = item_transforms.get(item_index).copied() else {
                         continue;
                     };
-                    let child_world = host_world.multiply(item_transform);
+                    let child_world =
+                        child.mounted_root_transform(host_world.multiply(item_transform));
                     let child_point = match point {
                         Some(point) => {
                             let Some(inverse_child_world) = runtime_mat2d_invert(child_world)
@@ -2230,10 +2240,7 @@ impl ArtboardInstance {
         // when the artboard itself is transparent. Besides avoiding needless
         // work, this keeps an as-yet unsettled instance from retaining local
         // paths against its all-identity construction transforms.
-        if self
-            .component(0)
-            .is_some_and(|component| component.transform.render_opacity == 0.0)
-        {
+        if self.child_opacity() == 0.0 {
             return Ok(());
         }
 
@@ -3404,9 +3411,7 @@ impl ArtboardInstance {
             .and_then(|local_id| self.component(local_id))
             .map(|component| component.transform.render_opacity)
             .unwrap_or(1.0);
-        if let Some(opacity_key) = runtime_draw_property_key_for_name("Artboard", "opacity") {
-            child.set_double_property(0, opacity_key, host_opacity);
-        }
+        child.set_host_opacity(host_opacity);
         child.update_pass();
         if let Some((child_paints, child_configurations, child_preparation, child_nested_paints)) =
             child_paint_caches
@@ -4202,10 +4207,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         resources: &mut RuntimeOccurrenceRenderResources,
     ) -> Result<()> {
-        if self
-            .component(0)
-            .is_some_and(|component| component.transform.render_opacity == 0.0)
-        {
+        if self.child_opacity() == 0.0 {
             return Ok(());
         }
 
@@ -4389,41 +4391,60 @@ impl ArtboardInstance {
         // C++ `Artboard::drawInternal` clears this before the opacity early
         // return, so an invisible artboard still consumes its change bit.
         self.did_change.set(false);
-        if self
-            .component(0)
-            .is_some_and(|component| component.transform.render_opacity == 0.0)
-        {
+        if self.child_opacity() == 0.0 {
             return Ok(());
         }
         runtime_realize_owned_shape_paints(runtime, self, factory, paint_by_global)?;
 
         let frame_origin = self.frame_origin();
-        let needs_save = self.clip || frame_origin;
+        let has_self_transform = self.has_self_transform();
+        let needs_save = self.clip || frame_origin || has_self_transform;
         if needs_save {
             renderer.save();
         }
-        if self.clip {
-            let (clip_left, clip_top) = if frame_origin {
-                (0.0, 0.0)
-            } else {
-                (-self.origin_x * self.width, -self.origin_y * self.height)
-            };
-            let fill_rule = RenderFillRule::Clockwise;
-            let key = path_cache.retained_render_path_key(self, graph, fill_rule);
-            // Mirrors C++ Artboard::drawInternal: m_worldPath.renderPath(this)
-            // retains the clip path, so build rect commands only on cache miss.
-            let clip = path_cache.artboard_clip_path(key, factory, || {
-                runtime_rect_commands(
-                    clip_left,
-                    clip_top,
-                    clip_left + self.width,
-                    clip_top + self.height,
-                )
-            });
-            renderer.clip_path(clip.as_ref());
-        }
         if frame_origin {
             renderer.transform(self.artboard_origin_transform());
+        }
+        if has_self_transform {
+            renderer.transform(RenderMat2D(self.self_transform().0));
+        }
+        if self.clip {
+            // `Artboard::m_localPath` is also the background paint's local
+            // ShapePaintPath. Reuse its backend sidecar so clipping and the
+            // following paint share the same RenderPath identity, as in C++.
+            let mut clipped_with_local_path = false;
+            if let Some(path_owner) = self
+                .runtime_shapes
+                .paint_path_owner(0, RuntimeShapePaintPathKind::Local)
+            {
+                let retained = path_owner.retained.borrow();
+                if let Some(retained) = retained.as_ref() {
+                    path_owner.backend.with_path(
+                        paint_by_global.backend_context_id,
+                        factory,
+                        retained.raw_path.as_ref(),
+                        RenderFillRule::Clockwise,
+                        None,
+                        |clip| renderer.clip_path(clip),
+                    );
+                    clipped_with_local_path = true;
+                }
+            }
+            if !clipped_with_local_path {
+                let clip_left = -self.origin_x * self.width;
+                let clip_top = -self.origin_y * self.height;
+                let fill_rule = RenderFillRule::Clockwise;
+                let key = path_cache.retained_render_path_key(self, graph, fill_rule);
+                let clip = path_cache.artboard_clip_path(key, factory, || {
+                    runtime_rect_commands(
+                        clip_left,
+                        clip_top,
+                        clip_left + self.width,
+                        clip_top + self.height,
+                    )
+                });
+                renderer.clip_path(clip.as_ref());
+            }
         }
 
         let (mounted_component_list_layout_revision, _) =
@@ -5558,7 +5579,7 @@ impl ArtboardInstance {
         let opacity_local =
             crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
         let render_opacity = self.component(opacity_local).map_or(1.0, |component| {
-            if component.transform.render_opacity == 0.0
+            let render_opacity = if component.transform.render_opacity == 0.0
                 && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
             {
                 // Parent-before-child dependency order has not yet reached
@@ -5567,6 +5588,11 @@ impl ArtboardInstance {
                 self.authored_transform(opacity_local).opacity
             } else {
                 component.transform.render_opacity
+            };
+            if component.type_name == "Artboard" {
+                render_opacity * self.host_opacity
+            } else {
+                render_opacity
             }
         });
         let Some(shape) = self.runtime_shapes.get(container_local) else {
@@ -6623,9 +6649,11 @@ impl ArtboardInstance {
                 let item_transforms = self
                     .component_list_state(list_local)
                     .into_iter()
-                    .flat_map(|list| &list.item_transforms)
-                    .copied()
-                    .map(|item_transform| host_root.multiply(item_transform))
+                    .flat_map(|list| list.item_transforms.iter().zip(&list.items))
+                    .map(|(item_transform, item)| {
+                        item.child
+                            .mounted_root_transform(host_root.multiply(*item_transform))
+                    })
                     .collect::<Vec<_>>();
                 (list_local, item_transforms)
             })
@@ -6771,9 +6799,36 @@ impl ArtboardInstance {
         }
         let style_local = self.runtime_layout_component_style_local(parent_local)?;
         let bounds = layout_bounds.and_then(|bounds| bounds.get(&parent_local).copied())?;
+        // `LayoutComponent::propagateSizeToChildren` passes its solved content
+        // box to `Text::controlSize`; the retained layout bounds are the border
+        // box, so remove authored padding before mirroring m_layoutWidth/Height.
+        let padding_left = self.runtime_layout_style_length(
+            style_local,
+            RuntimeLayoutStyleProperty::PaddingLeft,
+            RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
+            bounds.width,
+        )?;
+        let padding_right = self.runtime_layout_style_length(
+            style_local,
+            RuntimeLayoutStyleProperty::PaddingRight,
+            RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
+            bounds.width,
+        )?;
+        let padding_top = self.runtime_layout_style_length(
+            style_local,
+            RuntimeLayoutStyleProperty::PaddingTop,
+            RuntimeLayoutStyleProperty::PaddingTopUnitsValue,
+            bounds.height,
+        )?;
+        let padding_bottom = self.runtime_layout_style_length(
+            style_local,
+            RuntimeLayoutStyleProperty::PaddingBottom,
+            RuntimeLayoutStyleProperty::PaddingBottomUnitsValue,
+            bounds.height,
+        )?;
         Some(RuntimeTextLayoutConstraint {
-            width: bounds.width,
-            height: bounds.height,
+            width: (bounds.width - padding_left - padding_right).max(0.0),
+            height: (bounds.height - padding_top - padding_bottom).max(0.0),
             width_scale_type: self.runtime_layout_axis_scale(style_local, true),
             height_scale_type: self.runtime_layout_axis_scale(style_local, false),
             layout_direction: self
@@ -26734,6 +26789,64 @@ mod tests {
              (layout_component.cpp:1116-1124,1564-1565; \
              artboard.cpp:1138-1157)"
         );
+
+        renderer.ops.borrow_mut().clear();
+        instance.clip = true;
+        assert!(instance.set_transform_property(
+            0,
+            TransformProperty::Rotation,
+            std::f32::consts::FRAC_PI_2,
+        ));
+        instance.update_components();
+        instance
+            .draw_artboard_internal_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("transformed, clipped background draw succeeds");
+        let transformed_ops = renderer.ops.borrow();
+        assert_eq!(transformed_ops.first().map(String::as_str), Some("save"));
+        let clip_index = transformed_ops
+            .iter()
+            .position(|op| op == "clip_path")
+            .expect("the clipped artboard emits its local clip");
+        let transform_indices = transformed_ops
+            .iter()
+            .enumerate()
+            .filter_map(|(index, op)| op.starts_with("transform:").then_some(index))
+            .collect::<Vec<_>>();
+        assert!(
+            transform_indices
+                .iter()
+                .filter(|index| **index < clip_index)
+                .count()
+                >= 2,
+            "the frame-origin and artboard self transforms both precede the local clip: {transformed_ops:?}"
+        );
+        drop(transformed_ops);
+
+        renderer.ops.borrow_mut().clear();
+        assert!(instance.set_host_opacity(0.0));
+        instance
+            .draw_artboard_internal_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("host-transparent background draw succeeds");
+        assert!(
+            renderer.ops.borrow().is_empty(),
+            "childOpacity, not the artboard's authored opacity alone, controls the draw early return"
+        );
     }
 
     #[test]
@@ -28539,6 +28652,25 @@ mod tests {
                 )
                 .is_empty(),
             "a centered-origin 100x100 artboard clips at x=50, not x=100"
+        );
+    }
+
+    #[test]
+    fn geometry_hit_test_applies_the_artboard_self_transform() {
+        let bytes = synthetic_origin_clip_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic origin clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic origin clip riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let mut cache = RuntimeGeometryState::default();
+
+        assert!(instance.set_transform_property(0, TransformProperty::ScaleX, 2.0));
+        instance.update_pass();
+        assert_eq!(
+            instance.geometry_hit_test(RenderVec2D::new(90.0, 0.0), &mut cache),
+            vec![1],
+            "Artboard::hitTest applies the artboard's own transform before clipping and traversal"
         );
     }
 

@@ -645,6 +645,7 @@ pub(crate) enum Command {
         callback: DrawCallback,
     },
     CancelDraw(DrawKey),
+    TestingCommandLoopBreak,
     Disconnect,
 }
 
@@ -1362,6 +1363,12 @@ impl CommandQueue {
     pub fn cancel_draw(&self, key: DrawKey) {
         self.enqueue(Command::CancelDraw(key));
     }
+    /// Test-only protocol marker matching the pinned queue's command-loop
+    /// break. Commands after this marker remain queued for the next poll.
+    #[doc(hidden)]
+    pub fn testing_command_loop_break(&self) {
+        self.enqueue(Command::TestingCommandLoopBreak);
+    }
     pub fn disconnect(&self) {
         self.enqueue(Command::Disconnect);
     }
@@ -1456,6 +1463,13 @@ impl ListenerKey {
 }
 
 impl Shared {
+    pub(crate) fn prepend_commands(&self, commands: impl DoubleEndedIterator<Item = Command>) {
+        let mut pending = lock(&self.commands);
+        for command in commands.rev() {
+            pending.push_front(command);
+        }
+    }
+
     pub(crate) fn take_commands(&self, wait: bool) -> Vec<Command> {
         let mut commands = lock(&self.commands);
         if wait {

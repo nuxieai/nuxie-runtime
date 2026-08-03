@@ -192,7 +192,8 @@ impl CommandServer {
             return false;
         }
         let mut draws = BTreeMap::<DrawKey, DrawCallback>::new();
-        for command in commands {
+        let mut commands = commands.into_iter();
+        while let Some(command) = commands.next() {
             match command {
                 Command::LoadFile {
                     handle,
@@ -1079,6 +1080,10 @@ impl CommandServer {
                 }
                 Command::CancelDraw(key) => {
                     draws.remove(&key);
+                }
+                Command::TestingCommandLoopBreak => {
+                    self.queue.shared.prepend_commands(commands);
+                    break;
                 }
                 Command::Disconnect => {
                     self.disconnected = true;

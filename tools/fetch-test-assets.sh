@@ -17,6 +17,19 @@ assets=(
   "graph/draw_rule_cycle.riv|db0cf30b8df689dc1d29dfbf4316b69c61270743a7eb94bcd3ac27600a00c9c3"
   "minimal/long_name.riv|9f4b5f73afdd9223e7351fe853afa587f242868298576320ac6556ae91c54e9f"
   "minimal/two_artboards.riv|480472d9942711492ce37cdba9aea6266f254633f5a2ac4a9e30f9d0eca70e8c"
+  "command_queue/two_artboards.riv|480472d9942711492ce37cdba9aea6266f254633f5a2ac4a9e30f9d0eca70e8c"
+  "command_queue/multiple_state_machines.riv|62147bdb114ca6c11146209b55aa9a08a9adcb666e373429120ed0b896fc68de"
+  "command_queue/entry.riv|e5512458171a2715a8736c3264475b50cbc2079c3fe2120845f5f45b8c25d60b"
+  "command_queue/data_bind_test_cmdq.riv|054219ac8b15e384c8026c1ba9340385300fd00c649d8b787671d0d6fd7493b8"
+  "command_queue/pointer_events.riv|f221020aebd1c5756adfee21c594b22e5af4d4f3e7cac6bdc6df097815df0c08"
+  "command_queue/rapid_pointer_events.riv|e0584ba73df9bf8a7ac1a4ff1c3e381212967b10025d936e49ddab3d30a13079"
+  "command_queue/settler.riv|b642028531bd087bdc9bbf021a0d24ac9eef5a7d3d5a4d0adb59ba531e5eee50"
+  "command_queue/global_variables_test.riv|4c0e5946848a65d60202061ad9775f7e7d6ffc81fbf1ba514a6efcecb9c8b97a"
+  "command_queue/hosted_font_file.riv|4805f22e51f2429013f98c5df6947d18b2efde50b93b70d33928e6e2c25624c6"
+  "command_queue/hosted_image_file.riv|83d49331ba47368e8688a737dc6d2c15ccb5ee9e4e00c5dd92c7cce79eb18e14"
+  "command_queue/batdude.png|32c86d18c059d4338cca1771faf9b43a80827ae8ea30d6cc10d64f681bfeec01"
+  "command_queue/what.wav|1c7a0e0c6350a61c1be78f3d2799ba64df0ee4ba1c336e0f240babed355cf889|4ac7b32798da0482e441ef09304dc3b480ed3ee5|audio/what.wav"
+  "command_queue/OpenSans-Italic.ttf|5eabd67fe3d8b5b5eee64504ea9e4a5ef7665b643577ef117f3c32fda67cd29f|4ac7b32798da0482e441ef09304dc3b480ed3ee5|fonts/OpenSans-Italic.ttf"
   "sync/scope_probe.riv|fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347|b73bc6755421c41281f9d5c8c04d8444fc43f585"
   "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944|0a2e478ac331586387308068e01306225ecbb20d"
@@ -86,7 +99,9 @@ for entry in "${assets[@]}"; do
   fi
 
   # Keep S4-42's as-yet-unpinned assets out of the active fuzz seed sets.
-  if [[ "$relative" != "sync/data_bind_blob_test.riv" && "$relative" != "sync/data_enum_roundtrip.rml" ]]; then
+  if [[ "$relative" != "sync/data_bind_blob_test.riv" \
+    && "$relative" != "sync/data_enum_roundtrip.rml" \
+    && "$relative" != command_queue/* ]]; then
     for target in fuzz_import fuzz_runtime fuzz_pointer; do
       seed_dir="$repo_root/fuzz/seeds/$target"
       mkdir -p "$seed_dir"

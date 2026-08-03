@@ -27,10 +27,6 @@ path = "crates/nuxie-binary/src/core/mod.rs"
 category = "codegen"
 
 [[addition]]
-path = "crates/nuxie-render-api/src/lib.rs"
-category = "retained-render"
-
-[[addition]]
 path = "crates/nuxie-render-api/src/serializing.rs"
 category = "retained-render"
 

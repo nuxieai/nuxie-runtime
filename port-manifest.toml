@@ -1244,8 +1244,8 @@ note = "Consolidated runtime port."
 [[file]]
 upstream = "src/factory.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-render-api/src/lib.rs"
+note = "Backend-neutral render seam owner."
 
 [[file]]
 upstream = "src/file.cpp"
@@ -1868,8 +1868,8 @@ note = "P1-m/F12 faithful RiveProfile records, lifecycle, nested-host paths, tra
 [[file]]
 upstream = "src/renderer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-render-api/src/lib.rs"
+note = "Backend-neutral render seam owner."
 
 [[file]]
 upstream = "src/resetting_component.cpp"

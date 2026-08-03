@@ -412,6 +412,13 @@ def classify(upstream: str) -> dict[str, str]:
                 "rust_module": rust_module,
                 "note": f"Consolidated Rust port for {prefix.removeprefix('src/').rstrip('/')}.",
             }
+    if upstream in {"src/factory.cpp", "src/renderer.cpp"}:
+        return {
+            "upstream": upstream,
+            "status": "ported",
+            "rust_module": "crates/nuxie-render-api/src/lib.rs",
+            "note": "Backend-neutral render seam owner.",
+        }
     if upstream.startswith("src/") and upstream.count("/") == 1:
         return {
             "upstream": upstream,

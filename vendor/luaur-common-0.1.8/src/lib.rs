@@ -109,6 +109,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauLimitUnificationRecursion.set(value);
     FFlag::LuauNativeCodeTargetCheck.set(value);
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
+    FFlag::LuauNoDuplicateBinaryPrefix.set(false);
     FFlag::LuauOccursCheckForAllBindings.set(value);
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
@@ -346,6 +347,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauNativeCodeTargetCheck);
     // Analysis/src/NonStrictTypeChecker.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauNonStrictModeUseErrorSupressingTag);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauNoDuplicateBinaryPrefix);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauOccursCheckForAllBindings);
     // Analysis/src/Unifier2.cpp

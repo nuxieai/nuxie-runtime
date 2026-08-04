@@ -1140,6 +1140,7 @@ fn render_scene_schema() -> String {
     let mesh = concrete_definition("Mesh");
     let mesh_vertex = concrete_definition("MeshVertex");
     let layout_component_style = concrete_definition("LayoutComponentStyle");
+    let scroll_constraint = concrete_definition("ScrollConstraint");
     let layout_clip = resolve_named_property(
         "LayoutComponent",
         "clip",
@@ -1412,6 +1413,7 @@ fn render_scene_schema() -> String {
         ("DATA_ENUM_CUSTOM", data_enum_custom),
         ("DATA_ENUM_VALUE", data_enum_value),
         ("LAYOUT_COMPONENT_STYLE", layout_component_style),
+        ("SCROLL_CONSTRAINT", scroll_constraint),
         ("ARTBOARD_LIST_MAP_RULE", artboard_list_map_rule),
         (
             "DATA_CONVERTER_BOOLEAN_NEGATE",
@@ -1550,6 +1552,73 @@ fn render_scene_schema() -> String {
     );
     let translate_x = resolve_named_property("Shape", "x", "Node", FieldKind::Double, true);
     let translate_y = resolve_named_property("Shape", "y", "Node", FieldKind::Double, true);
+    let scroll_direction_value = resolve_named_property(
+        "ScrollConstraint",
+        "directionValue",
+        "DraggableConstraint",
+        FieldKind::Uint,
+        true,
+    );
+    let scroll_offset_x = resolve_named_property(
+        "ScrollConstraint",
+        "scrollOffsetX",
+        "ScrollConstraint",
+        FieldKind::Double,
+        false,
+    );
+    let scroll_offset_y = resolve_named_property(
+        "ScrollConstraint",
+        "scrollOffsetY",
+        "ScrollConstraint",
+        FieldKind::Double,
+        false,
+    );
+    let scroll_snap = resolve_named_property(
+        "ScrollConstraint",
+        "snap",
+        "ScrollConstraint",
+        FieldKind::Bool,
+        false,
+    );
+    let scroll_virtualize = resolve_named_property(
+        "ScrollConstraint",
+        "virtualize",
+        "ScrollConstraint",
+        FieldKind::Bool,
+        false,
+    );
+    let scroll_infinite = resolve_named_property(
+        "ScrollConstraint",
+        "infinite",
+        "ScrollConstraint",
+        FieldKind::Bool,
+        false,
+    );
+    let scroll_interactive = resolve_named_property(
+        "ScrollConstraint",
+        "interactive",
+        "ScrollConstraint",
+        FieldKind::Bool,
+        false,
+    );
+    let scroll_threshold = resolve_named_property(
+        "ScrollConstraint",
+        "threshold",
+        "ScrollConstraint",
+        FieldKind::Double,
+        false,
+    );
+    let scroll_drag_multiplier = resolve_named_property(
+        "ScrollConstraint",
+        "dragMultiplier",
+        "ScrollConstraint",
+        FieldKind::Double,
+        false,
+    );
+    // Sparse authored scroll lowering relies on these schema defaults: an
+    // omitted property must settle to the C++ default the spec documents.
+    assert_eq!(scroll_interactive.initial_value, Some("true"));
+    assert_eq!(scroll_drag_multiplier.initial_value, Some("1"));
     let shape_opacity = resolve_named_property(
         "Shape",
         "opacity",
@@ -2780,6 +2849,15 @@ fn render_scene_schema() -> String {
         ("LAYOUT_GAP_HORIZONTAL", layout_gap_horizontal),
         ("LAYOUT_GAP_VERTICAL", layout_gap_vertical),
         ("LAYOUT_FLEX_DIRECTION", layout_flex_direction),
+        ("SCROLL_DIRECTION_VALUE", scroll_direction_value),
+        ("SCROLL_OFFSET_X", scroll_offset_x),
+        ("SCROLL_OFFSET_Y", scroll_offset_y),
+        ("SCROLL_SNAP", scroll_snap),
+        ("SCROLL_VIRTUALIZE", scroll_virtualize),
+        ("SCROLL_INFINITE", scroll_infinite),
+        ("SCROLL_INTERACTIVE", scroll_interactive),
+        ("SCROLL_THRESHOLD", scroll_threshold),
+        ("SCROLL_DRAG_MULTIPLIER", scroll_drag_multiplier),
         ("TRANSLATE_X", translate_x),
         ("TRANSLATE_Y", translate_y),
         ("WORLD_OPACITY", shape_opacity),

@@ -693,9 +693,17 @@ pub fn script_node_for_artboard(
         .paths
         .iter()
         .find(|path| path.local_id == component.local_id)
-        // C++ exposes the retained `Path::rawPath()` at lookup time. Before
-        // the child artboard's first update that path is intentionally empty.
-        .map(|_| RawPath::new());
+        // C++ exposes the current retained `Path::rawPath()` at lookup time.
+        // Before the child artboard's first update that path is intentionally
+        // empty; afterward it snapshots the authored, dependency-settled path
+        // (`src/lua/lua_artboards.cpp:884-900`).
+        .map(|path| {
+            instance
+                .runtime_shapes
+                .retained_script_path(path.local_id)
+                .map(|path| path.as_ref().clone())
+                .unwrap_or_else(RawPath::new)
+        });
     let paint = graph
         .shape_paint_containers
         .iter()
@@ -2379,6 +2387,13 @@ pub struct ScriptArtboardParentContext {
 }
 
 impl ScriptArtboardParentContext {
+    #[doc(hidden)]
+    pub fn root(local: &RuntimeOwnedViewModelContextHandle) -> Self {
+        Self {
+            inner: RuntimeOwnedDataContext::from_context_handle(local),
+        }
+    }
+
     pub(crate) fn from_runtime(inner: RuntimeOwnedDataContext) -> Self {
         Self { inner }
     }
@@ -2461,6 +2476,18 @@ pub trait ScriptInstance {
     /// WorkPool completion poll, including for parked/event-only scripts.
     fn poll_async_work(&mut self) -> Result<bool, ScriptError> {
         Ok(false)
+    }
+
+    /// Advance clone-owned DataBind converter state parked behind a scripted
+    /// object. ScriptedInterpolator uses this seam because its lazy clones are
+    /// owned by LinearAnimationInstance rather than Artboard's ordinary bind
+    /// collection (`linear_animation_instance.cpp:109-172`).
+    fn advance_scripted_data_binds(
+        &mut self,
+        _elapsed_seconds: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> bool {
+        false
     }
 
     fn set_context_view_model(

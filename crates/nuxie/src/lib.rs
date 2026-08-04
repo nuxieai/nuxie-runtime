@@ -62,15 +62,14 @@ pub use nuxie_render_api::{
     GpuCanvasColorAttachment, GpuCanvasColorTarget, GpuCanvasDepthStencilAttachment,
     GpuCanvasDepthStencilState, GpuCanvasDrawCommand, GpuCanvasError, GpuCanvasIndexBuffer,
     GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders,
-    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasSamplerBinding,
-    GpuCanvasResourceLifetime, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
     GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
     GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D,
-    PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -567,13 +566,30 @@ struct DataBoundScriptedInterpolatorInstance {
     bindings: nuxie_runtime::RuntimeScriptedInterpolatorBindingOccurrence,
     script: Box<dyn ScriptInstance>,
     runtime: Arc<RuntimeFile>,
-    root: Option<RuntimeOwnedViewModelHandle>,
+    data_bind_error: Option<ScriptError>,
 }
 
 #[cfg(feature = "scripting")]
 impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
     fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
         self.script.poll_async_work()
+    }
+
+    fn advance_scripted_data_binds(
+        &mut self,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> bool {
+        match self
+            .bindings
+            .advance_stateful_converters(elapsed_seconds, host)
+        {
+            Ok(keep_going) => keep_going,
+            Err(error) => {
+                self.data_bind_error = Some(error);
+                false
+            }
+        }
     }
 
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
@@ -604,10 +620,11 @@ impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
         args: &[f32],
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_runtime::ScriptOptionalNumberResult, ScriptError> {
-        if let Some(root) = self.root.as_ref() {
-            self.bindings
-                .refresh_inputs(&self.runtime, root, self.script.as_mut())?;
+        if let Some(error) = self.data_bind_error.take() {
+            return Err(error.with_context("scripted interpolator DataBind advance failed"));
         }
+        self.bindings
+            .refresh_inputs(&self.runtime, self.script.as_mut())?;
         self.script.call_interpolator(method, args, host)
     }
 
@@ -2620,10 +2637,6 @@ impl FileScriptArtboard {
             )
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         instance.set_frame_origin(false);
-        let state_machine = file
-            .artboard(artboard_index)
-            .and_then(|artboard| artboard.default_state_machine_index())
-            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
         let view_model = supplied_view_model.or_else(|| {
             let owned_view_model = file
                 .runtime
@@ -2650,6 +2663,30 @@ impl FileScriptArtboard {
                 nuxie_runtime::script_view_model_from_owned(&file.runtime, instance)
             })
         });
+        // Build one complete projected occurrence: bind the selected VMI to
+        // the mounted child before constructing its state machine, then
+        // forward that exact child DataContext. This is the scripted-artboard
+        // counterpart of C++ `NestedArtboard::bindStateful` and replacement
+        // construction (`src/nested_artboard.cpp:156-185,228-350`).
+        let data_context = view_model.as_ref().map(|view_model| {
+            let local = view_model.owned_handle();
+            parent_context
+                .map(|parent| parent.with_local_view_model(&local))
+                .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local))
+        });
+        if let Some(context) = data_context.as_ref() {
+            instance.bind_script_artboard_data_context(&file.runtime, context);
+        }
+        let mut state_machine = file
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.default_state_machine_index())
+            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
+        if let (Some(state_machine), Some(context)) =
+            (state_machine.as_mut(), data_context.as_ref())
+        {
+            state_machine.bind_script_artboard_data_context(context);
+            state_machine.advance_data_context();
+        }
         let (width, height) = instance.artboard_dimensions();
         let mut scripted = Self {
             file,
@@ -2658,33 +2695,13 @@ impl FileScriptArtboard {
             state_machine,
             view_model,
             parent_context: parent_context.cloned(),
-            _data_context: None,
+            _data_context: data_context,
             width,
             height,
             frame_origin: false,
         };
-        scripted.bind_view_model_once();
         scripted.prepare_state_machine_once()?;
         Ok(scripted)
-    }
-
-    fn bind_view_model_once(&mut self) {
-        let Some(state_machine) = self.state_machine.as_mut() else {
-            return;
-        };
-        let Some(view_model) = self.view_model.as_ref() else {
-            return;
-        };
-        let local = view_model.owned_handle();
-        let context = self
-            .parent_context
-            .as_ref()
-            .map(|parent| parent.with_local_view_model(&local))
-            .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local));
-        self.instance
-            .bind_script_artboard_data_context(&self.file.runtime, &context);
-        state_machine.bind_script_artboard_data_context(&context);
-        self._data_context = Some(context);
     }
 
     fn prepare_state_machine_once(
@@ -3202,7 +3219,12 @@ fn attach_prepared_script_mounts(
                         })?
                         .instantiate();
                     bindings
-                        .hydrate_inputs(&runtime, hydration_root.as_ref(), script.as_mut())
+                        .hydrate_inputs(
+                            &runtime,
+                            artboard,
+                            hydration_root.as_ref(),
+                            script.as_mut(),
+                        )
                         .map_err(|error| {
                             error.with_context(format!(
                                 "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase cloned ScriptInput/DataBind hydration failed"
@@ -3226,7 +3248,7 @@ fn attach_prepared_script_mounts(
                         bindings,
                         script,
                         runtime: Arc::clone(&runtime),
-                        root: hydration_root,
+                        data_bind_error: None,
                     }) as Box<dyn ScriptInstance>)
                 }),
             );
@@ -4906,6 +4928,30 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.object_world_transform(local_id)
     }
 
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
+    }
+
     /// Return the canonical downstream shaped Text caret in source-artboard
     /// world space for one exact UTF-8 byte boundary.
     ///
@@ -5697,6 +5743,30 @@ impl OwnedArtboardInstance {
     /// Return the settled, layout-aware world transform for one runtime-local object.
     pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
         self.raw.object_world_transform(local_id)
+    }
+
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
     }
 
     /// Return the canonical downstream shaped Text caret in source-artboard

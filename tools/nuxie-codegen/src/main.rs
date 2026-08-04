@@ -90,7 +90,7 @@ impl FixtureArgs {
                 "--out" => out = args.next().map(PathBuf::from),
                 "--help" | "-h" => {
                     println!(
-                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier|transform-live-write|parent-child-opacity> [--font <font.ttf>] --out <fixture.riv>"
+                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier|transform-live-write|parent-child-opacity|grid-justify-items-bind> [--font <font.ttf>] --out <fixture.riv>"
                     );
                     std::process::exit(0);
                 }
@@ -111,6 +111,7 @@ fn emit_fixture(args: FixtureArgs) -> Result<()> {
         "text-variation-modifier" => text_variation_modifier_fixture(read_fixture_font(&args)?),
         "transform-live-write" => transform_live_write_fixture(),
         "parent-child-opacity" => parent_child_opacity_fixture(),
+        "grid-justify-items-bind" => grid_justify_items_bind_fixture(),
         other => bail!("unknown fixture name {other:?}"),
     };
     RuntimeFile::from_authoring_records(records.clone())
@@ -498,6 +499,177 @@ fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
                     AuthoringValue::String("Layout nested style".to_owned()),
                 ),
                 ("parentId", AuthoringValue::Uint(7)),
+            ],
+        ),
+    ]
+}
+
+fn schema_property_key(type_name: &str, property_name: &str) -> u64 {
+    let definition = nuxie_schema::definition_by_name(type_name)
+        .unwrap_or_else(|| panic!("fixture record type exists: {type_name}"));
+    let property = std::iter::once(definition.name)
+        .chain(definition.ancestors.iter().copied())
+        .filter_map(nuxie_schema::definition_by_name)
+        .flat_map(|owner| owner.properties)
+        .find(|property| property.name == property_name)
+        .unwrap_or_else(|| panic!("fixture property exists: {type_name}.{property_name}"));
+    u64::from(property.key.int)
+}
+
+// A 2x1-cell grid whose container justifyItemsValue is data-bound to the
+// main view-model number property "justify". The items are fixed-size (scale
+// type 0) so grid alignment governs their in-track position; a
+// `setVmNumber justify 1` view-model script command at t>0 moves both items
+// from flex-start to center through the LayoutComponentStyle dirt route.
+fn grid_justify_items_bind_fixture() -> Vec<AuthoringRecord> {
+    // Records 0..=4 precede the Artboard, so artboard-local ids below are
+    // record index minus 5.
+    vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "ViewModel",
+            vec![("name", AuthoringValue::String("Grid".to_owned()))],
+        ),
+        fixture_record(
+            "ViewModelPropertyNumber",
+            vec![("name", AuthoringValue::String("justify".to_owned()))],
+        ),
+        fixture_record(
+            "ViewModelInstance",
+            vec![
+                ("name", AuthoringValue::String("Defaults".to_owned())),
+                ("viewModelId", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "ViewModelInstanceNumber",
+            vec![
+                ("viewModelPropertyId", AuthoringValue::Uint(0)),
+                ("propertyValue", AuthoringValue::Double(0.0)),
+            ],
+        ),
+        fixture_record(
+            "Artboard",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Grid justify-items bind".to_owned()),
+                ),
+                ("width", AuthoringValue::Double(300.0)),
+                ("height", AuthoringValue::Double(150.0)),
+                ("viewModelId", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponent",
+            vec![
+                ("name", AuthoringValue::String("Grid container".to_owned())),
+                ("parentId", AuthoringValue::Uint(0)),
+                ("styleId", AuthoringValue::Uint(13)),
+                ("width", AuthoringValue::Double(300.0)),
+                ("height", AuthoringValue::Double(150.0)),
+            ],
+        ),
+        fixture_record(
+            "GridTrack",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                ("trackType", AuthoringValue::Uint(1)),
+                ("trackValue", AuthoringValue::Double(100.0)),
+            ],
+        ),
+        fixture_record(
+            "GridTrack",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                ("trackType", AuthoringValue::Uint(1)),
+                ("trackValue", AuthoringValue::Double(100.0)),
+            ],
+        ),
+        fixture_record(
+            "GridTrack",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                ("collection", AuthoringValue::Uint(1)),
+                ("trackType", AuthoringValue::Uint(1)),
+                ("trackValue", AuthoringValue::Double(100.0)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponent",
+            vec![
+                ("name", AuthoringValue::String("Item A".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("styleId", AuthoringValue::Uint(6)),
+                ("width", AuthoringValue::Double(40.0)),
+                ("height", AuthoringValue::Double(40.0)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                ("parentId", AuthoringValue::Uint(5)),
+                ("layoutWidthScaleType", AuthoringValue::Uint(0)),
+                ("layoutHeightScaleType", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(5))]),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("parentId", AuthoringValue::Uint(7)),
+                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponent",
+            vec![
+                ("name", AuthoringValue::String("Item B".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("styleId", AuthoringValue::Uint(10)),
+                ("width", AuthoringValue::Double(40.0)),
+                ("height", AuthoringValue::Double(40.0)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                ("parentId", AuthoringValue::Uint(9)),
+                ("layoutWidthScaleType", AuthoringValue::Uint(0)),
+                ("layoutHeightScaleType", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(9))]),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("parentId", AuthoringValue::Uint(11)),
+                ("colorValue", AuthoringValue::Color(0xff99_6633)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                ("name", AuthoringValue::String("Grid style".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("layoutTypeValue", AuthoringValue::Uint(1)),
+                ("justifyItemsValue", AuthoringValue::Uint(0)),
+            ],
+        ),
+        // The data bind targets the immediately preceding record (the grid
+        // container's LayoutComponentStyle).
+        fixture_record(
+            "DataBindContext",
+            vec![
+                (
+                    "propertyKey",
+                    AuthoringValue::Uint(schema_property_key(
+                        "LayoutComponentStyle",
+                        "justifyItemsValue",
+                    )),
+                ),
+                ("flags", AuthoringValue::Uint(0)),
+                ("sourcePathIds", AuthoringValue::Bytes(vec![0, 0])),
             ],
         ),
     ]

@@ -2,6 +2,7 @@
 //!
 //! Owns live-context resolution and the artboard-facing typed adapters.
 
+use crate::artboard::RuntimeNestedArtboardInstance;
 use crate::components::{ComponentHandle, DataBindHandle};
 use crate::custom_property_container::RuntimeArtboardCustomPropertyBindingInstance;
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
@@ -853,7 +854,6 @@ pub(crate) struct RuntimeOwnedDataContext {
 }
 
 impl RuntimeOwnedDataContext {
-    #[cfg(test)]
     pub(crate) fn from_root_handle(context: RuntimeOwnedViewModelHandle) -> Self {
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {
@@ -4953,11 +4953,10 @@ impl ArtboardInstance {
         }
     }
 
-    fn enqueue_artboard_shared_converter_direction(&mut self, data_bind_index: usize) {
+    fn enqueue_artboard_authored_data_bind_direction(&mut self, data_bind_index: usize) {
         let Some(target_origin) = self
             .artboard_authored_data_bind_states
             .get(data_bind_index)
-            .filter(|state| state.shared_converter.is_some())
             .map(|state| state.retained.target_origin())
         else {
             return;
@@ -4974,6 +4973,16 @@ impl ArtboardInstance {
             .property_index_for_data_bind(data_bind_index)
         {
             self.enqueue_artboard_property_binding_target(index);
+        }
+    }
+
+    fn enqueue_artboard_shared_converter_direction(&mut self, data_bind_index: usize) {
+        if self
+            .artboard_authored_data_bind_states
+            .get(data_bind_index)
+            .is_some_and(|state| state.shared_converter.is_some())
+        {
+            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
         }
     }
 
@@ -5226,6 +5235,12 @@ impl ArtboardInstance {
             // (`data_bind_context.cpp:80-85`, `data_bind.cpp:483-547`).
             self.artboard_authored_data_bind_states
                 .mark_rebind_reconcile(data_bind_index);
+            // C++ `DataBind::bind()` schedules its complete reconcile in the
+            // owning container. The retained dirt latch alone is not enough:
+            // a target-to-source-only bind has no source-dirt occurrence, so
+            // route the favored direction through its concrete execution
+            // queue as part of this same bind operation.
+            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
         }
         self.artboard_formula_token_bindings
             .bind_sources(file, data_context, scripting_manifest);
@@ -5751,15 +5766,19 @@ impl ArtboardInstance {
             };
 
             if rebind_self {
-                changed |=
-                    nested.bind_owned_view_model_animation_data_context(&nested_data_context);
+                changed |= nested.bind_owned_view_model_occurrence_data_context(
+                    file,
+                    &nested_data_context,
+                    allow_full_context_bindings,
+                );
+            } else {
+                changed |= nested.child.bind_owned_view_model_artboard_data_context(
+                    file,
+                    &nested_data_context,
+                    true,
+                    allow_full_context_bindings,
+                );
             }
-            changed |= nested.child.bind_owned_view_model_artboard_data_context(
-                file,
-                &nested_data_context,
-                true,
-                allow_full_context_bindings,
-            );
         }
         if bind_self && rebind_self {
             changed |= self.bind_owned_view_model_component_list_data_context(
@@ -5780,42 +5799,28 @@ impl ArtboardInstance {
     /// main/globals plus inherited-parent ordering as an initially mounted
     /// nested artboard, without waiting for the parent scene to be rebound.
     pub(crate) fn rebind_owned_view_model_context_after_nested_artboard_swap(
-        &mut self,
+        &self,
         file: &RuntimeFile,
         host_local_id: usize,
+        nested: &mut RuntimeNestedArtboardInstance,
     ) -> bool {
-        let Some(parent_data_context) = self.artboard_owned_data_context.clone() else {
-            return false;
-        };
-        let inherited_context = self.owned_data_context_for_nested_host(
-            file,
-            &parent_data_context,
-            host_local_id,
-            true,
-        );
-        let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
-            return false;
-        };
-
         let mut local_handles = Vec::new();
         if let Some(context) = nested.stateful_view_model_context.clone() {
             local_handles.push(context);
         }
         local_handles.extend(nested.stateful_global_view_model_contexts.values().cloned());
-        let data_context = if local_handles.is_empty() {
-            inherited_context
-        } else {
-            RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&inherited_context))
+        let inherited_context = self.artboard_owned_data_context.as_ref().map(|parent| {
+            self.owned_data_context_for_nested_host(file, parent, host_local_id, true)
+        });
+        let data_context = match (local_handles.is_empty(), inherited_context.as_ref()) {
+            (true, None) => return false,
+            (true, Some(inherited)) => inherited.clone(),
+            (false, inherited) => {
+                RuntimeOwnedDataContext::with_local_handles(local_handles, inherited)
+            }
         };
 
-        let mut changed = nested.bind_owned_view_model_animation_data_context(&data_context);
-        changed |= nested.child.bind_owned_view_model_artboard_data_context(
-            file,
-            &data_context,
-            true,
-            true,
-        );
-        changed
+        nested.bind_owned_view_model_occurrence_data_context(file, &data_context, true)
     }
 
     fn bind_owned_view_model_component_list_data_context(
@@ -9179,11 +9184,6 @@ impl ArtboardInstance {
                 };
                 let Some(context) = context else { continue };
                 let mut context = context.borrow_mut();
-                // A mounted child mutates the same ViewModelInstance pointer
-                // in C++. Until Rust publishes that retained-cell mutation
-                // back into the authored object arena, the arena can contain
-                // the previous value. Never let that stale mirror overwrite a
-                // live child write during an unrelated host-side sync.
                 if authored_dirty_locals.contains(&update.source_local_id)
                     && nested.stateful_view_model_instance_local != Some(update.instance_local_id)
                     && matches!(
@@ -9195,18 +9195,12 @@ impl ArtboardInstance {
                 {
                     preserve_mounted_layout_assignment = true;
                 }
-                if !authored_dirty_locals.contains(&update.source_local_id)
-                    && !matches!(
-                        &update.value,
-                        RuntimeStatefulViewModelValueUpdate::ImageAsset(_)
-                            | RuntimeStatefulViewModelValueUpdate::FontAsset(_)
-                    )
-                    && context
-                        .cell_by_property_path(&update.property_path)
-                        .is_some_and(|cell| cell.has_changed())
-                {
-                    continue;
-                }
+                // This host-first pass is the detached-copy equivalent of a
+                // keyed/property write on C++'s shared authored VMI pointer.
+                // Apply the authored arena value even when the retained cell
+                // still reports the preceding host write as changed; nested
+                // child writes are published back immediately after their
+                // occurrence advances.
                 let value_changed = match update.value {
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Number(value),
@@ -9266,11 +9260,9 @@ impl ArtboardInstance {
                 RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&inherited_context))
             };
             changed = true;
-            changed |= nested.bind_owned_view_model_animation_data_context(&nested_data_context);
-            changed |= nested.child.bind_owned_view_model_artboard_data_context(
+            changed |= nested.bind_owned_view_model_occurrence_data_context(
                 &file,
                 &nested_data_context,
-                true,
                 true,
             );
             // C++ retains authored view-model instances by pointer, so the
@@ -9637,6 +9629,56 @@ mod tests {
 
         assert_eq!(states.take_pending_source_dirt_indices(), vec![2]);
         assert!(states[2].retained.take_pending_source_dirt());
+    }
+
+    #[test]
+    fn explicit_rebind_enqueues_pure_target_to_source_direction() {
+        let file = font_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        artboard.artboard_authored_data_bind_states =
+            RuntimeArtboardAuthoredDataBindStates::new(vec![
+                RuntimeArtboardAuthoredDataBindState {
+                    target: None,
+                    path: Arc::from([1]),
+                    path_is_name_based: false,
+                    retained: RuntimeRetainedDataBind::new(
+                        DATA_BIND_FLAG_DIRECTION_TO_SOURCE,
+                        false,
+                    ),
+                    source: None,
+                    shared_converter: None,
+                    suppress_target_notifications: false,
+                },
+            ]);
+        let mut custom = custom_binding(0, 1, 1, None);
+        custom.flags = DATA_BIND_FLAG_DIRECTION_TO_SOURCE;
+        artboard.artboard_custom_property_bindings = vec![custom];
+        artboard.artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
+            &artboard.artboard_custom_property_bindings,
+            &[],
+            &[],
+            &[],
+        );
+
+        assert_eq!(
+            artboard
+                .artboard_data_bind_source_queues
+                .drain_custom_property_update_indices(),
+            vec![0]
+        );
+        artboard
+            .artboard_authored_data_bind_states
+            .mark_rebind_reconcile(0);
+        artboard.enqueue_artboard_authored_data_bind_direction(0);
+        assert_eq!(
+            artboard
+                .artboard_data_bind_source_queues
+                .drain_custom_property_update_indices(),
+            vec![0],
+            "C++ DataBind::bind schedules a pure target-to-source reconcile even without a shared converter"
+        );
     }
 
     #[test]

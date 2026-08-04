@@ -1,0 +1,3 @@
+# Move both fixed-size grid items from flex-start to center via the
+# justifyItemsValue data bind on the grid container's style.
+0.1 setVmNumber justify 1

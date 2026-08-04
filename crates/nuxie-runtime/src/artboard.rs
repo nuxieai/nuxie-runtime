@@ -511,6 +511,11 @@ pub struct ArtboardInstance {
     /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
     pub(crate) runtime_meshes: crate::draw::RuntimeMeshList,
     pub(crate) did_change: Cell<bool>,
+    /// Component occurrences that consumed C++ semantic-bounds dirt since the
+    /// last semantic-tree synchronization. `SemanticData` is a dependent of
+    /// its geometry owner, so either local can appear here
+    /// (`semantic_data.cpp:258-293`).
+    semantic_bounds_dirty_locals: BTreeSet<usize>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -646,6 +651,7 @@ impl Clone for ArtboardInstance {
             runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
             solved_layout_bounds: self.solved_layout_bounds.clone(),
@@ -804,6 +810,13 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
         let mut remaining = slots.len().saturating_add(1);
         while remaining != 0 {
             remaining -= 1;
+            // ClippingShape is a sibling renderer owner mounted below Text,
+            // not part of Text's shaped/style content. Its generated
+            // callbacks dirty the retained clipping path only
+            // (`clipping_shape.cpp:117-173`).
+            if slots.get(current_local).and_then(|slot| slot.type_name) == Some("ClippingShape") {
+                break;
+            }
             if matches!(
                 slots.get(current_local).and_then(|slot| slot.type_name),
                 Some("Text" | "TextInput")
@@ -2398,6 +2411,7 @@ impl ArtboardInstance {
             runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -4093,6 +4107,25 @@ impl ArtboardInstance {
         fallback_root.cloned()
     }
 
+    pub(crate) fn scripted_interpolator_owned_data_context(
+        &self,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> RuntimeOwnedDataContext {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            return data_context.clone();
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return RuntimeOwnedDataContext::from_context_handle(context);
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            return RuntimeOwnedDataContext::from_owned_context(context);
+        }
+        fallback_root
+            .cloned()
+            .map(RuntimeOwnedDataContext::from_root_handle)
+            .unwrap_or_default()
+    }
+
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
         self.state_machines.get(index)
     }
@@ -4180,14 +4213,23 @@ impl ArtboardInstance {
     }
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
+    ///
+    /// Pinned C++ `LayoutComponent::localBounds` reads the current `m_layout`
+    /// frame, not the newly solved animation target retained separately by
+    /// Rust. Keep semantic bounds on that live frame so `SemanticData` can
+    /// apply its exact bounds-delta gate.
     pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
-        let layout = self.layout_bounds(local_id)?;
-        let transform = self.component(local_id)?.transform.world_transform;
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
+            return None;
+        }
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
+        let transform = component.transform.world_transform;
         let corners = [
             transform.transform_point(0.0, 0.0),
-            transform.transform_point(layout.width, 0.0),
-            transform.transform_point(0.0, layout.height),
-            transform.transform_point(layout.width, layout.height),
+            transform.transform_point(width, 0.0),
+            transform.transform_point(0.0, height),
+            transform.transform_point(width, height),
         ];
         let (mut min_x, mut min_y) = corners[0];
         let (mut max_x, mut max_y) = corners[0];
@@ -4204,7 +4246,7 @@ impl ArtboardInstance {
     /// transforms applied. The draw cache computes the same combination;
     /// semantic/focus providers need it without creating renderer state.
     pub(crate) fn runtime_component_world_transform_with_scroll(&self, local_id: usize) -> Mat2D {
-        let mut world = self
+        let world = self
             .runtime_graph()
             .map(|graph| self.runtime_component_world_transform(local_id, graph))
             .or_else(|| {
@@ -4212,6 +4254,13 @@ impl ArtboardInstance {
                     .map(|component| component.transform.world_transform)
             })
             .unwrap_or(Mat2D::IDENTITY);
+        self.runtime_component_apply_ancestor_scroll(local_id, world)
+    }
+
+    /// Fold the live ancestor ScrollConstraint scroll transforms for one
+    /// component occurrence onto `world`, in the exact order the semantic
+    /// provider and draw cache compose them.
+    fn runtime_component_apply_ancestor_scroll(&self, local_id: usize, mut world: Mat2D) -> Mat2D {
         let mut current = Some(local_id);
         while let Some(ancestor_local) = current {
             if let Some(component) = self.component(ancestor_local) {
@@ -4229,6 +4278,90 @@ impl ArtboardInstance {
             current = self.component_parent_local(ancestor_local);
         }
         world
+    }
+
+    /// Public seam over the layout-derived world transform with live ancestor
+    /// ScrollConstraint transforms applied — the combination the semantic
+    /// provider and draw cache already compose internally.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`), so the fold starts at
+    /// the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    ///
+    /// Returns `None` for an unknown component occurrence.
+    pub fn component_world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.update_pass();
+        self.component(local_id)?;
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        Some(match self.component_parent_local(local_id) {
+            Some(parent_local) => self.runtime_component_apply_ancestor_scroll(parent_local, world),
+            None => world,
+        })
+    }
+
+    /// `layout_bounds` mapped through the live ancestor ScrollConstraint
+    /// scroll transforms, composed exactly as
+    /// [`Self::component_world_transform_with_scroll`] composes them.
+    /// Identical to `layout_bounds` when no ancestor ScrollConstraint is
+    /// live.
+    ///
+    /// The settled layout rect itself never reflects scroll in pinned C++:
+    /// `ScrollConstraint::offsetY` only marks the content world transform
+    /// dirty and `constrainChild` composes a world translate, leaving
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). Callers that need the
+    /// settled box in scrolled space compose here instead of mutating the
+    /// solve.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230`), so the fold
+    /// starts at the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
+        self.update_pass();
+        let layout = self.layout_bounds(local_id)?;
+        // Pinned C++ post-multiplies the scroll translate onto the child's
+        // world transform (`constrainChild`: `worldTransform *
+        // m_scrollTransform`, `scroll_constraint.cpp:215-230`), so the
+        // world-space displacement is the world linear applied to the local
+        // scroll offset — under a rotated or scaled ancestor the settled box
+        // shifts along the transformed axis, not the artboard axis. The
+        // displacement is the translation delta between the layout-derived
+        // world with and without ancestor scroll; at a zero offset it
+        // vanishes and this read equals `layout_bounds` exactly.
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        let with_scroll = match self.component_parent_local(local_id) {
+            Some(parent_local) => self.runtime_component_apply_ancestor_scroll(parent_local, world),
+            None => world,
+        };
+        Some(RuntimeLayoutBounds {
+            x: layout.x + (with_scroll.0[4] - world.0[4]),
+            y: layout.y + (with_scroll.0[5] - world.0[5]),
+            width: layout.width,
+            height: layout.height,
+        })
     }
 
     /// Run the `FocusData::scrollIntoView` ancestor walk for one mounted
@@ -6191,6 +6324,16 @@ impl ArtboardInstance {
         instance.advance_on_artboard(self, elapsed_seconds, false, None)
     }
 
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn advance_state_machine_instance_after_state_probe_for_tools(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_state_machine_instance_after_state_probe(instance, elapsed_seconds)
+    }
+
     pub(crate) fn try_change_state_machine_instance(
         &mut self,
         instance: &mut StateMachineInstance,
@@ -6622,6 +6765,11 @@ impl ArtboardInstance {
             &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
         >,
     ) -> Result<bool, ScriptError> {
+        // Stateful VMI children are shared pointers in C++. Apply the host's
+        // newly keyed values to Rust's detached occurrence before any nested
+        // state machine consumes the child DataContext this frame
+        // (`src/nested_artboard.cpp:156-185`).
+        let mut changed = self.sync_stateful_nested_view_model_contexts();
         let retained_result = self.advance_retained_components_collect_events_with_scripts(
             elapsed_seconds,
             true,
@@ -6629,7 +6777,7 @@ impl ArtboardInstance {
             nested_events,
             nested_event_dispatch,
         );
-        let mut changed = retained_result.as_ref().copied().unwrap_or(false);
+        changed |= retained_result.as_ref().copied().unwrap_or(false);
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         if let Err(error) = retained_result {
             return Err(error);
@@ -8331,6 +8479,10 @@ impl ArtboardInstance {
         self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
     }
 
+    pub(crate) fn take_semantic_bounds_dirty_locals(&mut self) -> BTreeSet<usize> {
+        std::mem::take(&mut self.semantic_bounds_dirty_locals)
+    }
+
     #[doc(hidden)]
     pub fn debug_update_pass_with_root_transform(&mut self, root_transform: Mat2D) -> bool {
         if let Some(root) = self.objects.root() {
@@ -9153,6 +9305,9 @@ impl ArtboardInstance {
                 let dirt = component.dirt;
                 if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
+                }
+                if !(dirt & (ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH)).is_empty() {
+                    self.semantic_bounds_dirty_locals.insert(local_id);
                 }
                 #[cfg(test)]
                 self.update_persistent_dirt_component_fixture(local_id);
@@ -10624,13 +10779,21 @@ impl ArtboardInstance {
                 0
             }
         });
+        // Pinned C++ completes replacement VMI selection and binds the mounted
+        // child plus its NestedStateMachine before the replacement operation
+        // returns (`src/nested_artboard.cpp:228-350`). Keep the detached Rust
+        // occurrence private until that replacement binding is complete too.
+        if let Some(file) = self.runtime_file_arc() {
+            self.rebind_owned_view_model_context_after_nested_artboard_swap(
+                &file,
+                local_id,
+                &mut nested,
+            );
+        }
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
         self.mark_nested_structure_changed();
         self.mark_nested_artboard_layout_changed(local_id);
-        if let Some(file) = self.runtime_file_arc() {
-            self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
-        }
         self.stateful_nested_view_model_contexts_dirty = true;
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
@@ -11109,6 +11272,26 @@ impl RuntimeNestedArtboardInstance {
         changed
     }
 
+    /// Bind one mounted occurrence in the same order as C++
+    /// `NestedArtboard::bindStateful`: first install the context on the child
+    /// Artboard, then forward the child's context to every nested state
+    /// machine (`src/nested_artboard.cpp:156-185`).
+    pub(crate) fn bind_owned_view_model_occurrence_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        allow_full_context_bindings: bool,
+    ) -> bool {
+        let mut changed = self.child.bind_owned_view_model_artboard_data_context(
+            file,
+            data_context,
+            true,
+            allow_full_context_bindings,
+        );
+        changed |= self.bind_owned_view_model_animation_data_context(data_context);
+        changed
+    }
+
     fn begin_advance(&mut self, elapsed_seconds: f32) -> Result<f32, bool> {
         if self.is_paused {
             return Err(false);
@@ -11516,6 +11699,11 @@ fn build_runtime_nested_artboard_instance(
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
     }
+    // C++ initializes the authored nested animation occurrences before
+    // `onAddedClean` discovers the active stateful VMI
+    // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
+    // consume its default context during construction; the child-first bind
+    // below supplies the context once the complete occurrence exists.
     let animations =
         runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child);
     let data_bind_view_model_instance_locals_by_id =
@@ -11561,24 +11749,38 @@ fn build_runtime_nested_artboard_instance(
         None
     }
     .map(RuntimeOwnedViewModelHandle::new);
-    let stateful_global_view_model_contexts = data_bind_view_model_instance_locals_by_id
-        .iter()
-        .filter_map(|(&view_model_id, &local_id)| {
-            let view_model_index = usize::try_from(view_model_id).ok()?;
-            let view_model = file.view_model(view_model_index)?;
-            if view_model.object.uint_property("viewModelType") != Some(2) {
-                return None;
-            }
-            let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
-            let instance = file.object(slot.source_global_id as usize)?;
-            let context = RuntimeOwnedViewModelInstance::from_instance_object(
-                file,
-                view_model_index,
-                instance,
-            )?;
-            Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
-        })
-        .collect();
+    let stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle> =
+        data_bind_view_model_instance_locals_by_id
+            .iter()
+            .filter_map(|(&view_model_id, &local_id)| {
+                let view_model_index = usize::try_from(view_model_id).ok()?;
+                let view_model = file.view_model(view_model_index)?;
+                if view_model.object.uint_property("viewModelType") != Some(2) {
+                    return None;
+                }
+                let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
+                let instance = file.object(slot.source_global_id as usize)?;
+                let context = RuntimeOwnedViewModelInstance::from_instance_object(
+                    file,
+                    view_model_index,
+                    instance,
+                )?;
+                Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
+            })
+            .collect();
+    let mut local_handles = Vec::new();
+    if let Some(context) = stateful_view_model_context.clone() {
+        local_handles.push(context);
+    }
+    local_handles.extend(stateful_global_view_model_contexts.values().cloned());
+    let initial_data_context = if local_handles.is_empty() {
+        child.artboard_owned_data_context.clone()
+    } else {
+        Some(RuntimeOwnedDataContext::with_local_handles(
+            local_handles,
+            None,
+        ))
+    };
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -11588,7 +11790,7 @@ fn build_runtime_nested_artboard_instance(
     );
     let (data_bind_property_source_locals, data_bind_image_source_locals) =
         build_nested_host_data_bind_source_local_slots(&child, &data_bind_source_locals_by_path);
-    Ok(RuntimeNestedArtboardInstance {
+    let mut nested = RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
         render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -11609,7 +11811,14 @@ fn build_runtime_nested_artboard_instance(
         speed,
         quantize,
         cumulated_seconds: 0.0,
-    })
+    };
+    if let Some(data_context) = initial_data_context.as_ref() {
+        // `NestedArtboard::bindStateful` binds the active local/global VMI
+        // list to the mounted child before its NestedStateMachine consumes the
+        // child's DataContext (`src/nested_artboard.cpp:156-185`).
+        nested.bind_owned_view_model_occurrence_data_context(file, data_context, true);
+    }
+    Ok(nested)
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {
@@ -12593,6 +12802,7 @@ mod tests {
             runtime_clipping_shapes: RuntimeClippingShapeList::default(),
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -15323,6 +15533,53 @@ mod tests {
         resizes: Rc<RefCell<Vec<(f32, f32)>>>,
     }
 
+    #[test]
+    fn semantic_layout_bounds_use_current_animation_frame_not_solved_target() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let style = synthetic_component_for_type(2, "LayoutComponentStyle");
+        let mut instance = synthetic_instance(vec![root, layout, style], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let style = instance.component_handle(2).expect("layout style");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.layout.as_mut())
+            .expect("layout state")
+            .style = Some(style);
+
+        let current = RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 80.0,
+        };
+        instance.retain_runtime_layout_component_bounds(1, current, None);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout state")
+            .set_animation_style(2, 1, 1.0, None);
+
+        let solved_target = RuntimeLayoutBounds {
+            height: 40.0,
+            ..current
+        };
+        instance.retain_runtime_layout_component_bounds(1, solved_target, None);
+        instance.solved_layout_bounds = Some(Arc::new(BTreeMap::from([(1, solved_target)])));
+
+        // Pinned C++ asks LayoutComponent::localBounds, which reads the
+        // current m_layout frame, before SemanticData's bounds-delta gate:
+        // semantic_provider.cpp:13-32,76-94;
+        // layout_component.hpp:192-211; semantic_data.cpp:501-531.
+        let bounds = crate::semantic_provider::SemanticProvider::semantic_bounds(&mut instance, 1);
+
+        assert_eq!(
+            bounds,
+            crate::semantic_data::SemanticBounds::new(0.0, 0.0, 100.0, 80.0)
+        );
+    }
+
     impl ScriptInstance for ScriptedLayoutTestInstance {
         fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
             Ok(matches!(
@@ -16319,6 +16576,33 @@ mod tests {
     }
 
     #[test]
+    fn component_settlement_journals_generic_semantic_bounds_dirt_once() {
+        let mut artboard = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+
+        assert!(artboard.add_dirt(
+            1,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+            false,
+        ));
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.take_semantic_bounds_dirty_locals(),
+            BTreeSet::from([1]),
+            "SemanticData::update receives its geometry owner's settled WorldTransform/Path dirt",
+        );
+        assert!(
+            artboard.take_semantic_bounds_dirty_locals().is_empty(),
+            "the journal is occurrence-local and consumed by one semantic synchronization",
+        );
+    }
+
+    #[test]
     fn root_advance_settles_components_and_reports_retained_component_dirt() {
         let mut artboard =
             synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
@@ -17222,6 +17506,170 @@ mod tests {
     }
 
     #[test]
+    fn animated_justify_self_write_dirties_only_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let justify_self = property_key_for_name("LayoutComponentStyle", "justifySelfValue")
+            .expect("LayoutComponentStyle.justifySelfValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, justify_self, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, justify_self, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn animated_justify_items_write_dirties_only_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let justify_items = property_key_for_name("LayoutComponentStyle", "justifyItemsValue")
+            .expect("LayoutComponentStyle.justifyItemsValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, justify_items, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, justify_items, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn layout_type_write_dirties_retained_parent_layout_and_its_layout_children() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+                synthetic_component_for_type(4, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 1);
+        synthetic_link_parent(&mut instance, 4, 0);
+        for local_id in 0..5 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let layout_type = property_key_for_name("LayoutComponentStyle", "layoutTypeValue")
+            .expect("LayoutComponentStyle.layoutTypeValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, layout_type, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let child = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("child layout owner");
+        let sibling = instance
+            .component(4)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(child.layout_node_is_dirty());
+        assert_eq!(child.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, layout_type, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
     fn fractional_height_write_dirties_retained_layout_node() {
         let mut instance = synthetic_instance(
             vec![synthetic_component_for_type(0, "LayoutComponent")],
@@ -17281,6 +17729,81 @@ mod tests {
         let revision = instance.layout_revision();
         assert!(!instance.set_double_property(3, font_size, 24.0));
         assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn text_vertical_trim_passthrough_dirties_shape_and_layout() {
+        // The generated top/bottom fields are bitmask passthrough setters for
+        // Text.verticalTrimValue. Their concrete callback is still
+        // Text::verticalTrimValueChanged, which invalidates shape and layout
+        // (`src/text/text.cpp:1403-1408`; generated text_base.hpp:225-241).
+        for property in ["verticalTrimTopValue", "verticalTrimBottomValue"] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_component_for_type(0, "Artboard"),
+                    synthetic_component_for_type(1, "LayoutComponent"),
+                    synthetic_component_for_type(2, "Text"),
+                ],
+                vec![0, 1, 2],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            for local_id in 0..3 {
+                instance.clear_component_dirt(local_id);
+            }
+
+            let key = property_key_for_name("Text", property).expect("vertical trim passthrough");
+            assert!(instance.set_uint_property(2, key, 1));
+            let text_dirt = instance.component(2).expect("text").dirt;
+            assert!(text_dirt.contains(ComponentDirt::PATH));
+            assert!(text_dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+            assert!(
+                instance
+                    .component(1)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .is_some_and(|layout| layout.layout_node_is_dirty())
+            );
+        }
+    }
+
+    #[test]
+    fn position_only_layout_change_dirties_world_transform() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+        for local_id in 0..2 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 25.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+
+        let layout = instance.component(1).expect("layout component");
+        assert!(layout.dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+        assert!(!layout.dirt.contains(ComponentDirt::PATH));
     }
 
     #[test]
@@ -17961,6 +18484,64 @@ mod tests {
                 .unwrap()
                 .chain
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn scripted_path_snapshot_exposes_current_retained_authored_geometry() {
+        let root = synthetic_component_for_type(0, "Node");
+        let shape = synthetic_component_for_type(1, "Shape");
+        let path = synthetic_component_for_type(2, "PointsPath");
+        let mut instance = synthetic_instance(vec![root, shape, path], vec![2, 0]);
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 1.0, y: 2.0 },
+                crate::draw::RuntimePathCommand::Line { x: 3.0, y: 4.0 },
+            ],
+            false,
+        );
+        let first = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("updated Path exposes its retained rawPath to scripts");
+        assert_eq!(first.verbs().len(), 2);
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 5.0, y: 6.0 },
+                crate::draw::RuntimePathCommand::Line { x: 7.0, y: 8.0 },
+            ],
+            false,
+        );
+        let current = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("subsequent lookup exposes the rebuilt path");
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+        assert_eq!(
+            current.points(),
+            &[
+                nuxie_render_api::Vec2D::new(5.0, 6.0),
+                nuxie_render_api::Vec2D::new(7.0, 8.0),
+            ]
         );
     }
 

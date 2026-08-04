@@ -1668,13 +1668,62 @@ impl UserData for ScriptedContext {
             this.require_live("audio")?;
             super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)
         });
-        methods.add_method("gpuCanvas", |lua, this, ()| {
+        methods.add_method("canvas", |_, this, _: MultiValue| {
+            this.require_live("canvas")?;
+            Err::<Value, _>(luaur_rt::Error::runtime(
+                "unsupported: scripted-context-canvas binding is unavailable",
+            ))
+        });
+        methods.add_method("gpuCanvas", |lua, this, descriptor: Option<Table>| {
             this.require_live("gpuCanvas")?;
             let gpu_canvas = this
                 .gpu_canvas
                 .as_ref()
                 .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
-            gpu_canvas.canvas_userdata(lua)
+            let (width, height) = match descriptor {
+                Some(descriptor) => (
+                    descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
+                    descriptor.get::<Option<u32>>("height")?.unwrap_or(0),
+                ),
+                None => (0, 0),
+            };
+            gpu_canvas.canvas_userdata_with_size(lua, width, height)
+        });
+        methods.add_method("features", |lua, this, ()| {
+            this.require_live("features")?;
+            // The Rust renderer seam deliberately exposes the same
+            // conservative no-render-context defaults used by pinned C++.
+            // `lua_scripted_context.cpp:84-122`.
+            let features = lua.create_table();
+            for name in [
+                "bc",
+                "etc2",
+                "astc",
+                "anisotropicFiltering",
+                "texture3D",
+                "textureArrays",
+                "colorBufferFloat",
+                "colorBufferHalfFloat",
+                "perTargetBlend",
+                "perTargetWriteMask",
+                "drawBaseInstance",
+                "depthBiasClamp",
+            ] {
+                features.set(name, false)?;
+            }
+            for (name, value) in [
+                ("maxTextureSize2D", 4096_u32),
+                ("maxTextureSizeCube", 4096),
+                ("maxTextureSize3D", 256),
+                ("maxColorAttachments", 4),
+                ("maxUniformBufferSize", 16_384),
+                ("maxSamplers", 16),
+                ("maxSamples", 4),
+            ] {
+                features.set(name, value)?;
+            }
+            features.set_readonly(true);
+            Ok(features)
         });
         methods.add_method("shader", |lua, this, name: String| {
             this.require_live("shader")?;
@@ -1959,6 +2008,88 @@ mod tests {
             .exec()
             .expect_err("escaped disposed Context must reject every method");
         assert!(error.to_string().contains("disposed context"));
+    }
+
+    #[test]
+    fn context_features_match_the_pinned_headless_surface_and_are_readonly() {
+        let lua = Lua::new();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .expect("scripted context");
+        lua.globals().set("context", context).unwrap();
+
+        let values: Table = lua
+            .load(
+                "local f = context:features()\n\
+                 assert(table.isfrozen(f))\n\
+                 return { f.bc, f.texture3D, f.maxTextureSize2D, f.maxTextureSize3D, f.maxUniformBufferSize, f.maxSamples }",
+            )
+            .eval()
+            .expect("headless feature table");
+        assert!(!values.get::<bool>(1).unwrap());
+        assert!(!values.get::<bool>(2).unwrap());
+        assert_eq!(values.get::<u32>(3).unwrap(), 4096);
+        assert_eq!(values.get::<u32>(4).unwrap(), 256);
+        assert_eq!(values.get::<u32>(5).unwrap(), 16_384);
+        assert_eq!(values.get::<u32>(6).unwrap(), 4);
+    }
+
+    #[test]
+    fn context_gpu_canvas_accepts_the_upstream_descriptor_shape() {
+        let lua = Lua::new();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                Some(crate::gpu_canvas::GpuCanvasContextBindings::for_test()),
+            ))
+            .expect("scripted context");
+        lua.globals().set("context", context).unwrap();
+
+        let (width, height, deferred_width, retained_width): (u32, u32, u32, u32) = lua
+            .load(
+                "local sized = context:gpuCanvas({ width = 320, height = 180 })\n\
+                 local width, height = sized.width, sized.height\n\
+                 local deferred = context:gpuCanvas()\n\
+                 return width, height, deferred.width, sized.width",
+            )
+            .eval()
+            .expect("GPU-canvas descriptor");
+        assert_eq!(
+            (width, height, deferred_width, retained_width),
+            (320, 180, 0, 320)
+        );
+    }
+
+    #[test]
+    fn context_canvas_names_the_missing_binding() {
+        let lua = Lua::new();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .expect("scripted context");
+        lua.globals().set("context", context).unwrap();
+
+        let error = lua
+            .load("context:canvas({ width = 16, height = 16 })")
+            .exec()
+            .expect_err("2D canvas has no Rust backing surface");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported: scripted-context-canvas binding is unavailable"),
+            "got: {error}"
+        );
     }
 
     fn fixture_models_from(asset: &str) -> BTreeMap<String, ScriptViewModel> {

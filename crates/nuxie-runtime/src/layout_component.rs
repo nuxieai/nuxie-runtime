@@ -37,6 +37,11 @@ pub(crate) fn flex_direction_changed(instance: &mut ArtboardInstance, local_id: 
         | instance.mark_layout_component_children_dirty(local_id)
 }
 
+pub(crate) fn layout_type_changed(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    mark_layout_node_dirty(instance, local_id)
+        | instance.mark_layout_component_children_dirty(local_id)
+}
+
 pub(crate) fn direction_changed(instance: &mut ArtboardInstance, local_id: usize) -> bool {
     if let Some(layout) = instance
         .component(local_id)

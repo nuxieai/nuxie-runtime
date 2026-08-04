@@ -2213,13 +2213,24 @@ impl ArtboardInstance {
                     shape_world,
                     layout_bounds,
                 );
+                if let Some(configurations) = paint_configurations.as_mut() {
+                    configurations.remove(paint.global_id);
+                }
+                if self.prepare_text_style_paint_owner(
+                    graph,
+                    container,
+                    object,
+                    &runtime_paint,
+                    factory,
+                    paint_by_global,
+                    render_cache,
+                )? {
+                    continue;
+                }
                 let mut gradient_resources = RuntimeGradientShaderResources {
                     factory,
                     shaders: &mut render_cache.gradient_shaders,
                 };
-                if let Some(configurations) = paint_configurations.as_mut() {
-                    configurations.remove(paint.global_id);
-                }
                 runtime_configure_paint(
                     paint_by_global
                         .paint_mut(paint.global_id)
@@ -2236,6 +2247,101 @@ impl ArtboardInstance {
         }
 
         Ok(())
+    }
+
+    /// Route TextStylePaint preparation to the concrete Text occurrence that
+    /// owns its retained RenderPaint. C++ constructs the paint once on the
+    /// ShapePaint occurrence and its mutator always writes that same object
+    /// (`shape_paint.cpp:50-57`, `shape_paint_mutator.cpp:7-25`).
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_text_style_paint_owner(
+        &self,
+        graph: &ArtboardGraph,
+        container: &ShapePaintContainerNode,
+        object: &RuntimeObject,
+        paint: &RuntimeShapePaintCommand,
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut RuntimeRenderPaints,
+        render_cache: &mut RuntimeArtboardPathState,
+    ) -> Result<bool> {
+        if crate::shapes::shape_paint_container::family(container.type_name)
+            != Some(
+                crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint,
+            )
+        {
+            return Ok(false);
+        }
+        let text_local =
+            crate::shapes::shape_paint_container::opacity_owner_local(graph, container.local_id);
+        let owner = self
+            .runtime_drawables
+            .drawable_by_local
+            .get(&text_local)
+            .and_then(|index| self.runtime_drawables.drawables.get(*index))
+            .and_then(|drawable| drawable.text_draw_owner.as_ref())
+            .with_context(|| {
+                format!(
+                    "missing occurrence-owned TextStylePaint owner for local {}",
+                    container.local_id
+                )
+            })?;
+        let occurrence_paint = owner
+            .retained
+            .borrow()
+            .as_ref()
+            .and_then(|frame| {
+                frame
+                    .commands
+                    .iter()
+                    .find(|command| command.paint_global_id == paint.paint_global_id)
+                    .cloned()
+            });
+        let Some(occurrence_paint) = occurrence_paint else {
+            // The immutable graph can still expose a TextStylePaint whose
+            // style is not in this occurrence's live m_renderStyles frame.
+            // C++ has no active paint to configure in that case.
+            return Ok(true);
+        };
+        let context_id = paint_by_global.backend_context_id;
+        let mut backend = owner.backend.borrow_mut();
+        if backend.context_id != Some(context_id) {
+            *backend = RuntimeTextBackendResources {
+                context_id: Some(context_id),
+                ..RuntimeTextBackendResources::default()
+            };
+        }
+        let global_id = paint.paint_global_id;
+        if !backend.authored_paints.contains_key(&global_id) {
+            let (shader_state, shader) = render_cache
+                .gradient_shaders
+                .remove(&global_id)
+                .map_or((None, None), |entry| {
+                    (Some(entry.state), Some(entry.shader))
+                });
+            backend.authored_paints.insert(
+                global_id,
+                RuntimeTextPaintBackend {
+                    paint: paint_by_global
+                        .take_paint(global_id)
+                        .unwrap_or_else(|| factory.make_render_paint()),
+                    shader,
+                    shader_state,
+                    configuration: None,
+                },
+            );
+        }
+        let authored = backend
+            .authored_paints
+            .get_mut(&global_id)
+            .expect("TextStylePaint owner was just populated");
+        runtime_configure_text_authored_paint(
+            authored,
+            self,
+            object,
+            &occurrence_paint,
+            factory,
+        )?;
+        Ok(true)
     }
 
     #[cfg(test)]
@@ -3768,13 +3874,24 @@ impl ArtboardInstance {
                 shape_world,
                 layout_bounds,
             );
+            if let Some(configurations) = paint_configurations.as_mut() {
+                configurations.remove(paint.global_id);
+            }
+            if self.prepare_text_style_paint_owner(
+                graph,
+                container,
+                object,
+                &runtime_paint,
+                factory,
+                paint_by_global,
+                render_cache,
+            )? {
+                continue;
+            }
             let mut gradient_resources = RuntimeGradientShaderResources {
                 factory,
                 shaders: &mut render_cache.gradient_shaders,
             };
-            if let Some(configurations) = paint_configurations.as_mut() {
-                configurations.remove(paint.global_id);
-            }
             runtime_configure_paint(
                 paint_by_global
                     .paint_mut(paint.global_id)

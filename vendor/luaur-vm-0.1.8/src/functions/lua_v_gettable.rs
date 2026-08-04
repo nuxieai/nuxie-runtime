@@ -20,7 +20,6 @@ use crate::macros::setobj_2_s::setobj2s;
 use crate::macros::ttisclass::ttisclass;
 use crate::macros::ttisfunction::ttisfunction;
 use crate::macros::ttisnil::ttisnil;
-use crate::macros::ttisnumber::ttisnumber;
 use crate::macros::ttisobject::ttisobject;
 use crate::macros::ttistable::ttistable;
 use crate::records::luau_class::LuauClass;
@@ -68,8 +67,7 @@ pub unsafe fn lua_v_gettable(
                 luaG_missingmembererror(L, t, key as *const TValue);
             }
 
-            LUAU_ASSERT!(ttisnumber!(offsettval));
-            let offset = nvalue!(offsettval) as i32;
+            let offset = nvalue!(offsettval) as u32;
             setobj2s!(L, val, luaR_lookupmemberatoffset!(inst, offset));
             return;
         } else if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get() && ttisclass!(t) {
@@ -80,9 +78,8 @@ pub unsafe fn lua_v_gettable(
                 luaG_missingmembererror(L, t, key as *const TValue);
             }
 
-            LUAU_ASSERT!(ttisnumber!(res));
-            let offset = nvalue!(res) as i32;
-            LUAU_ASSERT!(offset >= 0 && offset < (*lco).numberofallmembers);
+            let offset = nvalue!(res) as u32;
+            LUAU_ASSERT!(offset < (*lco).numberofallmembers);
 
             if offset < (*lco).numberofinstancemembers {
                 luaG_missingmembererror(L, t, key as *const TValue);

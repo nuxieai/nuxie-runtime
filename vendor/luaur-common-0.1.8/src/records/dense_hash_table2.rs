@@ -6,7 +6,7 @@ use core::marker::PhantomData;
 use crate::records::bit_set::BitSet;
 
 pub struct DenseHashTable2<K, I, Iface, H, E> {
-    pub(crate) data: Vec<I>,
+    pub(crate) data: Vec<Option<I>>,
     pub(crate) used_table: BitSet,
     pub(crate) capacity: usize,
     pub(crate) count: usize,

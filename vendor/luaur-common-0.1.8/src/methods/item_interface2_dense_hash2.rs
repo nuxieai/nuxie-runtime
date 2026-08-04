@@ -8,12 +8,8 @@ impl<K: DenseDefault> ItemInterface2<K, K> for ItemInterfaceSet2<K> {
         item
     }
 
-    fn set_key(item: &mut K, key: K) {
-        *item = key;
-    }
-
-    fn make_empty() -> K {
-        K::dense_default()
+    fn make(key: K) -> K {
+        key
     }
 }
 
@@ -22,11 +18,7 @@ impl<K: DenseDefault, V: DenseDefault> ItemInterface2<K, (K, V)> for ItemInterfa
         &item.0
     }
 
-    fn set_key(item: &mut (K, V), key: K) {
-        item.0 = key;
-    }
-
-    fn make_empty() -> (K, V) {
-        (K::dense_default(), V::dense_default())
+    fn make(key: K) -> (K, V) {
+        (key, V::dense_default())
     }
 }

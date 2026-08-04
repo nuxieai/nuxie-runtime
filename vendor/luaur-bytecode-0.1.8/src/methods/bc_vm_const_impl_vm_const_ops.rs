@@ -58,6 +58,10 @@ impl VmConstOps for BcVmConstImpl {
         BcVmConstImpl::is_arithmetic_constant(self, vm_const_op)
     }
 
+    fn as_number(&self, vm_const_op: &BcOp) -> f64 {
+        BcVmConstImpl::as_number(self, vm_const_op)
+    }
+
     fn as_imm(&self, op: BcOp) -> BcRef<'_, BcImm> {
         BcVmConstImpl::as_imm(self, op)
     }

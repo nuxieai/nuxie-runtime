@@ -15,15 +15,6 @@ impl BytecodeBuilder {
             return 10;
         }
 
-        if FFlag::LuauCompileUdataDirect.get() {
-            return 9;
-        }
-
-        // LBC_CONSTANT_INTEGER requires version 8
-        if FFlag::LuauIntegerType2.get() {
-            return 8;
-        }
-
         luaur_common::enums::luau_bytecode_tag::LBC_VERSION_TARGET.0 as u8
     }
 }

@@ -43,6 +43,8 @@ pub mod function;
 pub mod jump;
 pub mod jump_info;
 pub mod jump_target;
+pub mod sccp;
+pub mod sccp_interpreter;
 pub mod sccp_state;
 pub mod string_ref;
 pub mod string_ref_hash;

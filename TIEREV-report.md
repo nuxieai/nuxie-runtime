@@ -50,17 +50,14 @@ relative/collapsible binding, and boolean, color, enum, and string view-model
 families. The gate result was:
 
 ```text
-golden-compare summary: entries=10 exact=10 exact-segments=40
-  side-channel-segments=40 divergences=0 unsupported-feature=0
-  post-zero-runtime-hang=0 post-zero-incomplete-stream=0 not-yet-implemented=0
+golden-compare summary: entries=10 exact=10 exact-segments=40 side-channel-segments=40 diverges=0 unsupported-feature=0 not-yet=0
 golden-compare composed sessions: exact=10/10
 ```
 
 The unchanged full scripted gate also passed under all existing row contracts:
 
 ```text
-entries=363 exact=342 exact-segments=1114 side-channel-segments=1109
-divergences=16 unsupported-feature=0 not-yet-implemented=5
+golden-compare summary: entries=363 exact=342 exact-segments=1114 side-channel-segments=1109 diverges=16 unsupported-feature=0 not-yet=5
 ```
 
 ## Tier-5 measurements

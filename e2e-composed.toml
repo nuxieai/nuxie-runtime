@@ -101,4 +101,3 @@ view_model_script = "tests/e2e_composed/library-data-enum.txt"
 samples = [0.0, 0.05, 0.1, 0.25]
 status = "exact"
 features = ["e2e-composed", "events", "data-binding", "view-model-enum"]
-

@@ -3606,6 +3606,12 @@ fn artboard_property_binding_value_matches_kind(
         (
             RuntimeDataBindGraphValue::Number(_),
             FieldKind::Double | FieldKind::Uint
+        ) | (
+            // Symbol-list indices use the same CoreDouble/CoreUint target
+            // setters as C++'s ContextValueSymbolListIndex
+            // (`context_value_symbol_list_index.cpp:12-29`).
+            RuntimeDataBindGraphValue::SymbolListIndex(_),
+            FieldKind::Double | FieldKind::Uint
         ) | (RuntimeDataBindGraphValue::Boolean(_), FieldKind::Bool)
             | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
             | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
@@ -8487,6 +8493,12 @@ impl ArtboardInstance {
                 self.set_uint_property(target_local_id, property_key, rounded)
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
+                self.set_uint_property(target_local_id, property_key, value)
+            }
+            (Some(FieldKind::Double), Some(RuntimeDataBindGraphValue::SymbolListIndex(value))) => {
+                self.set_double_property(target_local_id, property_key, value as f32)
+            }
+            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::SymbolListIndex(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Asset(value))) => {

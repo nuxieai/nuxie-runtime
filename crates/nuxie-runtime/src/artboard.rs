@@ -5837,6 +5837,17 @@ impl ArtboardInstance {
             profile_path,
         )
         .ok()?;
+        // `Artboard::onAddedClean` clears the authored canvas placement from
+        // every mounted instance before list bindings and state machines run.
+        // Later animation/data-bind writes remain live and are consumed by
+        // `Artboard::worldBounds()` (`artboard.cpp:1080-1092,1807-1814`).
+        for axis in ["x", "y"] {
+            if let Some(property_key) = property_key_for_name("Node", axis) {
+                child
+                    .objects
+                    .set_generated_double_property(0, property_key, 0.0);
+            }
+        }
         child.inherit_audio_configuration_from(&self.audio_event_playback);
         child.set_frame_origin(false);
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
@@ -22891,6 +22902,151 @@ mod tests {
                 .component_list_resource_pools
                 .count(list_local_id, source_global_id),
             0
+        );
+    }
+
+    #[test]
+    fn component_list_override_without_mounted_rows_keeps_the_host_clean() {
+        let bytes = synthetic_riv(9703, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ArtboardComponentListOverride",
+                &[("parentId", 1)],
+            );
+        });
+        let file = read_runtime_file(&bytes).expect("component-list override fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("component-list fixture graphs");
+        let mut instance =
+            ArtboardInstance::from_graph(&file, &graph.artboards[0]).expect("artboard instance");
+        instance.update_pass();
+
+        let instance_height =
+            property_key_for_name("ArtboardComponentListOverride", "instanceHeight")
+                .expect("override height property");
+        assert!(instance.set_double_property(2, instance_height, 100.0));
+        assert!(
+            !instance.has_dirt(ComponentDirt::COMPONENTS),
+            "C++ walks only the override's mounted m_artboards; an empty host has no layout invalidation to bubble (`artboard_component_list_override.cpp:7-44`)"
+        );
+    }
+
+    #[test]
+    fn node_hosted_component_list_keeps_mounted_artboard_base_transform_identity() {
+        let bytes = synthetic_riv(9703, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyList", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", 1), ("viewModelInstanceId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Artboard", |bytes| {
+                push_synthetic_uint_property(bytes, "Artboard", "viewModelId", 1);
+                push_synthetic_f32_property(bytes, "Artboard", "x", 1121.0);
+                push_synthetic_f32_property(bytes, "Artboard", "y", 259.0);
+            });
+        });
+        let file = read_runtime_file(&bytes).expect("component-list transform fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("component-list fixture graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("parent artboard instance");
+        let list_local_id = graph.artboards[0].component_lists[0].local_id;
+        let row_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("component-list row context"),
+        );
+
+        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context],));
+
+        assert_eq!(
+            runtime_component_list_item_base_transforms(&parent, list_local_id),
+            vec![Mat2D::IDENTITY],
+            "a flowless mounted Artboard does not project its authored root x/y into the list transform (`artboard_component_list.cpp:1306-1329,1453-1483`)"
+        );
+    }
+
+    #[test]
+    fn component_list_rows_apply_their_item_index_to_child_data_binds() {
+        let file = read_runtime_file(include_bytes!(
+            "../../../fixtures/graph/clipping_and_draw_order.riv"
+        ))
+        .expect("clipping fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("clipping fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture root artboard");
+        let mut parent =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard instance");
+        let view_model_index = usize::try_from(
+            file.object(graph.global_id as usize)
+                .and_then(|artboard| artboard.uint_property("viewModelId"))
+                .expect("root artboard view model"),
+        )
+        .expect("view-model index fits usize");
+        let mut context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::new(&file, view_model_index)
+                .expect("root view-model instance"),
+        );
+        context.complete_for_artboard(&file, 0);
+
+        assert!(parent.bind_owned_view_model_artboard_contexts(&file, &context));
+        let mut state_machine = parent
+            .state_machine_instance(0)
+            .expect("root state machine instance");
+        state_machine.bind_owned_view_model_contexts(&context);
+        state_machine.advance_data_context();
+        for elapsed in [0.0, 0.5] {
+            parent.advance_state_machine_instance(&mut state_machine, elapsed);
+            parent
+                .advance_frame_components_with_state_machine_report(elapsed, &mut state_machine)
+                .expect("component-list frame advance");
+            parent
+                .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                    std::slice::from_mut(&mut state_machine),
+                )
+                .expect("component-list settle passes");
+        }
+
+        let list_local_id = graph.component_lists[0].local_id;
+        let rows = parent
+            .component_list_items(list_local_id)
+            .expect("component-list rows mount");
+        let rotation_key =
+            property_key_for_name("TransformComponent", "rotation").expect("rotation property key");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(
+            rows[1]
+                .context
+                .borrow()
+                .symbol_list_index_value_by_property_path(&[0]),
+            Some(1)
+        );
+        assert_eq!(
+            rows[1].child.artboard_data_bind_values.get(&[0, 0][..]),
+            Some(&RuntimeDataBindGraphValue::SymbolListIndex(1))
+        );
+        assert_eq!(
+            rows[1].child.double_property(1, rotation_key),
+            Some(1.0),
+            "the row's synthetic itemIndex is a numeric converter input for child Artboard DataBinds (`data_converter_operation.cpp:9-16`; `artboard_component_list.cpp:715-814,1492-1543`)"
         );
     }
 }

@@ -830,13 +830,13 @@ note = "Direct FL-B correspondence independently reaccepted at 14b18765 after el
 upstream = "src/animation/property_recorder.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/artboard.rs"
+rust_module = "crates/nuxie-runtime/src/artboard/animation/property_recorder.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0067"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "Direct FL-B correspondence independently reaccepted at 14b18765 after eleven joint review rounds; acceptance and final verdicts are indexed by docs/runtime-frame-loop-fl-c5-evidence/. MR-2b/C04 justified exception: the immutable-prototype baseline is part of Artboard construction and clone behavior shared with B6-0094, with no behavior-neutral PropertyRecorder seam."
+note = "Direct FL-B correspondence independently reaccepted at 14b18765 after eleven joint review rounds; acceptance and final verdicts are indexed by docs/runtime-frame-loop-fl-c5-evidence/. Direct C++-counterpart module: `crates/nuxie-runtime/src/artboard/animation/property_recorder.rs` owns the keyed PropertyRecorder write and callback surface."
 
 [[file]]
 upstream = "src/animation/scripted_listener_action.cpp"

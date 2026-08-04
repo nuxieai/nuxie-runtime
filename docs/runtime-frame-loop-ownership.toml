@@ -1119,7 +1119,7 @@ status = "faithful"
 upstream = "src/animation/property_recorder.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard/animation/property_recorder.rs"]
 dynamically_reached = false
 status = "faithful"
 

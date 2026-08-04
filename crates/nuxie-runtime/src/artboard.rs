@@ -452,6 +452,10 @@ pub struct ArtboardInstance {
     /// so clean frames do not reconcile detached copies. Rust only needs the
     /// full ordered reconciliation after a source value or context changes.
     pub(crate) stateful_nested_view_model_contexts_dirty: bool,
+    /// Authored `ViewModelInstanceValue` locals changed since the last
+    /// reconciliation. These writes are newer than the detached retained
+    /// cell, even when that cell still carries an unacknowledged child write.
+    pub(crate) stateful_nested_view_model_dirty_locals: BTreeSet<usize>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) image_render_overrides: BTreeMap<usize, crate::RuntimeViewModelImage>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
@@ -606,6 +610,9 @@ impl Clone for ArtboardInstance {
                 .clone(),
             stateful_nested_view_model_contexts_dirty: self
                 .stateful_nested_view_model_contexts_dirty,
+            stateful_nested_view_model_dirty_locals: self
+                .stateful_nested_view_model_dirty_locals
+                .clone(),
             image_asset_overrides: self.image_asset_overrides.clone(),
             image_render_overrides: self.image_render_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
@@ -2363,6 +2370,7 @@ impl ArtboardInstance {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
+            stateful_nested_view_model_dirty_locals: BTreeSet::new(),
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
@@ -7677,6 +7685,8 @@ impl ArtboardInstance {
             .is_some_and(|type_name| type_name.starts_with("ViewModelInstance"))
         {
             self.stateful_nested_view_model_contexts_dirty = true;
+            self.stateful_nested_view_model_dirty_locals
+                .insert(local_id);
         }
     }
 
@@ -12532,6 +12542,7 @@ mod tests {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
+            stateful_nested_view_model_dirty_locals: BTreeSet::new(),
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),

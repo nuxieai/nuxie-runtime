@@ -6598,8 +6598,16 @@ impl RuntimeDataBindGraph {
         &mut self,
         data_context: &RuntimeOwnedDataContext,
     ) -> bool {
+        self.bind_owned_view_model_data_context_with_file(data_context, None)
+    }
+
+    pub(crate) fn bind_owned_view_model_data_context_with_file(
+        &mut self,
+        data_context: &RuntimeOwnedDataContext,
+        file: Option<&RuntimeFile>,
+    ) -> bool {
         for source in &mut self.sources {
-            Self::bind_owned_view_model_data_context_source(source, data_context);
+            Self::bind_owned_view_model_data_context_source(source, data_context, file);
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
                     converter,
@@ -6617,13 +6625,25 @@ impl RuntimeDataBindGraph {
     fn bind_owned_view_model_data_context_source(
         source: &mut RuntimeDataBindGraphSourceNode,
         data_context: &RuntimeOwnedDataContext,
+        file: Option<&RuntimeFile>,
     ) -> bool {
         if !source.context_bindable {
             source.bound = false;
             return false;
         }
-        let resolved =
-            data_context.resolve_value_and_cell_for_source_path(&source.value, &source.path);
+        let resolved = file
+            .filter(|_| source.name_based)
+            .and_then(|file| {
+                data_context.resolve_value_and_cell_for_source_path_with_persistent_resolver(
+                    file,
+                    &source.value,
+                    &source.authored_path,
+                    true,
+                )
+            })
+            .or_else(|| {
+                data_context.resolve_value_and_cell_for_source_path(&source.value, &source.path)
+            });
         let retained_refresh = matches!(
             &resolved,
             Some((_, Some(cell), _))
@@ -6699,7 +6719,7 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source_index) else {
             return false;
         };
-        let bound = Self::bind_owned_view_model_data_context_source(source, data_context);
+        let bound = Self::bind_owned_view_model_data_context_source(source, data_context, None);
         if bound {
             self.mark_default_view_model_bindings_dirty();
         }

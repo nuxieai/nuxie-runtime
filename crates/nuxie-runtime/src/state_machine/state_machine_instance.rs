@@ -11939,9 +11939,15 @@ impl StateMachineInstance {
         }
         let mut changed = self
             .data_bind_graph
-            .bind_owned_view_model_data_context(data_context);
+            .bind_owned_view_model_data_context_with_file(
+                data_context,
+                self.scripted_listener_runtime_file.as_deref(),
+            );
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            changed |= graph.bind_owned_view_model_data_context(data_context);
+            changed |= graph.bind_owned_view_model_data_context_with_file(
+                data_context,
+                self.scripted_listener_runtime_file.as_deref(),
+            );
         }
         self.sync_bindable_font_assets_from_owned_data_context(data_context);
         changed
@@ -13643,6 +13649,7 @@ impl StateMachineInstance {
             state_machine.drop_hidden_focus_target(artboard);
             changed |= state_machine.sync_text_input_focus(artboard);
         }
+        changed |= artboard.sync_stateful_nested_view_model_contexts();
 
         let mut dispatch_nested_source =
             |artboard: &mut ArtboardInstance,

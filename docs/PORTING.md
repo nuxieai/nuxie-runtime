@@ -692,6 +692,26 @@ scripting (`make scripted-golden-runner` / `make scripted-golden-compare`) so
 scripted files get real reference streams, and luaur-shaped drift surfaces as an
 attributable stream diff against real Luau.
 
+**Oracle patches.** The pinned C++ is the authority, but a pinned bug that
+crashes the oracle *process* (not its output) may be fixed locally so the gate
+stays trustworthy. Such fixes live as registered patches in
+`tools/rive-runtime-patches/librive-*.patch` — never edits to the pinned
+checkout, which stays pristine. `runtime-provenance.sh materialize` extracts a
+`git archive` of the pin, applies each patch with a hard reverse-check, and the
+provenance stamp binds every librive archive to the exact patch set. Each patch
+documents its provenance and must be corpus-output neutral (byte-identical
+recordings), so the oracle's authority over *streams* is never diverged —
+silently or otherwise. Current set: `librive-0001-nested-artboard-swap-semantic-uaf`
+(register row W3, UNIV-1524): `NestedArtboard::updateArtboard` destroyed the
+outgoing `ArtboardInstance` while the shared `SemanticManager` held raw
+pointers into it; heap-layout-dependent, so it surfaced as a nondeterministic
+SIGSEGV that moved between data-bind/focus/artboard-swap corpus entries.
+`make golden-runner-stress` (gate binary) and `make golden-runner-stress-asan`
+(ASan+UBSan rebuild) re-run the historically crashing entries in a loop, so a
+patch-mechanism regression fails hard and attributably instead of flaking the
+gate; a returning nondeterministic oracle crash on artboard-swap entries means
+check the `patches=` line of the librive `*.provenance` stamp first.
+
 ### 6.2 The escalation ladder (divergence protocol)
 
 When a golden diff fails, localize before you theorize — **budget half a day per

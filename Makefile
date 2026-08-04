@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner golden-runner-stress golden-runner-stress-asan scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -250,6 +250,31 @@ cpp-atlas-mask-oracle:
 
 golden-runner:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/golden-runner/build.sh "$(CPP_CONFIG)"
+
+# Crash-stability regression for the pinned C++ oracle (UNIV-1524 / W3): loop
+# the historically crashing artboard-swap corpus entries so a regression in
+# the oracle-patch mechanism fails hard here instead of flaking the gate.
+# The -asan variant rebuilds runner+librive under ASan+UBSan into separate
+# output dirs (the provenance-bound gate archives stay untouched).
+GOLDEN_STRESS_ITERATIONS ?= 50
+GOLDEN_STRESS_ENTRIES ?= bindable_focus_tree_swap databind_artboard stateful_source_switch swappable_artboards_focus recursive_data_bind
+GOLDEN_ASAN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/debug/rive_golden_runner_asan
+
+golden-runner-stress: golden-runner
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/golden-runner/stress.sh "$(GOLDEN_RUNNER)" "$(GOLDEN_STRESS_ITERATIONS)" $(GOLDEN_STRESS_ENTRIES)
+
+golden-runner-stress-asan:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" \
+		RIVE_GOLDEN_RUNTIME_OUT="$(CURDIR)/target/golden-runner-librive/asan-debug" \
+		RIVE_GOLDEN_RUNNER_NAME=rive_golden_runner_asan \
+		CFLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+		CXXFLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+		LDFLAGS='-fsanitize=address,undefined' \
+		tools/golden-runner/build.sh debug
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" \
+		ASAN_OPTIONS=abort_on_error=1:halt_on_error=1 \
+		UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+		tools/golden-runner/stress.sh "$(GOLDEN_ASAN_RUNNER)" "$(GOLDEN_STRESS_ITERATIONS)" $(GOLDEN_STRESS_ENTRIES)
 
 scripted-golden-runner:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_WITH_SCRIPTING=1 RIVE_GOLDEN_RUNNER_NAME=rive_golden_runner_scripted tools/golden-runner/build.sh "$(CPP_CONFIG)"

@@ -1,10 +1,5 @@
-use crate::enums::bc_block_edge_kind::BcBlockEdgeKind;
-use crate::enums::bc_imm_kind::BcImmKind;
 use crate::enums::bc_op_kind::BcOpKind;
-use crate::records::bc_imm::BcImm;
-use crate::records::bc_inst::BcInst;
 use crate::records::bc_op::BcOp;
-use crate::records::bc_op_hash::BcOpHash;
 use crate::records::bytecode_graph_parser::BytecodeGraphParser;
 use crate::type_aliases::instruction::Instruction;
 use crate::type_aliases::reg::Reg;
@@ -19,7 +14,6 @@ use luaur_common::macros::luau_insn_c::LUAU_INSN_C;
 use luaur_common::macros::luau_insn_d::LUAU_INSN_D;
 use luaur_common::macros::luau_insn_e::LUAU_INSN_E;
 use luaur_common::macros::luau_insn_op::LUAU_INSN_OP;
-use std::collections::HashSet;
 impl<'a> BytecodeGraphParser<'a> {
     pub fn rebuild_graph(
         &mut self,
@@ -33,8 +27,6 @@ impl<'a> BytecodeGraphParser<'a> {
             return false;
         }
 
-        let mut loops: Vec<crate::records::loop_info::LoopInfo> = Vec::new();
-
         self.producers
             .resize(self.func.blocks.len(), Default::default());
         pcs.resize(codesize as usize, 0);
@@ -43,6 +35,19 @@ impl<'a> BytecodeGraphParser<'a> {
 
         for i in 0..self.func.numparams {
             self.add_producer(i, BcOp::bc_op_bc_op_kind_u32(BcOpKind::VmReg, i as u32));
+        }
+
+        for block_index in 0..self.func.blocks.len() {
+            self.producers[block_index].unsealed_preds =
+                self.func.blocks[block_index].predecessors.len() as u32;
+        }
+        for block_index in 0..self.func.blocks.len() {
+            if self.producers[block_index].unsealed_preds == 0 {
+                self.seal_block(BcOp::bc_op_bc_op_kind_u32(
+                    BcOpKind::Block,
+                    block_index as u32,
+                ));
+            }
         }
 
         // Create instructions.
@@ -63,18 +68,12 @@ impl<'a> BytecodeGraphParser<'a> {
             self.func
                 .block_op(self.current_block)
                 .append_instruction(node_op);
-            let node: *mut BcInst = self.func.inst_op(node_op);
-            unsafe {
-                (*node).block = self.current_block;
-            }
+            let node = node_op;
+            self.func.inst_op(node_op).block = self.current_block;
             if (i as usize) < lines.len() {
-                unsafe {
-                    (*node).line = lines[i as usize];
-                }
+                self.func.inst_op(node_op).line = lines[i as usize];
             }
-            unsafe {
-                (*node).op = op;
-            }
+            self.func.inst_op(node_op).op = op;
 
             pcs[i as usize] = node_op.index;
 
@@ -84,10 +83,8 @@ impl<'a> BytecodeGraphParser<'a> {
                               insn: u32,
                               aux: u32,
                               node_op: BcOp| {
-                let node: *mut BcInst = parser.func.inst_op(node_op);
-                unsafe {
-                    (*node).op = op;
-                }
+                let node = node_op;
+                parser.func.inst_op(node_op).op = op;
                 match op {
                     LuauOpcode::LOP_JUMPXEQKNIL => {
                         parser.add_vm_reg_input(node, LUAU_INSN_A(insn) as u8);
@@ -126,7 +123,6 @@ impl<'a> BytecodeGraphParser<'a> {
                         parser.add_vm_reg_input(node, (LUAU_INSN_A(insn) + 1) as u8);
                         parser.add_vm_reg_input(node, (LUAU_INSN_A(insn) + 2) as u8);
                         parser.add_jump_input(node, jump_target);
-                        let node: *mut BcInst = parser.func.inst_op(node_op);
                         parser.func.regs.insert(node_op, LUAU_INSN_A(insn) as u8);
                         let __proj1 = parser.func.add_proj(node_op, 0);
                         parser.add_producer(LUAU_INSN_A(insn) as u8, __proj1);
@@ -197,12 +193,12 @@ impl<'a> BytecodeGraphParser<'a> {
                     self.add_upval_input(node, LUAU_INSN_B(insn));
                 }
 
-                LuauOpcode::LOP_CLOSEUPVALS => unsafe {
-                    (*node).ops.push_back(BcOp::bc_op_bc_op_kind_u32(
+                LuauOpcode::LOP_CLOSEUPVALS => {
+                    self.func.add_use_inst(node, BcOp::bc_op_bc_op_kind_u32(
                         BcOpKind::VmReg,
                         LUAU_INSN_A(insn),
                     ));
-                },
+                }
 
                 LuauOpcode::LOP_GETIMPORT => {
                     self.add_vm_const_input(node, LUAU_INSN_D(insn) as u32);
@@ -274,7 +270,6 @@ impl<'a> BytecodeGraphParser<'a> {
                 LuauOpcode::LOP_CALL | LuauOpcode::LOP_CALLFB => {
                     let nparams = LUAU_INSN_B(insn) as i32 - 1;
                     let nresults = LUAU_INSN_C(insn) as i32 - 1;
-                    let node: *mut BcInst = self.func.inst_op(node_op);
                     self.add_imm_input_bc_inst_i32(node, nparams);
                     self.add_imm_input_bc_inst_i32(node, nresults);
                     if op == LuauOpcode::LOP_CALLFB {
@@ -295,11 +290,8 @@ impl<'a> BytecodeGraphParser<'a> {
                             self.current_block,
                             (LUAU_INSN_A(insn) + 1) as u8,
                         );
-                        let node: *mut BcInst = self.func.inst_op(node_op);
                         for inp in producers_up_to_top {
-                            unsafe {
-                                (*node).ops.push_back(inp);
-                            }
+                            self.func.add_use_inst(node, inp);
                         }
                     }
 
@@ -323,7 +315,6 @@ impl<'a> BytecodeGraphParser<'a> {
 
                 LuauOpcode::LOP_RETURN => {
                     let nresults = LUAU_INSN_B(insn) as i32 - 1;
-                    let node: *mut BcInst = self.func.inst_op(node_op);
                     self.add_imm_input_bc_inst_i32(node, nresults);
                     let mut j = 0i32;
                     while j < nresults {
@@ -333,21 +324,18 @@ impl<'a> BytecodeGraphParser<'a> {
                     if nresults < 0 {
                         let producers_up_to_top = self
                             .find_producers_up_to_top(self.current_block, LUAU_INSN_A(insn) as u8);
-                        let node: *mut BcInst = self.func.inst_op(node_op);
                         for inp in producers_up_to_top {
-                            unsafe {
-                                (*node).ops.push_back(inp);
-                            }
+                            self.func.add_use_inst(node, inp);
                         }
                     }
                     if nresults == 0 {
-                        let node: *mut BcInst = self.func.inst_op(node_op);
-                        unsafe {
-                            (*node).ops.push_back(BcOp::bc_op_bc_op_kind_u32(
+                        self.func.add_use_inst(
+                            node,
+                            BcOp::bc_op_bc_op_kind_u32(
                                 BcOpKind::VmReg,
                                 LUAU_INSN_A(insn),
-                            ));
-                        }
+                            ),
+                        );
                     }
                 }
 
@@ -466,11 +454,8 @@ impl<'a> BytecodeGraphParser<'a> {
                     if count < 0 {
                         let producers_up_to_top = self
                             .find_producers_up_to_top(self.current_block, LUAU_INSN_B(insn) as u8);
-                        let node: *mut BcInst = self.func.inst_op(node_op);
                         for inp in producers_up_to_top {
-                            unsafe {
-                                (*node).ops.push_back(inp);
-                            }
+                            self.func.add_use_inst(node, inp);
                         }
                     }
                 }
@@ -550,12 +535,13 @@ impl<'a> BytecodeGraphParser<'a> {
                 }
 
                 LuauOpcode::LOP_GETVARARGS => {
-                    unsafe {
-                        (*node).ops.push_back(BcOp::bc_op_bc_op_kind_u32(
+                    self.func.add_use_inst(
+                        node,
+                        BcOp::bc_op_bc_op_kind_u32(
                             BcOpKind::VmReg,
                             LUAU_INSN_A(insn),
-                        ));
-                    }
+                        ),
+                    );
                     let count = LUAU_INSN_B(insn) as i32 - 1;
                     self.add_imm_input_bc_inst_i32(node, count);
                     self.func.regs.insert(node_op, LUAU_INSN_A(insn) as u8);
@@ -639,9 +625,10 @@ impl<'a> BytecodeGraphParser<'a> {
                 }
 
                 LuauOpcode::LOP_NEWCLASSMEMBER => {
-                    LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
                     self.add_vm_reg_input(node, LUAU_INSN_A(insn) as u8);
-                    self.add_vm_reg_input(node, LUAU_INSN_C(insn) as u8);
+                    if !luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
+                        self.add_vm_reg_input(node, LUAU_INSN_C(insn) as u8);
+                    }
                     self.add_vm_const_input(node, aux);
                 }
 
@@ -652,87 +639,15 @@ impl<'a> BytecodeGraphParser<'a> {
                 _ => {}
             }
 
-            if luaur_common::functions::is_loop_jump::is_loop_jump(op) {
-                let target = get_jump_target(insn, i);
-                LUAU_ASSERT!(target >= 0 && self.block_by_pc.contains_key(&(target as u32)));
-                loops.push(crate::records::loop_info::LoopInfo {
-                    entry: *self.block_by_pc.get(&(target as u32)).unwrap(),
-                    exit: self.current_block,
-                });
-            }
-
             i += op_length;
             if self.block_by_pc.contains_key(&i) {
+                self.finalize_block(self.current_block);
                 self.current_block = *self.block_by_pc.get(&i).unwrap();
             }
         }
 
-        for loop_ in &loops {
-            let mut visited: HashSet<BcOp, BcOpHash> = HashSet::default();
-            let mut queue: Vec<BcOp> = Vec::new();
-            queue.push(loop_.exit);
-            while !queue.is_empty() {
-                let cur = queue.pop().unwrap();
-                if visited.contains(&cur) {
-                    continue;
-                }
-                visited.insert(cur);
-                let predecessors: alloc::collections::VecDeque<(BcBlockEdgeKind, BcOp)> = {
-                    let bl = self.func.block_op(cur);
-                    bl.predecessors.iter().map(|e| (e.kind, e.target)).collect()
-                };
-                let ops: alloc::collections::VecDeque<BcOp> = {
-                    let bl = self.func.block_op(cur);
-                    bl.ops.clone()
-                };
-
-                for op in &ops {
-                    let inst_ops: crate::type_aliases::bc_ops::BcOps = {
-                        let inst = self.func.inst_op(*op);
-                        inst.ops.clone()
-                    };
-                    for inp_idx in 0..inst_ops.len() {
-                        let inp = inst_ops[inp_idx];
-                        let reg_it = self.func.regs.get(&inp);
-                        let Some(reg) = reg_it.copied() else {
-                            continue;
-                        };
-                        // try to find it in the same loop before
-                        if self.has_producer_before_bc_op_bc_op_bc_op_reg(
-                            loop_.entry,
-                            cur,
-                            *op,
-                            reg,
-                        ) {
-                            continue;
-                        }
-                        if let Some(forward_input) = self
-                            .find_forward_producer_in_range_bc_op_bc_op_bc_op_reg(
-                                cur, loop_.exit, *op, reg,
-                            )
-                        {
-                            let inst: *mut BcInst = self.func.inst_op(*op);
-                            let op_val = unsafe {
-                                let ops = &(*inst).ops;
-                                ops[inp_idx]
-                            };
-                            let new_val = self.add_to_phi(op_val, forward_input);
-                            unsafe {
-                                let ops = &mut (*inst).ops;
-                                ops[inp_idx] = new_val;
-                            }
-                            self.func.regs.insert(new_val, reg);
-                        }
-                    }
-                }
-
-                for &(ctrl, pred) in &predecessors {
-                    if ctrl != BcBlockEdgeKind::Loop && !visited.contains(&pred) {
-                        queue.push(pred);
-                    }
-                }
-            }
-        }
+        self.finalize_block(self.current_block);
+        self.seal_all_remaining();
         true
     }
 }

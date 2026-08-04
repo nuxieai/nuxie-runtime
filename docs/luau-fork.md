@@ -140,7 +140,7 @@ ratchet floor at every rung):
 | 1 | `8f33df91..91caa731` (0.725) | 549+/209- | landed 2026-08-04: 75 rows ported, 29 no-op (C++-only scoping), 10 Require rows out of scope; new dark flags `LuauAutoStack`, `LuauCloneTableFix`, `LuauCustomYieldablePcalls`, `LuauUdataMetatablePinned` in the keep-OFF set; `DesugaredArrayTypeReferenceIsEmpty` removed (ON path hardwired) |
 | 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | landed 2026-08-04: 68 rows ported, 3 no-op; upstream removed `LuauCompileDuptableConstantPack2` (packed table constants + `LBC_VERSION_TARGET` 7 now unconditional — retires the baked-ON parts of baseline divergence 2); new dark flags `LuauCstAttr`, `LuauVirtualBcBuilder` in the keep-OFF set |
 | 3 | `86d2a9dc..f1f121dc` (0.727) | 867+/626- | landed 2026-08-04: 116 rows ported, 5 no-op, 25 deferred (Inliner/ JIT infra unreachable under keep-OFF profile; Require untranslated); layout changes Closure(-usage)/CallInfo(+p)/Proto(+optimized,+deoptimized); seven flag removals hardwired; new dark flags incl. `LuauCIProto`, `LuauPromoteProto`, `LuauGcTableStepFix` |
-| 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | inventoried |
+| 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | landed 2026-08-04: 57 rows ported, 9 no-op; three flag removals hardwired ON (`LuauConstJustReportErrorForUnderfill`, `LuauCstExprGroup`, `LuauErrorTolerantPrettyPrinting`); bytecode-graph SSA maturation (reverse def-use, sealed SSA, inliner phi anchoring, cyclic-phi serialization) |
 | 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | inventoried |
 | 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | inventoried |
 | 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | inventoried |

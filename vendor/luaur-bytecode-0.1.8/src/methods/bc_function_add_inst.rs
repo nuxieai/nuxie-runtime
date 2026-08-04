@@ -10,6 +10,7 @@ impl BcFunction {
             op: LuauOpcode::LOP_NOP,
             block: BcOp::new(),
             ops: Default::default(),
+            uses: Default::default(),
             lastUse: 0,
             useCount: 0,
             line: 0,

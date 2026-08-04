@@ -36,7 +36,7 @@ impl Parser {
                 (*self.allocator).alloc(AstExprGroup::new(Location::new(start, end), expr))
             };
 
-            if luaur_common::FFlag::LuauCstExprGroup.get() && self.options.store_cst_data {
+            if self.options.store_cst_data {
                 let close_pos = if close_paren_found {
                     self.lexer.previous_location().begin
                 } else {

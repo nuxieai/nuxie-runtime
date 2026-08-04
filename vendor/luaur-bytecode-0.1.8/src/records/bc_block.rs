@@ -6,6 +6,7 @@ use alloc::collections::VecDeque;
 pub struct BcBlock {
     pub flags: u8,
     pub useCount: u32,
+    pub phis: VecDeque<BcOp>,
     pub ops: VecDeque<BcOp>,
     pub successors: BcEdges,
     pub predecessors: BcEdges,
@@ -23,6 +24,7 @@ impl Default for BcBlock {
         Self {
             flags: 0,
             useCount: 0,
+            phis: VecDeque::new(),
             ops: VecDeque::new(),
             successors: BcEdges::default(),
             predecessors: BcEdges::default(),

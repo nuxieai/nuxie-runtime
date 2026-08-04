@@ -3,6 +3,7 @@ use crate::records::bc_op::BcOp;
 use crate::records::block_producers::BlockProducers;
 use alloc::vec::Vec;
 use luaur_common::records::dense_hash_map::DenseHashMap;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct BytecodeGraphParser<'a> {
@@ -10,6 +11,7 @@ pub struct BytecodeGraphParser<'a> {
     pub(crate) block_by_pc: DenseHashMap<u32, BcOp>,
     pub(crate) producers: Vec<BlockProducers>,
     pub(crate) current_block: BcOp,
+    pub(crate) phi_block: HashMap<BcOp, BcOp>,
 }
 
 impl<'a> BytecodeGraphParser<'a> {

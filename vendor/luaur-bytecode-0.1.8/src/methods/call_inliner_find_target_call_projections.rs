@@ -18,8 +18,7 @@ impl<'a> CallInliner<'a> {
                     self.return_ops.resize(proj.index as usize + 1, BcOp::new());
                 }
                 let phi_op = self.caller.add_phi();
-                let mut phi = self.caller.phi(phi_op);
-                phi.operator_deref_mut().ops.push_back(proj_op);
+                self.caller.add_use_phi(phi_op, proj_op);
                 self.call_projections.insert(proj_op);
                 self.return_ops[proj.index as usize] = phi_op;
             }

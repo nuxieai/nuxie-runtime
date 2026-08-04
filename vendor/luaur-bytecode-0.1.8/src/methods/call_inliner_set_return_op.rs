@@ -17,18 +17,15 @@ impl<'a> CallInliner<'a> {
 
         if self.return_ops[idx as usize].kind != BcOpKind::Phi {
             let phi_op = self.caller.add_phi();
-            {
-                let mut phi = self.caller.phi(phi_op);
-                phi.operator_deref_mut()
-                    .ops
-                    .push_back(self.return_ops[idx as usize]);
-            }
+            self.caller
+                .add_use_phi(phi_op, self.return_ops[idx as usize]);
             self.return_ops[idx as usize] = phi_op;
         } else {
             let mut phi = self.caller.phi(self.return_ops[idx as usize]);
             let exists = phi.operator_deref().ops.iter().any(|phi_op| *phi_op == op);
             if !exists {
-                phi.operator_deref_mut().ops.push_back(op);
+                self.caller
+                    .add_use_phi(self.return_ops[idx as usize], op);
             }
         }
     }

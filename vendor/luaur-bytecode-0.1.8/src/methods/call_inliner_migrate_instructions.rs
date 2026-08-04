@@ -88,8 +88,7 @@ impl<'a> CallInliner<'a> {
                 self.caller.regs.insert(caller_insn_op, mapped_reg);
             }
 
-            if self.caller.instructions[caller_insn_op.index as usize].op
-                == LuauOpcode::LOP_CALLFB
+            if self.caller.instructions[caller_insn_op.index as usize].op == LuauOpcode::LOP_CALLFB
             {
                 let caller_ptr: *mut crate::records::bc_function::BcFunction = self.caller;
                 let inst_ref = unsafe { (&*caller_ptr).inst(caller_insn_op) };

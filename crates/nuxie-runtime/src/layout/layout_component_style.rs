@@ -256,3 +256,32 @@ pub(crate) fn bool_property_changed(
 ) -> Option<bool> {
     changed(instance, local_id, type_name, property_key)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The dirt routes above compare schema-resolved keys against the incoming
+    // property key; an entry that no longer resolves silently stops routing
+    // dirt instead of failing. Every name in these tables must stay resolvable
+    // against the generated schema.
+    #[test]
+    fn node_dirty_properties_resolve_to_schema_keys() {
+        for name in NODE_DIRTY_PROPERTIES {
+            assert!(
+                property_key_for_name("LayoutComponentStyle", name).is_some(),
+                "NODE_DIRTY_PROPERTIES entry LayoutComponentStyle.{name} does not resolve"
+            );
+        }
+    }
+
+    #[test]
+    fn style_dirty_properties_resolve_to_schema_keys() {
+        for name in STYLE_DIRTY_PROPERTIES {
+            assert!(
+                property_key_for_name("LayoutComponentStyle", name).is_some(),
+                "STYLE_DIRTY_PROPERTIES entry LayoutComponentStyle.{name} does not resolve"
+            );
+        }
+    }
+}

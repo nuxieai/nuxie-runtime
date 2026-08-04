@@ -4517,7 +4517,7 @@ impl ArtboardInstance {
                 let clip_left = -self.origin_x * self.width;
                 let clip_top = -self.origin_y * self.height;
                 let fill_rule = RenderFillRule::Clockwise;
-                let key = path_cache.retained_render_path_key(self, graph, 0, fill_rule);
+                let key = path_cache.retained_render_path_key(self, graph, fill_rule);
                 let clip = path_cache.artboard_clip_path(key, factory, || {
                     runtime_rect_commands(
                         clip_left,
@@ -6734,15 +6734,6 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
-            if size_changed {
-                // Pinned LayoutComponent::updateLayoutBounds publishes Path
-                // before propagateSize/markWorldTransformDirty whenever the
-                // retained width or height changes. That ordering lets a
-                // dependent ClippingShape rebuild from the resized source
-                // path in the same dependency traversal
-                // (`layout_component.cpp:1153-1178`).
-                self.add_dirt(local_id, ComponentDirt::PATH, false);
-            }
             if should_propagate_size {
                 // A layout position change does not rebuild geometry, but it
                 // does move the owner and its descendants. C++ separates the
@@ -15510,13 +15501,12 @@ impl RuntimeArtboardPathState {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
-        local_id: usize,
         fill_rule: RenderFillRule,
     ) -> RuntimeRetainedRenderPathCacheKey {
         RuntimeRetainedRenderPathCacheKey {
             graph_global_id: graph.global_id,
             path_epoch: instance
-                .component(local_id)
+                .component(0)
                 .map_or(0, |component| component.path_revision()),
             world_epoch: 0,
             fill_rule,
@@ -17655,16 +17645,8 @@ fn runtime_draw_live_layout_family(
             instance.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
             && !paths.clip.is_empty()
         {
-            // LayoutComponent owns an independent retained clip path. Key it
-            // by that concrete owner's Path revision; the artboard-root
-            // revision only governs Artboard::m_clipPath and left resized
-            // layout clips backed by stale renderer resources.
-            let key = path_cache.retained_render_path_key(
-                instance,
-                graph,
-                layout_local,
-                RenderFillRule::Clockwise,
-            );
+            let key =
+                path_cache.retained_render_path_key(instance, graph, RenderFillRule::Clockwise);
             let path = runtime_cached_retained_render_path(
                 &mut backend.clip_path,
                 key,
@@ -19017,18 +18999,9 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
     // root Yoga node to the parent. The resulting width/height are therefore
     // the child's own layout constraints, not merely a draw-time frame.
-    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
-        // The hosted root is still the child's LayoutComponent owner. Refresh
-        // its retained constraint frame before the same-pass child update so
-        // Artboard::updateRenderPath sees the newly assigned row size, as the
-        // pinned transferred Yoga node does (`artboard_component_list.cpp:
-        // 220-260`; `artboard.cpp:1138-1157`).
-        child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
+    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    changed |= !child.layout_constraint_bounds_enabled;
+    child.enable_layout_constraint_bounds();
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }
@@ -26761,95 +26734,6 @@ mod tests {
             owner.backend(23).context_id,
             Some(23),
             "a new renderer context drops the old Layout backend members"
-        );
-    }
-
-    #[test]
-    fn layout_clip_backend_key_tracks_the_layout_path_owner() {
-        let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
-            .expect("artboard_list_overrides imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("artboard_list_overrides graphs build");
-        let graph = graphs
-            .artboards
-            .iter()
-            .find(|graph| graph.name.as_deref() == Some("Main"))
-            .expect("fixture has Main artboard");
-        let mut instance = ArtboardInstance::from_graph(&runtime, graph)
-            .expect("Main instance builds");
-        let path_cache = RuntimeArtboardPathState::default();
-        let root_before = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            0,
-            RenderFillRule::Clockwise,
-        );
-        let layout_before = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            3,
-            RenderFillRule::Clockwise,
-        );
-
-        instance.clear_component_dirt(3);
-        assert!(instance.add_dirt(3, ComponentDirt::PATH, false));
-
-        let root_after = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            0,
-            RenderFillRule::Clockwise,
-        );
-        let layout_after = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            3,
-            RenderFillRule::Clockwise,
-        );
-        assert_eq!(root_after, root_before);
-        assert_ne!(layout_after, layout_before);
-    }
-
-    #[test]
-    fn component_list_row_resize_refreshes_the_mounted_root_constraint_frame() {
-        let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
-            .expect("artboard_list_overrides imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("artboard_list_overrides graphs build");
-        let graph = graphs
-            .artboards
-            .iter()
-            .find(|graph| graph.name.as_deref() == Some("child"))
-            .expect("fixture has child artboard");
-        let mut child = ArtboardInstance::from_graph(&runtime, graph)
-            .expect("child instance builds");
-
-        assert!(runtime_apply_component_list_item_layout_bounds(
-            &mut child,
-            RuntimeLayoutBounds {
-                x: 0.0,
-                y: 0.0,
-                width: 500.0,
-                height: 100.0,
-            },
-        ));
-        assert!(runtime_apply_component_list_item_layout_bounds(
-            &mut child,
-            RuntimeLayoutBounds {
-                x: 0.0,
-                y: 0.0,
-                width: 500.0,
-                height: 150.0,
-            },
-        ));
-
-        assert_eq!(
-            child
-                .layout_constraint_bounds
-                .as_deref()
-                .and_then(|bounds| bounds.get(&0))
-                .map(|bounds| bounds.height),
-            Some(150.0),
         );
     }
 

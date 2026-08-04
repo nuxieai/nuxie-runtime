@@ -143,6 +143,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
+    DFFlag::LuauGcMarkUdataAccess.set(false);
     DFFlag::LuauGcTableStepFix.set(false);
 }
 
@@ -519,6 +520,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(AddReturnExectargetCheck, false);
     // Ast/src/Parser.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(DebugLuauReportReturnTypeVariadicWithTypeSuffix, false);
+    // VM/src/lgc.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcMarkUdataAccess, false);
     // VM/src/lgc.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // Require/src/RequireNavigator.cpp

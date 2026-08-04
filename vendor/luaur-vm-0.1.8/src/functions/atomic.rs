@@ -2,6 +2,7 @@ use crate::functions::cleartable::cleartable;
 use crate::functions::clearupvals::clearupvals;
 use crate::functions::markmt::markmt;
 use crate::functions::marktaggetmt::marktaggetmt;
+use crate::functions::markudatadirectaccess::markudatadirectaccess;
 use crate::functions::markudatadirectfields::markudatadirectfields;
 use crate::functions::propagateall::propagateall;
 use crate::functions::remarkupvals::remarkupvals;
@@ -31,6 +32,10 @@ pub unsafe fn atomic(l: *mut lua_State) -> usize {
 
     if luaur_common::FFlag::LuauUdataMetatablePinned.get() {
         marktaggetmt(g);
+    }
+
+    if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
+        markudatadirectaccess(g);
     }
 
     if luaur_common::FFlag::LuauDirectFieldGet.get() {

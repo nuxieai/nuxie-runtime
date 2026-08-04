@@ -6,13 +6,13 @@ use crate::records::ast_expr::AstExpr;
 use crate::records::ast_expr_function::AstExprFunction;
 use crate::records::ast_name::AstName;
 use crate::records::ast_stat_function::AstStatFunction;
-use crate::records::cst_stat_function::CstStatFunction;
 use crate::records::cst_attr_list::CstAttrList;
-use crate::records::temp_vector::TempVector;
+use crate::records::cst_stat_function::CstStatFunction;
 use crate::records::lexeme::Lexeme;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
 use crate::records::position::Position;
+use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_function_stat(
@@ -40,22 +40,19 @@ impl Parser {
 
         let mut hasself = false;
         let mut debugname = AstName::new();
-        let expr = self.parse_function_name(&mut hasself, &mut debugname);
+        let mut expr = self.parse_function_name(&mut hasself, &mut debugname);
 
-        if luaur_common::FFlag::LuauConst2.get() && !is_expr_l_value(expr) {
-            let expr = if luaur_common::FFlag::LuauExportValueSyntax.get()
-                && luaur_common::FFlag::LuauConst2.get()
-            {
-                self.report_l_value_error(expr)
+        if !is_expr_l_value(expr) {
+            expr = if luaur_common::FFlag::LuauExportValueSyntax.get() {
+                self.report_l_value_error(expr) as *mut AstExpr
             } else {
                 let expressions = self.copy_initializer_list_t(&[expr]);
                 self.report_expr_error(
                     unsafe { (*expr).base.location },
                     expressions,
                     format_args!("Assigned expression must be a variable or a field"),
-                )
+                ) as *mut AstExpr
             };
-            return expr as *mut AstStatFunction;
         }
 
         self.match_recovery_stop_on_token[Type::ReservedEnd.0 as usize] += 1;

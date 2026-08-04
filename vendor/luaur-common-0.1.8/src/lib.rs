@@ -81,7 +81,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileTypeAliases.set(value);
     FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
-    FFlag::LuauConst2.set(value);
     FFlag::LuauConstJustReportErrorForUnderfill.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCstAttr.set(false);
@@ -307,8 +306,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileUdataDirect);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauConst2);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstJustReportErrorForUnderfill);
     // Analysis/src/Constraint.cpp

@@ -19,7 +19,7 @@ impl Parser {
         // never consumed; parseBlockNoScope's statement loop then re-parsed the
         // same token forever, allocating until the process OOMs (machine crash).
         if !is_expr_l_value(initial) {
-            initial = if luaur_common::FFlag::LuauConst2.get() {
+            initial = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(initial)
             } else {
                 let expressions = self.copy_initializer_list_t(&[initial]);

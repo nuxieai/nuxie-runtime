@@ -14,8 +14,8 @@ use crate::records::ast_stat_block::AstStatBlock;
 use crate::records::ast_type::AstType;
 use crate::records::ast_type_pack::AstTypePack;
 use crate::records::binding::Binding;
-use crate::records::cst_expr_function::CstExprFunction;
 use crate::records::cst_attr_list::CstAttrList;
+use crate::records::cst_expr_function::CstExprFunction;
 use crate::records::cst_node::CstNode;
 use crate::records::function::Function;
 use crate::records::lexeme::Type;
@@ -134,21 +134,12 @@ impl Parser {
         });
         let mut fun_local: *mut AstLocal = core::ptr::null_mut();
         if let Some(local_name) = local_name {
-            let binding = if luaur_common::FFlag::LuauConst2.get() {
-                Binding::new(
-                    *local_name,
-                    core::ptr::null_mut(),
-                    Position::new(0, 0),
-                    is_const,
-                )
-            } else {
-                Binding::new(
-                    *local_name,
-                    core::ptr::null_mut(),
-                    Position::missing(),
-                    false,
-                )
-            };
+            let binding = Binding::new(
+                *local_name,
+                core::ptr::null_mut(),
+                Position::new(0, 0),
+                is_const,
+            );
             fun_local = self.push_local(&binding);
         }
 

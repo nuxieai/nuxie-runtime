@@ -15,12 +15,8 @@ pub fn is_expr_l_value(expr: *mut AstExpr) -> bool {
         let node = expr as *mut AstNode;
 
         let is_local = if ast_node_is::<AstExprLocal>(&*node) {
-            if luaur_common::FFlag::LuauConst2.get() {
-                let local_expr = ast_node_as::<AstExprLocal>(node);
-                !(*local_expr).local.is_null() && !(*(*local_expr).local).is_const
-            } else {
-                true
-            }
+            let local_expr = ast_node_as::<AstExprLocal>(node);
+            !(*local_expr).local.is_null() && !(*(*local_expr).local).is_const
         } else {
             false
         };

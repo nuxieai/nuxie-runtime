@@ -28,6 +28,7 @@ pub unsafe fn stack_init(L1: *mut lua_State, L: *mut lua_State) {
     (*L1).stack_last = stack.add(((*L1).stacksize - EXTRA_STACK) as usize);
     // initialize first ci
     (*(*L1).ci).func = (*L1).top;
+    (*(*L1).ci).p = core::ptr::null_mut();
     setnilvalue!((*L1).top); // `function' entry for this `ci'
     (*L1).top = (*L1).top.add(1);
     (*L1).base = (*L1).top;

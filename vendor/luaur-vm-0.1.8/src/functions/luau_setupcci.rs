@@ -5,6 +5,7 @@
 //! closure usage counter (when enabled), and ensure the stack has room.
 
 use crate::macros::clvalue::clvalue;
+use crate::macros::getproto::getproto;
 use crate::macros::incr_ci::incr_ci;
 use crate::macros::lua_d_checkstackfornewci::luaD_checkstackfornewci;
 use crate::macros::lua_minstack::LUA_MINSTACK;
@@ -12,6 +13,7 @@ use crate::macros::ttisfunction::ttisfunction;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 use core::ffi::c_int;
+use luaur_common::FFlag;
 use luaur_common::LUAU_ASSERT;
 
 pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
@@ -19,6 +21,9 @@ pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
         let ci = incr_ci!(L);
 
         (*ci).func = fun;
+        if FFlag::LuauCIProto.get() {
+            (*ci).p = getproto!(clvalue!(fun));
+        }
         (*ci).base = fun.add(1);
         (*ci).top = (*L).top.add(LUA_MINSTACK as usize);
         (*ci).context.savedpc = core::ptr::null();

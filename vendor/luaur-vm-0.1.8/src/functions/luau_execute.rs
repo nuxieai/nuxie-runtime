@@ -54,6 +54,7 @@ use crate::macros::fastnotm::fastnotm;
 use crate::macros::fasttm::fasttm;
 use crate::macros::gcvalue::gcvalue;
 use crate::macros::getnodekey::getnodekey;
+use crate::macros::getproto::getproto;
 use crate::macros::getstr::getstr;
 use crate::macros::gkey::{gkey, gval};
 use crate::macros::gnext::gnext;
@@ -144,6 +145,7 @@ use luaur_common::macros::luau_insn_d::LUAU_INSN_D;
 use luaur_common::macros::luau_insn_e::LUAU_INSN_E;
 use luaur_common::macros::luau_insn_fbslot_sealed::LUAU_INSN_FBSLOT_SEALED;
 use luaur_common::macros::luau_insn_op::LUAU_INSN_OP;
+use luaur_common::FFlag;
 
 /// C++ `void luau_execute(lua_State* L)` (lvmexecute.cpp:3716) — dispatches
 /// to the `template<bool SingleStep>` monomorphs.
@@ -1173,6 +1175,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     incr_ci!(L);
                     let ci = (*L).ci;
                     (*ci).func = ra;
+                    if FFlag::LuauCIProto.get() {
+                        (*ci).p = getproto!(ccl);
+                    }
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);
@@ -1311,6 +1316,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     incr_ci!(L);
                     let ci = (*L).ci;
                     (*ci).func = ra;
+                    if FFlag::LuauCIProto.get() {
+                        (*ci).p = getproto!(ccl);
+                    }
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);

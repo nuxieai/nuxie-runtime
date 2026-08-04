@@ -3,6 +3,7 @@
 
 use crate::functions::lua_v_tryfunc_tm::lua_v_tryfunc_tm;
 use crate::macros::clvalue::clvalue;
+use crate::macros::getproto::getproto;
 use crate::macros::incr_ci::incr_ci;
 use crate::macros::lua_callinfo_native::LUA_CALLINFO_NATIVE;
 use crate::macros::lua_d_checkstackfornewci::luaD_checkstackfornewci;
@@ -17,6 +18,7 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
+use luaur_common::FFlag;
 
 /// C++ `int luau_precall(lua_State* L, StkId func, int nresults)`.
 #[allow(non_snake_case)]
@@ -35,6 +37,9 @@ pub unsafe fn luau_precall(
     incr_ci!(L);
     let ci = (*L).ci;
     (*ci).func = func;
+    if FFlag::LuauCIProto.get() {
+        (*ci).p = getproto!(ccl);
+    }
     (*ci).base = func.add(1);
     (*ci).top = (*L).top.add((*ccl).stacksize as usize);
     (*ci).context.savedpc = core::ptr::null();

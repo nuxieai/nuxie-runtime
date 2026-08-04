@@ -32,6 +32,7 @@ pub unsafe fn lua_v_call_tm(L: *mut lua_State, nparams: i32, res: i32) {
 
     let ci = incr_ci!(L);
     (*ci).func = fun;
+    (*ci).p = core::ptr::null_mut();
     (*ci).base = fun.add(1);
     (*ci).top = top.add(LUA_MINSTACK as usize);
     (*ci).context.savedpc = std::ptr::null_mut();

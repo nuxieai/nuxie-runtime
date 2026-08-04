@@ -24,6 +24,7 @@ pub unsafe fn lua_resetthread(L: *mut lua_State) {
     lua_f_close(L, (*L).stack);
     // clear call frames
     let ci = (*L).base_ci;
+    (*ci).p = core::ptr::null_mut();
     (*ci).func = (*L).stack;
     (*ci).base = (*ci).func.add(1);
     (*ci).top = (*ci).base.add(LUA_MINSTACK as usize);

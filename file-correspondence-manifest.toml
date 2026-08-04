@@ -3100,7 +3100,7 @@ b6_row_id = "B6-0252"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "MR-3 justification: FL-E5 direct owner ports node/style dirt, scale, absolute-position, flex-direction, direction, padding/unit, and corner callbacks through the retained parent LayoutComponent; all 13 direct layout assertion bodies and callback tests pass."
+note = "MR-3 justification: FL-E5 direct owner ports node/style dirt, scale, absolute-position, flex-direction, direction, padding/unit, and corner callbacks through the retained parent LayoutComponent; all 13 direct layout assertion bodies and callback tests pass. The node-dirty property set was realigned to the 4ac7b327 post-port handler set: 7 pre-port names were dropped, justifyItems/justifySelf were added, and layoutTypeValue was routed through the layoutTypeChanged child-provider-sync path."
 
 [[file]]
 upstream = "src/layout/layout_participant.cpp"

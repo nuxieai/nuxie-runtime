@@ -10,17 +10,13 @@ const NODE_DIRTY_PROPERTIES: &[&str] = &[
     "displayValue",
     "overflowValue",
     "intrinsicallySizedValue",
-    "alignContentValue",
-    "alignItemsValue",
-    "alignSelfValue",
-    "justifyContentValue",
+    "layoutTypeValue",
+    "justifyItemsValue",
+    "justifySelfValue",
     "flexWrapValue",
     "positionTypeValue",
     "flexDirectionValue",
     "directionValue",
-    "flex",
-    "flexGrow",
-    "flexShrink",
     "flexBasis",
     "aspectRatio",
     "gapHorizontal",
@@ -160,6 +156,13 @@ fn flex_direction_changed(instance: &mut ArtboardInstance, style_local_id: usize
     })
 }
 
+// Ported from 4ac7b327 `LayoutComponentStyle::layoutTypeValueChanged`,
+// which routes through `LayoutComponent::layoutTypeChanged`.
+fn layout_type_changed(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
+    parent_layout_local(instance, style_local_id)
+        .is_some_and(|parent_local| layout_component::layout_type_changed(instance, parent_local))
+}
+
 fn direction_changed(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
     parent_layout_local(instance, style_local_id)
         .is_some_and(|parent_local| layout_component::direction_changed(instance, parent_local))
@@ -226,6 +229,9 @@ pub(crate) fn uint_property_changed(
             .any(|name| property_key_for_name("LayoutComponentStyle", name) == Some(property_key))
         {
             return Some(scale_type_changed(instance, local_id));
+        }
+        if property_key_for_name("LayoutComponentStyle", "layoutTypeValue") == Some(property_key) {
+            return Some(layout_type_changed(instance, local_id));
         }
         if property_key_for_name("LayoutComponentStyle", "positionTypeValue") == Some(property_key)
         {

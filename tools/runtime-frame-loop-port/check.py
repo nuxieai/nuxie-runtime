@@ -55,7 +55,7 @@ NESTED_EVENT_OWNER_BOUNDARY_RATCHETS = {
 }
 NESTED_EVENT_OWNER_BOUNDARY_DETECTOR = "rust_nested_event_owner_boundary"
 NESTED_EVENT_OWNER_MODULE = pathlib.PurePosixPath(
-    "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+    "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
 )
 NESTED_EVENT_OWNER_DETECTOR_MANIFEST = (
     TOOL_DIR / "rust-owner-detector" / "Cargo.toml"

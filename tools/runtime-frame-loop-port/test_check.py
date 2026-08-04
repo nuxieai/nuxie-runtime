@@ -1860,7 +1860,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_split_hydration_entrypoint",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 "impl X {\n    pub fn hydrate_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
             ),
@@ -1872,7 +1872,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_mutable_hydration_preflight",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&mut Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
             ),
@@ -1962,7 +1962,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_instance_map_drops_before_cloned_binds",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 "pub struct StateMachineInstance {\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n    focus: Focus,\n    scripted_object_bindings: Vec<Binding>,\n}\n",
                 "pub struct StateMachineInstance {\n    scripted_object_bindings: Vec<Binding>,\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n}\n",
             ),
@@ -2591,7 +2591,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     def test_fl_c5_instance_lifecycle_live_ratchets_reject_forbidden_shapes(
         self,
     ) -> None:
-        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         cases = [
             (
                 "state_machine_instance_constructor_phase_reorder",
@@ -2738,7 +2738,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         )
         instance_source = (
             "crates/nuxie-runtime/src/state_machine/"
-            "state_machine_instance.rs"
+            "state_machine_instance/state_machine_instance.rs"
         )
         required_cases = [
             (
@@ -2898,7 +2898,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     def test_fl_c5_hit_live_ratchets_require_complete_hierarchy_and_routing(
         self,
     ) -> None:
-        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         cases = [
             (
                 "state_machine_hit_trait_required",
@@ -3093,7 +3093,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     def test_fl_c5_bind_live_ratchets_preserve_null_order_and_delegation(
         self,
     ) -> None:
-        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         required_cases = [
             (
                 "state_machine_bind_primary_family_required",
@@ -3333,7 +3333,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     def test_fl_c5_event_live_ratchets_preserve_batches_visibility_and_seams(
         self,
     ) -> None:
-        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         required_cases = [
             (
                 "state_machine_event_apply_order_required",
@@ -3628,7 +3628,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         for missing in missing_cases:
             self.assert_required_production_ratchet_case(
                 "state_machine_vm_listener_firing_boundary_required",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 required,
                 missing,
             )
@@ -3636,7 +3636,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     def test_fl_c5_event_bubble_owner_wiring_negative_control(self) -> None:
         self.assert_required_production_ratchet_case(
             "state_machine_event_bubble_owner_wiring_required",
-            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
             textwrap.dedent(
                 """
                 fn new() {
@@ -3657,7 +3657,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
     def test_fl_c5_advance_live_ratchets_and_negative_controls(self) -> None:
         instance_source = (
-            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         )
         required_cases = [
             (
@@ -4719,7 +4719,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
         owner_alias_source = self.repo / (
             "crates/nuxie-runtime/src/state_machine/"
-            "state_machine_instance.rs"
+            "state_machine_instance/state_machine_instance.rs"
         )
         owner_alias_source.parent.mkdir(parents=True, exist_ok=True)
         owner_alias_source.write_text(
@@ -5217,7 +5217,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
     ) -> None:
         owner = self.repo / (
             "crates/nuxie-runtime/src/state_machine/"
-            "state_machine_instance.rs"
+            "state_machine_instance/state_machine_instance.rs"
         )
         consumer = self.repo / (
             "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
@@ -5315,7 +5315,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     self.assertIn(
                         "from owner export "
                         "crates/nuxie-runtime/src/state_machine/"
-                        f"state_machine_instance.rs::{exported}",
+                        f"state_machine_instance/state_machine_instance.rs::{exported}",
                         result.stderr,
                     )
 
@@ -6133,7 +6133,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_container_phase_order_required",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 """
                 fn advance_with_report_mode() {
                     self.prepare_key_frame_data_bind_enrollment(Enrollment::Initial);
@@ -6193,7 +6193,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_snapshot_rebuild_and_owner_ids_required",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 """
                 fn key_frame_data_bind_occurrence_ids() {
                     layer.ensure_key_frame_data_binds(graphs);
@@ -6231,7 +6231,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_machine_teardown_before_layers_required",
-                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
                 """
                 fn teardown_bind_occurrences() {
                     layer.remove_key_frame_data_binds();
@@ -6426,7 +6426,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
     def test_fl_c5_focus_semantic_live_ratchets_and_negative_controls(self) -> None:
         instance_source = (
-            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
         )
         required_cases = [
             (

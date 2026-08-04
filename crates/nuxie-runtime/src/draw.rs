@@ -5790,9 +5790,7 @@ impl ArtboardInstance {
             if is_solid_color {
                 settled_owner = true;
                 settle_concrete_sidecar |= shape.paint_container_family.is_some_and(|family| {
-                    !family.owns_shape_geometry()
-                        && family
-                            != crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint
+                    !family.owns_shape_geometry() && !family.owns_text_paint()
                 });
                 let Some(paint) = self
                     .runtime_shapes
@@ -9094,12 +9092,11 @@ impl RuntimeShapeList {
             .iter()
             .find_map(|owner_ref| {
                 let shape = self.get(owner_ref.shape_local)?;
-                (shape.paint_container_family
-                    == Some(
-                        crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint,
-                    ))
-                .then(|| shape.paint_owners.get(owner_ref.owner_index))
-                .flatten()
+                shape
+                    .paint_container_family
+                    .is_some_and(|family| family.owns_text_paint())
+                    .then(|| shape.paint_owners.get(owner_ref.owner_index))
+                    .flatten()
             })
     }
 
@@ -9196,10 +9193,7 @@ impl RuntimeShapeList {
                 // ShapePaint and its TextStylePaint subclass retain the
                 // common occurrence-owned RenderPaint. Geometry ownership is
                 // separate: only Shape/Artboard use the paint-path slots.
-                if family.owns_shape_geometry()
-                    || family
-                        == crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint
-                {
+                if family.owns_shape_geometry() || family.owns_text_paint() {
                     self.paint_owner_refs.push(owner_ref);
                 }
                 self.register_paint_component(container.local_id, owner_ref);
@@ -16306,9 +16300,7 @@ fn preallocate_render_paint_for_mounted_instance(
         .iter()
         .filter(|container| {
             crate::shapes::shape_paint_container::family(container.type_name)
-                == Some(
-                    crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint,
-                )
+                .is_some_and(|family| family.owns_text_paint())
         })
         .find_map(|container| {
             let owner_index = container
@@ -18895,14 +18887,9 @@ fn runtime_configure_owned_shape_paint(
             render_paint.shader(None);
         }
     }
-    render_paint.feather(
-        paint
-            .feather_state
-            .borrow()
-            .as_ref()
-            .map(|feather| feather.strength)
-            .unwrap_or(0.0),
-    );
+    render_paint.feather(runtime_live_owned_shape_paint_feather_strength(
+        instance, paint,
+    ));
     Ok(())
 }
 
@@ -19945,6 +19932,36 @@ fn runtime_live_owned_shape_paint_blend_mode_value(
             .and_then(|value| u32::try_from(value).ok())
             .unwrap_or(3);
     runtime_shape_paint_blend_mode_value(paint_blend_mode_value, container_blend_mode_value)
+}
+
+/// C++ `Feather::update(Paint)` writes the authored/live strength directly to
+/// its parent ShapePaint's retained RenderPaint. That write is independent of
+/// whether the concrete container owns Shape geometry: TextStylePaint and the
+/// TextInput paint containers keep their paths elsewhere but still inherit the
+/// same ShapePaint RenderPaint member.
+fn runtime_live_owned_shape_paint_feather_strength(
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintOwner,
+) -> f32 {
+    instance
+        .runtime_graph()
+        .and_then(|graph| {
+            let container_index = instance
+                .runtime_shapes
+                .get(paint.container_local)?
+                .paint_container_index?;
+            graph
+                .shape_paint_containers
+                .get(container_index)?
+                .paints
+                .get(paint.paint_index)?
+                .feather
+                .as_ref()
+        })
+        .map(|feather| {
+            runtime_feather_double_property(instance, feather, "strength", feather.strength)
+        })
+        .unwrap_or(0.0)
 }
 
 fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
@@ -25861,8 +25878,8 @@ mod tests {
         }
         assert_eq!(
             owners.paint_owner_refs.len(),
-            3,
-            "Artboard/Shape own geometry and TextStylePaint shares the common ShapePaint backend"
+            7,
+            "Artboard/Shape own geometry and all text families share the common ShapePaint backend"
         );
     }
 

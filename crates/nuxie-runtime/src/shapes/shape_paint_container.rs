@@ -42,6 +42,20 @@ impl RuntimeShapePaintContainerFamily {
     pub(crate) fn owns_shape_geometry(self) -> bool {
         matches!(self, Self::Artboard | Self::Shape)
     }
+
+    /// Text and text-input containers keep geometry in their concrete text
+    /// owners, but their child ShapePaints still retain the common C++
+    /// RenderPaint member.
+    pub(crate) fn owns_text_paint(self) -> bool {
+        matches!(
+            self,
+            Self::TextStylePaint
+                | Self::TextInputCursor
+                | Self::TextInputSelection
+                | Self::TextInputText
+                | Self::TextInputSelectedText
+        )
+    }
 }
 
 pub(crate) fn family(type_name: &str) -> Option<RuntimeShapePaintContainerFamily> {
@@ -51,14 +65,8 @@ pub(crate) fn family(type_name: &str) -> Option<RuntimeShapePaintContainerFamily
 pub(crate) fn runtime_shape_paint_container_is_occurrence_owned(
     container: &ShapePaintContainerNode,
 ) -> bool {
-    matches!(
-        crate::shapes::shape_paint_container::family(container.type_name),
-        Some(
-            RuntimeShapePaintContainerFamily::Artboard
-                | RuntimeShapePaintContainerFamily::Shape
-                | RuntimeShapePaintContainerFamily::TextStylePaint
-        )
-    )
+    crate::shapes::shape_paint_container::family(container.type_name)
+        .is_some_and(|family| family.owns_shape_geometry() || family.owns_text_paint())
 }
 
 /// Direct owner for C++ `ShapePaintContainer::addPaint`.

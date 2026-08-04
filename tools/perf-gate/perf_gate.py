@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--manifest", type=Path, default=Path("perf-corpus.toml"))
         command.add_argument("--corpus", type=Path, default=Path("corpus.toml"))
         command.add_argument("--rive-runtime-dir", type=Path)
-        command.add_argument("--report", type=Path, required=True)
+        command.add_argument("--report", type=Path, action="append", required=True)
 
     options = parser.parse_args(argv)
     try:
@@ -104,11 +104,20 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         try:
-            report = load_json(options.report)
-            rows = evaluate_report(manifest, report, options.report)
+            if options.command == "check-report" and len(options.report) != 1:
+                raise ValueError("check-report requires exactly one --report")
+            if options.command == "tighten" and len(options.report) != 3:
+                raise ValueError("tighten requires exactly three independent --report values")
+            sessions = tuple(
+                evaluate_report(manifest, load_json(path), path)
+                for path in options.report
+            )
+            rows = maximum_rows(sessions)
         except (OSError, ValueError, json.JSONDecodeError) as error:
             print(f"perf-gate error: {error}", file=sys.stderr)
             return 1
+        if options.command == "tighten":
+            print("perf-gate tighten candidate: per-file maximum of 3 sessions")
         print_ratio_table(rows)
         failed = [row for row in rows if not row.passed]
         if failed:
@@ -307,6 +316,7 @@ def evaluate_report(
         "warmups": 0,
         "benchmark_repeat": 1,
         "benchmark_frames": 100,
+        "rust_execute_scripts": True,
     }
     for key, expected in expected_scalars.items():
         if report.get(key) != expected:
@@ -356,6 +366,18 @@ def evaluate_report(
             )
         )
     return tuple(rows)
+
+
+def maximum_rows(sessions: tuple[tuple[ReportRow, ...], ...]) -> tuple[ReportRow, ...]:
+    if not sessions:
+        raise ValueError("at least one performance session is required")
+    row_count = len(sessions[0])
+    if any(len(session) != row_count for session in sessions):
+        raise ValueError("performance sessions have inconsistent row counts")
+    return tuple(
+        max((session[index] for session in sessions), key=lambda row: row.ratio)
+        for index in range(row_count)
+    )
 
 
 def phase_median(report_file: dict[str, Any], runner: str, report_path: Path) -> float:

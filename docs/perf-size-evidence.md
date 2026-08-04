@@ -118,39 +118,43 @@ list/virtualization, nested-artboard, text, and layout coverage. The otherwise
 size-eligible `data_viz_demo` is excluded because one current 100-frame Rust
 session takes minutes, which would turn a landing ratchet into a soak test.
 
-The method remains the one above: ordinary C++ and Rust release runners,
-100 sequential frames at 60 Hz, C++ first, no input script, and the median of
-five runner-internal `advance + draw` sums divided by 100. Three complete
-median-of-five sessions were captured to measure host variance. The table's
-times and current ratio are the final session; the last column is the range of
-the three independently aggregated ratios.
+The gate uses scripting-enabled C++ and Rust release runners for the whole
+corpus, and passes `--execute-scripts` to Rust. That keeps the runtime modes
+paired and ensures the selected scripted rows exercise their script hot paths.
+Each session measures 100 sequential frames at 60 Hz, C++ first, no input
+script, and the median of five runner-internal `advance + draw` sums divided by
+100. Four complete median-of-five sessions were captured to measure host
+variance, with the fourth retained after it caught a boundary flake in the
+initial ceiling. The displayed times are from session 4. The ratchet baseline is the
+largest current ratio observed across the four sessions; the ceiling is
+exactly `ceil(ratchet baseline * 1.15)`.
 
-| Fixture | C++ ms/frame | Rust ms/frame | Current Rust/C++ | Three-session range |
-|---|---:|---:|---:|---:|
-| `text_vertical_trim_test` | 0.005308 | 0.107919 | 20.333x | 17.386–20.333x |
-| `jellyfish_test` | 0.000508 | 0.005099 | 10.045x | 10.045–11.620x |
-| `car_widgets_v01` | 0.040715 | 8.792481 | 215.954x | 201.884–234.455x |
-| `zombie_skins` | 0.043068 | 0.949082 | 22.037x | 22.037–25.721x |
-| `script_dependency_test_using_library_v2` | 0.000295 | 0.001440 | 4.882x | 4.882–6.023x |
-| `script_dependency_test_using_library` | 0.000252 | 0.001360 | 5.403x | 4.987–6.024x |
-| `data_bind_test_cmdq` | 0.004652 | 0.036308 | 7.805x | 6.673–8.017x |
-| `viewmodel_based_condition` | 0.000686 | 0.003021 | 4.402x | 4.402–5.401x |
-| `image_scripting_property_value` | 0.000220 | 0.001088 | 4.939x | 4.939–5.388x |
-| `background_measure` | 0.001260 | 0.004231 | 3.359x | 2.788–3.359x |
-| `audio_script` | 0.002383 | 0.012990 | 5.452x | 5.158–5.452x |
-| `spotify_kids_demo` | 0.012361 | 0.194912 | 15.768x | 13.516–15.768x |
-| `library_with_text_and_image` | 0.000242 | 0.000993 | 4.107x | 4.107–5.403x |
-| `library` | 0.001362 | 0.003949 | 2.899x | 2.899–3.269x |
-| `layout_grid_stack` | 0.001245 | 0.033588 | 26.970x | 25.415–28.455x |
-| `gamepad_test` | 0.000541 | 0.002914 | 5.388x | 5.388–7.014x |
-| `local_bounds` | 0.001918 | 0.005848 | 3.049x | 3.049–3.404x |
-| `hit_test_test` | 0.000483 | 0.011596 | 24.033x | 24.033–25.501x |
-| `multi_listeners` | 0.005059 | 0.021570 | 4.264x | 3.616–5.059x |
-| `script_create_text_runs` | 0.002248 | 0.057086 | 25.399x | 25.399–31.212x |
-| `virtualize_blendmode` | 0.000368 | 0.006390 | 17.387x | 16.789–18.659x |
-| `component_list_1` | 0.000337 | 0.001321 | 3.924x | 3.924–4.164x |
-| `collapsing_elements` | 0.004486 | 0.078826 | 17.572x | 17.572–18.727x |
-| `clear_viewmodel_list` | 0.000272 | 0.000963 | 3.546x | 3.546–4.932x |
+| Fixture | Session-4 C++ ms/frame | Session-4 Rust ms/frame | Ratchet baseline | Four-session range | Ceiling |
+|---|---:|---:|---:|---:|---:|
+| `text_vertical_trim_test` | 0.005206 | 0.099735 | 21.554x | 15.714–21.554x | 25x |
+| `jellyfish_test` | 0.000554 | 0.005085 | 12.538x | 9.177–12.538x | 15x |
+| `car_widgets_v01` | 0.023279 | 6.759487 | 290.367x | 230.441–290.367x | 334x |
+| `zombie_skins` | 0.048665 | 0.994659 | 20.595x | 18.777–20.595x | 24x |
+| `script_dependency_test_using_library_v2` | 0.001497 | 0.002252 | 1.504x | 1.029–1.504x | 2x |
+| `script_dependency_test_using_library` | 0.001615 | 0.002923 | 1.810x | 1.210–1.810x | 3x |
+| `data_bind_test_cmdq` | 0.007535 | 0.079167 | 12.560x | 10.507–12.560x | 15x |
+| `viewmodel_based_condition` | 0.000901 | 0.003473 | 4.401x | 3.853–4.401x | 6x |
+| `image_scripting_property_value` | 0.000467 | 0.008180 | 17.503x | 16.809–17.503x | 21x |
+| `background_measure` | 0.001689 | 0.004175 | 3.139x | 2.471–3.139x | 4x |
+| `audio_script` | 0.003238 | 0.010192 | 3.147x | 2.560–3.147x | 4x |
+| `spotify_kids_demo` | 0.016930 | 0.214261 | 14.574x | 12.655–14.574x | 17x |
+| `library_with_text_and_image` | 0.000241 | 0.000884 | 4.072x | 3.670–4.072x | 5x |
+| `library` | 0.001357 | 0.003940 | 2.904x | 2.623–2.904x | 4x |
+| `layout_grid_stack` | 0.001186 | 0.030558 | 25.770x | 24.016–25.770x | 30x |
+| `gamepad_test` | 0.002286 | 0.390702 | 170.922x | 137.819–170.922x | 197x |
+| `local_bounds` | 0.001964 | 0.007800 | 3.972x | 2.817–3.972x | 5x |
+| `hit_test_test` | 0.003306 | 0.077831 | 27.593x | 22.983–27.593x | 32x |
+| `multi_listeners` | 0.012141 | 0.041407 | 3.411x | 2.756–3.411x | 4x |
+| `script_create_text_runs` | 0.005329 | 1.693305 | 327.917x | 268.874–327.917x | 378x |
+| `virtualize_blendmode` | 0.006185 | 0.236123 | 38.179x | 32.178–38.179x | 44x |
+| `component_list_1` | 0.005370 | 0.090869 | 16.920x | 13.588–16.920x | 20x |
+| `collapsing_elements` | 0.005576 | 0.091679 | 18.878x | 15.115–18.878x | 22x |
+| `clear_viewmodel_list` | 0.001284 | 0.026903 | 20.956x | 19.043–20.956x | 25x |
 
 The machine was the same 18-core `Mac17,6` Apple Silicon host described above:
 macOS 26.5.2 (25F84), `rustc 1.97.1`, and Homebrew clang 22.1.8. macOS has no
@@ -159,21 +163,24 @@ under the default scheduler; `tools/perf-gate/run-pinned.sh` pins the comparator
 and inherited runner processes to a highest-maximum-frequency CPU on Linux when
 `taskset` and `lscpu` are available. The ratio range, rather than absolute time,
 is the relevant stability evidence. The blocking ratchet uses the worst of the
-three session medians as its current baseline, then applies the requested 15%
+four session medians as its current stable baseline, then applies the requested 15%
 margin and integer ceiling. This deliberately absorbs the observed `car_widgets`
 variance; a repeatedly flaky timing row must be removed or the gate disabled,
 not papered over with an unrecorded ceiling increase.
 
 The three raw reports were produced under `target/` (never `/tmp`) with SHA-256:
 
-- `perf-gate-baseline.json`: `90f329925ccbbd18e84b3388667092dbd0b4b7f93f36f86454f5684680f7326c`
-- `perf-gate-stability-2.json`: `fe4daf7c8ea49e51f17416193d27f87637a5cf2ccd5d5311f9ea224b303f0bf0`
-- `perf-gate-stability-3.json`: `81d5fcb63260c17ceb0bdb43a582f88b5bd5ec02fa98d16918414923944d80b1`
+- `perf-gate-scripted-1.json`: `829b1a8a3196e0ed7d3ce003cb4bec1d3e43bb7f4e90245eaf928d6d369d7da6`
+- `perf-gate-scripted-2.json`: `1c43bb7092db3f995341e26a8b06753720d06b7059a66da4b421d39b82ff350f`
+- `perf-gate-scripted-3.json`: `39a402d83a8826f39fd119e58cb14374e48bdbc020d30c3fcac8ea4bd98a9ce9`
+- first `perf-gate.json` out-of-sample validation (boundary failure): `c3348edc3a3a39996a36958cd98b90b304e7dd79d20f0ca98ff148cd54abb4ef`
+- final green `perf-gate.json`: `63054da1decf28e9648793b2ccc5013bd75b7ef8fcecf71f8d40289af179ac3a`
 
 The equivalent comparator arguments are:
 
 ```sh
 --corpus corpus.toml --corpus-ids IDS_FROM_PERF_CORPUS \
 --runner-benchmark --benchmark-frames 100 --benchmark-hz 60 \
+--rust-execute-scripts \
 --iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
 ```

@@ -37,9 +37,11 @@ class PerfCorpusTests(unittest.TestCase):
             "\n  parity-scorecard:", 1
         )[0]
 
-        self.assertIn("perf-gate: perf-runtime-ref-check", makefile)
-        self.assertIn("perf-gate-tighten: perf-gate", makefile)
-        self.assertRegex(land, r"gates=\([\s\S]*\bperf-gate\b")
+        self.assertIn("perf-gate-measure: perf-runtime-ref-check", makefile)
+        self.assertIn("perf-gate: perf-gate-measure", makefile)
+        self.assertIn("perf-gate-tighten:", makefile)
+        self.assertIn("timing_gates=(perf-gate)", land)
+        self.assertIn('cat "$cache/$g.log"', land)
         self.assertIn("make perf-gate PERF_JSON_META=", perf_job)
         self.assertNotIn("continue-on-error", perf_job)
         self.assertNotIn("make perf-hot-loop", workflow)
@@ -129,9 +131,29 @@ class PerfCorpusTests(unittest.TestCase):
         self.assertLess(updates[first.id][1], first.ceiling)
         self.assertNotIn(second.id, updates)
 
+    def test_tighten_uses_the_worst_ratio_from_three_sessions(self):
+        sessions = []
+        for multiplier in (0.80, 0.95, 0.85):
+            report = make_report(self.manifest)
+            report["files"][0]["runners"]["rust"]["phases"]["advance_draw"][
+                "median_ms"
+            ] *= multiplier
+            sessions.append(
+                PERF_GATE.evaluate_report(self.manifest, report, Path("report.json"))
+            )
+
+        rows = PERF_GATE.maximum_rows(tuple(sessions))
+        updates = PERF_GATE.ratchet_updates(self.manifest, rows)
+
+        self.assertAlmostEqual(
+            updates[self.manifest.files[0].id][0],
+            round(self.manifest.files[0].baseline_ratio * 0.95, 6),
+        )
+
     def test_tightened_manifest_preserves_notes_and_revalidates(self):
         first = self.manifest.files[0]
-        updates = {first.id: (round(first.baseline_ratio * 0.5, 6), 12)}
+        improved = round(first.baseline_ratio * 0.5, 6)
+        updates = {first.id: (improved, PERF_GATE.math.ceil(improved * 1.15))}
         (REPO_ROOT / "target").mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "target") as directory:
             path = Path(directory) / "perf-corpus.toml"
@@ -174,6 +196,7 @@ def make_report(manifest):
         "benchmark_repeat": 1,
         "benchmark_frames": 100,
         "benchmark_hz": 60.0,
+        "rust_execute_scripts": True,
         "meta": {"build_profile": "release"},
         "files": files,
     }

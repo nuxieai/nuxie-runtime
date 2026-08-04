@@ -495,8 +495,9 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("floor.runtime_exact_segments must be at least 670", completed.stderr)
         self.assertIn("floor.renderer_entries must be at least 1468", completed.stderr)
 
-    def test_green_floor_evidence_prints_all_five_tiers_and_writes_json(self):
+    def test_check_rejects_missing_blocking_perf_evidence(self):
         repo, _ = self.create_green_repo(sdk_rows=("A1", "A2"))
+        (repo / "target" / "perf-gate.json").unlink()
         json_output = repo / "target" / "parity-scorecard.json"
 
         completed = subprocess.run(
@@ -515,7 +516,8 @@ class ParityScorecardCliTests(unittest.TestCase):
             capture_output=True,
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("blocking runtime ratio ratchet evidence is missing", completed.stderr)
         for tier_name in (
             "Frame parity",
             "Interaction parity",
@@ -559,7 +561,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertEqual(report["schema"], "nuxie-parity-scorecard-v1")
         self.assertEqual(report["source_sha"], "test-sha")
         self.assertEqual(report["tiers_green"], 0)
-        self.assertTrue(report["evidence_valid"])
+        self.assertFalse(report["evidence_valid"])
         self.assertEqual([tier["id"] for tier in report["tiers"]], [1, 2, 3, 4, 5])
         self.assertEqual(
             [gate["state"] for gate in report["regression_floor"]],
@@ -648,6 +650,7 @@ class ParityScorecardCliTests(unittest.TestCase):
             "browser-webgpu-only",
             "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0\n",
         )
+        self.write_perf_gate(repo, ratio=1.0, ceiling=2)
         return repo, evidence
 
     def write_perf_gate(self, repo, ratio, ceiling):
@@ -682,6 +685,7 @@ class ParityScorecardCliTests(unittest.TestCase):
                     "benchmark_repeat": 1,
                     "benchmark_frames": 100,
                     "benchmark_hz": 60,
+                    "rust_execute_scripts": True,
                     "meta": {"git_sha": "test-sha"},
                     "files": report_files,
                 }

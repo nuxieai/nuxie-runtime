@@ -822,9 +822,10 @@ def blocking_perf(
     perf_path = repo_root / "target" / "perf-gate.json"
     manifest_path = repo_root / "perf-corpus.toml"
     if not perf_path.is_file() or not manifest_path.is_file():
+        errors.append("blocking runtime ratio ratchet evidence is missing (V10)")
         return ratchet(
             "runtime-ratio",
-            "NOT_BUILT",
+            "RED",
             "blocking runtime ratio ratchet not built (V10 evidence unavailable)",
         )
     try:
@@ -843,6 +844,7 @@ def blocking_perf(
             or document["benchmark_repeat"] != 1
             or document["benchmark_frames"] != 100
             or document["benchmark_hz"] != 60
+            or document["rust_execute_scripts"] is not True
         ):
             raise ValueError("unexpected measurement method")
         manifest_ids = [file["id"] for file in manifest_files]

@@ -229,6 +229,13 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
     push_json_key(&mut out, "runner_order");
     push_json_string(&mut out, options.runner_order.as_str());
     out.push(',');
+    push_json_key(&mut out, "rust_execute_scripts");
+    out.push_str(if options.rust_execute_scripts {
+        "true"
+    } else {
+        "false"
+    });
+    out.push(',');
     if options.runner_benchmark {
         push_json_key(&mut out, "benchmark_repeat");
         out.push_str(&options.benchmark_repeat.to_string());
@@ -450,6 +457,7 @@ struct Options {
     benchmark_repeat: usize,
     benchmark_frames: Option<usize>,
     benchmark_hz: f64,
+    rust_execute_scripts: bool,
     json: Option<PathBuf>,
     meta: Vec<(String, String)>,
 }
@@ -536,6 +544,7 @@ impl Options {
         let mut benchmark_frames = None;
         let mut benchmark_hz = 60.0;
         let mut benchmark_hz_was_set = false;
+        let mut rust_execute_scripts = false;
         let mut json = None;
         let mut meta = Vec::new();
 
@@ -574,6 +583,7 @@ impl Options {
                     benchmark_hz = parse_positive_f64(&value(arg)?, "--benchmark-hz")?;
                     benchmark_hz_was_set = true;
                 }
+                "--rust-execute-scripts" => rust_execute_scripts = true,
                 "--json" => json = Some(PathBuf::from(value(arg)?)),
                 "--meta" => meta.push(parse_meta(&value(arg)?)?),
                 "--artboard" => artboard = Some(value(arg)?),
@@ -592,7 +602,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--runner-order cpp-first|rust-first] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--benchmark-frames N] [--benchmark-hz N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--runner-order cpp-first|rust-first] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--benchmark-frames N] [--benchmark-hz N] [--rust-execute-scripts] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -660,6 +670,7 @@ impl Options {
             benchmark_repeat,
             benchmark_frames,
             benchmark_hz,
+            rust_execute_scripts,
             json,
             meta,
         })
@@ -949,6 +960,7 @@ fn run_once(
         target,
         options.runner_benchmark,
         options.benchmark_repeat,
+        label == "rust" && options.rust_execute_scripts,
     );
     let start = Instant::now();
     let output = command
@@ -998,6 +1010,7 @@ fn runner_command(
     target: &RunTarget,
     benchmark: bool,
     benchmark_repeat: usize,
+    execute_scripts: bool,
 ) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(&target.file);
@@ -1011,6 +1024,9 @@ fn runner_command(
         command.arg("--input-script").arg(input_script);
     }
     command.arg("--samples").arg(&target.samples);
+    if execute_scripts {
+        command.arg("--execute-scripts");
+    }
     if benchmark {
         command.arg("--benchmark");
         if benchmark_repeat > 1 {
@@ -1584,7 +1600,7 @@ mod tests {
             samples: "0".to_owned(),
             segment_count: 1,
         };
-        let command = runner_command(Path::new("runner"), &target, true, 17);
+        let command = runner_command(Path::new("runner"), &target, true, 17, true);
         let args = command
             .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
@@ -1594,6 +1610,7 @@ mod tests {
             args.windows(2)
                 .any(|args| args[0] == "--benchmark-repeat" && args[1] == "17")
         );
+        assert!(args.iter().any(|argument| argument == "--execute-scripts"));
     }
 
     #[test]

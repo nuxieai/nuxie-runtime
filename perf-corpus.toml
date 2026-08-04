@@ -13,79 +13,79 @@ id = "text_vertical_trim_test"
 bytes = 10467863
 categories = ["largest", "text-heavy", "layout-heavy"]
 note = "Largest exact input-free fixture; stresses text shaping, vertical trim, and layout."
-baseline_ratio = 20.333149
-ceiling = 24
+baseline_ratio = 21.553745
+ceiling = 25
 
 [[file]]
 id = "jellyfish_test"
 bytes = 3057595
 categories = ["largest"]
 note = "Second-largest exact input-free fixture; dense vector animation without the text/layout cluster."
-baseline_ratio = 11.620350
-ceiling = 14
+baseline_ratio = 12.537996
+ceiling = 15
 
 [[file]]
 id = "car_widgets_v01"
 bytes = 2875164
 categories = ["largest", "text-heavy", "nested-artboards", "layout-heavy"]
 note = "Third-largest exact input-free fixture; historically exposes expensive nested widget settlement."
-baseline_ratio = 234.455179
-ceiling = 270
+baseline_ratio = 290.367198
+ceiling = 334
 
 [[file]]
 id = "zombie_skins"
 bytes = 1952536
 categories = ["largest", "nested-artboards"]
 note = "Fourth-largest exact input-free fixture; retained skins and nested artboards exercise draw invalidation."
-baseline_ratio = 25.720872
-ceiling = 30
+baseline_ratio = 20.595322
+ceiling = 24
 
 [[file]]
 id = "script_dependency_test_using_library_v2"
 bytes = 1755498
 categories = ["largest", "text-heavy", "scripted", "layout-heavy"]
 note = "Large library-backed scripted fixture covering dependency resolution and text/layout work."
-baseline_ratio = 6.023488
-ceiling = 7
+baseline_ratio = 1.504470
+ceiling = 2
 
 [[file]]
 id = "script_dependency_test_using_library"
 bytes = 1755486
 categories = ["largest", "text-heavy", "scripted", "layout-heavy"]
 note = "Companion scripted-library format keeps both dependency encodings under the ratchet."
-baseline_ratio = 6.023998
-ceiling = 7
+baseline_ratio = 1.810340
+ceiling = 3
 
 [[file]]
 id = "data_bind_test_cmdq"
 bytes = 1690399
 categories = ["largest", "text-heavy", "list-virtualization", "layout-heavy"]
 note = "Large command-queue data-binding scene with list-backed view models and text layout."
-baseline_ratio = 8.016807
-ceiling = 10
+baseline_ratio = 12.559797
+ceiling = 15
 
 [[file]]
 id = "viewmodel_based_condition"
 bytes = 1633889
 categories = ["largest", "layout-heavy"]
 note = "Large conditional view-model scene adds state-machine and data-binding diversity."
-baseline_ratio = 5.401184
-ceiling = 7
+baseline_ratio = 4.400999
+ceiling = 6
 
 [[file]]
 id = "image_scripting_property_value"
 bytes = 1617096
 categories = ["largest", "scripted", "layout-heavy"]
 note = "Large scripted image-property scene covers script-owned assets and layout."
-baseline_ratio = 5.387891
-ceiling = 7
+baseline_ratio = 17.503252
+ceiling = 21
 
 [[file]]
 id = "background_measure"
 bytes = 1301468
 categories = ["largest", "text-heavy"]
 note = "Large text measurement fixture isolates shaping and glyph measurement pressure."
-baseline_ratio = 3.358865
+baseline_ratio = 3.138769
 ceiling = 4
 
 [[file]]
@@ -93,31 +93,31 @@ id = "audio_script"
 bytes = 1289334
 categories = ["largest", "text-heavy", "scripted", "layout-heavy"]
 note = "Large scripted/audio scene keeps the script lifecycle represented in the hot loop."
-baseline_ratio = 5.452437
-ceiling = 7
+baseline_ratio = 3.147196
+ceiling = 4
 
 [[file]]
 id = "spotify_kids_demo"
 bytes = 980905
 categories = ["largest", "text-heavy", "nested-artboards", "layout-heavy"]
 note = "Large product-style demo with text, nested artboards, and layout-heavy composition."
-baseline_ratio = 15.768479
-ceiling = 19
+baseline_ratio = 14.573917
+ceiling = 17
 
 [[file]]
 id = "library_with_text_and_image"
 bytes = 903438
 categories = ["largest", "nested-artboards", "layout-heavy"]
 note = "Large library fixture exercises nested imported content with image and text resources."
-baseline_ratio = 5.402626
-ceiling = 7
+baseline_ratio = 4.071729
+ceiling = 5
 
 [[file]]
 id = "library"
 bytes = 903077
 categories = ["largest", "text-heavy", "layout-heavy"]
 note = "Large base library fixture covers imported text and shared layout definitions."
-baseline_ratio = 3.269344
+baseline_ratio = 2.904242
 ceiling = 4
 
 [[file]]
@@ -125,71 +125,71 @@ id = "layout_grid_stack"
 bytes = 899305
 categories = ["largest", "text-heavy", "layout-heavy"]
 note = "Large grid/stack scene targets deep layout traversal and text placement."
-baseline_ratio = 28.455148
-ceiling = 33
+baseline_ratio = 25.769660
+ceiling = 30
 
 [[file]]
 id = "gamepad_test"
 bytes = 893881
 categories = ["largest", "text-heavy", "list-virtualization", "scripted", "layout-heavy"]
 note = "Large scripted listener scene includes list-backed state and layout work."
-baseline_ratio = 7.014186
-ceiling = 9
+baseline_ratio = 170.921802
+ceiling = 197
 
 [[file]]
 id = "local_bounds"
 bytes = 892795
 categories = ["largest", "text-heavy", "layout-heavy"]
 note = "Large bounds fixture stresses text geometry and repeated layout-bound computation."
-baseline_ratio = 3.403939
-ceiling = 4
+baseline_ratio = 3.972196
+ceiling = 5
 
 [[file]]
 id = "hit_test_test"
 bytes = 883710
 categories = ["largest", "text-heavy", "list-virtualization", "nested-artboards", "layout-heavy"]
 note = "Large hit-test scene combines nested artboards, component lists, and layout."
-baseline_ratio = 25.500648
-ceiling = 30
+baseline_ratio = 27.593218
+ceiling = 32
 
 [[file]]
 id = "multi_listeners"
 bytes = 882454
 categories = ["largest", "text-heavy", "nested-artboards", "scripted", "layout-heavy"]
 note = "Largest remaining exact input-free row; broad listener and nested-script coverage."
-baseline_ratio = 5.059099
-ceiling = 6
+baseline_ratio = 3.410555
+ceiling = 4
 
 [[file]]
 id = "script_create_text_runs"
 bytes = 881724
 categories = ["text-heavy", "list-virtualization", "nested-artboards", "scripted", "layout-heavy"]
 note = "Targeted script-created text-run scene exercises dynamic list-backed text and nested layout."
-baseline_ratio = 31.212430
-ceiling = 36
+baseline_ratio = 327.917147
+ceiling = 378
 
 [[file]]
 id = "virtualize_blendmode"
 bytes = 1024
 categories = ["list-virtualization", "layout-heavy"]
 note = "Tiny intentional diversity row that drives the component-list virtualization and pool-reuse path."
-baseline_ratio = 18.659359
-ceiling = 22
+baseline_ratio = 38.179250
+ceiling = 44
 
 [[file]]
 id = "component_list_1"
 bytes = 806848
 categories = ["text-heavy", "list-virtualization", "layout-heavy"]
 note = "Substantial component-list fixture exercises list items, text, listeners, and layout together."
-baseline_ratio = 4.163931
-ceiling = 5
+baseline_ratio = 16.920113
+ceiling = 20
 
 [[file]]
 id = "collapsing_elements"
 bytes = 2146
 categories = ["nested-artboards", "layout-heavy"]
 note = "Small targeted nested-artboard-leaf and nested-layout collapse case."
-baseline_ratio = 18.726624
+baseline_ratio = 18.877781
 ceiling = 22
 
 [[file]]
@@ -197,5 +197,5 @@ id = "clear_viewmodel_list"
 bytes = 1436
 categories = ["list-virtualization", "scripted", "layout-heavy"]
 note = "Small scripted list mutation case covers clearing and rebuilding view-model-backed component lists."
-baseline_ratio = 4.932351
-ceiling = 6
+baseline_ratio = 20.956292
+ceiling = 25

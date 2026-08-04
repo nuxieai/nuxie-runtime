@@ -19926,9 +19926,19 @@ fn runtime_live_owned_shape_paint_blend_mode_value(
         .shape_paint_blend_mode_value(paint.paint_local)
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or(paint.authored_blend_mode_value);
+    // TextStylePaint::draw copies the concrete Text drawable's blend mode to
+    // each child ShapePaint before drawing (`text_style_paint.cpp:51-55`).
+    // Text-input paint containers follow the same split ownership: the
+    // ShapePaint owns RenderPaint while the concrete text drawable owns the
+    // inherited opacity/blend state.
+    let blend_owner_local = instance
+        .runtime_graph()
+        .map_or(paint.container_local, |graph| {
+            crate::shapes::shape_paint_container::opacity_owner_local(graph, paint.container_local)
+        });
     let container_blend_mode_value =
         runtime_draw_property_key_for_name("Drawable", "blendModeValue")
-            .and_then(|key| instance.uint_property(paint.container_local, key))
+            .and_then(|key| instance.uint_property(blend_owner_local, key))
             .and_then(|value| u32::try_from(value).ok())
             .unwrap_or(3);
     runtime_shape_paint_blend_mode_value(paint_blend_mode_value, container_blend_mode_value)

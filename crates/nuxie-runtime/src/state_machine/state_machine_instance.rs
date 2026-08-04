@@ -12229,10 +12229,6 @@ impl StateMachineInstance {
         }
     }
 
-    pub(crate) fn has_pending_data_bind_work(&self) -> bool {
-        self.data_bind_container.has_pending_work()
-    }
-
     /// Mirrors C++ `DataBindContainer::updateDataBinds(false)`. Dirty
     /// source-to-target values must be visible to event listeners and
     /// transition conditions without polling or writing target-to-source
@@ -13846,11 +13842,11 @@ impl StateMachineInstance {
                 }
             }
             artboard.reset_retained_components_for_state_machine_settlement();
-            if !artboard.has_dirt(ComponentDirt::COMPONENTS)
-                && !state_machines
-                    .iter()
-                    .any(StateMachineInstance::has_pending_data_bind_work)
-            {
+            // Pinned C++ resets the DataContext and Artboard after every pass,
+            // then continues solely on Component dirt. DataBind bookkeeping is
+            // not a second outer-loop continuation term
+            // (`state_machine_instance.cpp:2689-2703`).
+            if !artboard.has_dirt(ComponentDirt::COMPONENTS) {
                 break;
             }
         }
@@ -16168,6 +16164,41 @@ mod scripted_listener_action_tests {
             "FL_C5_PERSISTENT_DIRT_RECEIPT advanced={advanced} \
              advance_count={advance_count} update_count={update_count} \
              dirt_remaining={dirt_remaining}"
+        );
+    }
+
+    #[test]
+    fn fl_c5_settlement_pending_bind_work_does_not_extend_a_clean_component_pass() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        let _ = artboard.update_pass();
+        assert!(
+            !artboard.has_dirt(ComponentDirt::COMPONENTS),
+            "fixture prelude must start the settlement probe with clean component dirt"
+        );
+        let mut persisting_bind = crate::retained_data_bind::RuntimeRetainedDataBind::new(0, false);
+        machine
+            .data_bind_container
+            .add_data_bind(&mut persisting_bind, true);
+        let update_count = std::cell::Cell::new(0);
+
+        StateMachineInstance::settle_artboard_update_passes(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            true,
+            |_| {
+                update_count.set(update_count.get() + 1);
+                false
+            },
+        );
+
+        assert_eq!(
+            update_count.get(),
+            1,
+            "pinned C++ breaks on clean component dirt even when bind bookkeeping remains pending"
+        );
+        assert_eq!(
+            machine.data_context_advance_call_count, 1,
+            "the completed pass still advances the DataContext before checking component dirt"
         );
     }
 

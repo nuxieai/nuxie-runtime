@@ -3061,7 +3061,14 @@ fn advance_scene_to(
             .context("retained frame-component advance failed")?;
         changed |= components.changed;
         if components.notified {
-            changed |= instance.advance_state_machine_instance(state_machine, 0.0);
+            // Nested reports can request a zero-time transition probe after
+            // the main animation advance. This is the non-NewFrame half of
+            // C++ advanceAndApply; a second NewFrame pass would consume the
+            // callback just reported over `(lastTime, newTime]` before the
+            // host can observe it (`linear_animation_instance.cpp:208-217`,
+            // `state_machine_instance.cpp:2649-2707`).
+            changed |=
+                instance.advance_state_machine_instance_after_state_probe(state_machine, 0.0);
         }
     } else {
         changed |= instance

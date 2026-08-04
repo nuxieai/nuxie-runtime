@@ -6167,7 +6167,8 @@ impl ArtboardInstance {
         instance.advance_on_artboard(self, elapsed_seconds, true, owned_context)
     }
 
-    pub(crate) fn advance_state_machine_instance_after_state_probe(
+    #[doc(hidden)]
+    pub fn advance_state_machine_instance_after_state_probe(
         &mut self,
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,

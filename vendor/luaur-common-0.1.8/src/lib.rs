@@ -75,7 +75,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileFoldOptimize.set(value);
     FFlag::LuauCompileInlineTableFunctions.set(value);
     FFlag::LuauCompileNewTableMutationTracker.set(value);
-    FFlag::LuauCompileNoOptNext.set(value);
     FFlag::LuauCompilePropagateTableProps2.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
     FFlag::LuauCompileTypeAliases.set(value);
@@ -294,8 +293,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileInlineTableFunctions);
     // Compiler/src/ConstantFolding.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileNewTableMutationTracker);
-    // Compiler/src/Compiler.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileNoOptNext);
     // Compiler/src/ConstantFolding.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompilePropagateTableProps2);
     // Compiler/src/Compiler.cpp

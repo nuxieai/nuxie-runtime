@@ -56,7 +56,7 @@ impl Compiler {
                     } else if builtin.is_global("pairs") {
                         skip_op = LuauOpcode::LOP_FORGPREP_NEXT;
                     }
-                } else if stat_ref.values.size == 2 {
+                } else if stat_ref.values.size == 2 && !self.getfenv_used && !self.setfenv_used {
                     let builtin = crate::functions::get_builtin::get_builtin(
                         *stat_ref.values.data,
                         &self.globals,

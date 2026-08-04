@@ -614,3 +614,141 @@ fn absolute_badge() -> Result<()> {
     assert_eq!(label_owner_origin, fill_origin);
     Ok(())
 }
+
+fn raw_stream(scene: &mut Scene, artboard: nuxie::ArtboardId) -> Result<String> {
+    let instance = scene.instantiate(artboard)?;
+    let mut factory = RecordingFactory::new();
+    let mut cache = scene.new_draw_token(instance)?;
+    let mut renderer = factory.make_renderer();
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+    Ok(factory.stream())
+}
+
+fn write_stream(
+    name: &str,
+    width: u32,
+    height: u32,
+    scene: &mut Scene,
+    artboard: nuxie::ArtboardId,
+) -> Result<()> {
+    let text = raw_stream(scene, artboard)?;
+    let mut lines = text.lines();
+    let header = lines.next().context("stream header")?;
+    anyhow::ensure!(header == "rive-golden-stream-v1", "unexpected header {header}");
+    let body: Vec<&str> = lines.collect();
+    let mut out = String::new();
+    out.push_str("rive-golden-stream-v1\n");
+    out.push_str(&format!("frameSize width={width} height={height}\n"));
+    out.push_str("clearColor value=0xffffffff\n");
+    for line in &body {
+        out.push_str(line);
+        out.push('\n');
+    }
+    if body.last().map(|line| *line != "frame").unwrap_or(true) {
+        out.push_str("frame\n");
+    }
+    let dir = repo_root().join("target/univ-1408-streams");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(format!("{name}.stream")), out)?;
+    Ok(())
+}
+
+const FILL_COLOR: u32 = 0xff22_c55e;
+
+fn create_filled_border_scene(
+    width: f32,
+    height: f32,
+    border_width: f32,
+) -> Result<(Scene, nuxie::ArtboardId)> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "UNIV-1408 filled border".into(),
+            width,
+            height,
+            layout_style: None,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Border Shape".into(),
+                x: width / 2.0,
+                y: height / 2.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new(
+                "Border centerline",
+                (width - border_width).max(0.0),
+                (height - border_width).max(0.0),
+            )),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Background Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Background Color".into(),
+                color: FILL_COLOR,
+            }),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Border Stroke".into(),
+                thickness: border_width,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Border Color".into(),
+                color: BORDER_COLOR,
+            }),
+        )?;
+        Ok(artboard)
+    })?;
+    Ok((scene, artboard))
+}
+
+#[test]
+#[ignore = "UNIV-1408: dump the six recorded streams for renderer replay"]
+fn dump_streams() -> Result<()> {
+    let (mut scene, artboard) = create_border_scene(96.0, 64.0, 8.0, None)?;
+    write_stream("border_transparent", 96, 64, &mut scene, artboard)?;
+
+    let (mut scene, artboard) = create_border_scene(96.0, 64.0, 4.0, None)?;
+    write_stream("border_basic", 96, 64, &mut scene, artboard)?;
+
+    let dash = fitted_border_dash(8.0, 4.0, 92.0, 60.0, 2.0, false);
+    let (mut scene, artboard) = create_border_scene(96.0, 64.0, 4.0, Some(dash))?;
+    write_stream("border_dashed", 96, 64, &mut scene, artboard)?;
+
+    let dash = fitted_border_dash(0.25, 7.75, 92.0, 60.0, 2.0, true);
+    let (mut scene, artboard) = create_border_scene(96.0, 64.0, 4.0, Some(dash))?;
+    write_stream("border_dotted", 96, 64, &mut scene, artboard)?;
+
+    let (mut scene, artboard) = create_text_scene(1.0)?;
+    write_stream("text_tight_line_height", 180, 40, &mut scene, artboard)?;
+
+    let (mut scene, artboard) = create_absolute_badge_scene()?;
+    write_stream("absolute_badge", 390, 188, &mut scene, artboard)?;
+
+    let (mut scene, artboard) = create_filled_border_scene(96.0, 64.0, 4.0)?;
+    write_stream("border_basic_filled", 96, 64, &mut scene, artboard)?;
+    Ok(())
+}

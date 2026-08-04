@@ -1247,7 +1247,7 @@ status = "faithful"
 upstream = "src/animation/text_input_listener_group.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/text_input_listener_group.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs", "crates/nuxie-runtime/src/listener_group.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/text_input_listener_group.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/text_input_listener_group.rs", "crates/nuxie-runtime/src/listener_group.rs"]
 dynamically_reached = false
 status = "faithful"
 

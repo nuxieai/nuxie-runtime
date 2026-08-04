@@ -180,7 +180,7 @@ pub(crate) trait SemanticNodeResolver: std::fmt::Debug {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct AudioEventOccurrence {
+pub(super) struct AudioEventOccurrence {
     event_local_index: usize,
     event_core_type: u32,
 }
@@ -199,7 +199,7 @@ struct RuntimeLocalEventListenerBatch {
 }
 
 /// Instance-owned production boundary for `AudioEvent::play`.
-trait AudioEventSeam: std::fmt::Debug {
+pub(super) trait AudioEventSeam: std::fmt::Debug {
     fn selected(
         &self,
         occurrence: AudioEventOccurrence,
@@ -253,7 +253,7 @@ impl RuntimeHitResult {
 // C++ when the local name matches C++'s `HitResult`.
 use RuntimeHitResult as HitResult;
 
-trait HitComponent: std::fmt::Debug {
+pub(super) trait HitComponent: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn HitComponent>;
     fn component(&self) -> Option<ComponentHandle>;
     fn prepare_event(
@@ -1202,7 +1202,7 @@ enum RuntimeNestedEventNotifierKind {
 /// here is the ownership-safe adaptation. `dispose` explicitly removes every
 /// occurrence before this owner can receive another nested report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeNestedEventRegistration {
+pub(super) struct RuntimeNestedEventRegistration {
     source_local_id: usize,
     notifier_local_id: usize,
     kind: RuntimeNestedEventNotifierKind,
@@ -1254,7 +1254,7 @@ pub(crate) fn closest_semantic_node(
 /// C++ aggregate fields have no header initializers. These constructors force
 /// both values to be supplied and intentionally do not implement `Default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeQueuedFocusEvent {
+pub(super) struct RuntimeQueuedFocusEvent {
     listener_index: usize,
     is_focus: bool,
 }
@@ -1285,7 +1285,7 @@ impl RuntimeQueuedFocusEvent {
 /// C++ aggregate fields have no header initializers. These constructors force
 /// both values to be supplied and intentionally do not implement `Default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeQueuedSemanticEvent {
+pub(super) struct RuntimeQueuedSemanticEvent {
     listener_index: Option<usize>,
     action_type: u32,
 }
@@ -1315,7 +1315,7 @@ impl RuntimeQueuedSemanticEvent {
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeDeferredCallbackProbe {
+pub(super) enum RuntimeDeferredCallbackProbe {
     FocusQueuesSemantic {
         listener_index: Option<usize>,
         action_type: u32,
@@ -1327,7 +1327,7 @@ enum RuntimeDeferredCallbackProbe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeConstructorPhase {
+pub(super) enum RuntimeConstructorPhase {
     Inputs,
     LayersAnyEntry,
     MachineBinds,
@@ -1393,246 +1393,8 @@ pub(crate) enum RuntimeDataContextBindError {
     NullDataBind,
 }
 
-#[derive(Debug)]
-pub struct StateMachineInstance {
-    state_machine_index: usize,
-    profile_name: Arc<str>,
-    /// Retained authored definition owner. C++ stores `const StateMachine*
-    /// m_machine` on the instance and reuses it for every advance
-    /// (`state_machine_instance.hpp:123,386`;
-    /// `state_machine_instance.cpp:1707-1711`).
-    ///
-    /// Rust retains the immutable definition arena as well as the index so
-    /// the matching definition address remains stable for this occurrence.
-    state_machine_definitions: Option<Arc<Vec<RuntimeStateMachine>>>,
-    /// Exact listener definitions retained by this occurrence's dispatch
-    /// groups. C++ groups store listener pointers once at construction rather
-    /// than rediscovering them from the Artboard during every callback.
-    pub(in crate::state_machine) listener_definitions: Arc<Vec<RuntimeStateMachineListener>>,
-    default_view_model_index: Option<usize>,
-    /// Shared authored instances for bare default/serialized binds. The C++
-    /// probe retains `ViewModel::instance(index)` directly (`main.cpp:4683-4721`).
-    file_view_model_instances: Option<RuntimeFileViewModelInstanceCatalog>,
-    default_view_model_trigger_instance: Option<RuntimeViewModelInstanceCells>,
-    active_file_view_model_binding: Option<(usize, usize)>,
-    active_owned_view_model_advance_context: Option<RuntimeOwnedViewModelAdvanceContext>,
-    /// The internal focus domain exists before layer entry. `Drop` explicitly
-    /// releases this value before bind/layer/script state; an external
-    /// projection releases only its `Rc` reference and leaves the shared
-    /// owner's domain intact.
-    focus: RuntimeFocusTree,
-    /// Retained C++ `m_focusManager` adaptation while an external manager is
-    /// selected. This stores the owner-safe internal projection, not manager
-    /// internals from the RECORDED `src/input/focus_manager.cpp` seam owned by
-    /// manifest row B6-0238 (`focus.rs`, DIVERGENT).
-    internal_focus: Option<RuntimeFocusTree>,
-    /// Selection flag paired with RuntimeFocusTree's owner-safe shared-domain
-    /// identity check for the C++ same-pointer no-op.
-    external_focus_manager_selected: bool,
-    owns_focus_domain: bool,
-    #[cfg(test)]
-    focus_manager_phase_trace: Vec<&'static str>,
-    /// Whether the instance-owned retained semantic manager is enabled.
-    internal_semantic_manager_enabled: bool,
-    /// Retained semantic domain. It is created by `enable_semantics` and
-    /// populated from live Artboard occurrences at the first semantic
-    /// operation, mirroring C++'s lazy opt-in without retaining an Artboard
-    /// borrow across calls.
-    semantic_tree: Option<RuntimeSemanticTree>,
-    external_semantic_manager_identity: Option<u64>,
-    /// Compatibility resolver for the recorded external-manager seam.
-    /// Production internal routing uses `semantic_tree`; this defaults to
-    /// absent and is injected only by focused boundary tests.
-    semantic_node_resolver: Option<Rc<dyn SemanticNodeResolver>>,
-    #[cfg(test)]
-    semantic_manager_phase_trace: Vec<&'static str>,
-    inputs: Vec<StateMachineInputInstance>,
-    bindable_numbers: Vec<StateMachineBindableNumberInstance>,
-    bindable_integers: Vec<StateMachineBindableIntegerInstance>,
-    bindable_colors: Vec<StateMachineBindableColorInstance>,
-    bindable_strings: Vec<StateMachineBindableStringInstance>,
-    bindable_enums: Vec<StateMachineBindableEnumInstance>,
-    bindable_assets: Vec<StateMachineBindableAssetInstance>,
-    bindable_artboards: Vec<StateMachineBindableArtboardInstance>,
-    bindable_lists: Vec<StateMachineBindableListInstance>,
-    bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
-    bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
-    bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
-    default_view_model_triggers: Arc<Vec<RuntimeViewModelTrigger>>,
-    transition_durations: Vec<StateMachineTransitionDurationInstance>,
-    /// Rust initialization for C++ `m_layerCount`, which has no header
-    /// initializer. It is derived from the supplied machine before access.
-    layer_count: usize,
-    /// Bind owners are declared before layers so their retained cells and
-    /// converter tables drop first, matching C++ teardown.
-    pub(in crate::state_machine) data_bind_graph: RuntimeDataBindGraph,
-    /// One C++ `DataBindContainer` queue shared by ordinary state-machine
-    /// binds and every DataBind cloned with a scripted listener action.
-    data_bind_container: RuntimeDataBindContainerQueue,
-    data_bind_occurrences: Vec<RuntimeStateMachineDataBindOccurrence>,
-    key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
-    next_key_frame_data_bind_occurrence_id: u64,
-    layers: Vec<StateMachineLayerInstance>,
-    reported_events: Vec<StateMachineReportedEvent>,
-    /// Prefix of `reported_events` already consumed by C++ `applyEvents`.
-    /// Public reports remain frame-visible after listener delivery, so this
-    /// cursor keeps the two lifetimes distinct without replaying listeners.
-    reported_event_listener_index: usize,
-    /// Prefix of `reported_events` already returned through Rust's draining
-    /// host seam. The core queue remains intact until `applyEvents`, like C++.
-    host_reported_event_index: usize,
-    /// Retained C++ `m_reportingEvents` analog used while notifications may
-    /// enqueue the next batch into `reported_events`.
-    reporting_events: Vec<StateMachineReportedEvent>,
-    /// Events first reported inside the current `applyEvents` loop. They have
-    /// already reached listeners, but remain visible to the host until the
-    /// next loop begins.
-    events_applied_during_loop: Vec<StateMachineReportedEvent>,
-    /// Rust draining-host cursor for `events_applied_during_loop`.
-    host_events_applied_during_loop_index: usize,
-    /// Owner-safe output of the immediate nested bubbling phase. The artboard
-    /// owner drains this FIFO and delivers it to the next ancestor; retaining
-    /// values here avoids a raw child-to-parent pointer.
-    bubbled_event_reports: Vec<StateMachineReportedEvent>,
-    bubbled_event_report_index: usize,
-    /// Audio occurrences whose reporting machine has an owner. C++ reaches
-    /// these only after synchronous ancestor notification unwinds. Rust keeps
-    /// the typed occurrences here until the owner-mediated frame path has
-    /// completed that ancestor dispatch.
-    deferred_owner_audio_occurrences: Vec<AudioEventOccurrence>,
-    /// Whether this occurrence is owned by a `NestedStateMachine` notifier.
-    /// Root occurrences have no upward event edge and must not accumulate an
-    /// outgoing bubble batch.
-    event_bubble_owner_attached: bool,
-    notifying_event_listeners: bool,
-    /// C++ `m_reportedListenerViewModels`: every retained listener-cell
-    /// mutation appends its listener index, preserving duplicates and
-    /// dependent-registration order until next-frame `applyEvents`.
-    reported_listener_view_models: RuntimeCellNotificationQueue,
-    /// Retained C++ `m_reportingListenerViewModels` batch buffer.
-    reporting_listener_view_models: Vec<usize>,
-    /// Nested-ViewModel source reports discovered through Rust's external
-    /// context adaptation become pending only after the current frame's
-    /// `applyEvents`, matching the later C++ DataBind occurrence update.
-    post_apply_listener_view_models: Vec<usize>,
-    pub(in crate::state_machine) needs_advance: bool,
-    /// C++ `m_DataContext` can be mutated by the staged main/global setters
-    /// before any DataBind is rebound. The existing Rust graph APIs used the
-    /// bound source cells as their only context record, which collapsed that
-    /// distinction. Retain the public composite shape separately so
-    /// `setViewModelInstance`/`setGlobalViewModelInstance` can update slot
-    /// ownership without applying paths until `bind`.
-    primary_data_context: Option<RuntimeStateMachineDataContext>,
-    pub(in crate::state_machine) owned_data_context: Option<RuntimeOwnedDataContext>,
-    #[cfg(test)]
-    owned_data_bind_context_bind_count: usize,
-    #[cfg(test)]
-    bind_phase_trace: Vec<&'static str>,
-    #[cfg(test)]
-    event_dispatch_phase_trace: Vec<&'static str>,
-    #[cfg(test)]
-    event_total_order_trace: Option<(&'static str, &'static str, Rc<RefCell<Vec<&'static str>>>)>,
-    #[cfg(test)]
-    event_settlement_total_order_trace: Option<(&'static str, Rc<RefCell<Vec<&'static str>>>)>,
-    #[cfg(test)]
-    nested_event_forward_test: Option<StateMachineReportedEvent>,
-    audio_event_seam: Rc<dyn AudioEventSeam>,
-    audio_event_selection_count: usize,
-    audio_event_last_occurrence: Option<AudioEventOccurrence>,
-    #[cfg(test)]
-    advance_phase_trace: Vec<&'static str>,
-    #[cfg(test)]
-    raw_advance_call_count: usize,
-    #[cfg(test)]
-    transition_probe_count: usize,
-    #[cfg(test)]
-    data_context_advance_call_count: usize,
-    #[cfg(test)]
-    bind_advance_test_report: Option<StateMachineReportedEvent>,
-    /// C++ `ViewModelInstance::m_dependents` push channel: structural
-    /// ViewModel replacement dirties this sink so the retained DataContext is
-    /// relinked without polling a root mutation generation every frame.
-    pub(in crate::state_machine) owned_view_model_rebind_sink: RuntimeCellDirtSink,
-    /// Fresh component-provided listener/proxy owners constructed for this
-    /// StateMachineInstance (`state_machine_instance.cpp:1969-2013`).
-    draggable_proxies: Vec<RuntimeDraggableProxy>,
-    /// Complete polymorphic hit-owner hierarchy in current C++ hit order.
-    hit_components: Vec<Box<dyn HitComponent>>,
-    /// One retained ListenerGroup seam per authored/provider occurrence,
-    /// including unresolved authored pointer targets.
-    listener_groups: Vec<ListenerGroup>,
-    /// Explicitly detachable, value-owned adaptation of nested notifier
-    /// registrations.
-    nested_event_registrations: Vec<RuntimeNestedEventRegistration>,
-    disposed: bool,
-    /// Explicit zero initialization for C++ `m_drawOrderChangeCounter`.
-    /// WP3 owns constructor sorting and change-triggered re-sorting.
-    draw_order_change_counter: u64,
-    #[cfg(test)]
-    constructor_phases: Vec<RuntimeConstructorPhase>,
-    #[cfg(test)]
-    drop_phase_receipt: Option<Rc<RefCell<Vec<&'static str>>>>,
-    pub(in crate::state_machine) scripted_object_definitions: Vec<ScriptListenerActionDefinition>,
-    scripted_listener_action_definitions: Vec<ScriptListenerActionDefinition>,
-    /// C++ deletes the cloned DataBinds before deleting the cloned
-    /// ScriptedObjects. Keep the binding owner before every table-handle map
-    /// so Rust field destruction preserves that same owner lifetime
-    /// (`state_machine_instance.cpp:2169-2198`).
-    scripted_object_bindings:
-        Vec<super::scripted_listener_action::RuntimeScriptedListenerActionBindingOccurrence>,
-    scripted_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
-    scripted_listener_action_instances: BTreeMap<u32, RuntimeScriptInstanceHandle>,
-    /// C++ completes `cloneScriptedObject` plus the later
-    /// `initScriptedObjects` pass once per concrete StateMachineInstance.
-    ///
-    /// Rust defers that File/VM-backed work until the facade supplies its
-    /// authenticated scripting context. A snapshot clone starts cold because
-    /// it cannot alias mutable Lua tables from the source occurrence.
-    pub(in crate::state_machine) scripted_object_initialization_complete: bool,
-    /// Whether the owning Artboard already retained a DataContext when this
-    /// exact StateMachineInstance occurrence was constructed. C++ observes
-    /// this only inside the constructor: it assigns the Artboard context to
-    /// every cloned ScriptedObject and runs `initScriptedObjects` before
-    /// `ArtboardInstance::stateMachineAt` later calls `inheritDataContext`
-    /// (`state_machine_instance.cpp:2072-2082`; `artboard.cpp:2844-2856`).
-    pub(in crate::state_machine) scripted_constructor_context_was_prebound: bool,
-    /// Whether this occurrence has completed the latest C++
-    /// `internalDataContext` bind across both ordinary and cloned
-    /// ScriptedObject DataBinds. This is independent of Lua table
-    /// initialization: no-Factory entry points must still bind the fixed
-    /// occurrences, while a later Factory-backed call owns the cold script
-    /// lifecycle.
-    pub(in crate::state_machine) scripted_data_context_bind_complete: bool,
-    /// AF-8 facade adaptation: the public convenience advance accepts a root
-    /// ViewModel every frame, while C++ `internalDataContext` is an explicit
-    /// lifecycle boundary. Retain the exact last hydrated root identity so an
-    /// A->A frame is not invented into a rebind and A->B still rehydrates
-    /// every persistent scripted occurrence before same-frame advance.
-    pub(in crate::state_machine) scripted_facade_root_view_model:
-        Option<RuntimeOwnedViewModelHandle>,
-    /// The owning Artboard's file is stable for the lifetime of the concrete
-    /// C++ StateMachineInstance. Retain that same authority so the public
-    /// no-argument `updateDataBinds(true)` boundary can reconcile cloned
-    /// ScriptInput targets without borrowing the Artboard again.
-    scripted_listener_runtime_file: Option<Arc<RuntimeFile>>,
-    scripted_listener_artboard_resolver: Option<Rc<dyn ScriptArtboardResolver>>,
-    pub(in crate::state_machine) script_error: Option<ScriptError>,
-    view_model_listeners: Vec<RuntimeViewModelListenerInstance>,
-    focus_listener_groups: Vec<focus_listener_group::RuntimeFocusListenerGroup>,
-    keyboard_listener_groups: Vec<keyboard_listener_group::RuntimeKeyboardListenerGroup>,
-    gamepad_listener_groups: Vec<gamepad_listener_group::RuntimeGamepadListenerGroup>,
-    gamepad_scripted_drawables: Vec<gamepad_listener_group::RuntimeGamepadScriptedDrawable>,
-    pub(in crate::state_machine) embedder_gamepads: BTreeMap<i32, ScriptGamepadSnapshot>,
-    scripted_input_group_generation: u64,
-    semantic_listener_groups: Vec<semantic_listener_group::RuntimeSemanticListenerGroup>,
-    queued_focus_events: Vec<RuntimeQueuedFocusEvent>,
-    queued_semantic_events: Vec<RuntimeQueuedSemanticEvent>,
-    #[cfg(test)]
-    deferred_callback_probe: Option<RuntimeDeferredCallbackProbe>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeStateMachineDataBindOccurrence {
+pub(super) enum RuntimeStateMachineDataBindOccurrence {
     Ordinary {
         data_bind_index: usize,
     },
@@ -1652,345 +1414,7 @@ struct RuntimePointerInput {
     id: i32,
 }
 
-pub(in crate::state_machine) struct RuntimeStateMachineListenerActionExecutor<'a> {
-    needs_advance: &'a mut bool,
-    pub(in crate::state_machine) data_bind_graph: &'a mut RuntimeDataBindGraph,
-    data_bind_facilities_ready: bool,
-    owned_view_model_context: Option<&'a mut RuntimeOwnedViewModelInstance>,
-    owned_data_context: Option<RuntimeOwnedDataContext>,
-    file_data_context_instance: Option<RuntimeViewModelInstanceCells>,
-    scripted_listener_action_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
-    scripted_instances_by_global: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
-    focus: &'a mut RuntimeFocusTree,
-    host: &'a mut dyn ScriptHost,
-}
-
-impl RuntimeStateMachineListenerActionExecutor<'_> {
-    pub(in crate::state_machine) fn perform_scheduled_view_model_change(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        bindable_global_id: u32,
-        value: &RuntimeListenerViewModelChangeValue,
-        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
-    ) -> bool {
-        if !self.data_bind_facilities_ready {
-            return false;
-        }
-        let data_bind_index = self
-            .data_bind_graph
-            .bindable_data_bind_to_source_index(bindable_global_id);
-        let artboard_value = match value {
-            RuntimeListenerViewModelChangeValue::Number(value) => {
-                RuntimeDataBindGraphValue::Number(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Integer(value) => {
-                RuntimeDataBindGraphValue::SymbolListIndex(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Color(value) => {
-                RuntimeDataBindGraphValue::Color(*value)
-            }
-            RuntimeListenerViewModelChangeValue::String(value) => {
-                RuntimeDataBindGraphValue::String(value.clone())
-            }
-            RuntimeListenerViewModelChangeValue::Enum(value) => {
-                RuntimeDataBindGraphValue::Enum(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Asset(value) => {
-                RuntimeDataBindGraphValue::Asset(value.data_bind_asset_index())
-            }
-            RuntimeListenerViewModelChangeValue::Artboard(value) => {
-                RuntimeDataBindGraphValue::Artboard(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Trigger(value) => {
-                RuntimeDataBindGraphValue::Trigger(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Boolean(value) => {
-                RuntimeDataBindGraphValue::Boolean(*value)
-            }
-            RuntimeListenerViewModelChangeValue::List(value) => RuntimeDataBindGraphValue::List {
-                item_count: usize::try_from(*value).unwrap_or(usize::MAX),
-            },
-            RuntimeListenerViewModelChangeValue::ViewModel(value) => {
-                RuntimeDataBindGraphValue::ViewModel(*value)
-            }
-        };
-        let path = data_bind_index.and_then(|data_bind_index| {
-            self.data_bind_graph
-                .source_path_for_data_bind(data_bind_index)
-        });
-        let source_changed = if let Some(data_bind_index) = data_bind_index
-            && let Some(context) = self.owned_view_model_context.take()
-        {
-            let changed = self.perform_owned_view_model_change(
-                &mut *context,
-                data_bind_index,
-                value,
-                &mut targets,
-            );
-            self.owned_view_model_context = Some(context);
-            changed
-        } else if let Some(data_bind_index) = data_bind_index
-            && self.owned_data_context.is_some()
-        {
-            self.perform_owned_data_context_change(data_bind_index, value, &mut targets)
-        } else if let Some(data_bind_index) = data_bind_index {
-            self.data_bind_graph
-                .set_active_view_model_source_for_data_bind(data_bind_index, artboard_value.clone())
-        } else {
-            false
-        };
-        let target_dirtied = self
-            .data_bind_graph
-            .dirty_bindable_data_bind_to_target(bindable_global_id);
-        if !source_changed && !target_dirtied {
-            return false;
-        }
-        if source_changed && let Some(path) = path {
-            artboard.set_artboard_data_bind_value_for_path(&path, artboard_value);
-        }
-        // Pinned `ListenerViewModelChange::perform` updates only the
-        // target-to-source bind, then calls `addDirt(Bindings, true)` on the
-        // paired source-to-target bind. It does not run `updateDataBinds`
-        // inside the action FIFO (`listener_viewmodel_change.cpp:42-80`).
-        // Keeping the target dirty until the normal data-bind boundary means
-        // a later action in this same FIFO still observes its pre-batch
-        // target value.
-        true
-    }
-
-    fn perform_owned_data_context_change(
-        &mut self,
-        data_bind_index: usize,
-        value: &RuntimeListenerViewModelChangeValue,
-        targets: &mut RuntimeScheduledListenerActionTargetsMut<'_>,
-    ) -> bool {
-        let Some(source_path) = self
-            .data_bind_graph
-            .source_path_for_data_bind(data_bind_index)
-        else {
-            return false;
-        };
-        let Some((context_handle, property_path)) = self
-            .owned_data_context
-            .as_ref()
-            .and_then(|context| context.resolved_property_path(&source_path))
-        else {
-            return false;
-        };
-
-        if let RuntimeListenerViewModelChangeValue::Trigger(value) = value {
-            let Some(bindable_trigger) = targets
-                .bindable_triggers
-                .iter_mut()
-                .find(|trigger| trigger.has_data_bind_index(data_bind_index))
-            else {
-                return false;
-            };
-            bindable_trigger.set_value(*value);
-            let mut context = context_handle.borrow_mut();
-            if !self
-                .data_bind_graph
-                .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                    &mut context,
-                    data_bind_index,
-                    *value,
-                    &property_path,
-                )
-            {
-                return false;
-            }
-            return true;
-        }
-
-        let asset_value = match value {
-            RuntimeListenerViewModelChangeValue::Asset(fallback) => Some(
-                targets
-                    .bindable_assets
-                    .iter()
-                    .find(|asset| asset.has_data_bind_index(data_bind_index))
-                    .map(|asset| asset.value.clone())
-                    .unwrap_or_else(|| fallback.clone()),
-            ),
-            _ => None,
-        };
-        let graph_value = match value {
-            RuntimeListenerViewModelChangeValue::Number(value) => {
-                RuntimeDataBindGraphValue::Number(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Integer(value) => {
-                RuntimeDataBindGraphValue::SymbolListIndex(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Color(value) => {
-                RuntimeDataBindGraphValue::Color(*value)
-            }
-            RuntimeListenerViewModelChangeValue::String(value) => {
-                RuntimeDataBindGraphValue::String(value.clone())
-            }
-            RuntimeListenerViewModelChangeValue::Enum(value) => {
-                RuntimeDataBindGraphValue::Enum(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Asset(_) => RuntimeDataBindGraphValue::Asset(
-                asset_value
-                    .as_ref()
-                    .map(RuntimeBindableAssetValue::data_bind_asset_index)
-                    .unwrap_or_default(),
-            ),
-            RuntimeListenerViewModelChangeValue::Artboard(value) => {
-                RuntimeDataBindGraphValue::Artboard(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Boolean(value) => {
-                RuntimeDataBindGraphValue::Boolean(*value)
-            }
-            RuntimeListenerViewModelChangeValue::List(value) => RuntimeDataBindGraphValue::List {
-                item_count: usize::try_from(*value).unwrap_or(usize::MAX),
-            },
-            RuntimeListenerViewModelChangeValue::ViewModel(value) => {
-                RuntimeDataBindGraphValue::ViewModel(*value)
-            }
-            RuntimeListenerViewModelChangeValue::Trigger(_) => unreachable!(),
-        };
-        let mut context = context_handle.borrow_mut();
-        let Some(context_changed) =
-            StateMachineInstance::apply_listener_view_model_change_at_property_path(
-                &mut context,
-                &property_path,
-                value,
-                asset_value.as_ref(),
-            )
-        else {
-            return false;
-        };
-        let graph_changed = self
-            .data_bind_graph
-            .set_active_view_model_source_for_data_bind(data_bind_index, graph_value);
-        if matches!(value, RuntimeListenerViewModelChangeValue::Number(_)) {
-            // The listener wrote the retained cell above. Its owning binds,
-            // including converter-operand dependencies, are already dirty;
-            // fold that pushed dirt before this frame's data-bind pass.
-            self.data_bind_graph.collect_retained_source_dirt();
-        }
-        context_changed || graph_changed
-    }
-
-    fn perform_owned_view_model_change(
-        &mut self,
-        context: &mut RuntimeOwnedViewModelInstance,
-        data_bind_index: usize,
-        value: &RuntimeListenerViewModelChangeValue,
-        targets: &mut RuntimeScheduledListenerActionTargetsMut<'_>,
-    ) -> bool {
-        match value {
-            RuntimeListenerViewModelChangeValue::Number(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_number_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::Integer(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_symbol_list_index_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::Color(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_color_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::String(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_string_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    value,
-                ),
-            RuntimeListenerViewModelChangeValue::Enum(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_enum_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::Asset(value) => {
-                if let Some(blob_value) = value.blob_data_bind_value() {
-                    self.data_bind_graph
-                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            &blob_value,
-                        )
-                } else if let Some(font_value) = value.font_data_bind_value() {
-                    self.data_bind_graph
-                        .set_owned_view_model_context_font_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            &font_value,
-                        )
-                } else {
-                    self.data_bind_graph
-                        .set_owned_view_model_context_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            value.data_bind_asset_index(),
-                        )
-                }
-            }
-            RuntimeListenerViewModelChangeValue::Artboard(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_artboard_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::Boolean(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_boolean_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-            RuntimeListenerViewModelChangeValue::Trigger(value) => {
-                let Some(bindable_trigger) = targets
-                    .bindable_triggers
-                    .iter_mut()
-                    .find(|trigger| trigger.has_data_bind_index(data_bind_index))
-                else {
-                    return false;
-                };
-                bindable_trigger.set_value(*value);
-                if !self
-                    .data_bind_graph
-                    .fire_owned_view_model_context_trigger_source_for_data_bind(
-                        context,
-                        data_bind_index,
-                        *value,
-                    )
-                {
-                    return false;
-                }
-                true
-            }
-            RuntimeListenerViewModelChangeValue::List(value) => self
-                .data_bind_graph
-                .set_active_view_model_source_for_data_bind(
-                    data_bind_index,
-                    RuntimeDataBindGraphValue::List {
-                        item_count: usize::try_from(*value).unwrap_or(usize::MAX),
-                    },
-                ),
-            RuntimeListenerViewModelChangeValue::ViewModel(value) => self
-                .data_bind_graph
-                .set_active_view_model_source_for_data_bind(
-                    data_bind_index,
-                    RuntimeDataBindGraphValue::ViewModel(*value),
-                ),
-        }
-    }
-}
+impl RuntimeStateMachineListenerActionExecutor<'_> {}
 
 impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActionExecutor<'_> {
     fn mark_direct_input_changed(&mut self) {
@@ -2354,7 +1778,7 @@ fn validate_pointer_timestamp(timestamp_seconds: f32) -> Result<(), ScriptError>
 }
 
 #[derive(Debug)]
-struct RuntimeViewModelListenerInstance {
+pub(super) struct RuntimeViewModelListenerInstance {
     /// Stable authored listener-definition arena plus index, matching C++'s
     /// retained `const StateMachineListener*`.
     listener_definitions: Arc<Vec<RuntimeStateMachineListener>>,
@@ -2461,7 +1885,7 @@ impl RuntimeViewModelListenerInstance {
 /// One listener condition's dependent registration on its retained cell
 /// (C++ `ListenerViewModelPropertyBindingListener`). Dropping the binding
 /// unregisters implicitly: the cell only holds the sink weakly.
-struct RuntimeViewModelListenerCellBinding {
+pub(super) struct RuntimeViewModelListenerCellBinding {
     cell: RuntimeViewModelCell,
     _sink: RuntimeCellDirtSink,
 }
@@ -8250,203 +7674,7 @@ impl StateMachineInstance {
         Ok(changed)
     }
 
-    fn perform_listener_view_model_change(
-        &mut self,
-        data_bind_index: usize,
-        value: &RuntimeListenerViewModelChangeValue,
-        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
-    ) -> bool {
-        match value {
-            RuntimeListenerViewModelChangeValue::Number(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_number_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => {
-                    self.set_default_view_model_number_source_for_data_bind(data_bind_index, *value)
-                }
-            },
-            RuntimeListenerViewModelChangeValue::Integer(value) => match owned_context {
-                Some(context) => self
-                    .set_owned_view_model_context_symbol_list_index_source_for_data_bind(
-                        context,
-                        data_bind_index,
-                        *value,
-                    ),
-                None => self.set_default_view_model_symbol_list_index_source_for_data_bind(
-                    data_bind_index,
-                    *value,
-                ),
-            },
-            RuntimeListenerViewModelChangeValue::Color(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_color_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => {
-                    self.set_default_view_model_color_source_for_data_bind(data_bind_index, *value)
-                }
-            },
-            RuntimeListenerViewModelChangeValue::String(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_string_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    value,
-                ),
-                None => {
-                    self.set_default_view_model_string_source_for_data_bind(data_bind_index, value)
-                }
-            },
-            RuntimeListenerViewModelChangeValue::Enum(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_enum_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => {
-                    self.set_default_view_model_enum_source_for_data_bind(data_bind_index, *value)
-                }
-            },
-            RuntimeListenerViewModelChangeValue::Asset(value) => {
-                let value = self
-                    .listener_asset_value_for_data_bind(data_bind_index, value)
-                    .clone();
-                let font_value = value.font_data_bind_value();
-                let blob_value = value.blob_data_bind_value();
-                match (owned_context, font_value.as_ref(), blob_value.as_ref()) {
-                    (Some(context), Some(font_value), _) => self
-                        .set_owned_view_model_context_font_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            font_value,
-                        ),
-                    (Some(context), _, Some(blob_value)) => self
-                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            blob_value,
-                        ),
-                    (Some(context), None, None) => self
-                        .set_owned_view_model_context_asset_source_for_data_bind(
-                            context,
-                            data_bind_index,
-                            value.asset_index(),
-                        ),
-                    (None, _, _) => self.set_default_view_model_asset_source_for_data_bind(
-                        data_bind_index,
-                        value.data_bind_asset_index(),
-                    ),
-                }
-            }
-            RuntimeListenerViewModelChangeValue::Artboard(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_artboard_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => self
-                    .set_default_view_model_artboard_source_for_data_bind(data_bind_index, *value),
-            },
-            RuntimeListenerViewModelChangeValue::Trigger(value) => match owned_context {
-                Some(context) => self.fire_owned_view_model_context_trigger_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => self.perform_listener_trigger_view_model_change(data_bind_index, *value),
-            },
-            RuntimeListenerViewModelChangeValue::Boolean(value) => match owned_context {
-                Some(context) => self.set_owned_view_model_context_boolean_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    *value,
-                ),
-                None => self
-                    .set_default_view_model_boolean_source_for_data_bind(data_bind_index, *value),
-            },
-            RuntimeListenerViewModelChangeValue::List(value) => {
-                let changed = self
-                    .data_bind_graph
-                    .set_active_view_model_source_for_data_bind(
-                        data_bind_index,
-                        RuntimeDataBindGraphValue::List {
-                            item_count: usize::try_from(*value).unwrap_or(usize::MAX),
-                        },
-                    );
-                self.needs_advance |= changed;
-                changed
-            }
-            RuntimeListenerViewModelChangeValue::ViewModel(value) => {
-                let changed = self
-                    .data_bind_graph
-                    .set_active_view_model_source_for_data_bind(
-                        data_bind_index,
-                        RuntimeDataBindGraphValue::ViewModel(*value),
-                    );
-                self.needs_advance |= changed;
-                changed
-            }
-        }
-    }
-
-    fn perform_listener_trigger_view_model_change(
-        &mut self,
-        data_bind_index: usize,
-        value: u64,
-    ) -> bool {
-        let Some(bindable_trigger) = self
-            .bindable_triggers
-            .iter_mut()
-            .find(|bindable_trigger| bindable_trigger.has_data_bind_index(data_bind_index))
-        else {
-            return false;
-        };
-
-        // Mirrors src/animation/listener_viewmodel_change.cpp: listener
-        // actions invalidate the target-to-source binding even when the
-        // trigger target value itself did not change.
-        bindable_trigger.set_value(value);
-        if !self
-            .data_bind_graph
-            .mark_trigger_target_dirty_for_data_bind(data_bind_index)
-        {
-            return false;
-        }
-        let applied = self
-            .data_bind_graph
-            .apply_default_view_model_target_to_source_for_data_bind(
-                data_bind_index,
-                &RuntimeDataBindGraphTargetsMut {
-                    numbers: &mut self.bindable_numbers,
-                    integers: &mut self.bindable_integers,
-                    booleans: &mut self.bindable_booleans,
-                    strings: &mut self.bindable_strings,
-                    colors: &mut self.bindable_colors,
-                    enums: &mut self.bindable_enums,
-                    assets: &mut self.bindable_assets,
-                    artboards: &mut self.bindable_artboards,
-                    lists: &mut self.bindable_lists,
-                    triggers: &mut self.bindable_triggers,
-                    view_models: &mut self.bindable_view_models,
-                    transition_durations: &mut self.transition_durations,
-                    include_view_models: true,
-                },
-            );
-        match applied {
-            Ok(true) => {}
-            Ok(false) => return false,
-            Err(error) => {
-                self.script_error.get_or_insert(error);
-                return true;
-            }
-        }
-        self.needs_advance = true;
-        true
-    }
-
-    fn listener_asset_value_for_data_bind<'a>(
+    pub(super) fn listener_asset_value_for_data_bind<'a>(
         &'a self,
         data_bind_index: usize,
         fallback: &'a RuntimeBindableAssetValue,
@@ -8458,7 +7686,7 @@ impl StateMachineInstance {
             .unwrap_or(fallback)
     }
 
-    fn set_owned_view_model_context_font_asset_source_for_data_bind(
+    pub(super) fn set_owned_view_model_context_font_asset_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
         data_bind_index: usize,
@@ -8481,7 +7709,7 @@ impl StateMachineInstance {
         true
     }
 
-    fn set_owned_view_model_context_blob_asset_source_for_data_bind(
+    pub(super) fn set_owned_view_model_context_blob_asset_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
         data_bind_index: usize,
@@ -10277,7 +9505,7 @@ impl StateMachineInstance {
         true
     }
 
-    fn fire_owned_view_model_context_trigger_source_for_data_bind(
+    pub(super) fn fire_owned_view_model_context_trigger_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
         data_bind_index: usize,
@@ -11725,7 +10953,7 @@ impl StateMachineInstance {
         }
     }
 
-    fn apply_listener_view_model_change_at_property_path(
+    pub(super) fn apply_listener_view_model_change_at_property_path(
         context: &mut RuntimeOwnedViewModelInstance,
         property_path: &[usize],
         value: &RuntimeListenerViewModelChangeValue,

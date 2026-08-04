@@ -1047,7 +1047,7 @@ status = "faithful"
 upstream = "src/animation/listener_viewmodel_change.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_viewmodel_change.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_viewmodel_change.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/listener_viewmodel_change.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -3697,7 +3697,7 @@ drop = ["cpp:src/animation/blend_state_1d_instance.cpp:1-149", "rust:crates/nuxi
 id = "state_machine.collections"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine.cpp", "src/animation/state_machine_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "pub struct StateMachineInstance"
 status = "faithful"
 [member.lifecycle]
@@ -3731,7 +3731,7 @@ drop = ["cpp:src/animation/state_machine_instance.cpp:2320-2700", "rust:crates/n
 id = "state_machine.events"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine_instance.cpp", "src/animation/listener_action.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "reported_events"
 status = "faithful"
 [member.lifecycle]
@@ -3807,7 +3807,7 @@ cpp_files = [
   "src/animation/state_machine_fire_action.cpp",
   "src/animation/state_machine_fire_trigger.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "RuntimeStateMachineListenerActionExecutor"
 status = "faithful"
 [member.lifecycle]

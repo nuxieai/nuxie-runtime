@@ -17,3 +17,9 @@
 - Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
 - Touched areas: promoted table-property constant folding, change-log undo,
   safe `next` specialization, and the FASTCALL3 cost model.
+
+## Luau fork rung 5
+
+- Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
+- Touched areas: recursive type-alias bytecode typing and bytecode-v12 packed
+  cost computation/emission for inlinable functions.

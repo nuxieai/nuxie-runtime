@@ -797,6 +797,13 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
         let mut remaining = slots.len().saturating_add(1);
         while remaining != 0 {
             remaining -= 1;
+            // ClippingShape is a sibling renderer owner mounted below Text,
+            // not part of Text's shaped/style content. Its generated
+            // callbacks dirty the retained clipping path only
+            // (`clipping_shape.cpp:117-173`).
+            if slots.get(current_local).and_then(|slot| slot.type_name) == Some("ClippingShape") {
+                break;
+            }
             if matches!(
                 slots.get(current_local).and_then(|slot| slot.type_name),
                 Some("Text" | "TextInput")

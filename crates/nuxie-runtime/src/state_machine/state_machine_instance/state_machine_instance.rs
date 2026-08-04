@@ -1977,52 +1977,6 @@ pub(super) fn apply_scripted_input_update(
 }
 
 impl StateMachineInstance {
-    pub(super) fn record_bind_phase(&mut self, phase: &'static str) {
-        #[cfg(test)]
-        self.bind_phase_trace.push(phase);
-        #[cfg(not(test))]
-        let _ = phase;
-    }
-
-    fn record_event_dispatch_phase(&mut self, phase: &'static str) {
-        #[cfg(test)]
-        {
-            self.event_dispatch_phase_trace.push(phase);
-            if let Some((local, audio, total_order)) = &self.event_total_order_trace {
-                match phase {
-                    "local-dispatch" => total_order.borrow_mut().push(local),
-                    "recorded-audio-seam" => total_order.borrow_mut().push(audio),
-                    _ => {}
-                }
-            }
-        }
-        #[cfg(not(test))]
-        let _ = phase;
-    }
-
-    fn record_advance_phase(&mut self, phase: &'static str) {
-        #[cfg(test)]
-        self.advance_phase_trace.push(phase);
-        #[cfg(not(test))]
-        let _ = phase;
-    }
-
-    fn record_constructor_phase(&mut self, phase: RuntimeConstructorPhase) {
-        #[cfg(test)]
-        self.constructor_phases.push(phase);
-        #[cfg(not(test))]
-        let _ = phase;
-    }
-
-    pub(super) fn record_drop_phase(&self, phase: &'static str) {
-        #[cfg(test)]
-        if let Some(receipt) = self.drop_phase_receipt.as_ref() {
-            receipt.borrow_mut().push(phase);
-        }
-        #[cfg(not(test))]
-        let _ = phase;
-    }
-
     /// Explicitly detach this occurrence from every nested notifier identity.
     ///
     /// Rust polls nested reports rather than installing a raw child→parent
@@ -3540,10 +3494,6 @@ impl StateMachineInstance {
 
     pub fn state_machine_index(&self) -> usize {
         self.state_machine_index
-    }
-
-    fn profile_name(&self) -> &str {
-        &self.profile_name
     }
 
     pub(crate) fn retained_state_machine_definitions(

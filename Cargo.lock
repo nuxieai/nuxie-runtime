@@ -944,8 +944,6 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 [[package]]
 name = "luaur-ast"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "764705892871b019d59ae715a3c258c05d4c0cdc91b48bc13de1dff9528c46aa"
 dependencies = [
  "luaur-common",
 ]
@@ -953,8 +951,6 @@ dependencies = [
 [[package]]
 name = "luaur-bytecode"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d04ae19a8ccc422eb05af31c3d72ea52417fe183cf3b12c5838cec539541ab3a"
 dependencies = [
  "luaur-common",
 ]
@@ -970,8 +966,6 @@ dependencies = [
 [[package]]
 name = "luaur-compiler"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e84db18b5d4b63286e3725ef8473a1181dc70bad9941608ec120ecc2e255397"
 dependencies = [
  "luaur-ast",
  "luaur-bytecode",
@@ -981,8 +975,6 @@ dependencies = [
 [[package]]
 name = "luaur-rt"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2f75240c12ca15167dae8542d7d477d28a58491e33a752c4e160f424dc6e588"
 dependencies = [
  "luaur-ast",
  "luaur-bytecode",

@@ -1,0 +1,9 @@
+x = "unterminated
+local y = @[native] z
+bad = éሴ
+dq = `a{{b`
+esc = "a\zb   c\u{1F600}d"
+cr = 1
+v = ...
+idx = a::b
+nest = `out{ {1, 2} }in`

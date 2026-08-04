@@ -1,0 +1,25 @@
+[package]
+name = "luaur-bytecode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Luau bytecode format and builder (Rust)."
+keywords = ["luau", "lua", "bytecode", "compiler"]
+categories = ["compilers", "encoding"]
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+luaur-common = { path = "../luaur-common", version = "0.1.8" }
+
+[features]
+default = ["std"]
+std = []
+native = ["std"]
+cli = ["native"]
+native-codegen = ["native"]
+wasm = ["dep:wasm-bindgen"]

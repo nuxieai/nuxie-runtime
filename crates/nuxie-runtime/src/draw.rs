@@ -14089,7 +14089,36 @@ impl RuntimeOccurrenceRenderResources {
             return nested_structure_epoch.is_none()
                 || self.solid_only_tree_structure_epoch != nested_structure_epoch;
         }
-        true
+        if instance
+            .runtime_shapes
+            .backend_paints_need_realization(self.paints.backend_context_id)
+        {
+            return true;
+        }
+        let Some(preparation) = self.preparation.as_ref() else {
+            return true;
+        };
+        // `update_artboard_backend_tree_internal` records this exact key only
+        // after it has realized pending paints and completed the occurrence
+        // traversal. Reuse that retained clean boundary so an explicit
+        // prepare followed by draw does not enter synchronization twice.
+        let Some(gradient_frame) = self.path_cache.gradient_preparation.as_ref().filter(|frame| {
+            frame.key.graph_global_id == graph.global_id
+                && frame.key.graph_identity == graph as *const ArtboardGraph as usize
+        }) else {
+            return true;
+        };
+        let world_epoch = if gradient_frame.has_world_space_gradient_paints {
+            instance.prepared_epoch()
+        } else {
+            0
+        };
+        !preparation.can_skip_prepared_frame(
+            graph.global_id,
+            instance.cache_epoch(),
+            world_epoch,
+            instance.tree_paint_preparation_epoch(),
+        )
     }
 }
 
@@ -29011,6 +29040,56 @@ mod tests {
             owner.render_opacity.get(),
             0.25,
             "a clean initialized occurrence must not re-enter opacity-tree seeding",
+        );
+    }
+
+    #[test]
+    fn explicit_paint_preparation_leaves_gradient_occurrence_clean_for_draw() {
+        let bytes = synthetic_painted_layout_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic gradient riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic gradient graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+
+        instance
+            .synchronize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("explicit paint preparation succeeds");
+
+        assert!(
+            !instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "draw must not repeat synchronization for the just-prepared occurrence",
+        );
+
+        let clean_cache_epoch = instance.cache_epoch;
+        instance.cache_epoch = clean_cache_epoch.wrapping_add(1);
+        assert!(
+            instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "new occurrence dirt must invalidate the retained clean boundary",
+        );
+        instance.cache_epoch = clean_cache_epoch;
+
+        instance.runtime_shapes.backend_context_id.set(None);
+        assert!(
+            instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "a stale owner backend must force realization even when epochs are unchanged",
         );
     }
 

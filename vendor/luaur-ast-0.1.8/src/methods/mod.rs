@@ -493,6 +493,7 @@ pub mod printer_lookup_cst_node;
 pub mod printer_maybe_advance_and_write;
 pub mod printer_printer;
 pub mod printer_visualize_attribute;
+pub mod printer_visualize_attributes;
 pub mod printer_visualize_block_pretty_printer;
 pub mod printer_visualize_block_pretty_printer_alt_b;
 pub mod printer_visualize_else_if;

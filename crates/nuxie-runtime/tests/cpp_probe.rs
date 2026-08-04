@@ -91998,6 +91998,27 @@ fn upstream_new_text_load_body_is_ported() {
 }
 
 #[test]
+fn upstream_new_text_mixed_style_wrap_uses_contextual_advances() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("new_text.riv", None);
+    let mut machine = artboard.state_machine_instance(0).expect("state machine");
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    artboard.update_pass();
+    artboard.advance_state_machine_instance(&mut machine, 0.5);
+    artboard.update_pass();
+    let report = artboard
+        .debug_text_layout_report(&runtime, &graph.artboards[index], 21)
+        .expect("text report");
+    assert_eq!(report.text, "text is ok! now?");
+    assert_eq!(
+        report.line_glyph_ids,
+        vec![
+            vec![586, 330, 639, 586, 3, 409, 564],
+            vec![82, 78, 4, 3, 463, 477, 632, 539],
+        ]
+    );
+}
+
+#[test]
 fn upstream_layout_text_match_fit_font_size_measurement_is_ported() {
     let (runtime, graph, index, mut artboard) =
         upstream_layout_fixture("layout_text_match.riv", None);

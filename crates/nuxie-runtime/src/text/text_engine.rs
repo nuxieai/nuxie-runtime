@@ -231,6 +231,8 @@ fn runtime_color_glyph_path(
         1.0 / TEXT_SHAPE_SCALE_F32,
         0.0,
         0.0,
+        0.0,
+        0.0,
         Mat2D::IDENTITY,
     );
     let settings = DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), LocationRef::default())

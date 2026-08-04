@@ -3733,13 +3733,13 @@ note = "FL-D5 direct mounted-occurrence owner with animation-before-child teardo
 upstream = "src/nested_artboard_layout.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/nested_artboard_layout.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/nested_artboard_layout.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard_layout.rs; crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0304"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. MR-2b/C04 justified exception: remaining bounds transfer executes inside the nested Artboard advance path shared with B6-0303. MR-2b/C05 justified exception: nested layout transfer and drawing are embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf."
+note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. Artboard-side bounds capture, computation, and settlement live in `crates/nuxie-runtime/src/artboard/nested_artboard_layout.rs`. MR-2b/C05 justified exception: nested layout drawing remains embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf."
 
 [[file]]
 upstream = "src/nested_artboard_leaf.cpp"

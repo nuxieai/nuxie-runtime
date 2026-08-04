@@ -1,4 +1,5 @@
 use crate::records::ast_array::AstArray;
+use crate::records::ast_local::AstLocal;
 use crate::records::ast_name::AstName;
 use crate::records::ast_type::AstType;
 use crate::records::ast_type_or_pack::AstTypeOrPack;
@@ -15,6 +16,7 @@ impl AstTypeReference {
         name_location: Location,
         has_parameter_list: bool,
         parameters: AstArray<AstTypeOrPack>,
+        prefix_local: *mut AstLocal,
     ) -> Self {
         Self {
             base: AstType {
@@ -26,6 +28,7 @@ impl AstTypeReference {
             has_parameter_list,
             prefix,
             prefix_location,
+            prefix_local,
             name,
             name_location,
             parameters,
@@ -42,6 +45,7 @@ pub fn ast_type_reference_ast_type_reference(
     name_location: Location,
     has_parameter_list: bool,
     parameters: AstArray<AstTypeOrPack>,
+    prefix_local: *mut AstLocal,
 ) -> AstTypeReference {
     AstTypeReference::new(
         location,
@@ -51,5 +55,6 @@ pub fn ast_type_reference_ast_type_reference(
         name_location,
         has_parameter_list,
         parameters,
+        prefix_local,
     )
 }

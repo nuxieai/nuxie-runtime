@@ -57,6 +57,7 @@ pub struct Proto {
     pub funid: u32,
     pub optimized: *mut Proto,
     pub deoptimized: *mut Proto,
+    pub cost: u64,
 }
 
 #[allow(non_camel_case_types)]

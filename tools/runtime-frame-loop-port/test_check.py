@@ -3873,7 +3873,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             with self.subTest(ratchet=ratchet_id):
                 self.assert_required_production_ratchet_case(
                     ratchet_id,
-                    instance_source,
+                    (
+                        "crates/nuxie-runtime/src/state_machine/state_machine_instance/"
+                        "tests/scripted_listener_actions.rs"
+                        if ratchet_id
+                        == "state_machine_advance_persistent_dirt_real_facade_required"
+                        else instance_source
+                    ),
                     textwrap.dedent(required),
                     textwrap.dedent(missing),
                 )
@@ -5119,6 +5125,51 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         finally:
             self.gaps.write_text(base_gaps)
 
+    def test_fl_c5_owner_detector_accepts_declared_local_owner_module(
+        self,
+    ) -> None:
+        ratchet_id = "state_machine_nested_event_dispatch_outside_instance_policy"
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            hub = self.repo / (
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+            )
+            child = self.repo / (
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance/"
+                "nested_events.rs"
+            )
+            child.parent.mkdir(parents=True, exist_ok=True)
+            hub.write_text("mod nested_events;\n")
+            owner_source = textwrap.dedent(
+                """
+                impl StateMachineInstance {
+                    pub(crate) fn deliver(&mut self) {
+                        StateMachineInstance::notify_events(
+                            self, child, Some(host), &batch,
+                        );
+                    }
+                }
+                """
+            )
+            child.write_text(owner_source)
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            child.write_text("fn child_is_now_plain() {}\n")
+            scout = self.repo / (
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+            )
+            scout.write_text(owner_source)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"ratchet {ratchet_id} increased to 1 > 0",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
     def test_fl_c5_owner_detector_macro_and_attribute_tokens_fail_closed(
         self,
     ) -> None:
@@ -6233,6 +6284,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_keyframe_machine_teardown_before_layers_required",
                 "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
                 """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                    }
+                }
                 fn teardown_bind_occurrences() {
                     layer.remove_key_frame_data_binds();
                     self.key_frame_data_bind_graphs.clear();
@@ -6242,6 +6299,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                    }
+                }
                 fn teardown_bind_occurrences() {
                     self.key_frame_data_bind_graphs.clear();
                 }

@@ -5,6 +5,13 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 pub fn parse_integer(result: &mut f64, data: &str, base: i32) -> ConstantNumberParseResult {
     LUAU_ASSERT!(base == 2 || base == 16);
 
+    if luaur_common::FFlag::LuauNoDuplicateBinaryPrefix.get()
+        && base == 2
+        && (data.starts_with("0b") || data.starts_with("0B"))
+    {
+        return ConstantNumberParseResult::Malformed;
+    }
+
     // C++ `strtoull(data, &end, 16)` transparently skips a leading "0x"/"0X"
     // prefix; Rust's `u64::from_str_radix` does NOT (it errors on the 'x'). The
     // binary path strips "0b" before calling in, but the hex path passes the full

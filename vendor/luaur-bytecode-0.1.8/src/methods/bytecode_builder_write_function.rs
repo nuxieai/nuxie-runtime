@@ -22,7 +22,7 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 use luaur_common::FFlag;
 
 impl BytecodeBuilder {
-    pub fn write_function(&mut self, ss: &mut String, id: u32, flags: u8) {
+    pub fn write_function(&mut self, ss: &mut String, id: u32, flags: u8, cost: u64) {
         LUAU_ASSERT!(id < self.functions.len() as u32);
         let func = &self.functions[id as usize];
 
@@ -204,6 +204,13 @@ impl BytecodeBuilder {
                 write_byte(ss, LuauFeedbackType::LFT_CALLTARGET as u8);
                 write_var_int(ss, pc as u64);
             }
+        }
+
+        if FFlag::LuauBytecodeCostModel.get() && (flags & 8) != 0 {
+            if !FFlag::LuauEmitCallFeedback.get() {
+                write_var_int(ss, 0);
+            }
+            write_var_int(ss, cost);
         }
     }
 }

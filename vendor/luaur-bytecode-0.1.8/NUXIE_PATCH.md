@@ -12,3 +12,9 @@
 - Ported official Luau 0.728 delta (upstream f1f121dc..ddcea05e).
 - Touched areas: reverse def-use tracking, sealed-SSA phi construction,
   CallInliner phi anchoring, graph validation, and cyclic-phi serialization.
+
+## Luau fork rung 5
+
+- Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
+- Touched areas: bytecode-v12 proto sizing and cost metadata, graph-parser
+  metadata consumption, and the new SCCP constant-evaluation entities.

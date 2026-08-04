@@ -20,7 +20,6 @@ impl<'a> TypeMapVisitor<'a> {
             ty_resolved,
             Default::default(),
             &self.type_aliases,
-            true,
             self.host_vector_type,
             self.userdata_types,
             self.bytecode,

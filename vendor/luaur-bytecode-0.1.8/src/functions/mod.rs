@@ -1,5 +1,6 @@
 pub mod ceillog_2;
 pub mod count_uses;
+pub mod find_or_add_const;
 pub mod from_function_bytecode;
 pub mod get_base_type_string;
 pub mod has_use;
@@ -7,6 +8,7 @@ pub mod inline_call;
 pub mod log_2;
 pub mod printable_string_constant;
 pub mod read_string;
+pub mod three_way;
 pub mod to_function_bytecode_bytecode_graph;
 pub mod to_function_bytecode_bytecode_graph_alt_b;
 pub mod uses_of;

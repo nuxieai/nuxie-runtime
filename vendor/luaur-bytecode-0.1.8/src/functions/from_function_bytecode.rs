@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use core::option::Option;
 use luaur_common::enums::luau_bytecode_tag::LuauBytecodeTag;
 use luaur_common::enums::luau_bytecode_type::{LuauBytecodeType, LBC_TYPE_NIL};
+use luaur_common::enums::luau_feedback_type::LuauFeedbackType;
 use luaur_common::functions::read::read;
 use luaur_common::functions::read_var_int::read_var_int;
 use luaur_common::functions::read_var_int_64::read_var_int_64;
@@ -254,6 +255,19 @@ pub fn from_function_bytecode(
             let name = read_string(strings, &data, &mut offset);
             fn_.upvalue_names[i] = unsafe { core::str::from_utf8_unchecked(name) }.to_string();
         }
+    }
+
+    if luaur_common::FFlag::LuauCallFeedback.get() {
+        let feedbackvecsize = read_var_int(&data, &mut offset);
+        for _ in 0..feedbackvecsize {
+            let slottype = read::<u8>(&data, &mut offset);
+            LUAU_ASSERT!(slottype == LuauFeedbackType::LFT_CALLTARGET as u8);
+            read_var_int(&data, &mut offset);
+        }
+    }
+
+    if luaur_common::FFlag::LuauCostModel.get() && (fn_.flags & 8) != 0 {
+        read_var_int_64(&data, &mut offset);
     }
 
     let mut insns_pc: Vec<u32> = Vec::new();

@@ -52,7 +52,6 @@ pub(crate) fn get_function_type(
                 arg.annotation,
                 func_ref.generics,
                 type_aliases,
-                true, // resolveAliases_DEPRECATED
                 host_vector_type,
                 userdata_types,
                 bytecode,

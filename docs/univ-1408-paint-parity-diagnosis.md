@@ -219,3 +219,32 @@ runtime divergence.
   artifact, is independent of the tight-line-height rule.
 - The participant host-scale port is a separate upstream-parity commit and must
   not be used as a speculative UNIV-1408 fix.
+
+## Addendum (2026-08-04): downstream rasterization is exonerated natively
+
+Follow-up measurements on `origin/main` (`6f6191e4`) after rebasing this
+branch:
+
+1. `dump_streams` (new ignored test) writes the six recorded scenes plus a
+   filled-border variant as `rive-golden-stream-v1` files under
+   `target/univ-1408-streams/`.
+2. `renderer-replay --backend rust-wgpu --mode msaa` on `border_basic`
+   paints the exact DOM-expected ring: 1216 dark pixels at 1x (96x64 ->
+   88x56) and 4864 at a device-pixel-ratio-2 wrapper transform, matching
+   the DOM/baseline pixel count from the nightly evidence. The forced
+   texture-backed vertex-storage polyfill path and the filled fill+stroke
+   variant are also exact.
+3. The pointer-roll window `ae81ae0a..42496d5a` touches
+   `crates/nuxie-renderer` in exactly one commit (`09440677`), a shader
+   regeneration whose only semantic change is alpha-0 dither suppression
+   with its own two-mode regression test.
+
+Together with the recording measurements, this exonerates the recorded
+stream and its native rasterization for the border family. The remaining
+suspects are wasm/browser-only renderer behavior and, more likely, the
+retained mutation history of the real product session: every nightly
+measurement to date was taken at nuxie-dev pointer `42496d5a`, which
+predates the mounted-layout/retained-paint repair family on runtime main
+(`6e1eec2a`, `d65b2783`, V29 text-paint mounting, mounted component-list
+child transforms). A remeasure of the product visual suite against
+`6f6191e4` is the decisive next measurement.

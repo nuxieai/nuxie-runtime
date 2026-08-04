@@ -91,12 +91,18 @@ mod text_input_listener_group;
 mod viewmodel_instance_trigger;
 
 #[cfg(test)]
+mod view_model_listener_tests {
+    include!("state_machine_instance/tests/view_model_listener.rs");
+}
+
+#[cfg(test)]
 use state_machine_instance::RuntimeDeferredCallbackProbe;
 use state_machine_instance::{
     AudioEventOccurrence, AudioEventSeam, HitComponent, HitDrawable, RuntimeConstructorPhase,
     RuntimeNestedEventRegistration, RuntimeQueuedFocusEvent, RuntimeQueuedSemanticEvent,
     RuntimeStateMachineDataBindOccurrence, RuntimeViewModelListenerCellBinding,
-    RuntimeViewModelListenerInstance,
+    RuntimeViewModelListenerInstance, RuntimeViewModelListenerSource,
+    relink_view_model_listener_cell,
 };
 
 #[derive(Debug)]

@@ -12,6 +12,7 @@ pub struct AstStatLocal {
     pub values: AstArray<*mut AstExpr>,
     pub is_const: bool,
     pub is_exported: bool,
+    pub keyword_location: Option<Location>,
     pub equals_sign_location: Option<Location>,
 }
 

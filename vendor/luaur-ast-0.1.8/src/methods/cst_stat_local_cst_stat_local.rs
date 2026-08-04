@@ -14,7 +14,6 @@ impl CstStatLocal {
             base: CstNode {
                 class_index: <Self as CstNodeClass>::CLASS_INDEX,
             },
-            declaration_keyword_position: Position::missing(),
             vars_annotation_colon_positions: vars_annotation_colon_positions,
             vars_comma_positions: vars_comma_positions,
             values_comma_positions: values_comma_positions,

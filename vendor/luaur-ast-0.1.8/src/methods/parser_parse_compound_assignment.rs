@@ -1,4 +1,3 @@
-use crate::functions::is_expr_l_value::is_expr_l_value;
 use crate::records::ast_expr::AstExpr;
 use crate::records::ast_expr_binary::AstExprBinaryOp;
 use crate::records::ast_stat::AstStat;
@@ -18,7 +17,7 @@ impl Parser {
         // early, so when the LHS is not an lvalue the operator (`+=` etc.) was
         // never consumed; parseBlockNoScope's statement loop then re-parsed the
         // same token forever, allocating until the process OOMs (machine crash).
-        if !is_expr_l_value(initial) {
+        if !self.is_expr_l_value(initial) {
             initial = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(initial)
             } else {

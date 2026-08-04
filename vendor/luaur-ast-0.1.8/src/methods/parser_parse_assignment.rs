@@ -6,7 +6,6 @@
 //! target and value lists are gathered in scratch arenas (vars/values share the
 //! comma-position arena, stack-disciplined) and copied into the node.
 
-use crate::functions::is_expr_l_value::is_expr_l_value;
 use crate::records::ast_expr::AstExpr;
 use crate::records::ast_node::AstNode;
 use crate::records::ast_stat::AstStat;
@@ -21,7 +20,7 @@ use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_assignment(&mut self, mut initial: *mut AstExpr) -> *mut AstStat {
-        if !is_expr_l_value(initial) {
+        if !self.is_expr_l_value(initial) {
             initial = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(initial) as *mut AstExpr
             } else {
@@ -46,7 +45,7 @@ impl Parser {
 
             let mut expr = self.parse_primary_expr(true);
 
-            if !is_expr_l_value(expr) {
+            if !self.is_expr_l_value(expr) {
                 expr = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                     self.report_l_value_error(expr) as *mut AstExpr
                 } else {

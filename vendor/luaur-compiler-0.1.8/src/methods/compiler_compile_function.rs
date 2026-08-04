@@ -60,6 +60,10 @@ impl Compiler {
             let mut terminates_early = false;
             self.current_function = func;
 
+            if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() && self.at_top_level() {
+                self.preallocate_hoisted_classes(stat);
+            }
+
             for i in 0..(*stat).body.size {
                 let body_stat = *(*stat).body.data.add(i);
                 self.compile_stat(body_stat);

@@ -144,6 +144,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
+    DFFlag::LuauGcTableStepFix.set(false);
 }
 
 /// FastFlag namespace `FFlag::` — static (non-dynamic) bool flags. Definitions
@@ -517,6 +518,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(AddReturnExectargetCheck, false);
     // Ast/src/Parser.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(DebugLuauReportReturnTypeVariadicWithTypeSuffix, false);
+    // VM/src/lgc.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauRequireAliasOverrideOrderFix, false);
 }

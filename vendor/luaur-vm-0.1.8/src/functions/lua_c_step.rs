@@ -24,8 +24,7 @@ pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
     LUAU_ASSERT!((*g).totalbytes >= (*g).GCthreshold);
     let debt = (*g).totalbytes - (*g).GCthreshold;
 
-    if (luaur_common::FFlag::LuauBackedgeHeapCheck.get()
-        || cfg!(feature = "lua_vector_double"))
+    if (luaur_common::FFlag::LuauBackedgeHeapCheck.get() || cfg!(feature = "lua_vector_double"))
         && assist
     {
         let need = debt * (*g).gcstepmul as usize / 100;
@@ -41,12 +40,12 @@ pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
     }
 
     #[cfg(feature = "luai_gcmetrics")]
-    {
+    let lasttimestamp = {
         if (*g).gcstate == 0 {
             start_gc_cycle_metrics(g);
         }
-        let _lasttimestamp = lua_clock();
-    }
+        lua_clock()
+    };
 
     let lastgcstate = (*g).gcstate as i32;
 
@@ -54,7 +53,7 @@ pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
 
     #[cfg(feature = "luai_gcmetrics")]
     {
-        record_gc_state_step(g, lastgcstate, lua_clock() - _lasttimestamp, assist, work);
+        record_gc_state_step(g, lastgcstate, lua_clock() - lasttimestamp, assist, work);
     }
 
     let actualstepsize = (work * 100) / (*g).gcstepmul as usize;

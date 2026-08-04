@@ -1,12 +1,12 @@
 use crate::functions::cleartable::cleartable;
 use crate::functions::clearupvals::clearupvals;
+use crate::functions::embeddermarkref::embeddermarkref;
 use crate::functions::markmt::markmt;
 use crate::functions::marktaggetmt::marktaggetmt;
 use crate::functions::markudatadirectaccess::markudatadirectaccess;
 use crate::functions::markudatadirectfields::markudatadirectfields;
 use crate::functions::propagateall::propagateall;
 use crate::functions::remarkupvals::remarkupvals;
-use crate::functions::embeddermarkref::embeddermarkref;
 use crate::macros::gc_satomic::GCSatomic;
 use crate::macros::gc_satomic::GCSsweep;
 use crate::macros::markobject::markobject;
@@ -50,12 +50,21 @@ pub unsafe fn atomic(l: *mut lua_State) -> usize {
     work += propagateall(g);
 
     if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        #[cfg(feature = "luai_gcmetrics")]
+        let mut embedder_start = crate::functions::lua_clock::lua_clock();
+
         if let Some(embeddergc) = (*g).embeddergc {
             embeddergc((*g).mainthread, Some(embeddermarkref));
             while !(*g).gray.is_null() {
                 work += propagateall(g);
                 embeddergc((*g).mainthread, Some(embeddermarkref));
             }
+        }
+
+        #[cfg(feature = "luai_gcmetrics")]
+        {
+            (*g).gcmetrics.currcycle.atomictimeembedder +=
+                crate::functions::record_gc_delta_time::record_gc_delta_time(&mut embedder_start);
         }
     }
 

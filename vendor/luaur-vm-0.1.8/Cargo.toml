@@ -42,6 +42,7 @@ default = ["std"]
 native = ["std"]
 native-codegen = ["native"]
 lua_vector_double = []
+luai_gcmetrics = []
 std = []
 wasm = ["dep:wasm-bindgen"]
 

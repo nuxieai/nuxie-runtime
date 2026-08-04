@@ -841,6 +841,24 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
     result
 }
 
+fn dependency_edge_targets_component(
+    edge: &nuxie_graph::DependencyNodeEdge,
+    nodes: &[DependencyNode],
+    kind: nuxie_graph::DependencyKind,
+    local_id: usize,
+) -> bool {
+    edge.kind == kind
+        && nodes.get(edge.dependent_node).is_some_and(|node| {
+            matches!(
+                &node.kind,
+                DependencyNodeKind::Component {
+                    local_id: dependent_local,
+                    ..
+                } if *dependent_local == local_id
+            )
+        })
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeNestedAnimationInstance {
     Simple {
@@ -1679,6 +1697,38 @@ impl ArtboardInstance {
                                 | nuxie_graph::DependencyKind::TextVariationHelperText
                         )
                     {
+                        push_edge(edge_index);
+                    }
+                }
+            }
+
+            // LinearGradient::buildDependencies and Feather::buildDependencies
+            // run at their authored object slots. Both attach the concrete
+            // component directly to the owning Shape/PathComposer (or other
+            // ShapePaintContainer) path builder. These insertion points are
+            // observable because DependencySorter visits dependents in their
+            // retained insertion order. In particular, a gradient authored
+            // before an inner feather must remain ahead of that feather
+            // (`linear_gradient.cpp:32-61`, `feather.cpp:77-89`).
+            let authored_path_dependency = match component.type_name {
+                "LinearGradient" | "RadialGradient" => {
+                    Some(nuxie_graph::DependencyKind::LinearGradientPaintContainer)
+                }
+                "Feather" => Some(nuxie_graph::DependencyKind::FeatherPathBuilder),
+                _ => None,
+            };
+            if let Some(kind) = authored_path_dependency {
+                for (edge_index, edge) in graph
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .enumerate()
+                {
+                    if dependency_edge_targets_component(
+                        edge,
+                        &graph.dependency_nodes,
+                        kind,
+                        component.local_id,
+                    ) {
                         push_edge(edge_index);
                     }
                 }
@@ -17028,6 +17078,52 @@ mod tests {
             vec![0, 2, 1, 3],
             "DependencySorter visits retained dependents in insertion order and front-inserts each completed owner (`src/dependency_sorter.cpp:6-48`)"
         );
+    }
+
+    #[test]
+    fn path_effect_dependencies_are_selected_at_their_authored_component_slots() {
+        let nodes = vec![
+            DependencyNode {
+                node_id: 0,
+                kind: DependencyNodeKind::PathComposer {
+                    shape_local: 3,
+                    shape_global: 30,
+                },
+            },
+            DependencyNode {
+                node_id: 1,
+                kind: DependencyNodeKind::Component {
+                    local_id: 7,
+                    global_id: 70,
+                    type_name: "Feather",
+                    name: None,
+                },
+            },
+        ];
+        let edge = nuxie_graph::DependencyNodeEdge {
+            source_node: 0,
+            dependent_node: 1,
+            kind: nuxie_graph::DependencyKind::FeatherPathBuilder,
+        };
+
+        assert!(dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::FeatherPathBuilder,
+            7,
+        ));
+        assert!(!dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::FeatherPathBuilder,
+            8,
+        ));
+        assert!(!dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::LinearGradientPaintContainer,
+            7,
+        ));
     }
 
     #[test]

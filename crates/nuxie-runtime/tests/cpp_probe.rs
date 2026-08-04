@@ -19766,6 +19766,40 @@ fn runtime_drawable_dispatch_stream_exposes_feather_paint_payloads_like_cpp_prob
 }
 
 #[test]
+fn bankcard_inner_feather_dependency_order_matches_cpp() {
+    let bytes = std::fs::read(cpp_runtime_fixture("bankcard.riv")).expect("read bankcard.riv");
+    let runtime = read_runtime_file(&bytes).expect("import bankcard.riv");
+    let file = GraphFile::from_runtime_file(&runtime).expect("graph bankcard.riv");
+    let graph = file
+        .artboards
+        .iter()
+        .find(|artboard| artboard.name.as_deref() == Some("Artboard"))
+        .expect("nested Artboard graph");
+    let instance = ArtboardInstance::from_graph_with_artboards(&runtime, graph, &file.artboards)
+        .expect("instantiate nested Artboard");
+
+    let orders = [1usize, 367, 365, 360, 332, 334, 335, 337]
+        .map(|local| {
+            instance
+                .component(local)
+                .and_then(|component| component.graph_order())
+        });
+    assert_eq!(
+        orders,
+        [
+            Some(5),
+            Some(6),
+            Some(7),
+            Some(8),
+            Some(9),
+            Some(18),
+            Some(19),
+            Some(20),
+        ]
+    );
+}
+
+#[test]
 fn runtime_drawable_dispatch_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

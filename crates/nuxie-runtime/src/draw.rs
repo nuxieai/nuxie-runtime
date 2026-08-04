@@ -5117,7 +5117,7 @@ impl ArtboardInstance {
         };
 
         let mut commands = Vec::with_capacity(container.paints.len());
-        for paint in &container.paints {
+        for (paint_index, paint) in container.paints.iter().enumerate() {
             let (path_commands, prepared_raw_path) = match container.type_name {
                 "LayoutComponent" => (
                     self.runtime_layout_component_paint_path_commands(
@@ -5168,6 +5168,25 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
+            // LayoutComponent::updateRenderPath retains the path before its
+            // authored Feather dependents run. Once that dependency node has
+            // rebuilt an inner path, ShapePaint::draw reads the Feather-owned
+            // result; it does not derive another path from draw-time layout
+            // geometry (`layout_component.cpp:91-120`, `feather.cpp:36-89`).
+            if container.type_name == "LayoutComponent"
+                && let Some(feather_state) = self
+                    .runtime_shapes
+                    .get(container_local)
+                    .and_then(|shape| {
+                        shape
+                            .paint_owners
+                            .iter()
+                            .find(|owner| owner.paint_index == paint_index)
+                    })
+                    .and_then(|owner| owner.feather_state.borrow().clone())
+            {
+                command.feather_state = Some(feather_state);
+            }
             command.prepared_raw_path = prepared_raw_path;
             if drawable.kind == DrawableOrderKind::LayoutProxy
                 || container.type_name == "ForegroundLayoutDrawable"
@@ -6150,11 +6169,18 @@ impl ArtboardInstance {
             owner.feather_dirty.set(false);
             return;
         };
-        let source_path = shape.paint_paths[runtime_shape_paint_path_kind_slot(path_kind)]
-            .retained
-            .borrow()
-            .as_ref()
-            .cloned();
+        let source_path = if container.type_name == "LayoutComponent" {
+            self.runtime_layout_component_draw_paths(shape_local, graph, layout_bounds)
+                .map(|paths| RuntimeShapePathState {
+                    raw_path: Arc::new(runtime_raw_path_from_commands(paths.paint.as_ref())),
+                })
+        } else {
+            shape.paint_paths[runtime_shape_paint_path_kind_slot(path_kind)]
+                .retained
+                .borrow()
+                .as_ref()
+                .cloned()
+        };
         let selected_path = owner
             .effect_paths
             .iter()

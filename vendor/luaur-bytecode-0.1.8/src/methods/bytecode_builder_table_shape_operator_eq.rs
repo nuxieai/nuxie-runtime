@@ -3,8 +3,6 @@ use crate::records::table_shape::TableShape;
 impl TableShape {
     #[allow(non_snake_case)]
     pub(crate) fn operator_eq(&self, other: &TableShape) -> bool {
-        // Note: FFlag::LuauCompileDuptableConstantPack2 is assumed true in modern Luau bytecode logic
-        // as the C++ source provides a branch for it.
         if self.length != other.length {
             return false;
         }

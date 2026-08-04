@@ -40,7 +40,6 @@ pub mod debug_upval;
 pub mod function;
 pub mod jump;
 pub mod jump_info;
-pub mod loop_info;
 pub mod string_ref;
 pub mod string_ref_hash;
 pub mod table_shape;

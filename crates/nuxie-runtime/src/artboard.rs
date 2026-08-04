@@ -7289,7 +7289,9 @@ impl ArtboardInstance {
                     // A row mounted during the preceding update therefore
                     // enters its initial state in this same outer pass
                     // (`artboard_component_list.cpp:827-854`).
-                    row_changed = true;
+                    // The successful probe is not itself a keep-going term:
+                    // C++ composes only the following nested `advance`
+                    // return. The transition's dirt still drives settlement.
                     row_changed |= item.child.advance_state_machine_instance_after_state_probe(
                         state_machine,
                         elapsed_seconds,
@@ -7964,6 +7966,13 @@ impl ArtboardInstance {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        if matching_items.is_empty() {
+            // C++ override callbacks only walk their retained `m_artboards`.
+            // With no matching mounted occurrence there is no hosted layout
+            // to invalidate and no dirt bubbles to the list owner
+            // (`artboard_component_list_override.cpp:7-44`).
+            return false;
+        }
         for index in matching_items {
             if let Some(item) = self
                 .component_list_items_mut(list_local)
@@ -10540,8 +10549,13 @@ impl ArtboardInstance {
                     property_key_for_name("ScrollConstraint", name) == Some(property_key)
                 }) =>
             {
-                apply_scroll_offset_changed(self, local_id, property_key, value)
-                    .unwrap_or_else(|| self.mark_constraint_parent_transform_dirty(local_id))
+                // Computed scroll setters retain/resolve their intent in
+                // `set_runtime_scroll_double_property`. Only a resulting
+                // scrollOffset write invokes C++ `offsetX/Y` and dirties the
+                // content transform; an unresolved intent or an unchanged
+                // resolved offset is clean (`scroll_constraint.cpp:182-199,
+                // 590-665`).
+                apply_scroll_offset_changed(self, local_id, property_key, value).unwrap_or(false)
             }
             _ => owner_changed,
         }

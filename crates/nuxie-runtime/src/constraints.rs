@@ -3762,6 +3762,13 @@ mod tests {
             .expect("resolved index reads from the clamped offset");
         assert!((resolved_index - 5.545_454_5).abs() < 1.0e-5);
 
+        instance.update_pass();
+        assert!(instance.set_double_property(constraint_local, index_key, 100.0));
+        assert!(
+            !instance.has_dirt(crate::components::ComponentDirt::COMPONENTS),
+            "a computed scroll intent that clamps to the retained offset must not dirty its content transform (`scroll_constraint.cpp:182-199,590-665`)"
+        );
+
         assert!(instance.set_double_property(constraint_local, index_key, -5.0));
         assert_eq!(
             instance.double_property(constraint_local, offset_y_key),

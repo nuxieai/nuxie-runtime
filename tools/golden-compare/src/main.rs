@@ -562,16 +562,23 @@ impl CorpusEntry {
     }
 
     fn effective_status(&self, scripted: bool) -> Status {
-        if scripted
-            && self
+        if scripted {
+            if self
                 .features
                 .iter()
                 .any(|feature| feature == "scripted-status:exact")
-        {
-            Status::Exact
-        } else {
-            self.status
+            {
+                return Status::Exact;
+            }
+            if self
+                .features
+                .iter()
+                .any(|feature| feature == "scripted-status:diverges")
+            {
+                return Status::Diverges;
+            }
         }
+        self.status
     }
 }
 
@@ -1118,6 +1125,16 @@ mod tests {
 
         assert_eq!(entry.effective_status(false), Status::Diverges);
         assert_eq!(entry.effective_status(true), Status::Exact);
+    }
+
+    #[test]
+    fn scripted_divergence_override_preserves_an_ordinary_exact_row() {
+        let mut entry = CorpusEntry::new();
+        entry.status = Status::Exact;
+        entry.features.push("scripted-status:diverges".to_owned());
+
+        assert_eq!(entry.effective_status(false), Status::Exact);
+        assert_eq!(entry.effective_status(true), Status::Diverges);
     }
 
     #[test]

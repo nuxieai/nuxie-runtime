@@ -1240,6 +1240,26 @@ impl FlowSession {
         }
 
         #[cfg(feature = "scripting")]
+        if let FlowPlayer::StateMachine(machine) = &mut self.player {
+            // `StateMachineInstance::reset` advances the live DataContext
+            // after settlement, so a reset trigger reaches its ScriptInput
+            // through the next DataBind pass (`state_machine_instance.cpp:
+            // 2629-2703`; `viewmodel_instance_trigger.cpp:20-27`). A
+            // StateBatch is a facade-owned boundary between those runtime
+            // frames: flush the already-validated source state before the
+            // transaction candidate adopts the live ScriptInput targets and
+            // rehomes them onto the batch's mutated ViewModel graph.
+            let flush = self
+                .artboard
+                .apply_flow_listener_action_source_updates(machine);
+            if let Err(error) = flush {
+                return Err(self.poison_after_mutation(flow_script_error(
+                    error.with_context("pre-transaction listener binding flush failed"),
+                )));
+            }
+        }
+
+        #[cfg(feature = "scripting")]
         let previous_listener_binding_baseline = self.listener_binding_baseline.clone();
         #[cfg(feature = "scripting")]
         let mut staged_listener_binding_baseline = None;

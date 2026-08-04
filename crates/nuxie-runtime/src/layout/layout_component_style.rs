@@ -10,17 +10,13 @@ const NODE_DIRTY_PROPERTIES: &[&str] = &[
     "displayValue",
     "overflowValue",
     "intrinsicallySizedValue",
-    "alignContentValue",
-    "alignItemsValue",
-    "alignSelfValue",
-    "justifyContentValue",
+    "layoutTypeValue",
+    "justifyItemsValue",
+    "justifySelfValue",
     "flexWrapValue",
     "positionTypeValue",
     "flexDirectionValue",
     "directionValue",
-    "flex",
-    "flexGrow",
-    "flexShrink",
     "flexBasis",
     "aspectRatio",
     "gapHorizontal",
@@ -160,6 +156,13 @@ fn flex_direction_changed(instance: &mut ArtboardInstance, style_local_id: usize
     })
 }
 
+// Ported from 4ac7b327 `LayoutComponentStyle::layoutTypeValueChanged`,
+// which routes through `LayoutComponent::layoutTypeChanged`.
+fn layout_type_changed(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
+    parent_layout_local(instance, style_local_id)
+        .is_some_and(|parent_local| layout_component::layout_type_changed(instance, parent_local))
+}
+
 fn direction_changed(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
     parent_layout_local(instance, style_local_id)
         .is_some_and(|parent_local| layout_component::direction_changed(instance, parent_local))
@@ -227,6 +230,9 @@ pub(crate) fn uint_property_changed(
         {
             return Some(scale_type_changed(instance, local_id));
         }
+        if property_key_for_name("LayoutComponentStyle", "layoutTypeValue") == Some(property_key) {
+            return Some(layout_type_changed(instance, local_id));
+        }
         if property_key_for_name("LayoutComponentStyle", "positionTypeValue") == Some(property_key)
         {
             return Some(position_type_changed(instance, local_id));
@@ -249,4 +255,33 @@ pub(crate) fn bool_property_changed(
     property_key: u16,
 ) -> Option<bool> {
     changed(instance, local_id, type_name, property_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The dirt routes above compare schema-resolved keys against the incoming
+    // property key; an entry that no longer resolves silently stops routing
+    // dirt instead of failing. Every name in these tables must stay resolvable
+    // against the generated schema.
+    #[test]
+    fn node_dirty_properties_resolve_to_schema_keys() {
+        for name in NODE_DIRTY_PROPERTIES {
+            assert!(
+                property_key_for_name("LayoutComponentStyle", name).is_some(),
+                "NODE_DIRTY_PROPERTIES entry LayoutComponentStyle.{name} does not resolve"
+            );
+        }
+    }
+
+    #[test]
+    fn style_dirty_properties_resolve_to_schema_keys() {
+        for name in STYLE_DIRTY_PROPERTIES {
+            assert!(
+                property_key_for_name("LayoutComponentStyle", name).is_some(),
+                "STYLE_DIRTY_PROPERTIES entry LayoutComponentStyle.{name} does not resolve"
+            );
+        }
+    }
 }

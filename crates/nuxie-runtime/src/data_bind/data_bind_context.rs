@@ -852,7 +852,6 @@ pub(crate) struct RuntimeOwnedDataContext {
 }
 
 impl RuntimeOwnedDataContext {
-    #[cfg(test)]
     pub(crate) fn from_root_handle(context: RuntimeOwnedViewModelHandle) -> Self {
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {

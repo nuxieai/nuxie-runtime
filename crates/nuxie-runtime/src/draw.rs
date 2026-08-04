@@ -17695,6 +17695,15 @@ fn runtime_realize_owned_shape_gradient(
             owner.paint_global_id
         )
     })?;
+    if backend.shader_state.as_ref() == Some(state) {
+        // Multiple Rust-side dirt sources can converge on the same mutator
+        // dependency node. The retained C++ occurrence still owns the shader
+        // already installed on its RenderPaint; an unchanged settled state is
+        // not a second LinearGradient::update materialization
+        // (`linear_gradient.cpp:86-126`, `shape_paint_mutator.cpp:7-25`).
+        backend.paint = Some(render_paint);
+        return Ok(());
+    }
     match state {
         state @ RuntimeShapePaintState::LinearGradient {
             start_x,

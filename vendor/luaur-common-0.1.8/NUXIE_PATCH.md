@@ -54,3 +54,9 @@ Provenance:
 - Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
 - Touched areas: bytecode-v9 target selection, retired compiler gates, new
   dark math/GC flags, and occupied-bucket lifetime support in `DenseHash2`.
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: bytecode vector-double tagging, dark rung flag registration,
+  and the clipped `DenseHash2` hash-shift assertion.

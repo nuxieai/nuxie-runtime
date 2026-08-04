@@ -7927,9 +7927,6 @@ impl ArtboardInstance {
                     .runtime_shapes
                     .text_style_paint_container_for_component(local_id)
                     .is_some_and(|container_local| container_local != local_id)
-                    && !self
-                        .runtime_shapes
-                        .component_rebuilds_paint_path(local_id)
                 {
                     // ShapePaint mutators under TextStylePaint change the
                     // retained paint frame, not the glyph paths. FL-E7 routes
@@ -7939,10 +7936,6 @@ impl ArtboardInstance {
                     self.runtime_drawables
                         .mark_text_resource_dirty_for_local(text_local);
                 } else {
-                    // Feather and stroke-effect descendants replace the path
-                    // consumed by Text::buildRenderStyles, so they require a
-                    // full retained frame rebuild after authored properties
-                    // settle (`feather.cpp:36-89`).
                     self.runtime_drawables
                         .mark_text_render_styles_dirty_for_local(text_local);
                 }
@@ -9269,12 +9262,6 @@ impl ArtboardInstance {
         }
 
         report.max_steps_reached = self.has_dirt(ComponentDirt::COMPONENTS);
-        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-            self.settle_runtime_shape_paint_paths(
-                &graphs[*graph_index],
-                layout_bounds.as_deref(),
-            );
-        }
         report
     }
 

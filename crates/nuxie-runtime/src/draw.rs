@@ -6158,38 +6158,6 @@ impl ArtboardInstance {
         owner.feather_dirty.set(false);
     }
 
-    /// Finish effect and feather owners dirtied after their authored update
-    /// slot by a later source-path rebuild in the same dependency wave.
-    ///
-    /// C++ expresses this through PathComposer -> ShapePaint/Feather
-    /// dependencies. Rust retains renderer sidecars separately, so settle the
-    /// still-dirty suffix once all component dependencies have run, before a
-    /// draw can observe it (`shape_paint.cpp:30-47`; `feather.cpp:36-89`).
-    pub(crate) fn settle_runtime_shape_paint_paths(
-        &self,
-        graph: &ArtboardGraph,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) {
-        for (shape_local, shape) in self.runtime_shapes.by_local.iter().enumerate() {
-            let Some(shape) = shape.as_ref() else {
-                continue;
-            };
-            for (owner_index, paint) in shape.paint_owners.iter().enumerate() {
-                if paint.effect_dirty_from.get().is_some() {
-                    self.update_runtime_shape_paint_effects(shape_local, owner_index, graph);
-                }
-                if paint.feather_dirty.get() {
-                    self.update_runtime_shape_paint_feather(
-                        shape_local,
-                        owner_index,
-                        graph,
-                        layout_bounds,
-                    );
-                }
-            }
-        }
-    }
-
     fn runtime_layout_component_paint_path_commands(
         &self,
         layout_local: usize,
@@ -9127,21 +9095,6 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
-    pub(crate) fn component_rebuilds_paint_path(&self, local_id: usize) -> bool {
-        self.paint_owners_by_component_local
-            .get(local_id)
-            .is_some_and(|owners| {
-                owners.iter().any(|owner| {
-                    self.get(owner.shape_local)
-                        .and_then(|shape| shape.paint_owners.get(owner.owner_index))
-                        .is_some_and(|paint| paint.feather_local == Some(local_id))
-                })
-            }) || self
-            .effect_owners_by_component_local
-            .get(local_id)
-            .is_some_and(|effects| !effects.is_empty())
-    }
-
     pub(crate) fn text_style_paint_container_for_component(
         &self,
         local_id: usize,

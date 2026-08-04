@@ -3071,8 +3071,12 @@ fn advance_scene_to(
                 .advance_state_machine_instance_after_state_probe_for_tools(state_machine, 0.0);
         }
     } else {
+        // Pinned `StaticScene::advanceAndApply` ignores its seconds argument
+        // and advances the Artboard at zero elapsed time
+        // (`static_scene.cpp:22-28`). The sample clock still moves below, but
+        // mounted simple animations must not consume that wall-clock delta.
         changed |= instance
-            .advance_frame_components(elapsed_seconds)
+            .advance_frame_components(0.0)
             .context("retained frame-component advance failed")?;
     }
     let _ = (runtime, owned_view_model_context);

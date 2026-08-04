@@ -2023,6 +2023,11 @@ impl<'a> StaticTextSlice<'a> {
         let apply_ellipsis =
             self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
         let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
+        let contextual_glyphs = if text_input_bidi {
+            self.styled_resolved_run_glyphs_bidi(runtime, instance, resolved_runs, font_scale)?
+        } else {
+            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?
+        };
         let lines = self.layout_static_text_lines(
             runtime,
             instance,
@@ -2034,14 +2039,10 @@ impl<'a> StaticTextSlice<'a> {
             scale,
             letter_spacing,
             text_input_bidi,
+            Some(&contextual_glyphs),
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
-        let contextual_glyphs = if text_input_bidi {
-            self.styled_resolved_run_glyphs_bidi(runtime, instance, resolved_runs, font_scale)?
-        } else {
-            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?
-        };
         let line_widths = lines
             .iter()
             .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -2362,14 +2363,21 @@ impl<'a> StaticTextSlice<'a> {
                         .location(skrifa_variations.iter().copied());
                     let location_ref = LocationRef::from(&location);
                     if let Some(outline) = outlines.get(glyph_id) {
+                        let outline_units = style_font
+                            .head()
+                            .map(|head| f32::from(head.units_per_em()))
+                            .unwrap_or(TEXT_SHAPE_SCALE_F32);
                         let mut pen = TextOutlinePen::new(
                             positioned.x,
                             line.baseline,
                             glyph.scale,
                             center_x,
                             line.baseline,
+                            glyph.offset_x,
+                            glyph.offset_y,
                             positioned.modifier_transform,
-                        );
+                        )
+                        .with_outline_units(outline_units);
                         // C++ `src/text/font_hb.cpp` records static glyf contours
                         // at the font's authored start points; Skrifa's
                         // HarfBuzz-style conversion can rotate those starts.
@@ -2378,9 +2386,8 @@ impl<'a> StaticTextSlice<'a> {
                         } else {
                             PathStyle::HarfBuzz
                         };
-                        let draw_settings =
-                            DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
-                                .with_path_style(path_style);
+                        let draw_settings = DrawSettings::unhinted(Size::unscaled(), location_ref)
+                            .with_path_style(path_style);
                         outline
                             .draw(draw_settings, &mut pen)
                             .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
@@ -2609,6 +2616,12 @@ impl<'a> StaticTextSlice<'a> {
         let scaled_font_size = font_size * font_scale;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.letter_spacing(runtime, instance);
+        let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
+        let contextual_glyphs = if text_input_bidi {
+            self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
+        } else {
+            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
+        };
         let lines = self.layout_static_text_lines(
             runtime,
             instance,
@@ -2619,15 +2632,11 @@ impl<'a> StaticTextSlice<'a> {
             &features,
             scale,
             letter_spacing,
-            self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
+            text_input_bidi,
+            Some(&contextual_glyphs),
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
-        let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(&text) {
-            self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
-        } else {
-            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
-        };
         let measured_width = lines
             .iter()
             .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -3166,6 +3175,12 @@ impl<'a> StaticTextSlice<'a> {
         let fits = |top_size: i32| -> Result<bool> {
             let font_scale = top_size as f32 / max_size;
             let scale = base_font_size * font_scale / TEXT_SHAPE_SCALE_F32;
+            let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(text);
+            let contextual_glyphs = if text_input_bidi {
+                self.styled_resolved_run_glyphs_bidi(runtime, instance, runs, font_scale)?
+            } else {
+                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?
+            };
             let lines = self.layout_static_text_lines(
                 runtime,
                 instance,
@@ -3176,14 +3191,9 @@ impl<'a> StaticTextSlice<'a> {
                 features,
                 scale,
                 letter_spacing,
-                self.kind == StaticTextKind::TextInput && text_has_rtl(text),
+                text_input_bidi,
+                Some(&contextual_glyphs),
             )?;
-            let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(text)
-            {
-                self.styled_resolved_run_glyphs_bidi(runtime, instance, runs, font_scale)?
-            } else {
-                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?
-            };
             let max_width = lines
                 .iter()
                 .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -3422,6 +3432,8 @@ impl<'a> StaticTextSlice<'a> {
                 char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
                 style_index,
                 advance: glyph.advance * scale + letter_spacing,
+                offset_x: glyph.offset_x * scale,
+                offset_y: glyph.offset_y * scale,
                 scale,
                 rtl: false,
                 variations: variations.clone(),
@@ -3482,6 +3494,8 @@ impl<'a> StaticTextSlice<'a> {
                 char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
                 style_index,
                 advance: glyph.advance * scale + letter_spacing,
+                offset_x: glyph.offset_x * scale,
+                offset_y: glyph.offset_y * scale,
                 scale,
                 rtl: bidi
                     .levels
@@ -3669,6 +3683,12 @@ impl<'a> StaticTextSlice<'a> {
             )?;
             let scale = self.style_font_size(runtime, instance, base_style)? * font_scale
                 / TEXT_SHAPE_SCALE_F32;
+            let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
+            let contextual_glyphs = if text_input_bidi {
+                self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
+            } else {
+                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
+            };
             lines = self.layout_static_text_lines(
                 runtime,
                 instance,
@@ -3679,16 +3699,11 @@ impl<'a> StaticTextSlice<'a> {
                 &features,
                 scale,
                 self.letter_spacing(runtime, instance),
-                self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
+                text_input_bidi,
+                Some(&contextual_glyphs),
             )?;
             line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
-            let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(&text)
-            {
-                self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
-            } else {
-                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
-            };
             measured_width = lines
                 .iter()
                 .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -3943,6 +3958,7 @@ impl<'a> StaticTextSlice<'a> {
         scale: f32,
         letter_spacing: f32,
         bidi: bool,
+        contextual_glyphs: Option<&[StyledTextGlyph]>,
     ) -> Result<Vec<StaticTextLine<'text>>> {
         let authored_lines = split_static_text_lines(text);
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
@@ -3975,7 +3991,30 @@ impl<'a> StaticTextSlice<'a> {
             let mut char_start = authored_line.char_start;
             let mut soft_wrap_skipped_start = None;
             while !remaining.is_empty() {
-                let glyphs = if bidi {
+                let mut glyphs = if let Some(contextual_glyphs) = contextual_glyphs {
+                    let remaining_char_count = remaining.chars().count();
+                    let remaining_end = char_start.saturating_add(remaining_char_count);
+                    contextual_glyphs
+                        .iter()
+                        .filter(|glyph| {
+                            glyph.char_index >= char_start && glyph.char_index < remaining_end
+                        })
+                        .map(|glyph| {
+                            let local_char = glyph.char_index.saturating_sub(char_start);
+                            TextGlyph {
+                                glyph_id: glyph.glyph_id,
+                                cluster: u32::try_from(char_byte_index(remaining, local_char))
+                                    .unwrap_or(u32::MAX),
+                                advance: glyph.advance,
+                                offset_x: glyph.offset_x,
+                                offset_y: glyph.offset_y,
+                                renderer_breaks_before: 0,
+                                renderer_breaks_after: 0,
+                                renderer_joiners: Vec::new(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                } else if bidi {
                     shape_bidi_text_glyphs_with_features(
                         shaper,
                         remaining,
@@ -3990,14 +4029,25 @@ impl<'a> StaticTextSlice<'a> {
                         features,
                     )
                 };
+                if contextual_glyphs.is_some() {
+                    materialize_renderer_glyph_run_annotations(remaining, &mut glyphs)?;
+                }
                 let glyph_end = self.first_static_wrapped_line_end(
                     runtime,
                     instance,
                     remaining,
                     &glyphs,
                     max_width,
-                    scale,
-                    letter_spacing,
+                    if contextual_glyphs.is_some() {
+                        1.0
+                    } else {
+                        scale
+                    },
+                    if contextual_glyphs.is_some() {
+                        0.0
+                    } else {
+                        letter_spacing
+                    },
                 )?;
                 let mut byte_end = byte_index_for_glyph_end(remaining, &glyphs, glyph_end);
                 if byte_end == 0 {
@@ -4555,7 +4605,14 @@ fn runtime_positioned_color_glyph_transform(
     baseline: f32,
 ) -> Mat2D {
     let size = positioned.glyph.scale * TEXT_SHAPE_SCALE_F32;
-    let base = Mat2D([size, 0.0, 0.0, size, positioned.x, baseline]);
+    let base = Mat2D([
+        size,
+        0.0,
+        0.0,
+        size,
+        positioned.x + positioned.glyph.offset_x,
+        baseline + positioned.glyph.offset_y,
+    ]);
     if positioned.modifier_transform == Mat2D::IDENTITY {
         return base;
     }
@@ -5339,13 +5396,15 @@ mod tests {
             12.3 / TEXT_SHAPE_SCALE_F32,
             0.1,
             0.0,
+            0.0,
+            0.0,
             Mat2D::IDENTITY,
         );
         let start = (-2047.0, 119.0);
         let control = (-987.0, -37.0);
         let end = (805.0, -91.0);
-        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
-        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
+        let start_outline = pen.normalize_point(start.0, start.1);
+        let control_outline = pen.normalize_point(control.0, control.1);
         let t = 2.0 / 3.0;
         let expected_outline = (
             start_outline.0 + (control_outline.0 - start_outline.0) * t,
@@ -5415,6 +5474,8 @@ mod tests {
                 char_len: 1,
                 style_index: 0,
                 advance: 650.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
                 scale: 1.0,
                 rtl: false,
                 variations: Vec::new(),
@@ -5425,6 +5486,8 @@ mod tests {
                 char_len: 1,
                 style_index: 0,
                 advance: 1_194.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
                 scale: 1.0,
                 rtl: false,
                 variations: Vec::new(),
@@ -5460,6 +5523,8 @@ mod tests {
                     char_len: 1,
                     style_index: 0,
                     advance: 1.0,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
                     scale: 1.0,
                     rtl: false,
                     variations: Vec::new(),
@@ -5503,6 +5568,8 @@ mod tests {
                 char_len: 2,
                 style_index: 0,
                 advance,
+                offset_x: 0.0,
+                offset_y: 0.0,
                 scale: 1.0,
                 rtl: false,
                 variations: Vec::new(),
@@ -5553,6 +5620,8 @@ mod tests {
                 char_len: 1,
                 style_index: 0,
                 advance,
+                offset_x: 0.0,
+                offset_y: 0.0,
                 scale: 1.0,
                 rtl: false,
                 variations: Vec::new(),

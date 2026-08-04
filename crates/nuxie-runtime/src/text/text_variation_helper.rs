@@ -5,6 +5,8 @@ struct StyledTextGlyph {
     char_len: usize,
     style_index: usize,
     advance: f32,
+    offset_x: f32,
+    offset_y: f32,
     scale: f32,
     rtl: bool,
     variations: Vec<(u32, f32)>,

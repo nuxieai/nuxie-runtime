@@ -841,6 +841,24 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
     result
 }
 
+fn dependency_edge_targets_component(
+    edge: &nuxie_graph::DependencyNodeEdge,
+    nodes: &[DependencyNode],
+    kind: nuxie_graph::DependencyKind,
+    local_id: usize,
+) -> bool {
+    edge.kind == kind
+        && nodes.get(edge.dependent_node).is_some_and(|node| {
+            matches!(
+                &node.kind,
+                DependencyNodeKind::Component {
+                    local_id: dependent_local,
+                    ..
+                } if *dependent_local == local_id
+            )
+        })
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeNestedAnimationInstance {
     Simple {
@@ -1679,6 +1697,38 @@ impl ArtboardInstance {
                                 | nuxie_graph::DependencyKind::TextVariationHelperText
                         )
                     {
+                        push_edge(edge_index);
+                    }
+                }
+            }
+
+            // LinearGradient::buildDependencies and Feather::buildDependencies
+            // run at their authored object slots. Both attach the concrete
+            // component directly to the owning Shape/PathComposer (or other
+            // ShapePaintContainer) path builder. These insertion points are
+            // observable because DependencySorter visits dependents in their
+            // retained insertion order. In particular, a gradient authored
+            // before an inner feather must remain ahead of that feather
+            // (`linear_gradient.cpp:32-61`, `feather.cpp:77-89`).
+            let authored_path_dependency = match component.type_name {
+                "LinearGradient" | "RadialGradient" => {
+                    Some(nuxie_graph::DependencyKind::LinearGradientPaintContainer)
+                }
+                "Feather" => Some(nuxie_graph::DependencyKind::FeatherPathBuilder),
+                _ => None,
+            };
+            if let Some(kind) = authored_path_dependency {
+                for (edge_index, edge) in graph
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .enumerate()
+                {
+                    if dependency_edge_targets_component(
+                        edge,
+                        &graph.dependency_nodes,
+                        kind,
+                        component.local_id,
+                    ) {
                         push_edge(edge_index);
                     }
                 }
@@ -4168,6 +4218,14 @@ impl ArtboardInstance {
             })
             .collect::<Vec<_>>();
         for text_local in controlled_text {
+            // A hosting-layout resize dirties TextShape but does not run
+            // `Text::clearRenderStyles`; TextStylePaint keeps and rewinds its
+            // existing opacity paths. Classify the pending rebuild before
+            // publishing Path dirt so pooled component-list rows reuse those
+            // concrete RenderPath owners (`layout_component.cpp:1116-1124`,
+            // `text.cpp:1209-1230`).
+            self.runtime_drawables
+                .mark_text_resource_dirty_for_local(text_local);
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
         self.mark_changed();
@@ -7389,9 +7447,10 @@ impl ArtboardInstance {
             {
                 source_changed = true;
             }
-            if row_changed {
-                item.settled_layout_size.set(None);
-            }
+            // The row Artboard's root Yoga node belongs to the hosting list.
+            // Nested animation/data-bind dirt does not detach that node or
+            // discard its parent-assigned size; only topology/pool mounting
+            // creates an occurrence without a hosted result.
             keep_going |= row_changed;
         }
         if source_changed {
@@ -17031,6 +17090,52 @@ mod tests {
     }
 
     #[test]
+    fn path_effect_dependencies_are_selected_at_their_authored_component_slots() {
+        let nodes = vec![
+            DependencyNode {
+                node_id: 0,
+                kind: DependencyNodeKind::PathComposer {
+                    shape_local: 3,
+                    shape_global: 30,
+                },
+            },
+            DependencyNode {
+                node_id: 1,
+                kind: DependencyNodeKind::Component {
+                    local_id: 7,
+                    global_id: 70,
+                    type_name: "Feather",
+                    name: None,
+                },
+            },
+        ];
+        let edge = nuxie_graph::DependencyNodeEdge {
+            source_node: 0,
+            dependent_node: 1,
+            kind: nuxie_graph::DependencyKind::FeatherPathBuilder,
+        };
+
+        assert!(dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::FeatherPathBuilder,
+            7,
+        ));
+        assert!(!dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::FeatherPathBuilder,
+            8,
+        ));
+        assert!(!dependency_edge_targets_component(
+            &edge,
+            &nodes,
+            nuxie_graph::DependencyKind::LinearGradientPaintContainer,
+            7,
+        ));
+    }
+
+    #[test]
     fn occurrence_dependency_sort_publishes_cpp_partial_order_on_cycle() {
         let mut instance = synthetic_instance(
             vec![
@@ -23200,6 +23305,9 @@ mod tests {
         let pooled_identity = parent.component_list_items(list_local_id).unwrap()[0]
             .child
             .instance_identity();
+        parent.component_list_items(list_local_id).unwrap()[0]
+            .settled_layout_size
+            .set(Some((119.666_664, 58.0)));
         let source_global_id = parent.component_list_items(list_local_id).unwrap()[0]
             .child
             .graph_global_id;
@@ -23213,6 +23321,11 @@ mod tests {
         assert!(parent.add_component_list_virtualizable(&file, list_local_id, 0));
         let remounted = &parent.component_list_items(list_local_id).unwrap()[0];
         assert_eq!(remounted.child.instance_identity(), pooled_identity);
+        assert_eq!(
+            remounted.settled_layout_size.get(),
+            Some((119.666_664, 58.0)),
+            "pool reuse keeps the transferred root layout result until the hosting parent solves it again"
+        );
         assert_eq!(
             remounted.state_machines[0].changed_state_count(),
             0,

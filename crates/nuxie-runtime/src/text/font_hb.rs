@@ -238,6 +238,9 @@ struct TextOutlinePen {
     scale: f32,
     center_x: f32,
     center_y: f32,
+    offset_x: f32,
+    offset_y: f32,
+    outline_units: f32,
     transform: Mat2D,
     current: Option<(f32, f32)>,
     contour_start: Option<(f32, f32)>,
@@ -245,7 +248,16 @@ struct TextOutlinePen {
     contour_start_outline: Option<(f32, f32)>,
 }
 impl TextOutlinePen {
-    fn new(x: f32, y: f32, scale: f32, center_x: f32, center_y: f32, transform: Mat2D) -> Self {
+    fn new(
+        x: f32,
+        y: f32,
+        scale: f32,
+        center_x: f32,
+        center_y: f32,
+        offset_x: f32,
+        offset_y: f32,
+        transform: Mat2D,
+    ) -> Self {
         Self {
             commands: Vec::new(),
             x,
@@ -253,6 +265,9 @@ impl TextOutlinePen {
             scale,
             center_x,
             center_y,
+            offset_x,
+            offset_y,
+            outline_units: TEXT_SHAPE_SCALE_F32,
             transform,
             current: None,
             contour_start: None,
@@ -261,9 +276,14 @@ impl TextOutlinePen {
         }
     }
 
-    fn normalize_outline_point(x: f32, y: f32) -> (f32, f32) {
-        let inverse_shape_scale = 1.0 / TEXT_SHAPE_SCALE_F32;
-        (x * inverse_shape_scale, -y * inverse_shape_scale)
+    fn with_outline_units(mut self, outline_units: f32) -> Self {
+        self.outline_units = outline_units;
+        self
+    }
+
+    fn normalize_point(&self, x: f32, y: f32) -> (f32, f32) {
+        let inverse_outline_units = 1.0 / self.outline_units;
+        (x * inverse_outline_units, -y * inverse_outline_units)
     }
 
     fn map_normalized(&self, x: f32, y: f32) -> (f32, f32) {
@@ -273,18 +293,24 @@ impl TextOutlinePen {
             // normalized path with the font-size matrix. Preserve its scale-
             // and-translate operation order here.
             let glyph_center = self.center_x - self.x;
-            let translation_x = -glyph_center + (self.x + glyph_center);
-            return (font_size * x + translation_x, font_size * y + self.y);
+            let translation_x = -glyph_center + ((self.x + glyph_center) + self.offset_x);
+            return (
+                font_size * x + translation_x,
+                font_size * y + (self.y + self.offset_y),
+            );
         }
         let point = (self.x + x * font_size, self.y + y * font_size);
         let transformed = self
             .transform
-            .transform_point(point.0 - self.center_x, point.1 - self.center_y);
-        (self.center_x + transformed.0, self.center_y + transformed.1)
+            .map_point(point.0 - self.center_x, point.1 - self.center_y);
+        (
+            (self.center_x + transformed.0) + self.offset_x,
+            (self.center_y + transformed.1) + self.offset_y,
+        )
     }
 
     fn map(&self, x: f32, y: f32) -> ((f32, f32), (f32, f32)) {
-        let outline = Self::normalize_outline_point(x, y);
+        let outline = self.normalize_point(x, y);
         (self.map_normalized(outline.0, outline.1), outline)
     }
 }
@@ -323,8 +349,8 @@ impl OutlinePen for TextOutlinePen {
             self.move_to(x, y);
             return;
         };
-        let control_outline = Self::normalize_outline_point(cx0, cy0);
-        let end_outline = Self::normalize_outline_point(x, y);
+        let control_outline = self.normalize_point(cx0, cy0);
+        let end_outline = self.normalize_point(x, y);
         // C++ converts HarfBuzz quadratic contours to cubics before applying
         // the glyph matrix. Doing the lerps after mapping is algebraically
         // equivalent but rounds hundreds of text control points differently.

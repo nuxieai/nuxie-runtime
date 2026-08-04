@@ -424,6 +424,14 @@ pub struct ArtboardInstance {
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
+    previous_nested_layout_transfers: BTreeMap<
+        usize,
+        (
+            RuntimeNestedLayoutDataTransferKey,
+            Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
+        ),
+    >,
+    consumed_mounted_layout_hosts: BTreeSet<usize>,
     pub(crate) artboard_data_bind_values: BTreeMap<Arc<[u32]>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
@@ -525,6 +533,11 @@ pub struct ArtboardInstance {
     /// its geometry owner, so either local can appear here
     /// (`semantic_data.cpp:258-293`).
     semantic_bounds_dirty_locals: BTreeSet<usize>,
+    /// `Artboard::takeLayoutData()` transferred this occurrence's root Yoga
+    /// node to a hosting layout. Child-local solves still retain descendants,
+    /// but must not overwrite the parent-owned root result.
+    pub(crate) layout_node_owned_by_host: bool,
+    pub(crate) suppress_mounted_component_list_layout_updates: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -583,6 +596,8 @@ impl Clone for ArtboardInstance {
             build_context: self.build_context.clone(),
             nested_context_source_tree_cache: self.nested_context_source_tree_cache.clone(),
             nested_layout_bounds: self.nested_layout_bounds.clone(),
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values: self.artboard_data_bind_values.clone(),
             artboard_formula_random_source: self.artboard_formula_random_source.clone(),
             artboard_owned_view_model_context: self.artboard_owned_view_model_context.clone(),
@@ -7749,6 +7764,9 @@ impl ArtboardInstance {
         self.solved_layout_bounds = layout_bounds.clone();
         if let Some(layout_bounds) = layout_bounds.as_deref() {
             for (&local_id, &bounds) in layout_bounds {
+                if local_id == 0 && self.layout_node_owned_by_host {
+                    continue;
+                }
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
             }
             // The solve above can dirty a Text owner after the pre-guard

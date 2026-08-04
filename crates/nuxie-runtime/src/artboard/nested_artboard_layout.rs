@@ -142,6 +142,26 @@ impl ArtboardInstance {
             // that unconstrained component state before taking the one Yoga
             // layout snapshot owned by the parent.
             changed |= nested.child.update_components().did_update;
+            // The standalone settle above must not consume the mounted
+            // Artboard's first-host placement. C++ keeps m_justAddedToHost
+            // armed until the transferred Yoga node receives its first
+            // parent-owned result (`artboard.cpp:1061-1073`;
+            // `layout_component.cpp:1117-1137`).
+            nested.child.added_to_host();
+            nested.child.layout_node_owned_by_host = true;
+            // The standalone pre-transfer settle measured list rows in the
+            // child's old root space. Re-arm exactly one hosted list tail so
+            // the first parent-owned Yoga snapshot establishes their mounted
+            // transforms; later child updates do not run an independent
+            // layout solve while `takeLayoutData()` ownership is active.
+            let list_locals = nested.child.component_list_locals().collect::<Vec<_>>();
+            for list_local in list_locals {
+                if let Some(items) = nested.child.component_list_items_mut(list_local) {
+                    for item in items {
+                        item.settled_layout_size.set(None);
+                    }
+                }
+            }
         }
 
         // Match NestedArtboardLayout's mounted ordering: the constraint space
@@ -170,10 +190,19 @@ impl ArtboardInstance {
         // writes dirty the transferred root node themselves; only a later
         // child layout generation should emulate C++ `markHostingLayoutDirty`
         // and request another parent-owned constraint refresh.
+        let transfer_key = RuntimeNestedLayoutDataTransferKey {
         nested.layout_data_transfer_key = Some(RuntimeNestedLayoutDataTransferKey {
             parent_layout,
             assigned_bounds: bounds,
             child_layout_revision: nested.child.layout_revision,
+        };
+        nested.layout_data_transfer_key = Some(transfer_key);
+        if first_transfer {
+            self.previous_nested_layout_transfers.insert(
+                host_local_id,
+                (transfer_key, nested.child.layout_constraint_bounds.clone()),
+            );
+        }
         });
         changed
     }

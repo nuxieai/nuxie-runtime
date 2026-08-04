@@ -62,15 +62,14 @@ pub use nuxie_render_api::{
     GpuCanvasColorAttachment, GpuCanvasColorTarget, GpuCanvasDepthStencilAttachment,
     GpuCanvasDepthStencilState, GpuCanvasDrawCommand, GpuCanvasError, GpuCanvasIndexBuffer,
     GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders,
-    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasSamplerBinding,
-    GpuCanvasResourceLifetime, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
     GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
     GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D,
-    PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -4918,8 +4917,8 @@ impl<'a> ArtboardInstance<'a> {
     /// The settled layout rect mapped through live ancestor ScrollConstraint
     /// scroll transforms. Identical to the raw solved rect when no ancestor
     /// ScrollConstraint is live; the solve itself never reflects scroll in
-    /// pinned C++ (`scroll_constraint.cpp:170-224` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
     pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         let bounds = self.raw.scrolled_layout_bounds(local_id)?;
         Some(Aabb::new(
@@ -5735,8 +5734,8 @@ impl OwnedArtboardInstance {
     /// The settled layout rect mapped through live ancestor ScrollConstraint
     /// scroll transforms. Identical to the raw solved rect when no ancestor
     /// ScrollConstraint is live; the solve itself never reflects scroll in
-    /// pinned C++ (`scroll_constraint.cpp:170-224` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
     pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         let bounds = self.raw.scrolled_layout_bounds(local_id)?;
         Some(Aabb::new(

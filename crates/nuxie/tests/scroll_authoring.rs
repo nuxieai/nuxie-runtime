@@ -3,19 +3,19 @@
 //! scroll-composed read seams.
 //!
 //! Behavior is pinned against C++ `ScrollConstraint` at
-//! `d788e8ec6e8b598526607d6a1e8818e8b637b60c`: offsets store raw and
+//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`: offsets store raw and
 //! unclamped (`m_offsetX/Y`), reads clamp live against settled
-//! content/viewport extents (`scroll_constraint.cpp:128-167`), and scroll is
+//! content/viewport extents (`scroll_constraint.cpp:141-181`), and scroll is
 //! a post-layout world composition over the content's layout children that
-//! never mutates the settled layout solve (`scroll_constraint.cpp:170-224`).
+//! never mutates the settled layout solve (`scroll_constraint.cpp:182-230`).
 
 use anyhow::Result;
 use nuxie::{
     Aabb, ArtboardId, ArtboardSpec, EditReason, ExportedObjectKind, ExportedProperty, FillSpec,
     InstanceId, LayoutComponentSpec, LayoutComponentStyleSpec, NodeSpec, ObjectId, Parent,
     RecordingFactory, RectangleSpec, ResolveError, Scene, SceneLayoutFlexDirection,
-    SceneLayoutScale, ScrollConstraintDirection, ScrollConstraintId, ScrollConstraintSpec,
-    ScrollProperty, ShapeSpec, SolidColorSpec, Vec2D,
+    SceneLayoutScale, SceneLayoutUnit, ScrollConstraintDirection, ScrollConstraintId,
+    ScrollConstraintSpec, ScrollProperty, ShapeSpec, SolidColorSpec, Vec2D,
 };
 
 fn canonical_draw_stream(scene: &mut Scene, instance: InstanceId) -> Result<String> {
@@ -329,6 +329,67 @@ fn scroll_offset_write_clamps_and_settles_draw_hit_and_reads_in_the_same_frame()
     );
     let _ = fixture.child1;
     let _ = fixture.viewport;
+    Ok(())
+}
+
+#[test]
+fn virtualized_clamp_includes_content_padding_at_the_pin() -> Result<()> {
+    // The pin-discriminating clamp case: at `4ac7b327` a non-infinite
+    // virtualized constraint's content extent includes the content's leading
+    // and trailing padding (`scroll_constraint.cpp:26-66`); at the audit ref
+    // `d788e8ec` it did not. Children 60 + 80 with padding 5 + 7 must clamp
+    // against content 152, not 140: `maxOffsetY = min(0, 100 - 152) = -52`.
+    let mut scene = Scene::new();
+    let ((artboard, constraint), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Padded".into(),
+            width: 200.0,
+            height: 200.0,
+        })?;
+        let mut viewport_node = layout("Viewport", 100.0, 100.0);
+        let NodeSpec::LayoutComponent(viewport_spec) = &mut viewport_node else {
+            unreachable!("layout helper always returns a LayoutComponent")
+        };
+        viewport_spec.clip = true;
+        let viewport = tx.create(Parent::Artboard(artboard), viewport_node)?;
+        let mut content_node = layout("Content", 100.0, 140.0);
+        let NodeSpec::LayoutComponent(content_spec) = &mut content_node else {
+            unreachable!("layout helper always returns a LayoutComponent")
+        };
+        content_spec.style.flex_direction = SceneLayoutFlexDirection::Column;
+        content_spec.style.padding_top = 5.0;
+        content_spec.style.padding_top_units = SceneLayoutUnit::Point;
+        content_spec.style.padding_bottom = 7.0;
+        content_spec.style.padding_bottom_units = SceneLayoutUnit::Point;
+        let content = tx.create(Parent::Object(viewport), content_node)?;
+        tx.create(Parent::Object(content), layout("First", 100.0, 60.0))?;
+        tx.create(Parent::Object(content), layout("Second", 100.0, 80.0))?;
+        let constraint = tx.create_scroll_constraint(
+            content,
+            ScrollConstraintSpec {
+                virtualize: true,
+                ..ScrollConstraintSpec::default()
+            },
+        )?;
+        Ok((artboard, constraint))
+    })?;
+    let instance = settle(&mut scene, artboard)?;
+
+    let snapshot = scene.scroll_constraint_snapshot(instance, constraint)?;
+    assert_eq!(
+        snapshot.lower_bound,
+        (0.0, -52.0),
+        "virtualized non-infinite content is padding-inclusive at the pin: \
+         min(0, viewport 100 - (children 140 + padding 12))",
+    );
+    let written =
+        scene.set_scroll_property(instance, constraint, ScrollProperty::OffsetY, -200.0)?;
+    assert_eq!(written.offset, (0.0, -200.0));
+    assert_eq!(
+        written.clamped_offset,
+        (0.0, -52.0),
+        "reads clamp to the padding-inclusive bound",
+    );
     Ok(())
 }
 

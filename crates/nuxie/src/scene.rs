@@ -2100,7 +2100,7 @@ impl RecordSpec {
 ///
 /// Mirrors pinned C++ `DraggableConstraintDirection`
 /// (`draggable_constraint.hpp:14-19` at
-/// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+/// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScrollConstraintDirection {
     Horizontal,
@@ -2124,17 +2124,22 @@ impl ScrollConstraintDirection {
 /// The owner LayoutComponent is the CONTENT the constraint scrolls; the
 /// owner's parent (a LayoutComponent, or the Artboard root) is the viewport.
 /// Ownership is positional exactly as pinned C++
-/// (`scroll_constraint.hpp:114-118`): `content()` is the constraint's
-/// parent and `viewport()` is its grandparent — there is no viewport field
-/// to author.
+/// (`scroll_constraint.hpp:115-119` at
+/// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`): `content()` is the
+/// constraint's parent and `viewport()` is its grandparent — there is no
+/// viewport field to author.
 ///
 /// Offsets are stored raw and unclamped, matching pinned C++ `m_offsetX/Y`;
 /// reads clamp live against the settled content/viewport extents
-/// (`scroll_constraint.cpp:128-167`). Physics authoring is deliberately
-/// absent from this first slice: with no owned physics the runtime clamps
-/// with the same math as the pinned C++ null-physics branch, which is the
-/// settled behavior wheel-driven hosts need. ClampedScrollPhysics and
-/// ElasticScrollPhysics stay import-only (B6-0134/B6-0135).
+/// (`scroll_constraint.cpp:141-181`). A non-infinite virtualized
+/// constraint's content extent includes the content's leading and trailing
+/// padding (`scroll_constraint.cpp:26-66`). Physics authoring is
+/// deliberately absent from this first slice: at the pin the no-physics
+/// path is fully settled — reads clamp live, and even interactive drags
+/// clamp continuously so overscroll cannot accumulate
+/// (`scroll_constraint.cpp:256-279`) — which is exactly the behavior
+/// wheel-driven hosts need. ClampedScrollPhysics and ElasticScrollPhysics
+/// stay import-only (B6-0134/B6-0135).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScrollConstraintSpec {
     pub direction: ScrollConstraintDirection,
@@ -2167,8 +2172,8 @@ impl Default for ScrollConstraintSpec {
 /// One writable scroll channel on a live ScrollConstraint occurrence.
 ///
 /// Channels mirror the pinned C++ generated core properties
-/// (`scroll_constraint_base.hpp:36-49` at
-/// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`): offsets store raw and
+/// (`scroll_constraint_base.hpp:35-52` at
+/// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`): offsets store raw and
 /// unclamped; percent and index writes defer as scroll intents until layout
 /// can convert them, exactly as `setScrollPercentX/Y`/`setScrollIndex` do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8801,8 +8806,8 @@ impl Scene {
     ///
     /// The write routes through the same generic core-property seam pinned
     /// C++ exposes as `CoreRegistry::setDouble` over the generated
-    /// ScrollConstraint keys (`scroll_constraint_base.hpp:36-49` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`): offsets store raw and
+    /// ScrollConstraint keys (`scroll_constraint_base.hpp:35-52` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`): offsets store raw and
     /// unclamped, percent/index writes defer as scroll intents until layout
     /// can resolve them. The stored value settles into draw, hit, world
     /// bounds, and semantic geometry on the next settle, which snapshot
@@ -8905,8 +8910,8 @@ impl Scene {
     /// The settled layout rect itself never reflects scroll: pinned C++
     /// `ScrollConstraint::offsetY` only marks the content world transform
     /// dirty and `constrainChild` composes a world translate, leaving
-    /// `layoutBounds()` untouched (`scroll_constraint.cpp:170-224` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`). Settles pending update
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). Settles pending update
     /// dirt first so a scroll offset written this frame is reflected in the
     /// same read.
     pub fn scrolled_layout_bounds(
@@ -9887,8 +9892,8 @@ impl SceneTx<'_> {
     /// `content` must be an authored LayoutComponent whose parent is another
     /// LayoutComponent or the Artboard root — the parent is the viewport,
     /// positionally, exactly as pinned C++ resolves `content()`/`viewport()`
-    /// (`scroll_constraint.hpp:114-118` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`). At most one authored
+    /// (`scroll_constraint.hpp:115-119` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). At most one authored
     /// ScrollConstraint may own one content component.
     pub fn create_scroll_constraint(
         &mut self,
@@ -22969,7 +22974,7 @@ fn lower_artboard(
     // style: nothing forward-references them, so their local ids are simply
     // their emission positions. Each record is parented to its content
     // LayoutComponent, exactly the positional ownership pinned C++ resolves
-    // through `content()`/`viewport()` (`scroll_constraint.hpp:114-118`).
+    // through `content()`/`viewport()` (`scroll_constraint.hpp:115-119`).
     for record in &artboard.records {
         let RecordSpec::ScrollConstraint { owner, spec } = &record.spec else {
             continue;

@@ -4228,8 +4228,8 @@ impl ArtboardInstance {
     ///
     /// A ScrollConstraint owned by the queried component itself does not
     /// displace it: pinned C++ constrains the content's layout children,
-    /// never the content (`scroll_constraint.cpp:209-224` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`), so the fold starts at
+    /// never the content (`scroll_constraint.cpp:215-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`), so the fold starts at
     /// the parent.
     ///
     /// Settles pending update dirt first so a scroll offset written this
@@ -4262,14 +4262,14 @@ impl ArtboardInstance {
     /// The settled layout rect itself never reflects scroll in pinned C++:
     /// `ScrollConstraint::offsetY` only marks the content world transform
     /// dirty and `constrainChild` composes a world translate, leaving
-    /// `layoutBounds()` untouched (`scroll_constraint.cpp:170-224` at
-    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`). Callers that need the
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). Callers that need the
     /// settled box in scrolled space compose here instead of mutating the
     /// solve.
     ///
     /// A ScrollConstraint owned by the queried component itself does not
     /// displace it: pinned C++ constrains the content's layout children,
-    /// never the content (`scroll_constraint.cpp:209-224`), so the fold
+    /// never the content (`scroll_constraint.cpp:215-230`), so the fold
     /// starts at the parent.
     ///
     /// Settles pending update dirt first so a scroll offset written this

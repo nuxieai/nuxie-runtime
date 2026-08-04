@@ -6,5 +6,7 @@ pub mod macros;
 pub mod methods;
 pub mod records;
 #[cfg(test)]
+mod rung7_tests;
+#[cfg(test)]
 mod sccp_tests;
 pub mod type_aliases;

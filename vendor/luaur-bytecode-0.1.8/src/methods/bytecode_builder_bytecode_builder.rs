@@ -13,7 +13,9 @@ impl BytecodeBuilder {
         let constant_map = DenseHashMap::new(ConstantKey {
             r#type: crate::enums::r#type::Type::Type_Nil,
             value: !0u64,
-            extra: 0,
+            extra1: 0,
+            extra2: 0,
+            extra3: 0,
         });
 
         let table_shape_map = DenseHashMap::new(TableShape::default());

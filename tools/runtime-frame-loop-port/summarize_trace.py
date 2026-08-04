@@ -332,7 +332,7 @@ MECHANISM_LANDMARKS = {
             "anchor": "obj->reset();",
         },
         "rust": {
-            "source": "crates/nuxie-runtime/src/artboard.rs",
+            "source": "crates/nuxie-runtime/src/artboard/resetting_component.rs",
             "anchor": "let entry = self.resetting_components[index];",
         },
     },

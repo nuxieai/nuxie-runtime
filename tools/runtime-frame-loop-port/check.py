@@ -2184,6 +2184,10 @@ def check(
         pathlib.PurePosixPath(path.relative_to(repo_root))
         for path in state_machine_instance_declared_test_paths(repo_root)
     )
+    logical_owner_relatives.add(
+        pathlib.PurePosixPath("crates/nuxie-runtime/src/artboard/tests.rs")
+    )
+    logical_owner_relatives.add(NESTED_EVENT_OWNER_MODULE)
     for owner_path in logical_owner_paths:
         owner_relative = owner_path.relative_to(repo_root).as_posix()
         for exported in nested_event_owner_exports(
@@ -2255,6 +2259,7 @@ def check(
                         resolver_seam_exists=semantic_resolver_seam_exists,
                     )
                 elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
+                    relative_path = pathlib.PurePosixPath(path.relative_to(repo_root))
                     if relative_path in logical_owner_relatives:
                         continue
                     detector_kind = NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[

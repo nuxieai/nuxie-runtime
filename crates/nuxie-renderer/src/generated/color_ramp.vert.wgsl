@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -63,7 +63,7 @@ fn main_1() {
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = n.cc;
+    let _e50 = n.ec;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);

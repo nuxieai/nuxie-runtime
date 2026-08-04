@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -37,8 +37,8 @@ var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f,
 
 fn main_1() {
     let _e13 = KB_1;
-    let _e15 = n.df;
-    let _e17 = n.ef;
+    let _e15 = n.ff;
+    let _e17 = n.gf;
     let _e25 = vec4<f32>(((_e13.x * _e15) - 1f), ((_e13.y * _e17) - sign(_e17)), 0f, 1f);
     let _e27 = KB_1[2u];
     unnamed.gl_Position = vec4<f32>(_e25.x, _e25.y, (1f - (f32((bitcast<u32>(_e27) & 65535u)) * 0.000061035156f)), _e25.w);

@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -37,7 +37,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
+@id(0) override Yg: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
@@ -63,7 +63,7 @@ fn main_1() {
     let _e38 = ((mat2x2<f32>(vec2<f32>(_e26.x, _e26.y), vec2<f32>(_e26.z, _e26.w)) * _e34) + _e36.xy);
     let _e39 = PC_1;
     E5_ = _e39;
-    if Wg {
+    if Yg {
         let _e41 = IB_1[1u];
         let _e43 = n.Z5_;
         if (_e41 == 0u) {
@@ -74,8 +74,8 @@ fn main_1() {
         let _e50 = phi_293_;
         I3_ = _e50;
     }
-    let _e52 = n.df;
-    let _e54 = n.ef;
+    let _e52 = n.ff;
+    let _e54 = n.gf;
     let _e62 = vec4<f32>(((_e38.x * _e52) - 1f), ((_e38.y * _e54) - sign(_e54)), 0f, 1f);
     let _e64 = IB_1[3u];
     let _e74 = IB_1[0u];

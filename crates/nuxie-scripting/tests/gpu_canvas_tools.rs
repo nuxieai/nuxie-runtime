@@ -364,13 +364,24 @@ fn syntax_and_unsupported_gpu_contracts_fail_closed() {
     let syntax = GpuCanvasProgram::compile("return function( this is not luau").unwrap_err();
     assert!(syntax.to_string().contains("syntax"), "{syntax}");
 
-    let mut missing_draw = GpuCanvasProgram::compile("return function() return {} end")
-        .expect("shape compiles before execution");
+    let no_occurrence = GpuCanvasProgram::compile("return function() return {} end").unwrap_err();
+    assert!(
+        no_occurrence.to_string().contains("GPUCanvas occurrence"),
+        "{no_occurrence}"
+    );
+
+    let mut missing_draw = GpuCanvasProgram::compile(
+        "return function(context) context:gpuCanvas() return {} end",
+    )
+    .expect("shape compiles before execution");
     let error = missing_draw.draw().unwrap_err();
     assert!(error.to_string().contains("drawCanvas"), "{error}");
 
     let mut infinite_draw = GpuCanvasProgram::compile(
-        "return function() return { drawCanvas = function() while true do end end } end",
+        "return function(context)
+            context:gpuCanvas()
+            return { drawCanvas = function() while true do end end }
+        end",
     )
     .expect("shape compiles before execution");
     let error = infinite_draw.draw().unwrap_err();

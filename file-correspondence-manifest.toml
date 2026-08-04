@@ -4863,13 +4863,13 @@ note = "F2 closure via FL-E6 ports rectangle union, contour orientation, per-cor
 upstream = "src/text/text_style.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/text/text_style.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/artboard.rs"
+rust_module = "crates/nuxie-runtime/src/text/text_style.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/text/text_style.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0399"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_style.rs and text.rs own style child registration, live font resolution, metric dirt, ordered features, and variation shaping; D-ST-FONT/FEATURE/VARIATION plus both exact FL-E8 goldens are evidence. MR-2b/C04 justified exception: remaining style dirt propagation shares the Text callback dispatcher with B6-0385. C17 exception: retained modules are `crates/nuxie-runtime/src/text/text_style.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs`; the dedicated style callbacks, common shaping/font state, and Artboard dirt dispatcher form one shared Text lifecycle, preventing a complete per-row extraction."
+note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_style.rs and text.rs own style child registration, live font resolution, metric dirt, ordered features, and variation shaping; D-ST-FONT/FEATURE/VARIATION plus both exact FL-E8 goldens are evidence. MR-2b/C04 justified exception: remaining style dirt propagation shares the Text callback dispatcher with B6-0385. C17 exception: retained modules are `crates/nuxie-runtime/src/text/text_style.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/artboard/text/text_style.rs`; the direct C++-counterpart module owns Artboard-side font/feature state and style dirt publication while common shaping and callback dispatch remain shared."
 
 [[file]]
 upstream = "src/text/text_style_axis.cpp"

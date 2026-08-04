@@ -17905,6 +17905,64 @@ mod tests {
     }
 
     #[test]
+    fn scripted_path_snapshot_exposes_current_retained_authored_geometry() {
+        let root = synthetic_component_for_type(0, "Node");
+        let shape = synthetic_component_for_type(1, "Shape");
+        let path = synthetic_component_for_type(2, "PointsPath");
+        let mut instance = synthetic_instance(vec![root, shape, path], vec![2, 0]);
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 1.0, y: 2.0 },
+                crate::draw::RuntimePathCommand::Line { x: 3.0, y: 4.0 },
+            ],
+            false,
+        );
+        let first = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("updated Path exposes its retained rawPath to scripts");
+        assert_eq!(first.verbs().len(), 2);
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 5.0, y: 6.0 },
+                crate::draw::RuntimePathCommand::Line { x: 7.0, y: 8.0 },
+            ],
+            false,
+        );
+        let current = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("subsequent lookup exposes the rebuilt path");
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+        assert_eq!(
+            current.points(),
+            &[
+                nuxie_render_api::Vec2D::new(5.0, 6.0),
+                nuxie_render_api::Vec2D::new(7.0, 8.0),
+            ]
+        );
+    }
+
+    #[test]
     fn follow_path_measure_rebuilds_on_owner_update_and_preserves_when_shape_is_empty() {
         let root = synthetic_component_for_type(0, "Node");
         let shape = synthetic_component_for_type(1, "Shape");

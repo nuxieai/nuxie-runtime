@@ -693,9 +693,17 @@ pub fn script_node_for_artboard(
         .paths
         .iter()
         .find(|path| path.local_id == component.local_id)
-        // C++ exposes the retained `Path::rawPath()` at lookup time. Before
-        // the child artboard's first update that path is intentionally empty.
-        .map(|_| RawPath::new());
+        // C++ exposes the current retained `Path::rawPath()` at lookup time.
+        // Before the child artboard's first update that path is intentionally
+        // empty; afterward it snapshots the authored, dependency-settled path
+        // (`src/lua/lua_artboards.cpp:884-900`).
+        .map(|path| {
+            instance
+                .runtime_shapes
+                .retained_script_path(path.local_id)
+                .map(|path| path.as_ref().clone())
+                .unwrap_or_else(RawPath::new)
+        });
     let paint = graph
         .shape_paint_containers
         .iter()

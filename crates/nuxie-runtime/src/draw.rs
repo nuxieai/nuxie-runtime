@@ -9321,6 +9321,19 @@ impl RuntimeShapeList {
         ))
     }
 
+    /// Snapshot the current clone-owned `Path::rawPath()` for script-facing
+    /// node lookup. The retained owner is populated only after the Path's
+    /// dependency update; callers preserve C++'s pre-update empty path when
+    /// this returns `None` (`src/lua/lua_artboards.cpp:884-900`).
+    pub(crate) fn retained_script_path(&self, path_local: usize) -> Option<Arc<RawPath>> {
+        let owner = self.paths_by_local.get(path_local)?.as_ref()?;
+        owner
+            .retained
+            .borrow()
+            .as_ref()
+            .map(|path| Arc::clone(&path.raw_path))
+    }
+
     #[cfg(test)]
     pub(crate) fn seed_follow_path_source_for_test(
         &mut self,

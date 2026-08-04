@@ -443,19 +443,14 @@ impl ArtboardInstance {
                         // component traversal performs `updatePass(false)`.
                         item.child.added_to_host();
                     }
-                    if let Some(layout) = item
-                        .child
-                        .component(0)
-                        .and_then(|component| component.concrete.layout.as_ref())
-                    {
-                        // The mounted root Yoga node remains owned by the
-                        // hosting layout. Retain its parent-local location
-                        // before the later child component traversal, which
-                        // must not solve the occurrence as a standalone root
-                        // (`artboard_component_list.cpp:220-229`;
-                        // `scroll_virtualizer.cpp:269-291`).
-                        layout.retain_bounds(bounds.x, bounds.y, bounds.width, bounds.height);
-                    }
+                    // The mounted root Yoga node remains owned by the hosting
+                    // layout. Retain its parent-local location through the
+                    // LayoutComponent owner so a size delta publishes the
+                    // same Path-before-World dirt as C++ before the later
+                    // child traversal (`artboard_component_list.cpp:220-229`;
+                    // `layout_component.cpp:1153-1178`).
+                    item.child
+                        .retain_runtime_layout_component_bounds(0, bounds, None);
                     // The transferred root Yoga node is the size owner after
                     // the parent solve. Do not immediately run a standalone
                     // child solve and overwrite its parent-local location.
@@ -693,5 +688,4 @@ impl ArtboardInstance {
         }
         Ok(keep_going)
     }
-
 }

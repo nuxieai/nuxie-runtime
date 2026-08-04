@@ -1044,13 +1044,16 @@ impl ArtboardInstance {
                 let mut child_ancestors = nested_ancestors.to_vec();
                 child_ancestors.push(child_graph.global_id);
                 let host_world = match command.object_kind {
-                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => path_cache
-                        .component_world_transform_with_bounds(
+                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => {
+                        runtime_nested_artboard_layout_world_transform(
                             self,
                             graph,
                             host_local_id,
+                            nested.child.as_ref(),
                             layout_bounds,
-                        ),
+                            path_cache,
+                        )
+                    }
                     RuntimeDrawableDispatchObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -1656,8 +1659,20 @@ impl ArtboardInstance {
                     path_cache,
                 )
                 .ok()?,
-                "NestedArtboard" | "NestedArtboardLayout" => path_cache
-                    .component_world_transform_with_bounds(self, graph, local_id, layout_bounds),
+                "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
+                    self,
+                    graph,
+                    local_id,
+                    nested.child.as_ref(),
+                    layout_bounds,
+                    path_cache,
+                ),
+                "NestedArtboard" => path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                ),
                 _ => unreachable!("nested-artboard type was preflighted"),
             };
             let content = RuntimeAabb::from_artboard_with_layout(&nested.child, child_graph);
@@ -4107,8 +4122,7 @@ impl ArtboardInstance {
             (
                 (resources.image_tree_structure_epoch != Some(structure_epoch))
                     .then(|| Arc::clone(&resources.image_assets)),
-                seed_opacity
-                    && resources.opacity_tree_structure_epoch != Some(structure_epoch),
+                seed_opacity && resources.opacity_tree_structure_epoch != Some(structure_epoch),
             )
         };
         if let Some(images) = attach_images.as_ref() {
@@ -4506,7 +4520,7 @@ impl ArtboardInstance {
                 let clip_left = -self.origin_x * self.width;
                 let clip_top = -self.origin_y * self.height;
                 let fill_rule = RenderFillRule::Clockwise;
-                let key = path_cache.retained_render_path_key(self, graph, fill_rule);
+                let key = path_cache.retained_render_path_key(self, graph, 0, fill_rule);
                 let clip = path_cache.artboard_clip_path(key, factory, || {
                     runtime_rect_commands(
                         clip_left,
@@ -6698,10 +6712,27 @@ impl ArtboardInstance {
         bounds: RuntimeLayoutBounds,
         all_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
+        let retain_mounted_artboard_root_only = local_id == 0
+            && self
+                .component(local_id)
+                .is_some_and(|component| component.type_name == "Artboard")
+            && self
+                .runtime_shapes
+                .paint_path_owner(local_id, RuntimeShapePaintPathKind::Local)
+                .is_none();
         if let Some(layout) = self
             .component(local_id)
             .and_then(|component| component.concrete.layout.as_ref())
         {
+            // A component-list row's Artboard root is a mounted Yoga node, but
+            // it is not itself a renderer-facing LayoutComponent unless it
+            // owns a local paint path. Retain the host-assigned bounds without
+            // publishing path/world dirt for that synthetic root. Descendant
+            // LayoutComponents still use the full invalidation path below.
+            if retain_mounted_artboard_root_only {
+                layout.retain_bounds(bounds.x, bounds.y, bounds.width, bounds.height);
+                return;
+            }
             // Renderer-facing bounds are accumulated in artboard space. C++
             // stores Yoga's parent-local Layout on the LayoutComponent and
             // its virtual x()/y() return that local left/top.
@@ -6723,6 +6754,15 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if size_changed {
+                // Pinned LayoutComponent::updateLayoutBounds publishes Path
+                // before propagateSize/markWorldTransformDirty whenever the
+                // retained width or height changes. That ordering lets a
+                // dependent ClippingShape rebuild from the resized source
+                // path in the same dependency traversal
+                // (`layout_component.cpp:1153-1178`).
+                self.add_dirt(local_id, ComponentDirt::PATH, false);
+            }
             if should_propagate_size {
                 // A layout position change does not rebuild geometry, but it
                 // does move the owner and its descendants. C++ separates the
@@ -9202,7 +9242,8 @@ impl RuntimeShapeList {
     /// `ShapePaint` and `ShapePaintPath` backend sidecars from the pooled
     /// occurrence before installing the fresh state.
     pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
-        self.backend_context_id.set(pooled.backend_context_id.take());
+        self.backend_context_id
+            .set(pooled.backend_context_id.take());
         for (fresh_shape, pooled_shape) in self.by_local.iter_mut().zip(&mut pooled.by_local) {
             let (Some(fresh_shape), Some(pooled_shape)) = (fresh_shape, pooled_shape) else {
                 continue;
@@ -12142,6 +12183,23 @@ impl TaffyRuntimeLayoutEngine {
         width_axis: bool,
     ) -> Option<f32> {
         let nested = instance.nested_artboards.get(&local)?;
+        // `NestedArtboardLayout::layoutNode` transfers the mounted artboard's
+        // exact root Yoga node to its host, and `Artboard::takeLayoutData`
+        // disables standalone child solves. Measure that retained node here:
+        // re-solving the detached child skips its interpolation and shrinks
+        // independently positioned siblings (`nested_artboard_layout.cpp:24-42`;
+        // `artboard.cpp:1245-1253`).
+        if nested.child.layout_node_owned_by_host
+            && (instance.mounted_layout_host_is_fenced(local)
+                || !nested.child.suppress_mounted_component_list_layout_updates)
+            && let Some(layout) = nested
+                .child
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+        {
+            let (_, _, width, height) = layout.current_bounds();
+            return Some(if width_axis { width } else { height });
+        }
         let layout_size = nested
             .child
             .runtime_file()
@@ -12349,15 +12407,12 @@ impl TaffyRuntimeLayoutEngine {
                 // `parent_is_row` gating quirk only under a style-less
                 // container: C++ `mainAxisIsRow()` reports row there while
                 // the zero-initialized Yoga node settles as a column.
-                style.flex_basis = if self.parent_actual_main_axis_is_row(
-                    instance,
-                    layout_local,
-                    parent_is_row,
-                ) {
-                    style.size.width
-                } else {
-                    style.size.height
-                };
+                style.flex_basis =
+                    if self.parent_actual_main_axis_is_row(instance, layout_local, parent_is_row) {
+                        style.size.width
+                    } else {
+                        style.size.height
+                    };
             }
             2 => {
                 style.flex_grow = 0.0;
@@ -14213,10 +14268,15 @@ impl RuntimeOccurrenceRenderResources {
         // after it has realized pending paints and completed the occurrence
         // traversal. Reuse that retained clean boundary so an explicit
         // prepare followed by draw does not enter synchronization twice.
-        let Some(gradient_frame) = self.path_cache.gradient_preparation.as_ref().filter(|frame| {
-            frame.key.graph_global_id == graph.global_id
-                && frame.key.graph_identity == graph as *const ArtboardGraph as usize
-        }) else {
+        let Some(gradient_frame) = self
+            .path_cache
+            .gradient_preparation
+            .as_ref()
+            .filter(|frame| {
+                frame.key.graph_global_id == graph.global_id
+                    && frame.key.graph_identity == graph as *const ArtboardGraph as usize
+            })
+        else {
             return true;
         };
         let world_epoch = if gradient_frame.has_world_space_gradient_paints {
@@ -15368,10 +15428,17 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
-            let bounds = match layout {
-                Some(layout) => Some(layout.bounds),
-                None => None,
+            let bounds = if instance.layout_node_owned_by_host {
+                // `Artboard::takeLayoutData()` disables the mounted child's
+                // own layout solve. Draw reads the last parent-owned Yoga
+                // snapshot instead of recomputing the transferred subtree
+                // from live child data binds (`artboard.cpp:1245-1253,
+                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
+                instance.layout_constraint_bounds.as_deref().cloned()
+            } else {
+                TaffyRuntimeLayoutEngine
+                    .compute_layout(instance, graph, runtime)
+                    .map(|layout| layout.bounds)
             };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
@@ -15483,12 +15550,13 @@ impl RuntimeArtboardPathState {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        local_id: usize,
         fill_rule: RenderFillRule,
     ) -> RuntimeRetainedRenderPathCacheKey {
         RuntimeRetainedRenderPathCacheKey {
             graph_global_id: graph.global_id,
             path_epoch: instance
-                .component(0)
+                .component(local_id)
                 .map_or(0, |component| component.path_revision()),
             world_epoch: 0,
             fill_rule,
@@ -17627,8 +17695,16 @@ fn runtime_draw_live_layout_family(
             instance.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
             && !paths.clip.is_empty()
         {
-            let key =
-                path_cache.retained_render_path_key(instance, graph, RenderFillRule::Clockwise);
+            // LayoutComponent owns an independent retained clip path. Key it
+            // by that concrete owner's Path revision; the artboard-root
+            // revision only governs Artboard::m_clipPath and left resized
+            // layout clips backed by stale renderer resources.
+            let key = path_cache.retained_render_path_key(
+                instance,
+                graph,
+                layout_local,
+                RenderFillRule::Clockwise,
+            );
             let path = runtime_cached_retained_render_path(
                 &mut backend.clip_path,
                 key,
@@ -17697,11 +17773,13 @@ fn runtime_draw_live_nested_artboard(
         .context("mounted nested artboard graph is missing")?;
 
     let host_world = match drawable.type_name {
-        "NestedArtboardLayout" => path_cache.component_world_transform_with_bounds(
+        "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
             instance,
             graph,
             host_local,
+            child,
             layout_bounds,
+            path_cache,
         ),
         "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
             instance,
@@ -18593,7 +18671,9 @@ fn runtime_component_list_host_world_transform(
     )
     .is_some()
     {
-        let parent_local = instance.component_parent_local(local_id).unwrap_or(local_id);
+        let parent_local = instance
+            .component_parent_local(local_id)
+            .unwrap_or(local_id);
         return path_cache.component_world_transform_with_bounds(
             instance,
             graph,
@@ -18601,12 +18681,8 @@ fn runtime_component_list_host_world_transform(
             layout_bounds,
         );
     }
-    let base = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        local_id,
-        layout_bounds,
-    );
+    let base =
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
     instance
         .component_handle(local_id)
         .map(|list| {
@@ -18811,6 +18887,57 @@ impl RuntimeAabb {
     }
 }
 
+/// Port the translation owner used by `NestedArtboardLayout::update`.
+///
+/// The parent solve supplies size/target bounds, but the mounted child
+/// Artboard retains the current interpolated Yoga left/top. Start with the
+/// ordinary host transform and replace only the solved parent-local
+/// translation with that retained position, preserving authored linear
+/// transforms and parent affine composition
+/// (`nested_artboard_layout.cpp:53-78`; `artboard.cpp:1120-1137`).
+fn runtime_nested_artboard_layout_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    child: &ArtboardInstance,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeArtboardPathState,
+) -> Mat2D {
+    let mut world =
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
+    let Some((retained_x, retained_y)) = child
+        .component(0)
+        .and_then(|component| component.concrete.layout.as_ref())
+        .map(|layout| layout.position())
+    else {
+        return world;
+    };
+    let Some(solved) = layout_bounds.and_then(|bounds| bounds.get(&local_id).copied()) else {
+        return world;
+    };
+    let parent_local = instance.component_parent_local(local_id);
+    let solved_parent_local = parent_local
+        .and_then(|parent_local| {
+            layout_bounds
+                .and_then(|bounds| bounds.get(&parent_local).copied())
+                .map(|parent| (solved.x - parent.x, solved.y - parent.y))
+        })
+        .unwrap_or((solved.x, solved.y));
+    let parent_world = parent_local.map_or(Mat2D::IDENTITY, |parent_local| {
+        path_cache.component_world_transform_with_bounds(
+            instance,
+            graph,
+            parent_local,
+            layout_bounds,
+        )
+    });
+    let delta_x = retained_x - solved_parent_local.0;
+    let delta_y = retained_y - solved_parent_local.1;
+    world.0[4] += parent_world.0[0] * delta_x + parent_world.0[2] * delta_y;
+    world.0[5] += parent_world.0[1] * delta_x + parent_world.0[3] * delta_y;
+    world
+}
+
 fn runtime_nested_artboard_leaf_world_transform(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
@@ -18924,9 +19051,18 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
     // root Yoga node to the parent. The resulting width/height are therefore
     // the child's own layout constraints, not merely a draw-time frame.
-    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    changed |= !child.layout_constraint_bounds_enabled;
-    child.enable_layout_constraint_bounds();
+    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
+    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+        // The hosted root is still the child's LayoutComponent owner. Refresh
+        // its retained constraint frame before the same-pass child update so
+        // Artboard::updateRenderPath sees the newly assigned row size, as the
+        // pinned transferred Yoga node does (`artboard_component_list.cpp:
+        // 220-260`; `artboard.cpp:1138-1157`).
+        child.refresh_layout_constraint_bounds();
+    } else {
+        child.enable_layout_constraint_bounds();
+    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }
@@ -25264,8 +25400,8 @@ mod tests {
     fn pooled_component_list_renderer_backends_survive_authored_state_restore() {
         let runtime = read_runtime_file(&cpp_runtime_fixture("virtualize_blendmode.riv"))
             .expect("virtualize_blendmode imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("virtualize_blendmode graphs build");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("virtualize_blendmode graphs build");
         let child_graph = graphs
             .artboards
             .iter()
@@ -25293,11 +25429,8 @@ mod tests {
             .value
             .get_mut()
             .context_id = Some(context_id);
-        pooled_shape.paint_owners[0]
-            .backend
-            .value
-            .get_mut()
-            .paint = Some(factory.make_render_paint());
+        pooled_shape.paint_owners[0].backend.value.get_mut().paint =
+            Some(factory.make_render_paint());
         *pooled_shape.paint_paths[0].backend.value.get_mut() = Some(RuntimePathBackendState {
             path: factory.make_empty_render_path(),
             raw_mutation_id: 11,
@@ -25321,11 +25454,7 @@ mod tests {
             "the pooled ShapePaint keeps its RenderPaint"
         );
         assert!(
-            fresh_shape.paint_paths[0]
-                .backend
-                .value
-                .get_mut()
-                .is_some(),
+            fresh_shape.paint_paths[0].backend.value.get_mut().is_some(),
             "the pooled ShapePaintPath keeps its RenderPath"
         );
 
@@ -26756,6 +26885,79 @@ mod tests {
             owner.backend(23).context_id,
             Some(23),
             "a new renderer context drops the old Layout backend members"
+        );
+    }
+
+    #[test]
+    fn layout_clip_backend_key_tracks_the_layout_path_owner() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
+            .expect("artboard_list_overrides imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("artboard_list_overrides graphs build");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Main"))
+            .expect("fixture has Main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph(&runtime, graph).expect("Main instance builds");
+        let path_cache = RuntimeArtboardPathState::default();
+        let root_before =
+            path_cache.retained_render_path_key(&instance, graph, 0, RenderFillRule::Clockwise);
+        let layout_before =
+            path_cache.retained_render_path_key(&instance, graph, 3, RenderFillRule::Clockwise);
+
+        instance.clear_component_dirt(3);
+        assert!(instance.add_dirt(3, ComponentDirt::PATH, false));
+
+        let root_after =
+            path_cache.retained_render_path_key(&instance, graph, 0, RenderFillRule::Clockwise);
+        let layout_after =
+            path_cache.retained_render_path_key(&instance, graph, 3, RenderFillRule::Clockwise);
+        assert_eq!(root_after, root_before);
+        assert_ne!(layout_after, layout_before);
+    }
+
+    #[test]
+    fn component_list_row_resize_refreshes_the_mounted_root_constraint_frame() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
+            .expect("artboard_list_overrides imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("artboard_list_overrides graphs build");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("child"))
+            .expect("fixture has child artboard");
+        let mut child =
+            ArtboardInstance::from_graph(&runtime, graph).expect("child instance builds");
+
+        assert!(runtime_apply_component_list_item_layout_bounds(
+            &mut child,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 500.0,
+                height: 100.0,
+            },
+        ));
+        assert!(runtime_apply_component_list_item_layout_bounds(
+            &mut child,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 500.0,
+                height: 150.0,
+            },
+        ));
+
+        assert_eq!(
+            child
+                .layout_constraint_bounds
+                .as_deref()
+                .and_then(|bounds| bounds.get(&0))
+                .map(|bounds| bounds.height),
+            Some(150.0),
         );
     }
 

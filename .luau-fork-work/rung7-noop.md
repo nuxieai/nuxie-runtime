@@ -19,6 +19,7 @@ The following C++ hunks select `LUA_VECTOR_TYPE`, `condvector4`, or precision-di
 - `VM/src/lveclib.cpp`: `vector_magnitude`, `vector_dot`, `vector_angle`, `vector_floor`, `vector_ceil`, `vector_abs`, `vector_sign`, `vector_clamp`, `vector_max`, `vector_index`, `createmetatable`, and `luaopen_vector`. These either inherit `LuaVectorType` or have no representation-sensitive body change. `vector_create`, normalize, cross, min, and lerp were edited directly.
 - `VM/src/lvmexecute.cpp`: arithmetic opcode cases whose C hunk only changes a vector temporary/pointer from `float` to `LUA_VECTOR_TYPE` (`LOP_ADD`, `SUB`, `MUL`, `DIV`, `IDIV`, `MULK`, `DIVK`, `IDIVK`, `UNM`, and `DIVRK`). The translated interpreter uses the feature-selected alias. `LOP_GETTABLEKS`, backedge GC checks, and state-aware vector stores were edited directly.
 - `VM/src/lvmutils.cpp`: portions of `luaV_doarithimpl` whose only change is the component type. The Rust twin is generic over `LuaVectorType`; vector allocation/store paths were edited directly.
+- `VM/src/laux.cpp`: `luaL_tolstring` inherits the feature-selected `LuaVectorType` pointer directly from `lua_tovector`; the C hunk's local `float*` to `LUA_VECTOR_TYPE*` spelling change needs no separate Rust edit.
 
 ## Other verified no-op rows
 

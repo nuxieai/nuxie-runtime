@@ -22,6 +22,7 @@ use crate::records::ast_type_pack::AstTypePack;
 use crate::records::binding::Binding;
 use crate::records::comment::Comment;
 use crate::records::cst_type_instantiation::CstTypeInstantiation;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::function::Function;
 use crate::records::hot_comment::HotComment;
 use crate::records::lexeme::Lexeme;
@@ -88,6 +89,7 @@ pub struct Parser {
     pub(crate) scratch_opt_arg_name: Vec<Option<AstArgumentName>>,
     pub(crate) scratch_position: Vec<Position>,
     pub(crate) scratch_position_2: Vec<Position>,
+    pub(crate) scratch_cst_attr_list: Vec<*mut CstAttrList>,
     pub(crate) scratch_data: String,
     pub(crate) cst_node_map: CstNodeMap,
 }

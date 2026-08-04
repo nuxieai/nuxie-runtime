@@ -85,6 +85,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConst2.set(value);
     FFlag::LuauConstJustReportErrorForUnderfill.set(value);
     FFlag::LuauConstraintGraph.set(value);
+    FFlag::LuauCstAttr.set(false);
     FFlag::LuauCstExprGroup.set(value);
     FFlag::LuauCstTypeGroup.set(value);
     FFlag::LuauCustomYieldablePcalls.set(false);
@@ -285,6 +286,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSyncFix);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileDuptableConstantPack2);
+    // Ast/src/Cst.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
     // Compiler/src/CostModel.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileFastcall3CostModel);
     // Compiler/src/ConstantFolding.cpp

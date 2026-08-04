@@ -82,6 +82,7 @@ impl Parser {
             scratch_opt_arg_name: alloc::vec::Vec::new(),
             scratch_position: alloc::vec::Vec::new(),
             scratch_position_2: alloc::vec::Vec::new(),
+            scratch_cst_attr_list: alloc::vec::Vec::new(),
             scratch_data: alloc::string::String::new(),
             cst_node_map: DenseHashMap::new(core::ptr::null_mut()),
         };

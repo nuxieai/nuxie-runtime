@@ -1,3 +1,5 @@
+use crate::records::ast_array::AstArray;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::cst_node::CstNode;
 use crate::records::position::Position;
 
@@ -5,6 +7,7 @@ use crate::records::position::Position;
 #[derive(Debug, Clone)]
 pub struct CstStatFunction {
     pub base: CstNode,
+    pub attr_lists: AstArray<*mut CstAttrList>,
     pub function_keyword_position: Position,
 }
 

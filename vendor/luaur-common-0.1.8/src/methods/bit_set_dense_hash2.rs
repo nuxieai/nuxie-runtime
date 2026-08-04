@@ -48,6 +48,21 @@ impl BitSet {
     pub(crate) fn num_words(&self) -> usize {
         self.data.len()
     }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        self.data.iter().enumerate().flat_map(|(word_index, word)| {
+            let mut word = *word;
+            core::iter::from_fn(move || {
+                if word == 0 {
+                    return None;
+                }
+
+                let bit = word.trailing_zeros() as usize;
+                word &= word - 1;
+                Some(word_index * Self::NUM_ELEMENTS + bit)
+            })
+        })
+    }
 }
 
 impl Default for BitSet {

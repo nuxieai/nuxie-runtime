@@ -13,6 +13,18 @@ pub(crate) struct StaticShapedTextLayout {
     has_geometric_modifiers: bool,
     has_non_monotone_advances: bool,
 }
+
+/// C++ `Text::{m_shape,m_lines}`: retained HarfBuzz glyph topology and line
+/// breaks, before `buildRenderStyles` applies positioning, modifiers, and the
+/// local render transform.
+#[derive(Debug, Clone)]
+pub(crate) struct StaticShapedTextTopology {
+    text: String,
+    resolved_runs: Vec<StaticResolvedRun>,
+    contextual_glyphs: Vec<StyledTextGlyph>,
+    lines: Vec<StaticTextLine>,
+    font_scale: f32,
+}
 #[derive(Debug, Clone)]
 struct StaticShapedTextLine {
     line_index: usize,

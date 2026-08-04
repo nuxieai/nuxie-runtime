@@ -743,6 +743,41 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
     })
 }
 
+pub(crate) fn runtime_text_draw_data_from_retained_topology(
+    slice: &StaticTextSlice,
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    text_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    topology: Option<&StaticShapedTextTopology>,
+) -> Result<RuntimeTextDrawData> {
+    let text_world =
+        instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
+    let layout = topology
+        .map(|topology| {
+            slice.layout_from_shaped_topology(
+                runtime,
+                instance,
+                layout_constraint,
+                text_world,
+                topology,
+                StaticShapedTextPurpose::Render,
+            )
+        })
+        .transpose()?;
+    runtime_text_draw_data_from_retained_layout(
+        slice,
+        runtime,
+        instance,
+        graph,
+        text_local,
+        layout_bounds,
+        layout.as_ref(),
+    )
+}
+
 pub(crate) fn runtime_text_input_shape_paint_commands(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -907,9 +942,9 @@ struct StaticTextStyle {
 
 include!("text/text_style_axis.rs");
 
-#[derive(Debug, Clone, Copy)]
-struct StaticTextLine<'a> {
-    text: &'a str,
+#[derive(Debug, Clone)]
+struct StaticTextLine {
+    text: String,
     char_start: usize,
     line_index: usize,
     soft_wrap_skipped_start: Option<usize>,
@@ -2008,9 +2043,7 @@ impl StaticTextSlice {
         )
     }
 
-    /// C++ `Text::{m_shape,m_lines}` for the render path. The concrete Text
-    /// owner retains this result across Paint-only rebuilds.
-    pub(crate) fn render_layout(
+    fn render_layout(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
@@ -2031,6 +2064,29 @@ impl StaticTextSlice {
         )
     }
 
+    /// C++ `Text::{m_shape,m_lines}` for the render path. The concrete Text
+    /// owner retains this result across Paint-only rebuilds.
+    pub(crate) fn render_topology(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+    ) -> Result<Option<StaticShapedTextTopology>> {
+        let resolved_runs = self.resolved_runs(runtime, instance)?;
+        if resolved_runs.iter().all(|run| run.text.is_empty()) {
+            return Ok(None);
+        }
+        self.shaped_topology_from_resolved_runs(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            &resolved_runs,
+            StaticShapedTextPurpose::Render,
+        )
+    }
+
     fn shaped_layout_from_resolved_runs(
         &self,
         runtime: &RuntimeFile,
@@ -2040,6 +2096,37 @@ impl StaticTextSlice {
         resolved_runs: &[StaticResolvedRun],
         purpose: StaticShapedTextPurpose,
     ) -> Result<Option<StaticShapedTextLayout>> {
+        let Some(topology) = self.shaped_topology_from_resolved_runs(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            resolved_runs,
+            purpose,
+        )?
+        else {
+            return Ok(None);
+        };
+        self.layout_from_shaped_topology(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            &topology,
+            purpose,
+        )
+        .map(Some)
+    }
+
+    fn shaped_topology_from_resolved_runs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+        resolved_runs: &[StaticResolvedRun],
+        purpose: StaticShapedTextPurpose,
+    ) -> Result<Option<StaticShapedTextTopology>> {
         if purpose == StaticShapedTextPurpose::Geometry
             && !self.text_geometry_inputs_supported(
                 runtime,
@@ -2100,8 +2187,6 @@ impl StaticTextSlice {
         )?;
         let scaled_font_size = font_size * font_scale;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
-        let apply_ellipsis =
-            self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
         let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
         let contextual_glyphs = if text_input_bidi {
             self.styled_resolved_run_glyphs_bidi(runtime, instance, resolved_runs, font_scale)?
@@ -2121,6 +2206,58 @@ impl StaticTextSlice {
             text_input_bidi,
             Some(&contextual_glyphs),
         )?;
+        Ok(Some(StaticShapedTextTopology {
+            text,
+            resolved_runs: resolved_runs.to_vec(),
+            contextual_glyphs,
+            lines,
+            font_scale,
+        }))
+    }
+
+    fn layout_from_shaped_topology(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+        topology: &StaticShapedTextTopology,
+        purpose: StaticShapedTextPurpose,
+    ) -> Result<StaticShapedTextLayout> {
+        let text = &topology.text;
+        let resolved_runs = &topology.resolved_runs;
+        let contextual_glyphs = &topology.contextual_glyphs;
+        let lines = topology.lines.clone();
+        let font_scale = topology.font_scale;
+        let base_style = self.base_style()?;
+        let font_size = self.style_font_size(runtime, instance, base_style)?;
+        let letter_spacing = self.letter_spacing(runtime, instance);
+        let font_bytes = base_style
+            .font_bytes(runtime, instance)
+            .context("retained shaped Text lost its font bytes")?;
+        let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+        let harf_variations = base_style.harf_variations(instance);
+        let shaper_instance = if harf_variations.is_empty() {
+            None
+        } else {
+            Some(ShaperInstance::from_variations(
+                &harf_font,
+                harf_variations.iter().copied(),
+            ))
+        };
+        let shaper_data = ShaperData::new(&harf_font);
+        let shaper = shaper_data
+            .shaper(&harf_font)
+            .instance(shaper_instance.as_ref())
+            .build();
+        let features = base_style.harf_features(instance);
+        let skrifa_font =
+            SkrifaFontRef::new(font_bytes).context("failed to parse font for outlines")?;
+        let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
+        let scale = font_size * font_scale / TEXT_SHAPE_SCALE_F32;
+        let apply_ellipsis =
+            self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
+        let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(text);
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
         let line_widths = lines
@@ -2224,14 +2361,14 @@ impl StaticTextSlice {
                 )?;
                 let base_glyphs = shape_text_glyphs_with_features(
                     &shaper,
-                    line.text,
+                    &line.text,
                     disable_legacy_kern,
                     &features,
                 );
                 let line_end = self.first_static_wrapped_line_end(
                     runtime,
                     instance,
-                    line.text,
+                    &line.text,
                     &base_glyphs,
                     max_width,
                     scale,
@@ -2285,7 +2422,7 @@ impl StaticTextSlice {
         }
 
         if text_input_bidi {
-            reorder_text_input_bidi_geometry(&text, &mut shaped_lines);
+            reorder_text_input_bidi_geometry(text, &mut shaped_lines);
         }
 
         let text_world_inverse = text_world.invert_or_identity();
@@ -2329,18 +2466,18 @@ impl StaticTextSlice {
         let shape_world = text_world.multiply(local_transform);
         let caret_boundaries = (purpose == StaticShapedTextPurpose::Geometry).then(|| {
             let (boundaries, _caret_build_work) =
-                build_static_caret_boundaries(&text, &shaped_lines, shape_world);
+                build_static_caret_boundaries(text, &shaped_lines, shape_world);
             boundaries
         });
-        Ok(Some(StaticShapedTextLayout {
-            text,
+        Ok(StaticShapedTextLayout {
+            text: text.clone(),
             lines: shaped_lines,
             caret_boundaries,
             local_transform,
             shape_world,
             has_geometric_modifiers,
             has_non_monotone_advances,
-        }))
+        })
     }
 
     fn render_data_filtered(
@@ -2542,7 +2679,7 @@ impl StaticTextSlice {
             .map(|line| {
                 let glyphs = shape_text_glyphs_with_features(
                     &shaper,
-                    line.text,
+                    &line.text,
                     disable_legacy_kern,
                     &features,
                 );
@@ -2907,7 +3044,7 @@ impl StaticTextSlice {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StaticTextLineMetrics>> {
@@ -3010,7 +3147,7 @@ impl StaticTextSlice {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
         line_metrics: &[StaticTextLineMetrics],
         resolved_runs: &[StaticResolvedRun],
         font_scale: f32,
@@ -3082,7 +3219,7 @@ impl StaticTextSlice {
 
     fn style_indices_for_line(
         &self,
-        line: &StaticTextLine<'_>,
+        line: &StaticTextLine,
         resolved_runs: &[StaticResolvedRun],
     ) -> Result<Vec<usize>> {
         let line_start = line.char_start;
@@ -3384,7 +3521,7 @@ impl StaticTextSlice {
                 glyphs.extend(self.styled_text_glyphs_for_style_bidi(
                     runtime,
                     instance,
-                    paragraph.text,
+                    &paragraph.text,
                     run.char_start + paragraph.char_start,
                     style_index,
                     font_scale,
@@ -3396,7 +3533,7 @@ impl StaticTextSlice {
     }
 
     fn styled_line_glyphs(
-        line: &StaticTextLine<'_>,
+        line: &StaticTextLine,
         contextual_glyphs: &[StyledTextGlyph],
     ) -> Vec<StyledTextGlyph> {
         let range = Self::styled_line_glyph_range(line, contextual_glyphs);
@@ -3404,7 +3541,7 @@ impl StaticTextSlice {
     }
 
     fn styled_line_glyph_range(
-        line: &StaticTextLine<'_>,
+        line: &StaticTextLine,
         contextual_glyphs: &[StyledTextGlyph],
     ) -> std::ops::Range<usize> {
         let line_start = line.char_start;
@@ -3415,7 +3552,7 @@ impl StaticTextSlice {
         start..end
     }
 
-    fn styled_line_width(line: &StaticTextLine<'_>, contextual_glyphs: &[StyledTextGlyph]) -> f32 {
+    fn styled_line_width(line: &StaticTextLine, contextual_glyphs: &[StyledTextGlyph]) -> f32 {
         contextual_glyphs[Self::styled_line_glyph_range(line, contextual_glyphs)]
             .iter()
             .map(|glyph| glyph.advance)
@@ -4012,12 +4149,12 @@ impl StaticTextSlice {
         Ok(glyphs.len())
     }
 
-    fn layout_static_text_lines<'text>(
+    fn layout_static_text_lines(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
-        text: &'text str,
+        text: &str,
         shaper: &harfrust::Shaper<'_>,
         disable_legacy_kern: bool,
         features: &[Feature],
@@ -4025,7 +4162,7 @@ impl StaticTextSlice {
         letter_spacing: f32,
         bidi: bool,
         contextual_glyphs: Option<&[StyledTextGlyph]>,
-    ) -> Result<Vec<StaticTextLine<'text>>> {
+    ) -> Result<Vec<StaticTextLine>> {
         let authored_lines = split_static_text_lines(text);
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let wrap = self.text_uint_property(runtime, instance, "wrapValue")?;
@@ -4053,7 +4190,7 @@ impl StaticTextSlice {
                 continue;
             }
 
-            let mut remaining = authored_line.text;
+            let mut remaining = authored_line.text.as_str();
             let mut char_start = authored_line.char_start;
             let mut soft_wrap_skipped_start = None;
             while !remaining.is_empty() {
@@ -4127,7 +4264,7 @@ impl StaticTextSlice {
                 let line_text = &remaining[..byte_end];
                 let char_end = char_start + line_text.chars().count();
                 lines.push(StaticTextLine {
-                    text: line_text,
+                    text: line_text.to_owned(),
                     char_start,
                     line_index,
                     soft_wrap_skipped_start,
@@ -4158,7 +4295,7 @@ impl StaticTextSlice {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
         line_metrics: &[StaticTextLineMetrics],
         resolved_runs: &[StaticResolvedRun],
         measured_width: f32,
@@ -5571,7 +5708,7 @@ mod tests {
             },
         ];
         let first_line = StaticTextLine {
-            text: "t",
+            text: "t".to_owned(),
             char_start: 0,
             line_index: 0,
             soft_wrap_skipped_start: None,

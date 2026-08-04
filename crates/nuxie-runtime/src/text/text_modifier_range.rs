@@ -99,7 +99,7 @@ impl StaticTextModifierRange {
         instance: &ArtboardInstance,
         text: &str,
         runs: &[StaticResolvedRun],
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
         coverage: &mut [f32],
     ) -> Result<()> {
         if coverage.is_empty() {
@@ -198,7 +198,7 @@ impl StaticTextModifierRange {
         text: &str,
         start: usize,
         end: usize,
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
     ) -> Result<Vec<StaticRangeUnit>> {
         match units_value {
             0 => Ok((start..end)
@@ -244,7 +244,7 @@ impl StaticTextModifierRange {
     }
 
     fn line_range_units(
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
         start: usize,
         end: usize,
     ) -> Vec<StaticRangeUnit> {

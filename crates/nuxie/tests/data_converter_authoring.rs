@@ -15,6 +15,7 @@ fn authors_a_named_boolean_negate_converter_in_the_file_catalog() -> Result<()> 
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -44,6 +45,7 @@ fn property_bearing_converter_records_keep_typed_values_and_flags() -> Result<()
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -140,6 +142,7 @@ fn primitive_converter_records_preserve_authored_order() -> Result<()> {
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -187,6 +190,7 @@ fn converter_references_lower_to_exact_catalog_ordinals_and_paths() -> Result<()
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -263,6 +267,7 @@ fn formula_ast_lowers_to_owned_rive_tokens() -> Result<()> {
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -319,6 +324,7 @@ fn interpolator_lowers_duration_and_owned_cubic_easing() -> Result<()> {
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -372,6 +378,7 @@ fn scripted_converter_references_the_canonical_script_asset_ordinal() -> Result<
     let mut scene = Scene::new();
     scene.edit(|tx| {
         tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -408,6 +415,7 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
     let mut scene = Scene::new();
     let ((artboard, shape, defaults, source_opacity), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Root".into(),
             width: 100.0,
             height: 100.0,
@@ -515,6 +523,7 @@ fn converter_aware_property_binds_reject_known_output_mismatches_atomically() ->
     let ((rectangle, color, number, tint, to_number, boolean_negate, string_group), _) = scene
         .edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Typed converter targets".into(),
                 width: 100.0,
                 height: 100.0,
@@ -678,6 +687,7 @@ fn removal_rejects_live_references_atomically_then_compacts_the_catalog() -> Res
     let (leaf, group) = scene
         .edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 100.0,
                 height: 100.0,

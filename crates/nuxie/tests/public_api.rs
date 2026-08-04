@@ -30,6 +30,7 @@ fn scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped() {
     let ((animation, first_key), _) = scene
         .edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -89,6 +90,7 @@ fn scene_visibility_authoring_surface_is_typed_key_free_and_preserves_local_opac
     let ((artboard, shape, defaults, shown_property), _) = scene
         .edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -178,6 +180,7 @@ fn scene_rejects_zero_fps_when_creating_a_linear_animation_atomically() {
     let (artboard, _) = scene
         .edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -221,6 +224,7 @@ fn scene_rejects_zero_fps_at_commit_and_rolls_back_the_animation() {
     let (animation, _) = scene
         .edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,

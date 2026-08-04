@@ -342,6 +342,7 @@ fn scripted_scene() -> Result<(Scene, nuxie::ArtboardId)> {
                 bytes: compile_luau(include_bytes!("fixtures/vector-scripted-module.luau")),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Scripted vector".into(),
                 width: 160.0,
                 height: 100.0,

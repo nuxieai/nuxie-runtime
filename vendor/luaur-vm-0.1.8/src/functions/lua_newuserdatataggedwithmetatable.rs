@@ -20,6 +20,7 @@ pub unsafe fn lua_newuserdatataggedwithmetatable(
     api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32);
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
 
     let u = lua_u_newudata(L, sz, tag);
 

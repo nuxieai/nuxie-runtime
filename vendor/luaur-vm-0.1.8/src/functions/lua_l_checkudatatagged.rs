@@ -11,6 +11,9 @@ pub unsafe fn lua_l_checkudatatagged(L: *mut lua_State, ud: c_int, tag: c_int) -
         return p;
     }
 
+    // C passes the raw TString bytes to luaL_typeerrorL; luaur's error layer
+    // is &str-based, so non-UTF-8 __type bytes are lossy-replaced here
+    // (documented divergence 7, docs/luau-fork.md).
     let tname = CStr::from_ptr(lua_getuserdataname(L, tag)).to_string_lossy();
     lua_l_typeerror_l(L, ud, &tname)
 }

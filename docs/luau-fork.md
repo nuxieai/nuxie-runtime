@@ -106,6 +106,13 @@ carried (not version lag; all pre-date the fork and are gate-green today):
    explicit keep-OFF exception for `LuauExportValueSyntax`; also
    `FixMathNoisePrecision` ON (Luau CLI keeps it OFF).
 6. `luaur-rt::Compiler` exposes a subset of engine `CompileOptions`.
+7. `&str`-based error formatting (rung-5 audit finding, adjudicated
+   2026-08-04): luaur's error layer takes `&str`, so non-UTF-8 bytes in a
+   userdata `__type` name are lossy-replaced (U+FFFD) in error messages
+   where C passes raw bytes — affects baseline `luaL_checkudata` and
+   rung-5 `luaL_checkudatatagged` alike. Unreachable for Nuxie's ASCII
+   type registrations; the scripted side-channel referees any
+   corpus-visible divergence.
 
 ## Oracle facts that bind the port
 

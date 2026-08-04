@@ -62,15 +62,14 @@ pub use nuxie_render_api::{
     GpuCanvasColorAttachment, GpuCanvasColorTarget, GpuCanvasDepthStencilAttachment,
     GpuCanvasDepthStencilState, GpuCanvasDrawCommand, GpuCanvasError, GpuCanvasIndexBuffer,
     GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders,
-    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasSamplerBinding,
-    GpuCanvasResourceLifetime, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
     GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
     GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D,
-    PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -4906,6 +4905,30 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.object_world_transform(local_id)
     }
 
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
+    }
+
     /// Return the canonical downstream shaped Text caret in source-artboard
     /// world space for one exact UTF-8 byte boundary.
     ///
@@ -5697,6 +5720,30 @@ impl OwnedArtboardInstance {
     /// Return the settled, layout-aware world transform for one runtime-local object.
     pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
         self.raw.object_world_transform(local_id)
+    }
+
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
     }
 
     /// Return the canonical downstream shaped Text caret in source-artboard

@@ -4188,7 +4188,7 @@ impl ArtboardInstance {
     /// transforms applied. The draw cache computes the same combination;
     /// semantic/focus providers need it without creating renderer state.
     pub(crate) fn runtime_component_world_transform_with_scroll(&self, local_id: usize) -> Mat2D {
-        let mut world = self
+        let world = self
             .runtime_graph()
             .map(|graph| self.runtime_component_world_transform(local_id, graph))
             .or_else(|| {
@@ -4196,6 +4196,13 @@ impl ArtboardInstance {
                     .map(|component| component.transform.world_transform)
             })
             .unwrap_or(Mat2D::IDENTITY);
+        self.runtime_component_apply_ancestor_scroll(local_id, world)
+    }
+
+    /// Fold the live ancestor ScrollConstraint scroll transforms for one
+    /// component occurrence onto `world`, in the exact order the semantic
+    /// provider and draw cache compose them.
+    fn runtime_component_apply_ancestor_scroll(&self, local_id: usize, mut world: Mat2D) -> Mat2D {
         let mut current = Some(local_id);
         while let Some(ancestor_local) = current {
             if let Some(component) = self.component(ancestor_local) {
@@ -4213,6 +4220,89 @@ impl ArtboardInstance {
             current = self.component_parent_local(ancestor_local);
         }
         world
+    }
+
+    /// Public seam over the layout-derived world transform with live ancestor
+    /// ScrollConstraint transforms applied — the combination the semantic
+    /// provider and draw cache already compose internally.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`), so the fold starts at
+    /// the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    ///
+    /// Returns `None` for an unknown component occurrence.
+    pub fn component_world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.update_pass();
+        self.component(local_id)?;
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        Some(match self.component_parent_local(local_id) {
+            Some(parent_local) => self.runtime_component_apply_ancestor_scroll(parent_local, world),
+            None => world,
+        })
+    }
+
+    /// `layout_bounds` mapped through the live ancestor ScrollConstraint
+    /// scroll transforms, composed exactly as
+    /// [`Self::component_world_transform_with_scroll`] composes them.
+    /// Identical to `layout_bounds` when no ancestor ScrollConstraint is
+    /// live.
+    ///
+    /// The settled layout rect itself never reflects scroll in pinned C++:
+    /// `ScrollConstraint::offsetY` only marks the content world transform
+    /// dirty and `constrainChild` composes a world translate, leaving
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). Callers that need the
+    /// settled box in scrolled space compose here instead of mutating the
+    /// solve.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230`), so the fold
+    /// starts at the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
+        self.update_pass();
+        let layout = self.layout_bounds(local_id)?;
+        let scroll = match self.component_parent_local(local_id) {
+            Some(parent_local) => {
+                self.runtime_component_apply_ancestor_scroll(parent_local, Mat2D::IDENTITY)
+            }
+            None => Mat2D::IDENTITY,
+        };
+        let corners = [
+            scroll.transform_point(layout.x, layout.y),
+            scroll.transform_point(layout.x + layout.width, layout.y),
+            scroll.transform_point(layout.x, layout.y + layout.height),
+            scroll.transform_point(layout.x + layout.width, layout.y + layout.height),
+        ];
+        let (mut min_x, mut min_y) = corners[0];
+        let (mut max_x, mut max_y) = corners[0];
+        for (x, y) in corners.into_iter().skip(1) {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        Some(RuntimeLayoutBounds {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        })
     }
 
     /// Run the `FocusData::scrollIntoView` ancestor walk for one mounted

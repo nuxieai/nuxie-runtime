@@ -206,7 +206,7 @@ impl Parser {
                 if self.lexer.current().r#type == Type::Attribute
                     || self.lexer.current().r#type == Type::AttributeOpen
                 {
-                    attributes = self.parse_attributes();
+                    attributes = self.parse_attributes(core::ptr::null_mut());
 
                     if self.lexer.current().r#type != Type::ReservedFunction {
                         return self.report_stat_error(

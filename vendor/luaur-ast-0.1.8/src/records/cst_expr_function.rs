@@ -1,11 +1,13 @@
 use crate::records::ast_array::AstArray;
 use crate::records::cst_node::CstNode;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::position::Position;
 
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CstExprFunction {
     pub base: CstNode,
+    pub attr_lists: AstArray<*mut CstAttrList>,
     pub function_keyword_position: Position,
     pub open_generics_position: Position,
     pub generics_comma_positions: AstArray<Position>,

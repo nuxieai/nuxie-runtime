@@ -9,7 +9,11 @@ impl Parser {
     pub fn parse_call_list(
         &mut self,
         comma_positions: *mut TempVector<'_, Position>,
+        close_paren_position: *mut Position,
     ) -> (AstArray<*mut AstExpr>, Location, Location) {
+        luaur_common::LUAU_ASSERT!(
+            close_paren_position.is_null() || luaur_common::FFlag::LuauCstAttr.get()
+        );
         let current_type = self.lexer.current().r#type;
         luaur_common::LUAU_ASSERT!(
             current_type == crate::records::lexeme::Type('(' as i32)
@@ -37,7 +41,13 @@ impl Parser {
             let end = self.lexer.current().location;
             let arg_end = end.end;
 
-            self.expect_match_and_consume(')', &match_paren, false);
+            let close_paren_found = self.expect_match_and_consume(')', &match_paren, false);
+            if luaur_common::FFlag::LuauCstAttr.get()
+                && !close_paren_position.is_null()
+                && close_paren_found
+            {
+                unsafe { *close_paren_position = end.begin };
+            }
 
             let args_array = self.copy_temp_vector_t(&args);
             (

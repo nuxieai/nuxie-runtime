@@ -10,6 +10,7 @@ use crate::records::ast_stat_local_function::AstStatLocalFunction;
 use crate::records::binding::Binding;
 use crate::records::cst_stat_local::CstStatLocal;
 use crate::records::cst_stat_local_function::CstStatLocalFunction;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::lexeme::Lexeme;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
@@ -23,7 +24,11 @@ impl Parser {
         keyword_position: Position,
         attributes: &AstArray<*mut AstAttr>,
         is_const: bool,
+        cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> *mut AstStat {
+        luaur_common::LUAU_ASSERT!(
+            cst_attr_lists.is_null() || luaur_common::FFlag::LuauCstAttr.get()
+        );
         if !is_const {
             self.next_lexeme();
         }
@@ -54,6 +59,7 @@ impl Parser {
                 Some(&name),
                 attributes,
                 is_const,
+                core::ptr::null_mut(),
             );
 
             self.match_recovery_stop_on_token[Type::ReservedEnd.0 as usize] -= 1;
@@ -66,10 +72,18 @@ impl Parser {
 
             if self.options.store_cst_data {
                 let cst_node = unsafe {
-                    (*self.allocator).alloc(CstStatLocalFunction::new(
-                        keyword_position,
-                        function_keyword_position,
-                    ))
+                    if luaur_common::FFlag::LuauCstAttr.get() && !cst_attr_lists.is_null() {
+                        (*self.allocator).alloc(CstStatLocalFunction::new_with_attr_lists(
+                            self.copy_temp_vector_t(&*cst_attr_lists),
+                            keyword_position,
+                            function_keyword_position,
+                        ))
+                    } else {
+                        (*self.allocator).alloc(CstStatLocalFunction::new(
+                            keyword_position,
+                            function_keyword_position,
+                        ))
+                    }
                 };
                 self.cst_node_map.try_insert(
                     node as *mut crate::records::ast_node::AstNode,

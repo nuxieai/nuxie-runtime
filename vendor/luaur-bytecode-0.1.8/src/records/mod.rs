@@ -4,6 +4,7 @@ pub mod bc_call;
 pub mod bc_call_fb;
 pub mod bc_cmp_proto;
 pub mod bc_function;
+pub mod bc_get_import;
 pub mod bc_get_table_ks;
 pub mod bc_get_var_args;
 pub mod bc_imm;

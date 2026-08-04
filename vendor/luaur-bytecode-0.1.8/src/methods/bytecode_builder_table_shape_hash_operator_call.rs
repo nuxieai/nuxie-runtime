@@ -11,8 +11,6 @@ impl TableShapeHash {
             hash ^= v.keys[i] as u32;
             hash = hash.wrapping_mul(16777619);
 
-            // Note: FFlag::LuauCompileDuptableConstantPack2 is assumed true in this translation context
-            // as we are translating the logic that depends on the shape's internal state.
             if v.hasConstants {
                 hash ^= v.constants[i] as u32;
                 hash = hash.wrapping_mul(16777619);

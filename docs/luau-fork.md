@@ -94,9 +94,10 @@ carried (not version lag; all pre-date the fork and are gate-green today):
 1. Every VM fast-call dispatch slot is `luauF_missing` — all fastcalls
    fall back to ordinary calls (semantically equivalent by Luau's design;
    a standing perf divergence; candidate post-ladder lane).
-2. `LuauCompileDuptableConstantPack2` table-shape equality/hash baked ON;
-   `LuauCompileNoOptNext` omitted (baked OFF); `LuauIntegerBufferFastcalls`
-   conjunct baked ON.
+2. `LuauCompileNoOptNext` omitted (baked OFF); `LuauIntegerBufferFastcalls`
+   conjunct baked ON. (A third item — `LuauCompileDuptableConstantPack2`
+   shape equality/hash baked ON — was retired at rung 2 when upstream
+   removed the flag and hardwired the ON path.)
 3. `math.ldexp` constant folding uses `x * 2^exp` instead of `ldexp`
    (edge-case divergence, e.g. `ldexp(0, 2000)`).
 4. Assertion handler's "do not trap" return value is ignored (Rust always
@@ -137,7 +138,7 @@ ratchet floor at every rung):
 | rung | range | scoped delta | status |
 |---|---|---|---|
 | 1 | `8f33df91..91caa731` (0.725) | 549+/209- | landed 2026-08-04: 75 rows ported, 29 no-op (C++-only scoping), 10 Require rows out of scope; new dark flags `LuauAutoStack`, `LuauCloneTableFix`, `LuauCustomYieldablePcalls`, `LuauUdataMetatablePinned` in the keep-OFF set; `DesugaredArrayTypeReferenceIsEmpty` removed (ON path hardwired) |
-| 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | inventoried |
+| 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | landed 2026-08-04: 68 rows ported, 3 no-op; upstream removed `LuauCompileDuptableConstantPack2` (packed table constants + `LBC_VERSION_TARGET` 7 now unconditional — retires the baked-ON parts of baseline divergence 2); new dark flags `LuauCstAttr`, `LuauVirtualBcBuilder` in the keep-OFF set |
 | 3 | `86d2a9dc..f1f121dc` (0.727) | 867+/626- | inventoried |
 | 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | inventoried |
 | 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | inventoried |

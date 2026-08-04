@@ -53,6 +53,7 @@ pub struct Compiler {
     pub stack_size: u32,
     pub arg_count: usize,
     pub has_loops: bool,
+    pub has_multi_ret: bool,
     pub current_function: *mut AstExprFunction,
     pub block_depth: usize,
     pub getfenv_used: bool,

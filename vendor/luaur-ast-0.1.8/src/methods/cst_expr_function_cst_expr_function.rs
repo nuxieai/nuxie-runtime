@@ -10,6 +10,7 @@ impl CstExprFunction {
             base: CstNode {
                 class_index: <Self as CstNodeClass>::CLASS_INDEX,
             },
+            attr_lists: AstArray::default(),
             function_keyword_position: Position::missing(),
             open_generics_position: Position::missing(),
             generics_comma_positions: AstArray::default(),

@@ -62,7 +62,7 @@ impl Parser {
                     type_pack: core::ptr::null_mut(),
                 };
             } else {
-                attributes = Parser::parse_attributes(self);
+                attributes = Parser::parse_attributes(self, core::ptr::null_mut());
                 return self.parse_function_type(allow_pack, &attributes);
             }
         } else if self.lexer.current().r#type == Type::ReservedNil {

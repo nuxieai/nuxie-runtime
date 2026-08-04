@@ -11,6 +11,7 @@ impl<'a> CallInliner<'a> {
         caller: &'a mut BcFunction,
         target: &'a mut BcFunction,
         call_op: BcOp,
+        caller_fb_vec_size: u32,
     ) -> Self {
         let caller_ptr: *mut BcFunction = caller;
         let call_ref = unsafe { (&*caller_ptr).inst(call_op) };
@@ -24,6 +25,7 @@ impl<'a> CallInliner<'a> {
             call,
             call_params,
             target_reg,
+            caller_fb_vec_size,
             caller_blocks_size_before_inline: 0,
             caller_inst_size_before_inline: 0,
             caller_vm_const_size_before_inline: 0,

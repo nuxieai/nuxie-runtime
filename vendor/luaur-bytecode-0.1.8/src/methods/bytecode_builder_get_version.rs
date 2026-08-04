@@ -20,11 +20,6 @@ impl BytecodeBuilder {
             return 8;
         }
 
-        // LBC_CONSTANT_TABLE_WITH_CONSTANTS requires version 7
-        if FFlag::LuauCompileDuptableConstantPack2.get() {
-            return 7;
-        }
-
         luaur_common::enums::luau_bytecode_tag::LBC_VERSION_TARGET.0 as u8
     }
 }

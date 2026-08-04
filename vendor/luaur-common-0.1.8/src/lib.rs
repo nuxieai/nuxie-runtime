@@ -71,7 +71,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCodegenSuggestArgumentRegisterX64.set(value);
     FFlag::LuauCodegenVmExitSync.set(value);
     FFlag::LuauCodegenVmExitSyncFix.set(value);
-    FFlag::LuauCompileDuptableConstantPack2.set(value);
     FFlag::LuauCompileFastcall3CostModel.set(value);
     FFlag::LuauCompileFoldOptimize.set(value);
     FFlag::LuauCompileInlineTableFunctions.set(value);
@@ -85,6 +84,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConst2.set(value);
     FFlag::LuauConstJustReportErrorForUnderfill.set(value);
     FFlag::LuauConstraintGraph.set(value);
+    FFlag::LuauCstAttr.set(false);
     FFlag::LuauCstExprGroup.set(value);
     FFlag::LuauCstTypeGroup.set(value);
     FFlag::LuauCustomYieldablePcalls.set(false);
@@ -144,6 +144,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauUdataMetatablePinned.set(false);
     FFlag::LuauUdtfTypeIsSubtypeOf.set(value);
     FFlag::LuauUseNativeStackGuard.set(value);
+    FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
 }
@@ -283,8 +284,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSync);
     // CodeGen/src/OptimizeDeadStore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSyncFix);
-    // Compiler/src/Compiler.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileDuptableConstantPack2);
+    // Ast/src/Cst.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
     // Compiler/src/CostModel.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileFastcall3CostModel);
     // Compiler/src/ConstantFolding.cpp
@@ -419,6 +420,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdtfTypeIsSubtypeOf);
     // Analysis/src/NativeStackGuard.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUseNativeStackGuard);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauVirtualBcBuilder);
     // Analysis/src/DataFlowGraph.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauVisitCallTypeArgsInDfg);
     // VM/src/lvmexecute.cpp

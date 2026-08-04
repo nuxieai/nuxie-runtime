@@ -13,26 +13,30 @@ impl BytecodeBuilder {
 
         let mut span = 1 << 24;
 
-        let mut offset = 0;
-        while offset < self.lines.len() {
-            let mut next = offset;
-            let mut min = self.lines[offset];
-            let mut max = self.lines[offset];
+        if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+            span = self.calc_lines_span();
+        } else {
+            let mut offset = 0;
+            while offset < self.lines.len() {
+                let mut next = offset;
+                let mut min = self.lines[offset];
+                let mut max = self.lines[offset];
 
-            while next < self.lines.len() && next < offset + span {
-                min = cmp::min(min, self.lines[next]);
-                max = cmp::max(max, self.lines[next]);
+                while next < self.lines.len() && next < offset + span {
+                    min = cmp::min(min, self.lines[next]);
+                    max = cmp::max(max, self.lines[next]);
 
-                if max - min > 255 {
-                    break;
+                    if max - min > 255 {
+                        break;
+                    }
+                    next += 1;
                 }
-                next += 1;
-            }
 
-            if next < self.lines.len() && next - offset < span {
-                span = 1 << log2((next - offset) as i32);
-            } else {
-                offset += span;
+                if next < self.lines.len() && next - offset < span {
+                    span = 1 << log2((next - offset) as i32);
+                } else {
+                    offset += span;
+                }
             }
         }
 
@@ -50,16 +54,20 @@ impl BytecodeBuilder {
             core::slice::from_mut(&mut baseline_one)
         };
 
-        for offset in (0..self.lines.len()).step_by(span) {
-            let mut next = offset;
-            let mut min = self.lines[offset];
+        if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+            self.fill_baseline_info(span, baseline, baseline_size);
+        } else {
+            for offset in (0..self.lines.len()).step_by(span) {
+                let mut next = offset;
+                let mut min = self.lines[offset];
 
-            while next < self.lines.len() && next < offset + span {
-                min = cmp::min(min, self.lines[next]);
-                next += 1;
+                while next < self.lines.len() && next < offset + span {
+                    min = cmp::min(min, self.lines[next]);
+                    next += 1;
+                }
+
+                baseline[offset / span] = min;
             }
-
-            baseline[offset / span] = min;
         }
 
         let logspan = log2(span as i32);

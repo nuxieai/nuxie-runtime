@@ -143,6 +143,7 @@ impl Parser {
                     None,
                     &AstArray::default(),
                     false,
+                    core::ptr::null_mut(),
                 );
 
                 self.match_recovery_stop_on_token[Type::ReservedEnd.0 as usize] -= 1;

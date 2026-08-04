@@ -206,7 +206,14 @@ impl<'a> BytecodeGraphParser<'a> {
 
                 LuauOpcode::LOP_GETIMPORT => {
                     self.add_vm_const_input(node, LUAU_INSN_D(insn) as u32);
-                    self.add_imm_input_bc_inst_u32(node, aux);
+                    let components_count = (aux >> 30) as i32;
+                    self.add_imm_input_bc_inst_i32(node, components_count);
+                    for component in 0..components_count {
+                        self.add_vm_const_input(
+                            node,
+                            (aux >> (20 - 10 * component)) & 0x3ff,
+                        );
+                    }
                     self.add_producer(LUAU_INSN_A(insn) as u8, node_op);
                 }
 

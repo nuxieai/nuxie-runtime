@@ -116,7 +116,7 @@ impl BytecodeBuilder {
                 }
                 Type::Type_Table => {
                     let shape = &self.table_shapes[unsafe { c.value.valueTable } as usize];
-                    if FFlag::LuauCompileDuptableConstantPack2.get() && shape.hasConstants {
+                    if shape.hasConstants {
                         write_byte(
                             ss,
                             LuauBytecodeTag::LBC_CONSTANT_TABLE_WITH_CONSTANTS.0 as u8,

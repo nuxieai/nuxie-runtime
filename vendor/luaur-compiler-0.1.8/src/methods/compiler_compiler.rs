@@ -53,6 +53,7 @@ impl Compiler {
             stack_size: 0,
             arg_count: 0,
             has_loops: false,
+            has_multi_ret: false,
             current_function: core::ptr::null_mut(),
             block_depth: 0,
             getfenv_used: false,

@@ -1,7 +1,11 @@
 #[allow(unused_macros)]
 macro_rules! VCONSTANY {
-    ($v:expr, $constants:expr) => {
-        LUAU_ASSERT!(($v as usize) < $constants.len())
+    ($v:expr, $builder:expr) => {
+        if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+            $builder.validate_const($v as i32);
+        } else {
+            LUAU_ASSERT!(($v as usize) < $builder.constants.len());
+        }
     };
 }
 

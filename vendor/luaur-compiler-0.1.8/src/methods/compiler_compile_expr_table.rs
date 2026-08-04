@@ -92,66 +92,37 @@ impl Compiler {
             {
                 let mut shape = BcTableShape::default();
 
-                if luaur_common::FFlag::LuauCompileDuptableConstantPack2.get() {
-                    for i in 0..expr_ref.items.size {
-                        let item = &*expr_ref.items.data.add(i as usize);
-                        LUAU_ASSERT!(item.kind == ItemKind::Record);
-                        let ckey = rtti::ast_node_as::<AstExprConstantString>(item.key as *mut _);
-                        LUAU_ASSERT!(!ckey.is_null());
-                        let key_cid = (*self.bytecode)
-                            .add_constant_string(sref_ast_array_c_char((*ckey).value));
-                        if key_cid < 0 {
-                            CompileError::raise(
-                                &(*ckey).base.base.location,
-                                format_args!(
-                                    "Exceeded constant limit; simplify the code to compile"
-                                ),
-                            );
-                        }
-                        let value_cid = self.get_constant_index(item.value);
-                        if let Some(existing) = last_key_val.get(&key_cid) {
-                            if *existing == -1 {
-                                continue;
-                            }
-                        }
-                        // C++ `lastKeyVal[keyCid] = valueCid` — operator[] OVERWRITES an
-                        // existing entry. InsertionOrderedMap::insert is a no-op when the key
-                        // exists, so a duplicate key whose value later becomes -1 (non-constant,
-                        // e.g. a closure) failed to downgrade and the table wrongly packed its
-                        // constants. get_or_default is the operator[] equivalent.
-                        *last_key_val.get_or_default(key_cid) = value_cid;
+                for i in 0..expr_ref.items.size {
+                    let item = &*expr_ref.items.data.add(i as usize);
+                    LUAU_ASSERT!(item.kind == ItemKind::Record);
+                    let ckey = rtti::ast_node_as::<AstExprConstantString>(item.key as *mut _);
+                    LUAU_ASSERT!(!ckey.is_null());
+                    let key_cid = (*self.bytecode)
+                        .add_constant_string(sref_ast_array_c_char((*ckey).value));
+                    if key_cid < 0 {
+                        CompileError::raise(
+                            &(*ckey).base.base.location,
+                            format_args!("Exceeded constant limit; simplify the code to compile"),
+                        );
                     }
+                    let value_cid = self.get_constant_index(item.value);
+                    if let Some(existing) = last_key_val.get(&key_cid) {
+                        if *existing == -1 {
+                            continue;
+                        }
+                    }
+                    *last_key_val.get_or_default(key_cid) = value_cid;
+                }
 
-                    for (key_cid, value_cid) in last_key_val.iter() {
-                        LUAU_ASSERT!(shape.length < BcTableShape::kMaxLength);
-                        let idx = shape.length as usize;
-                        shape.keys[idx] = *key_cid;
-                        shape.constants[idx] = *value_cid;
-                        if *value_cid >= 0 {
-                            shape.hasConstants = true;
-                        }
-                        shape.length += 1;
+                for (key_cid, value_cid) in last_key_val.iter() {
+                    LUAU_ASSERT!(shape.length < BcTableShape::kMaxLength);
+                    let idx = shape.length as usize;
+                    shape.keys[idx] = *key_cid;
+                    shape.constants[idx] = *value_cid;
+                    if *value_cid >= 0 {
+                        shape.hasConstants = true;
                     }
-                } else {
-                    for i in 0..expr_ref.items.size {
-                        let item = &*expr_ref.items.data.add(i as usize);
-                        LUAU_ASSERT!(item.kind == ItemKind::Record);
-                        let ckey = rtti::ast_node_as::<AstExprConstantString>(item.key as *mut _);
-                        LUAU_ASSERT!(!ckey.is_null());
-                        let cid = (*self.bytecode)
-                            .add_constant_string(sref_ast_array_c_char((*ckey).value));
-                        if cid < 0 {
-                            CompileError::raise(
-                                &(*ckey).base.base.location,
-                                format_args!(
-                                    "Exceeded constant limit; simplify the code to compile"
-                                ),
-                            );
-                        }
-                        LUAU_ASSERT!(shape.length < BcTableShape::kMaxLength);
-                        shape.keys[shape.length as usize] = cid;
-                        shape.length += 1;
-                    }
+                    shape.length += 1;
                 }
 
                 let tid = (*self.bytecode).add_constant_table(&shape);
@@ -168,10 +139,8 @@ impl Compiler {
                     (*self.bytecode).emit_ad(LuauOpcode::LOP_DUPTABLE, reg, tid as i16);
                 } else {
                     // must disable duptable constant optimization here, as we default back to new table
-                    if luaur_common::FFlag::LuauCompileDuptableConstantPack2.get() {
-                        shape.hasConstants = false;
-                        last_key_val.clear();
-                    }
+                    shape.hasConstants = false;
+                    last_key_val.clear();
                     (*self.bytecode).emit_abc(LuauOpcode::LOP_NEWTABLE, reg, encoded_hash_size, 0);
                     (*self.bytecode).emit_aux(0);
                 }
@@ -220,8 +189,7 @@ impl Compiler {
                 let key = item.key;
                 let value = item.value;
 
-                if luaur_common::FFlag::LuauCompileDuptableConstantPack2.get()
-                    && last_key_val.size() > 0
+                if last_key_val.size() > 0
                     && !key.is_null()
                     && !rtti::ast_node_as::<AstExprConstantString>(key as *mut _).is_null()
                 {

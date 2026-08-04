@@ -19,11 +19,10 @@ pub unsafe fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfun
     api_check!(L, nresults >= LUA_MULTRET);
     api_checknelems!(L, nargs + 1);
     api_check!(L, (*L).status == 0);
-    api_check!(
-        L,
-        nresults == LUA_MULTRET
-            || (*(*L).ci).top.offset_from((*L).top) >= (nresults - nargs) as isize
-    );
+
+    if nresults > nargs + 1 {
+        crate::ensure_stack!(L, nresults - (nargs + 1));
+    }
 
     let mut func: isize = 0;
     if errfunc != 0 {

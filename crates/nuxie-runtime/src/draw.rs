@@ -1667,8 +1667,12 @@ impl ArtboardInstance {
                     layout_bounds,
                     path_cache,
                 ),
-                "NestedArtboard" => path_cache
-                    .component_world_transform_with_bounds(self, graph, local_id, layout_bounds),
+                "NestedArtboard" => path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                ),
                 _ => unreachable!("nested-artboard type was preflighted"),
             };
             let content = RuntimeAabb::from_artboard_with_layout(&nested.child, child_graph);
@@ -4109,6 +4113,31 @@ impl ArtboardInstance {
         self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
         self.seed_runtime_shape_paint_opacity_tree();
         Ok(())
+    }
+
+    fn attach_initialized_renderer_tree_if_needed(&self, seed_opacity: bool) {
+        let structure_epoch = self.nested_structure_epoch();
+        let (attach_images, seed_opacity) = {
+            let resources = self.render_resources.borrow();
+            (
+                (resources.image_tree_structure_epoch != Some(structure_epoch))
+                    .then(|| Arc::clone(&resources.image_assets)),
+                seed_opacity && resources.opacity_tree_structure_epoch != Some(structure_epoch),
+            )
+        };
+        if let Some(images) = attach_images.as_ref() {
+            self.attach_runtime_image_assets_tree(Arc::clone(images));
+        }
+        if seed_opacity {
+            self.seed_runtime_shape_paint_opacity_tree();
+        }
+        let mut resources = self.render_resources.borrow_mut();
+        if attach_images.is_some() {
+            resources.image_tree_structure_epoch = Some(structure_epoch);
+        }
+        if seed_opacity {
+            resources.opacity_tree_structure_epoch = Some(structure_epoch);
+        }
     }
 
     fn seed_runtime_shape_paint_opacity_tree(&self) {
@@ -9195,7 +9224,8 @@ impl RuntimeShapeList {
     /// `ShapePaint` and `ShapePaintPath` backend sidecars from the pooled
     /// occurrence before installing the fresh state.
     pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
-        self.backend_context_id.set(pooled.backend_context_id.take());
+        self.backend_context_id
+            .set(pooled.backend_context_id.take());
         for (fresh_shape, pooled_shape) in self.by_local.iter_mut().zip(&mut pooled.by_local) {
             let (Some(fresh_shape), Some(pooled_shape)) = (fresh_shape, pooled_shape) else {
                 continue;
@@ -12111,6 +12141,21 @@ impl TaffyRuntimeLayoutEngine {
         width_axis: bool,
     ) -> Option<f32> {
         let nested = instance.nested_artboards.get(&local)?;
+        // `NestedArtboardLayout::layoutNode` transfers the mounted artboard's
+        // exact root Yoga node to its host, and `Artboard::takeLayoutData`
+        // disables standalone child solves. Measure that retained node here:
+        // re-solving the detached child skips its interpolation and shrinks
+        // independently positioned siblings (`nested_artboard_layout.cpp:24-42`;
+        // `artboard.cpp:1245-1253`).
+        if nested.child.layout_node_owned_by_host
+            && let Some(layout) = nested
+                .child
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+        {
+            let (_, _, width, height) = layout.current_bounds();
+            return Some(if width_axis { width } else { height });
+        }
         let layout_size = nested
             .child
             .runtime_file()
@@ -12318,15 +12363,12 @@ impl TaffyRuntimeLayoutEngine {
                 // `parent_is_row` gating quirk only under a style-less
                 // container: C++ `mainAxisIsRow()` reports row there while
                 // the zero-initialized Yoga node settles as a column.
-                style.flex_basis = if self.parent_actual_main_axis_is_row(
-                    instance,
-                    layout_local,
-                    parent_is_row,
-                ) {
-                    style.size.width
-                } else {
-                    style.size.height
-                };
+                style.flex_basis =
+                    if self.parent_actual_main_axis_is_row(instance, layout_local, parent_is_row) {
+                        style.size.width
+                    } else {
+                        style.size.height
+                    };
             }
             2 => {
                 style.flex_grow = 0.0;
@@ -14163,7 +14205,41 @@ impl RuntimeOccurrenceRenderResources {
             return nested_structure_epoch.is_none()
                 || self.solid_only_tree_structure_epoch != nested_structure_epoch;
         }
-        true
+        if instance
+            .runtime_shapes
+            .backend_paints_need_realization(self.paints.backend_context_id)
+        {
+            return true;
+        }
+        let Some(preparation) = self.preparation.as_ref() else {
+            return true;
+        };
+        // `update_artboard_backend_tree_internal` records this exact key only
+        // after it has realized pending paints and completed the occurrence
+        // traversal. Reuse that retained clean boundary so an explicit
+        // prepare followed by draw does not enter synchronization twice.
+        let Some(gradient_frame) = self
+            .path_cache
+            .gradient_preparation
+            .as_ref()
+            .filter(|frame| {
+                frame.key.graph_global_id == graph.global_id
+                    && frame.key.graph_identity == graph as *const ArtboardGraph as usize
+            })
+        else {
+            return true;
+        };
+        let world_epoch = if gradient_frame.has_world_space_gradient_paints {
+            instance.prepared_epoch()
+        } else {
+            0
+        };
+        !preparation.can_skip_prepared_frame(
+            graph.global_id,
+            instance.cache_epoch(),
+            world_epoch,
+            instance.tree_paint_preparation_epoch(),
+        )
     }
 }
 
@@ -18545,7 +18621,9 @@ fn runtime_component_list_host_world_transform(
     )
     .is_some()
     {
-        let parent_local = instance.component_parent_local(local_id).unwrap_or(local_id);
+        let parent_local = instance
+            .component_parent_local(local_id)
+            .unwrap_or(local_id);
         return path_cache.component_world_transform_with_bounds(
             instance,
             graph,
@@ -18553,12 +18631,8 @@ fn runtime_component_list_host_world_transform(
             layout_bounds,
         );
     }
-    let base = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        local_id,
-        layout_bounds,
-    );
+    let base =
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
     instance
         .component_handle(local_id)
         .map(|list| {
@@ -18779,12 +18853,8 @@ fn runtime_nested_artboard_layout_world_transform(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     path_cache: &mut RuntimeArtboardPathState,
 ) -> Mat2D {
-    let mut world = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        local_id,
-        layout_bounds,
-    );
+    let mut world =
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
     let Some((retained_x, retained_y)) = child
         .component(0)
         .and_then(|component| component.concrete.layout.as_ref())
@@ -25280,8 +25350,8 @@ mod tests {
     fn pooled_component_list_renderer_backends_survive_authored_state_restore() {
         let runtime = read_runtime_file(&cpp_runtime_fixture("virtualize_blendmode.riv"))
             .expect("virtualize_blendmode imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("virtualize_blendmode graphs build");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("virtualize_blendmode graphs build");
         let child_graph = graphs
             .artboards
             .iter()
@@ -25309,11 +25379,8 @@ mod tests {
             .value
             .get_mut()
             .context_id = Some(context_id);
-        pooled_shape.paint_owners[0]
-            .backend
-            .value
-            .get_mut()
-            .paint = Some(factory.make_render_paint());
+        pooled_shape.paint_owners[0].backend.value.get_mut().paint =
+            Some(factory.make_render_paint());
         *pooled_shape.paint_paths[0].backend.value.get_mut() = Some(RuntimePathBackendState {
             path: factory.make_empty_render_path(),
             raw_mutation_id: 11,
@@ -25337,11 +25404,7 @@ mod tests {
             "the pooled ShapePaint keeps its RenderPaint"
         );
         assert!(
-            fresh_shape.paint_paths[0]
-                .backend
-                .value
-                .get_mut()
-                .is_some(),
+            fresh_shape.paint_paths[0].backend.value.get_mut().is_some(),
             "the pooled ShapePaintPath keeps its RenderPath"
         );
 
@@ -26651,44 +26714,28 @@ mod tests {
     fn layout_clip_backend_key_tracks_the_layout_path_owner() {
         let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
             .expect("artboard_list_overrides imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("artboard_list_overrides graphs build");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("artboard_list_overrides graphs build");
         let graph = graphs
             .artboards
             .iter()
             .find(|graph| graph.name.as_deref() == Some("Main"))
             .expect("fixture has Main artboard");
-        let mut instance = ArtboardInstance::from_graph(&runtime, graph)
-            .expect("Main instance builds");
+        let mut instance =
+            ArtboardInstance::from_graph(&runtime, graph).expect("Main instance builds");
         let path_cache = RuntimeArtboardPathState::default();
-        let root_before = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            0,
-            RenderFillRule::Clockwise,
-        );
-        let layout_before = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            3,
-            RenderFillRule::Clockwise,
-        );
+        let root_before =
+            path_cache.retained_render_path_key(&instance, graph, 0, RenderFillRule::Clockwise);
+        let layout_before =
+            path_cache.retained_render_path_key(&instance, graph, 3, RenderFillRule::Clockwise);
 
         instance.clear_component_dirt(3);
         assert!(instance.add_dirt(3, ComponentDirt::PATH, false));
 
-        let root_after = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            0,
-            RenderFillRule::Clockwise,
-        );
-        let layout_after = path_cache.retained_render_path_key(
-            &instance,
-            graph,
-            3,
-            RenderFillRule::Clockwise,
-        );
+        let root_after =
+            path_cache.retained_render_path_key(&instance, graph, 0, RenderFillRule::Clockwise);
+        let layout_after =
+            path_cache.retained_render_path_key(&instance, graph, 3, RenderFillRule::Clockwise);
         assert_eq!(root_after, root_before);
         assert_ne!(layout_after, layout_before);
     }
@@ -26697,15 +26744,15 @@ mod tests {
     fn component_list_row_resize_refreshes_the_mounted_root_constraint_frame() {
         let runtime = read_runtime_file(&cpp_runtime_fixture("artboard_list_overrides.riv"))
             .expect("artboard_list_overrides imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("artboard_list_overrides graphs build");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("artboard_list_overrides graphs build");
         let graph = graphs
             .artboards
             .iter()
             .find(|graph| graph.name.as_deref() == Some("child"))
             .expect("fixture has child artboard");
-        let mut child = ArtboardInstance::from_graph(&runtime, graph)
-            .expect("child instance builds");
+        let mut child =
+            ArtboardInstance::from_graph(&runtime, graph).expect("child instance builds");
 
         assert!(runtime_apply_component_list_item_layout_bounds(
             &mut child,

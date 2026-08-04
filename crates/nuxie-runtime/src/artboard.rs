@@ -23593,11 +23593,7 @@ mod tests {
             push_synthetic_object(bytes, "Backboard", &[]);
             push_synthetic_object(bytes, "Artboard", &[]);
             push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 0)]);
-            push_synthetic_object(
-                bytes,
-                "ArtboardComponentListOverride",
-                &[("parentId", 1)],
-            );
+            push_synthetic_object(bytes, "ArtboardComponentListOverride", &[("parentId", 1)]);
         });
         let file = read_runtime_file(&bytes).expect("component-list override fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("component-list fixture graphs");

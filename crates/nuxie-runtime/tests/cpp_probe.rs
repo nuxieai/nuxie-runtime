@@ -18924,7 +18924,11 @@ fn styleless_artboard_settles_top_level_children_as_column_like_cpp_probe() {
             .find(|component| component.local_id == local)
             .and_then(|component| component.world_transform)
             .map(|matrix| (matrix[4], matrix[5]));
-        assert_eq!(cpp_xy, Some(expected_xy), "C++ settled xy for local {local}");
+        assert_eq!(
+            cpp_xy,
+            Some(expected_xy),
+            "C++ settled xy for local {local}"
+        );
         let rust_bounds = rust
             .layout_bounds(local)
             .unwrap_or_else(|| panic!("Rust solved bounds for local {local}"));
@@ -18996,7 +19000,11 @@ fn artboard_own_column_style_drives_root_flow_like_cpp_probe() {
             .find(|component| component.local_id == local)
             .and_then(|component| component.world_transform)
             .map(|matrix| (matrix[4], matrix[5]));
-        assert_eq!(cpp_xy, Some(expected_xy), "C++ settled xy for local {local}");
+        assert_eq!(
+            cpp_xy,
+            Some(expected_xy),
+            "C++ settled xy for local {local}"
+        );
         let rust_bounds = rust
             .layout_bounds(local)
             .unwrap_or_else(|| panic!("Rust solved bounds for local {local}"));
@@ -19778,12 +19786,11 @@ fn bankcard_inner_feather_dependency_order_matches_cpp() {
     let instance = ArtboardInstance::from_graph_with_artboards(&runtime, graph, &file.artboards)
         .expect("instantiate nested Artboard");
 
-    let orders = [1usize, 367, 365, 360, 332, 334, 335, 337]
-        .map(|local| {
-            instance
-                .component(local)
-                .and_then(|component| component.graph_order())
-        });
+    let orders = [1usize, 367, 365, 360, 332, 334, 335, 337].map(|local| {
+        instance
+            .component(local)
+            .and_then(|component| component.graph_order())
+    });
     assert_eq!(
         orders,
         [

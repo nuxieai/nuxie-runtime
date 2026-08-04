@@ -140,7 +140,8 @@ impl Compiler {
             // C: `isInlinable = !vararg && !getfenvUsed && !setfenvUsed;
             //     if (FFlag::LuauEmitCallFeedback && isInlinable && upvals.empty()) flags |= LPF_INLINABLE;`
             // This whole block was missing, so the Rust compiler never marked functions inlinable.
-            let is_inlinable = !func_ref.vararg && !self.getfenv_used && !self.setfenv_used;
+            let is_inlinable =
+                !self.has_multi_ret && !self.getfenv_used && !self.setfenv_used;
             if luaur_common::FFlag::LuauEmitCallFeedback.get()
                 && is_inlinable
                 && self.upvals.len() == 0
@@ -198,6 +199,7 @@ impl Compiler {
             self.stack_size = 0;
             self.arg_count = 0;
             self.has_loops = false;
+            self.has_multi_ret = false;
             self.current_function = core::ptr::null_mut();
             fid
         }

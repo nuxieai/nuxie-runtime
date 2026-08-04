@@ -49,6 +49,9 @@ impl Compiler {
             }
 
             self.close_locals(0);
+            if mult_ret {
+                self.has_multi_ret = true;
+            }
             (*self.bytecode).emit_abc(
                 LuauOpcode::LOP_RETURN,
                 temp,

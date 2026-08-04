@@ -2,10 +2,40 @@
 set -euo pipefail
 
 expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-schema="nuxie-golden-librive-provenance-v2"
+schema="nuxie-golden-librive-provenance-v3"
+
+# Registered local oracle patches applied on top of the pinned revision when
+# building librive. The pinned checkout itself must stay pristine: build.sh
+# materializes `git archive` of the pin into an isolated tree, applies these,
+# and compiles there. The stamp binds the archive to the exact patch set so a
+# patch edit (or removal) invalidates previously built archives.
+librive_patch_dir="$(cd "$(dirname "$0")/.." && pwd)/rive-runtime-patches"
+
+librive_patches() {
+    local patch
+    for patch in "$librive_patch_dir"/librive-*.patch; do
+        [[ -e "$patch" ]] || continue
+        printf '%s\n' "$patch"
+    done | LC_ALL=C sort
+}
+
+patches_digest() {
+    local patch digest out=""
+    while IFS= read -r patch; do
+        [[ -n "$patch" ]] || continue
+        digest="$(sha256_file "$patch")"
+        out+="${out:+,}$(basename "$patch"):$digest"
+    done < <(librive_patches)
+    if [[ -z "$out" ]]; then
+        out="none"
+    fi
+    printf '%s\n' "$out"
+}
 
 usage() {
     echo "usage: $0 source <runtime-dir>" >&2
+    echo "       $0 patches" >&2
+    echo "       $0 materialize <runtime-dir> <dest-dir>" >&2
     echo "       $0 write|verify <runtime-dir> <archive> <rive.make> <stamp> <debug|release> <ordinary|scripted|audio>" >&2
     exit 2
 }
@@ -76,6 +106,44 @@ expected_defines() {
         )
     fi
     printf '%s\n' "${defines[@]}" | LC_ALL=C sort | paste -sd, -
+}
+
+# Produce the librive build source tree. With no registered patches this is
+# the pinned checkout itself. With patches, an isolated `git archive` of the
+# pin is extracted into <dest-dir>, patches are applied there, and <dest-dir>
+# is the build source — the shared checkout is never written. Prints the
+# directory to build from on stdout.
+materialize_source() {
+    local runtime_dir="$1"
+    local dest="$2"
+    validate_source "$runtime_dir"
+    local patches
+    patches="$(librive_patches)"
+    if [[ -z "$patches" ]]; then
+        printf '%s\n' "$runtime_dir"
+        return 0
+    fi
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    git -C "$runtime_dir" archive HEAD | tar -x -C "$dest"
+    # The destination usually lives under the consuming repo's (gitignored)
+    # target/ tree. `git apply` run there would resolve the ENCLOSING repo and
+    # silently skip every path (exit 0, no changes) — so pin the destination
+    # as its own throwaway repo, apply against it, and hard-verify each patch
+    # actually landed before reporting the tree as patched.
+    git -C "$dest" init --quiet
+    local patch
+    while IFS= read -r patch; do
+        [[ -n "$patch" ]] || continue
+        echo "applying oracle patch: $(basename "$patch")" >&2
+        git -C "$dest" apply "$patch"
+        if ! git -C "$dest" apply --reverse --check "$patch"; then
+            echo "oracle patch did not take effect: $patch" >&2
+            return 1
+        fi
+    done <<<"$patches"
+    rm -rf "$dest/.git"
+    printf '%s\n' "$dest"
 }
 
 read_stamp_value() {
@@ -156,6 +224,7 @@ write_stamp() {
         echo "config=$config"
         echo "mode=$mode"
         echo "defines=$(normalize_defines "$makefile")"
+        echo "patches=$(patches_digest)"
         echo "compiler_path=$(compiler_path)"
         echo "compiler_version=$(compiler_version)"
         echo "archive_sha256=$(sha256_file "$archive")"
@@ -177,13 +246,14 @@ verify_stamp() {
     fi
 
     local field expected
-    for field in schema runtime_revision config mode defines compiler_path compiler_version archive_sha256; do
+    for field in schema runtime_revision config mode defines patches compiler_path compiler_version archive_sha256; do
         case "$field" in
             schema) expected="$schema" ;;
             runtime_revision) expected="$expected_runtime_revision" ;;
             config) expected="$config" ;;
             mode) expected="$mode" ;;
             defines) expected="$(normalize_defines "$makefile")" ;;
+            patches) expected="$(patches_digest)" ;;
             compiler_path) expected="$(compiler_path)" ;;
             compiler_version) expected="$(compiler_version)" ;;
             archive_sha256) expected="$(sha256_file "$archive")" ;;
@@ -206,6 +276,14 @@ case "$action" in
     source)
         [[ "$#" == "1" ]] || usage
         validate_source "$@"
+        ;;
+    patches)
+        [[ "$#" == "0" ]] || usage
+        librive_patches
+        ;;
+    materialize)
+        [[ "$#" == "2" ]] || usage
+        materialize_source "$@"
         ;;
     write)
         [[ "$#" == "6" ]] || usage

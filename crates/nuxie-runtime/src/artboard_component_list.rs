@@ -39,6 +39,15 @@ impl RuntimeComponentListItemInstance {
     /// renderer resources; C++ rewinds the occurrence's authored properties
     /// without replacing its RenderPath/RenderPaint owners.
     fn restore_from_fresh(&mut self, mut fresh: Self) {
+        let hosted_layout_size = self.settled_layout_size.get();
+        fresh
+            .child
+            .runtime_shapes
+            .adopt_pooled_backend_owners(&mut self.child.runtime_shapes);
+        fresh
+            .child
+            .runtime_drawables
+            .adopt_pooled_backend_owners(&mut self.child.runtime_drawables);
         std::mem::swap(
             &mut self.child.instance_identity,
             &mut fresh.child.instance_identity,
@@ -51,7 +60,13 @@ impl RuntimeComponentListItemInstance {
         self.draw_index_sink = fresh.draw_index_sink;
         self.occurrence_identity = fresh.occurrence_identity;
         self.logical_index = fresh.logical_index;
-        self.settled_layout_size = fresh.settled_layout_size;
+        // C++ moves the pooled ArtboardInstance itself back onto the list.
+        // Its transferred root Yoga node therefore keeps the last
+        // parent-assigned layout result while property recorders rewind the
+        // authored state. A fresh Rust clone has no hosted result yet; using
+        // that `None` as intrinsic input makes a virtualized row resize its
+        // ancestors for one frame during pool reuse.
+        self.settled_layout_size = Cell::new(hosted_layout_size);
         self.transform = fresh.transform;
         self.render_cache_revision = fresh.render_cache_revision;
     }

@@ -1953,23 +1953,9 @@ fn apply_scroll_constraint_child(
     let constraint_local = artboard.component_at(constraint).local_id;
     let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
     let current = artboard.component_at(child).transform.world_transform;
-    let target = current.multiply(scroll_transform);
-    let components_a = current.decompose();
-    let mut components_b = target.decompose();
-    let inverse_strength = 1.0 - strength;
-    components_b.rotation = interpolated_rotation_from_modded_base(
-        components_a.rotation,
-        components_b.rotation,
-        strength,
-    );
-    components_b.x = components_a.x * inverse_strength + components_b.x * strength;
-    components_b.y = components_a.y * inverse_strength + components_b.y * strength;
-    components_b.scale_x =
-        components_a.scale_x * inverse_strength + components_b.scale_x * strength;
-    components_b.scale_y =
-        components_a.scale_y * inverse_strength + components_b.scale_y * strength;
-    components_b.skew = components_a.skew * inverse_strength + components_b.skew * strength;
-    let changed = write_world_transform(artboard, child, Mat2D::compose(components_b));
+    let (constrained, components_a, components_b) =
+        scroll_constrained_world_transform(current, scroll_transform, strength);
+    let changed = write_world_transform(artboard, child, constrained);
 
     // C++ applies the transform before incrementing and only then tests the
     // virtualizer rendezvous (`scroll_constraint.cpp:203-237`).
@@ -1986,6 +1972,63 @@ fn apply_scroll_constraint_child(
     // (`scroll_constraint.cpp:203-237`).
     scrolling::scroll_virtualizer::constrain_scroll_virtualizer(artboard, constraint, false);
     changed
+}
+
+fn scroll_constrained_world_transform(
+    current: Mat2D,
+    scroll_transform: Mat2D,
+    strength: f32,
+) -> (Mat2D, TransformComponents, TransformComponents) {
+    let target = current.multiply(scroll_transform);
+    let components_a = current.decompose();
+    let mut components_b = target.decompose();
+    let inverse_strength = 1.0 - strength;
+    components_b.rotation = interpolated_rotation_from_modded_base(
+        components_a.rotation,
+        components_b.rotation,
+        strength,
+    );
+    components_b.x = components_a.x * inverse_strength + components_b.x * strength;
+    components_b.y = components_a.y * inverse_strength + components_b.y * strength;
+    components_b.scale_x =
+        components_a.scale_x * inverse_strength + components_b.scale_x * strength;
+    components_b.scale_y =
+        components_a.scale_y * inverse_strength + components_b.scale_y * strength;
+    components_b.skew = components_a.skew * inverse_strength + components_b.skew * strength;
+    (Mat2D::compose(components_b), components_a, components_b)
+}
+
+/// Compose the fresh hosted-layout base world with the list's retained parent
+/// layout constraints. C++ rebuilds `m_artboardTransforms`, composes the list
+/// world, and then runs `ArtboardComponentList::updateConstraints`; renderer
+/// preparation must observe that same result even when mounted-size feedback
+/// made the solved Yoga base newer than the occurrence's stored world.
+pub(crate) fn constrain_component_list_world_transform(
+    artboard: &ArtboardInstance,
+    list: ComponentHandle,
+    mut world: Mat2D,
+) -> Mat2D {
+    let constraints = artboard
+        .objects
+        .component(list)
+        .and_then(|component| component.concrete.constrainable_list.as_ref())
+        .map(|list| list.layout_constraints.clone())
+        .unwrap_or_default();
+    for constraint in constraints {
+        let Some(scroll_transform) = artboard
+            .objects
+            .component(constraint)
+            .and_then(|component| component.concrete.scroll.as_ref())
+            .map(|scroll| scroll.scroll_transform)
+        else {
+            continue;
+        };
+        let constraint_local = artboard.component_at(constraint).local_id;
+        let strength =
+            constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+        world = scroll_constrained_world_transform(world, scroll_transform, strength).0;
+    }
+    world
 }
 
 /// Pinned `ScrollConstraint::advanceComponent`.
@@ -3016,7 +3059,7 @@ mod tests {
 
     use crate::draw::RuntimeLayoutBounds;
     use crate::properties::property_key_for_name;
-    use crate::{ArtboardInstance, TransformProperty};
+    use crate::{ArtboardInstance, Mat2D, TransformProperty};
 
     use super::draggable_constraint::runtime_draggable_proxies;
     use super::scrolling::scroll_virtualizer::{
@@ -3031,6 +3074,7 @@ mod tests {
         RUNTIME_CONSTRAINT_PROPERTY_KEYS, RuntimeDraggableProxyKind, RuntimeScrollAxis,
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
         RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
+        constrain_component_list_world_transform,
         interpolated_rotation, interpolated_rotation_from_modded_base, point_length,
         runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
         runtime_scroll_intent_axes, scroll_viewport_axis_size,
@@ -4264,6 +4308,30 @@ mod tests {
             .expect("named component list");
         assert!(artboard.component_list_state(list_local).is_some());
         assert_eq!(artboard.scroll_constraint_occurrences().len(), 1);
+
+        let list = artboard.component_handle(list_local).expect("list handle");
+        let constraint = artboard
+            .objects
+            .component(list)
+            .and_then(|component| component.concrete.constrainable_list.as_ref())
+            .and_then(|list| list.layout_constraints.first())
+            .copied()
+            .expect("list retains its parent ScrollConstraint");
+        artboard
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .expect("retained ScrollConstraint state")
+            .scroll_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, -37.0]);
+        assert_eq!(
+            constrain_component_list_world_transform(
+                &artboard,
+                list,
+                Mat2D([1.0, 0.0, 0.0, 1.0, 11.0, 19.0]),
+            ),
+            Mat2D([1.0, 0.0, -0.0, 1.0, 11.0, -18.0]),
+            "fresh hosted-layout base is constrained before component-list drawing"
+        );
     }
 
     #[test]

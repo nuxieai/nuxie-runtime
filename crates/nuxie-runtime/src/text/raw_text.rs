@@ -698,11 +698,13 @@ impl<'factory> RawText<'factory> {
             return;
         };
         let mut pen = TextOutlinePen::new(
-            x + glyph.offset_x,
-            baseline + glyph.offset_y,
+            x,
+            baseline,
             glyph.size / TEXT_SHAPE_SCALE_F32,
-            x + glyph.offset_x + glyph.advance * 0.5,
-            baseline + glyph.offset_y,
+            x + glyph.advance * 0.5,
+            baseline,
+            glyph.offset_x,
+            glyph.offset_y,
             Mat2D::IDENTITY,
         );
         let settings = DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), LocationRef::default())

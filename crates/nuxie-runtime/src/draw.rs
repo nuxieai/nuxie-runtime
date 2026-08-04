@@ -1177,20 +1177,12 @@ impl ArtboardInstance {
                 let Some(items) = self.component_list_items(host_local_id) else {
                     continue;
                 };
-                let host_transform_local =
-                    if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(self, host_local_id)
-                        .is_some()
-                    {
-                        self.component_parent_local(host_local_id)
-                            .unwrap_or(host_local_id)
-                    } else {
-                        host_local_id
-                    };
-                let host_world = path_cache.component_world_transform_with_bounds(
+                let host_world = runtime_component_list_host_world_transform(
                     self,
                     graph,
-                    host_transform_local,
+                    host_local_id,
                     layout_bounds,
+                    path_cache,
                 );
                 let Some(item_transforms) = self
                     .component_list_state(host_local_id)
@@ -2208,6 +2200,7 @@ impl ArtboardInstance {
                     }
                     runtime_realize_next_owned_shape_gradient(
                         self,
+                        graph,
                         container,
                         paint_ref.paint_index,
                         factory,
@@ -3763,6 +3756,7 @@ impl ArtboardInstance {
                 }
                 runtime_realize_next_owned_shape_gradient(
                     self,
+                    graph,
                     container,
                     paint_ref.paint_index,
                     factory,
@@ -5145,7 +5139,7 @@ impl ArtboardInstance {
         };
 
         let mut commands = Vec::with_capacity(container.paints.len());
-        for paint in &container.paints {
+        for (paint_index, paint) in container.paints.iter().enumerate() {
             let (path_commands, prepared_raw_path) = match container.type_name {
                 "LayoutComponent" => (
                     self.runtime_layout_component_paint_path_commands(
@@ -5196,6 +5190,25 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
+            // LayoutComponent::updateRenderPath retains the path before its
+            // authored Feather dependents run. Once that dependency node has
+            // rebuilt an inner path, ShapePaint::draw reads the Feather-owned
+            // result; it does not derive another path from draw-time layout
+            // geometry (`layout_component.cpp:91-120`, `feather.cpp:36-89`).
+            if container.type_name == "LayoutComponent"
+                && let Some(feather_state) = self
+                    .runtime_shapes
+                    .get(container_local)
+                    .and_then(|shape| {
+                        shape
+                            .paint_owners
+                            .iter()
+                            .find(|owner| owner.paint_index == paint_index)
+                    })
+                    .and_then(|owner| owner.feather_state.borrow().clone())
+            {
+                command.feather_state = Some(feather_state);
+            }
             command.prepared_raw_path = prepared_raw_path;
             if drawable.kind == DrawableOrderKind::LayoutProxy
                 || container.type_name == "ForegroundLayoutDrawable"
@@ -6169,11 +6182,18 @@ impl ArtboardInstance {
             owner.feather_dirty.set(false);
             return;
         };
-        let source_path = shape.paint_paths[runtime_shape_paint_path_kind_slot(path_kind)]
-            .retained
-            .borrow()
-            .as_ref()
-            .cloned();
+        let source_path = if container.type_name == "LayoutComponent" {
+            self.runtime_layout_component_draw_paths(shape_local, graph, layout_bounds)
+                .map(|paths| RuntimeShapePathState {
+                    raw_path: Arc::new(runtime_raw_path_from_commands(paths.paint.as_ref())),
+                })
+        } else {
+            shape.paint_paths[runtime_shape_paint_path_kind_slot(path_kind)]
+                .retained
+                .borrow()
+                .as_ref()
+                .cloned()
+        };
         let selected_path = owner
             .effect_paths
             .iter()
@@ -6803,21 +6823,30 @@ impl ArtboardInstance {
         list_locals
             .into_iter()
             .map(|list_local| {
-                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                let host_world = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
                     self, list_local,
                 )
-                .is_some()
-                {
-                    self.component_parent_local(list_local)
-                        .unwrap_or(list_local)
+                .is_some() {
+                    let host_transform_local = self.component_parent_local(list_local).unwrap_or(list_local);
+                    self.runtime_component_world_transform_with_bounds(
+                        host_transform_local,
+                        graph,
+                        layout_bounds.as_ref(),
+                    )
                 } else {
-                    list_local
+                    let base = self.runtime_component_world_transform_with_bounds(
+                        list_local,
+                        graph,
+                        layout_bounds.as_ref(),
+                    );
+                    self.component_handle(list_local)
+                        .map(|list| {
+                            crate::constraints::constrain_component_list_world_transform(
+                                self, list, base,
+                            )
+                        })
+                        .unwrap_or(base)
                 };
-                let host_world = self.runtime_component_world_transform_with_bounds(
-                    host_transform_local,
-                    graph,
-                    layout_bounds.as_ref(),
-                );
                 let host_root = root_transform.multiply(host_world);
                 let item_transforms = self
                     .component_list_state(list_local)
@@ -6846,19 +6875,21 @@ impl ArtboardInstance {
     ) -> BTreeMap<usize, Vec<Mat2D>> {
         self.component_list_locals()
             .map(|list_local| {
-                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                let host_root = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
                     self, list_local,
                 )
-                .is_some()
-                {
-                    self.component_parent_local(list_local)
-                        .unwrap_or(list_local)
+                .is_some() {
+                    let host_transform_local = self.component_parent_local(list_local).unwrap_or(list_local);
+                    root_transform.multiply(
+                        self.runtime_component_world_transform_with_scroll(host_transform_local),
+                    )
                 } else {
-                    list_local
+                    root_transform.multiply(
+                        self.component(list_local)
+                            .map(|component| component.transform.world_transform)
+                            .unwrap_or(Mat2D::IDENTITY),
+                    )
                 };
-                let host_root = root_transform.multiply(
-                    self.runtime_component_world_transform_with_scroll(host_transform_local),
-                );
                 let item_transforms = self
                     .component_list_state(list_local)
                     .into_iter()
@@ -9162,6 +9193,48 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    /// Move the renderer members owned by a pooled Artboard occurrence onto
+    /// its freshly reconstructed CPU/property state.
+    ///
+    /// C++ `ArtboardComponentList::applyRecorders` writes authored properties
+    /// back onto the same cloned objects. Rust reconstructs that authored
+    /// state in a temporary occurrence, so explicitly retain the concrete
+    /// `ShapePaint` and `ShapePaintPath` backend sidecars from the pooled
+    /// occurrence before installing the fresh state.
+    pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
+        self.backend_context_id.set(pooled.backend_context_id.take());
+        for (fresh_shape, pooled_shape) in self.by_local.iter_mut().zip(&mut pooled.by_local) {
+            let (Some(fresh_shape), Some(pooled_shape)) = (fresh_shape, pooled_shape) else {
+                continue;
+            };
+            for (fresh_path, pooled_path) in fresh_shape
+                .paint_paths
+                .iter_mut()
+                .zip(&mut pooled_shape.paint_paths)
+            {
+                std::mem::swap(&mut fresh_path.backend, &mut pooled_path.backend);
+            }
+            for (fresh_paint, pooled_paint) in fresh_shape
+                .paint_owners
+                .iter_mut()
+                .zip(&mut pooled_shape.paint_owners)
+            {
+                std::mem::swap(&mut fresh_paint.backend, &mut pooled_paint.backend);
+                std::mem::swap(
+                    &mut fresh_paint.inner_feather_backend,
+                    &mut pooled_paint.inner_feather_backend,
+                );
+                for (fresh_effect, pooled_effect) in fresh_paint
+                    .effect_paths
+                    .iter_mut()
+                    .zip(&mut pooled_paint.effect_paths)
+                {
+                    std::mem::swap(&mut fresh_effect.backend, &mut pooled_effect.backend);
+                }
+            }
+        }
+    }
+
     fn text_style_paint_owner(&self, paint_local: usize) -> Option<&RuntimeShapePaintOwner> {
         self.paint_owners_by_component_local
             .get(paint_local)?
@@ -10166,6 +10239,44 @@ pub(crate) struct RuntimeDrawableList {
 }
 
 impl RuntimeDrawableList {
+    /// Preserve backend sidecars when a virtualized component-list row is
+    /// restored from a fresh authored-property snapshot. The drawable CPU
+    /// state comes from the snapshot; the RenderPath/RenderPaint objects stay
+    /// with the pooled occurrence, matching C++ property-recorder replay.
+    pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
+        for (fresh_drawable, pooled_drawable) in
+            self.drawables.iter_mut().zip(&mut pooled.drawables)
+        {
+            if fresh_drawable.local_id != pooled_drawable.local_id
+                || fresh_drawable.type_name != pooled_drawable.type_name
+            {
+                continue;
+            }
+            if let (Some(fresh_owner), Some(pooled_owner)) = (
+                fresh_drawable.text_draw_owner.as_mut(),
+                pooled_drawable.text_draw_owner.as_mut(),
+            ) {
+                std::mem::swap(&mut fresh_owner.backend, &mut pooled_owner.backend);
+                // The pooled C++ Text keeps its concrete TextStylePaint
+                // opacity paths while property recorders and the new row
+                // context rebuild CPU draw commands. Mark this as the
+                // layout/property refresh branch so the next Text update
+                // rewinds those paths instead of treating the fresh snapshot
+                // as `clearRenderStyles` ownership replacement.
+                fresh_owner.mark_paths_retained_dirty();
+            }
+        }
+        for (fresh_owner, pooled_owner) in self
+            .layout_draw_owners
+            .iter_mut()
+            .zip(&mut pooled.layout_draw_owners)
+        {
+            if let (Some(fresh_owner), Some(pooled_owner)) = (fresh_owner, pooled_owner) {
+                std::mem::swap(&mut fresh_owner.backend, &mut pooled_owner.backend);
+            }
+        }
+    }
+
     pub(crate) fn from_graph(graph: &ArtboardGraph, objects: &InstanceObjectArena) -> Self {
         let mut drawables = graph
             .drawable_order
@@ -17806,8 +17917,71 @@ fn runtime_realize_owned_shape_paints(
 /// artboard gradients through the same `LinearGradient::update` traversal
 /// (`linear_gradient.cpp:86-126`); Shape paint membership order is draw order,
 /// not shader-creation order.
+fn runtime_initial_root_gradient_state_before_data_bind_source_writes(
+    graph: &ArtboardGraph,
+    owner: &RuntimeShapePaintOwner,
+    state: &RuntimeShapePaintState,
+) -> RuntimeShapePaintState {
+    let Some(mutator_local) = owner.mutator_local else {
+        return state.clone();
+    };
+    let mut state = state.clone();
+    let type_name = match state {
+        RuntimeShapePaintState::LinearGradient { .. } => "LinearGradient",
+        RuntimeShapePaintState::RadialGradient { .. } => "RadialGradient",
+        RuntimeShapePaintState::SolidColor { .. } => return state,
+    };
+    for data_bind in graph.data_binds.iter().filter(|data_bind| {
+        data_bind.target_local == Some(mutator_local)
+            && crate::data_bind_flags_apply_source_to_target(data_bind.flags)
+    }) {
+        let bound = |property_name| {
+            runtime_draw_property_key_for_name(type_name, property_name)
+                .is_some_and(|key| u64::from(key) == data_bind.property_key)
+        };
+        match &mut state {
+            RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            }
+            | RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            } => {
+                // A C++ root Artboard owns its RenderPaint while the default
+                // view-model context is being attached. The first gradient
+                // update therefore observes the numeric ContextValue default;
+                // a target-to-source sibling write is queued for the next
+                // DataBindContainer turn and does not rewrite that retained
+                // shader (`artboard.cpp:1195-1203`,
+                // `data_bind_container.cpp:156-203`). Rust attaches the
+                // renderer later, so preserve that one-time resource state
+                // instead of sampling the already-reconciled property.
+                if bound("startX") {
+                    *start_x = 0.0;
+                } else if bound("startY") {
+                    *start_y = 0.0;
+                } else if bound("endX") {
+                    *end_x = 0.0;
+                } else if bound("endY") {
+                    *end_y = 0.0;
+                }
+            }
+            RuntimeShapePaintState::SolidColor { .. } => {}
+        }
+    }
+    state
+}
+
 fn runtime_realize_owned_shape_gradient(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     container: &ShapePaintContainerNode,
     paint_index: usize,
     state: &RuntimeShapePaintState,
@@ -17839,6 +18013,14 @@ fn runtime_realize_owned_shape_gradient(
             owner.paint_global_id
         )
     })?;
+    let initial_state;
+    let state = if backend.shader_state.is_none() && container.type_name == "Artboard" {
+        initial_state =
+            runtime_initial_root_gradient_state_before_data_bind_source_writes(graph, owner, state);
+        &initial_state
+    } else {
+        state
+    };
     match state {
         state @ RuntimeShapePaintState::LinearGradient {
             start_x,
@@ -17893,6 +18075,7 @@ fn runtime_realize_owned_shape_gradient(
 
 fn runtime_realize_next_owned_shape_gradient(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     container: &ShapePaintContainerNode,
     paint_index: usize,
     factory: &mut dyn RenderFactory,
@@ -17914,6 +18097,7 @@ fn runtime_realize_next_owned_shape_gradient(
     };
     runtime_realize_owned_shape_gradient(
         instance,
+        graph,
         container,
         paint_index,
         &state,
@@ -17984,6 +18168,7 @@ fn runtime_realize_owned_shape_gradients_in_dependency_order(
             if let Some(state) = state {
                 runtime_realize_owned_shape_gradient(
                     instance,
+                    graph,
                     container,
                     *paint_index,
                     &state,
@@ -18396,6 +18581,40 @@ pub(crate) fn runtime_component_list_item_base_transforms(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn runtime_component_list_host_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeArtboardPathState,
+) -> Mat2D {
+    if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+        instance, local_id,
+    )
+    .is_some()
+    {
+        let parent_local = instance.component_parent_local(local_id).unwrap_or(local_id);
+        return path_cache.component_world_transform_with_bounds(
+            instance,
+            graph,
+            parent_local,
+            layout_bounds,
+        );
+    }
+    let base = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        local_id,
+        layout_bounds,
+    );
+    instance
+        .component_handle(local_id)
+        .map(|list| {
+            crate::constraints::constrain_component_list_world_transform(instance, list, base)
+        })
+        .unwrap_or(base)
+}
+
 fn runtime_draw_live_component_list(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -18462,23 +18681,12 @@ fn runtime_draw_component_list_with_state(
     // A virtualized list's row positions already include the scroll window.
     // C++ therefore draws it in its parent's world space; non-virtualized
     // lists continue to use their own world transform.
-    let host_transform_local =
-        if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
-            instance, local_id,
-        )
-        .is_some()
-        {
-            instance
-                .component_parent_local(local_id)
-                .unwrap_or(local_id)
-        } else {
-            local_id
-        };
-    let host_world = path_cache.component_world_transform_with_bounds(
+    let host_world = runtime_component_list_host_world_transform(
         instance,
         graph,
-        host_transform_local,
+        local_id,
         layout_bounds,
+        path_cache,
     );
     if needs_save_operation {
         renderer.save();
@@ -25003,6 +25211,155 @@ mod tests {
                 .join(relative),
         )
         .unwrap_or_else(|error| panic!("read pinned C++ fixture {relative}: {error}"))
+    }
+
+    #[test]
+    fn root_gradient_first_backend_state_precedes_sibling_data_bind_write() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("rewards_demo.riv"))
+            .expect("rewards_demo imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("rewards_demo graphs build");
+        let graph = graphs.artboards.first().expect("rewards_demo has Main");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("Main instance builds");
+        let container = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.type_name == "Artboard")
+            .expect("Main owns root paints");
+        let owner = instance
+            .runtime_shapes
+            .get(container.local_id)
+            .expect("root paint container is retained")
+            .paint_owners
+            .iter()
+            .find(|owner| owner.mutator_local == Some(1))
+            .expect("root LinearGradient is retained");
+        let state = RuntimeShapePaintState::LinearGradient {
+            start_x: 11.0,
+            start_y: 22.0,
+            end_x: 33.0,
+            end_y: 44.0,
+            opacity: 1.0,
+            render_opacity: 1.0,
+            stops: Vec::new(),
+        };
+
+        let initial = runtime_initial_root_gradient_state_before_data_bind_source_writes(
+            graph, owner, &state,
+        );
+        assert_eq!(
+            initial,
+            RuntimeShapePaintState::LinearGradient {
+                start_x: 11.0,
+                start_y: 0.0,
+                end_x: 33.0,
+                end_y: 44.0,
+                opacity: 1.0,
+                render_opacity: 1.0,
+                stops: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn pooled_component_list_renderer_backends_survive_authored_state_restore() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("virtualize_blendmode.riv"))
+            .expect("virtualize_blendmode imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("virtualize_blendmode graphs build");
+        let child_graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("child"))
+            .expect("fixture has a pooled child artboard");
+        let mut pooled = RuntimeShapeList::from_graph(child_graph);
+        let mut fresh = RuntimeShapeList::from_graph(child_graph);
+        let shape_local = pooled
+            .by_local
+            .iter()
+            .position(|shape| {
+                shape
+                    .as_ref()
+                    .is_some_and(|shape| !shape.paint_owners.is_empty())
+            })
+            .expect("child has a painted shape");
+        let context_id = 73;
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        pooled.backend_context_id.set(Some(context_id));
+        let pooled_shape = pooled.by_local[shape_local]
+            .as_mut()
+            .expect("painted shape remains addressable");
+        pooled_shape.paint_owners[0]
+            .backend
+            .value
+            .get_mut()
+            .context_id = Some(context_id);
+        pooled_shape.paint_owners[0]
+            .backend
+            .value
+            .get_mut()
+            .paint = Some(factory.make_render_paint());
+        *pooled_shape.paint_paths[0].backend.value.get_mut() = Some(RuntimePathBackendState {
+            path: factory.make_empty_render_path(),
+            raw_mutation_id: 11,
+            fill_rule: RenderFillRule::Clockwise,
+            context_id,
+        });
+
+        fresh.adopt_pooled_backend_owners(&mut pooled);
+
+        assert_eq!(fresh.backend_context_id.get(), Some(context_id));
+        let fresh_shape = fresh.by_local[shape_local]
+            .as_mut()
+            .expect("fresh painted shape remains addressable");
+        assert!(
+            fresh_shape.paint_owners[0]
+                .backend
+                .value
+                .get_mut()
+                .paint
+                .is_some(),
+            "the pooled ShapePaint keeps its RenderPaint"
+        );
+        assert!(
+            fresh_shape.paint_paths[0]
+                .backend
+                .value
+                .get_mut()
+                .is_some(),
+            "the pooled ShapePaintPath keeps its RenderPath"
+        );
+
+        let mut pooled_instance = ArtboardInstance::from_graph(&runtime, child_graph)
+            .expect("pooled child instance builds");
+        let mut fresh_instance = ArtboardInstance::from_graph(&runtime, child_graph)
+            .expect("fresh child instance builds");
+        let pooled_layout = pooled_instance
+            .runtime_drawables
+            .layout_draw_owners
+            .iter_mut()
+            .flatten()
+            .next()
+            .expect("child has a layout draw owner");
+        pooled_layout.backend.get_mut().context_id = Some(context_id);
+
+        fresh_instance
+            .runtime_drawables
+            .adopt_pooled_backend_owners(&mut pooled_instance.runtime_drawables);
+
+        assert_eq!(
+            fresh_instance
+                .runtime_drawables
+                .layout_draw_owners
+                .iter_mut()
+                .flatten()
+                .next()
+                .expect("fresh child has a layout draw owner")
+                .backend
+                .get_mut()
+                .context_id,
+            Some(context_id),
+            "the pooled LayoutComponent keeps its backend owner"
+        );
     }
 
     fn image_asset_id_for_named_image(file: &RuntimeFile, name: &str) -> u32 {

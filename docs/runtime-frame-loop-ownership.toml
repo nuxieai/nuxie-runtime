@@ -2352,7 +2352,7 @@ status = "faithful"
 upstream = "src/nested_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/nested_artboard.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_artboard.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/nested_artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -3976,7 +3976,7 @@ rust_file = "crates/nuxie-runtime/src/nested_artboard.rs"
 rust_anchor = "pub(crate) struct RuntimeNestedArtboardInstance"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/nested_artboard.cpp:264-419", "rust:crates/nuxie-runtime/src/artboard.rs:9625-9993"]
+construct = ["cpp:src/nested_artboard.cpp:264-419", "rust:crates/nuxie-runtime/src/artboard/nested_artboard.rs:1-371"]
 retain = ["cpp:src/nested_artboard.cpp:419-617", "rust:crates/nuxie-runtime/src/nested_artboard.rs:8-37"]
 dirty = ["cpp:src/nested_artboard.cpp:687-812", "rust:crates/nuxie-runtime/src/artboard.rs:7750-8120"]
 update = ["cpp:src/nested_artboard.cpp:812-965", "rust:crates/nuxie-runtime/src/artboard.rs:7750-8120"]

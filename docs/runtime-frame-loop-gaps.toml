@@ -1741,81 +1741,123 @@ guarded_name = "StateMachine"
 site_hash = "5f408047103ace3dbe7872f67e0c2967ba72ed6574320bb5e6c8abdee96e126c"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "f183f8c5d3a176b03e2081f168f44f9ef29935b4740d954f9b7aca83ab4d0e18"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_outer_update"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_remap"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "6d16b73a78420b2110c3daad2c90207fb10a531f3c54527375a0c3ca2dd4968b"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_contexts"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_data_context"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::install_external_focus_domain"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::reset_outer_state_machine_changed_state_counts"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "ae85371fd1d2cb5824cc2ffcd06534074a43b14227bc0867ee1b25b8fec425b2"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_remap_time"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "329439c54592a0340c016944a2be82aa38c08d8638669ac8afb38fc5f7a5c0a2"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_simple_animation_is_playing"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "b978880bb8b0242722b6dc996e43727f0a0b41c9826720cb39ca6de365d3e518"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_simple_animation_speed"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "06532ad249f1a0f342eac02c83836163b2c67362581080c60d873a3b2cfca9d8"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::install_external_focus_domain"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_contexts"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_data_context"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::reset_outer_state_machine_changed_state_counts"
+guarded_name = "StateMachine"
+site_hash = "ae85371fd1d2cb5824cc2ffcd06534074a43b14227bc0867ee1b25b8fec425b2"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_outer_update"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::set_animation_mix"
+guarded_name = "StateMachine"
+site_hash = "dd4247c38a3c05c49e5a3a941029a1c755305b584292d36d7ef70279998bdbc3"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/nested_artboard.rs"
@@ -1891,14 +1933,14 @@ guarded_name = "advance_artboard_frame_components_with"
 site_hash = "1ce0516fffd56caa0d29f04aef22fdbc1f94cbb519b5912f3ac658640ec64a56"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "audio"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "audio"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"

@@ -319,6 +319,7 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueSyntax);
+    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 3);
     // Analysis/src/Frontend.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueTypecheck);
     // Analysis/src/Normalize.cpp

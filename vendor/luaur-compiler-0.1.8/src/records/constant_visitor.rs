@@ -132,10 +132,8 @@ impl<'a> ConstantVisitor<'a> {
         } {
             if let Some(l) = self.locals.find(&expr.local) {
                 result = *l;
-            } else if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-                if let Some(l) = self.table_locals.find(&expr.local) {
-                    result = *l;
-                }
+            } else if let Some(l) = self.table_locals.find(&expr.local) {
+                result = *l;
             }
         } else if luaur_ast::rtti::ast_node_is::<luaur_ast::records::ast_expr_global::AstExprGlobal>(
             node as *mut luaur_ast::records::ast_node::AstNode,
@@ -170,17 +168,8 @@ impl<'a> ConstantVisitor<'a> {
                     for i in 0..expr.args.size as usize {
                         let ac = self.analyze(unsafe { *expr.args.data.add(i) });
 
-                        if luaur_common::FFlag::LuauCompilePropagateTableProps2.get() {
-                            if ac.r#type == crate::enums::type_constant_folding::Type::Type_Unknown
-                                || ac.r#type
-                                    == crate::enums::type_constant_folding::Type::Type_Table
-                            {
-                                can_fold = false;
-                            } else {
-                                self.builtin_args.push(ac);
-                            }
-                        } else if ac.r#type
-                            == crate::enums::type_constant_folding::Type::Type_Unknown
+                        if ac.r#type == crate::enums::type_constant_folding::Type::Type_Unknown
+                            || ac.r#type == crate::enums::type_constant_folding::Type::Type_Table
                         {
                             can_fold = false;
                         } else {
@@ -218,9 +207,7 @@ impl<'a> ConstantVisitor<'a> {
             .as_mut()
         } {
             let value = self.analyze(expr.expr);
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && value.r#type == crate::enums::type_constant_folding::Type::Type_Table
-            {
+            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
                 let table_index = unsafe { value.data.value_table };
                 luaur_common::LUAU_ASSERT!(table_index < self.constant_tables.len());
                 if table_index < self.constant_tables.len() {
@@ -278,8 +265,7 @@ impl<'a> ConstantVisitor<'a> {
             let index_val = self.analyze(expr.index);
             let table_val = self.analyze(expr.expr);
 
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && table_val.r#type == crate::enums::type_constant_folding::Type::Type_Table
+            if table_val.r#type == crate::enums::type_constant_folding::Type::Type_Table
                 && index_val.r#type == crate::enums::type_constant_folding::Type::Type_String
             {
                 let table_index = unsafe { table_val.data.value_table };
@@ -313,47 +299,34 @@ impl<'a> ConstantVisitor<'a> {
             )
             .as_mut()
         } {
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get() {
-                let mut props = DenseHashMap::new(AstName::new());
-                for i in 0..expr.items.size as usize {
-                    let item = unsafe { &*expr.items.data.add(i) };
+            let mut props = DenseHashMap::new(AstName::new());
+            for i in 0..expr.items.size as usize {
+                let item = unsafe { &*expr.items.data.add(i) };
 
-                    let value_val = self.analyze(item.value);
+                let value_val = self.analyze(item.value);
 
-                    if !item.key.is_null() {
-                        let key_val = self.analyze(item.key);
+                if !item.key.is_null() {
+                    let key_val = self.analyze(item.key);
 
-                        if key_val.r#type == crate::enums::type_constant_folding::Type::Type_String
-                            && value_val.r#type
-                                != crate::enums::type_constant_folding::Type::Type_Unknown
-                            && value_val.r#type
-                                != crate::enums::type_constant_folding::Type::Type_Table
-                            && key_val.string_length != 0
-                        {
-                            let const_key = self.string_table.get_or_add(
-                                unsafe { key_val.data.value_string } as *const core::ffi::c_char,
-                                key_val.string_length as usize,
-                            );
-                            props.try_insert(const_key, value_val);
-                        }
+                    if key_val.r#type == crate::enums::type_constant_folding::Type::Type_String
+                        && value_val.r#type
+                            != crate::enums::type_constant_folding::Type::Type_Unknown
+                        && value_val.r#type != crate::enums::type_constant_folding::Type::Type_Table
+                        && key_val.string_length != 0
+                    {
+                        let const_key = self.string_table.get_or_add(
+                            unsafe { key_val.data.value_string } as *const core::ffi::c_char,
+                            key_val.string_length as usize,
+                        );
+                        props.try_insert(const_key, value_val);
                     }
                 }
+            }
 
-                if props.size() == expr.items.size as usize {
-                    result.r#type = crate::enums::type_constant_folding::Type::Type_Table;
-                    result.data.value_table = self.constant_tables.len();
-                    self.constant_tables.push(props);
-                }
-            } else {
-                for i in 0..expr.items.size as usize {
-                    let item = unsafe { &*expr.items.data.add(i) };
-
-                    if !item.key.is_null() {
-                        self.analyze(item.key);
-                    }
-
-                    self.analyze(item.value);
-                }
+            if props.size() == expr.items.size as usize {
+                result.r#type = crate::enums::type_constant_folding::Type::Type_Table;
+                result.data.value_table = self.constant_tables.len();
+                self.constant_tables.push(props);
             }
         } else if let Some(expr) = unsafe {
             luaur_ast::rtti::ast_node_as::<luaur_ast::records::ast_expr_unary::AstExprUnary>(
@@ -457,60 +430,32 @@ impl<'a> ConstantVisitor<'a> {
     }
 
     fn record_expr_constant(&mut self, key: *mut AstExpr, value: Constant) {
-        if luaur_common::FFlag::LuauCompileFoldOptimize.get()
-            && luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-        {
-            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                // Table constants are recorded in a separate map
-            } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                self.log_expr_change(key, None);
-                *self.constants.get_or_insert(key) = value;
-            } else if self.was_empty {
-                // No need to clear out entries if we started with empty maps
-            } else if let Some(old) = self.constants.find(&key).copied() {
-                self.log_expr_change(key, Some(old));
-                // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
-                // when the key exists, so the stale constant survived across inline re-folds.
-                *self.constants.get_or_insert(key) = Constant::default();
-            }
-        } else {
-            if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                *self.constants.get_or_insert(key) = value;
-            } else if self.was_empty && !luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            {
-                // nothing
-            } else if self.constants.find(&key).is_some() {
-                // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
-                // when the key exists, so the stale constant survived across inline re-folds.
-                *self.constants.get_or_insert(key) = Constant::default();
-            }
+        if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+            // Table constants are recorded in a separate map
+        } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
+            self.log_expr_change(key, None);
+            *self.constants.get_or_insert(key) = value;
+        } else if self.was_empty {
+            // No need to clear out entries if we started with empty maps
+        } else if let Some(old) = self.constants.find(&key).copied() {
+            self.log_expr_change(key, Some(old));
+            // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
+            // when the key exists, so the stale constant survived across inline re-folds.
+            *self.constants.get_or_insert(key) = Constant::default();
         }
     }
 
     fn record_local_constant(&mut self, key: *mut AstLocal, value: Constant) {
-        if luaur_common::FFlag::LuauCompileFoldOptimize.get()
-            && luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-        {
-            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                // Table constants are recorded in a separate map
-            } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                self.log_local_change(key, None);
-                *self.locals.get_or_insert(key) = value;
-            } else if self.was_empty {
-                // No need to clear out entries if we started with empty maps
-            } else if let Some(old) = self.locals.find(&key).copied() {
-                self.log_local_change(key, Some(old));
-                *self.locals.get_or_insert(key) = Constant::default();
-            }
-        } else {
-            if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                *self.locals.get_or_insert(key) = value;
-            } else if self.was_empty && !luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            {
-                // nothing
-            } else if self.locals.find(&key).is_some() {
-                *self.locals.get_or_insert(key) = Constant::default();
-            }
+        if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+            // Table constants are recorded in a separate map
+        } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
+            self.log_local_change(key, None);
+            *self.locals.get_or_insert(key) = value;
+        } else if self.was_empty {
+            // No need to clear out entries if we started with empty maps
+        } else if let Some(old) = self.locals.find(&key).copied() {
+            self.log_local_change(key, Some(old));
+            *self.locals.get_or_insert(key) = Constant::default();
         }
     }
 
@@ -554,24 +499,12 @@ impl<'a> ConstantVisitor<'a> {
         let v = self.variables.find_mut(&local).unwrap();
 
         if !v.written {
-            if luaur_common::FFlag::LuauCompileFoldOptimize.get()
-                && luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            {
-                if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                    v.constant = false;
-                    self.table_locals.try_insert(local, value);
-                } else {
-                    v.constant =
-                        value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown;
-                    self.record_local_constant(local, value);
-                }
+            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+                v.constant = false;
+                self.table_locals.try_insert(local, value);
             } else {
-                v.constant = if luaur_common::FFlag::LuauCompilePropagateTableProps2.get() {
-                    value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown
-                        && value.r#type != crate::enums::type_constant_folding::Type::Type_Table
-                } else {
-                    value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown
-                };
+                v.constant =
+                    value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown;
                 self.record_local_constant(local, value);
             }
         }
@@ -587,9 +520,7 @@ impl<'a> ConstantVisitor<'a> {
             let rhs = unsafe { *node_ref.values.data.add(i) };
             let arg = self.analyze(rhs);
 
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && arg.r#type == crate::enums::type_constant_folding::Type::Type_Table
-            {
+            if arg.r#type == crate::enums::type_constant_folding::Type::Type_Table {
                 let local = unsafe { *node_ref.vars.data.add(i) };
 
                 let kind = self.constant_table_locals.find(&local);

@@ -73,7 +73,6 @@
 //!   - type_ref <- method Parser::parseContinue (Ast/src/Parser.cpp)
 //!   - type_ref <- method Parser::parseFor (Ast/src/Parser.cpp)
 //!   - type_ref <- method Parser::parseAttributeStat (Ast/src/Parser.cpp)
-//!   - type_ref <- method Parser::parseLocal_DEPRECATED (Ast/src/Parser.cpp)
 //!   - type_ref <- method Parser::parseLocal (Ast/src/Parser.cpp)
 //!   - type_ref <- method Parser::parseReturn (Ast/src/Parser.cpp)
 //!   - type_ref <- method Parser::parseTypeAlias (Ast/src/Parser.cpp)

@@ -1,7 +1,6 @@
 use crate::enums::type_constant_folding::Type;
 use crate::records::constant::Constant;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
-use luaur_common::FFlag::LuauCompilePropagateTableProps2;
 use luaur_common::FFlag::LuauIntegerType2;
 
 pub fn constants_equal(la: &Constant, ra: &Constant) -> bool {
@@ -38,13 +37,7 @@ pub fn constants_equal(la: &Constant, ra: &Constant) -> bool {
                 }
         }
         Type::Type_Table => {
-            if LuauCompilePropagateTableProps2.get() {
-                ra.r#type == Type::Type_Table
-                    && unsafe { la.data.value_table == ra.data.value_table }
-            } else {
-                LUAU_ASSERT!(false);
-                false
-            }
+            ra.r#type == Type::Type_Table && unsafe { la.data.value_table == ra.data.value_table }
         }
         Type::Type_Integer => {
             if LuauIntegerType2.get() {

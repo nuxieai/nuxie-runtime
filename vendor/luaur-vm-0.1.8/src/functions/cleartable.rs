@@ -12,6 +12,7 @@ use crate::records::lua_node::LuaNode;
 use crate::records::lua_table::LuaTable;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
+use luaur_common::DFFlag;
 
 #[inline]
 unsafe fn contains_s(mut mode: *const core::ffi::c_char) -> bool {
@@ -31,9 +32,16 @@ pub unsafe fn cleartable(l: *mut lua_State, mut list: *mut GCObject) -> usize {
     while !list.is_null() {
         let h = list as *mut LuaTable;
         let hsize = sizenode!(h);
+        let accounted_hsize = if DFFlag::LuauGcTableStepFix.get()
+            && (*h).node == crate::macros::dummynode::luaH_dummynode_ptr as *mut LuaNode
+        {
+            0
+        } else {
+            hsize as usize
+        };
         work += core::mem::size_of::<LuaTable>()
             + core::mem::size_of::<TValue>() * (*h).sizearray as usize
-            + core::mem::size_of::<LuaNode>() * hsize as usize;
+            + core::mem::size_of::<LuaNode>() * accounted_hsize;
 
         let mut i = (*h).sizearray;
         while i > 0 {

@@ -51,13 +51,8 @@ impl Compiler {
                 }
             }
 
-            let record_changes = luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && luaur_common::FFlag::LuauCompileFoldOptimize.get();
-
-            if record_changes {
-                self.expr_changes.clear();
-                self.local_changes.clear();
-            }
+            self.expr_changes.clear();
+            self.local_changes.clear();
 
             fold_constants(
                 &mut self.constants,
@@ -69,16 +64,8 @@ impl Compiler {
                 func_ref.body as *mut AstNode,
                 &mut *self.names,
                 &self.table_constants,
-                if record_changes {
-                    &mut self.expr_changes as *mut _
-                } else {
-                    core::ptr::null_mut()
-                },
-                if record_changes {
-                    &mut self.local_changes as *mut _
-                } else {
-                    core::ptr::null_mut()
-                },
+                &mut self.expr_changes as *mut _,
+                &mut self.local_changes as *mut _,
             );
 
             let cost = model_cost_ast_node_ast_local_usize_dense_hash_map_ast_expr_call_i32_dense_hash_map_ast_expr_constant(
@@ -96,30 +83,14 @@ impl Compiler {
                 }
             }
 
-            if record_changes {
-                undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
-                    &mut self.constants,
-                    &self.expr_changes,
-                );
-                undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
-                    &mut self.locstants,
-                    &self.local_changes,
-                );
-            } else {
-                fold_constants(
-                    &mut self.constants,
-                    &mut self.variables,
-                    &mut self.locstants,
-                    self.builtins_fold,
-                    self.builtins_fold_library_k,
-                    self.options.library_member_constant_cb,
-                    func_ref.body as *mut AstNode,
-                    &mut *self.names,
-                    &self.table_constants,
-                    core::ptr::null_mut(),
-                    core::ptr::null_mut(),
-                );
-            }
+            undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
+                &mut self.constants,
+                &self.expr_changes,
+            );
+            undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
+                &mut self.locstants,
+                &self.local_changes,
+            );
 
             cost
         }

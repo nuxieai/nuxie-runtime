@@ -36,7 +36,6 @@ pub struct Closure {
     pub nupvalues: u8,
     pub stacksize: u8,
     pub preload: u8,
-    pub usage: u64,
     pub gclist: *mut crate::records::gc_object::GcObject,
     pub env: *mut crate::records::lua_table::LuaTable,
     pub inner: ClosureInner,

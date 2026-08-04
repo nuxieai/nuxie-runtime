@@ -2,7 +2,6 @@
 //! Source: `VM/src/lstate.cpp:148-180` (hand-ported)
 
 use crate::enums::lua_status::lua_Status;
-use crate::functions::cleanupcistack::cleanupcistack;
 use crate::functions::lua_d_realloc_ci::lua_d_realloc_ci;
 use crate::functions::lua_d_reallocstack::luaD_reallocstack;
 use crate::functions::lua_f_close::lua_f_close;
@@ -23,12 +22,9 @@ pub unsafe fn lua_resetthread(L: *mut lua_State) {
 
     // close upvalues before clearing anything
     lua_f_close(L, (*L).stack);
-    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-        cleanupcistack(L);
-    }
-
     // clear call frames
     let ci = (*L).base_ci;
+    (*ci).p = core::ptr::null_mut();
     (*ci).func = (*L).stack;
     (*ci).base = (*ci).func.add(1);
     (*ci).top = (*ci).base.add(LUA_MINSTACK as usize);

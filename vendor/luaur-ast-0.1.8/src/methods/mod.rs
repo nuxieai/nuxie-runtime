@@ -424,7 +424,6 @@ pub mod parser_parse_index_expr;
 pub mod parser_parse_index_name;
 pub mod parser_parse_interp_string;
 pub mod parser_parse_local;
-pub mod parser_parse_local_deprecated;
 pub mod parser_parse_method_call;
 pub mod parser_parse_name;
 pub mod parser_parse_name_expr;

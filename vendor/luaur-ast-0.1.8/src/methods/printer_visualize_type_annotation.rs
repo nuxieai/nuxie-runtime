@@ -512,19 +512,10 @@ impl<'a> Printer<'a> {
             self.writer.symbol("(");
             self.visualize_type_annotation(unsafe { &mut *a.type_ });
 
-            if luaur_common::FFlag::LuauCstTypeGroup.get() {
-                let cst_node = self
-                    .lookup_cst_node_impl::<CstTypeGroup>(a as *mut AstTypeGroup as *mut AstNode);
-                if !cst_node.is_null() {
-                    self.maybe_advance_and_write(
-                        unsafe { &(*cst_node).close_position },
-                        ")",
-                        false,
-                    );
-                } else {
-                    self.advance_before(type_annotation.base.location.end, 1);
-                    self.writer.symbol(")");
-                }
+            let cst_node =
+                self.lookup_cst_node_impl::<CstTypeGroup>(a as *mut AstTypeGroup as *mut AstNode);
+            if !cst_node.is_null() {
+                self.maybe_advance_and_write(unsafe { &(*cst_node).close_position }, ")", false);
             } else {
                 self.advance_before(type_annotation.base.location.end, 1);
                 self.writer.symbol(")");

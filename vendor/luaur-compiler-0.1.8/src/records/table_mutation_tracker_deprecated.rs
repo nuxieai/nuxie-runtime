@@ -30,7 +30,6 @@ use luaur_ast::records::ast_stat_return::AstStatReturn;
 use luaur_ast::records::ast_visitor::AstVisitor;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 use luaur_common::records::dense_hash_map::DenseHashMap;
-use luaur_common::FFlag;
 
 #[derive(Debug)]
 pub struct TableMutationTrackerDeprecated<'a> {
@@ -47,7 +46,6 @@ impl<'a> TableMutationTrackerDeprecated<'a> {
         >,
         variables: &'a DenseHashMap<*mut luaur_ast::records::ast_local::AstLocal, Variable>,
     ) -> Self {
-        LUAU_ASSERT!(FFlag::LuauCompilePropagateTableProps2.get());
         Self {
             constant_tables,
             variables,

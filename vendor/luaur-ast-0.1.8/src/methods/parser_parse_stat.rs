@@ -21,30 +21,26 @@ impl Parser {
             Type::ReservedFor => return self.parse_for(),
             Type::ReservedRepeat => return self.parse_repeat(),
             Type::ReservedFunction => {
-                return self.parse_function_stat(&AstArray {
-                    data: core::ptr::null_mut(),
-                    size: 0,
-                }, core::ptr::null_mut()) as *mut AstStat;
-            }
-            Type::ReservedLocal => {
-                if luaur_common::FFlag::LuauConst2.get() {
-                    let start = self.lexer.current().location;
-                    return self.parse_local(
-                        start,
-                        start.begin,
-                        &AstArray {
-                            data: core::ptr::null_mut(),
-                            size: 0,
-                        },
-                        false,
-                        core::ptr::null_mut(),
-                    );
-                } else {
-                    return self.parseLocal_DEPRECATED(&AstArray {
+                return self.parse_function_stat(
+                    &AstArray {
                         data: core::ptr::null_mut(),
                         size: 0,
-                    }, core::ptr::null_mut());
-                }
+                    },
+                    core::ptr::null_mut(),
+                ) as *mut AstStat;
+            }
+            Type::ReservedLocal => {
+                let start = self.lexer.current().location;
+                return self.parse_local(
+                    start,
+                    start.begin,
+                    &AstArray {
+                        data: core::ptr::null_mut(),
+                        size: 0,
+                    },
+                    false,
+                    core::ptr::null_mut(),
+                );
             }
             Type::ReservedReturn => return self.parse_return(),
             Type::ReservedBreak => return self.parser_parse_break(),
@@ -88,7 +84,7 @@ impl Parser {
         }
 
         if ident.operator_eq_c_char(c"export".as_ptr()) {
-            if luaur_common::FFlag::LuauConst2.get() {
+            if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 let current = self.lexer.current();
                 let is_local = current.r#type == Type::ReservedLocal;
                 let is_function = current.r#type == Type::ReservedFunction;
@@ -146,7 +142,7 @@ impl Parser {
             return self.parser_parse_continue(&unsafe { (*expr).base.location });
         }
 
-        if luaur_common::FFlag::LuauConst2.get() && ident.operator_eq_c_char(c"const".as_ptr()) {
+        if ident.operator_eq_c_char(c"const".as_ptr()) {
             return self.parse_local(
                 unsafe { (*expr).base.location },
                 unsafe { (*expr).base.location.begin },

@@ -8,9 +8,9 @@ use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_local::AstStatLocal;
 use crate::records::ast_stat_local_function::AstStatLocalFunction;
 use crate::records::binding::Binding;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::cst_stat_local::CstStatLocal;
 use crate::records::cst_stat_local_function::CstStatLocalFunction;
-use crate::records::cst_attr_list::CstAttrList;
 use crate::records::lexeme::Lexeme;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
@@ -67,7 +67,17 @@ impl Parser {
             let location = Location::new(start.begin, unsafe { (*body).base.base.location.end });
 
             let node = unsafe {
-                (*self.allocator).alloc(AstStatLocalFunction::new(location, var, body, is_const))
+                (*self.allocator).alloc(AstStatLocalFunction::new(
+                    location,
+                    var,
+                    body,
+                    is_const,
+                    if is_const && luaur_common::FFlag::LuauStoreConstKeywordBegin.get() {
+                        keyword_position
+                    } else {
+                        Position::missing()
+                    },
+                ))
             };
 
             if self.options.store_cst_data {

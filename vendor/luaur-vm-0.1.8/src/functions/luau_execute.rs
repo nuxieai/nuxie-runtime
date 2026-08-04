@@ -54,6 +54,7 @@ use crate::macros::fastnotm::fastnotm;
 use crate::macros::fasttm::fasttm;
 use crate::macros::gcvalue::gcvalue;
 use crate::macros::getnodekey::getnodekey;
+use crate::macros::getproto::getproto;
 use crate::macros::getstr::getstr;
 use crate::macros::gkey::{gkey, gval};
 use crate::macros::gnext::gnext;
@@ -107,6 +108,7 @@ use crate::macros::ttisvector::ttisvector;
 use crate::macros::ttype::ttype;
 use crate::macros::upvalue::upvalue;
 use crate::macros::uvalue::uvalue;
+use crate::macros::vm_assert_pc::VM_ASSERT_PC;
 use crate::macros::vm_interrupt::VM_INTERRUPT;
 use crate::macros::vm_kv::VM_KV;
 use crate::macros::vm_patch_aux::VM_PATCH_AUX;
@@ -144,6 +146,7 @@ use luaur_common::macros::luau_insn_d::LUAU_INSN_D;
 use luaur_common::macros::luau_insn_e::LUAU_INSN_E;
 use luaur_common::macros::luau_insn_fbslot_sealed::LUAU_INSN_FBSLOT_SEALED;
 use luaur_common::macros::luau_insn_op::LUAU_INSN_OP;
+use luaur_common::FFlag;
 
 /// C++ `void luau_execute(lua_State* L)` (lvmexecute.cpp:3716) — dispatches
 /// to the `template<bool SingleStep>` monomorphs.
@@ -176,7 +179,11 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
         let native_cl = clvalue!((*(*L).ci).func);
         let native_lcl =
             core::ptr::addr_of!((*native_cl).inner.l).cast::<crate::records::closure::LClosure>();
-        let p = (*native_lcl).p;
+        let p = if FFlag::LuauCIProto.get() {
+            (*(*L).ci).p
+        } else {
+            (*native_lcl).p
+        };
         LUAU_ASSERT!(!(*p).execdata.is_null());
         if let Some(enter) = (*(*L).global).ecb.enter {
             if enter(L, p) == 0 {
@@ -188,11 +195,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
     // C++ `reentry:` label (goto target from NATIVECALL/RETURN native paths).
     'reentry: loop {
         LUAU_ASSERT!(isLua!((*L).ci));
+        LUAU_ASSERT!(!FFlag::LuauCIProto.get() || !(*(*L).ci).p.is_null());
 
         pc = (*(*L).ci).context.savedpc;
         cl = clvalue!((*(*L).ci).func);
         base = (*L).base;
-        k = {
+        k = if FFlag::LuauCIProto.get() {
+            (*(*(*L).ci).p).k
+        } else {
             let l = &(*cl).inner.l;
             (*l.p).k
         };
@@ -252,11 +262,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     setbvalue!(ra as *mut TValue, LUAU_INSN_B!(insn) as i32);
 
                     pc = pc.add(LUAU_INSN_C!(insn) as usize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
 
@@ -275,7 +281,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base);
-                    let kv = VM_KV!(LUAU_INSN_D!(insn), cl, k);
+                    let kv = VM_KV!(LUAU_INSN_D!(insn), L, cl, k);
 
                     setobj_2_s!(L, ra as *mut TValue, kv as *const TValue);
                     continue 'dispatch;
@@ -299,7 +305,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base);
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k);
+                    let kv = VM_KV!(aux, L, cl, k);
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     // fast-path: value is in expected slot
@@ -335,7 +341,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base);
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k);
+                    let kv = VM_KV!(aux, L, cl, k);
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     // fast-path: value is in expected slot
@@ -410,7 +416,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base);
-                    let kv = VM_KV!(LUAU_INSN_D!(insn), cl, k);
+                    let kv = VM_KV!(LUAU_INSN_D!(insn), L, cl, k);
 
                     // fast-path: import resolution was successful and closure
                     // environment is "safe" for import
@@ -443,7 +449,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k) as *mut TValue;
+                    let kv = VM_KV!(aux, L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     // fast-path: built-in table
@@ -667,7 +673,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k) as *mut TValue;
+                    let kv = VM_KV!(aux, L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     // fast-path: built-in table
@@ -897,10 +903,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
 
-                    let (pv, sizep) = {
+                    let active_proto = if FFlag::LuauCIProto.get() {
+                        (*(*L).ci).p
+                    } else {
                         let l = &(*cl).inner.l;
-                        (*(*l.p).p.add(LUAU_INSN_D!(insn) as usize), (*l.p).sizep)
+                        l.p
                     };
+                    let pv = *(*active_proto).p.add(LUAU_INSN_D!(insn) as usize);
+                    let sizep = (*active_proto).sizep;
                     LUAU_ASSERT!((LUAU_INSN_D!(insn) as u32) < sizep as u32);
 
                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaF_newLclosure may fail due to OOM
@@ -961,7 +971,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k) as *mut TValue;
+                    let kv = VM_KV!(aux, L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     if ttistable!(rb as *const TValue) {
@@ -1173,6 +1183,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     incr_ci!(L);
                     let ci = (*L).ci;
                     (*ci).func = ra;
+                    if FFlag::LuauCIProto.get() {
+                        (*ci).p = getproto!(ccl);
+                    }
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);
@@ -1182,10 +1195,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     (*L).base = (*ci).base;
                     (*L).top = argtop;
-
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        (*ccl).usage += 1;
-                    }
 
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
@@ -1242,11 +1251,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // ci is our callinfo, cip is our parent
                         let ci = (*L).ci;
                         let cip = ci.sub(1);
-
-                        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                            LUAU_ASSERT!((*ccl).usage > 0);
-                            (*ccl).usage -= 1;
-                        }
 
                         // copy return values into parent stack (but only up to
                         // nresults!), fill the rest with nil
@@ -1320,6 +1324,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     incr_ci!(L);
                     let ci = (*L).ci;
                     (*ci).func = ra;
+                    if FFlag::LuauCIProto.get() {
+                        (*ci).p = getproto!(ccl);
+                    }
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);
@@ -1329,10 +1336,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     (*L).base = (*ci).base;
                     (*L).top = argtop;
-
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        (*ccl).usage += 1;
-                    }
 
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
@@ -1395,11 +1398,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         let ci = (*L).ci;
                         let cip = ci.sub(1);
 
-                        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                            LUAU_ASSERT!((*ccl).usage > 0);
-                            (*ccl).usage -= 1;
-                        }
-
                         // copy return values into parent stack (but only up to
                         // nresults!), fill the rest with nil
                         let mut res = (*ci).func;
@@ -1445,12 +1443,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // ci is our callinfo, cip is our parent
                     let ci = (*L).ci;
                     let cip = ci.sub(1);
-
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        let cicl = clvalue!((*ci).func);
-                        LUAU_ASSERT!((*cicl).usage > 0);
-                        (*cicl).usage -= 1;
-                    }
 
                     // note: we assume CALL always puts func+args and expects results
                     // to start at func
@@ -1501,7 +1493,10 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(isLua!((*L).ci));
 
                     let nextcl = clvalue!((*cip).func);
-                    let nextproto = {
+                    LUAU_ASSERT!(!FFlag::LuauCIProto.get() || !(*cip).p.is_null());
+                    let nextproto = if FFlag::LuauCIProto.get() {
+                        (*cip).p
+                    } else {
                         let l = &(*nextcl).inner.l;
                         l.p
                     };
@@ -1530,11 +1525,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
 
                     pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
 
@@ -1549,11 +1540,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         LUAU_INSN_D!(insn) as isize
                     });
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
 
@@ -1568,11 +1555,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         0
                     });
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_JUMPIFEQ => {
@@ -1590,11 +1573,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -1723,11 +1702,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         jump_and_next!(res == 1);
                     } else {
                         pc = pc.offset(1);
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                        VM_ASSERT_PC!(pc, L, cl);
                         continue 'dispatch;
                     }
                 }
@@ -1746,11 +1721,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -1879,11 +1850,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         jump_and_next!(res == 0);
                     } else {
                         pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                        VM_ASSERT_PC!(pc, L, cl);
                         continue 'dispatch;
                     }
                 }
@@ -1902,11 +1869,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -1950,11 +1913,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -1998,11 +1957,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -2044,11 +1999,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else {
                                 1
                             });
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         }};
                     }
@@ -2528,7 +2479,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2557,7 +2508,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2586,7 +2537,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2651,7 +2602,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2716,7 +2667,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2784,7 +2735,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2813,7 +2764,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     // fast-path
                     if ttisnumber!(rb as *const TValue) {
@@ -2891,7 +2842,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     setobj_2_s!(
                         L,
@@ -2910,7 +2861,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let rb = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_C!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_C!(insn), L, cl, k) as *mut TValue;
 
                     setobj_2_s!(
                         L,
@@ -3068,7 +3019,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_D!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_D!(insn), L, cl, k) as *mut TValue;
 
                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_clone may fail due to OOM
 
@@ -3157,11 +3108,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             LUAU_INSN_D!(insn) as isize
                         },
                     );
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_FORNLOOP => {
@@ -3190,11 +3137,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         limit <= idx
                     } {
                         pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                        VM_ASSERT_PC!(pc, L, cl);
                         continue 'dispatch;
                     } else {
                         // fallthrough to exit
@@ -3342,11 +3285,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     }
 
                     pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_FORGLOOP => {
@@ -3399,13 +3338,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 setobj_2_s!(L, ra.add(4), e as *const TValue);
 
                                 pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                                let p = {
-                                    let l = &(*cl).inner.l;
-                                    l.p
-                                };
-                                LUAU_ASSERT!(
-                                    (pc.offset_from((*p).code) as u32) < (*p).sizecode as u32
-                                );
+                                VM_ASSERT_PC!(pc, L, cl);
                                 continue 'dispatch;
                             }
 
@@ -3428,13 +3361,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 setobj_2_s!(L, ra.add(4), gval!(n) as *const TValue);
 
                                 pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                                let p = {
-                                    let l = &(*cl).inner.l;
-                                    l.p
-                                };
-                                LUAU_ASSERT!(
-                                    (pc.offset_from((*p).code) as u32) < (*p).sizecode as u32
-                                );
+                                VM_ASSERT_PC!(pc, L, cl);
                                 continue 'dispatch;
                             }
 
@@ -3484,11 +3411,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         } else {
                             LUAU_INSN_D!(insn) as isize
                         });
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                        VM_ASSERT_PC!(pc, L, cl);
                         continue 'dispatch;
                     }
                 }
@@ -3517,11 +3440,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     }
 
                     pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_FORGPREP_NEXT => {
@@ -3548,16 +3467,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     }
 
                     pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_NATIVECALL => {
                     // lvmexecute.cpp:2873
-                    let p = {
+                    let p = if FFlag::LuauCIProto.get() {
+                        (*(*L).ci).p
+                    } else {
                         let l = &(*cl).inner.l;
                         l.p
                     };
@@ -3583,10 +3500,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let b = LUAU_INSN_B!(insn) as i32 - 1;
-                    let n = {
+                    let p = if FFlag::LuauCIProto.get() {
+                        (*(*L).ci).p
+                    } else {
                         let l = &(*cl).inner.l;
-                        base.offset_from((*(*L).ci).func) as i32 - (*l.p).numparams as i32 - 1
+                        l.p
                     };
+                    let n = base.offset_from((*(*L).ci).func) as i32 - (*p).numparams as i32 - 1;
 
                     if b == LUA_MULTRET {
                         vm_protect!(L, pc, base, {
@@ -3630,7 +3550,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_D!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_D!(insn), L, cl, k) as *mut TValue;
 
                     let kcl = clvalue!(kv as *const TValue);
 
@@ -3642,7 +3562,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let mut ncl = if (*kcl).env == (*cl).env {
                         kcl
                     } else {
-                        let kp = {
+                        let kp = if FFlag::LuauCIProto.get() {
+                            getproto!(kcl)
+                        } else {
                             let l = &(*kcl).inner.l;
                             l.p
                         };
@@ -3688,7 +3610,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                         // lazily clone the closure and update the upvalues
                         if ncl == kcl && (*kcl).preload == 0 {
-                            let kp = {
+                            let kp = if FFlag::LuauCIProto.get() {
+                                getproto!(kcl)
+                            } else {
                                 let l = &(*kcl).inner.l;
                                 l.p
                             };
@@ -3757,11 +3681,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
 
                     pc = pc.offset(LUAU_INSN_D!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
 
@@ -3772,7 +3692,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base);
                     let aux: u32 = *pc;
                     pc = pc.add(1);
-                    let kv = VM_KV!(aux, cl, k);
+                    let kv = VM_KV!(aux, L, cl, k);
 
                     setobj_2_s!(L, ra as *mut TValue, kv as *const TValue);
                     continue 'dispatch;
@@ -3785,11 +3705,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
 
                     pc = pc.offset(LUAU_INSN_E!(insn) as isize);
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_FASTCALL => {
@@ -3798,20 +3714,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let bfid = LUAU_INSN_A!(insn) as i32;
                     let skip = LUAU_INSN_C!(insn) as i32;
-                    {
-                        {
-                            let p = {
-                                {
-                                    let l = &(*cl).inner.l;
-                                    l.p
-                                }
-                            };
-                            LUAU_ASSERT!(
-                                ((pc.offset_from((*p).code) as i32 + skip) as u32)
-                                    < (*p).sizecode as u32
-                            );
-                        }
-                    }
+                    VM_ASSERT_PC!(pc.offset(skip as isize), L, cl);
 
                     let call: Instruction = *pc.add(skip as usize);
                     LUAU_ASSERT!(LUAU_INSN_OP!(call) == LuauOpcode::LOP_CALL as u32);
@@ -3851,11 +3754,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             // skip instructions that compute function as well as CALL
                             pc = pc.add((skip + 1) as usize);
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         } else {
                             // continue execution through the fallback code
@@ -3891,7 +3790,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_B!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_B!(insn), L, cl, k) as *mut TValue;
                     let rc = VM_REG!(LUAU_INSN_C!(insn), L, base) as *mut TValue;
 
                     // fast-path
@@ -3920,7 +3819,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_B!(insn), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_B!(insn), L, cl, k) as *mut TValue;
                     let rc = VM_REG!(LUAU_INSN_C!(insn), L, base) as *mut TValue;
 
                     // fast-path
@@ -3962,20 +3861,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let bfid = LUAU_INSN_A!(insn) as i32;
                     let arg = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let skip = LUAU_INSN_C!(insn) as i32;
-                    {
-                        {
-                            let p = {
-                                {
-                                    let l = &(*cl).inner.l;
-                                    l.p
-                                }
-                            };
-                            LUAU_ASSERT!(
-                                ((pc.offset_from((*p).code) as i32 + skip) as u32)
-                                    < (*p).sizecode as u32
-                            );
-                        }
-                    }
+                    VM_ASSERT_PC!(pc.offset(skip as isize), L, cl);
 
                     let call: Instruction = *pc.add(skip as usize);
                     LUAU_ASSERT!(LUAU_INSN_OP!(call) == LuauOpcode::LOP_CALL as u32);
@@ -4000,11 +3886,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             // skip instructions that compute function as well as CALL
                             pc = pc.add((skip + 1) as usize);
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         } else {
                             // continue execution through the fallback code
@@ -4025,16 +3907,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let arg1 = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let arg2 = VM_REG!(aux, L, base) as *mut TValue;
-                    {
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!(
-                            ((pc.offset_from((*p).code) as i32 + skip) as u32)
-                                < (*p).sizecode as u32
-                        );
-                    }
+                    VM_ASSERT_PC!(pc.offset(skip as isize), L, cl);
 
                     let call: Instruction = *pc.add(skip as usize);
                     LUAU_ASSERT!(LUAU_INSN_OP!(call) == LuauOpcode::LOP_CALL as u32);
@@ -4059,11 +3932,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             // skip instructions that compute function as well as CALL
                             pc = pc.add((skip + 1) as usize);
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         } else {
                             // continue execution through the fallback code
@@ -4083,17 +3952,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
                     let arg1 = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
-                    let arg2 = VM_KV!(aux, cl, k) as *mut TValue;
-                    {
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!(
-                            ((pc.offset_from((*p).code) as i32 + skip) as u32)
-                                < (*p).sizecode as u32
-                        );
-                    }
+                    let arg2 = VM_KV!(aux, L, cl, k) as *mut TValue;
+                    VM_ASSERT_PC!(pc.offset(skip as isize), L, cl);
 
                     let call: Instruction = *pc.add(skip as usize);
                     LUAU_ASSERT!(LUAU_INSN_OP!(call) == LuauOpcode::LOP_CALL as u32);
@@ -4118,11 +3978,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             // skip instructions that compute function as well as CALL
                             pc = pc.add((skip + 1) as usize);
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         } else {
                             // continue execution through the fallback code
@@ -4144,16 +4000,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let arg1 = VM_REG!(LUAU_INSN_B!(insn), L, base) as *mut TValue;
                     let arg2 = VM_REG!(LUAU_INSN_AUX_A(aux), L, base) as *mut TValue;
                     let arg3 = VM_REG!(LUAU_INSN_AUX_B(aux), L, base) as *mut TValue;
-                    {
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!(
-                            ((pc.offset_from((*p).code) as i32 + skip) as u32)
-                                < (*p).sizecode as u32
-                        );
-                    }
+                    VM_ASSERT_PC!(pc.offset(skip as isize), L, cl);
 
                     let call: Instruction = *pc.add(skip as usize);
                     LUAU_ASSERT!(LUAU_INSN_OP!(call) == LuauOpcode::LOP_CALL as u32);
@@ -4184,11 +4031,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             // skip instructions that compute function as well as CALL
                             pc = pc.add((skip + 1) as usize);
-                            let p = {
-                                let l = &(*cl).inner.l;
-                                l.p
-                            };
-                            LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                            VM_ASSERT_PC!(pc, L, cl);
                             continue 'dispatch;
                         } else {
                             // continue execution through the fallback code
@@ -4201,7 +4044,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 }
                 LuauOpcode::LOP_BREAK => {
                     // lvmexecute.cpp:3359
-                    let proto = {
+                    let proto = if FFlag::LuauCIProto.get() {
+                        (*(*L).ci).p
+                    } else {
                         let l = &(*cl).inner.l;
                         l.p
                     };
@@ -4244,11 +4089,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             1
                         },
                     );
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_JUMPXEQKB => {
@@ -4269,11 +4110,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             1
                         },
                     );
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_JUMPXEQKN => {
@@ -4283,7 +4120,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let aux: u32 = *pc;
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_AUX_KV(aux), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_AUX_KV(aux), L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisnumber!(kv as *const TValue));
 
                     pc = pc.offset(
@@ -4297,11 +4134,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             1
                         },
                     );
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_JUMPXEQKS => {
@@ -4310,7 +4143,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     pc = pc.add(1);
                     let aux: u32 = *pc;
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let kv = VM_KV!(LUAU_INSN_AUX_KV(aux), cl, k) as *mut TValue;
+                    let kv = VM_KV!(LUAU_INSN_AUX_KV(aux), L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisstring!(kv as *const TValue));
 
                     pc = pc.offset(
@@ -4324,11 +4157,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             1
                         },
                     );
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_GETUDATAKS => {
@@ -4340,7 +4169,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
                     let kidx = LUAU_INSN_AUX_KV16(aux);
-                    let kv = VM_KV!(kidx, cl, k) as *mut TValue;
+                    let kv = VM_KV!(kidx, L, cl, k) as *mut TValue;
 
                     'udata_fast: {
                         if ttisuserdata!(rb as *const TValue) {
@@ -4398,12 +4227,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
 
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
-
                                     (*L).ci = cip;
                                     (*L).base = (*cip).base;
                                     (*L).nCcalls -= 1;
@@ -4443,7 +4266,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
                     let kidx = LUAU_INSN_AUX_KV16(aux);
-                    let kv = VM_KV!(kidx, cl, k) as *mut TValue;
+                    let kv = VM_KV!(kidx, L, cl, k) as *mut TValue;
 
                     'udata_fast: {
                         if ttisuserdata!(rb as *const TValue) {
@@ -4502,12 +4325,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
 
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
-
                                     (*L).ci = cip;
                                     (*L).base = (*cip).base;
                                     (*L).top = (*cip).top;
@@ -4540,7 +4357,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
                     let kidx = LUAU_INSN_AUX_KV16(aux);
-                    let kv = VM_KV!(kidx, cl, k) as *mut TValue;
+                    let kv = VM_KV!(kidx, L, cl, k) as *mut TValue;
 
                     'udata_fast: {
                         if ttisuserdata!(rb as *const TValue) {
@@ -4622,12 +4439,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
 
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
-
                                     let mut res = (*ci).func;
                                     let mut vali = (*L).top.sub(results as usize);
                                     let valend = (*L).top;
@@ -4678,7 +4489,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
-                    let membername = VM_KV!(aux, cl, k) as *mut TValue;
+                    let membername = VM_KV!(aux, L, cl, k) as *mut TValue;
                     LUAU_ASSERT!(ttisstring!(membername as *const TValue));
                     LUAU_ASSERT!(LUAU_INSN_B!(insn) == 0);
                     let rc = VM_REG!(LUAU_INSN_C!(insn), L, base) as *mut TValue;
@@ -4702,11 +4513,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     if !ttisfunction!(ra as *const TValue) {
                         pc = pc.offset(LUAU_INSN_D!(insn) as isize - 1);
-                        let p = {
-                            let l = &(*cl).inner.l;
-                            l.p
-                        };
-                        LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                        VM_ASSERT_PC!(pc, L, cl);
                         continue 'dispatch;
                     }
 
@@ -4718,11 +4525,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         pc = pc.offset(LUAU_INSN_D!(insn) as isize - 1);
                     }
 
-                    let p = {
-                        let l = &(*cl).inner.l;
-                        l.p
-                    };
-                    LUAU_ASSERT!((pc.offset_from((*p).code) as u32) < (*p).sizecode as u32);
+                    VM_ASSERT_PC!(pc, L, cl);
                     continue 'dispatch;
                 }
 

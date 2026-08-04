@@ -4,6 +4,7 @@ use crate::records::ast_node::AstNode;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_local_function::AstStatLocalFunction;
 use crate::records::location::Location;
+use crate::records::position::Position;
 use crate::rtti::AstNodeClass;
 
 impl AstStatLocalFunction {
@@ -12,6 +13,7 @@ impl AstStatLocalFunction {
         name: *mut AstLocal,
         func: *mut AstExprFunction,
         is_const: bool,
+        const_keyword_begin: Position,
     ) -> Self {
         Self {
             base: AstStat {
@@ -24,6 +26,7 @@ impl AstStatLocalFunction {
             name,
             func,
             is_const,
+            const_keyword_begin,
         }
     }
 }
@@ -34,6 +37,7 @@ pub fn ast_stat_local_function_ast_stat_local_function(
     name: *mut AstLocal,
     func: *mut AstExprFunction,
     is_const: bool,
+    const_keyword_begin: Position,
 ) -> AstStatLocalFunction {
-    AstStatLocalFunction::new(location, name, func, is_const)
+    AstStatLocalFunction::new(location, name, func, is_const, const_keyword_begin)
 }

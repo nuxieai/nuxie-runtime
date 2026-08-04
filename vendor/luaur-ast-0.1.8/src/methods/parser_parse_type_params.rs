@@ -64,14 +64,14 @@ impl Parser {
                             let parenthesized_type =
                                 unsafe { *(*explicit_type_pack).type_list.types.data.add(0) };
 
-                            if FFlag::LuauCstTypeGroup.get() && self.options.store_cst_data {
-                                let type_group = unsafe {
-                                    (*self.allocator).alloc(AstTypeGroup::new(
-                                        (*parenthesized_type).base.location,
-                                        parenthesized_type,
-                                    ))
-                                };
+                            let type_group = unsafe {
+                                (*self.allocator).alloc(AstTypeGroup::new(
+                                    (*parenthesized_type).base.location,
+                                    parenthesized_type,
+                                ))
+                            };
 
+                            if self.options.store_cst_data {
                                 if let Some(cst_node) = self.cst_node_map.find(
                                     &(explicit_type_pack as *mut crate::records::ast_node::AstNode),
                                 ) {
@@ -98,25 +98,13 @@ impl Parser {
                                         }
                                     }
                                 }
-
-                                parameters.push(AstTypeOrPack {
-                                    r#type: self
-                                        .parse_type_suffix(type_group as *mut AstType, &begin_loc),
-                                    type_pack: core::ptr::null_mut(),
-                                });
-                            } else {
-                                let type_group = unsafe {
-                                    (*self.allocator).alloc(AstTypeGroup::new(
-                                        (*parenthesized_type).base.location,
-                                        parenthesized_type,
-                                    ))
-                                };
-                                parameters.push(AstTypeOrPack {
-                                    r#type: self
-                                        .parse_type_suffix(type_group as *mut AstType, &begin_loc),
-                                    type_pack: core::ptr::null_mut(),
-                                });
                             }
+
+                            parameters.push(AstTypeOrPack {
+                                r#type: self
+                                    .parse_type_suffix(type_group as *mut AstType, &begin_loc),
+                                type_pack: core::ptr::null_mut(),
+                            });
                         } else {
                             parameters.push(AstTypeOrPack {
                                 r#type: core::ptr::null_mut(),

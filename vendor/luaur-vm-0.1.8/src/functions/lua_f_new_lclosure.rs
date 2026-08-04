@@ -27,7 +27,6 @@ pub unsafe fn luaF_newLclosure(
     (*c).nupvalues = nelems as u8;
     (*c).stacksize = (*p).maxstacksize;
     (*c).preload = 0;
-    (*c).usage = 0;
     (*c).gclist = core::ptr::null_mut();
     let lc = core::ptr::addr_of_mut!((*c).inner.l) as *mut LClosure;
     (*lc).p = p;

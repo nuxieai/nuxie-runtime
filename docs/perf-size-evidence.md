@@ -163,12 +163,13 @@ under the default scheduler; `tools/perf-gate/run-pinned.sh` pins the comparator
 and inherited runner processes to a highest-maximum-frequency CPU on Linux when
 `taskset` and `lscpu` are available. The ratio range, rather than absolute time,
 is the relevant stability evidence. The blocking ratchet uses the worst of the
-four session medians as its current stable baseline, then applies the requested 15%
-margin and integer ceiling. This deliberately absorbs the observed `car_widgets`
-variance; a repeatedly flaky timing row must be removed or the gate disabled,
-not papered over with an unrecorded ceiling increase.
+four session medians as its current stable baseline, then applies the requested
+15% margin and integer ceiling. This deliberately absorbs the observed
+`car_widgets` variance; a repeatedly flaky timing row must be removed or the
+gate disabled, not papered over with an unrecorded ceiling increase.
 
-The three raw reports were produced under `target/` (never `/tmp`) with SHA-256:
+The four baseline reports and final validation report were produced under
+`target/` (never `/tmp`) with SHA-256:
 
 - `perf-gate-scripted-1.json`: `829b1a8a3196e0ed7d3ce003cb4bec1d3e43bb7f4e90245eaf928d6d369d7da6`
 - `perf-gate-scripted-2.json`: `1c43bb7092db3f995341e26a8b06753720d06b7059a66da4b421d39b82ff350f`

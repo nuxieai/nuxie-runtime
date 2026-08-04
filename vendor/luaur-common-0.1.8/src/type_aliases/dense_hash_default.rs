@@ -7,7 +7,7 @@
 //! Deviation (documented, behaviorally faithful): Rust has no stable
 //! specialization, so a single `K: Hash` blanket impl serves every key type,
 //! including raw pointers, via the inline FNV-1a hasher below. C++'s pointer
-//! specialization (`DenseHashPointer`, `(addr>>4)^(addr>>9)`) and `std::hash`
+//! specialization (`DenseHashPointer`) and `std::hash`
 //! differ only in the constant scrambling — any consistent hash is correct
 //! here because `DenseHash` iteration order is not a contract. The exact
 //! `DenseHashPointer` remains available for explicit use.

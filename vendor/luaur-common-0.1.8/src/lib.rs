@@ -150,6 +150,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauXpcallFixMessageYieldPath.set(false);
     DFFlag::LuauGcMarkUdataAccess.set(false);
     DFFlag::LuauGcTableStepFix.set(false);
+    DFFlag::LuauSelfIsSelfAndAlwaysSelf.set(false);
 }
 
 /// FastFlag namespace `FFlag::` — static (non-dynamic) bool flags. Definitions
@@ -543,6 +544,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauRequireAliasOverrideOrderFix, false);
+    // Require/src/RequireNavigator.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauSelfIsSelfAndAlwaysSelf, false);
 }
 
 /// Dynamic int flags (`DFInt::`), mirroring `FInt`.

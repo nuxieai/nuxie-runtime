@@ -11,3 +11,9 @@
 - Ported official Luau 0.726 delta (upstream 91caa731..86d2a9dc).
 - Touched areas: attribute CST records, flag-gated parser propagation, and
   attribute pretty-printing.
+
+## Luau fork rung 3
+
+- Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
+- Touched areas: const syntax promotion, grouped type CSTs, local-function
+  const keyword positions, and extern type-definition compatibility.

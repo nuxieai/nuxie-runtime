@@ -3757,13 +3757,13 @@ note = "FL-D5 filename-corresponding NestedArtboardLeaf occurrence classificatio
 upstream = "src/node.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard/node.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0307"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port. C17 exception: retained modules are `crates/nuxie-runtime/src/lib.rs`; the retained crate root exports the public Node-facing surface while node state, transforms, and invalidation share component and Artboard owners, so a dedicated leaf would only forward shared behavior."
+note = "Consolidated runtime port. The direct C++-counterpart module `crates/nuxie-runtime/src/artboard/node.rs` owns the retained computed-local-transform behavior; the crate root continues to export the unchanged public surface."
 
 [[file]]
 upstream = "src/parent_traversal.cpp"

@@ -104,6 +104,8 @@ mod advancing_component;
 pub(crate) use advancing_component::RuntimeAdvancingComponent;
 #[path = "artboard/bones/bone.rs"]
 mod bone;
+#[path = "artboard/node.rs"]
+mod node;
 #[path = "artboard/animation/property_recorder.rs"]
 mod property_recorder;
 mod resetting_component;
@@ -7376,17 +7378,6 @@ impl ArtboardInstance {
             child_layout_revision: nested.child.layout_revision,
         });
         changed
-    }
-
-    pub(crate) fn runtime_node_computed_local_transform(&self, local_id: usize) -> Option<Mat2D> {
-        let handle = self.component_handle(local_id)?;
-        let component = self.objects.component(handle)?;
-        let node = component.concrete.node.as_ref()?;
-        let parent_world = component
-            .parent_transform
-            .and_then(|parent| self.objects.component(parent))
-            .map(|parent| parent.transform.world_transform);
-        Some(node.computed_local_transform(parent_world, component.transform.world_transform))
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {

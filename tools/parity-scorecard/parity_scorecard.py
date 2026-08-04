@@ -651,7 +651,7 @@ def build_tiers(
     minimum_perf_entries, maximum_perf_ratio = performance_requirements(
         definition, errors
     )
-    perf = provisional_perf(
+    perf = blocking_perf(
         repo_root,
         source_sha,
         minimum_perf_entries,
@@ -812,50 +812,102 @@ def string_list(value: Any, label: str, errors: list[str]) -> list[str]:
     return value
 
 
-def provisional_perf(
+def blocking_perf(
     repo_root: Path,
     source_sha: str,
     minimum: int,
     maximum: float,
     errors: list[str],
 ) -> dict[str, Any]:
-    perf_path = repo_root / "target" / "perf-compare.json"
-    if not perf_path.is_file():
+    perf_path = repo_root / "target" / "perf-gate.json"
+    manifest_path = repo_root / "perf-corpus.toml"
+    if not perf_path.is_file() or not manifest_path.is_file():
         return ratchet(
             "runtime-ratio",
             "NOT_BUILT",
-            "runtime ratio not built (#OR-9; provisional evidence unavailable)",
+            "blocking runtime ratio ratchet not built (V10 evidence unavailable)",
         )
     try:
         document = json.loads(perf_path.read_text())
-        aggregate = document["aggregate"]
-        ratio = aggregate["rust_over_cpp"]
-        entries = aggregate["entries"]
+        manifest = tomllib.loads(manifest_path.read_text())
+        report_files = document["files"]
+        manifest_files = manifest["file"]
         report_sha = document["meta"]["git_sha"]
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as error:
-        errors.append(f"malformed provisional perf evidence {perf_path}: {error}")
+        if document["schema"] != "rive-perf-compare-json-v1":
+            raise ValueError("unexpected report schema")
+        if document["metric"] != "runner_hot_loop_ms":
+            raise ValueError("unexpected metric")
+        if (
+            document["iterations"] != 5
+            or document["warmups"] != 0
+            or document["benchmark_repeat"] != 1
+            or document["benchmark_frames"] != 100
+            or document["benchmark_hz"] != 60
+        ):
+            raise ValueError("unexpected measurement method")
+        manifest_ids = [file["id"] for file in manifest_files]
+        report_ids = [file["id"] for file in report_files]
+        if report_ids != manifest_ids:
+            raise ValueError("report ids/order do not match perf-corpus.toml")
+        ceilings = {file["id"]: file["ceiling"] for file in manifest_files}
+        ratios = {
+            file["id"]: (
+                file["runners"]["rust"]["phases"]["advance_draw"]["median_ms"]
+                / file["runners"]["cpp"]["phases"]["advance_draw"]["median_ms"]
+            )
+            for file in report_files
+        }
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        tomllib.TOMLDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        ZeroDivisionError,
+    ) as error:
+        errors.append(f"malformed blocking perf evidence {perf_path}: {error}")
         return ratchet("runtime-ratio", "RED", "runtime ratio malformed")
-    if (
+
+    entries = len(ratios)
+    invalid_ratio = any(
         not isinstance(ratio, (int, float))
         or isinstance(ratio, bool)
         or not math.isfinite(ratio)
         or ratio <= 0
-        or not isinstance(entries, int)
-        or isinstance(entries, bool)
-        or entries < 1
-        or report_sha != source_sha
-    ):
-        errors.append(f"invalid or stale provisional perf evidence {perf_path}")
+        for ratio in ratios.values()
+    )
+    invalid_ceiling = any(
+        not isinstance(ceiling, int)
+        or isinstance(ceiling, bool)
+        or ceiling <= 0
+        for ceiling in ceilings.values()
+    )
+    if invalid_ratio or invalid_ceiling or report_sha != source_sha:
+        errors.append(f"invalid or stale blocking perf evidence {perf_path}")
         return ratchet("runtime-ratio", "RED", "runtime ratio invalid/stale")
-    state = "PARTIAL" if ratio <= maximum and entries < minimum else "RED"
-    if ratio <= maximum and entries >= minimum:
-        # #OR-9 must still make this CI lane blocking before it can be GREEN.
+
+    exceeded = [
+        file_id for file_id, ratio in ratios.items() if ratio > ceilings[file_id]
+    ]
+    if entries < minimum:
+        errors.append(f"blocking perf corpus has {entries} files; minimum is {minimum}")
+    if exceeded:
+        errors.append("blocking perf ceilings exceeded: " + ", ".join(exceeded))
+    worst_ratio = max(ratios.values())
+    if entries < minimum or exceeded:
+        state = "RED"
+    elif worst_ratio <= maximum:
+        state = "GREEN"
+    else:
         state = "PARTIAL"
     return ratchet(
         "runtime-ratio",
         state,
-        f"runtime ratio {ratio:.3f} over {entries}/{minimum} files (non-blocking; #OR-9)",
-        value=ratio,
+        f"runtime advance+draw worst {worst_ratio:.3f} over {entries}/{minimum} files "
+        f"(blocking per-file ratchet; target <= {maximum:.3f})",
+        value=worst_ratio,
         target=maximum,
     )
 

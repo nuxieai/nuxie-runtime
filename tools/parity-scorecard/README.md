@@ -57,7 +57,8 @@ comparison and masquerade as green.
 
 Known future gates are different from unavailable evidence: they are printed
 as `not built` with their ticket and keep their tier non-green, but do not make
-the scorecard plumbing fail. The optional six-file perf artifact is reported
-only as non-blocking evidence until #OR-9 lands. `parity-scorecard.toml` holds
-the current A-row and verified-adapter checklist facts; tickets update those
-lists only when their mechanical exit gate closes.
+the scorecard plumbing fail. The 24-file V10 performance artifact is required:
+missing evidence or a per-file ceiling breach is red, while passing ceilings
+remain partial until every ratio reaches direct parity. `parity-scorecard.toml`
+holds the current A-row and verified-adapter checklist facts; tickets update
+those lists only when their mechanical exit gate closes.

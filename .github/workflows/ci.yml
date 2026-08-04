@@ -422,13 +422,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Optional performance ratchet: continue-on-error preserves the existing
-  # non-blocking CI policy, while the command itself still fails closed above
-  # the 1.0 Rust/C++ threshold and publishes its full JSON evidence.
-  perf-json:
-    name: Perf JSON artifact (optional)
+  # Blocking per-file hot-loop ratchet. The gate prints every advance+draw
+  # ratio, fails on any checked-in ceiling, and publishes its raw JSON.
+  perf-gate:
+    name: Hot-loop performance gate
     runs-on: macos-14
-    continue-on-error: true
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -457,17 +455,17 @@ jobs:
           RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh release
           echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
 
-      - name: Run runtime parity ratchet and generate perf JSON
+      - name: Run blocking per-file performance ratchet
         working-directory: ${{ github.workspace }}/rive-rust
         run: |
-          make perf-hot-loop PERF_JSON_META="--meta build_profile=release --meta git_sha=${GITHUB_SHA} --meta timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          make perf-gate PERF_JSON_META="--meta build_profile=release --meta git_sha=${GITHUB_SHA} --meta timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-      - name: Upload perf JSON artifact
+      - name: Upload perf gate JSON artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf-compare-json
-          path: rive-rust/target/perf-compare.json
+          name: perf-gate-json
+          path: rive-rust/target/perf-gate.json
           if-no-files-found: ignore
 
   parity-scorecard:
@@ -477,7 +475,7 @@ jobs:
       - parity-runtime-evidence
       - browser-renderer
       - renderer-golden
-      - perf-json
+      - perf-gate
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -500,11 +498,11 @@ jobs:
           path: target/parity-scorecard/evidence
           merge-multiple: true
 
-      - name: Download optional provisional perf evidence
+      - name: Download blocking perf-gate evidence
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: perf-compare-json
+          name: perf-gate-json
           path: target
 
       - name: Publish and check parity scorecard

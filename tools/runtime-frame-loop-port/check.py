@@ -2194,10 +2194,8 @@ def check(
                     )
                 elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
                     relative_path = pathlib.PurePosixPath(path.relative_to(repo_root))
-                    if (
-                        relative_path.stem == "tests"
-                        or relative_path.stem.endswith("_tests")
-                        or "tests" in relative_path.parts
+                    if relative_path == pathlib.PurePosixPath(
+                        "crates/nuxie-runtime/src/artboard/tests.rs"
                     ):
                         continue
                     if (

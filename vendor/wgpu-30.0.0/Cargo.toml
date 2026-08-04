@@ -283,3 +283,5 @@ ref_as_ptr = "warn"
 
 [lints.rust]
 missing_debug_implementations = "warn"
+
+[workspace]

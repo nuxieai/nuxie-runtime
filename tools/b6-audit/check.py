@@ -15,6 +15,18 @@ MANIFEST = ROOT / "file-correspondence-manifest.toml"
 # records. The live pin (`upstream_ref`) advances independently with each
 # upstream sync, so it is deliberately NOT what this gate compares.
 EXPECTED_AUDIT_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+# The census below is a deliberate ratchet: an upstream sync that adds,
+# removes, or reclassifies a manifest row is meant to fail this gate until
+# the numbers are re-stated here on purpose. Updating it is a one-liner, and
+# NOT doing so is what kept CI red for two days after the 4ac7b327 advance:
+#
+#   python3 -c 'import collections,tomllib,pathlib; \
+#     d=tomllib.loads(pathlib.Path("file-correspondence-manifest.toml").read_text()); \
+#     r=d["file"]; print(len(r), collections.Counter(x.get("b6_verdict") for x in r))'
+#
+# Rows the census reports under `None` are unaudited: add them to
+# POST_AUDIT_UNAUDITED below (and to the register follow-up that tracks it),
+# not to EXPECTED_COUNTS.
 EXPECTED_ROW_COUNT = 456
 EXPECTED_COUNTS = {
     "ISOMORPHIC": 22,
@@ -27,6 +39,10 @@ EXPECTED_COUNTS = {
 # B-6 verdict. Listing them by name (rather than letting the census absorb
 # them) keeps the unaudited surface visible: any further verdict-less row
 # fails this gate until it is audited or added here deliberately.
+#
+# This set is tracked debt, not a permanent exemption --- register row #H5
+# owns shrinking it. Audit a row into a verdict, delete it here, and restate
+# EXPECTED_COUNTS; #H5 closes when this set is empty.
 POST_AUDIT_UNAUDITED = {
     "src/animation/keyframe_int.cpp",
     "src/component_origin.cpp",

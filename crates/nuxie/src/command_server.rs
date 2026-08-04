@@ -2005,6 +2005,12 @@ impl CommandServer {
     fn check_subscriptions(&mut self) {
         let mut events = Vec::new();
         for index in 0..self.subscriptions.len() {
+            // Both lookups are total: `index` is drawn from the current
+            // length, and the only call between them --- `subscription_value`
+            // --- takes `&self`, so it cannot resize `subscriptions`. These
+            // replace an index that used to panic here; assert the invariant
+            // rather than let a future `&mut self` on that path degrade into a
+            // silently skipped subscription.
             let Some((handle, path, data_type, request_id)) =
                 self.subscriptions
                     .get(index)
@@ -2012,10 +2018,12 @@ impl CommandServer {
                         (*handle, path.clone(), *data_type, *request_id)
                     })
             else {
+                debug_assert!(false, "subscription {index} vanished before its read");
                 continue;
             };
             if let Some((value, revision)) = self.subscription_value(handle, &path, data_type) {
                 let Some(subscription) = self.subscriptions.get_mut(index) else {
+                    debug_assert!(false, "subscription {index} vanished during its value read");
                     continue;
                 };
                 if value != subscription.4 || revision != subscription.5 {

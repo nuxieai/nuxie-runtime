@@ -319,6 +319,7 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
+    crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 2);
     // Analysis/src/ConstraintGenerator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowRedefiningBuiltinTypes);
     // Compiler/src/Compiler.cpp

@@ -116,8 +116,8 @@ impl Compiler {
             if !expr_local.is_null() {
                 if luaur_common::FFlag::LuauExportValueSyntax.get()
                     && (*(*expr_local).local).is_exported
+                    && !self.exported_classes.contains(&(*expr_local).local)
                 {
-                    let table_reg = self.get_export_table_reg(node as *mut AstNode);
                     let name = sref_ast_name((*(*expr_local).local).name);
                     let cid = (*self.bytecode).add_constant_string(name);
                     if cid < 0 {
@@ -126,13 +126,27 @@ impl Compiler {
                             format_args!("Exceeded constant limit; simplify the code to compile"),
                         );
                     }
-                    (*self.bytecode).emit_abc(
-                        LuauOpcode::LOP_GETTABLEKS,
-                        target,
-                        table_reg,
-                        bytecode_builder_get_string_hash(name) as u8,
-                    );
-                    (*self.bytecode).emit_aux(cid as u32);
+                    let export_local = &mut self.export_table_local as *mut _;
+                    let table_reg = self.get_local_reg(export_local);
+                    if table_reg >= 0 {
+                        (*self.bytecode).emit_abc(
+                            LuauOpcode::LOP_GETTABLEKS,
+                            target,
+                            table_reg as u8,
+                            bytecode_builder_get_string_hash(name) as u8,
+                        );
+                        (*self.bytecode).emit_aux(cid as u32);
+                    } else {
+                        let upval = self.get_upval(export_local);
+                        (*self.bytecode).emit_abc(LuauOpcode::LOP_GETUPVAL, target, upval, 0);
+                        (*self.bytecode).emit_abc(
+                            LuauOpcode::LOP_GETTABLEKS,
+                            target,
+                            target,
+                            bytecode_builder_get_string_hash(name) as u8,
+                        );
+                        (*self.bytecode).emit_aux(cid as u32);
+                    }
                 } else {
                     let reg = self.get_expr_local_reg(node);
                     if reg >= 0 {

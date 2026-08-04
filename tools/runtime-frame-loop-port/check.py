@@ -619,6 +619,23 @@ def state_machine_instance_logical_owner_source(
     )
 
 
+def state_machine_instance_declared_test_paths(
+    repo_root: pathlib.Path,
+) -> tuple[pathlib.Path, ...]:
+    """Return literal test-body includes declared by the compatibility hub."""
+
+    hub = repo_root / NESTED_EVENT_OWNER_MODULE
+    if not hub.is_file():
+        return ()
+    source = hub.read_text(encoding="utf-8", errors="replace")
+    paths = []
+    for match in re.finditer(r'include!\(\s*"([^"]+)"\s*\)', source):
+        path = hub.parent / match.group(1)
+        if path.is_file() and "tests" in path.relative_to(hub.parent).parts:
+            paths.append(path)
+    return tuple(paths)
+
+
 def nested_event_owner_boundary_hits(
     source: str,
     kind: str,
@@ -2163,6 +2180,10 @@ def check(
         pathlib.PurePosixPath(path.relative_to(repo_root))
         for path in logical_owner_paths
     }
+    logical_owner_relatives.update(
+        pathlib.PurePosixPath(path.relative_to(repo_root))
+        for path in state_machine_instance_declared_test_paths(repo_root)
+    )
     for owner_path in logical_owner_paths:
         owner_relative = owner_path.relative_to(repo_root).as_posix()
         for exported in nested_event_owner_exports(

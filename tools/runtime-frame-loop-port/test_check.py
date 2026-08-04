@@ -3873,7 +3873,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             with self.subTest(ratchet=ratchet_id):
                 self.assert_required_production_ratchet_case(
                     ratchet_id,
-                    instance_source,
+                    (
+                        "crates/nuxie-runtime/src/state_machine/state_machine_instance/"
+                        "tests/scripted_listener_actions.rs"
+                        if ratchet_id
+                        == "state_machine_advance_persistent_dirt_real_facade_required"
+                        else instance_source
+                    ),
                     textwrap.dedent(required),
                     textwrap.dedent(missing),
                 )

@@ -96,12 +96,19 @@ mod view_model_listener_tests {
 }
 
 #[cfg(test)]
+mod scripted_listener_action_tests {
+    include!("state_machine_instance/tests/scripted_listener_actions.rs");
+}
+
+#[cfg(test)]
 use state_machine_instance::RuntimeDeferredCallbackProbe;
 use state_machine_instance::{
-    AudioEventOccurrence, AudioEventSeam, HitComponent, HitDrawable, RuntimeConstructorPhase,
-    RuntimeNestedEventRegistration, RuntimeQueuedFocusEvent, RuntimeQueuedSemanticEvent,
-    RuntimeStateMachineDataBindOccurrence, RuntimeViewModelListenerCellBinding,
-    RuntimeViewModelListenerInstance, RuntimeViewModelListenerSource,
+    AudioEventOccurrence, AudioEventSeam, HitComponent, HitDrawable, HitResult,
+    RuntimeConstructorPhase, RuntimeNestedEventNotifierKind, RuntimeNestedEventRegistration,
+    RuntimePointerInput, RuntimeQueuedFocusEvent, RuntimeQueuedSemanticEvent,
+    RuntimeSemanticManagerSelection, RuntimeStateMachineDataBindOccurrence,
+    RuntimeViewModelListenerCellBinding, RuntimeViewModelListenerInstance,
+    RuntimeViewModelListenerSource, apply_scripted_input_update, listener_types_use_report_queue,
     relink_view_model_listener_cell,
 };
 

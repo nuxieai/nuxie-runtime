@@ -10,7 +10,7 @@ Pinned C++ runtime: `rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 The imported Text topology is now retained per concrete Text occurrence rather
 than reconstructed on every dirty draw. The retained slice owns the imported
-run, style, modifier, variation, feature, paint-container, and font-asset
+run, style, modifier, variation, feature, paint-container handle, and font-asset
 identity topology. Shaping is rerun only at the existing text-shape
 invalidation boundary; its final draw commands, raw paths, clip state, paint
 pools, and backend resources remain in the existing retained draw frame.
@@ -23,6 +23,7 @@ The work was landed in independent rows:
 1. `5fd52314 perf(binary): index imported file assets`
 2. `d9dc3be4 perf(text): retain imported text topology`
 3. `7e993be7 test(silver): promote animated clipping nodes`
+4. `01e3ae4f perf(text): retain style handles across transform dirt`
 
 The third row is a silver-oracle ratchet only: `animated_clipping-nodes` was
 already byte-exact and was promoted from an allowed difference to exact.
@@ -46,9 +47,10 @@ The port mirrors the pinned C++ ownership boundaries as follows:
 | render paths, clip path, paint pools, backend handles | existing `RuntimeCachedTextShapePaints` and `RuntimeTextBackendResources` |
 | file-level asset collection | import-time `RuntimeFile::file_asset_object_ids` dense index |
 
-`StaticTextSlice` and its styles are owned values. Paint containers are cloned
-once when the topology is constructed, while embedded/runtime font byte
-storage is deliberately not copied into the topology.
+`StaticTextSlice` and its styles are owned values. Styles retain stable graph
+indices for their paint containers rather than cloning mutable graph nodes;
+embedded/runtime font byte storage is deliberately not copied into the
+topology.
 
 ## Invalidation fidelity
 
@@ -64,6 +66,10 @@ storage is deliberately not copied into the topology.
   boundaries. Render-opacity-only dirt now follows pinned `Text::update`: it
   updates effective command paint opacity without rebuilding shaped geometry
   or render paths.
+- World-transform dirt updates cached world geometry, clip state, paint-space
+  transforms, and color transforms in place. It does not reshape local text or
+  rebuild local paths. The imported local transform is retained directly so
+  initially singular world transforms remain exact.
 - `text_render_opacity_propagates_without_rebuilding_retained_paths` asserts
   path `Arc` identity and byte-identical path commands across an opacity-only
   update.
@@ -77,22 +83,21 @@ frame.
 
 | Fixture | Baseline ms/frame | Retained ms/frame | Change |
 |---|---:|---:|---:|
-| `script_create_text_runs` | 1.527619 | 1.353785 | -11.38% |
-| `text_vertical_trim_test` | 0.094717 | 0.101325 | +6.98% |
-| `layout_text_match` | 0.171508 | 0.173455 | +1.14% |
+| `script_create_text_runs` | 1.527619 | 1.367418 | -10.49% |
+| `text_vertical_trim_test` | 0.094717 | 0.064614 | -31.78% |
+| `layout_text_match` | 0.171508 | 0.146746 | -14.44% |
 
-The dirty-text fixture shows the intended reduction. The absolute movements
-on the two mostly static fixtures are 0.006608 and 0.001947 ms/frame and fall
-inside the host variance observed in repeated gate runs. The dated methodology,
-digests, and raw JSON links are in
+All three requested fixtures improve; the dirty-text fixture removes 0.160200
+ms/frame and the two mostly static fixtures remove 0.030103 and 0.024763
+ms/frame. The dated methodology, digests, and raw JSON links are in
 [`docs/perf-size-evidence.md`](docs/perf-size-evidence.md) and
 [`docs/evidence/texttop-2026-08-04/`](docs/evidence/texttop-2026-08-04/).
 
 The independent 24-row performance ratchet is green:
 
 - `make perf-gate`: `PASS files=24`
-- `script_create_text_runs`: 1.406114 Rust ms/frame, 271.253x, ceiling 378x
-- `text_vertical_trim_test`: 0.081804 Rust ms/frame, 17.400x, ceiling 25x
+- `script_create_text_runs`: 1.229818 Rust ms/frame, 293.690x, ceiling 378x
+- `text_vertical_trim_test`: 0.069744 Rust ms/frame, 11.500x, ceiling 25x
 
 ## Exactness and focused verification
 
@@ -104,7 +109,8 @@ The independent 24-row performance ratchet is green:
   (2,690,852 bytes); eight exact and eight side-channel segments total.
 - `cargo test -p nuxie-binary`: green (26 library, 13 authoring, 74 C++
   import, six F14, and 108 fixture tests).
-- `cargo test -p nuxie-runtime --lib text::tests`: 32/32 green.
+- `cargo test -p nuxie-runtime --lib`: 976/976 green (including all 32 text
+  tests).
 - The opacity-retention regression test is green.
 - `cargo check -p nuxie-runtime`: green.
 - `make rust-attribution-check`: green.

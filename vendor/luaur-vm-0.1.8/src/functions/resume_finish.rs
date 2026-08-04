@@ -30,8 +30,14 @@ pub unsafe fn resume_finish(l: *mut lua_State, mut status: c_int, oldnCcalls: c_
             }
         }
 
-        (*l).nCcalls = oldnCcalls as u16;
-        (*l).baseCcalls = (*l).nCcalls;
+        if luaur_common::FFlag::LuauCustomYieldablePcalls.get()
+            && luaur_common::FFlag::LuauXpcallFixMessageYieldPath.get()
+        {
+            (*l).baseCcalls = oldnCcalls as u16;
+        } else {
+            (*l).nCcalls = oldnCcalls as u16;
+            (*l).baseCcalls = (*l).nCcalls;
+        }
 
         (*l).status = status as u8;
         status = luaD_rawrunprotected(l, Some(resume_handle), ch as *mut core::ffi::c_void);

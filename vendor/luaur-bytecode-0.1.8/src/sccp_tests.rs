@@ -2,7 +2,7 @@ use crate::enums::bc_block_edge_kind::BcBlockEdgeKind;
 use crate::enums::bc_imm_kind::BcImmKind;
 use crate::enums::bc_vm_const_kind::BcVmConstKind;
 use crate::enums::constness::Constness;
-use crate::functions::fold_constants_sccp::fold_constants;
+use crate::functions::fold_constants::fold_constants;
 use crate::records::bc_block_edge::BcBlockEdge;
 use crate::records::bc_function::BcFunction;
 use crate::records::bc_imm::{BcImm, BcImmValue};
@@ -123,5 +123,55 @@ fn sccp_rewrites_folded_immediate_arithmetic_to_loadn() {
         unsafe { func.imm_op(folded.ops[0]).value.valueInt },
         -3,
         "Luau integer division rounds toward negative infinity"
+    );
+}
+
+fn fold_vm_constant_arithmetic(opcode: LuauOpcode, value: f64) -> LuauOpcode {
+    let mut func = BcFunction::default();
+    let entry = func.add_block();
+    let exit = func.add_block();
+    func.entry_block = entry;
+    func.exit_block = exit;
+    func.blocks[entry.index as usize]
+        .successors
+        .push(BcBlockEdge {
+            kind: BcBlockEdgeKind::Fallthrough,
+            target: exit,
+        });
+
+    let constant = func.add_const(&number(value));
+    let load = func.add_inst();
+    func.instructions[load.index as usize].op = LuauOpcode::LOP_LOADK;
+    func.instructions[load.index as usize].block = entry;
+    func.instructions[load.index as usize].ops.push(constant);
+    let arithmetic = func.add_inst();
+    func.instructions[arithmetic.index as usize].op = opcode;
+    func.instructions[arithmetic.index as usize].block = entry;
+    func.instructions[arithmetic.index as usize].ops.push(
+        crate::records::bc_op::BcOp::bc_op_bc_op_kind_u32(
+            crate::enums::bc_op_kind::BcOpKind::VmReg,
+            0,
+        ),
+    );
+    func.instructions[arithmetic.index as usize].ops.push(load);
+    func.instructions[load.index as usize].uses.push(arithmetic);
+    func.blocks[entry.index as usize]
+        .ops
+        .extend([load, arithmetic]);
+
+    let ops = BcVmConstImpl::new(&mut func);
+    fold_constants(&mut func, &ops);
+    func.instructions[arithmetic.index as usize].op
+}
+
+#[test]
+fn sccp_preserves_upstream_unmatched_zero_and_one_arithmetic_cases() {
+    assert_eq!(
+        fold_vm_constant_arithmetic(LuauOpcode::LOP_DIV, 0.0),
+        LuauOpcode::LOP_DIV
+    );
+    assert_eq!(
+        fold_vm_constant_arithmetic(LuauOpcode::LOP_ADD, 1.0),
+        LuauOpcode::LOP_ADD
     );
 }

@@ -11,14 +11,14 @@ Diff: `6e9b580e..e8ae48c4` (official Luau 0.729 to 0.730)
 | `Parser::parseLocal` | `vendor/luaur-ast-0.1.8/src/methods/parser_parse_local.rs` | C++ only reformats the unchanged `CstStatLocal` construction/assignment. |
 | `BytecodeValidation.h` prologue | No translated header | Include/pragma ordering only; the duplicate C++ `<algorithm>` include has no Rust effect. |
 | `VCONST` in `BytecodeBuilder::validateInstructions` | `vendor/luaur-bytecode-0.1.8/src/methods/bytecode_builder_validate_instructions.rs` | Ternary expression is unchanged; only C++ macro wrapping changes. |
-| `DenseHashTable2::getBucket` | `vendor/luaur-common-0.1.8/src/methods/dense_hash_table2_get_bucket.rs` | C++ adds braces around the same empty-bucket return. |
+| `DenseHashTable2::getBucket` | `vendor/luaur-common-0.1.8/src/methods/dense_hash_table2_dense_hash2.rs` | C++ adds braces around the same empty-bucket return. |
 | `ConstantVisitor::visit(AstStatLocal*)` | `vendor/luaur-compiler-0.1.8/src/records/constant_visitor.rs` | Eligibility condition is only rewrapped. |
 | compiler `foldConstants` | `vendor/luaur-compiler-0.1.8/src/functions/fold_constants.rs` | Aggregate initialization arguments and order are unchanged. |
 | `JitInliner::createInlinedProto` | Untranslated `Inliner/` subsystem | Trailing whitespace removal only. |
 | `lua_getuserdataname` | No existing Rust translation | CRLF normalization only; public API statements are unchanged. |
 | `luaL_checkudatatagged` | No existing Rust translation | Line-ending normalization on the unchanged API call only. |
 | `lmod`, `ceillog2` | `vendor/luaur-vm-0.1.8/src/macros/lmod.rs`; `vendor/luaur-vm-0.1.8/src/macros/ceillog_2.rs` | Whitespace around subtraction only. |
-| `VM_ASSERT_PC` | No separate Rust macro twin | C++ assertion wrapping only; interpreter behavior is unchanged. |
+| `VM_ASSERT_PC` | `vendor/luaur-vm-0.1.8/src/macros/vm_assert_pc.rs` | C++ assertion wrapping only; interpreter behavior is unchanged. |
 | `luau_callhook` | `vendor/luaur-vm-0.1.8/src/functions/luau_callhook.rs` | Assignment wrapping only. |
 | `LOP_DUPCLOSURE` | `vendor/luaur-vm-0.1.8/src/functions/luau_execute.rs` | Conditional allocation wrapping only. |
 

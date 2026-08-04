@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use core::marker::PhantomData;
 
 use crate::records::bc_function::BcFunction;
 use crate::records::bc_op::BcOp;
@@ -10,13 +11,14 @@ use crate::records::vm_const_ops::VmConstOps;
 use luaur_common::records::dense_hash_map2::DenseHashMap2;
 use luaur_common::records::dense_hash_set2::DenseHashSet2;
 
-pub struct Sccp<'a> {
+pub struct Sccp<'func, 'ops> {
     pub(crate) func: *mut BcFunction,
-    pub(crate) impl_: &'a dyn VmConstOps,
+    pub(crate) impl_: &'ops dyn VmConstOps,
     pub(crate) state: Box<SccpState>,
-    pub(crate) interpreter: SccpInterpreter<'a>,
+    pub(crate) interpreter: SccpInterpreter<'ops>,
     pub(crate) block_uses: DenseHashMap2<u32, DenseHashSet2<BcOp, BcOpHash>>,
     pub(crate) flow_worklist: VecDeque<BcOp>,
     pub(crate) flow_worklist_set: DenseHashSet2<BcOp, BcOpHash>,
     pub(crate) ssa_worklist: VecDeque<BcOp>,
+    pub(crate) _func: PhantomData<&'func mut BcFunction>,
 }

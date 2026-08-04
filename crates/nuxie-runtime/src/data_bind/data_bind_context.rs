@@ -9302,11 +9302,14 @@ impl ArtboardInstance {
             }
             child_layout_changed |= !preserve_mounted_layout_assignment && mounted_layout_changed;
         }
-        if !consumed_mounted_layout_hosts.is_empty() {
-            // One parent Yoga frame owns every mounted sibling. Consuming the
-            // global layout write through any one detached context therefore
-            // advances the shared frame fence for the complete mounted set.
-            consumed_mounted_layout_hosts = self.nested_artboard_locals.iter().copied().collect();
+        // Every transferred root remains an independent Yoga node. Advance
+        // only the fence whose same-layer source was actually consumed; a
+        // sibling must still accept the current parent solve and interpolation
+        // target (`nested_artboard_layout.cpp:24-42,53-78`).
+        if std::env::var_os("NUXIE_DEBUG_MOUNTED_LAYOUT").is_some()
+            && !consumed_mounted_layout_hosts.is_empty()
+        {
+            eprintln!("consumed-mounted-layout-hosts={consumed_mounted_layout_hosts:?}");
         }
         self.acknowledge_consumed_mounted_layout_generation(&consumed_mounted_layout_hosts);
         if child_layout_changed {

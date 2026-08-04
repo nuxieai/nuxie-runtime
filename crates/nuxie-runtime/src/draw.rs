@@ -18765,7 +18765,7 @@ impl RuntimeAabb {
 
 /// Port the translation owner used by `NestedArtboardLayout::update`.
 ///
-/// The parent solve supplies size/target bounds, but the mounted child
+/// The parent solve supplies size/target bounds, while the mounted child
 /// Artboard retains the current interpolated Yoga left/top. Start with the
 /// ordinary host transform and replace only the solved parent-local
 /// translation with that retained position, preserving authored linear
@@ -18779,6 +18779,20 @@ fn runtime_nested_artboard_layout_world_transform(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     path_cache: &mut RuntimeArtboardPathState,
 ) -> Mat2D {
+    if std::env::var_os("NUXIE_DEBUG_MOUNTED_LAYOUT").is_some()
+        && let Some(layout) = child
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+    {
+        eprintln!(
+            "mounted-layout local={local_id} name={:?} child_graph={} current={:?} target={:?} solved={:?}",
+            graph.local_objects.get(local_id).and_then(|object| object.name.as_deref()),
+            child.graph_global_id,
+            layout.current_bounds(),
+            layout.target_bounds(),
+            layout_bounds.and_then(|bounds| bounds.get(&local_id)),
+        );
+    }
     let mut world = path_cache.component_world_transform_with_bounds(
         instance,
         graph,

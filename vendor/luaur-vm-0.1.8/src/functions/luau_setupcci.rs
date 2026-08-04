@@ -25,10 +25,6 @@ pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
         (*ci).flags = 0;
         (*ci).nresults = nresults;
 
-        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-            (*clvalue!(fun)).usage += 1;
-        }
-
         (*L).base = fun.add(1);
 
         luaD_checkstackfornewci(L, LUA_MINSTACK);

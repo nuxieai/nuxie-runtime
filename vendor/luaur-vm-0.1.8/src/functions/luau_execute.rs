@@ -1183,10 +1183,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     (*L).base = (*ci).base;
                     (*L).top = argtop;
 
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        (*ccl).usage += 1;
-                    }
-
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
                     // crucially, we can't use ra/argtop after this line
@@ -1242,11 +1238,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // ci is our callinfo, cip is our parent
                         let ci = (*L).ci;
                         let cip = ci.sub(1);
-
-                        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                            LUAU_ASSERT!((*ccl).usage > 0);
-                            (*ccl).usage -= 1;
-                        }
 
                         // copy return values into parent stack (but only up to
                         // nresults!), fill the rest with nil
@@ -1330,10 +1321,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     (*L).base = (*ci).base;
                     (*L).top = argtop;
 
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        (*ccl).usage += 1;
-                    }
-
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
                     // crucially, we can't use ra/argtop after this line
@@ -1395,11 +1382,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         let ci = (*L).ci;
                         let cip = ci.sub(1);
 
-                        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                            LUAU_ASSERT!((*ccl).usage > 0);
-                            (*ccl).usage -= 1;
-                        }
-
                         // copy return values into parent stack (but only up to
                         // nresults!), fill the rest with nil
                         let mut res = (*ci).func;
@@ -1445,12 +1427,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // ci is our callinfo, cip is our parent
                     let ci = (*L).ci;
                     let cip = ci.sub(1);
-
-                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                        let cicl = clvalue!((*ci).func);
-                        LUAU_ASSERT!((*cicl).usage > 0);
-                        (*cicl).usage -= 1;
-                    }
 
                     // note: we assume CALL always puts func+args and expects results
                     // to start at func
@@ -4398,12 +4374,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
 
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
-
                                     (*L).ci = cip;
                                     (*L).base = (*cip).base;
                                     (*L).nCcalls -= 1;
@@ -4501,12 +4471,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     // ci is our callinfo, cip is our parent
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
-
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
 
                                     (*L).ci = cip;
                                     (*L).base = (*cip).base;
@@ -4621,12 +4585,6 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     // ci is our callinfo, cip is our parent
                                     let ci = (*L).ci;
                                     let cip = ci.sub(1);
-
-                                    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-                                        let cicl = clvalue!((*ci).func);
-                                        LUAU_ASSERT!((*cicl).usage > 0);
-                                        (*cicl).usage -= 1;
-                                    }
 
                                     let mut res = (*ci).func;
                                     let mut vali = (*L).top.sub(results as usize);

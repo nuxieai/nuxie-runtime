@@ -19,12 +19,6 @@ pub unsafe fn luau_poscall(L: *mut lua_State, first: StkId) {
     let ci = (*L).ci;
     let cip = ci.sub(1);
 
-    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-        let cicl = clvalue!((*ci).func);
-        LUAU_ASSERT!((*cicl).usage > 0);
-        (*cicl).usage -= 1;
-    }
-
     // copy return values into parent stack (but only up to nresults!), fill
     // the rest with nil
     // TODO: it might be worthwhile to handle the case when nresults==b explicitly?

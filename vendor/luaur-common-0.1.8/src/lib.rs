@@ -49,7 +49,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauBidirectionalInferenceBetterUnionHandling.set(value);
     FFlag::LuauCallFeedback.set(value);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
-    FFlag::LuauClosureUsageCounter.set(value);
     FFlag::LuauCloneTableFix.set(false);
     FFlag::LuauCodeGenCallWrapperEmitInst.set(value);
     FFlag::LuauCodegenBufferInteger.set(value);
@@ -236,8 +235,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCallFeedback);
     // Analysis/src/TypeChecker2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCheckFunctionStatementTypes);
-    // VM/src/lvmexecute.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauClosureUsageCounter);
     // VM/src/lapi.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCloneTableFix);
     // CodeGen/src/EmitInstructionX64.cpp

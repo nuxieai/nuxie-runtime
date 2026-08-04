@@ -33,18 +33,6 @@ pub unsafe fn luaD_pcall(
     if status != 0 {
         let mut errstatus: i32 = status;
 
-        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-            let mut lastci: *mut CallInfo = (*L).ci;
-            let savedci: *mut CallInfo = restoreci!(L, old_ci);
-            while lastci != savedci {
-                let cl =
-                    clvalue!((*lastci).func) as *const _ as *mut crate::records::closure::Closure;
-                LUAU_ASSERT!((*cl).usage > 0);
-                (*cl).usage -= 1;
-                lastci = lastci.offset(-1);
-            }
-        }
-
         // call user-defined error function (used in xpcall)
         if ef != 0 {
             // push error object to stack top if it's not already there

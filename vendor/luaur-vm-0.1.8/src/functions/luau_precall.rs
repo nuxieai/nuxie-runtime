@@ -40,10 +40,6 @@ pub unsafe fn luau_precall(
     (*ci).context.savedpc = core::ptr::null();
     (*ci).flags = 0;
     (*ci).nresults = nresults;
-    if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-        (*ccl).usage += 1;
-    }
-
     (*L).base = (*ci).base;
     // Note: L->top is assigned externally
 
@@ -91,11 +87,6 @@ pub unsafe fn luau_precall(
         // ci is our callinfo, cip is our parent
         let ci = (*L).ci;
         let cip = ci.sub(1);
-
-        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-            LUAU_ASSERT!((*ccl).usage > 0);
-            (*ccl).usage -= 1;
-        }
 
         // copy return values into parent stack (but only up to nresults!),
         // fill the rest with nil

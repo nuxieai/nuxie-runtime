@@ -86,7 +86,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCstAttr.set(false);
     FFlag::LuauCstExprGroup.set(value);
-    FFlag::LuauCstTypeGroup.set(value);
     FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
@@ -314,8 +313,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCstExprGroup);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCstTypeGroup);
     // VM/src/laux.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp

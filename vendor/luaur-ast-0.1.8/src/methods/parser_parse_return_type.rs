@@ -98,41 +98,26 @@ impl Parser {
             if result.size() == 1 {
                 let mut inner: *mut AstType = core::ptr::null_mut();
 
-                if luaur_common::FFlag::LuauCstTypeGroup.get() {
-                    if vararg_annotation.is_null() {
-                        inner = unsafe {
-                            (*self.allocator)
-                                .alloc(AstTypeGroup::new(location, *result.operator_index(0)))
-                                as *mut AstType
-                        };
-                        if self.options.store_cst_data {
-                            self.cst_node_map.try_insert(
-                                inner as *mut crate::records::ast_node::AstNode,
-                                unsafe {
-                                    (*self.allocator).alloc(CstTypeGroup::new(
-                                        if close_paren_found {
-                                            close_parentheses_position
-                                        } else {
-                                            Position::missing()
-                                        },
-                                    ))
-                                }
-                                    as *mut crate::records::cst_node::CstNode,
-                            );
-                        }
-                    } else {
-                        inner = *result.operator_index(0);
+                if vararg_annotation.is_null() {
+                    inner = unsafe {
+                        (*self.allocator)
+                            .alloc(AstTypeGroup::new(location, *result.operator_index(0)))
+                            as *mut AstType
+                    };
+                    if self.options.store_cst_data {
+                        self.cst_node_map.try_insert(
+                            inner as *mut crate::records::ast_node::AstNode,
+                            unsafe {
+                                (*self.allocator).alloc(CstTypeGroup::new(if close_paren_found {
+                                    close_parentheses_position
+                                } else {
+                                    Position::missing()
+                                }))
+                            } as *mut crate::records::cst_node::CstNode,
+                        );
                     }
                 } else {
-                    inner = if vararg_annotation.is_null() {
-                        unsafe {
-                            (*self.allocator)
-                                .alloc(AstTypeGroup::new(location, *result.operator_index(0)))
-                                as *mut AstType
-                        }
-                    } else {
-                        *result.operator_index(0)
-                    };
+                    inner = *result.operator_index(0);
                 }
 
                 let return_type = self.parse_type_suffix(inner, &begin.location);

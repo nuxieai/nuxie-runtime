@@ -145,7 +145,7 @@ impl Parser {
                         params[0],
                     ))
                 };
-                if FFlag::LuauCstTypeGroup.get() && self.options.store_cst_data {
+                if self.options.store_cst_data {
                     let close_pos = if close_args_found {
                         close_args_location.begin
                     } else {

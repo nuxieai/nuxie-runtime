@@ -1,6 +1,8 @@
 pub mod bc_block_append_instruction;
 pub mod bc_function_add_block;
 pub mod bc_function_add_imm;
+pub mod bc_function_add_imm_alt_b;
+pub mod bc_function_add_const;
 pub mod bc_function_add_inst;
 pub mod bc_function_add_phi;
 pub mod bc_function_add_proj;

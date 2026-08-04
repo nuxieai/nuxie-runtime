@@ -74,49 +74,39 @@ impl<'func, 'ops> Sccp<'func, 'ops> {
                     .as_number(&constant.vm_const.expect("VM constant"));
                 if value == 0.0 {
                     if matches!(opcode, LuauOpcode::LOP_ADD | LuauOpcode::LOP_SUB) {
-                        let inst = &mut self.func_mut().instructions[op.index as usize];
-                        inst.op = LuauOpcode::LOP_MOVE;
-                        inst.ops.clear();
-                        inst.ops.push(non_constant);
+                        self.func_mut().instructions[op.index as usize].op = LuauOpcode::LOP_MOVE;
+                        self.func_mut().set_ops(op, &[non_constant]);
                     } else if opcode == LuauOpcode::LOP_MUL {
                         let immediate = self.func_mut().add_imm_value(&BcImm {
                             kind: BcImmKind::Int,
                             value: BcImmValue { valueInt: 0 },
                         });
-                        let inst = &mut self.func_mut().instructions[op.index as usize];
-                        inst.op = LuauOpcode::LOP_LOADN;
-                        inst.ops.clear();
-                        inst.ops.push(immediate);
+                        self.func_mut().instructions[op.index as usize].op = LuauOpcode::LOP_LOADN;
+                        self.func_mut().set_ops(op, &[immediate]);
                     } else if opcode == LuauOpcode::LOP_POW {
                         let immediate = self.func_mut().add_imm_value(&BcImm {
                             kind: BcImmKind::Int,
                             value: BcImmValue { valueInt: 1 },
                         });
-                        let inst = &mut self.func_mut().instructions[op.index as usize];
-                        inst.op = LuauOpcode::LOP_LOADN;
-                        inst.ops.clear();
-                        inst.ops.push(immediate);
+                        self.func_mut().instructions[op.index as usize].op = LuauOpcode::LOP_LOADN;
+                        self.func_mut().set_ops(op, &[immediate]);
                     }
                 } else if value == 1.0 {
                     if matches!(
                         opcode,
                         LuauOpcode::LOP_MUL | LuauOpcode::LOP_POW | LuauOpcode::LOP_DIV
                     ) {
-                        let inst = &mut self.func_mut().instructions[op.index as usize];
-                        inst.op = LuauOpcode::LOP_MOVE;
-                        inst.ops.clear();
-                        inst.ops.push(non_constant);
+                        self.func_mut().instructions[op.index as usize].op = LuauOpcode::LOP_MOVE;
+                        self.func_mut().set_ops(op, &[non_constant]);
                     }
                 } else {
-                    let inst = &mut self.func_mut().instructions[op.index as usize];
-                    inst.op = k_opcode;
-                    inst.ops.clear();
+                    self.func_mut().instructions[op.index as usize].op = k_opcode;
                     if rk {
-                        inst.ops.push(constant.vm_const.expect("VM constant"));
-                        inst.ops.push(non_constant);
+                        self.func_mut()
+                            .set_ops(op, &[constant.vm_const.expect("VM constant"), non_constant]);
                     } else {
-                        inst.ops.push(non_constant);
-                        inst.ops.push(constant.vm_const.expect("VM constant"));
+                        self.func_mut()
+                            .set_ops(op, &[non_constant, constant.vm_const.expect("VM constant")]);
                     }
                 }
                 to_erase.push(previous_constant);

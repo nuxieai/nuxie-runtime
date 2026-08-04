@@ -37,6 +37,56 @@ fn evaluates_numeric_arithmetic_and_deduplicates_results() {
 }
 
 #[test]
+fn evaluates_division_by_zero_with_ieee_results() {
+    let mut func = BcFunction::default();
+    let one = func.add_const(&number(1.0));
+    let zero = func.add_const(&number(0.0));
+    let ops = BcVmConstImpl::new(&mut func);
+
+    let div = ops
+        .evaluate(&one, &zero, LuauOpcode::LOP_DIV)
+        .expect("division by zero is folded");
+    let idiv = ops
+        .evaluate(&one, &zero, LuauOpcode::LOP_IDIV)
+        .expect("floor division by zero is folded");
+
+    assert_eq!(
+        unsafe { func.const_op(div).value.valueNumber },
+        f64::INFINITY
+    );
+    assert_eq!(
+        unsafe { func.const_op(idiv).value.valueNumber },
+        f64::INFINITY
+    );
+    assert_eq!(ops.evaluate(&one, &zero, LuauOpcode::LOP_MOD), None);
+}
+
+#[test]
+fn set_ops_rebuilds_def_use_links() {
+    let mut func = BcFunction::default();
+    let block = func.add_block();
+    let old = func.add_inst();
+    let new = func.add_inst();
+    let user = func.add_inst();
+
+    for op in [old, new, user] {
+        func.instructions[op.index as usize].block = block;
+        func.blocks[block.index as usize].ops.push_back(op);
+    }
+    func.instructions[user.index as usize].ops.push(old);
+    func.instructions[old.index as usize].uses.push(user);
+
+    func.set_ops(user, &[new]);
+
+    assert!(func.instructions[old.index as usize].uses.is_empty());
+    assert_eq!(func.instructions[new.index as usize].uses, vec![user]);
+    assert_eq!(
+        func.instructions[user.index as usize].ops.as_slice(),
+        &[new]
+    );
+}
+
+#[test]
 fn preserves_luau_truthiness_and_optional_comparisons() {
     let mut func = BcFunction::default();
     let nil = func.add_const(&BcVmConst::new());

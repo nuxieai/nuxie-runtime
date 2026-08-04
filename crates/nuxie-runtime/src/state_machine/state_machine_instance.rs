@@ -1,6 +1,5 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
-use crate::semantic_runtime_tree::RuntimeSemanticTree;
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
@@ -26,6 +25,7 @@ use crate::script_asset::RuntimeScriptImplementedMethods;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::semantic_data::{RuntimeSemanticData, SemanticActionType, SemanticNodeHandle};
 use crate::semantic_manager::{SemanticDrainError, SemanticManager, SemanticsDiff};
+use crate::semantic_runtime_tree::RuntimeSemanticTree;
 use crate::view_model::{
     RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext,
 };
@@ -1315,8 +1315,6 @@ pub(crate) struct RuntimeSemanticRoute {
     pub(crate) target_local_id: usize,
     pub(crate) data_local_id: usize,
 }
-
-
 
 pub(crate) fn closest_semantic_node(
     artboard: &ArtboardInstance,

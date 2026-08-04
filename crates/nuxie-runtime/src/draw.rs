@@ -6677,9 +6677,21 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
+            let target_bounds = (x, y, bounds.width, bounds.height);
             let should_propagate_size = layout.should_force_update_layout_bounds()
-                || layout.target_bounds() != (x, y, bounds.width, bounds.height);
-            if layout.retain_bounds(x, y, bounds.width, bounds.height) {
+                || layout.target_bounds() != target_bounds;
+            let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if should_propagate_size {
+                // A layout position change does not rebuild geometry, but it
+                // does move the owner and its descendants. C++ separates the
+                // width/height Path dirt above from this unconditional world
+                // transform invalidation (`layout_component.cpp:1167-1178`).
+                self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                self.layout_revision = self.layout_revision.wrapping_add(1);
+                self.runtime_drawables
+                    .mark_layout_resource_dirty_for_local(local_id);
+            }
+            if size_changed {
                 let layout_handle = self.component_handle(local_id);
                 let affected_text = self
                     .components()
@@ -9356,6 +9368,19 @@ impl RuntimeShapeList {
             Arc::clone(&retained.raw_path),
             retained.has_weighted_context,
         ))
+    }
+
+    /// Snapshot the current clone-owned `Path::rawPath()` for script-facing
+    /// node lookup. The retained owner is populated only after the Path's
+    /// dependency update; callers preserve C++'s pre-update empty path when
+    /// this returns `None` (`src/lua/lua_artboards.cpp:884-900`).
+    pub(crate) fn retained_script_path(&self, path_local: usize) -> Option<Arc<RawPath>> {
+        let owner = self.paths_by_local.get(path_local)?.as_ref()?;
+        owner
+            .retained
+            .borrow()
+            .as_ref()
+            .map(|path| Arc::clone(&path.raw_path))
     }
 
     #[cfg(test)]
@@ -16718,7 +16743,7 @@ fn runtime_text_replay_order(
 }
 
 impl ArtboardInstance {
-    /// Build the live solved box observed by C++ `Node::localBounds`.
+    /// Build the live current-frame box observed by C++ `Node::localBounds`.
     ///
     /// D3 Taffy adapter: Rust's horizontal fill result excludes the layout
     /// component's own padding, while Rive's Yoga-backed
@@ -16731,32 +16756,33 @@ impl ArtboardInstance {
     ) -> Option<(f32, f32, f32, f32)> {
         const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
 
-        if self.component(local_id)?.type_name != "LayoutComponent" {
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
             return None;
         }
-        let layout = self.layout_bounds(local_id)?;
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
         let style_local = self.runtime_layout_component_style_local(local_id)?;
         let mut min_x = 0.0;
-        let mut max_x = layout.width;
+        let mut max_x = width;
         if self.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_FILL {
             let padding_left = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingLeft,
                 RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
-                layout.width,
+                width,
             )?;
             let padding_right = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingRight,
                 RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
-                layout.width,
+                width,
             )?;
             min_x -= padding_left;
             max_x += padding_left + padding_right;
         }
         let bounds = runtime_transformed_rect_bounds(
-            (min_x, 0.0, max_x, layout.height),
-            self.component(local_id)?.transform.world_transform,
+            (min_x, 0.0, max_x, height),
+            component.transform.world_transform,
         );
         Some((bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
     }

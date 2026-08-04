@@ -38,7 +38,6 @@ pub use records::f_value::set_luau_bool_flags;
 /// (Rust statics cannot self-register, so the list is generated explicitly.)
 #[allow(non_snake_case)]
 pub fn set_all_flags(value: bool) {
-    FFlag::DesugaredArrayTypeReferenceIsEmpty.set(value);
     FFlag::FixMathNoisePrecision.set(value);
     FFlag::LuauAddRecursionCounterToNonStrictTypeChecker.set(value);
     FFlag::LuauAllowGlobalDeclarationToBeCalledClass.set(value);
@@ -214,8 +213,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(DebugLuauUserDefinedClasses);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(DebugLuauUserDefinedClassesRuntime);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(DesugaredArrayTypeReferenceIsEmpty);
     // VM/src/lmathlib.cpp
     crate::LUAU_FASTFLAGVARIABLE!(FixMathNoisePrecision);
     // Analysis/src/NonStrictTypeChecker.cpp

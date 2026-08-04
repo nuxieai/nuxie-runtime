@@ -1,6 +1,7 @@
 pub mod ceillog_2;
 pub mod count_uses;
 pub mod find_or_add_const;
+pub mod fold_constants_sccp;
 pub mod from_function_bytecode;
 pub mod get_base_type_string;
 pub mod has_use;

@@ -1,6 +1,9 @@
+use crate::enums::bc_block_edge_kind::BcBlockEdgeKind;
 use crate::enums::bc_imm_kind::BcImmKind;
 use crate::enums::bc_vm_const_kind::BcVmConstKind;
 use crate::enums::constness::Constness;
+use crate::functions::fold_constants_sccp::fold_constants;
+use crate::records::bc_block_edge::BcBlockEdge;
 use crate::records::bc_function::BcFunction;
 use crate::records::bc_imm::{BcImm, BcImmValue};
 use crate::records::bc_vm_const::{BcVmConst, BcVmConstValue};
@@ -66,5 +69,59 @@ fn lattice_meet_keeps_equal_constants_and_drops_disagreement() {
             .merge(&ConstnessLattice::from_kind(Constness::NotAConstant))
             .kind,
         Constness::NotAConstant
+    );
+}
+
+#[test]
+fn sccp_rewrites_folded_immediate_arithmetic_to_loadn() {
+    let mut func = BcFunction::default();
+    let entry = func.add_block();
+    let exit = func.add_block();
+    func.entry_block = entry;
+    func.exit_block = exit;
+    func.blocks[entry.index as usize]
+        .successors
+        .push(BcBlockEdge {
+            kind: BcBlockEdgeKind::Fallthrough,
+            target: exit,
+        });
+
+    let lhs_imm = func.add_imm_value(&BcImm {
+        kind: BcImmKind::Int,
+        value: BcImmValue { valueInt: -7 },
+    });
+    let rhs_imm = func.add_imm_value(&BcImm {
+        kind: BcImmKind::Int,
+        value: BcImmValue { valueInt: 3 },
+    });
+    let lhs = func.add_inst();
+    func.instructions[lhs.index as usize].op = LuauOpcode::LOP_LOADN;
+    func.instructions[lhs.index as usize].block = entry;
+    func.instructions[lhs.index as usize].ops.push(lhs_imm);
+    let rhs = func.add_inst();
+    func.instructions[rhs.index as usize].op = LuauOpcode::LOP_LOADN;
+    func.instructions[rhs.index as usize].block = entry;
+    func.instructions[rhs.index as usize].ops.push(rhs_imm);
+    let idiv = func.add_inst();
+    func.instructions[idiv.index as usize].op = LuauOpcode::LOP_IDIV;
+    func.instructions[idiv.index as usize].block = entry;
+    func.instructions[idiv.index as usize].ops.push(lhs);
+    func.instructions[idiv.index as usize].ops.push(rhs);
+    func.instructions[lhs.index as usize].uses.push(idiv);
+    func.instructions[rhs.index as usize].uses.push(idiv);
+    func.blocks[entry.index as usize]
+        .ops
+        .extend([lhs, rhs, idiv]);
+
+    let ops = BcVmConstImpl::new(&mut func);
+    fold_constants(&mut func, &ops);
+
+    let folded = &func.instructions[idiv.index as usize];
+    assert_eq!(folded.op, LuauOpcode::LOP_LOADN);
+    assert_eq!(folded.ops.len(), 1);
+    assert_eq!(
+        unsafe { func.imm_op(folded.ops[0]).value.valueInt },
+        -3,
+        "Luau integer division rounds toward negative infinity"
     );
 }

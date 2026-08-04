@@ -77,6 +77,17 @@ where
     }
 }
 
+impl<K, H, E> DenseDefault for DenseHashSet2<K, H, E>
+where
+    K: Clone + DenseDefault,
+    H: DenseHasher<K> + Default,
+    E: DenseEq<K> + Default,
+{
+    fn dense_default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, H, E> PartialEq for DenseHashSet2<K, H, E>
 where
     K: Clone + DenseDefault,

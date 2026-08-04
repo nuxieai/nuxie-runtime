@@ -36256,6 +36256,52 @@ mod tests {
         Ok(())
     }
 
+    /// The rejection must be a safe per-operation skip inside a live
+    /// transaction: a caller that catches `RecordSlotCrossesSiblings`, keeps
+    /// editing, and commits must export byte-identically to a transaction
+    /// that never attempted the slot. Guards the pre-scan ordering of
+    /// PR #256 — with validation after the splice, the caught rejection
+    /// leaves a mutated stream that this equality detects.
+    #[test]
+    fn caught_sibling_crossing_rejection_leaves_the_transaction_unmutated() -> Result<()> {
+        let build = |attempt_crossing: bool| -> Result<ExportedDocument> {
+            let FlexScene {
+                mut scene,
+                artboard,
+                child_parent: _,
+                roots,
+            } = flex_parent_scene(
+                FlexSceneShape {
+                    wrapped: false,
+                    flanked: true,
+                },
+                &FLEX_THREE,
+            )?;
+            scene.edit(|tx| {
+                if attempt_crossing {
+                    let rejected = tx
+                        .place_record_block(roots[0], RecordSlot::After(roots[2]))
+                        .expect_err("crossing slot must reject inside the live tx");
+                    assert_eq!(
+                        rejected.diagnostic().reason,
+                        EditReason::RecordSlotCrossesSiblings
+                    );
+                }
+                // The transaction continues past the caught rejection and
+                // commits unrelated valid work.
+                create_flex_child_subtree(tx, Parent::Artboard(artboard), "extra", FLEX_BLUE)?;
+                Ok(())
+            })?;
+            Ok(scene.export_records())
+        };
+        assert_eq!(
+            build(true)?,
+            build(false)?,
+            "a caught crossing rejection must not leak mutation into the committed stream"
+        );
+        Ok(())
+    }
+
     /// The editor's mount flow builds a replacement subtree at artboard level
     /// and reparents it into the retained parent at an exact sibling slot;
     /// `reparent` alone must land the record block at the cold position.

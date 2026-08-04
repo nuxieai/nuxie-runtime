@@ -2,7 +2,7 @@
 macro_rules! vm_protect {
     ($L:expr, $pc:expr, $base:expr, $x:expr) => {
         unsafe {
-            (*(*$L).ci).savedpc = $pc;
+            (*(*$L).ci).context.savedpc = $pc;
             {
                 $x;
             };

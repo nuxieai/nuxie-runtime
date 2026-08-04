@@ -68,16 +68,30 @@ fn shape_text_glyphs_for_style_with_variations(
 }
 
 /// Direct update for the embedded `TextVariationHelper` dependency owner.
-///
-/// Rust shaping reads the live axis/feature values when the already-dirtied
-/// Text rebuilds, so there is no separate variable-font cache to refresh.
-/// Crucially, C++ `TextVariationHelper::update` only calls
-/// `TextStyle::updateVariableFont`; it does not publish fresh TextShape dirt.
-/// The helper-to-Text dependency has already propagated the source dirt before
-/// this update node runs (`text_variation_helper.cpp:7-17`).
+/// C++ refreshes the style's cached variable font on every helper update and
+/// never dirties the owning Text from here (`text_variation_helper.cpp:14-17`,
+/// `text_style.cpp:98-126`); the reshape request is `TextStyle::onDirty`
+/// placing TextShape dirt on both the Text and this helper
+/// (`text_style.cpp:27-43`). Rust shapes against live axis values instead of a
+/// cached font object, so the refresh only has observable work for that
+/// TextShape request. A transform- or opacity-only wave reaching this helper
+/// through the artboard dependency must leave the retained Text occurrence
+/// alone: escalating it re-runs `Text::buildRenderStyles`, whose
+/// `clearRenderStyles` replaces the opacity-bucket render paths that pinned
+/// C++ keeps retained across such waves.
 pub(crate) fn update_text_variation_helper(
-    _instance: &mut ArtboardInstance,
-    _text: crate::components::ComponentHandle,
-    _dirt: crate::components::ComponentDirt,
+    instance: &mut ArtboardInstance,
+    text: crate::components::ComponentHandle,
+    dirt: crate::components::ComponentDirt,
 ) {
+    if (dirt & crate::components::ComponentDirt::TEXT_SHAPE).is_empty() {
+        return;
+    }
+    if let Some(text_local) = instance.component_local_id(text) {
+        instance.add_dirt(
+            text_local,
+            crate::components::ComponentDirt::TEXT_SHAPE,
+            false,
+        );
+    }
 }

@@ -587,6 +587,55 @@ def nested_event_owner_exports(source: str) -> set[tuple[str, str]]:
     return set(rust_nested_event_owner_analysis(source)[2])
 
 
+def state_machine_instance_logical_owner_paths(
+    repo_root: pathlib.Path,
+) -> tuple[pathlib.Path, ...]:
+    """Return the hub and each literal local child module in declaration order."""
+
+    hub = repo_root / NESTED_EVENT_OWNER_MODULE
+    if not hub.is_file():
+        return ()
+    source = hub.read_text(encoding="utf-8", errors="replace")
+    children = []
+    child_dir = hub.with_suffix("")
+    for match in re.finditer(
+        r"(?m)^\s*mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*$",
+        source,
+    ):
+        child = child_dir / f"{match.group(1)}.rs"
+        if child.is_file():
+            children.append(child)
+    return (hub, *children)
+
+
+def state_machine_instance_logical_owner_source(
+    repo_root: pathlib.Path,
+) -> str:
+    """Compose declared owner modules for file-structural ratchets."""
+
+    return "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in state_machine_instance_logical_owner_paths(repo_root)
+    )
+
+
+def state_machine_instance_declared_test_paths(
+    repo_root: pathlib.Path,
+) -> tuple[pathlib.Path, ...]:
+    """Return literal test-body includes declared by the compatibility hub."""
+
+    hub = repo_root / NESTED_EVENT_OWNER_MODULE
+    if not hub.is_file():
+        return ()
+    source = hub.read_text(encoding="utf-8", errors="replace")
+    paths = []
+    for match in re.finditer(r'include!\(\s*"([^"]+)"\s*\)', source):
+        path = hub.parent / match.group(1)
+        if path.is_file() and "tests" in path.relative_to(hub.parent).parts:
+            paths.append(path)
+    return tuple(paths)
+
+
 def nested_event_owner_boundary_hits(
     source: str,
     kind: str,
@@ -2126,9 +2175,21 @@ def check(
         if path.is_file()
     )
     owner_export_origins: dict[tuple[str, str], str] = {}
-    owner_path = repo_root / NESTED_EVENT_OWNER_MODULE
-    if owner_path.is_file():
-        owner_relative = NESTED_EVENT_OWNER_MODULE.as_posix()
+    logical_owner_paths = state_machine_instance_logical_owner_paths(repo_root)
+    logical_owner_relatives = {
+        pathlib.PurePosixPath(path.relative_to(repo_root))
+        for path in logical_owner_paths
+    }
+    logical_owner_relatives.update(
+        pathlib.PurePosixPath(path.relative_to(repo_root))
+        for path in state_machine_instance_declared_test_paths(repo_root)
+    )
+    logical_owner_relatives.add(
+        pathlib.PurePosixPath("crates/nuxie-runtime/src/artboard/tests.rs")
+    )
+    logical_owner_relatives.add(NESTED_EVENT_OWNER_MODULE)
+    for owner_path in logical_owner_paths:
+        owner_relative = owner_path.relative_to(repo_root).as_posix()
         for exported in nested_event_owner_exports(
             owner_path.read_text(encoding="utf-8", errors="replace")
         ):
@@ -2184,7 +2245,12 @@ def check(
             for path in sorted(repo_root.glob(glob)):
                 if not path.is_file():
                     continue
-                source = path.read_text(encoding="utf-8", errors="replace")
+                relative_path = pathlib.PurePosixPath(path.relative_to(repo_root))
+                source = (
+                    state_machine_instance_logical_owner_source(repo_root)
+                    if relative_path == NESTED_EVENT_OWNER_MODULE
+                    else path.read_text(encoding="utf-8", errors="replace")
+                )
                 if ratchet_id == UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET:
                     found_offsets = unbound_scripted_constructor_hits(source)
                 elif ratchet_id == SEMANTIC_ORDINAL_PROJECTION_RATCHET:
@@ -2193,10 +2259,8 @@ def check(
                         resolver_seam_exists=semantic_resolver_seam_exists,
                     )
                 elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
-                    if (
-                        pathlib.PurePosixPath(path.relative_to(repo_root))
-                        == NESTED_EVENT_OWNER_MODULE
-                    ):
+                    relative_path = pathlib.PurePosixPath(path.relative_to(repo_root))
+                    if relative_path in logical_owner_relatives:
                         continue
                     detector_kind = NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[
                         ratchet_id

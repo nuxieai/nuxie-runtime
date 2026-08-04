@@ -1,0 +1,93 @@
+[package]
+name = "luaur-rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Safe, ergonomic, mlua-style API for luaur (pure-Rust Luau)."
+keywords = ["luau", "lua", "mlua", "scripting", "embedding"]
+categories = ["api-bindings", "development-tools::ffi", "game-development"]
+
+[features]
+# Rust <-> Lua value (de)serialization via serde, mirroring mlua's `serde`
+# feature. Off by default so the base build/API is unchanged.
+serde = ["dep:serde"]
+# The `#[derive(UserData)]` / `#[derive(FromLua)]` procedural derive macros,
+# mirroring mlua's `macros` feature. Off by default so the base build/API is
+# byte-for-byte unchanged.
+macros = ["dep:luaur-rt-derive"]
+# Rust `async`/`await` support, mirroring mlua's `async` feature: Rust async
+# functions callable from Lua (`Lua::create_async_function` /
+# `Function::wrap_async`) and async chunk/function execution
+# (`Function::call_async`, `Chunk::eval_async`/`exec_async`,
+# `Thread::into_async` / `AsyncThread`). Off by default so the base build/API +
+# `Error` enum are byte-for-byte unchanged. Executor-agnostic: the caller drives
+# the returned futures on their own runtime.
+async = ["dep:futures-util"]
+# Static type-checking of Luau source against the host surface, using luaur's
+# port of Luau's type checker (`luaur-analysis`). Adds `Lua::check` /
+# `Lua::add_definitions` / `Chunk::check`, the free `check` /
+# `check_with_definitions` functions, the structured `TypeDiagnostic` type, and
+# the `Error::TypeError` variant. Off by default so the base build/API + `Error`
+# enum are byte-for-byte unchanged.
+typecheck = ["dep:luaur-analysis", "dep:luaur-config"]
+# Makes `Lua` and all of its handles (`Table`/`Function`/`String`/
+# `AnyUserData`/`Thread`/`Buffer`/`Value`/`RegistryKey`) `Send`, mirroring
+# mlua's `send` feature: the whole VM can be **moved** to another thread (the
+# user guarantees serialized access). It does NOT make the VM thread-safe and
+# does NOT make it `Sync`. Off by default so the base build/API is byte-for-byte
+# unchanged (`XRc` = `Rc`, `MaybeSend`/`MaybeSync` are empty markers).
+#
+# `send` composes with `async`: the async bridge's per-VM waker + implicit-thread
+# ownership map live in a process-wide table keyed by the VM's global-state
+# pointer (a `Mutex` under `send`, a thread-local otherwise) so they travel with
+# the VM across thread moves, and the async callback/future boxes carry the same
+# `MaybeSend` (`+ Send`) bound as the synchronous callbacks. See
+# `tests/mlua_send_async.rs`.
+send = []
+
+[dependencies]
+luaur-common = { path = "../luaur-common", version = "0.1.8" }
+# Optional: only pulled in by the `macros` feature. Provides the
+# `#[derive(UserData)]` / `#[derive(FromLua)]` proc-macros, re-exported below.
+luaur-rt-derive = { path = "../luaur-rt-derive", version = "0.1.8", optional = true }
+luaur-compiler = { path = "../luaur-compiler", version = "0.1.8" }
+luaur-vm = { path = "../luaur-vm", version = "0.1.8" }
+# Needed by `Chunk` to drive the compiler with default parse/encode options,
+# mirroring the umbrella `luaur` crate's `compile` helper.
+luaur-ast = { path = "../luaur-ast", version = "0.1.8" }
+luaur-bytecode = { path = "../luaur-bytecode", version = "0.1.8" }
+# Optional: only pulled in by the `typecheck` feature. Provides Luau's static
+# type checker (the `Frontend` + builtins) used by `Lua::check` / `Chunk::check`
+# and the free `check` / `check_with_definitions` helpers.
+luaur-analysis = { path = "../luaur-analysis", version = "0.1.8", optional = true }
+# Optional: only pulled in by the `typecheck` feature. Provides the `Config`
+# the type-checker's config resolver returns.
+luaur-config = { path = "../luaur-config", version = "0.1.8", optional = true }
+
+# Optional: only pulled in by the `serde` feature. We implement the
+# Serializer/Deserializer directly over luaur-rt's `Value`/`Table`, so plain
+# `serde` is all that is needed (no erased-serde / serde-value).
+serde = { version = "1.0", optional = true, default-features = false, features = ["std"] }
+
+# Optional: only pulled in by the `async` feature. Provides the `Stream` trait
+# (implemented by `AsyncThread`) and small future combinators used by the
+# bridge. We keep it lightweight (default features, no executor).
+futures-util = { version = "0.3", optional = true }
+
+[dev-dependencies]
+# The ported mlua serde tests assert round-trips against `serde_json` and use
+# `bstr::BString` / `#[derive(Serialize, Deserialize)]`, exactly like mlua's
+# `tests/serde.rs`. These are test-only.
+serde = { version = "1.0", features = ["std", "derive"] }
+# `arbitrary_precision` makes `serde_json::Number` serialize as the
+# `$serde_json::private::Number` struct, which the `test_arbitrary_precision`
+# port exercises (matching mlua's dev-dependency).
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+bstr = { version = "1", features = ["serde"] }
+# The ported mlua async tests (`tests/mlua_async.rs`, gated `feature = "async"`)
+# use tokio as the executor and `futures-util` stream combinators, matching
+# mlua's async dev-dependencies.
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+futures-util = { version = "0.3" }

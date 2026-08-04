@@ -14,6 +14,7 @@ use crate::records::lua_debug::lua_Debug;
 use crate::type_aliases::lua_hook::LuaHook;
 use crate::type_aliases::lua_state::lua_State;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
+use luaur_common::FFlag;
 
 /// C++ `LUAU_NOINLINE void luau_callhook(lua_State* L, lua_Hook hook, void* userdata)`.
 #[allow(non_snake_case)]
@@ -38,15 +39,18 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
     // continue execution from the same point, this is called with savedpc at
     // the *current* instruction. this needs to be called before
     // luaD_checkstack in case it fails to reallocate stack
-    let oldsavedpc = (*(*L).ci).savedpc;
+    let oldsavedpc = (*(*L).ci).context.savedpc;
 
-    if !(*(*L).ci).savedpc.is_null() {
-        let code_end = {
+    if !(*(*L).ci).context.savedpc.is_null() {
+        let p = if FFlag::LuauCIProto.get() {
+            (*(*L).ci).p
+        } else {
             let l = &(*cl).inner.l;
-            (*l.p).code.add((*l.p).sizecode as usize)
+            l.p
         };
-        if (*(*L).ci).savedpc != code_end {
-            (*(*L).ci).savedpc = (*(*L).ci).savedpc.add(1);
+        let code_end = (*p).code.add((*p).sizecode as usize);
+        if (*(*L).ci).context.savedpc != code_end {
+            (*(*L).ci).context.savedpc = (*(*L).ci).context.savedpc.add(1);
         }
     }
 
@@ -58,11 +62,13 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
     ar.currentline = if (*cl).isC != 0 {
         -1
     } else {
-        let p = {
+        let p = if FFlag::LuauCIProto.get() {
+            (*(*L).ci).p
+        } else {
             let l = &(*cl).inner.l;
             l.p
         };
-        luaG_getline(p, pcRel!((*(*L).ci).savedpc, p))
+        luaG_getline(p, pcRel!((*(*L).ci).context.savedpc, p))
     };
     ar.userdata = userdata;
 
@@ -70,7 +76,7 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
         hook(L, &mut ar);
     }
 
-    (*(*L).ci).savedpc = oldsavedpc;
+    (*(*L).ci).context.savedpc = oldsavedpc;
 
     (*(*L).ci).top = restorestack!(L, ci_top);
     (*L).top = restorestack!(L, top);

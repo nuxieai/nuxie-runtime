@@ -2120,16 +2120,8 @@ fn parse_cpp_member_initializers(header: &Path) -> BTreeMap<String, String> {
         };
         if !matches!(
             type_name,
-            "bool"
-                | "float"
-                | "int"
-                | "int16_t"
-                | "int32_t"
-                | "std::string"
-                | "uint8_t"
-                | "uint16_t"
-                | "uint32_t"
-                | "uint64_t"
+            "bool" | "float" | "int" | "int16_t" | "int32_t" | "std::string" | "uint8_t"
+                | "uint16_t" | "uint32_t" | "uint64_t"
         ) {
             continue;
         }

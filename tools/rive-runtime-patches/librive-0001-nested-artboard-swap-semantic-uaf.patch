@@ -1,0 +1,90 @@
+Local oracle fix: use-after-free in semantic reconciliation after a
+view-model artboard swap.
+
+Provenance:
+  - Applies to pinned upstream rive-runtime 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+    (port-manifest.toml upstream_ref). No upstream commit exists for this fix;
+    it is a local patch authored 2026-08-03 against the pinned oracle.
+  - Symptom: rive_golden_runner{,_scripted} --side-channel flakily crashes
+    (EXC_BAD_ACCESS) on corpus entries replace_view_model,
+    data_binding_artboards_test, and stateful_source_switch — every asset that
+    swaps artboards via ViewModelInstanceArtboard (type keys 598/599).
+    Faulting stack: SemanticProvider::rootTransformAABB <-
+    SemanticManager::reconcileBoundsForSubtree <- SemanticManager::drainDiff.
+  - Root cause: NestedArtboard::updateArtboard destroys the outgoing
+    ArtboardInstance (unique_ptr replacement in NestedArtboard::nest) while
+    the shared SemanticManager still holds its semantic subtree. The
+    boundary SemanticNode keeps a raw Artboard* (SemanticNode::
+    boundaryArtboard) and SemanticData nodes keep raw Core* owners into the
+    freed instance; the next drainDiff() reconciles bounds through freed
+    memory. updateArtboard already detaches the focus tree
+    (cleanupFocusTree) for the analogous reason but never detached the
+    semantic tree.
+  - Fix: mirror the focus-tree treatment. Detach the outgoing instance's
+    semantic subtree (cleanupSemanticTree) before teardown, and register the
+    swapped-in instance's subtree with the host tree's shared manager after
+    mount, resolving the parent the same way Artboard::buildSemanticTree's
+    nested-artboard propagation does.
+  - Corpus-output neutral: none of the affected assets contain SemanticData
+    objects (no semantic type keys in corpus.toml features), and boundary
+    nodes are skipped during flattening, so detach/re-register changes no
+    flattened snapshot and emits no diff records. Verified byte-identical
+    side-channel recordings against the pre-fix non-crashing baseline.
+
+diff --git a/src/nested_artboard.cpp b/src/nested_artboard.cpp
+index 15fcbe6..c901f8b 100644
+--- a/src/nested_artboard.cpp
++++ b/src/nested_artboard.cpp
+@@ -12,6 +12,8 @@
+ #include "rive/input/focusable.hpp"
+ #include "rive/nested_animation.hpp"
+ #include "rive/animation/nested_state_machine.hpp"
++#include "rive/semantic/semantic_data.hpp"
++#include "rive/semantic/semantic_manager.hpp"
+ #include "rive/data_bind/data_bind_path.hpp"
+ #include "rive/clip_result.hpp"
+ #include "rive/text/text_input.hpp"
+@@ -259,6 +261,16 @@ void NestedArtboard::updateArtboard(
+     {
+         outgoing->cleanupFocusTree();
+     }
++    // Detach the outgoing instance's semantic subtree BEFORE teardown for the
++    // same reason: the shared SemanticManager retains raw back-pointers into
++    // the instance (the boundary node's Artboard*, SemanticData core owners).
++    // Destroying the instance while those nodes stay registered leaves the
++    // manager reconciling bounds through freed memory on the next
++    // drainDiff() (use-after-free in reconcileBoundsForSubtree).
++    if (outgoing != nullptr)
++    {
++        outgoing->cleanupSemanticTree();
++    }
+     clearDataContext();
+     clearNestedAnimations();
+     m_boundNestedStateMachine = nullptr;
+@@ -294,6 +306,26 @@ void NestedArtboard::updateArtboard(
+         }
+         referencedArtboard(artboardInstance.release());
+ 
++        // Register the swapped-in instance's semantic subtree with the host
++        // tree's shared SemanticManager (the counterpart of the
++        // cleanupSemanticTree() above). Without this, semantics inside the
++        // incoming artboard would stay unregistered until the next full
++        // buildSemanticTree() pass. Parent resolution mirrors
++        // Artboard::buildSemanticTree's nested-artboard propagation: closest
++        // enclosing semantic node, else the host artboard's boundary node.
++        auto* hostArtboard = this->artboard();
++        auto* semanticManager =
++            hostArtboard != nullptr ? hostArtboard->semanticManager() : nullptr;
++        if (semanticManager != nullptr && m_Instance != nullptr)
++        {
++            auto parentNode = SemanticData::findClosestSemanticNode(this);
++            if (parentNode == nullptr)
++            {
++                parentNode = hostArtboard->semanticBoundaryNode();
++            }
++            m_Instance->buildSemanticTree(semanticManager, parentNode);
++        }
++
+         if (isStateful())
+         {
+             auto statefulChild = findStatefulChildVmi();

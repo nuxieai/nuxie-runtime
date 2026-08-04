@@ -25,7 +25,11 @@ members = [
     "tools/silver-corpus",
 ]
 exclude = [
+    "vendor/luaur-ast-0.1.8",
+    "vendor/luaur-bytecode-0.1.8",
     "vendor/luaur-common-0.1.8",
+    "vendor/luaur-compiler-0.1.8",
+    "vendor/luaur-rt-0.1.8",
     "vendor/luaur-vm-0.1.8",
     "vendor/wgpu-30.0.0",
     "vendor/wgpu-core-30.0.0",
@@ -43,9 +47,16 @@ license = "MIT"
 repository = "https://github.com/nuxieai/nuxie-runtime"
 
 [patch.crates-io]
-# luaur 0.1.8 only selected its Mach clock implementation for macOS. The
-# local packages widen that existing implementation to every Apple platform.
+# In-house luaur fork (docs/luau-fork.md): every luaur crate in the dependency
+# graph resolves to the vendored fork baseline (crates.io 0.1.8 packages,
+# upstream commit f0eac7f7, Luau 0.724-era). luaur-common and luaur-vm carry
+# the pre-existing Apple Mach-clock patch (their NUXIE_PATCH.md files); the
+# other four are byte-identical to crates.io (NUXIE_PROVENANCE.md files).
+luaur-ast = { path = "vendor/luaur-ast-0.1.8" }
+luaur-bytecode = { path = "vendor/luaur-bytecode-0.1.8" }
 luaur-common = { path = "vendor/luaur-common-0.1.8" }
+luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
+luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
 # Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).

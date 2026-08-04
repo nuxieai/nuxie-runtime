@@ -2,6 +2,7 @@ use crate::macros::clvalue::clvalue;
 use crate::macros::lua_callinfo_opyield::LUA_CALLINFO_OPYIELD;
 use crate::macros::setobj_2_s::setobj_2_s;
 use crate::macros::ttisnil::ttisnil;
+use crate::macros::vm_assert_pc::VM_ASSERT_PC;
 use crate::macros::vm_reg::VM_REG;
 use crate::type_aliases::instruction::Instruction;
 use crate::type_aliases::lua_state::lua_State;
@@ -21,7 +22,7 @@ pub unsafe fn luau_finishop(L: *mut lua_State) {
     let cl = clvalue!((*(*L).ci).func);
     let _base = (*L).base;
 
-    let pc_ptr = ci.savedpc;
+    let pc_ptr = ci.context.savedpc;
     let insn: Instruction = *pc_ptr.offset(-1); // the interrupted instruction
 
     let mut pc = pc_ptr;
@@ -39,14 +40,7 @@ pub unsafe fn luau_finishop(L: *mut lua_State) {
                 pc = pc.offset(LUAU_INSN_D(insn) as isize);
             }
 
-            let lcl =
-                core::ptr::addr_of!((*cl).inner.l).cast::<crate::records::closure::LClosure>();
-            let proto = (*lcl).p;
-            LUAU_ASSERT!(
-                (pc as usize).wrapping_sub((*proto).code as usize)
-                    / core::mem::size_of::<Instruction>()
-                    < ((*proto).sizecode as usize)
-            );
+            VM_ASSERT_PC!(pc, L, cl);
         }
         _ => {
             LUAU_ASSERT!(false);
@@ -54,5 +48,5 @@ pub unsafe fn luau_finishop(L: *mut lua_State) {
         }
     }
 
-    (*(*L).ci).savedpc = pc;
+    (*(*L).ci).context.savedpc = pc;
 }

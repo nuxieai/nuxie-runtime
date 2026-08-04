@@ -16,11 +16,10 @@ pub unsafe fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int) {
     api_check!(L, nresults >= LUA_MULTRET);
     api_checknelems!(L, nargs + 1);
     api_check!(L, (*L).status == 0);
-    api_check!(
-        L,
-        nresults == LUA_MULTRET
-            || (*(*L).ci).top.offset_from((*L).top) >= (nresults - nargs) as isize
-    );
+
+    if nresults > nargs + 1 {
+        crate::ensure_stack!(L, nresults - (nargs + 1));
+    }
 
     let func: StkId = (*L).top.sub((nargs + 1) as usize);
     lua_d_call(L, func, nresults);

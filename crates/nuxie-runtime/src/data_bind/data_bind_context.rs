@@ -9156,7 +9156,6 @@ impl ArtboardInstance {
 
         let mut changed = false;
         let mut child_layout_changed = false;
-        let mut consumed_mounted_layout_hosts = BTreeSet::new();
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         for (host_local_id, mut updates) in updates {
             // A parent ViewModel selection must be applied before values below
@@ -9197,18 +9196,16 @@ impl ArtboardInstance {
                 };
                 let Some(context) = context else { continue };
                 let mut context = context.borrow_mut();
-                let consumed_same_layer_global = authored_dirty_locals
-                    .contains(&update.source_local_id)
+                if authored_dirty_locals.contains(&update.source_local_id)
                     && nested.stateful_view_model_instance_local != Some(update.instance_local_id)
                     && matches!(
                         &update.value,
                         RuntimeStatefulViewModelValueUpdate::Value(
                             RuntimeDataBindGraphValue::Number(value)
                         ) if update.authored_number_value.is_some_and(|authored| authored != *value)
-                    );
-                if consumed_same_layer_global {
+                    )
+                {
                     preserve_mounted_layout_assignment = true;
-                    nested.child.suppress_mounted_component_list_layout_updates = true;
                 }
                 // This host-first pass is the detached-copy equivalent of a
                 // keyed/property write on C++'s shared authored VMI pointer.
@@ -9287,20 +9284,8 @@ impl ArtboardInstance {
             // hug-sized NestedArtboardLayout from the child.
             changed |= nested.child.advance_artboard_data_binds();
             changed |= nested.child.update_pass();
-            let mounted_layout_changed = nested.child.layout_revision() != child_layout_revision;
-            if preserve_mounted_layout_assignment {
-                consumed_mounted_layout_hosts.insert(host_local_id);
-            }
-            if preserve_mounted_layout_assignment && mounted_layout_changed {
-                // `ConditionComparisonSelf` consumed this authored global
-                // write in the source layer. C++'s mounted Artboard shares
-                // the parent-owned Yoga node, so the detached child update
-                // must not make that same value look like a new host layout
-                // generation (`transition_viewmodel_condition.cpp:49-60`;
-                // `artboard.cpp:1245-1253`).
-                nested.acknowledge_consumed_child_layout_revision();
-            }
-            child_layout_changed |= !preserve_mounted_layout_assignment && mounted_layout_changed;
+            child_layout_changed |= !preserve_mounted_layout_assignment
+                && nested.child.layout_revision() != child_layout_revision;
         }
         // Every transferred root remains an independent Yoga node. Advance
         // only the fence whose same-layer source was actually consumed; a

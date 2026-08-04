@@ -102,12 +102,12 @@ citations = [
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7327-7520",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12094-12479",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12669-12860",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12935-12988",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115-13152",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7327-7520",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7672-7721",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:6953-7510",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7540-7700",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7700-7800",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7836-7880",
 ]
 closure = "Closed by W121 aggregate trace acceptance: event_apply_batch is 30 / 11 C++/Rust and state_machine_advance is 30 / 11 C++/Rust, so both sides preserve the required one-batch-per-advance relationship across the independently accepted owner-boundary adaptation. FL-C4 owns ListenerAlignTarget, FL-C5 owns transition search and displaced lookups, and the cited Rust batching/bubbling/audio/error/settlement chain owns the intentional call-topology difference."
 
@@ -142,7 +142,7 @@ citations = [
   "rust:crates/nuxie-runtime/src/artboard.rs:6733-6735",
   "rust:crates/nuxie-runtime/src/artboard.rs:7290-7440",
   "rust:crates/nuxie-runtime/src/joystick.rs:149-170",
-  "rust:crates/nuxie-runtime/src/artboard.rs:15206-15252",
+  "rust:crates/nuxie-runtime/src/artboard/tests.rs:3107-3153",
   "rust:crates/nuxie-runtime/src/nested_artboard_layout.rs:3-20",
   "rust:crates/nuxie-runtime/src/artboard.rs:6750-7125",
   "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650",
@@ -1577,7 +1577,7 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_advance_persistent_dirt_real_facade_required"
-globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs"]
 pattern = "fn\\s+fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes\\b[\\s\\S]{0,800}install_persistent_dirt_component_fixture\\(\\)[\\s\\S]{0,800}\\.advance_and_apply\\(&mut\\s+artboard,\\s*0\\.25\\)[\\s\\S]{0,800}persistent_dirt_component_fixture_receipt\\(\\)[\\s\\S]{0,800}\\(true,\\s*6,\\s*5,\\s*true\\)"
 min_occurrences = 1
 max_occurrences = 1
@@ -1741,81 +1741,123 @@ guarded_name = "StateMachine"
 site_hash = "5f408047103ace3dbe7872f67e0c2967ba72ed6574320bb5e6c8abdee96e126c"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "f183f8c5d3a176b03e2081f168f44f9ef29935b4740d954f9b7aca83ab4d0e18"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_outer_update"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::advance_remap"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "6d16b73a78420b2110c3daad2c90207fb10a531f3c54527375a0c3ca2dd4968b"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_contexts"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_data_context"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::install_external_focus_domain"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::reset_outer_state_machine_changed_state_counts"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "ae85371fd1d2cb5824cc2ffcd06534074a43b14227bc0867ee1b25b8fec425b2"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_remap_time"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "329439c54592a0340c016944a2be82aa38c08d8638669ac8afb38fc5f7a5c0a2"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_simple_animation_is_playing"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "b978880bb8b0242722b6dc996e43727f0a0b41c9826720cb39ca6de365d3e518"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboardInstance::set_simple_animation_speed"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "06532ad249f1a0f342eac02c83836163b2c67362581080c60d873a3b2cfca9d8"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::install_external_focus_domain"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_contexts"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_data_context"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::reset_outer_state_machine_changed_state_counts"
+guarded_name = "StateMachine"
+site_hash = "ae85371fd1d2cb5824cc2ffcd06534074a43b14227bc0867ee1b25b8fec425b2"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_outer_update"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::set_animation_mix"
+guarded_name = "StateMachine"
+site_hash = "dd4247c38a3c05c49e5a3a941029a1c755305b584292d36d7ef70279998bdbc3"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/nested_artboard.rs"
@@ -1891,14 +1933,14 @@ guarded_name = "advance_artboard_frame_components_with"
 site_hash = "1ce0516fffd56caa0d29f04aef22fdbc1f94cbb519b5912f3ac658640ec64a56"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "audio"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
 site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "audio"
 anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
 guarded_name = "dispatch_nested_events_to_animation_owners"
@@ -2044,9 +2086,9 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_keyframe_machine_teardown_before_layers_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)[\\s\\S]{0,800}fn\\s+teardown_layers\\b"
-min_occurrences = 1
-max_occurrences = 1
+pattern = "(?:fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)|impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}self\\.teardown_bind_occurrences\\(\\);[\\s\\S]{0,200}self\\.teardown_layers\\(\\);)"
+min_occurrences = 2
+max_occurrences = 2
 
 [[ratchet]]
 id = "state_machine_keyframe_cpp_initialize_converter_order_required"
@@ -2072,7 +2114,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_focus_semantic_typed_queues_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*listener_index:\\s*usize,\\s*is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*listener_index:\\s*Option<usize>,\\s*action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*(?:pub\\(super\\)\\s+)?listener_index:\\s*usize,\\s*(?:pub\\(super\\)\\s+)?is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*(?:pub\\(super\\)\\s+)?listener_index:\\s*Option<usize>,\\s*(?:pub\\(super\\)\\s+)?action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
 min_occurrences = 1
 max_occurrences = 1
 

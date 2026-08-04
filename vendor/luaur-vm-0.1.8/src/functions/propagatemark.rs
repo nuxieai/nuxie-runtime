@@ -40,6 +40,7 @@ use crate::type_aliases::t_value::TValue;
 use core::ffi::c_int;
 use core::mem::size_of;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
+use luaur_common::DFFlag;
 
 // traverse one gray object, turning it to black.
 // Returns `quantity' traversed.
@@ -56,9 +57,16 @@ pub(crate) unsafe fn propagatemark(g: *mut global_State) -> usize {
                 // table is weak?
                 black2gray!(o); // keep it gray
             }
+            let hash_size = if DFFlag::LuauGcTableStepFix.get()
+                && (*h).node == crate::macros::dummynode::luaH_dummynode_ptr as *mut LuaNode
+            {
+                0
+            } else {
+                sizenode!(h) as usize
+            };
             size_of::<LuaTable>()
                 + size_of::<TValue>() * (*h).sizearray as usize
-                + size_of::<LuaNode>() * sizenode!(h) as usize
+                + size_of::<LuaNode>() * hash_size
         }
         t if t == lua_Type::LUA_TFUNCTION as i32 => {
             let cl = gco2cl!(o) as *const _ as *mut Closure;

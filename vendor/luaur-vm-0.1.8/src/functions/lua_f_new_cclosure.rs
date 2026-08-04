@@ -19,7 +19,6 @@ pub unsafe fn luaF_newCclosure(l: *mut lua_State, nelems: c_int, e: *mut LuaTabl
     (*c).nupvalues = nelems as u8;
     (*c).stacksize = LUA_MINSTACK as u8;
     (*c).preload = 0;
-    (*c).usage = 0;
     (*c).gclist = core::ptr::null_mut();
     let cc = core::ptr::addr_of_mut!((*c).inner.c) as *mut CClosure;
     (*cc).f = None;

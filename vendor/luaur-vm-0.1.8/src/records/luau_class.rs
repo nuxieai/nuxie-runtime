@@ -20,7 +20,7 @@ pub struct LuauClass {
 
     pub instancemetatable: *mut crate::records::lua_table::LuaTable,
 
-    pub numberofinstancemembers: core::ffi::c_int,
+    pub numberofinstancemembers: u32,
 
-    pub numberofallmembers: core::ffi::c_int,
+    pub numberofallmembers: u32,
 }

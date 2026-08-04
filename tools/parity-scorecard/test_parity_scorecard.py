@@ -392,27 +392,29 @@ class ParityScorecardCliTests(unittest.TestCase):
             completed.stderr,
         )
 
-    def test_check_labels_the_current_thin_perf_result_as_non_blocking(self):
+    def test_check_labels_the_current_perf_result_as_a_blocking_ratchet(self):
         repo, _ = self.create_green_repo()
-        (repo / "target" / "perf-compare.json").write_text(
-            json.dumps(
-                {
-                    "schema": "rive-perf-compare-json-v1",
-                    "meta": {"git_sha": "test-sha"},
-                    "aggregate": {"entries": 6, "rust_over_cpp": 0.9},
-                }
-            )
-            + "\n"
-        )
+        self.write_perf_gate(repo, ratio=2.0, ceiling=3)
 
         completed = self.run_check(repo)
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn(
-            "runtime ratio 0.900 over 6/20 files (non-blocking; #OR-9)",
+            "runtime advance+draw worst 2.000 over 20/20 files "
+            "(blocking per-file ratchet; target <= 1.000)",
             completed.stdout,
         )
         self.assertIn("| 5 Performance & size | PARTIAL |", completed.stdout)
+
+    def test_check_rejects_a_blocking_perf_ceiling_failure(self):
+        repo, _ = self.create_green_repo()
+        self.write_perf_gate(repo, ratio=3.01, ceiling=3)
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("blocking perf ceilings exceeded", completed.stderr)
+        self.assertIn("| 5 Performance & size | RED |", completed.stdout)
 
     def test_check_reports_recorded_size_evidence_within_budget_as_green(self):
         repo, evidence = self.create_green_repo()
@@ -493,8 +495,9 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("floor.runtime_exact_segments must be at least 670", completed.stderr)
         self.assertIn("floor.renderer_entries must be at least 1468", completed.stderr)
 
-    def test_green_floor_evidence_prints_all_five_tiers_and_writes_json(self):
+    def test_check_rejects_missing_blocking_perf_evidence(self):
         repo, _ = self.create_green_repo(sdk_rows=("A1", "A2"))
+        (repo / "target" / "perf-gate.json").unlink()
         json_output = repo / "target" / "parity-scorecard.json"
 
         completed = subprocess.run(
@@ -513,7 +516,8 @@ class ParityScorecardCliTests(unittest.TestCase):
             capture_output=True,
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("blocking runtime ratio ratchet evidence is missing", completed.stderr)
         for tier_name in (
             "Frame parity",
             "Interaction parity",
@@ -540,10 +544,13 @@ class ParityScorecardCliTests(unittest.TestCase):
             "#OR-4",
             "#OR-5",
             "#OR-7",
-            "#OR-9",
             "#B-3",
         ):
             self.assertIn(f"not built ({ticket}", completed.stdout)
+        self.assertIn(
+            "blocking runtime ratio ratchet not built (V10 evidence unavailable)",
+            completed.stdout,
+        )
         self.assertIn(
             "WebGPU-only browser support gate green; legacy backend retired (#HD-3)",
             completed.stdout,
@@ -554,7 +561,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertEqual(report["schema"], "nuxie-parity-scorecard-v1")
         self.assertEqual(report["source_sha"], "test-sha")
         self.assertEqual(report["tiers_green"], 0)
-        self.assertTrue(report["evidence_valid"])
+        self.assertFalse(report["evidence_valid"])
         self.assertEqual([tier["id"] for tier in report["tiers"]], [1, 2, 3, 4, 5])
         self.assertEqual(
             [gate["state"] for gate in report["regression_floor"]],
@@ -643,7 +650,48 @@ class ParityScorecardCliTests(unittest.TestCase):
             "browser-webgpu-only",
             "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0\n",
         )
+        self.write_perf_gate(repo, ratio=1.0, ceiling=2)
         return repo, evidence
+
+    def write_perf_gate(self, repo, ratio, ceiling):
+        manifest_files = []
+        report_files = []
+        for index in range(20):
+            file_id = f"perf-{index}"
+            manifest_files.append(
+                f'[[file]]\nid = "{file_id}"\nceiling = {ceiling}\n'
+            )
+            report_files.append(
+                {
+                    "id": file_id,
+                    "runners": {
+                        "cpp": {
+                            "phases": {"advance_draw": {"median_ms": 100.0}}
+                        },
+                        "rust": {
+                            "phases": {"advance_draw": {"median_ms": ratio * 100}}
+                        },
+                    },
+                }
+            )
+        (repo / "perf-corpus.toml").write_text("\n".join(manifest_files))
+        (repo / "target" / "perf-gate.json").write_text(
+            json.dumps(
+                {
+                    "schema": "rive-perf-compare-json-v1",
+                    "metric": "runner_hot_loop_ms",
+                    "iterations": 5,
+                    "warmups": 0,
+                    "benchmark_repeat": 1,
+                    "benchmark_frames": 100,
+                    "benchmark_hz": 60,
+                    "rust_execute_scripts": True,
+                    "meta": {"git_sha": "test-sha"},
+                    "files": report_files,
+                }
+            )
+            + "\n"
+        )
 
     @staticmethod
     def write_runtime_manifest(path, entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):

@@ -1044,16 +1044,13 @@ impl ArtboardInstance {
                 let mut child_ancestors = nested_ancestors.to_vec();
                 child_ancestors.push(child_graph.global_id);
                 let host_world = match command.object_kind {
-                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => {
-                        runtime_nested_artboard_layout_world_transform(
+                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => path_cache
+                        .component_world_transform_with_bounds(
                             self,
                             graph,
                             host_local_id,
-                            nested.child.as_ref(),
                             layout_bounds,
-                            path_cache,
-                        )
-                    }
+                        ),
                     RuntimeDrawableDispatchObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -4110,8 +4107,8 @@ impl ArtboardInstance {
             factory,
             max_retained_decoded_image_bytes,
         )?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
-        self.seed_runtime_shape_paint_opacity_tree();
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(true);
         Ok(())
     }
 
@@ -4142,7 +4139,8 @@ impl ArtboardInstance {
 
     fn seed_runtime_shape_paint_opacity_tree(&self) {
         let graph = self.runtime_graph();
-        for owner_ref in &self.runtime_shapes.paint_owner_refs {
+        let pending_owners = self.runtime_shapes.pending_backend_paints.borrow().clone();
+        for owner_ref in pending_owners {
             let Some(owner) = self
                 .runtime_shapes
                 .get(owner_ref.shape_local)
@@ -4204,7 +4202,8 @@ impl ArtboardInstance {
             factory,
             max_retained_decoded_image_bytes,
         )?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(false);
         Ok(())
     }
 
@@ -4241,7 +4240,8 @@ impl ArtboardInstance {
             max_retained_decoded_image_bytes,
         );
         resources.install_root_cache(cache)?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(false);
         Ok(())
     }
 
@@ -4270,7 +4270,6 @@ impl ArtboardInstance {
             max_retained_decoded_image_bytes,
         )?;
         let mut resources = self.render_resources.borrow_mut();
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
         if resources.needs_paint_preparation(self, graph) {
             self.prepare_artboard_occurrence_resources(
                 runtime,
@@ -4518,7 +4517,7 @@ impl ArtboardInstance {
                 let clip_left = -self.origin_x * self.width;
                 let clip_top = -self.origin_y * self.height;
                 let fill_rule = RenderFillRule::Clockwise;
-                let key = path_cache.retained_render_path_key(self, graph, 0, fill_rule);
+                let key = path_cache.retained_render_path_key(self, graph, fill_rule);
                 let clip = path_cache.artboard_clip_path(key, factory, || {
                     runtime_rect_commands(
                         clip_left,
@@ -5663,21 +5662,14 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
-        let container_locals = graph
-            .shape_paint_containers
-            .iter()
-            .filter(|container| {
-                crate::shapes::shape_paint_container::family(container.type_name).is_some()
-                    && crate::shapes::shape_paint_container::opacity_owner_local(
-                        graph,
-                        container.local_id,
-                    ) == opacity_owner_local
-            })
-            .map(|container| container.local_id)
-            .collect::<Vec<_>>();
-        for container_local in container_locals {
+        let container_indices = self
+            .runtime_shapes
+            .opacity_paint_container_indices(opacity_owner_local)
+            .to_vec();
+        for container_index in container_indices {
             self.propagate_runtime_shape_paint_container_opacity(
-                container_local,
+                container_index,
+                opacity_owner_local,
                 graph,
                 layout_bounds,
             );
@@ -5686,39 +5678,37 @@ impl ArtboardInstance {
 
     fn propagate_runtime_shape_paint_container_opacity(
         &mut self,
-        container_local: usize,
+        container_index: usize,
+        opacity_owner_local: usize,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
-        let Some(container) = graph
-            .shape_paint_containers
-            .iter()
-            .find(|container| container.local_id == container_local)
-        else {
+        let Some(container) = graph.shape_paint_containers.get(container_index) else {
             return;
         };
         let Some(family) = crate::shapes::shape_paint_container::family(container.type_name) else {
             return;
         };
-        let opacity_local =
-            crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
-        let render_opacity = self.component(opacity_local).map_or(1.0, |component| {
-            let render_opacity = if component.transform.render_opacity == 0.0
-                && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
-            {
-                // Parent-before-child dependency order has not yet reached
-                // this retained nested occurrence. C++ observes the authored
-                // opacity when Shape propagates to its paint mutators.
-                self.authored_transform(opacity_local).opacity
-            } else {
-                component.transform.render_opacity
-            };
-            if component.type_name == "Artboard" {
-                render_opacity * self.host_opacity
-            } else {
-                render_opacity
-            }
-        });
+        let container_local = container.local_id;
+        let render_opacity = self
+            .component(opacity_owner_local)
+            .map_or(1.0, |component| {
+                let render_opacity = if component.transform.render_opacity == 0.0
+                    && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
+                {
+                    // Parent-before-child dependency order has not yet reached
+                    // this retained nested occurrence. C++ observes the authored
+                    // opacity when Shape propagates to its paint mutators.
+                    self.authored_transform(opacity_owner_local).opacity
+                } else {
+                    component.transform.render_opacity
+                };
+                if component.type_name == "Artboard" {
+                    render_opacity * self.host_opacity
+                } else {
+                    render_opacity
+                }
+            });
         let Some(shape) = self.runtime_shapes.get(container_local) else {
             return;
         };
@@ -6744,15 +6734,6 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
-            if size_changed {
-                // Pinned LayoutComponent::updateLayoutBounds publishes Path
-                // before propagateSize/markWorldTransformDirty whenever the
-                // retained width or height changes. That ordering lets a
-                // dependent ClippingShape rebuild from the resized source
-                // path in the same dependency traversal
-                // (`layout_component.cpp:1153-1178`).
-                self.add_dirt(local_id, ComponentDirt::PATH, false);
-            }
             if should_propagate_size {
                 // A layout position change does not rebuild geometry, but it
                 // does move the owner and its descendants. C++ separates the
@@ -8821,6 +8802,11 @@ pub(crate) struct RuntimeShapeList {
     by_local: Vec<Option<RuntimeShape>>,
     pub(crate) paths_by_local: Vec<Option<RuntimePathOwner>>,
     shape_by_path_local: Vec<Option<usize>>,
+    /// C++ `ShapePaintContainer` occurrences are reached directly from their
+    /// concrete Transform/Artboard opacity owner. Retain the equivalent
+    /// ordered container indices on this occurrence so RenderOpacity dirt
+    /// never rediscovers ownership by scanning the immutable graph.
+    opacity_paint_containers_by_owner_local: Vec<Vec<usize>>,
     paint_owners_by_component_local: Vec<Vec<RuntimeShapePaintOwnerRef>>,
     effect_owners_by_component_local: Vec<Vec<RuntimeShapeEffectOwnerRef>>,
     /// Clone-owned ShapePaint occurrences in import order. C++
@@ -8843,6 +8829,9 @@ impl Clone for RuntimeShapeList {
             by_local,
             paths_by_local: self.paths_by_local.clone(),
             shape_by_path_local: vec![None; self.shape_by_path_local.len()],
+            opacity_paint_containers_by_owner_local: self
+                .opacity_paint_containers_by_owner_local
+                .clone(),
             paint_owners_by_component_local: self.paint_owners_by_component_local.clone(),
             effect_owners_by_component_local: self.effect_owners_by_component_local.clone(),
             paint_owner_refs: paint_owner_refs.clone(),
@@ -9333,11 +9322,35 @@ impl RuntimeShapeList {
             shapes.slot_mut(composer.shape_local);
         }
         shapes.retain_paint_containers(&graph.shape_paint_containers);
+        shapes.retain_opacity_owner_index(graph);
         shapes
             .pending_backend_paints
             .get_mut()
             .clone_from(&shapes.paint_owner_refs);
         shapes
+    }
+
+    fn retain_opacity_owner_index(&mut self, graph: &ArtboardGraph) {
+        for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
+            if crate::shapes::shape_paint_container::family(container.type_name).is_none() {
+                continue;
+            }
+            let owner_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                graph,
+                container.local_id,
+            );
+            if self.opacity_paint_containers_by_owner_local.len() <= owner_local {
+                self.opacity_paint_containers_by_owner_local
+                    .resize_with(owner_local + 1, Vec::new);
+            }
+            self.opacity_paint_containers_by_owner_local[owner_local].push(container_index);
+        }
+    }
+
+    fn opacity_paint_container_indices(&self, owner_local: usize) -> &[usize] {
+        self.opacity_paint_containers_by_owner_local
+            .get(owner_local)
+            .map_or(&[], Vec::as_slice)
     }
 
     fn retain_paint_containers(&mut self, containers: &[ShapePaintContainerNode]) {
@@ -14046,6 +14059,12 @@ pub(crate) struct RuntimeArtboardResourceBundle {
 pub(crate) struct RuntimeOccurrenceRenderResources {
     parent_backend_context_id: Option<u64>,
     initialized: bool,
+    /// `None` means the late backend has not attached this occurrence tree;
+    /// `Some(epoch)` records the exact mounted structure already attached.
+    /// The nested option preserves graph-less synthetic occurrences, whose
+    /// stable epoch is itself `None`.
+    image_tree_structure_epoch: Option<Option<u64>>,
+    opacity_tree_structure_epoch: Option<Option<u64>>,
     paints: RuntimeRenderPaints,
     paint_configurations: RuntimePaintOwnerSlots,
     preparation_without_nested_layout: RuntimeOptionalPaintPreparation,
@@ -15378,17 +15397,10 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let bounds = if instance.layout_node_owned_by_host {
-                // `Artboard::takeLayoutData()` disables the mounted child's
-                // own layout solve. Draw reads the last parent-owned Yoga
-                // snapshot instead of recomputing the transferred subtree
-                // from live child data binds (`artboard.cpp:1245-1253,
-                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
-                instance.layout_constraint_bounds.as_deref().cloned()
-            } else {
-                TaffyRuntimeLayoutEngine
-                    .compute_layout(instance, graph, runtime)
-                    .map(|layout| layout.bounds)
+            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
+            let bounds = match layout {
+                Some(layout) => Some(layout.bounds),
+                None => None,
             };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
@@ -15500,13 +15512,12 @@ impl RuntimeArtboardPathState {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
-        local_id: usize,
         fill_rule: RenderFillRule,
     ) -> RuntimeRetainedRenderPathCacheKey {
         RuntimeRetainedRenderPathCacheKey {
             graph_global_id: graph.global_id,
             path_epoch: instance
-                .component(local_id)
+                .component(0)
                 .map_or(0, |component| component.path_revision()),
             world_epoch: 0,
             fill_rule,
@@ -17645,16 +17656,8 @@ fn runtime_draw_live_layout_family(
             instance.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
             && !paths.clip.is_empty()
         {
-            // LayoutComponent owns an independent retained clip path. Key it
-            // by that concrete owner's Path revision; the artboard-root
-            // revision only governs Artboard::m_clipPath and left resized
-            // layout clips backed by stale renderer resources.
-            let key = path_cache.retained_render_path_key(
-                instance,
-                graph,
-                layout_local,
-                RenderFillRule::Clockwise,
-            );
+            let key =
+                path_cache.retained_render_path_key(instance, graph, RenderFillRule::Clockwise);
             let path = runtime_cached_retained_render_path(
                 &mut backend.clip_path,
                 key,
@@ -17723,13 +17726,11 @@ fn runtime_draw_live_nested_artboard(
         .context("mounted nested artboard graph is missing")?;
 
     let host_world = match drawable.type_name {
-        "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
+        "NestedArtboardLayout" => path_cache.component_world_transform_with_bounds(
             instance,
             graph,
             host_local,
-            child,
             layout_bounds,
-            path_cache,
         ),
         "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
             instance,
@@ -19001,18 +19002,9 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
     // root Yoga node to the parent. The resulting width/height are therefore
     // the child's own layout constraints, not merely a draw-time frame.
-    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
-        // The hosted root is still the child's LayoutComponent owner. Refresh
-        // its retained constraint frame before the same-pass child update so
-        // Artboard::updateRenderPath sees the newly assigned row size, as the
-        // pinned transferred Yoga node does (`artboard_component_list.cpp:
-        // 220-260`; `artboard.cpp:1138-1157`).
-        child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
+    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    changed |= !child.layout_constraint_bounds_enabled;
+    child.enable_layout_constraint_bounds();
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }
@@ -26383,6 +26375,103 @@ mod tests {
     }
 
     #[test]
+    fn transform_only_wave_through_text_variation_helper_retains_text_render_paths() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_variation_modifier.riv");
+        let runtime = read_runtime_file(bytes).expect("text variation fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text variation graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let axis_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextStyleAxis")
+            .expect("fixture has TextStyleAxis")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+
+        let mut cold_factory = nuxie_render_api::RecordingFactory::new();
+        let mut cold_renderer = cold_factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut cold_factory,
+                &mut cold_renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("initial retained text draws");
+        let cold = cold_factory.canonical_recording().stream().to_string();
+
+        // A position-only layout move publishes recursive WORLD_TRANSFORM dirt
+        // from the moved owner (`layout_component.cpp:1167-1178`). When that
+        // wave reaches the embedded TextVariationHelper through its artboard
+        // dependency, C++ only refreshes the style's cached variable font
+        // (`text_variation_helper.cpp:14-17`); the Text must not reshape and
+        // `Text::buildRenderStyles` must not replace the retained opacity
+        // render paths. Round-trip the wave twice so the drawn state is
+        // byte-identical to the cold frame.
+        instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
+        instance.update_pass();
+        instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
+        instance.update_pass();
+
+        let mut fresh_factory = nuxie_render_api::RecordingFactory::new();
+        let mut fresh_renderer = fresh_factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut fresh_factory,
+                &mut fresh_renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("restored transform state redraws");
+        assert!(
+            !fresh_factory.stream().contains("makeEmptyRenderPath"),
+            "a transform-only wave must not replace retained text render paths: {}",
+            fresh_factory.stream(),
+        );
+        // Hosts that record each frame with a fresh factory (the nuxie-dev
+        // editor parity harness) rely on this identity: a mid-frame path
+        // re-creation restarts the new factory's id space and collides with
+        // the retained objects created by the previous factory, so the
+        // canonical recording only stays a cold-frame fixpoint when the
+        // retained paths survive the wave.
+        assert_eq!(
+            fresh_factory.canonical_recording().stream(),
+            cold,
+            "a fresh-factory redraw of restored state must replay the cold recording identity",
+        );
+
+        // The authored axis-change chain still reshapes: the TextStyleAxis
+        // setter dirties its TextStyle, whose onDirty marks the owning Text
+        // and the helper (`text_style_axis.cpp:27-30`, `text_style.cpp:27-43`).
+        assert!(instance.set_double_property(
+            axis_local,
+            property_key_for_name("TextStyleAxis", "axisValue").expect("TextStyleAxis.axisValue"),
+            900.0,
+        ));
+        assert!(
+            instance
+                .debug_component_dirt(text_local)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::TEXT_SHAPE)),
+            "an axis value change must still reshape the owning Text",
+        );
+    }
+
+    #[test]
     fn setter_dirt_between_update_and_draw_renders_the_stale_retained_text_frame() {
         let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
         let runtime = read_runtime_file(bytes).expect("text style fixture imports");
@@ -26546,6 +26635,37 @@ mod tests {
             7,
             "Artboard/Shape own geometry and all text families share the common ShapePaint backend"
         );
+    }
+
+    #[test]
+    fn retained_opacity_owner_index_matches_static_owner_resolution() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let owners = RuntimeShapeList::from_graph(graph);
+
+        for component in &graph.components {
+            let expected = graph
+                .shape_paint_containers
+                .iter()
+                .enumerate()
+                .filter(|(_, container)| {
+                    crate::shapes::shape_paint_container::family(container.type_name).is_some()
+                        && crate::shapes::shape_paint_container::opacity_owner_local(
+                            graph,
+                            container.local_id,
+                        ) == component.local_id
+                })
+                .map(|(container_index, _)| container_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                owners.opacity_paint_container_indices(component.local_id),
+                expected,
+                "opacity owner {} must retain its exact ordered paint-container occurrences",
+                component.local_id,
+            );
+        }
     }
 
     #[test]
@@ -29469,6 +29589,105 @@ mod tests {
         assert!(
             nslicer_cache.needs_paint_preparation(&nslicer_instance, nslicer_graph),
             "authored NSlicer mesh work must never be hidden by the paint fast path"
+        );
+    }
+
+    #[test]
+    fn renderer_initialization_does_not_reseed_a_clean_occurrence_tree() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let file = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("text style graphs build");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+
+        instance
+            .initialize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("first renderer initialization succeeds");
+        let owner_ref = *instance
+            .runtime_shapes
+            .paint_owner_refs
+            .first()
+            .expect("fixture retains a paint owner");
+        let owner = instance
+            .runtime_shapes
+            .get(owner_ref.shape_local)
+            .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            .expect("retained owner resolves");
+        owner.render_opacity.set(0.25);
+
+        instance
+            .initialize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("repeated renderer initialization succeeds");
+        assert_eq!(
+            owner.render_opacity.get(),
+            0.25,
+            "a clean initialized occurrence must not re-enter opacity-tree seeding",
+        );
+    }
+
+    #[test]
+    fn explicit_paint_preparation_leaves_gradient_occurrence_clean_for_draw() {
+        let bytes = synthetic_painted_layout_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic gradient riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic gradient graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+
+        instance
+            .synchronize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("explicit paint preparation succeeds");
+
+        assert!(
+            !instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "draw must not repeat synchronization for the just-prepared occurrence",
+        );
+
+        let clean_cache_epoch = instance.cache_epoch;
+        instance.cache_epoch = clean_cache_epoch.wrapping_add(1);
+        assert!(
+            instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "new occurrence dirt must invalidate the retained clean boundary",
+        );
+        instance.cache_epoch = clean_cache_epoch;
+
+        instance.runtime_shapes.backend_context_id.set(None);
+        assert!(
+            instance
+                .render_resources
+                .borrow()
+                .needs_paint_preparation(&instance, graph),
+            "a stale owner backend must force realization even when epochs are unchanged",
         );
     }
 

@@ -42,4 +42,10 @@ pub(crate) unsafe fn traverseproto(g: *mut global_State, f: *mut Proto) {
             stringmark!(varname);
         }
     }
+    if !(*f).optimized.is_null() {
+        markobject!(g, (*f).optimized);
+    }
+    if !(*f).deoptimized.is_null() {
+        markobject!(g, (*f).deoptimized);
+    }
 }

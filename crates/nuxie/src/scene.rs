@@ -197,6 +197,22 @@ pub enum ChildIndex {
     At(usize),
 }
 
+/// Explicit destination for one authored subtree's record block within its
+/// artboard's record stream.
+///
+/// Record order owns serialized/export interleaving and paint order between
+/// subtrees; the native child lists own layout. A record slot names a
+/// position relative to another authored object's complete record block, so a
+/// caller that knows the cold stream shape can restore it without touching
+/// any native child order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordSlot {
+    /// Immediately before the first record of the object's subtree block.
+    Before(ObjectId),
+    /// Immediately after the last record of the object's subtree block.
+    After(ObjectId),
+}
+
 /// Stable identities involved in a failed edit operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditId {
@@ -229,6 +245,7 @@ pub enum EditReason {
     CycleDetected,
     ChildIndexOutOfRange,
     ChildSetMismatch,
+    RecordSlotCrossesSiblings,
     InvalidParent {
         parent: Option<NodeKind>,
         child: NodeKind,
@@ -3716,6 +3733,147 @@ impl Hierarchy<'_> {
         let ordered_nodes = groups.into_iter().flatten().collect::<Vec<_>>();
         let insertion_index = insertion_index.unwrap_or(remaining.len());
         remaining.splice(insertion_index..insertion_index, ordered_nodes);
+        artboard.records = remaining;
+        Ok(artboard_id)
+    }
+
+    fn place_record_block(
+        &mut self,
+        object: ObjectId,
+        slot: RecordSlot,
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        let indexed = self
+            .indexed_object(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        if indexed.visual_kind().is_none() {
+            return Err(self.abort(vec![EditId::Object(object)], EditReason::NonVisualObject));
+        }
+        let (artboard_id, artboard_index) = (indexed.artboard, indexed.artboard_index);
+        let anchor = match slot {
+            RecordSlot::Before(anchor) | RecordSlot::After(anchor) => anchor,
+        };
+        let anchor_indexed = self
+            .indexed_object(anchor)
+            .ok_or_else(|| self.abort(vec![EditId::Object(anchor)], EditReason::UnknownObject))?;
+        // Any authored record works as an anchor. A satellite anchor is load-
+        // bearing: `After(layout style)` names the first-child slot directly
+        // after a parent's own records, which no visual anchor can express
+        // because `After(parent)` spans the parent's complete subtree.
+        if anchor_indexed.artboard != artboard_id {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(anchor)],
+                EditReason::CrossArtboardReference {
+                    source: artboard_id,
+                    target: anchor_indexed.artboard,
+                },
+            ));
+        }
+        let block_ids = self.subtree_ids(object);
+        if block_ids.contains(&anchor) {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(anchor)],
+                EditReason::CycleDetected,
+            ));
+        }
+        let anchor_ids = self.subtree_ids(anchor);
+        let parent = self
+            .definitions
+            .artboards
+            .get(artboard_index)
+            .and_then(|artboard| artboard.records.get(indexed.record_index))
+            .and_then(|record| record.spec.visual().map(|(parent, _)| parent))
+            .ok_or_else(|| {
+                self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
+            })?;
+
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Object(object)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        // One non-mutating scan derives everything the validity check needs:
+        // the destination in remaining-record coordinates, the current
+        // sibling order, and where the moved root would land among its
+        // siblings. The record stream is the single source of per-parent
+        // child order, so a slot that carries the block across one of its own
+        // siblings would silently reorder the parent's children; reject it
+        // BEFORE mutating so a caller can treat the rejection as a skip and
+        // keep issuing operations in the same transaction.
+        let mut remaining_len = 0usize;
+        let mut anchor_first = None;
+        let mut anchor_last = None;
+        let mut previous_siblings = Vec::new();
+        let mut remaining_sibling_positions = Vec::new();
+        for record in &artboard.records {
+            let is_sibling = matches!(
+                &record.spec,
+                RecordSpec::Visual {
+                    parent: record_parent,
+                    ..
+                } if *record_parent == parent
+            );
+            if is_sibling {
+                previous_siblings.push(record.id);
+            }
+            if block_ids.contains(&record.id) {
+                continue;
+            }
+            if anchor_ids.contains(&record.id) {
+                anchor_first.get_or_insert(remaining_len);
+                anchor_last = Some(remaining_len);
+            }
+            if is_sibling {
+                remaining_sibling_positions.push((record.id, remaining_len));
+            }
+            remaining_len = remaining_len.saturating_add(1);
+        }
+        let insertion_index = match slot {
+            RecordSlot::Before(_) => anchor_first,
+            RecordSlot::After(_) => anchor_last.map(|last| last.saturating_add(1)),
+        }
+        .ok_or_else(|| {
+            EditAbort::new(
+                self.operation_index,
+                vec![EditId::Object(anchor)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        let mut next_siblings = Vec::with_capacity(previous_siblings.len());
+        let mut moved_inserted = false;
+        for (sibling, position) in &remaining_sibling_positions {
+            if !moved_inserted && *position >= insertion_index {
+                next_siblings.push(object);
+                moved_inserted = true;
+            }
+            next_siblings.push(*sibling);
+        }
+        if !moved_inserted {
+            next_siblings.push(object);
+        }
+        if next_siblings != previous_siblings {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(anchor)],
+                EditReason::RecordSlotCrossesSiblings,
+            ));
+        }
+
+        let records = std::mem::take(&mut artboard.records);
+        let mut block = Vec::with_capacity(block_ids.len());
+        let mut remaining = Vec::with_capacity(records.len().saturating_sub(block_ids.len()));
+        for record in records {
+            if block_ids.contains(&record.id) {
+                block.push(record);
+            } else {
+                remaining.push(record);
+            }
+        }
+        remaining.splice(insertion_index..insertion_index, block);
         artboard.records = remaining;
         Ok(artboard_id)
     }
@@ -10054,6 +10212,40 @@ impl SceneTx<'_> {
             operation_index,
         }
         .set_child_order(parent, ordered_children)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard_id, operation_index);
+        Ok(())
+    }
+
+    /// Move one authored subtree's complete record block — the object, its
+    /// owned descendants, and their satellite records — to an explicit slot
+    /// in the artboard record stream, relative to another authored object's
+    /// block.
+    ///
+    /// No native child list changes: every parent keeps its exact child
+    /// order, so layout is untouched. Record order owns export interleaving
+    /// and paint order between subtrees, which is what moves. A slot that
+    /// would carry the block across one of the object's own siblings is
+    /// rejected with [`EditReason::RecordSlotCrossesSiblings`], because the
+    /// record stream is also the source of per-parent child order; use
+    /// [`SceneTx::reorder`] to change sibling order.
+    ///
+    /// Selective rematerialization is the motivating caller: a replacement
+    /// subtree is created at the record tail, and the editor re-slots its
+    /// block to the removed block's cold position — named through a retained
+    /// neighbor — without remounting or disturbing any retained record.
+    pub fn place_record_block(
+        &mut self,
+        object: ObjectId,
+        slot: RecordSlot,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_id = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .place_record_block(object, slot)?;
         self.refresh_definition_index();
         self.touched_artboards.insert(artboard_id, operation_index);
         Ok(())
@@ -22238,6 +22430,29 @@ fn lower_artboard(
             })?;
     }
 
+    // The artboard's optional root LayoutComponentStyle takes the final style
+    // local ids, after visuals and every owned style. C++ resolves the
+    // inherited Artboard styleId from the complete object table (no adjacency
+    // contract), so tail placement keeps every existing local id stable and
+    // keeps `layout_style: None` exports byte-identical to the pre-seam
+    // format.
+    let mut artboard_layout_style_local_id = None;
+    let mut artboard_layout_style_interpolator_local_id = None;
+    if let Some(style) = artboard.spec.layout_style.as_ref() {
+        let mut next_local = next_component_list_style_local_id;
+        artboard_layout_style_local_id = Some(next_local);
+        next_local = next_local.checked_add(1).ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.artboard(artboard.id, fallback_operation_index),
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        if style.interpolator.is_some() {
+            artboard_layout_style_interpolator_local_id = Some(next_local);
+        }
+    }
+
     let mut local_ids = BTreeMap::new();
     let mut objects = BTreeMap::new();
     let mut scroll_constraint_locals = BTreeMap::new();
@@ -22968,6 +23183,93 @@ fn lower_artboard(
             }
         }
         objects_by_local.push(None);
+    }
+
+    if let Some(style) = artboard.spec.layout_style.as_ref() {
+        if let Some(SceneLayoutInterpolator::Scripted(interpolator)) = style.interpolator.as_ref()
+            && let Some(script) = interpolator.script
+            && !catalogs.file_assets.script_indices.contains_key(&script)
+        {
+            return Err(EditDiagnostic::new(
+                origins.artboard(artboard.id, fallback_operation_index),
+                vec![EditId::Artboard(artboard.id), EditId::ScriptAsset(script)],
+                EditReason::UnknownScriptAsset,
+            ));
+        }
+        let style_local_id = artboard_layout_style_local_id.ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.artboard(artboard.id, fallback_operation_index),
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        if objects_by_local.len() != style_local_id {
+            return Err(EditDiagnostic::new(
+                origins.artboard(artboard.id, fallback_operation_index),
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::InternalInvariant,
+            ));
+        }
+        // Parent local 0 is the artboard itself: the record omits ParentId
+        // (0 is the runtime default) and the runtime parents the style through
+        // the artboard's inherited styleId resolution, mirroring C++
+        // LayoutComponent::onAddedDirty's addChild(m_style).
+        records.push(
+            layout_component_style_record(
+                style,
+                &artboard.spec.name,
+                0,
+                artboard_layout_style_interpolator_local_id,
+            )
+            .map_err(|reason| {
+                EditDiagnostic::new(
+                    origins.artboard(artboard.id, fallback_operation_index),
+                    vec![EditId::Artboard(artboard.id)],
+                    reason,
+                )
+            })?,
+        );
+        objects_by_local.push(None);
+        if let Some(interpolator_local_id) = artboard_layout_style_interpolator_local_id {
+            if objects_by_local.len() != interpolator_local_id {
+                return Err(EditDiagnostic::new(
+                    origins.artboard(artboard.id, fallback_operation_index),
+                    vec![EditId::Artboard(artboard.id)],
+                    EditReason::InternalInvariant,
+                ));
+            }
+            let interpolator = style.interpolator.as_ref().ok_or_else(|| {
+                EditDiagnostic::new(
+                    origins.artboard(artboard.id, fallback_operation_index),
+                    vec![EditId::Artboard(artboard.id)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+            records.push(
+                layout_style_interpolator_record(
+                    interpolator,
+                    &catalogs.file_assets.script_indices,
+                )
+                .map_err(|reason| {
+                    EditDiagnostic::new(
+                        origins.artboard(artboard.id, fallback_operation_index),
+                        vec![EditId::Artboard(artboard.id)],
+                        reason,
+                    )
+                })?,
+            );
+            objects_by_local.push(None);
+        }
+        let style_local_id = u32::try_from(style_local_id).map_err(|_| {
+            EditDiagnostic::new(
+                origins.artboard(artboard.id, fallback_operation_index),
+                vec![EditId::Artboard(artboard.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        records[0]
+            .properties
+            .push(ExportedProperty::LayoutComponentStyleId(style_local_id));
     }
 
     // Authored ScrollConstraints join the object table after every layout
@@ -24664,6 +24966,11 @@ fn validate_artboard_spec(spec: &ArtboardSpec) -> std::result::Result<(), EditRe
     if !spec.height.is_finite() {
         return Err(EditReason::NonFiniteProperty { property: "height" });
     }
+    if let Some(style) = spec.layout_style.as_ref()
+        && let Some(property) = style.first_non_finite_property()
+    {
+        return Err(EditReason::NonFiniteProperty { property });
+    }
     Ok(())
 }
 
@@ -25442,14 +25749,16 @@ fn layout_component_style_record(
         .map(u32::try_from)
         .transpose()
         .map_err(|_| EditReason::CapacityExceeded)?;
-    let mut properties = vec![
-        ExportedProperty::ComponentName(
-            spec.name
-                .clone()
-                .unwrap_or_else(|| format!("{owner_name} Style")),
-        ),
-        ExportedProperty::ParentId(parent_id),
-    ];
+    let mut properties = vec![ExportedProperty::ComponentName(
+        spec.name
+            .clone()
+            .unwrap_or_else(|| format!("{owner_name} Style")),
+    )];
+    // Parent 0 is the artboard, the runtime default for an omitted parentId;
+    // export stays sparse like node_record. Every non-root owner is local > 0.
+    if parent_id != 0 {
+        properties.push(ExportedProperty::ParentId(parent_id));
+    }
     properties.extend(
         spec.exported_properties(interpolator_local_id)
             .into_iter()
@@ -25603,11 +25912,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((first_artboard, second_artboard, defaults, number), _) = scene.edit(|tx| {
             let first_artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "First".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let second_artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Second".into(),
                 width: 100.0,
                 height: 100.0,
@@ -25663,11 +25974,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((first_artboard, second_artboard, defaults, number), _) = scene.edit(|tx| {
             let first_artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "First".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let second_artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Second".into(),
                 width: 100.0,
                 height: 100.0,
@@ -25720,6 +26033,7 @@ mod tests {
             tx.set_artboard(
                 first_artboard,
                 ArtboardSpec {
+                    layout_style: None,
                     name: "First rematerialized".into(),
                     width: 120.0,
                     height: 80.0,
@@ -25745,6 +26059,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, defaults), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Before".into(),
                 width: 100.0,
                 height: 100.0,
@@ -25820,6 +26135,7 @@ mod tests {
             tx.set_artboard(
                 artboard,
                 ArtboardSpec {
+                    layout_style: None,
                     name: "After".into(),
                     width: 120.0,
                     height: 80.0,
@@ -25885,6 +26201,7 @@ mod tests {
             _,
         ) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 100.0,
                 height: 100.0,
@@ -26010,16 +26327,19 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 120.0,
                 height: 40.0,
             })?;
             let item_a = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "A".into(),
                 width: 20.0,
                 height: 20.0,
             })?;
             let item_b = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "B".into(),
                 width: 20.0,
                 height: 20.0,
@@ -26191,11 +26511,13 @@ mod tests {
         scene
             .edit(|tx| {
                 let root = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Root".into(),
                     width: 100.0,
                     height: 100.0,
                 })?;
                 let item = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Item".into(),
                     width: 30.0,
                     height: 30.0,
@@ -26606,6 +26928,7 @@ mod tests {
                 is_module: true,
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Layout fixpoint".into(),
                 width: 100.0,
                 height: 100.0,
@@ -26863,6 +27186,7 @@ mod tests {
                 bytes: fixture_40_by_20_png(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Top-left artboard".into(),
                 width: 80.0,
                 height: 40.0,
@@ -26981,6 +27305,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: spec.artboard_name.into(),
                 width: spec.frame_size.0,
                 height: spec.frame_size.1,
@@ -27162,6 +27487,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Image and title".into(),
                 width: 200.0,
                 height: 100.0,
@@ -27318,6 +27644,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Formula".into(),
                 width: 10.0,
                 height: 10.0,
@@ -27354,6 +27681,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Native converter matrix".into(),
                 width: 10.0,
                 height: 10.0,
@@ -27658,6 +27986,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Interpolator".into(),
                 width: 10.0,
                 height: 10.0,
@@ -27799,6 +28128,7 @@ mod tests {
                 ),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Scripted converter".into(),
                 width: 10.0,
                 height: 10.0,
@@ -27921,6 +28251,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project converter".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28050,6 +28381,7 @@ mod tests {
         let mut scene = Scene::new();
         let artboard = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project converter".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28136,6 +28468,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project valuePath".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28282,6 +28615,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project relative path".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28397,6 +28731,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project context path".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28557,6 +28892,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project colliding paths".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28724,6 +29060,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project NumberToList".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28776,11 +29113,13 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let card = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Card".into(),
                 width: 10.0,
                 height: 10.0,
@@ -28952,6 +29291,7 @@ mod tests {
                 bytes: program,
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project interpolation".into(),
                 width: 10.0,
                 height: 10.0,
@@ -29077,6 +29417,7 @@ mod tests {
                 bytes: program,
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Project group".into(),
                 width: 10.0,
                 height: 10.0,
@@ -29191,6 +29532,7 @@ mod tests {
                 bytes: program,
             })?;
             tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Format artifact".into(),
                 width: 10.0,
                 height: 10.0,
@@ -29253,6 +29595,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Bound width".into(),
                 width: 200.0,
                 height: 120.0,
@@ -29402,6 +29745,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Bound scalars".into(),
                 width: 240.0,
                 height: 120.0,
@@ -29598,6 +29942,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Shadow".into(),
                 width: 100.0,
                 height: 100.0,
@@ -29673,6 +30018,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Cubic export".into(),
                 width: 100.0,
                 height: 100.0,
@@ -29770,6 +30116,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Visibility".into(),
                 width: 160.0,
                 height: 80.0,
@@ -29925,6 +30272,7 @@ mod tests {
         let ((artboard, root_defaults, settings_defaults, orphan_settings, beta, dim, title), _) =
             scene.edit(|tx| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Nested scalars".into(),
                     width: 120.0,
                     height: 60.0,
@@ -30152,6 +30500,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((shape, shown), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Visibility validation".into(),
                 width: 100.0,
                 height: 100.0,
@@ -30240,6 +30589,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -30407,6 +30757,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Catalog".into(),
                 width: 120.0,
                 height: 40.0,
@@ -30506,6 +30857,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Authored defaults".into(),
                 width: 120.0,
                 height: 40.0,
@@ -30596,6 +30948,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Product".into(),
                 width: 120.0,
                 height: 40.0,
@@ -30805,6 +31158,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Catalog".into(),
                 width: 120.0,
                 height: 40.0,
@@ -31523,6 +31877,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "External font text".into(),
                 width: 200.0,
                 height: 100.0,
@@ -31728,16 +32083,19 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 240.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Child".into(),
                 width: 140.0,
                 height: 70.0,
             })?;
             let replacement = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Replacement".into(),
                 width: 140.0,
                 height: 70.0,
@@ -31766,6 +32124,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Trim geometry".into(),
                 width: 200.0,
                 height: 100.0,
@@ -32787,11 +33146,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((first, second), _) = scene.edit(|tx| {
             let first = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "First".into(),
                 width: 200.0,
                 height: 100.0,
             })?;
             let second = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Second".into(),
                 width: 200.0,
                 height: 100.0,
@@ -32874,11 +33235,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((parent, child, host, child_shape), _) = scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 200.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Badge".into(),
                 width: 40.0,
                 height: 30.0,
@@ -33010,11 +33373,13 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 200.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Card".into(),
                 width: 80.0,
                 height: 40.0,
@@ -33092,11 +33457,13 @@ mod tests {
         let mut scene = Scene::new();
         let (parent, _) = scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 200.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Card".into(),
                 width: 80.0,
                 height: 40.0,
@@ -33297,11 +33664,13 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 200.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Card".into(),
                 width: 80.0,
                 height: 40.0,
@@ -33473,11 +33842,13 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Child".into(),
                 width: 40.0,
                 height: 40.0,
@@ -33573,11 +33944,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((parent, machine), _) = scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Child".into(),
                 width: 40.0,
                 height: 40.0,
@@ -33797,6 +34170,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, shape), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Direct opacity".into(),
                 width: 100.0,
                 height: 100.0,
@@ -33868,6 +34242,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, parent, child), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Composed opacity".into(),
                 width: 100.0,
                 height: 100.0,
@@ -33971,11 +34346,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((root, host, child_shape), _) = scene.edit(|tx| {
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Nested opacity root".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Nested opacity child".into(),
                 width: 40.0,
                 height: 40.0,
@@ -34065,11 +34442,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((root, host, item_shape), _) = scene.edit(|tx| {
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "List opacity root".into(),
                 width: 100.0,
                 height: 100.0,
             })?;
             let item = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "List opacity item".into(),
                 width: 20.0,
                 height: 20.0,
@@ -34212,11 +34591,13 @@ mod tests {
             let error = scene
                 .edit(|tx| {
                     let parent = tx.create_artboard(ArtboardSpec {
+                        layout_style: None,
                         name: "Parent".into(),
                         width: 200.0,
                         height: 120.0,
                     })?;
                     let child = tx.create_artboard(ArtboardSpec {
+                        layout_style: None,
                         name: "Card".into(),
                         width: 80.0,
                         height: 40.0,
@@ -34399,6 +34780,7 @@ mod tests {
                 bytes: b"opaque image bytes".to_vec(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Images".into(),
                 width: 200.0,
                 height: 100.0,
@@ -34571,6 +34953,7 @@ mod tests {
                 bytes: b"RSTB bytes".to_vec(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Mixed assets".into(),
                 width: 100.0,
                 height: 100.0,
@@ -34818,6 +35201,7 @@ mod tests {
         let parent = scene
             .edit(|tx| {
                 tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Parent".into(),
                     width: 200.0,
                     height: 120.0,
@@ -34837,11 +35221,13 @@ mod tests {
         let err = scene
             .edit(|tx| {
                 let first = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "First".into(),
                     width: 100.0,
                     height: 100.0,
                 })?;
                 let second = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Second".into(),
                     width: 100.0,
                     height: 100.0,
@@ -34860,11 +35246,13 @@ mod tests {
         let mut scene = Scene::new();
         let ((parent, child), _) = scene.edit(|tx| {
             let parent = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Parent".into(),
                 width: 200.0,
                 height: 120.0,
             })?;
             let child = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Badge".into(),
                 width: 40.0,
                 height: 30.0,
@@ -34908,6 +35296,7 @@ mod tests {
         let ((first, second), _) = scene.edit(|tx| {
             let mut create = |name: &str, x: f32, color: u32| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: name.to_owned(),
                     width: 100.0,
                     height: 80.0,
@@ -35014,6 +35403,7 @@ mod tests {
                 bytes: fixture_font_bytes(),
             })?;
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Text".into(),
                 width: 200.0,
                 height: 100.0,
@@ -35342,6 +35732,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, shape, animation), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -35410,6 +35801,7 @@ mod tests {
         let duration = u32::try_from(key_count)?;
         let ((artboard, shape, animation), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -35432,6 +35824,7 @@ mod tests {
                 tx.set_artboard(
                     artboard,
                     ArtboardSpec {
+                        layout_style: None,
                         name: "Reject after indexed animation authoring".into(),
                         width: f32::NAN,
                         height: 100.0,
@@ -35468,6 +35861,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -35505,6 +35899,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, roots), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -35549,6 +35944,7 @@ mod tests {
         let (foreign_artboard, foreign) = scene
             .edit(|tx| {
                 let foreign_artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Foreign".into(),
                     width: 100.0,
                     height: 100.0,
@@ -35697,6 +36093,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, child_parent, roots), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Flex".into(),
                 width: 200.0,
                 height: 100.0,
@@ -35977,6 +36374,139 @@ mod tests {
         Ok(())
     }
 
+    /// Replacing a retained parent's ONLY child subtree: no sibling record
+    /// anchors the splice, so append-created records drift to the artboard
+    /// record tail and neither `set_child_order` (its anchor is the drifted
+    /// block itself) nor `reorder` can bring them home. `place_record_block`
+    /// re-slots the block against the retained parent without touching any
+    /// native child order. The trailing unit makes the tail a wrong answer.
+    #[test]
+    fn selective_only_child_replace_reaches_the_cold_fixpoint() -> Result<()> {
+        assert_flex_cold_fixpoint(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &[("solo", FLEX_RED)],
+            &[("solo", FLEX_RED)],
+            |tx, _, parent, roots| {
+                tx.remove(roots[0])?;
+                let replacement =
+                    create_flex_child_subtree(tx, Parent::Object(parent), "solo", FLEX_RED)?;
+                tx.place_record_block(replacement, RecordSlot::After(parent))?;
+                Ok(vec![replacement])
+            },
+        )
+    }
+
+    /// Replacing the LAST of three children: the final sibling slot has no
+    /// at-slot record anchor either, so the replacement block is re-slotted
+    /// after the retained middle sibling's block.
+    #[test]
+    fn selective_last_child_replace_reaches_the_cold_fixpoint() -> Result<()> {
+        assert_flex_cold_fixpoint(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+            &FLEX_THREE,
+            |tx, artboard, parent, roots| {
+                tx.remove(roots[2])?;
+                let replacement = create_flex_child_subtree(
+                    tx,
+                    Parent::Artboard(artboard),
+                    "follower",
+                    FLEX_BLUE,
+                )?;
+                tx.reparent(replacement, Parent::Object(parent), ChildIndex::Last)?;
+                tx.place_record_block(replacement, RecordSlot::After(roots[1]))?;
+                Ok(vec![roots[0], roots[1], replacement])
+            },
+        )
+    }
+
+    /// `place_record_block` moves records only: a slot that would carry the
+    /// block across one of its own siblings must reject without mutating,
+    /// because per-parent child order derives from the same stream.
+    #[test]
+    fn place_record_block_rejects_sibling_crossing_slots() -> Result<()> {
+        let FlexScene {
+            mut scene,
+            artboard: _,
+            child_parent: _,
+            roots,
+        } = flex_parent_scene(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+        )?;
+        let before = scene.export_records();
+        let error = scene
+            .edit(|tx| tx.place_record_block(roots[0], RecordSlot::After(roots[2])))
+            .expect_err("a sibling-crossing record slot must reject");
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::RecordSlotCrossesSiblings
+        );
+        assert_eq!(scene.export_records(), before);
+
+        let error = scene
+            .edit(|tx| tx.place_record_block(roots[0], RecordSlot::Before(roots[0])))
+            .expect_err("a slot anchored inside the moved block must reject");
+        assert_eq!(error.diagnostic().reason, EditReason::CycleDetected);
+        assert_eq!(scene.export_records(), before);
+        Ok(())
+    }
+
+    /// The rejection must be a safe per-operation skip inside a live
+    /// transaction: a caller that catches `RecordSlotCrossesSiblings`, keeps
+    /// editing, and commits must export byte-identically to a transaction
+    /// that never attempted the slot. Guards the pre-scan ordering of
+    /// PR #256 — with validation after the splice, the caught rejection
+    /// leaves a mutated stream that this equality detects.
+    #[test]
+    fn caught_sibling_crossing_rejection_leaves_the_transaction_unmutated() -> Result<()> {
+        let build = |attempt_crossing: bool| -> Result<ExportedDocument> {
+            let FlexScene {
+                mut scene,
+                artboard,
+                child_parent: _,
+                roots,
+            } = flex_parent_scene(
+                FlexSceneShape {
+                    wrapped: false,
+                    flanked: true,
+                },
+                &FLEX_THREE,
+            )?;
+            scene.edit(|tx| {
+                if attempt_crossing {
+                    let rejected = tx
+                        .place_record_block(roots[0], RecordSlot::After(roots[2]))
+                        .expect_err("crossing slot must reject inside the live tx");
+                    assert_eq!(
+                        rejected.diagnostic().reason,
+                        EditReason::RecordSlotCrossesSiblings
+                    );
+                }
+                // The transaction continues past the caught rejection and
+                // commits unrelated valid work.
+                create_flex_child_subtree(tx, Parent::Artboard(artboard), "extra", FLEX_BLUE)?;
+                Ok(())
+            })?;
+            Ok(scene.export_records())
+        };
+        assert_eq!(
+            build(true)?,
+            build(false)?,
+            "a caught crossing rejection must not leak mutation into the committed stream"
+        );
+        Ok(())
+    }
+
     /// The editor's mount flow builds a replacement subtree at artboard level
     /// and reparents it into the retained parent at an exact sibling slot;
     /// `reparent` alone must land the record block at the cold position.
@@ -36052,6 +36582,7 @@ mod tests {
         let error = scene
             .edit(|tx| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Rejected after hierarchy construction".into(),
                     width: f32::NAN,
                     height: 100.0,
@@ -36088,6 +36619,7 @@ mod tests {
         let mut scene = Scene::new();
         let (artboard, _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -36104,6 +36636,7 @@ mod tests {
                 tx.set_artboard(
                     artboard,
                     ArtboardSpec {
+                        layout_style: None,
                         name: "Rejected after hierarchy work".into(),
                         width: f32::NAN,
                         height: 100.0,
@@ -36123,6 +36656,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, root), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Main".into(),
                 width: 100.0,
                 height: 100.0,
@@ -36152,6 +36686,7 @@ mod tests {
                 tx.set_artboard(
                     artboard,
                     ArtboardSpec {
+                        layout_style: None,
                         name: "Rejected after hierarchy work".into(),
                         width: f32::NAN,
                         height: 100.0,
@@ -36221,6 +36756,7 @@ mod tests {
                     bytes,
                 })?;
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Failure".into(),
                     width: 100.0,
                     height: 100.0,
@@ -36264,6 +36800,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -36380,6 +36917,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, defaults, trigger), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "ViewModel trigger".into(),
                 width: 100.0,
                 height: 100.0,
@@ -36526,6 +37064,7 @@ mod tests {
         let ((artboard, root_defaults, root_trigger, unrelated, global_defaults, global_number), _) =
             scene.edit(|tx| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Global listener".into(),
                     width: 100.0,
                     height: 100.0,
@@ -36725,6 +37264,7 @@ mod tests {
         let ((artboard, source_defaults, source_number, target_defaults, target_number), _) = scene
             .edit(|tx| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Global-only listener".into(),
                     width: 100.0,
                     height: 100.0,
@@ -36838,6 +37378,7 @@ mod tests {
         let error = scene
             .edit(|tx| {
                 tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Canvas".into(),
                     width: 100.0,
                     height: 100.0,
@@ -36865,6 +37406,7 @@ mod tests {
         let ((artboard, global_defaults, transition, global_trigger), _) = scene
             .edit(|tx| {
                 let artboard = tx.create_artboard(ArtboardSpec {
+                    layout_style: None,
                     name: "Canvas".into(),
                     width: 100.0,
                     height: 100.0,
@@ -36930,6 +37472,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((machine, shape, root_number, other_number), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -37030,6 +37573,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -37164,6 +37708,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 100.0,
                 height: 100.0,
@@ -37276,6 +37821,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, machine), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 10.0,
                 height: 10.0,
@@ -37341,6 +37887,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, machine), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 10.0,
                 height: 10.0,
@@ -37411,6 +37958,7 @@ mod tests {
         let mut scene = Scene::new();
         let ((artboard, machine), _) = scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Canvas".into(),
                 width: 10.0,
                 height: 10.0,
@@ -37460,6 +38008,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Scroll viewport".into(),
                 width: 200.0,
                 height: 100.0,
@@ -37554,6 +38103,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Generic property binds".into(),
                 width: 100.0,
                 height: 100.0,
@@ -37708,6 +38258,7 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Direct property directions".into(),
                 width: 100.0,
                 height: 100.0,
@@ -37939,11 +38490,13 @@ mod tests {
         let mut scene = Scene::new();
         scene.edit(|tx| {
             let root = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Root".into(),
                 width: 100.0,
                 height: 60.0,
             })?;
             let item = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
                 name: "Item".into(),
                 width: 40.0,
                 height: 20.0,

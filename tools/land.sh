@@ -25,8 +25,9 @@ echo "land.sh: gate cache $cache"
 make rust-sources-fresh || exit 1
 
 gates=(cpp-probe runtime-frame-loop-port-check rust-attribution-check
-       cargo-test-runtime cargo-test-scripting scripted-golden-compare
-       silver-corpus-test)
+       cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
+       scripted-golden-compare silver-corpus-test)
+timing_gates=(perf-gate)
 for extra in "$@"; do gates+=("$extra"); done
 
 run_gate() {
@@ -39,6 +40,11 @@ run_gate() {
     case "$g" in
         cargo-test-runtime)  cargo test -p nuxie-runtime > "$cache/$g.log" 2>&1; rc=$? ;;
         cargo-test-scripting) cargo test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+        # The gate above exercises the nuxie crate's scripting feature, not
+        # the nuxie-scripting crate's own tests — those went red invisibly
+        # twice (context_init_tests via 58a077bb, gpu_canvas_tools via PR
+        # #236) before this gate existed.
+        cargo-test-scripting-crate) cargo test -p nuxie-scripting > "$cache/$g.log" 2>&1; rc=$? ;;
         *)                   make "$g" > "$cache/$g.log" 2>&1; rc=$? ;;
     esac
     if [[ $rc -eq 0 ]]; then
@@ -72,7 +78,27 @@ if [[ ${#failed[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# Timing gates run after the CPU-heavy parallel gates so their recorded ratios
+# are not distorted by landing-time contention. Always publish the cached or
+# fresh table on success.
+for g in "${timing_gates[@]}"; do
+    if ! run_gate "$g"; then
+        echo "land.sh: FAILED gate: $g" >&2
+        tail -15 "$cache/$g.log" >&2
+        exit 1
+    fi
+    cat "$cache/$g.log"
+done
+
 git push -u origin "$branch" || exit 1
-gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")" || exit 1
+# A prior land.sh run may have created the PR and then lost the merge race with
+# main advancing; reuse the branch's open PR instead of aborting the retry.
+if ! gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"; then
+    existing=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+    if [[ -z "$existing" ]]; then
+        echo "land.sh: gh pr create failed and no open PR exists for $branch" >&2; exit 1
+    fi
+    echo "land.sh: reusing existing open PR #$existing for $branch"
+fi
 gh pr merge --merge || exit 1
 echo "LANDED: $branch"

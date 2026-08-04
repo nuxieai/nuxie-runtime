@@ -71,8 +71,8 @@ pub unsafe fn lua_v_settable(
             if ttisnil!(offset) {
                 luaG_missingmembererror(L, t, key as *const TValue);
             }
-            let offsetnum = nvalue!(offset) as i32;
-            LUAU_ASSERT!(offsetnum >= 0 && offsetnum < (*(*inst).lclass).numberofallmembers);
+            let offsetnum = nvalue!(offset) as u32;
+            LUAU_ASSERT!(offsetnum < (*(*inst).lclass).numberofallmembers);
             if offsetnum >= (*(*inst).lclass).numberofinstancemembers {
                 luaG_indexerror(L, t, key as *const TValue);
             }

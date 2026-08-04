@@ -16,6 +16,7 @@ use crate::records::closure::Closure;
 use crate::records::lua_debug::LuaDebug;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_char;
+use luaur_common::FFlag;
 
 pub(crate) unsafe fn auxgetinfo(
     L: *mut lua_State,
@@ -36,7 +37,11 @@ pub(crate) unsafe fn auxgetinfo(
                     (*ar).linedefined = -1;
                     (*ar).short_src = c"[C]".as_ptr();
                 } else {
-                    let proto = (&(*f).inner.l).p;
+                    let proto = if FFlag::LuauCIProto.get() && !ci.is_null() {
+                        (*ci).p
+                    } else {
+                        (&(*f).inner.l).p
+                    };
                     let source = (*proto).source;
                     (*ar).source = getstr(source);
                     (*ar).what = c"Lua".as_ptr();
@@ -68,7 +73,11 @@ pub(crate) unsafe fn auxgetinfo(
                     (*ar).isvararg = 1;
                     (*ar).nparams = 0;
                 } else {
-                    let proto = (&(*f).inner.l).p;
+                    let proto = if FFlag::LuauCIProto.get() && !ci.is_null() {
+                        (*ci).p
+                    } else {
+                        (&(*f).inner.l).p
+                    };
                     (*ar).isvararg = (*proto).is_vararg as c_char;
                     (*ar).nparams = (*proto).numparams;
                 }

@@ -1,0 +1,9 @@
+use crate::records::ast_type_singleton_bool::AstTypeSingletonBool;
+use crate::records::ast_visitor::AstVisitor;
+use crate::visit::AstVisitable;
+
+impl AstVisitable for AstTypeSingletonBool {
+    fn visit(&self, visitor: &mut dyn AstVisitor) {
+        visitor.visit_type_singleton_bool(self as *const Self as *mut core::ffi::c_void);
+    }
+}

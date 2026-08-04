@@ -148,6 +148,7 @@ fn create_transform_scene() -> Result<(Scene, TransformFixtureObjects)> {
     let mut scene = Scene::new();
     let ((artboard, parent, child, layout_descendant), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "UNIV-1275 transform live writes".into(),
             width: 320.0,
             height: 240.0,

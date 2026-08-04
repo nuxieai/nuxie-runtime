@@ -44,10 +44,23 @@ fn run() -> Result<(), String> {
     let mut counts = BTreeMap::<Status, usize>::new();
     let mut exact_segments = 0usize;
     let mut side_channel_segments = 0usize;
+    let mut composed_sessions = 0usize;
     let mut not_yet_rust_probed = 0usize;
     let mut not_yet_rust_exact = 0usize;
     let mut parked_by_milestone = BTreeMap::<String, usize>::new();
     let mut failures = Vec::new();
+
+    if options.require_composed_session {
+        if !options.side_channel {
+            return Err("--require-composed-session requires --side-channel".to_owned());
+        }
+        if options.rust_runner.is_none() {
+            return Err("--require-composed-session requires --rust-runner".to_owned());
+        }
+        for entry in &corpus {
+            validate_composed_entry(entry, options.verify_scripted_diagnostics)?;
+        }
+    }
 
     for entry in &corpus {
         let status = entry.effective_status(options.verify_scripted_diagnostics);
@@ -196,6 +209,15 @@ fn run() -> Result<(), String> {
                     entry_side_channel,
                 ) {
                     Ok(cpp_stream) => {
+                        if options.require_composed_session
+                            && let Err(error) = validate_composed_stream(&cpp_stream)
+                        {
+                            failures.push(format!(
+                                "{}: C++ runner did not execute a composed session: {error}",
+                                entry.id
+                            ));
+                            continue;
+                        }
                         println!(
                             "[{}] {}: c++ stream ok ({} bytes)",
                             status,
@@ -242,6 +264,16 @@ fn run() -> Result<(), String> {
                                             }
                                         }
                                         Ok(rust_stream) => {
+                                            if options.require_composed_session
+                                                && let Err(error) =
+                                                    validate_composed_stream(&rust_stream)
+                                            {
+                                                failures.push(format!(
+                                                    "{}: Rust runner did not execute a composed session: {error}",
+                                                    entry.id
+                                                ));
+                                                continue;
+                                            }
                                             let rust_comparison =
                                                 entry.comparison_stream(&rust_stream);
                                             let cpp_comparison =
@@ -257,6 +289,8 @@ fn run() -> Result<(), String> {
                                                     "{}: stream differs from C++ under {} verification: {difference}",
                                                     entry.id, entry.verification
                                                 ));
+                                            } else if options.require_composed_session {
+                                                composed_sessions += 1;
                                             }
                                         }
                                         Err(error) if status == Status::NotYet => {
@@ -296,6 +330,13 @@ fn run() -> Result<(), String> {
             .unwrap_or(0),
         counts.get(&Status::NotYet).copied().unwrap_or(0),
     );
+    if options.require_composed_session {
+        println!(
+            "golden-compare composed sessions: exact={}/{}",
+            composed_sessions,
+            corpus.len()
+        );
+    }
     if options.probe_not_yet_rust {
         println!(
             "golden-compare not-yet probe: rust-exact={} probed={}",
@@ -335,6 +376,7 @@ struct Options {
     probe_not_yet_rust: bool,
     verify_scripted_diagnostics: bool,
     side_channel: bool,
+    require_composed_session: bool,
 }
 
 impl Options {
@@ -352,6 +394,7 @@ impl Options {
         let mut probe_not_yet_rust = false;
         let mut verify_scripted_diagnostics = false;
         let mut side_channel = false;
+        let mut require_composed_session = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
@@ -379,9 +422,10 @@ impl Options {
                 "--probe-not-yet-rust" => probe_not_yet_rust = true,
                 "--verify-scripted-diagnostics" => verify_scripted_diagnostics = true,
                 "--side-channel" => side_channel = true,
+                "--require-composed-session" => require_composed_session = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] [--side-channel] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] [--side-channel] [--require-composed-session] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -403,7 +447,59 @@ impl Options {
             probe_not_yet_rust,
             verify_scripted_diagnostics,
             side_channel,
+            require_composed_session,
         })
+    }
+}
+
+fn validate_composed_entry(entry: &CorpusEntry, scripted_lane: bool) -> Result<(), String> {
+    if entry.effective_status(scripted_lane) != Status::Exact
+        || entry.verification != VerificationMode::Exact
+    {
+        return Err(format!(
+            "entry {} must use exact status and exact verification in the composed lane",
+            entry.id
+        ));
+    }
+    if entry.semantic_side_channel_only {
+        return Err(format!(
+            "entry {} cannot project its stream in the composed lane",
+            entry.id
+        ));
+    }
+    if entry.input_script.is_none() || entry.view_model_script.is_none() {
+        return Err(format!(
+            "entry {} must provide both input_script and view_model_script in the composed lane",
+            entry.id
+        ));
+    }
+    Ok(())
+}
+
+fn validate_composed_stream(stream: &str) -> Result<(), String> {
+    let requirements = [
+        ("advance", "advance "),
+        ("scripted input", "input kind="),
+        ("view-model mutation", "viewModel "),
+        ("resize", "resize "),
+        ("semantic read", "semantics "),
+        ("sample", "sample "),
+    ];
+    let lines = stream.lines().collect::<Vec<_>>();
+    let missing = requirements
+        .iter()
+        .filter_map(|(name, prefix)| {
+            (!lines.iter().any(|line| line.starts_with(prefix))).then_some(*name)
+        })
+        .collect::<Vec<_>>();
+    let mut missing = missing;
+    if !lines.contains(&"frame") {
+        missing.push("frame");
+    }
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("missing records: {}", missing.join(", ")))
     }
 }
 
@@ -1115,6 +1211,51 @@ mod tests {
         assert_eq!(options.ids, ["one", "two"]);
         assert!(options.probe_not_yet_rust);
         assert_eq!(options.rust_runner, Some(PathBuf::from("rust-runner")));
+    }
+
+    #[test]
+    fn composed_option_is_explicit() {
+        let options = Options::parse(vec![
+            "--side-channel".to_owned(),
+            "--require-composed-session".to_owned(),
+        ])
+        .unwrap();
+
+        assert!(options.side_channel);
+        assert!(options.require_composed_session);
+    }
+
+    #[test]
+    fn composed_stream_requires_every_observed_session_stage() {
+        let stream = concat!(
+            "rive-golden-stream-v1\n",
+            "advance seconds=0 settled=false statesChanged=0\n",
+            "input kind=pointerMove seconds=0.05 position=(1,1) pointerId=0\n",
+            "viewModel seconds=0.1 path=\"value\" type=number value=2\n",
+            "resize seconds=0 logical=(320,180) dpr=2 pixels=(640,360)\n",
+            "semantics frame=0 treeVersion=1 rootId=1\n",
+            "sample seconds=0.1\n",
+            "frame\n",
+        );
+
+        assert_eq!(validate_composed_stream(stream), Ok(()));
+        assert_eq!(
+            validate_composed_stream(&stream.replace("viewModel ", "ignored ")),
+            Err("missing records: view-model mutation".to_owned())
+        );
+    }
+
+    #[test]
+    fn composed_entry_forbids_projected_or_partial_evidence() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "composed".to_owned();
+        entry.status = Status::Exact;
+        entry.input_script = Some("input.txt".to_owned());
+        entry.view_model_script = Some("view-model.txt".to_owned());
+
+        assert_eq!(validate_composed_entry(&entry, true), Ok(()));
+        entry.semantic_side_channel_only = true;
+        assert!(validate_composed_entry(&entry, true).is_err());
     }
 
     #[test]

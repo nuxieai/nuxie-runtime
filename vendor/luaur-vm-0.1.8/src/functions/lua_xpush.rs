@@ -12,6 +12,7 @@ use crate::type_aliases::lua_state::lua_State;
 pub unsafe fn lua_xpush(from: *mut lua_State, to: *mut lua_State, idx: core::ffi::c_int) {
     api_check!(from, (*from).global == (*to).global);
     lua_c_threadbarrier_lapi(to);
+    crate::ensure_stack_impl!(to, from, 1);
     let o = index2addr(from, idx);
     setobj2s!(to, (*to).top, o);
     api_incr_top!(to);

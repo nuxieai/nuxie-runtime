@@ -3,6 +3,7 @@ use crate::functions::luau_execute::luau_execute;
 use crate::functions::luau_finishop::luau_finishop;
 use crate::functions::luau_poscall::luau_poscall;
 use crate::macros::curr_func::curr_func;
+use crate::macros::lua_callinfo_handle::LUA_CALLINFO_HANDLE;
 use crate::macros::lua_callinfo_opyield::LUA_CALLINFO_OPYIELD;
 use crate::macros::scheduled_reentry::SCHEDULED_REENTRY;
 use crate::type_aliases::lua_state::lua_State;
@@ -26,6 +27,10 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
             let cont_opt = (*c).cont;
             LUAU_ASSERT!(cont_opt.is_some());
 
+            if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+                (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
+            }
+
             if let Some(cont) = cont_opt {
                 let n = cont(L, 0);
 
@@ -34,6 +39,12 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
                     || (*L).status == lua_Status::LUA_YIELD as u8
                 {
                     break;
+                }
+
+                if luaur_common::FFlag::LuauCustomYieldablePcalls.get()
+                    && (*L).status == SCHEDULED_REENTRY as u8
+                {
+                    continue;
                 }
 
                 luau_poscall(L, (*L).top.offset(-(n as isize)));

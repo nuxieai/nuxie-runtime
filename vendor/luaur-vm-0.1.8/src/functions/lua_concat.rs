@@ -32,6 +32,7 @@ pub unsafe fn lua_concat(L: *mut lua_State, n: c_int) {
         (*L).top = (*L).top.sub((n - 1) as usize);
     } else if n == 0 {
         lua_c_threadbarrier_lapi(L);
+        crate::ensure_stack!(L, 1);
         setsvalue!(L, (*L).top, luaS_newlstr(L, c"".as_ptr(), 0));
         api_incr_top!(L);
     }

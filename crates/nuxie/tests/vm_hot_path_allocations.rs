@@ -51,6 +51,7 @@ fn direct_view_model_slot_writes_allocate_nothing() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, defaults, number), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Canvas".into(),
             width: 100.0,
             height: 100.0,

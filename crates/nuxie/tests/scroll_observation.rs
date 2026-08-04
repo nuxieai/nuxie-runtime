@@ -8,6 +8,7 @@ fn scene_scroll_observation_is_scoped_to_one_live_instance() -> Result<()> {
     let mut scene = Scene::new();
     let (artboard, _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Observation host".into(),
             width: 100.0,
             height: 100.0,

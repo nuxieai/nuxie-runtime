@@ -5,6 +5,7 @@ use crate::macros::setnvalue::setnvalue;
 use crate::type_aliases::lua_state::lua_State;
 
 pub fn lua_pushunsigned(l: *mut lua_State, u: core::ffi::c_uint) {
+    crate::ensure_stack!(l, 1);
     unsafe {
         setnvalue!((*l).top, cast_num!(u));
     }

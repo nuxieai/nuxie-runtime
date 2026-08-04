@@ -4,6 +4,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[export_name = "luaur_luaA_pushvalue"]
 pub unsafe fn luaA_pushvalue(L: *mut lua_State, o: *const TValue) {
+    crate::ensure_stack!(L, 1);
     *(*L).top = *o;
     api_incr_top!(L);
 }

@@ -2,6 +2,9 @@
 //! Source: `VM/src/lgc.cpp` (lgc.cpp:805-837, hand-ported)
 
 use crate::functions::markmt::markmt;
+use crate::functions::marktaggetmt::marktaggetmt;
+use crate::functions::markudatadirectaccess::markudatadirectaccess;
+use crate::functions::markudatadirectfields::markudatadirectfields;
 use crate::macros::gc_spropagate::GCSpropagate;
 use crate::macros::markobject::markobject;
 use crate::macros::markvalue::markvalue;
@@ -23,32 +26,37 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
     markvalue!(g, core::ptr::addr_of_mut!((*g).registry));
 
     if luaur_common::FFlag::LuauUdataDirectAccess6.get() {
-        for i in 0..UTAG_INTERNAL_LIMIT as usize {
-            let udatadirect = core::ptr::addr_of_mut!((*(*l).global).udatadirect[i]);
+        if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
+            markudatadirectaccess(g);
+        } else {
+            for i in 0..UTAG_INTERNAL_LIMIT as usize {
+                let udatadirect = core::ptr::addr_of_mut!((*(*l).global).udatadirect[i]);
 
-            markvalue!(
-                g,
-                core::ptr::addr_of_mut!((*udatadirect).indextm) as *mut TValue
-            );
-            markvalue!(
-                g,
-                core::ptr::addr_of_mut!((*udatadirect).newindextm) as *mut TValue
-            );
-            markvalue!(
-                g,
-                core::ptr::addr_of_mut!((*udatadirect).namecalltm) as *mut TValue
-            );
-        }
-    }
-
-    if luaur_common::FFlag::LuauDirectFieldGet.get() {
-        for i in 0..UTAG_INTERNAL_LIMIT as usize {
-            if !(*g).udatadirectfields[i].is_null() {
-                markobject!(g, (*g).udatadirectfields[i]);
+                markvalue!(
+                    g,
+                    core::ptr::addr_of_mut!((*udatadirect).indextm) as *mut TValue
+                );
+                markvalue!(
+                    g,
+                    core::ptr::addr_of_mut!((*udatadirect).newindextm) as *mut TValue
+                );
+                markvalue!(
+                    g,
+                    core::ptr::addr_of_mut!((*udatadirect).namecalltm) as *mut TValue
+                );
             }
         }
     }
 
+    if luaur_common::FFlag::LuauDirectFieldGet.get() {
+        markudatadirectfields(g);
+    }
+
     markmt(g);
+
+    if luaur_common::FFlag::LuauUdataMetatablePinned.get() {
+        marktaggetmt(g);
+    }
+
     (*g).gcstate = GCSpropagate as u8;
 }

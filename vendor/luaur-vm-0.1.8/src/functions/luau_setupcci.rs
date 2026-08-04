@@ -1,8 +1,8 @@
 //! Node: `cxx:Function:Luau.VM:VM/src/lvmexecute.cpp:206:luau_setupcci`
 //!
 //! Push and initialize a fresh `CallInfo` for a C continuation call: point it at
-//! `fun`, give it a `LUA_MINSTACK` window, clear the saved pc/flags, bump the
-//! closure usage counter (when enabled), and ensure the stack has room.
+//! `fun`, give it a `LUA_MINSTACK` window, clear the saved pc/flags, and ensure
+//! the stack has room.
 
 use crate::macros::clvalue::clvalue;
 use crate::macros::getproto::getproto;

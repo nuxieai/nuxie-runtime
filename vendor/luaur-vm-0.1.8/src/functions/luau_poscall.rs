@@ -1,15 +1,12 @@
 //! Node: `cxx:Function:Luau.VM:VM/src/lvmexecute.cpp:3843:luau_poscall`
 //! Source: `VM/src/lvmexecute.cpp:3843-3872` (hand-ported)
 
-use crate::macros::clvalue::clvalue;
 use crate::macros::lua_multret::LUA_MULTRET;
 use crate::macros::setnilvalue::setnilvalue;
 use crate::macros::setobj_2_s::setobj_2_s;
-use crate::records::closure::Closure;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
-use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 /// C++ `void luau_poscall(lua_State* L, StkId first)`.
 #[allow(non_snake_case)]

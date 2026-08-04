@@ -22,6 +22,8 @@ fn run() -> Result<(), String> {
 }
 
 fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
+    let target = apply_benchmark_frames(target.clone(), options)?;
+    let target = &target;
     let (cpp, rust) = measure_runners(target, options)?;
 
     println!("perf-compare file={}", target.file.display());
@@ -30,6 +32,7 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         target.samples, options.iterations, options.warmups
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
+    print_benchmark_frames(options.benchmark_frames, options.benchmark_hz);
     print_aggregate_mode(options.aggregate);
     print_runner_order(options.runner_order);
     print_measurements("cpp", cpp.total);
@@ -73,6 +76,7 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         options.warmups
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
+    print_benchmark_frames(options.benchmark_frames, options.benchmark_hz);
     print_aggregate_mode(options.aggregate);
     print_runner_order(options.runner_order);
     for target in &targets {
@@ -143,11 +147,10 @@ fn corpus_targets(
                 &options.rive_runtime_dir,
             )?);
         } else {
-            targets.push(RunTarget::from_corpus_entry(
-                &entry,
-                &options.rive_runtime_dir,
-                corpus_dir,
-            ));
+            targets.push(apply_benchmark_frames(
+                RunTarget::from_corpus_entry(&entry, &options.rive_runtime_dir, corpus_dir),
+                options,
+            )?);
         }
     }
     Ok(targets)
@@ -174,6 +177,12 @@ fn print_metric(runner_benchmark: bool, benchmark_repeat: usize) {
     println!("perf-compare metric={}", metric_name(runner_benchmark));
     if runner_benchmark {
         println!("perf-compare benchmark_repeat={benchmark_repeat}");
+    }
+}
+
+fn print_benchmark_frames(frames: Option<usize>, hz: f64) {
+    if let Some(frames) = frames {
+        println!("perf-compare benchmark_frames={frames} benchmark_hz={hz:.3}");
     }
 }
 
@@ -223,6 +232,14 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
     if options.runner_benchmark {
         push_json_key(&mut out, "benchmark_repeat");
         out.push_str(&options.benchmark_repeat.to_string());
+        out.push(',');
+    }
+    if let Some(frames) = options.benchmark_frames {
+        push_json_key(&mut out, "benchmark_frames");
+        out.push_str(&frames.to_string());
+        out.push(',');
+        push_json_key(&mut out, "benchmark_hz");
+        push_json_number(&mut out, options.benchmark_hz);
         out.push(',');
     }
 
@@ -431,6 +448,8 @@ struct Options {
     max_ratio: Option<f64>,
     runner_benchmark: bool,
     benchmark_repeat: usize,
+    benchmark_frames: Option<usize>,
+    benchmark_hz: f64,
     json: Option<PathBuf>,
     meta: Vec<(String, String)>,
 }
@@ -514,6 +533,9 @@ impl Options {
         let mut max_ratio = None;
         let mut runner_benchmark = false;
         let mut benchmark_repeat = 1usize;
+        let mut benchmark_frames = None;
+        let mut benchmark_hz = 60.0;
+        let mut benchmark_hz_was_set = false;
         let mut json = None;
         let mut meta = Vec::new();
 
@@ -544,6 +566,14 @@ impl Options {
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, "--benchmark-repeat")?
                 }
+                "--benchmark-frames" => {
+                    benchmark_frames =
+                        Some(parse_positive_usize(&value(arg)?, "--benchmark-frames")?)
+                }
+                "--benchmark-hz" => {
+                    benchmark_hz = parse_positive_f64(&value(arg)?, "--benchmark-hz")?;
+                    benchmark_hz_was_set = true;
+                }
                 "--json" => json = Some(PathBuf::from(value(arg)?)),
                 "--meta" => meta.push(parse_meta(&value(arg)?)?),
                 "--artboard" => artboard = Some(value(arg)?),
@@ -562,7 +592,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--runner-order cpp-first|rust-first] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--runner-order cpp-first|rust-first] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--benchmark-frames N] [--benchmark-hz N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -593,6 +623,18 @@ impl Options {
         if benchmark_repeat > 1 && !runner_benchmark {
             return Err("--benchmark-repeat requires --runner-benchmark".to_owned());
         }
+        if benchmark_frames.is_some() && !runner_benchmark {
+            return Err("--benchmark-frames requires --runner-benchmark".to_owned());
+        }
+        if benchmark_hz_was_set && benchmark_frames.is_none() {
+            return Err("--benchmark-hz requires --benchmark-frames".to_owned());
+        }
+        if benchmark_frames.is_some() && benchmark_repeat > 1 {
+            return Err(
+                "--benchmark-frames cannot be combined with --benchmark-repeat greater than 1"
+                    .to_owned(),
+            );
+        }
         if benchmark_repeat > 1
             && let Mode::Single(target) = &mode
         {
@@ -616,6 +658,8 @@ impl Options {
             max_ratio,
             runner_benchmark,
             benchmark_repeat,
+            benchmark_frames,
+            benchmark_hz,
             json,
             meta,
         })
@@ -1264,6 +1308,34 @@ fn parse_positive_usize(value: &str, option: &str) -> Result<usize, String> {
     Ok(parsed)
 }
 
+fn parse_positive_f64(value: &str, option: &str) -> Result<f64, String> {
+    let parsed = value
+        .parse::<f64>()
+        .map_err(|_| format!("{option} must be a finite positive number"))?;
+    if !parsed.is_finite() || parsed <= 0.0 {
+        return Err(format!("{option} must be a finite positive number"));
+    }
+    Ok(parsed)
+}
+
+fn apply_benchmark_frames(mut target: RunTarget, options: &Options) -> Result<RunTarget, String> {
+    let Some(frames) = options.benchmark_frames else {
+        return Ok(target);
+    };
+    if target.input_script.is_some() {
+        return Err(format!(
+            "--benchmark-frames cannot be combined with input_script entry {}",
+            target.id
+        ));
+    }
+    target.samples = (0..frames)
+        .map(|frame| format!("{:.9}", frame as f64 / options.benchmark_hz))
+        .collect::<Vec<_>>()
+        .join(",");
+    target.segment_count = frames;
+    Ok(target)
+}
+
 fn parse_ratio(value: &str) -> Result<f64, String> {
     let parsed = value
         .parse::<f64>()
@@ -1430,6 +1502,75 @@ mod tests {
         .unwrap_err();
 
         assert!(error.contains("requires --runner-benchmark"));
+    }
+
+    #[test]
+    fn benchmark_frames_builds_a_sequential_sixty_hz_session() {
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--runner-benchmark".to_owned(),
+            "--benchmark-frames".to_owned(),
+            "100".to_owned(),
+            "--benchmark-hz".to_owned(),
+            "60".to_owned(),
+        ])
+        .expect("parse benchmark frames");
+        let Mode::Single(target) = &options.mode else {
+            panic!("expected single target");
+        };
+        let target = apply_benchmark_frames(target.clone(), &options).expect("build session");
+        let samples = target.samples.split(',').collect::<Vec<_>>();
+
+        assert_eq!(target.segment_count, 100);
+        assert_eq!(samples.len(), 100);
+        assert_eq!(samples[0], "0.000000000");
+        assert_eq!(samples[1], "0.016666667");
+        assert_eq!(samples[99], "1.650000000");
+    }
+
+    #[test]
+    fn benchmark_frames_requires_runner_benchmark_and_no_repeat() {
+        let missing_benchmark = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--benchmark-frames".to_owned(),
+            "100".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(missing_benchmark.contains("requires --runner-benchmark"));
+
+        let repeated = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--runner-benchmark".to_owned(),
+            "--benchmark-frames".to_owned(),
+            "100".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "2".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(repeated.contains("cannot be combined"));
+    }
+
+    #[test]
+    fn benchmark_frames_rejects_input_scripts() {
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--input-script".to_owned(),
+            "events.txt".to_owned(),
+            "--runner-benchmark".to_owned(),
+            "--benchmark-frames".to_owned(),
+            "100".to_owned(),
+        ])
+        .expect("parse benchmark frames");
+        let Mode::Single(target) = &options.mode else {
+            panic!("expected single target");
+        };
+
+        let error = apply_benchmark_frames(target.clone(), &options).unwrap_err();
+        assert!(error.contains("cannot be combined with input_script"));
     }
 
     #[test]

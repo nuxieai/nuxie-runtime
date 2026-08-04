@@ -108,3 +108,72 @@ therefore printed total hot-loop time (including `prepare`). It was updated to
 the method above before all three revisions were remeasured. Authoritative raw
 reports are the `corrected-*` baseline/fix-1 files and the `fix2-*`/`fix3-*` files in
 [`evidence/perffix-2026-08-04/`](evidence/perffix-2026-08-04/).
+
+## 2026-08-04 V10 blocking-gate baseline
+
+The V10 lane broadened the measurement to the 24 checked-in entries in
+`perf-corpus.toml`. Nineteen are the largest practical exact, input-free files
+from `corpus.toml`; five targeted rows add explicit scripted,
+list/virtualization, nested-artboard, text, and layout coverage. The otherwise
+size-eligible `data_viz_demo` is excluded because one current 100-frame Rust
+session takes minutes, which would turn a landing ratchet into a soak test.
+
+The method remains the one above: ordinary C++ and Rust release runners,
+100 sequential frames at 60 Hz, C++ first, no input script, and the median of
+five runner-internal `advance + draw` sums divided by 100. Three complete
+median-of-five sessions were captured to measure host variance. The table's
+times and current ratio are the final session; the last column is the range of
+the three independently aggregated ratios.
+
+| Fixture | C++ ms/frame | Rust ms/frame | Current Rust/C++ | Three-session range |
+|---|---:|---:|---:|---:|
+| `text_vertical_trim_test` | 0.005308 | 0.107919 | 20.333x | 17.386–20.333x |
+| `jellyfish_test` | 0.000508 | 0.005099 | 10.045x | 10.045–11.620x |
+| `car_widgets_v01` | 0.040715 | 8.792481 | 215.954x | 201.884–234.455x |
+| `zombie_skins` | 0.043068 | 0.949082 | 22.037x | 22.037–25.721x |
+| `script_dependency_test_using_library_v2` | 0.000295 | 0.001440 | 4.882x | 4.882–6.023x |
+| `script_dependency_test_using_library` | 0.000252 | 0.001360 | 5.403x | 4.987–6.024x |
+| `data_bind_test_cmdq` | 0.004652 | 0.036308 | 7.805x | 6.673–8.017x |
+| `viewmodel_based_condition` | 0.000686 | 0.003021 | 4.402x | 4.402–5.401x |
+| `image_scripting_property_value` | 0.000220 | 0.001088 | 4.939x | 4.939–5.388x |
+| `background_measure` | 0.001260 | 0.004231 | 3.359x | 2.788–3.359x |
+| `audio_script` | 0.002383 | 0.012990 | 5.452x | 5.158–5.452x |
+| `spotify_kids_demo` | 0.012361 | 0.194912 | 15.768x | 13.516–15.768x |
+| `library_with_text_and_image` | 0.000242 | 0.000993 | 4.107x | 4.107–5.403x |
+| `library` | 0.001362 | 0.003949 | 2.899x | 2.899–3.269x |
+| `layout_grid_stack` | 0.001245 | 0.033588 | 26.970x | 25.415–28.455x |
+| `gamepad_test` | 0.000541 | 0.002914 | 5.388x | 5.388–7.014x |
+| `local_bounds` | 0.001918 | 0.005848 | 3.049x | 3.049–3.404x |
+| `hit_test_test` | 0.000483 | 0.011596 | 24.033x | 24.033–25.501x |
+| `multi_listeners` | 0.005059 | 0.021570 | 4.264x | 3.616–5.059x |
+| `script_create_text_runs` | 0.002248 | 0.057086 | 25.399x | 25.399–31.212x |
+| `virtualize_blendmode` | 0.000368 | 0.006390 | 17.387x | 16.789–18.659x |
+| `component_list_1` | 0.000337 | 0.001321 | 3.924x | 3.924–4.164x |
+| `collapsing_elements` | 0.004486 | 0.078826 | 17.572x | 17.572–18.727x |
+| `clear_viewmodel_list` | 0.000272 | 0.000963 | 3.546x | 3.546–4.932x |
+
+The machine was the same 18-core `Mac17,6` Apple Silicon host described above:
+macOS 26.5.2 (25F84), `rustc 1.97.1`, and Homebrew clang 22.1.8. macOS has no
+supported API for pinning a process to performance cores, so these sessions ran
+under the default scheduler; `tools/perf-gate/run-pinned.sh` pins the comparator
+and inherited runner processes to a highest-maximum-frequency CPU on Linux when
+`taskset` and `lscpu` are available. The ratio range, rather than absolute time,
+is the relevant stability evidence. The blocking ratchet uses the worst of the
+three session medians as its current baseline, then applies the requested 15%
+margin and integer ceiling. This deliberately absorbs the observed `car_widgets`
+variance; a repeatedly flaky timing row must be removed or the gate disabled,
+not papered over with an unrecorded ceiling increase.
+
+The three raw reports were produced under `target/` (never `/tmp`) with SHA-256:
+
+- `perf-gate-baseline.json`: `90f329925ccbbd18e84b3388667092dbd0b4b7f93f36f86454f5684680f7326c`
+- `perf-gate-stability-2.json`: `fe4daf7c8ea49e51f17416193d27f87637a5cf2ccd5d5311f9ea224b303f0bf0`
+- `perf-gate-stability-3.json`: `81d5fcb63260c17ceb0bdb43a582f88b5bd5ec02fa98d16918414923944d80b1`
+
+The equivalent comparator arguments are:
+
+```sh
+--corpus corpus.toml --corpus-ids IDS_FROM_PERF_CORPUS \
+--runner-benchmark --benchmark-frames 100 --benchmark-hz 60 \
+--iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
+```

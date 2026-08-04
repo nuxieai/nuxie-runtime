@@ -61,16 +61,12 @@ impl<'a> CallInliner<'a> {
                 for inp in target_ops {
                     if inp != last {
                         let mapped = self.map_to_caller_op(inp);
-                        self.caller.instructions[caller_insn_op.index as usize]
-                            .ops
-                            .push_back(mapped);
+                        self.caller.add_use_inst(caller_insn_op, mapped);
                     } else {
                         LUAU_ASSERT!(self.var_arg_moves.contains_key(&inp));
                         let moves = self.var_arg_moves.get(&inp).unwrap().clone();
                         for move_op in moves {
-                            self.caller.instructions[caller_insn_op.index as usize]
-                                .ops
-                                .push_back(move_op);
+                            self.caller.add_use_inst(caller_insn_op, move_op);
                         }
                     }
                 }
@@ -83,9 +79,7 @@ impl<'a> CallInliner<'a> {
             } else {
                 for inp in target_ops {
                     let mapped = self.map_to_caller_op(inp);
-                    self.caller.instructions[caller_insn_op.index as usize]
-                        .ops
-                        .push_back(mapped);
+                    self.caller.add_use_inst(caller_insn_op, mapped);
                 }
             }
 

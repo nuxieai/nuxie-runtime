@@ -34,6 +34,7 @@ impl<'a> CallInliner<'a> {
             return_ops: Vec::new(),
             call_projections: DenseHashSet::new(BcOp::new()),
             var_arg_moves: DenseHashMap::new(BcOp::new()),
+            mapped_phis: DenseHashMap::new(BcOp::new()),
         }
     }
 }

@@ -26,6 +26,7 @@ pub struct CallInliner<'a> {
     pub(crate) return_ops: Vec<BcOp>,
     pub(crate) call_projections: DenseHashSet<BcOp, BcOpHash>,
     pub(crate) var_arg_moves: DenseHashMap<BcOp, Vec<BcOp>, BcOpHash>,
+    pub(crate) mapped_phis: DenseHashMap<BcOp, BcOp, BcOpHash>,
 }
 
 impl<'a> CallInliner<'a> {

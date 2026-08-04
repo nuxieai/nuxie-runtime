@@ -78,6 +78,14 @@ if [[ ${#failed[@]} -gt 0 ]]; then
 fi
 
 git push -u origin "$branch" || exit 1
-gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")" || exit 1
+# A prior land.sh run may have created the PR and then lost the merge race with
+# main advancing; reuse the branch's open PR instead of aborting the retry.
+if ! gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"; then
+    existing=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+    if [[ -z "$existing" ]]; then
+        echo "land.sh: gh pr create failed and no open PR exists for $branch" >&2; exit 1
+    fi
+    echo "land.sh: reusing existing open PR #$existing for $branch"
+fi
 gh pr merge --merge || exit 1
 echo "LANDED: $branch"

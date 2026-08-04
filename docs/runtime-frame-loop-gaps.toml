@@ -102,12 +102,12 @@ citations = [
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7327-7520",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12094-12479",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12669-12860",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12935-12988",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115-13152",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7327-7520",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7672-7721",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:6953-7510",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7540-7700",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7700-7800",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs:7836-7880",
 ]
 closure = "Closed by W121 aggregate trace acceptance: event_apply_batch is 30 / 11 C++/Rust and state_machine_advance is 30 / 11 C++/Rust, so both sides preserve the required one-batch-per-advance relationship across the independently accepted owner-boundary adaptation. FL-C4 owns ListenerAlignTarget, FL-C5 owns transition search and displaced lookups, and the cited Rust batching/bubbling/audio/error/settlement chain owns the intentional call-topology difference."
 
@@ -1577,7 +1577,7 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_advance_persistent_dirt_real_facade_required"
-globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs"]
 pattern = "fn\\s+fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes\\b[\\s\\S]{0,800}install_persistent_dirt_component_fixture\\(\\)[\\s\\S]{0,800}\\.advance_and_apply\\(&mut\\s+artboard,\\s*0\\.25\\)[\\s\\S]{0,800}persistent_dirt_component_fixture_receipt\\(\\)[\\s\\S]{0,800}\\(true,\\s*6,\\s*5,\\s*true\\)"
 min_occurrences = 1
 max_occurrences = 1
@@ -2044,9 +2044,9 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_keyframe_machine_teardown_before_layers_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)[\\s\\S]{0,800}fn\\s+teardown_layers\\b"
-min_occurrences = 1
-max_occurrences = 1
+pattern = "(?:fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)|impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}self\\.teardown_bind_occurrences\\(\\);[\\s\\S]{0,200}self\\.teardown_layers\\(\\);)"
+min_occurrences = 2
+max_occurrences = 2
 
 [[ratchet]]
 id = "state_machine_keyframe_cpp_initialize_converter_order_required"
@@ -2072,7 +2072,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_focus_semantic_typed_queues_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*listener_index:\\s*usize,\\s*is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*listener_index:\\s*Option<usize>,\\s*action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*(?:pub\\(super\\)\\s+)?listener_index:\\s*usize,\\s*(?:pub\\(super\\)\\s+)?is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*(?:pub\\(super\\)\\s+)?listener_index:\\s*Option<usize>,\\s*(?:pub\\(super\\)\\s+)?action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
 min_occurrences = 1
 max_occurrences = 1
 

@@ -5610,21 +5610,14 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
-        let container_locals = graph
-            .shape_paint_containers
-            .iter()
-            .filter(|container| {
-                crate::shapes::shape_paint_container::family(container.type_name).is_some()
-                    && crate::shapes::shape_paint_container::opacity_owner_local(
-                        graph,
-                        container.local_id,
-                    ) == opacity_owner_local
-            })
-            .map(|container| container.local_id)
-            .collect::<Vec<_>>();
-        for container_local in container_locals {
+        let container_indices = self
+            .runtime_shapes
+            .opacity_paint_container_indices(opacity_owner_local)
+            .to_vec();
+        for container_index in container_indices {
             self.propagate_runtime_shape_paint_container_opacity(
-                container_local,
+                container_index,
+                opacity_owner_local,
                 graph,
                 layout_bounds,
             );
@@ -5633,39 +5626,37 @@ impl ArtboardInstance {
 
     fn propagate_runtime_shape_paint_container_opacity(
         &mut self,
-        container_local: usize,
+        container_index: usize,
+        opacity_owner_local: usize,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
-        let Some(container) = graph
-            .shape_paint_containers
-            .iter()
-            .find(|container| container.local_id == container_local)
-        else {
+        let Some(container) = graph.shape_paint_containers.get(container_index) else {
             return;
         };
         let Some(family) = crate::shapes::shape_paint_container::family(container.type_name) else {
             return;
         };
-        let opacity_local =
-            crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
-        let render_opacity = self.component(opacity_local).map_or(1.0, |component| {
-            let render_opacity = if component.transform.render_opacity == 0.0
-                && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
-            {
-                // Parent-before-child dependency order has not yet reached
-                // this retained nested occurrence. C++ observes the authored
-                // opacity when Shape propagates to its paint mutators.
-                self.authored_transform(opacity_local).opacity
-            } else {
-                component.transform.render_opacity
-            };
-            if component.type_name == "Artboard" {
-                render_opacity * self.host_opacity
-            } else {
-                render_opacity
-            }
-        });
+        let container_local = container.local_id;
+        let render_opacity = self
+            .component(opacity_owner_local)
+            .map_or(1.0, |component| {
+                let render_opacity = if component.transform.render_opacity == 0.0
+                    && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
+                {
+                    // Parent-before-child dependency order has not yet reached
+                    // this retained nested occurrence. C++ observes the authored
+                    // opacity when Shape propagates to its paint mutators.
+                    self.authored_transform(opacity_owner_local).opacity
+                } else {
+                    component.transform.render_opacity
+                };
+                if component.type_name == "Artboard" {
+                    render_opacity * self.host_opacity
+                } else {
+                    render_opacity
+                }
+            });
         let Some(shape) = self.runtime_shapes.get(container_local) else {
             return;
         };
@@ -8741,6 +8732,11 @@ pub(crate) struct RuntimeShapeList {
     by_local: Vec<Option<RuntimeShape>>,
     pub(crate) paths_by_local: Vec<Option<RuntimePathOwner>>,
     shape_by_path_local: Vec<Option<usize>>,
+    /// C++ `ShapePaintContainer` occurrences are reached directly from their
+    /// concrete Transform/Artboard opacity owner. Retain the equivalent
+    /// ordered container indices on this occurrence so RenderOpacity dirt
+    /// never rediscovers ownership by scanning the immutable graph.
+    opacity_paint_containers_by_owner_local: Vec<Vec<usize>>,
     paint_owners_by_component_local: Vec<Vec<RuntimeShapePaintOwnerRef>>,
     effect_owners_by_component_local: Vec<Vec<RuntimeShapeEffectOwnerRef>>,
     /// Clone-owned ShapePaint occurrences in import order. C++
@@ -8763,6 +8759,9 @@ impl Clone for RuntimeShapeList {
             by_local,
             paths_by_local: self.paths_by_local.clone(),
             shape_by_path_local: vec![None; self.shape_by_path_local.len()],
+            opacity_paint_containers_by_owner_local: self
+                .opacity_paint_containers_by_owner_local
+                .clone(),
             paint_owners_by_component_local: self.paint_owners_by_component_local.clone(),
             effect_owners_by_component_local: self.effect_owners_by_component_local.clone(),
             paint_owner_refs: paint_owner_refs.clone(),
@@ -9210,11 +9209,35 @@ impl RuntimeShapeList {
             shapes.slot_mut(composer.shape_local);
         }
         shapes.retain_paint_containers(&graph.shape_paint_containers);
+        shapes.retain_opacity_owner_index(graph);
         shapes
             .pending_backend_paints
             .get_mut()
             .clone_from(&shapes.paint_owner_refs);
         shapes
+    }
+
+    fn retain_opacity_owner_index(&mut self, graph: &ArtboardGraph) {
+        for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
+            if crate::shapes::shape_paint_container::family(container.type_name).is_none() {
+                continue;
+            }
+            let owner_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                graph,
+                container.local_id,
+            );
+            if self.opacity_paint_containers_by_owner_local.len() <= owner_local {
+                self.opacity_paint_containers_by_owner_local
+                    .resize_with(owner_local + 1, Vec::new);
+            }
+            self.opacity_paint_containers_by_owner_local[owner_local].push(container_index);
+        }
+    }
+
+    fn opacity_paint_container_indices(&self, owner_local: usize) -> &[usize] {
+        self.opacity_paint_containers_by_owner_local
+            .get(owner_local)
+            .map_or(&[], Vec::as_slice)
     }
 
     fn retain_paint_containers(&mut self, containers: &[ShapePaintContainerNode]) {
@@ -26024,6 +26047,37 @@ mod tests {
             7,
             "Artboard/Shape own geometry and all text families share the common ShapePaint backend"
         );
+    }
+
+    #[test]
+    fn retained_opacity_owner_index_matches_static_owner_resolution() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let owners = RuntimeShapeList::from_graph(graph);
+
+        for component in &graph.components {
+            let expected = graph
+                .shape_paint_containers
+                .iter()
+                .enumerate()
+                .filter(|(_, container)| {
+                    crate::shapes::shape_paint_container::family(container.type_name).is_some()
+                        && crate::shapes::shape_paint_container::opacity_owner_local(
+                            graph,
+                            container.local_id,
+                        ) == component.local_id
+                })
+                .map(|(container_index, _)| container_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                owners.opacity_paint_container_indices(component.local_id),
+                expected,
+                "opacity owner {} must retain its exact ordered paint-container occurrences",
+                component.local_id,
+            );
+        }
     }
 
     #[test]

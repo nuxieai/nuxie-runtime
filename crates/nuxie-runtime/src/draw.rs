@@ -1847,6 +1847,43 @@ impl ArtboardInstance {
         })
     }
 
+    /// Ensure an initial Text occurrence has traversed the same shaping
+    /// bounds builder as `Text::buildRenderStyles` before SemanticData reads
+    /// `localBounds`. Mounted component-list children can become semantically
+    /// visible before their first draw, so drawing cannot own this work
+    /// (`text.cpp:534-615,1154-1233`; `semantic_data.cpp:501-532`).
+    pub(crate) fn prepare_initial_semantic_text_bounds(&mut self, local_id: usize) {
+        let missing_text_bounds = self
+            .component(local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+            .is_some_and(|text| text.bounds().is_none());
+        if !missing_text_bounds {
+            return;
+        }
+        let Some(runtime) = self.runtime_file() else {
+            return;
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return;
+        };
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        let Some(bounds) = build_static_text_constraint_bounds(
+            runtime,
+            graph,
+            self,
+            local_id,
+            self.runtime_text_layout_constraint(local_id, layout_bounds.as_ref()),
+        ) else {
+            return;
+        };
+        if let Some(text) = self
+            .component(local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+        {
+            text.retain_bounds(bounds);
+        }
+    }
+
     pub fn text_caret(
         &mut self,
         local_id: usize,

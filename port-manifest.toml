@@ -1627,9 +1627,9 @@ note = "P1G: direct host-routed _G.print binding is ported."
 
 [[file]]
 upstream = "src/lua/lua_scripted_context.cpp"
-status = "absent"
-rust_module = ""
-note = "F7/F3F6 audit: a partial ScriptedContext method surface exists, but pinned canvas/features and full ScriptedObject-backed markNeedsUpdate/lifecycle semantics remain absent. LT-2 commit 7f486955 is not on current origin/main and addresses lua_properties rather than this residue, so the coherent binding remains unpromoted."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/gpu_canvas.rs"
+note = "FTAIL partial promotion against pinned lua_scripted_context.cpp:28-123,188-567: ScriptedContext now exposes the complete method-name surface, including a readonly 19-field conservative headless features table and independent optional gpuCanvas {width,height} occurrences; the existing viewModel/rootViewModel/dataContext, image/blob/audio, shader, decodeImage, lifetime, and base markNeedsUpdate behavior remain covered. The unavailable Canvas 2D backing surface fails with the exact named diagnostic `unsupported: scripted-context-canvas binding is unavailable`, spot-checked by context_canvas_names_the_missing_binding. Honest remainders: no pinned/importable fixture currently reaches canvas(), so its requested unsupported corpus gate remains open; component-derived ScriptedObject Context owners still need owner-specific markNeedsUpdate overrides. The base ScriptedObject no-op is faithful at lua_scripted_context.cpp:206-210."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
@@ -1933,9 +1933,9 @@ note = "Consolidated Rust port for scripted."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
-status = "ported"
+status = "partial"
 rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs"
-note = "Per-keyframe ScriptedInterpolator tables, VM callback coercion, and ordinary cloned ScriptInput DataBind/converter lifecycle; scripted/stateful converter clone advancement and full DataContext rebinding remain explicit file-correspondence residue. Crate-boundary facade and VM seams are retained intentionally."
+note = "FTAIL partial promotion against scripted_interpolator.cpp:108-150 and linear_animation_instance.cpp:109-183: per-keyframe tables clone ordinary ScriptInput DataBinds/converters, resolve through the complete Artboard DataContext chain, refresh retained sources, and advance stateful converter occurrences in authored clone order after lazy apply. Existing fixture-shaped tests cover hydration, source refresh, teardown/replacement, and per-keyframe identity; focused runtime tests cover per-clone advancement. Honest remainders: cloneProperties-created ScriptedDataConverter operands still lack attachment of their cloned Lua converter tables, and no imported fixture yet exercises parent-scope fallback with a real stateful scripted converter. Crate-boundary facade and VM seams are retained intentionally."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
@@ -1957,9 +1957,9 @@ note = "Consolidated Rust port for scripted."
 
 [[file]]
 upstream = "src/semantic/semantic_data.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/semantic_data.rs"
-note = "SEMRES: data_binding_lists now matches Selected propagation, removals, hierarchy patches, and all post-action diffs; four initial mounted Text bounds keep the full differential red, and generic bounds dirt remains snapshot-adapted rather than owner-pushed (SEMRES-report.md)."
+note = "FTAIL closes the SEMRES remainder: data_binding_lists is exact across the initial and action frames, including four glyph-shaped mounted Text bounds, and generic owner WorldTransform/Path settlement now pushes one-shot semantic bounds dirt (text.cpp:534-615,1154-1233; semantic_data.cpp:273-293,501-532)."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
@@ -1969,15 +1969,15 @@ note = "SEMRES: the Simpsons semantic-only differential is exact across initial 
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/semantic_manager.rs"
-note = "SEMRES: nested focus and Simpsons are exact; data_binding_lists matches Selected propagation, removals, and all post-action diffs, but four initial mounted Text bounds and snapshot-adapted generic bounds dirt keep the row partial (SEMRES-report.md)."
+note = "FTAIL: nested focus, Simpsons, and the three-sample data_binding_lists semantic projection are exact. Runtime component settlement journals owner WorldTransform/Path dirt and the retained tree consumes it once per synchronization, replacing the former snapshot-only generic refresh."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/semantic_provider.rs"
-note = "SEMRES: nested focus and Simpsons provider/root/pre-layout bounds are exact; four initial mounted Text bounds and the remaining owner-pushed generic bounds-dirt port keep the provider family partial (SEMRES-report.md)."
+note = "FTAIL: provider/root/pre-layout bounds remain exact and data_binding_lists now includes exact initial glyph-shaped Text bounds. Semantic reads prepare retained text geometry before objectWorldBounds and generic owner dirt refreshes bounds after component settlement."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"

@@ -35588,6 +35588,464 @@ mod tests {
         Ok(())
     }
 
+    fn flex_layout_child(name: &str, color: u32, width: f32) -> NodeSpec {
+        let _ = (color, width);
+        NodeSpec::LayoutComponent(LayoutComponentSpec {
+            name: name.into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            clip: false,
+            width,
+            height: 20.0,
+            fractional_width: 1.0,
+            fractional_height: 1.0,
+            style: LayoutComponentStyleSpec::default(),
+        })
+    }
+
+    /// One direct child subtree of the retained flex parent: a fixed-size
+    /// LayoutComponent leaf carrying a filled shape so the paint stream
+    /// identifies it by color.
+    fn create_flex_child_subtree(
+        tx: &mut SceneTx<'_>,
+        parent: Parent,
+        name: &str,
+        color: u32,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let child = tx.create(parent, flex_layout_child(name, color, 30.0))?;
+        let shape = tx.create(
+            Parent::Object(child),
+            NodeSpec::Shape(ShapeSpec {
+                name: format!("{name} shape"),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new(format!("{name} bounds"), 30.0, 20.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: format!("{name} fill"),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} color"),
+                color,
+            }),
+        )?;
+        Ok(child)
+    }
+
+    fn flex_container(name: &str, width: f32, height: f32) -> NodeSpec {
+        NodeSpec::LayoutComponent(LayoutComponentSpec {
+            name: name.into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            clip: false,
+            width,
+            height,
+            fractional_width: 1.0,
+            fractional_height: 1.0,
+            style: LayoutComponentStyleSpec {
+                gap_horizontal: 5.0,
+                ..LayoutComponentStyleSpec::default()
+            },
+        })
+    }
+
+    /// Shape of the retained authored-layout convergence scenes.
+    ///
+    /// `wrapped` inserts a Content wrapper between the retained parent and the
+    /// children (the editor's View lowering shape); `flanked` surrounds the
+    /// parent with sibling artboard-level units so the parent's record block
+    /// is interior to the stream, not at its tail.
+    #[derive(Clone, Copy)]
+    struct FlexSceneShape {
+        wrapped: bool,
+        flanked: bool,
+    }
+
+    struct FlexScene {
+        scene: Scene,
+        artboard: ArtboardId,
+        /// The direct owner of the child subtrees: the Content wrapper when
+        /// `wrapped`, otherwise the retained parent itself.
+        child_parent: ObjectId,
+        roots: Vec<ObjectId>,
+    }
+
+    /// Retained authored flex scene: one LayoutComponent parent under the
+    /// artboard with one filled child subtree per `(name, color)` entry.
+    fn flex_parent_scene(shape: FlexSceneShape, children: &[(&str, u32)]) -> Result<FlexScene> {
+        let mut scene = Scene::new();
+        let ((artboard, child_parent, roots), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Flex".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            if shape.flanked {
+                create_flex_child_subtree(
+                    tx,
+                    Parent::Artboard(artboard),
+                    "leading unit",
+                    0xff88_8888,
+                )?;
+            }
+            let parent = tx.create(
+                Parent::Artboard(artboard),
+                flex_container("Parent", 200.0, 60.0),
+            )?;
+            let child_parent = if shape.wrapped {
+                tx.create(
+                    Parent::Object(parent),
+                    flex_container("Content", 200.0, 60.0),
+                )?
+            } else {
+                parent
+            };
+            let roots = children
+                .iter()
+                .map(|(name, color)| {
+                    create_flex_child_subtree(tx, Parent::Object(child_parent), name, *color)
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            if shape.flanked {
+                create_flex_child_subtree(
+                    tx,
+                    Parent::Artboard(artboard),
+                    "trailing unit",
+                    0xff44_4444,
+                )?;
+            }
+            Ok((artboard, child_parent, roots))
+        })?;
+        Ok(FlexScene {
+            scene,
+            artboard,
+            child_parent,
+            roots,
+        })
+    }
+
+    /// Paint order of the flex children, observed from the recorded render
+    /// stream as the sequence of solid fill colors.
+    fn painted_color_order(scene: &mut Scene, instance: InstanceId) -> Result<Vec<u32>> {
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut token = scene.new_draw_token(instance)?;
+        let mut events = Vec::new();
+        scene.frame().advance(instance, 0.0, &mut events);
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut token)
+            .map_err(|error| anyhow::anyhow!("flex scene draw failed: {error}"))?;
+        let stream = factory.stream();
+        Ok(stream
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .filter_map(|line| {
+                let color = line.split("color=0x").nth(1)?;
+                u32::from_str_radix(color.get(..8)?, 16).ok()
+            })
+            .collect())
+    }
+
+    /// Solved layout x positions (border-box centers) of the given children.
+    fn solved_child_centers(
+        scene: &Scene,
+        instance: InstanceId,
+        children: &[ObjectId],
+    ) -> Result<Vec<f32>> {
+        children
+            .iter()
+            .map(|child| {
+                let bounds = scene
+                    .solved_layout_bounds(instance, *child)
+                    .map_err(|error| anyhow::anyhow!("solved bounds: {error:?}"))?;
+                Ok((bounds.min_x + bounds.max_x) / 2.0)
+            })
+            .collect()
+    }
+
+    const FLEX_RED: u32 = 0xffcc_0000;
+    const FLEX_GREEN: u32 = 0xff00_cc00;
+    const FLEX_BLUE: u32 = 0xff00_00cc;
+    const FLEX_GOLD: u32 = 0xffcc_9900;
+
+    const FLEX_THREE: [(&str, u32); 3] = [
+        ("inactive", FLEX_RED),
+        ("first", FLEX_GREEN),
+        ("follower", FLEX_BLUE),
+    ];
+
+    /// Drive one selective structural mutation against a live retained flex
+    /// scene and require full convergence with a cold scene authored directly
+    /// in the final topology: exported record stream, flex-solved positions,
+    /// and paint order together. The mounted instance from before the
+    /// mutation stays live throughout, so convergence is retained-path
+    /// convergence, not a fresh instantiation.
+    fn assert_flex_cold_fixpoint(
+        shape: FlexSceneShape,
+        before: &[(&str, u32)],
+        after: &[(&str, u32)],
+        mutate: impl FnOnce(
+            &mut SceneTx<'_>,
+            ArtboardId,
+            ObjectId,
+            &[ObjectId],
+        ) -> std::result::Result<Vec<ObjectId>, EditAbort>,
+    ) -> Result<()> {
+        let FlexScene {
+            mut scene,
+            artboard,
+            child_parent,
+            roots,
+        } = flex_parent_scene(shape, before)?;
+        let instance = scene.instantiate(artboard)?;
+        let (final_roots, _) = scene.edit(|tx| mutate(tx, artboard, child_parent, &roots))?;
+
+        let mut fresh = flex_parent_scene(shape, after)?;
+        assert_eq!(
+            scene.export_records().records(),
+            fresh.scene.export_records().records(),
+            "the retained mutation must converge with the cold record stream",
+        );
+
+        let fresh_instance = fresh.scene.instantiate(fresh.artboard)?;
+        let retained_paint = painted_color_order(&mut scene, instance)?;
+        let fresh_paint = painted_color_order(&mut fresh.scene, fresh_instance)?;
+        assert_eq!(
+            retained_paint, fresh_paint,
+            "paint order must match the cold scene",
+        );
+        assert_eq!(
+            solved_child_centers(&scene, instance, &final_roots)?,
+            solved_child_centers(&fresh.scene, fresh_instance, &fresh.roots)?,
+            "flex-solved positions must match the cold scene",
+        );
+        Ok(())
+    }
+
+    /// Selectively replace one child subtree the way the editor's burn-down
+    /// needs to: remove the old child, create the replacement (appended to
+    /// the record tail), and restore the declaration order with one complete
+    /// `set_child_order`.
+    fn replace_one_child(
+        tx: &mut SceneTx<'_>,
+        parent: ObjectId,
+        roots: &[ObjectId],
+        replaced: usize,
+        name: &str,
+        color: u32,
+    ) -> std::result::Result<Vec<ObjectId>, EditAbort> {
+        tx.remove(roots[replaced])?;
+        let replacement = create_flex_child_subtree(tx, Parent::Object(parent), name, color)?;
+        let mut order = roots.to_vec();
+        order[replaced] = replacement;
+        tx.set_child_order(Parent::Object(parent), &order)?;
+        Ok(order)
+    }
+
+    /// UNIV-1351 discriminator: replacing the middle child of a retained flex
+    /// parent must restore cold record/paint order and cold flex positions in
+    /// the same transaction, not one at the expense of the other.
+    #[test]
+    fn selective_child_replace_reaches_the_cold_record_layout_and_paint_fixpoint() -> Result<()> {
+        for (replaced, name, color) in [
+            (0usize, "inactive", FLEX_RED),
+            (1, "first", FLEX_GREEN),
+            (2, "follower", FLEX_BLUE),
+        ] {
+            assert_flex_cold_fixpoint(
+                FlexSceneShape {
+                    wrapped: false,
+                    flanked: false,
+                },
+                &FLEX_THREE,
+                &FLEX_THREE,
+                |tx, _, parent, roots| replace_one_child(tx, parent, roots, replaced, name, color),
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The same selective replacement with the parent's record block interior
+    /// to the stream (leading and trailing sibling units) and the children
+    /// owned by a Content wrapper — the editor's View lowering shape.
+    #[test]
+    fn selective_child_replace_converges_under_a_content_wrapper_between_sibling_units()
+    -> Result<()> {
+        for wrapped in [false, true] {
+            assert_flex_cold_fixpoint(
+                FlexSceneShape {
+                    wrapped,
+                    flanked: true,
+                },
+                &FLEX_THREE,
+                &FLEX_THREE,
+                |tx, _, parent, roots| replace_one_child(tx, parent, roots, 1, "first", FLEX_GREEN),
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Inserting a new child subtree at an interior declaration slot must
+    /// converge with a cold scene authored with four children.
+    #[test]
+    fn selective_child_insertion_reaches_the_cold_fixpoint() -> Result<()> {
+        assert_flex_cold_fixpoint(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+            &[
+                ("inactive", FLEX_RED),
+                ("inserted", FLEX_GOLD),
+                ("first", FLEX_GREEN),
+                ("follower", FLEX_BLUE),
+            ],
+            |tx, _, parent, roots| {
+                let inserted =
+                    create_flex_child_subtree(tx, Parent::Object(parent), "inserted", FLEX_GOLD)?;
+                let order = vec![roots[0], inserted, roots[1], roots[2]];
+                tx.set_child_order(Parent::Object(parent), &order)?;
+                Ok(order)
+            },
+        )
+    }
+
+    /// Removing one interior child subtree must converge with a cold scene
+    /// authored with the surviving two children.
+    #[test]
+    fn selective_child_removal_reaches_the_cold_fixpoint() -> Result<()> {
+        assert_flex_cold_fixpoint(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+            &[("inactive", FLEX_RED), ("follower", FLEX_BLUE)],
+            |tx, _, _, roots| {
+                tx.remove(roots[1])?;
+                Ok(vec![roots[0], roots[2]])
+            },
+        )
+    }
+
+    /// A pure topology reorder of retained children (satellite style records
+    /// included) must converge with a cold scene authored in the new order.
+    #[test]
+    fn retained_topology_reorder_reaches_the_cold_fixpoint() -> Result<()> {
+        for wrapped in [false, true] {
+            assert_flex_cold_fixpoint(
+                FlexSceneShape {
+                    wrapped,
+                    flanked: true,
+                },
+                &FLEX_THREE,
+                &[
+                    ("follower", FLEX_BLUE),
+                    ("inactive", FLEX_RED),
+                    ("first", FLEX_GREEN),
+                ],
+                |tx, _, parent, roots| {
+                    let order = vec![roots[2], roots[0], roots[1]];
+                    tx.set_child_order(Parent::Object(parent), &order)?;
+                    Ok(order)
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The editor's mount flow builds a replacement subtree at artboard level
+    /// and reparents it into the retained parent at an exact sibling slot;
+    /// `reparent` alone must land the record block at the cold position.
+    #[test]
+    fn reparent_at_exact_slot_reaches_the_cold_fixpoint_without_set_child_order() -> Result<()> {
+        assert_flex_cold_fixpoint(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+            &FLEX_THREE,
+            |tx, artboard, parent, roots| {
+                tx.remove(roots[1])?;
+                let replacement =
+                    create_flex_child_subtree(tx, Parent::Artboard(artboard), "first", FLEX_GREEN)?;
+                tx.reparent(replacement, Parent::Object(parent), ChildIndex::At(1))?;
+                Ok(vec![roots[0], replacement, roots[2]])
+            },
+        )
+    }
+
+    /// Replacing one interior sibling must not move any untouched sibling's
+    /// exported records, and retained sibling ObjectIds must stay resolvable
+    /// to the same authored components.
+    #[test]
+    fn selective_child_replace_preserves_untouched_sibling_record_positions() -> Result<()> {
+        let FlexScene {
+            mut scene,
+            artboard: _,
+            child_parent,
+            roots,
+        } = flex_parent_scene(
+            FlexSceneShape {
+                wrapped: false,
+                flanked: true,
+            },
+            &FLEX_THREE,
+        )?;
+        let untouched = ["inactive", "follower", "leading unit", "trailing unit"];
+        let position_of = |records: &ExportedDocument, component: &str| {
+            records.records().iter().position(|record| {
+                record
+                    .properties
+                    .contains(&ExportedProperty::ComponentName(component.to_string()))
+            })
+        };
+        let before = scene.export_records();
+        let before_positions = untouched
+            .iter()
+            .map(|component| {
+                position_of(&before, component)
+                    .unwrap_or_else(|| panic!("component '{component}' is exported"))
+            })
+            .collect::<Vec<_>>();
+
+        scene.edit(|tx| replace_one_child(tx, child_parent, &roots, 1, "first", FLEX_GREEN))?;
+
+        let after = scene.export_records();
+        for (component, before_position) in untouched.iter().zip(before_positions) {
+            assert_eq!(
+                position_of(&after, component),
+                Some(before_position),
+                "replacing one sibling must not move untouched record '{component}'",
+            );
+        }
+        Ok(())
+    }
+
     fn rejected_bulk_create_work(node_count: usize) -> Result<SceneWork> {
         let mut scene = Scene::new();
         reset_scene_work();

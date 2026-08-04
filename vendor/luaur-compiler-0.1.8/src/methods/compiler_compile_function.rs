@@ -137,7 +137,7 @@ impl Compiler {
                 *protoflags |= 4; // LPF_NATIVE_FUNCTION = 1 << 2 (was wrongly 2)
             }
 
-            // C: `isInlinable = !vararg && !getfenvUsed && !setfenvUsed;
+            // C: `isInlinable = !hasMultiRet && !getfenvUsed && !setfenvUsed;
             //     if (FFlag::LuauEmitCallFeedback && isInlinable && upvals.empty()) flags |= LPF_INLINABLE;`
             // This whole block was missing, so the Rust compiler never marked functions inlinable.
             let is_inlinable =

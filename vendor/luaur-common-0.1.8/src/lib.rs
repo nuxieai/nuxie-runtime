@@ -126,6 +126,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
     FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
     FFlag::LuauTableEntriesDontNeedToMatchIndent.set(value);
+    FFlag::LuauTrackPrefixLocal.set(false);
     FFlag::LuauTableFreezeCheckIsSubtype.set(value);
     FFlag::LuauTidyTypePrototyping.set(value);
     FFlag::LuauTransitiveSubtyping.set(value);
@@ -379,6 +380,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingTablesHasBetterErrorSuppression);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTableEntriesDontNeedToMatchIndent);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauTrackPrefixLocal);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTableFreezeCheckIsSubtype);
     // Analysis/src/ConstraintGenerator.cpp

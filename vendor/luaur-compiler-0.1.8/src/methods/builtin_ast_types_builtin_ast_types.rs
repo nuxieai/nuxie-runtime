@@ -16,7 +16,16 @@ impl BuiltinAstTypes {
         let empty_arr = AstArray::default();
 
         let make_ref = |name: AstName| {
-            AstTypeReference::new(loc, None, name, None, loc, false, empty_arr.clone())
+            AstTypeReference::new(
+                loc,
+                None,
+                name,
+                None,
+                loc,
+                false,
+                empty_arr.clone(),
+                core::ptr::null_mut(),
+            )
         };
 
         Self {

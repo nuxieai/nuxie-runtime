@@ -1,6 +1,6 @@
-use crate::enums::bc_op_kind::BcOpKind;
 use crate::records::bc_inst_helper::BcInstHelper;
 use crate::records::bc_op::BcOp;
+use crate::enums::bc_op_kind::BcOpKind;
 
 impl BcInstHelper<'_> {
     pub(crate) fn set_bc_op(&mut self, input_idx: u32, op: BcOp) {

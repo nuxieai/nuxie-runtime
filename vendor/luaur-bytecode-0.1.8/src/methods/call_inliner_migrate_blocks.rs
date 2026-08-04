@@ -18,7 +18,8 @@ impl<'a> CallInliner<'a> {
         for i in 0..self.target.blocks.len() {
             let target_block_sortkey = self.target.blocks[i].sortkey;
             let target_block_ops: Vec<BcOp> = self.target.blocks[i].ops.iter().cloned().collect();
-            let target_block_phis: Vec<BcOp> = self.target.blocks[i].phis.iter().cloned().collect();
+            let target_block_phis: Vec<BcOp> =
+                self.target.blocks[i].phis.iter().cloned().collect();
 
             let caller_block_idx = (self.caller_blocks_size_before_inline + i as u32) as usize;
             let caller_block_op = BcOp::bc_op_bc_op_kind_u32(

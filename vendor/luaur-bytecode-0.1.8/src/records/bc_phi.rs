@@ -1,5 +1,5 @@
-use crate::records::bc_op::BcOp;
 use crate::type_aliases::bc_ops::BcOps;
+use crate::records::bc_op::BcOp;
 use alloc::vec::Vec;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

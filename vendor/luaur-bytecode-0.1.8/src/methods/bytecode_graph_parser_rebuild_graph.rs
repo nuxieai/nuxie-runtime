@@ -194,10 +194,10 @@ impl<'a> BytecodeGraphParser<'a> {
                 }
 
                 LuauOpcode::LOP_CLOSEUPVALS => {
-                    self.func.add_use_inst(
-                        node,
-                        BcOp::bc_op_bc_op_kind_u32(BcOpKind::VmReg, LUAU_INSN_A(insn)),
-                    );
+                    self.func.add_use_inst(node, BcOp::bc_op_bc_op_kind_u32(
+                        BcOpKind::VmReg,
+                        LUAU_INSN_A(insn),
+                    ));
                 }
 
                 LuauOpcode::LOP_GETIMPORT => {
@@ -205,7 +205,10 @@ impl<'a> BytecodeGraphParser<'a> {
                     let components_count = (aux >> 30) as i32;
                     self.add_imm_input_bc_inst_i32(node, components_count);
                     for component in 0..components_count {
-                        self.add_vm_const_input(node, (aux >> (20 - 10 * component)) & 0x3ff);
+                        self.add_vm_const_input(
+                            node,
+                            (aux >> (20 - 10 * component)) & 0x3ff,
+                        );
                     }
                     self.add_producer(LUAU_INSN_A(insn) as u8, node_op);
                 }
@@ -328,7 +331,10 @@ impl<'a> BytecodeGraphParser<'a> {
                     if nresults == 0 {
                         self.func.add_use_inst(
                             node,
-                            BcOp::bc_op_bc_op_kind_u32(BcOpKind::VmReg, LUAU_INSN_A(insn)),
+                            BcOp::bc_op_bc_op_kind_u32(
+                                BcOpKind::VmReg,
+                                LUAU_INSN_A(insn),
+                            ),
                         );
                     }
                 }
@@ -531,7 +537,10 @@ impl<'a> BytecodeGraphParser<'a> {
                 LuauOpcode::LOP_GETVARARGS => {
                     self.func.add_use_inst(
                         node,
-                        BcOp::bc_op_bc_op_kind_u32(BcOpKind::VmReg, LUAU_INSN_A(insn)),
+                        BcOp::bc_op_bc_op_kind_u32(
+                            BcOpKind::VmReg,
+                            LUAU_INSN_A(insn),
+                        ),
                     );
                     let count = LUAU_INSN_B(insn) as i32 - 1;
                     self.add_imm_input_bc_inst_i32(node, count);

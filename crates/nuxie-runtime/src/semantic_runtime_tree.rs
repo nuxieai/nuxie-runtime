@@ -118,6 +118,12 @@ impl RuntimeSemanticTree {
         live: &mut BTreeSet<RuntimeSemanticOccurrenceKey>,
         live_boundaries: &mut BTreeSet<u64>,
     ) {
+        // Consume dirt produced by the scene's normal component settlement;
+        // individual bounds queries stay read-side and never initiate a
+        // second update pass before draw. This synchronization owner also
+        // retains initial Text geometry while mounted SemanticData is created
+        // (`text.cpp:534-615,1154-1233`; `semantic_data.cpp:273-293,501-532`).
+        let semantic_bounds_dirty = artboard.take_semantic_bounds_dirty_locals();
         let owner_identity = artboard.instance_identity();
         let effective_parent = if needs_boundary {
             live_boundaries.insert(owner_identity);
@@ -160,6 +166,13 @@ impl RuntimeSemanticTree {
             live.insert(key);
             if !self.data.contains_key(&key) {
                 let mut data = RuntimeSemanticData::from_artboard(artboard, *local_id);
+                if let Some(target_local_id) = data.parent_local_id {
+                    // C++ Text builds and retains glyph bounds before the
+                    // first SemanticData::updateWorldBounds. Rust performs
+                    // the same one-time work at mounted semantic occurrence
+                    // initialization, never from the bounds query itself.
+                    artboard.prepare_initial_semantic_text_bounds(target_local_id);
+                }
                 data.prepare_for_tree(artboard);
                 data.update_world_bounds_with_root_transform(artboard, None, root_transform);
                 self.data.insert(key, data);
@@ -189,6 +202,8 @@ impl RuntimeSemanticTree {
                 .and_then(|parent| closest_semantic_node(artboard, parent, &nodes_by_target))
                 .or_else(|| effective_parent.clone());
             let data = self.data.get_mut(&key).expect("semantic data was retained");
+            let bounds_dirty = semantic_bounds_dirty.contains(local_id)
+                || target_local.is_some_and(|target| semantic_bounds_dirty.contains(&target));
             data.synchronize_from_artboard(artboard, &mut self.manager);
             data.reconcile_tree_membership(
                 &mut self.manager,
@@ -197,6 +212,17 @@ impl RuntimeSemanticTree {
                 root_transform,
                 boundary_collapsed,
             );
+            if bounds_dirty {
+                // C++'s generic Component dependency propagation pushes both
+                // WorldTransform and Path dirt from the geometry owner into
+                // SemanticData::update. Consume the recorded owner event once;
+                // do not poll bounds on clean synchronizations.
+                data.update_world_bounds_with_root_transform(
+                    artboard,
+                    Some(&mut self.manager),
+                    root_transform,
+                );
+            }
         }
 
         let nested_hosts = artboard

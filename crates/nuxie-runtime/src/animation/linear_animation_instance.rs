@@ -84,6 +84,10 @@ pub struct LinearAnimationInstance {
     key_frame_value_holders: Option<Box<HashMap<u32, RuntimeKeyFrameValue>>>,
     key_frame_prototype_revision: u64,
     scripted_interpolators: RefCell<RuntimeScriptedInterpolatorState>,
+    // Pinned advanceAndApply creates lazy interpolator clones during apply,
+    // then advances their Artboard-owned binds. Retain elapsed time across
+    // Rust's split advance/apply API to preserve that ordering.
+    pending_scripted_bind_advance: Cell<Option<f32>>,
     #[cfg(test)]
     removed_key_frame_data_bind_occurrences: Vec<RuntimeKeyFrameDataBindOccurrenceId>,
 }
@@ -117,6 +121,7 @@ impl Clone for LinearAnimationInstance {
             // C++ does not copy `m_StatefulInterpolators`: a copied LAI lazily
             // clones fresh ScriptedInterpolator tables for its own keyframes.
             scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
+            pending_scripted_bind_advance: Cell::new(None),
             #[cfg(test)]
             removed_key_frame_data_bind_occurrences: Vec::new(),
         }
@@ -150,6 +155,7 @@ impl LinearAnimationInstance {
             key_frame_value_holders: None,
             key_frame_prototype_revision: 0,
             scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
+            pending_scripted_bind_advance: Cell::new(None),
             #[cfg(test)]
             removed_key_frame_data_bind_occurrences: Vec::new(),
         })
@@ -464,13 +470,22 @@ impl LinearAnimationInstance {
         let Some(definition) = self.retained_definition() else {
             return false;
         };
-        definition.apply_with_key_frame_values(
+        let changed = definition.apply_with_key_frame_values(
             artboard,
             self.time,
             mix,
             self.key_frame_value_context(),
             Some(self),
-        )
+        );
+        let scripted_bind_more = self
+            .pending_scripted_bind_advance
+            .take()
+            .is_some_and(|elapsed_seconds| {
+                self.scripted_interpolators
+                    .borrow_mut()
+                    .advance_stateful_converters(elapsed_seconds)
+            });
+        changed || scripted_bind_more
     }
 
     fn evaluate_scripted_interpolator(
@@ -681,6 +696,7 @@ impl LinearAnimationInstance {
             &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
         >,
     ) -> bool {
+        self.pending_scripted_bind_advance.set(Some(elapsed_seconds));
         let delta_seconds = elapsed_seconds * animation.speed * self.direction;
         self.spilled_time = 0.0;
         if delta_seconds == 0.0 {

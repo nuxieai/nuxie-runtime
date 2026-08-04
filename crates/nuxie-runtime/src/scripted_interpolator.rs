@@ -1,14 +1,15 @@
-use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::state_machine::{
     RuntimeScriptedListenerActionBindingDefinition, RuntimeScriptedListenerActionBindingOccurrence,
     RuntimeScriptedListenerBoundValue, runtime_scripted_object_binding_definition,
 };
 use crate::{
-    ArtboardInstance, NoopScriptHost, RuntimeOwnedViewModelHandle, ScriptError, ScriptInstance,
-    ScriptInterpolatorMethod, ScriptListenerInputSnapshotValue, ScriptOptionalNumberResult,
+    ArtboardInstance, NoopScriptHost, RuntimeOwnedViewModelHandle, ScriptError, ScriptHost,
+    ScriptInstance, ScriptInterpolatorMethod, ScriptListenerInputSnapshotValue,
+    ScriptOptionalNumberResult,
 };
 use nuxie_binary::RuntimeFile;
 
@@ -57,6 +58,7 @@ impl RuntimeScriptedInterpolatorBindingDefinition {
     pub fn instantiate(&self) -> RuntimeScriptedInterpolatorBindingOccurrence {
         RuntimeScriptedInterpolatorBindingOccurrence {
             inner: self.inner.instantiate(),
+            data_context: RuntimeOwnedDataContext::default(),
         }
     }
 }
@@ -72,6 +74,7 @@ impl RuntimeScriptedInterpolatorBindingDefinition {
 #[derive(Debug)]
 pub struct RuntimeScriptedInterpolatorBindingOccurrence {
     inner: RuntimeScriptedListenerActionBindingOccurrence,
+    data_context: RuntimeOwnedDataContext,
 }
 
 impl RuntimeScriptedInterpolatorBindingOccurrence {
@@ -82,7 +85,8 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
     pub fn hydrate_inputs(
         &mut self,
         file: &RuntimeFile,
-        root: Option<&RuntimeOwnedViewModelHandle>,
+        artboard: &ArtboardInstance,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
         script: &mut dyn ScriptInstance,
     ) -> Result<(), ScriptError> {
         for input in self.inner.input_snapshots() {
@@ -90,14 +94,10 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
                 script.set_input_core(&input.name, value)?;
             }
         }
-        let Some(root) = root else {
-            return Ok(());
-        };
-        {
-            let root = root.borrow();
-            self.inner.bind_sources(file, &root, false);
-        }
-        self.refresh_inputs(file, root, script)
+        self.data_context = artboard.scripted_interpolator_owned_data_context(fallback_root);
+        self.inner
+            .bind_sources_from_data_context(file, &self.data_context, false);
+        self.refresh_inputs(file, script)
     }
 
     /// Apply source changes observed after the clone was hydrated. The source
@@ -106,20 +106,29 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
     pub fn refresh_inputs(
         &mut self,
         file: &RuntimeFile,
-        root: &RuntimeOwnedViewModelHandle,
         script: &mut dyn ScriptInstance,
     ) -> Result<(), ScriptError> {
         self.inner.collect_source_dirt();
-        let updates = {
-            let root = root.borrow();
-            self.inner.resolve_runtime_table_updates(file, &root)?
-        };
+        let updates = self
+            .inner
+            .resolve_runtime_table_updates_from_data_context(file, &self.data_context)?;
         for update in updates {
             if let RuntimeScriptedListenerBoundValue::Value(value) = update.value {
                 script.set_input_core(&update.input_name, value)?;
             }
         }
         Ok(())
+    }
+
+    pub fn advance_stateful_converters(
+        &mut self,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        let advance = self
+            .inner
+            .advance_stateful_converters(elapsed_seconds, host)?;
+        Ok(advance.changed || advance.keep_going)
     }
 }
 
@@ -204,7 +213,9 @@ impl RuntimeScriptedInterpolatorDiagnostic {
 
 #[derive(Default)]
 pub(crate) struct RuntimeScriptedInterpolatorState {
-    instances: HashMap<u32, Box<dyn ScriptInstance>>,
+    // C++ parks clones on the owning Artboard in authored discovery order.
+    // Converter advancement is observable, so retain that order explicitly.
+    instances: Vec<(u32, Box<dyn ScriptInstance>)>,
     diagnostics: Vec<RuntimeScriptedInterpolatorDiagnostic>,
 }
 
@@ -218,6 +229,15 @@ impl fmt::Debug for RuntimeScriptedInterpolatorState {
 }
 
 impl RuntimeScriptedInterpolatorState {
+    pub(crate) fn advance_stateful_converters(&mut self, elapsed_seconds: f32) -> bool {
+        let mut keep_going = false;
+        for (_, instance) in &mut self.instances {
+            keep_going |=
+                instance.advance_scripted_data_binds(elapsed_seconds, &mut NoopScriptHost);
+        }
+        keep_going
+    }
+
     pub(crate) fn evaluate(
         &mut self,
         artboard: Option<&ArtboardInstance>,
@@ -229,7 +249,7 @@ impl RuntimeScriptedInterpolatorState {
         arguments: &[f32],
         fallback: f32,
     ) -> f32 {
-        if !self.instances.contains_key(&instance_key) {
+        if !self.instances.iter().any(|(key, _)| *key == instance_key) {
             let Some(factory) = factory else {
                 self.record(
                     key_frame_global_id,
@@ -241,7 +261,7 @@ impl RuntimeScriptedInterpolatorState {
             };
             match factory.create(artboard) {
                 Ok(instance) => {
-                    self.instances.insert(instance_key, instance);
+                    self.instances.push((instance_key, instance));
                 }
                 Err(error) => {
                     self.record(
@@ -257,7 +277,8 @@ impl RuntimeScriptedInterpolatorState {
 
         let result = self
             .instances
-            .get_mut(&instance_key)
+            .iter_mut()
+            .find_map(|(key, instance)| (*key == instance_key).then_some(instance))
             .expect("scripted interpolator inserted above")
             .call_interpolator(method, arguments, &mut NoopScriptHost);
         match result {
@@ -325,7 +346,7 @@ impl RuntimeScriptedInterpolatorState {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
 
     use super::*;
     use crate::{ScriptMethod, ScriptOptionalMethodResult, ScriptValue};
@@ -333,6 +354,45 @@ mod tests {
     struct TestInstance {
         calls: Rc<Cell<u32>>,
         result: Result<ScriptOptionalNumberResult, ScriptError>,
+    }
+
+    struct AdvancingInstance {
+        clone_ordinal: usize,
+        advances: Rc<RefCell<Vec<(usize, f32)>>>,
+    }
+
+    impl ScriptInstance for AdvancingInstance {
+        fn advance_scripted_data_binds(
+            &mut self,
+            elapsed_seconds: f32,
+            _host: &mut dyn ScriptHost,
+        ) -> bool {
+            self.advances
+                .borrow_mut()
+                .push((self.clone_ordinal, elapsed_seconds));
+            true
+        }
+
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(true)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
     }
 
     impl ScriptInstance for TestInstance {
@@ -433,6 +493,44 @@ mod tests {
 
         assert_eq!(creations.get(), 2);
         assert_eq!(calls.get(), 3);
+    }
+
+    #[test]
+    fn advances_new_lazy_keyframe_clones_once_in_authored_order() {
+        let advances = Rc::new(RefCell::new(Vec::new()));
+        let next_ordinal = Rc::new(Cell::new(0));
+        let factory = RuntimeScriptedInterpolatorFactory::new_for_test({
+            let advances = Rc::clone(&advances);
+            let next_ordinal = Rc::clone(&next_ordinal);
+            move || {
+                let clone_ordinal = next_ordinal.get();
+                next_ordinal.set(clone_ordinal + 1);
+                Ok(Box::new(AdvancingInstance {
+                    clone_ordinal,
+                    advances: Rc::clone(&advances),
+                }))
+            }
+        });
+        let mut state = RuntimeScriptedInterpolatorState::default();
+        for keyframe in [10, 11] {
+            state.evaluate(
+                None,
+                Some(&factory),
+                keyframe,
+                keyframe,
+                3,
+                ScriptInterpolatorMethod::Transform,
+                &[0.5],
+                0.5,
+            );
+        }
+
+        assert!(state.advance_stateful_converters(0.25));
+        assert_eq!(
+            *advances.borrow(),
+            [(0, 0.25), (1, 0.25)],
+            "new per-keyframe clones advance this frame in authored discovery order",
+        );
     }
 
     #[test]

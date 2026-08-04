@@ -1847,6 +1847,43 @@ impl ArtboardInstance {
         })
     }
 
+    /// Ensure an initial Text occurrence has traversed the same shaping
+    /// bounds builder as `Text::buildRenderStyles` before SemanticData reads
+    /// `localBounds`. Mounted component-list children can become semantically
+    /// visible before their first draw, so drawing cannot own this work
+    /// (`text.cpp:534-615,1154-1233`; `semantic_data.cpp:501-532`).
+    pub(crate) fn prepare_initial_semantic_text_bounds(&mut self, local_id: usize) {
+        let missing_text_bounds = self
+            .component(local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+            .is_some_and(|text| text.bounds().is_none());
+        if !missing_text_bounds {
+            return;
+        }
+        let Some(runtime) = self.runtime_file() else {
+            return;
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return;
+        };
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        let Some(bounds) = build_static_text_constraint_bounds(
+            runtime,
+            graph,
+            self,
+            local_id,
+            self.runtime_text_layout_constraint(local_id, layout_bounds.as_ref()),
+        ) else {
+            return;
+        };
+        if let Some(text) = self
+            .component(local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+        {
+            text.retain_bounds(bounds);
+        }
+    }
+
     pub fn text_caret(
         &mut self,
         local_id: usize,
@@ -11492,6 +11529,17 @@ impl TaffyRuntimeLayoutEngine {
         };
 
         let Some(style_local) = style_local else {
+            // C++ `LayoutComponent::syncStyle` returns before touching the
+            // Yoga node when `m_style == nullptr`
+            // (src/layout_component.cpp:478-483), so a style-less root keeps
+            // Yoga's zero-initialized flex direction: Column
+            // (yoga/YGStyle.h `flags = 0`, `YGFlexDirectionColumn`). Taffy's
+            // `Style::default()` is Row, so pin the pinned-C++ default
+            // explicitly. The null-style `mainAxisIsRow()` accessor still
+            // reports row — that mismatch is upstream's own
+            // (src/layout_component.cpp:436-444) and both sides are ported
+            // as-is.
+            style.flex_direction = FlexDirection::Column;
             return Some(style);
         };
 
@@ -12122,9 +12170,20 @@ impl TaffyRuntimeLayoutEngine {
                 style.flex_grow = 0.0;
                 style.flex_shrink = 0.0;
                 // Yoga preserves the authored main-axis size for fixed
-                // LayoutComponents. Taffy's `auto` basis would instead let
-                // intrinsic Text content widen the fixed child.
-                style.flex_basis = if parent_is_row {
+                // LayoutComponents (`flexBasis = YGUnitAuto`,
+                // src/layout_component.cpp:626-630, resolved by Yoga against
+                // the container's real direction). Taffy's `auto` basis would
+                // instead let intrinsic Text content widen the fixed child,
+                // so pin the point value — picked along the container's
+                // ACTUAL main axis. That axis diverges from the
+                // `parent_is_row` gating quirk only under a style-less
+                // container: C++ `mainAxisIsRow()` reports row there while
+                // the zero-initialized Yoga node settles as a column.
+                style.flex_basis = if self.parent_actual_main_axis_is_row(
+                    instance,
+                    layout_local,
+                    parent_is_row,
+                ) {
                     style.size.width
                 } else {
                     style.size.height
@@ -12157,6 +12216,41 @@ impl TaffyRuntimeLayoutEngine {
             _ => return None,
         };
         Some(())
+    }
+
+    /// The solved main axis of this node's layout container, as the layout
+    /// engine will actually flow it. This differs from the C++
+    /// `mainAxisIsRow()` gating value only for a style-less container:
+    /// upstream's accessor reports row on a null style
+    /// (src/layout_component.cpp:436-444) while the zero-initialized Yoga
+    /// node settles as a column (yoga/YGStyle.h `flags = 0`,
+    /// `YGFlexDirectionColumn`) — only the style-less Artboard root reaches
+    /// the layout tree in that state. Falls back to the gating value when the
+    /// container cannot be resolved from this instance (a component-list item
+    /// child whose container lives in the host artboard).
+    fn parent_actual_main_axis_is_row(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        quirk_parent_is_row: bool,
+    ) -> bool {
+        let mut current = instance.component_parent_local(local);
+        let mut visited = BTreeSet::new();
+        while let Some(parent) = current {
+            if !visited.insert(parent) {
+                break;
+            }
+            if let Some(style_local) = instance.runtime_layout_node_style_local(parent) {
+                return instance.runtime_layout_style_is_row(style_local);
+            }
+            if parent == 0 {
+                // Style-less Artboard root: Yoga's zero-initialized default
+                // flows children as a column.
+                return false;
+            }
+            current = instance.component_parent_local(parent);
+        }
+        quirk_parent_is_row
     }
 
     fn parent_layout_type(
@@ -29040,22 +29134,24 @@ mod tests {
 
         assert_eq!(
             instance.geometry_world_transform_with_context(&file, graph, 5, &mut cache),
-            Some(RenderMat2D([1.0, 0.0, 0.0, 1.0, 110.0, 20.0]))
+            Some(RenderMat2D([1.0, 0.0, 0.0, 1.0, 10.0, 120.0]))
         );
         assert_eq!(
             instance.geometry_world_bounds_with_context(&file, graph, 5, &mut cache),
-            Some(RenderAabb::new(60.0, -30.0, 160.0, 70.0)),
+            Some(RenderAabb::new(-40.0, 70.0, 60.0, 170.0)),
             "the path is resized by the live 100x100 layout constraint"
         );
         assert_eq!(
             instance.geometry_world_bounds_with_context(&file, graph, 3, &mut cache),
-            Some(RenderAabb::new(100.0, 0.0, 200.0, 100.0))
+            Some(RenderAabb::new(0.0, 100.0, 100.0, 200.0))
         );
+        // The settled square spans (-40,70)-(60,170); probe inside its
+        // artboard-visible slice (the artboard clips hits at y=100).
         assert_eq!(
             instance.geometry_hit_test_with_context(
                 &file,
                 graph,
-                RenderVec2D::new(110.0, 20.0),
+                RenderVec2D::new(10.0, 80.0),
                 &mut cache,
             ),
             vec![5]
@@ -29085,8 +29181,8 @@ mod tests {
         assert_eq!(
             instance.layout_bounds(3),
             Some(RuntimeLayoutBounds {
-                x: 100.0,
-                y: 0.0,
+                x: 0.0,
+                y: 100.0,
                 width: 100.0,
                 height: 100.0,
             }),
@@ -29359,25 +29455,27 @@ mod tests {
 
         // S4-38 makes LayoutComponent transformable: the layout engine still
         // owns translation, then authored rotation/scale compose over the slot.
-        assert_mat2d_near(layout.world_transform, [0.0, 2.0, -0.5, 0.0, 100.0, 0.0]);
+        assert_mat2d_near(layout.world_transform, [0.0, 2.0, -0.5, 0.0, 0.0, 100.0]);
         assert_mat2d_near(
             instance
                 .geometry_world_transform_with_context(&file, graph, 5, &mut cache)
                 .expect("child shape has a world transform")
                 .0,
-            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, -10.0, 120.0],
         );
         assert_aabb_near(
             instance
                 .geometry_world_bounds_with_context(&file, graph, 5, &mut cache)
                 .expect("child shape has geometry"),
-            RenderAabb::new(65.0, -80.0, 115.0, 120.0),
+            RenderAabb::new(-35.0, 20.0, 15.0, 220.0),
         );
+        // The transformed square spans (-35,20)-(15,220); probe inside its
+        // artboard-visible slice (the artboard clips hits at x=0/y=100).
         assert_eq!(
             instance.geometry_hit_test_with_context(
                 &file,
                 graph,
-                RenderVec2D::new(90.0, 20.0),
+                RenderVec2D::new(10.0, 50.0),
                 &mut cache,
             ),
             vec![5]
@@ -29404,35 +29502,40 @@ mod tests {
 
         assert_mat2d_near(
             child_layout.world_transform,
-            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, -10.0, 120.0],
         );
         assert_mat2d_near(
             instance
                 .runtime_layout_component_world_transform(5, graph)
                 .0,
-            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, -10.0, 120.0],
         );
         assert_mat2d_near(
             instance
                 .geometry_world_transform_with_context(&file, graph, 7, &mut cache)
                 .expect("nested child shape has a world transform")
                 .0,
-            [0.0, 2.0, -0.5, 0.0, 87.0, 30.0],
+            [0.0, 2.0, -0.5, 0.0, -13.0, 130.0],
         );
         assert_aabb_near(
             instance
                 .geometry_world_bounds_with_context(&file, graph, 7, &mut cache)
                 .expect("nested child shape has geometry"),
-            RenderAabb::new(79.5, -10.0, 94.5, 70.0),
+            RenderAabb::new(-20.5, 90.0, -5.5, 170.0),
         );
-        assert_eq!(
-            instance.geometry_hit_test_with_context(
-                &file,
-                graph,
-                RenderVec2D::new(87.0, 30.0),
-                &mut cache,
-            ),
-            vec![7]
+        // Column settlement composes the nested slot to (-13,130): the whole
+        // shape now sits outside the artboard rect, so the artboard clip makes
+        // its settled center unhittable — same as upstream, which clips
+        // content to the artboard before hit testing.
+        assert!(
+            instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(-13.0, 130.0),
+                    &mut cache,
+                )
+                .is_empty()
         );
     }
 

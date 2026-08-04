@@ -15,6 +15,7 @@ pub fn lua_getuserdatametatable(L: *mut lua_State, tag: core::ffi::c_int) {
         if (marked as i32 & (1 << BLACKBIT)) != 0 {
             lua_c_barrierback(L, L as *mut GCObject, &mut (*L).gclist);
         }
+        crate::ensure_stack!(L, 1);
 
         let h = (*(*L).global).udatamt[tag as usize];
         if !h.is_null() {

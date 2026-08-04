@@ -25,8 +25,8 @@ echo "land.sh: gate cache $cache"
 make rust-sources-fresh || exit 1
 
 gates=(cpp-probe runtime-frame-loop-port-check rust-attribution-check
-       cargo-test-runtime cargo-test-scripting scripted-golden-compare
-       silver-corpus-test)
+       cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
+       scripted-golden-compare silver-corpus-test)
 for extra in "$@"; do gates+=("$extra"); done
 
 run_gate() {
@@ -39,6 +39,11 @@ run_gate() {
     case "$g" in
         cargo-test-runtime)  cargo test -p nuxie-runtime > "$cache/$g.log" 2>&1; rc=$? ;;
         cargo-test-scripting) cargo test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+        # The gate above exercises the nuxie crate's scripting feature, not
+        # the nuxie-scripting crate's own tests — those went red invisibly
+        # twice (context_init_tests via 58a077bb, gpu_canvas_tools via PR
+        # #236) before this gate existed.
+        cargo-test-scripting-crate) cargo test -p nuxie-scripting > "$cache/$g.log" 2>&1; rc=$? ;;
         *)                   make "$g" > "$cache/$g.log" 2>&1; rc=$? ;;
     esac
     if [[ $rc -eq 0 ]]; then

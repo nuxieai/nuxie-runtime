@@ -4906,6 +4906,30 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.object_world_transform(local_id)
     }
 
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:170-224` at
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
+    }
+
     /// Return the canonical downstream shaped Text caret in source-artboard
     /// world space for one exact UTF-8 byte boundary.
     ///
@@ -5697,6 +5721,30 @@ impl OwnedArtboardInstance {
     /// Return the settled, layout-aware world transform for one runtime-local object.
     pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
         self.raw.object_world_transform(local_id)
+    }
+
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.raw
+            .component_world_transform_with_scroll(local_id)
+            .map(|transform| Mat2D(transform.0))
+    }
+
+    /// The settled layout rect mapped through live ancestor ScrollConstraint
+    /// scroll transforms. Identical to the raw solved rect when no ancestor
+    /// ScrollConstraint is live; the solve itself never reflects scroll in
+    /// pinned C++ (`scroll_constraint.cpp:170-224` at
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<Aabb> {
+        let bounds = self.raw.scrolled_layout_bounds(local_id)?;
+        Some(Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
     }
 
     /// Return the canonical downstream shaped Text caret in source-artboard

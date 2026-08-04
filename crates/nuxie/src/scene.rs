@@ -93,6 +93,7 @@ ordinary_record_id!(ViewModelChildId);
 ordinary_record_id!(ViewModelInstanceId);
 ordinary_record_id!(ArtboardComponentListId);
 ordinary_record_id!(LayoutComponentStyleId);
+ordinary_record_id!(ScrollConstraintId);
 ordinary_record_id!(DataBindId);
 ordinary_record_id!(DataConverterId);
 
@@ -1102,6 +1103,7 @@ pub enum ResolveError {
     UnknownViewModelListIndex,
     UnknownViewModelList,
     UnknownImageAsset,
+    NonFiniteValue,
 }
 
 impl std::fmt::Display for ResolveError {
@@ -1126,6 +1128,7 @@ impl std::fmt::Display for ResolveError {
             Self::UnknownViewModelListIndex => "unknown authored view-model list index",
             Self::UnknownViewModelList => "unknown authored view-model list relation",
             Self::UnknownImageAsset => "unknown authored image asset",
+            Self::NonFiniteValue => "non-finite value",
         })
     }
 }
@@ -1497,6 +1500,7 @@ impl DefinitionIndex {
                     }
                     RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(_))
                     | RecordSpec::LayoutComponentStyle { .. }
+                    | RecordSpec::ScrollConstraint { .. }
                     | RecordSpec::Machine(_)
                     | RecordSpec::VisibilityBind(_)
                     | RecordSpec::TextBind(_)
@@ -1877,6 +1881,7 @@ impl RecordDefinition {
             RecordSpec::Animation(spec) => Some(spec),
             RecordSpec::Visual { .. }
             | RecordSpec::LayoutComponentStyle { .. }
+            | RecordSpec::ScrollConstraint { .. }
             | RecordSpec::Machine(_)
             | RecordSpec::VisibilityBind(_)
             | RecordSpec::TextBind(_)
@@ -1889,6 +1894,7 @@ impl RecordDefinition {
             RecordSpec::Machine(spec) => Some(spec),
             RecordSpec::Visual { .. }
             | RecordSpec::LayoutComponentStyle { .. }
+            | RecordSpec::ScrollConstraint { .. }
             | RecordSpec::Animation(_)
             | RecordSpec::VisibilityBind(_)
             | RecordSpec::TextBind(_)
@@ -1906,6 +1912,10 @@ enum RecordSpec {
     LayoutComponentStyle {
         owner: ObjectId,
         spec: LayoutComponentStyleSpec,
+    },
+    ScrollConstraint {
+        owner: ObjectId,
+        spec: ScrollConstraintSpec,
     },
     Animation(AnimationRecordSpec),
     Machine(MachineRecordSpec),
@@ -1952,6 +1962,7 @@ pub enum AuthoredObjectKind {
     FireEvent,
     DataBindContext,
     LayoutComponentStyle,
+    ScrollConstraint,
 }
 
 impl RecordSpec {
@@ -1959,6 +1970,7 @@ impl RecordSpec {
         match self {
             Self::Visual { node, .. } => AuthoredObjectKind::Visual(node.kind()),
             Self::LayoutComponentStyle { .. } => AuthoredObjectKind::LayoutComponentStyle,
+            Self::ScrollConstraint { .. } => AuthoredObjectKind::ScrollConstraint,
             Self::Animation(AnimationRecordSpec::LinearAnimation(_)) => {
                 AuthoredObjectKind::LinearAnimation
             }
@@ -2061,6 +2073,7 @@ impl RecordSpec {
                 ..
             } => None,
             Self::LayoutComponentStyle { owner, .. } => Some(*owner),
+            Self::ScrollConstraint { owner, .. } => Some(*owner),
             Self::Animation(spec) => spec.owner(),
             Self::Machine(spec) => spec.owner(),
             Self::VisibilityBind(spec) => Some(spec.target),
@@ -2075,10 +2088,112 @@ impl RecordSpec {
             Self::Animation(_)
             | Self::Machine(_)
             | Self::LayoutComponentStyle { .. }
+            | Self::ScrollConstraint { .. }
             | Self::VisibilityBind(_)
             | Self::TextBind(_)
             | Self::PropertyBind(_) => None,
         }
+    }
+}
+
+/// Scroll axis for one authored ScrollConstraint.
+///
+/// Mirrors pinned C++ `DraggableConstraintDirection`
+/// (`draggable_constraint.hpp:14-19` at
+/// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollConstraintDirection {
+    Horizontal,
+    #[default]
+    Vertical,
+    All,
+}
+
+impl ScrollConstraintDirection {
+    const fn wire_value(self) -> u32 {
+        match self {
+            Self::Horizontal => 0,
+            Self::Vertical => 1,
+            Self::All => 2,
+        }
+    }
+}
+
+/// Author one ScrollConstraint owned by a content LayoutComponent.
+///
+/// The owner LayoutComponent is the CONTENT the constraint scrolls; the
+/// owner's parent (a LayoutComponent, or the Artboard root) is the viewport.
+/// Ownership is positional exactly as pinned C++
+/// (`scroll_constraint.hpp:114-118`): `content()` is the constraint's
+/// parent and `viewport()` is its grandparent — there is no viewport field
+/// to author.
+///
+/// Offsets are stored raw and unclamped, matching pinned C++ `m_offsetX/Y`;
+/// reads clamp live against the settled content/viewport extents
+/// (`scroll_constraint.cpp:128-167`). Physics authoring is deliberately
+/// absent from this first slice: with no owned physics the runtime clamps
+/// with the same math as the pinned C++ null-physics branch, which is the
+/// settled behavior wheel-driven hosts need. ClampedScrollPhysics and
+/// ElasticScrollPhysics stay import-only (B6-0134/B6-0135).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScrollConstraintSpec {
+    pub direction: ScrollConstraintDirection,
+    pub scroll_offset_x: f32,
+    pub scroll_offset_y: f32,
+    pub snap: bool,
+    pub virtualize: bool,
+    pub infinite: bool,
+    pub interactive: bool,
+    pub threshold: f32,
+    pub drag_multiplier: f32,
+}
+
+impl Default for ScrollConstraintSpec {
+    fn default() -> Self {
+        Self {
+            direction: ScrollConstraintDirection::default(),
+            scroll_offset_x: 0.0,
+            scroll_offset_y: 0.0,
+            snap: false,
+            virtualize: false,
+            infinite: false,
+            interactive: true,
+            threshold: 0.0,
+            drag_multiplier: 1.0,
+        }
+    }
+}
+
+/// One writable scroll channel on a live ScrollConstraint occurrence.
+///
+/// Channels mirror the pinned C++ generated core properties
+/// (`scroll_constraint_base.hpp:36-49` at
+/// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`): offsets store raw and
+/// unclamped; percent and index writes defer as scroll intents until layout
+/// can convert them, exactly as `setScrollPercentX/Y`/`setScrollIndex` do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollProperty {
+    OffsetX,
+    OffsetY,
+    PercentX,
+    PercentY,
+    Index,
+}
+
+impl ScrollProperty {
+    fn property_key(self) -> Option<u16> {
+        let name = match self {
+            Self::OffsetX => "scrollOffsetX",
+            Self::OffsetY => "scrollOffsetY",
+            Self::PercentX => "scrollPercentX",
+            Self::PercentY => "scrollPercentY",
+            Self::Index => "scrollIndex",
+        };
+        nuxie_schema::definition_by_name("ScrollConstraint")?
+            .properties
+            .iter()
+            .find(|property| property.name == name)
+            .map(|property| property.key.int)
     }
 }
 
@@ -3984,6 +4099,38 @@ impl Hierarchy<'_> {
                         ));
                     }
                 }
+                RecordSpec::ScrollConstraint { owner, .. } => {
+                    let Some(owner_kind) = resolve_kind(*owner) else {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(*owner)],
+                            EditReason::UnknownObject,
+                        ));
+                    };
+                    if !matches!(
+                        owner_kind,
+                        AuthoredObjectKind::Visual(NodeKind::LayoutComponent)
+                    ) {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(*owner)],
+                            EditReason::InternalInvariant,
+                        ));
+                    }
+                    let Some(owner_artboard) = resolve_artboard(*owner) else {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(*owner)],
+                            EditReason::UnknownObject,
+                        ));
+                    };
+                    if owner_artboard != artboard_id {
+                        return Err(self.abort(
+                            vec![EditId::Object(id), EditId::Object(*owner)],
+                            EditReason::CrossArtboardReference {
+                                source: artboard_id,
+                                target: owner_artboard,
+                            },
+                        ));
+                    }
+                }
                 RecordSpec::Animation(spec) => {
                     if let Some(owner) = spec.owner() {
                         let Some(owner_kind) = resolve_kind(owner) else {
@@ -4574,6 +4721,31 @@ impl Hierarchy<'_> {
                     ));
                 }
             }
+            let mut scroll_constraints_by_owner = BTreeMap::new();
+            for record in &artboard.records {
+                let RecordSpec::ScrollConstraint { owner, .. } = record.spec else {
+                    continue;
+                };
+                if scroll_constraints_by_owner
+                    .insert(owner, record.id)
+                    .is_some()
+                {
+                    return Err(abort(
+                        vec![EditId::Object(owner), EditId::Object(record.id)],
+                        EditReason::IdentityCollision,
+                    ));
+                }
+                let valid_owner = artboard.records.iter().any(|candidate| {
+                    candidate.id == owner
+                        && matches!(candidate.visual(), Some((_, NodeSpec::LayoutComponent(_))))
+                });
+                if !valid_owner {
+                    return Err(abort(
+                        vec![EditId::Object(record.id), EditId::Object(owner)],
+                        EditReason::InternalInvariant,
+                    ));
+                }
+            }
         }
 
         // Validate references before following parent chains. Parent-kind
@@ -4952,6 +5124,7 @@ struct MaterializedArtboard {
     file: Arc<File>,
     image_intrinsic_dimensions_by_global: BTreeMap<u32, (u32, u32)>,
     objects: BTreeMap<ObjectId, RuntimeSlot>,
+    scroll_constraints: BTreeMap<ObjectId, usize>,
     animations: BTreeMap<AnimationId, usize>,
     machines: BTreeMap<MachineId, usize>,
     events_by_local: Vec<Option<EventId>>,
@@ -5498,6 +5671,7 @@ pub enum ExportedObjectKind {
     LayoutComponent,
     ArtboardComponentList,
     LayoutComponentStyle,
+    ScrollConstraint,
     ArtboardListMapRule,
     Rectangle,
     PointsPath,
@@ -5710,6 +5884,15 @@ pub enum ExportedProperty {
     LayoutGapHorizontal(f32),
     LayoutGapVertical(f32),
     LayoutFlexDirection(u32),
+    ScrollDirectionValue(u32),
+    ScrollOffsetX(f32),
+    ScrollOffsetY(f32),
+    ScrollSnap(bool),
+    ScrollVirtualize(bool),
+    ScrollInfinite(bool),
+    ScrollInteractive(bool),
+    ScrollThreshold(f32),
+    ScrollDragMultiplier(f32),
     TranslateX(f32),
     TranslateY(f32),
     WorldOpacity(f32),
@@ -5948,6 +6131,15 @@ impl ExportedProperty {
             Self::LayoutGapHorizontal(_) => PROPERTY_LAYOUT_GAP_HORIZONTAL,
             Self::LayoutGapVertical(_) => PROPERTY_LAYOUT_GAP_VERTICAL,
             Self::LayoutFlexDirection(_) => PROPERTY_LAYOUT_FLEX_DIRECTION,
+            Self::ScrollDirectionValue(_) => PROPERTY_SCROLL_DIRECTION_VALUE,
+            Self::ScrollOffsetX(_) => PROPERTY_SCROLL_OFFSET_X,
+            Self::ScrollOffsetY(_) => PROPERTY_SCROLL_OFFSET_Y,
+            Self::ScrollSnap(_) => PROPERTY_SCROLL_SNAP,
+            Self::ScrollVirtualize(_) => PROPERTY_SCROLL_VIRTUALIZE,
+            Self::ScrollInfinite(_) => PROPERTY_SCROLL_INFINITE,
+            Self::ScrollInteractive(_) => PROPERTY_SCROLL_INTERACTIVE,
+            Self::ScrollThreshold(_) => PROPERTY_SCROLL_THRESHOLD,
+            Self::ScrollDragMultiplier(_) => PROPERTY_SCROLL_DRAG_MULTIPLIER,
             Self::TranslateX(_) => PROPERTY_TRANSLATE_X,
             Self::TranslateY(_) => PROPERTY_TRANSLATE_Y,
             Self::WorldOpacity(_) => PROPERTY_WORLD_OPACITY,
@@ -6206,6 +6398,7 @@ impl ExportedProperty {
             | Self::FileAssetId(value)
             | Self::LayoutComponentStyleId(value)
             | Self::LayoutFlexDirection(value)
+            | Self::ScrollDirectionValue(value)
             | Self::NestedArtboardId(value)
             | Self::ImageAssetId(value)
             | Self::ScriptedDrawableScriptAssetId(value)
@@ -6386,6 +6579,10 @@ impl ExportedProperty {
             | Self::DataConverterRangeMaxInput(value)
             | Self::DataConverterRangeMinOutput(value)
             | Self::DataConverterRangeMaxOutput(value)
+            | Self::ScrollOffsetX(value)
+            | Self::ScrollOffsetY(value)
+            | Self::ScrollThreshold(value)
+            | Self::ScrollDragMultiplier(value)
             | Self::FormulaTokenValue(value) => AuthoringValue::Double(value),
             Self::RectangleLinkCornerRadius(value)
             | Self::LayoutClip(value)
@@ -6401,6 +6598,10 @@ impl ExportedProperty {
             | Self::BindablePropertyBooleanValue(value)
             | Self::ViewModelBooleanValue(value)
             | Self::StateMachineBooleanValue(value)
+            | Self::ScrollSnap(value)
+            | Self::ScrollVirtualize(value)
+            | Self::ScrollInfinite(value)
+            | Self::ScrollInteractive(value)
             | Self::NestedBooleanValue(value) => AuthoringValue::Bool(value),
             Self::BooleanEqualsValue(value) => AuthoringValue::Uint(u64::from(!value)),
             Self::ColorValue(value)
@@ -6467,6 +6668,7 @@ impl ExportedRecord {
             ExportedObjectKind::LayoutComponent => TYPE_LAYOUT_COMPONENT,
             ExportedObjectKind::ArtboardComponentList => TYPE_ARTBOARD_COMPONENT_LIST,
             ExportedObjectKind::LayoutComponentStyle => TYPE_LAYOUT_COMPONENT_STYLE,
+            ExportedObjectKind::ScrollConstraint => TYPE_SCROLL_CONSTRAINT,
             ExportedObjectKind::ArtboardListMapRule => TYPE_ARTBOARD_LIST_MAP_RULE,
             ExportedObjectKind::Rectangle => TYPE_RECTANGLE,
             ExportedObjectKind::PointsPath => TYPE_POINTS_PATH,
@@ -8541,6 +8743,101 @@ impl Scene {
             .scroll_constraint_for_content_authored_id(content_authored_id))
     }
 
+    fn resolve_scroll_constraint_local(
+        &self,
+        instance: InstanceId,
+        constraint: ScrollConstraintId,
+    ) -> std::result::Result<usize, ResolveError> {
+        let slot = self
+            .materialized
+            .iter()
+            .find_map(|(artboard, materialized)| {
+                materialized
+                    .scroll_constraints
+                    .get(&constraint.object_id())
+                    .map(|local| (*artboard, *local))
+            });
+        let Some((slot_artboard, local_id)) = slot else {
+            return Err(ResolveError::UnknownObject);
+        };
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        if live.artboard != slot_artboard {
+            return Err(ResolveError::DifferentArtboard);
+        }
+        Ok(local_id)
+    }
+
+    /// Read the live occurrence of one authored ScrollConstraint in one
+    /// exact live Scene artboard occurrence.
+    pub fn scroll_constraint_snapshot(
+        &self,
+        instance: InstanceId,
+        constraint: ScrollConstraintId,
+    ) -> std::result::Result<RuntimeScrollConstraintSnapshot, ResolveError> {
+        let local_id = self.resolve_scroll_constraint_local(instance, constraint)?;
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        live.runtime
+            .raw()
+            .scroll_constraint_occurrences()
+            .into_iter()
+            .find(|snapshot| snapshot.constraint_local_id == local_id)
+            .ok_or(ResolveError::UnsupportedProperty)
+    }
+
+    /// Write one scroll channel on the live occurrence of one authored
+    /// ScrollConstraint, occurrence-scoped to `instance`, and return the
+    /// post-write snapshot so callers observe clamping without a second
+    /// call.
+    ///
+    /// The write routes through the same generic core-property seam pinned
+    /// C++ exposes as `CoreRegistry::setDouble` over the generated
+    /// ScrollConstraint keys (`scroll_constraint_base.hpp:36-49` at
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`): offsets store raw and
+    /// unclamped, percent/index writes defer as scroll intents until layout
+    /// can resolve them. The stored value settles into draw, hit, world
+    /// bounds, and semantic geometry on the next settle, which snapshot
+    /// reads and the scrolled read seams run themselves.
+    pub fn set_scroll_property(
+        &mut self,
+        instance: InstanceId,
+        constraint: ScrollConstraintId,
+        property: ScrollProperty,
+        value: f32,
+    ) -> std::result::Result<RuntimeScrollConstraintSnapshot, ResolveError> {
+        if !value.is_finite() {
+            return Err(ResolveError::NonFiniteValue);
+        }
+        let local_id = self.resolve_scroll_constraint_local(instance, constraint)?;
+        let key = property
+            .property_key()
+            .ok_or(ResolveError::UnsupportedProperty)?;
+        let live = self
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        live.runtime
+            .raw_mut()
+            .set_double_property(local_id, key, value);
+        live.runtime
+            .raw()
+            .scroll_constraint_occurrences()
+            .into_iter()
+            .find(|snapshot| snapshot.constraint_local_id == local_id)
+            .ok_or(ResolveError::UnsupportedProperty)
+    }
+
     /// Read one authored layout view's retained solved border box.
     ///
     /// The returned bounds are in artboard-local coordinates and use the
@@ -8597,6 +8894,62 @@ impl Scene {
             bounds.x + bounds.width,
             bounds.y + bounds.height,
         ))
+    }
+
+    /// [`Self::solved_layout_bounds`] mapped through live ancestor
+    /// ScrollConstraint scroll transforms, composed exactly as the semantic
+    /// provider and draw cache compose them. Identical to
+    /// [`Self::solved_layout_bounds`] when no ancestor ScrollConstraint is
+    /// live.
+    ///
+    /// The settled layout rect itself never reflects scroll: pinned C++
+    /// `ScrollConstraint::offsetY` only marks the content world transform
+    /// dirty and `constrainChild` composes a world translate, leaving
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:170-224` at
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`). Settles pending update
+    /// dirt first so a scroll offset written this frame is reflected in the
+    /// same read.
+    pub fn scrolled_layout_bounds(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+    ) -> std::result::Result<crate::Aabb, ResolveError> {
+        let slot = self
+            .materialized
+            .iter()
+            .find_map(|(artboard, materialized)| {
+                materialized
+                    .objects
+                    .get(&object)
+                    .map(|slot| (*artboard, *slot))
+            });
+        let Some((slot_artboard, slot)) = slot else {
+            let known_nonvisual = self.definitions.artboards.iter().any(|artboard| {
+                artboard.records.iter().any(|record| {
+                    record.id == object && !matches!(record.spec, RecordSpec::Visual { .. })
+                })
+            });
+            return Err(if known_nonvisual {
+                ResolveError::NonVisualObject
+            } else {
+                ResolveError::UnknownObject
+            });
+        };
+        let live = self
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        if live.artboard != slot_artboard {
+            return Err(ResolveError::DifferentArtboard);
+        }
+        if slot.kind != NodeKind::LayoutComponent {
+            return Err(ResolveError::UnsupportedProperty);
+        }
+        live.runtime
+            .scrolled_layout_bounds(slot.local_id)
+            .ok_or(ResolveError::UnsupportedProperty)
     }
 
     /// Create a host identity token for one authored instance mount.
@@ -9509,6 +9862,155 @@ impl SceneTx<'_> {
             .insert(owner_record.artboard, operation_index);
         self.spec_origins.nodes.insert(id, operation_index);
         Ok(LayoutComponentStyleId(id))
+    }
+
+    /// Resolve the stable authored ScrollConstraint owned by a content
+    /// LayoutComponent.
+    pub fn scroll_constraint(&self, content: ObjectId) -> Option<ScrollConstraintId> {
+        self.definition_index
+            .owned
+            .get(&content)
+            .into_iter()
+            .flatten()
+            .copied()
+            .find(|id| {
+                self.definition_index
+                    .objects
+                    .get(id)
+                    .is_some_and(|indexed| indexed.kind == AuthoredObjectKind::ScrollConstraint)
+            })
+            .map(ScrollConstraintId)
+    }
+
+    /// Author one ScrollConstraint on a content LayoutComponent.
+    ///
+    /// `content` must be an authored LayoutComponent whose parent is another
+    /// LayoutComponent or the Artboard root — the parent is the viewport,
+    /// positionally, exactly as pinned C++ resolves `content()`/`viewport()`
+    /// (`scroll_constraint.hpp:114-118` at
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`). At most one authored
+    /// ScrollConstraint may own one content component.
+    pub fn create_scroll_constraint(
+        &mut self,
+        content: ObjectId,
+        spec: ScrollConstraintSpec,
+    ) -> std::result::Result<ScrollConstraintId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        for (value, property) in [
+            (spec.scroll_offset_x, "scrollOffsetX"),
+            (spec.scroll_offset_y, "scrollOffsetY"),
+            (spec.threshold, "threshold"),
+            (spec.drag_multiplier, "dragMultiplier"),
+        ] {
+            if !value.is_finite() {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(content)],
+                    EditReason::NonFiniteProperty { property },
+                ));
+            }
+        }
+        let owner_record = self
+            .definition_index
+            .objects
+            .get(&content)
+            .copied()
+            .filter(|indexed| {
+                matches!(
+                    indexed.kind,
+                    AuthoredObjectKind::Visual(NodeKind::LayoutComponent)
+                )
+            })
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(content)],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        // The viewport is the content's parent. Reject content whose parent
+        // cannot resolve as a viewport LayoutComponent (the Artboard root is
+        // one: `Artboard extends LayoutComponent` in the Rive schema).
+        let viewport_valid =
+            self.definitions
+                .artboards
+                .get(owner_record.artboard_index)
+                .and_then(|artboard| artboard.records.get(owner_record.record_index))
+                .and_then(|record| record.visual())
+                .is_some_and(|(parent, _)| match parent {
+                    Parent::Artboard(_) => true,
+                    Parent::Object(parent) => self
+                        .definition_index
+                        .objects
+                        .get(&parent)
+                        .is_some_and(|indexed| {
+                            matches!(
+                                indexed.kind,
+                                AuthoredObjectKind::Visual(NodeKind::LayoutComponent)
+                            )
+                        }),
+                });
+        if !viewport_valid {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(content)],
+                EditReason::InternalInvariant,
+            ));
+        }
+        if self.scroll_constraint(content).is_some() {
+            return Err(EditAbort::new(
+                operation_index,
+                vec![EditId::Object(content)],
+                EditReason::IdentityCollision,
+            ));
+        }
+        let id = ObjectId(allocate_global_identity(&NEXT_OBJECT_ID).ok_or_else(|| {
+            EditAbort::new(
+                operation_index,
+                vec![EditId::Object(content)],
+                EditReason::IdentityExhausted,
+            )
+        })?);
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(owner_record.artboard_index)
+            .filter(|artboard| artboard.id == owner_record.artboard)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Artboard(owner_record.artboard)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let record_index = artboard.records.len();
+        artboard.records.push(RecordDefinition {
+            id,
+            spec: RecordSpec::ScrollConstraint {
+                owner: content,
+                spec,
+            },
+        });
+        self.definition_index.objects.insert(
+            id,
+            IndexedObject {
+                artboard: owner_record.artboard,
+                artboard_index: owner_record.artboard_index,
+                record_index,
+                kind: AuthoredObjectKind::ScrollConstraint,
+            },
+        );
+        self.definition_index.owned.entry(id).or_default();
+        self.definition_index
+            .owned
+            .entry(content)
+            .or_default()
+            .push(id);
+        self.created_objects.push(id);
+        self.touched_artboards
+            .insert(owner_record.artboard, operation_index);
+        self.spec_origins.nodes.insert(id, operation_index);
+        Ok(ScrollConstraintId(id))
     }
 
     /// Move an authored object subtree to an exact final position among its
@@ -16483,6 +16985,24 @@ impl Frame<'_> {
             .world_transform(local_id)
     }
 
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied — the combination the semantic provider and draw
+    /// cache already compose internally. Settles pending update dirt first.
+    pub fn world_transform_with_scroll(
+        &mut self,
+        instance: InstanceId,
+        object: ObjectId,
+    ) -> Option<crate::Mat2D> {
+        let (artboard, local_id) = self.resolve_geometry_target(instance, object)?;
+        self.scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance && candidate.artboard == artboard)?
+            .runtime
+            .world_transform_with_scroll(local_id)
+    }
+
     /// Return the canonical downstream shaped Text caret in source-artboard
     /// world space for one exact UTF-8 byte boundary.
     ///
@@ -16765,6 +17285,7 @@ impl MaterializedArtboard {
         let mut root_animations = None;
         let mut root_machines = None;
         let mut root_events_by_local = None;
+        let mut root_scroll_constraints = None;
         let mut objects_by_artboard_local = BTreeMap::new();
         let catalogs = LoweringCatalogs {
             file_assets: &referenced_assets,
@@ -16782,6 +17303,7 @@ impl MaterializedArtboard {
                 root_animations = Some(lowered.animations.clone());
                 root_machines = Some(lowered.machines.clone());
                 root_events_by_local = Some(lowered.events_by_local.clone());
+                root_scroll_constraints = Some(lowered.scroll_constraints.clone());
             }
             objects_by_artboard_local.insert(definition.id, lowered.objects_by_local);
             records.extend(lowered.records);
@@ -16873,6 +17395,13 @@ impl MaterializedArtboard {
                 )
             })?,
             events_by_local: root_events_by_local.ok_or_else(|| {
+                EditDiagnostic::new(
+                    touched_operation_index,
+                    vec![EditId::Artboard(root)],
+                    EditReason::InternalInvariant,
+                )
+            })?,
+            scroll_constraints: root_scroll_constraints.ok_or_else(|| {
                 EditDiagnostic::new(
                     touched_operation_index,
                     vec![EditId::Artboard(root)],
@@ -17063,6 +17592,7 @@ struct LoweredArtboard {
     machines: BTreeMap<MachineId, usize>,
     events_by_local: Vec<Option<EventId>>,
     objects_by_local: Vec<Option<ObjectId>>,
+    scroll_constraints: BTreeMap<ObjectId, usize>,
 }
 
 fn artboard_indices(
@@ -21705,6 +22235,7 @@ fn lower_artboard(
 
     let mut local_ids = BTreeMap::new();
     let mut objects = BTreeMap::new();
+    let mut scroll_constraint_locals = BTreeMap::new();
     let mut objects_by_local = vec![None];
     let visibility_binds = artboard
         .records
@@ -22434,6 +22965,34 @@ fn lower_artboard(
         objects_by_local.push(None);
     }
 
+    // Authored ScrollConstraints join the object table after every layout
+    // style: nothing forward-references them, so their local ids are simply
+    // their emission positions. Each record is parented to its content
+    // LayoutComponent, exactly the positional ownership pinned C++ resolves
+    // through `content()`/`viewport()` (`scroll_constraint.hpp:114-118`).
+    for record in &artboard.records {
+        let RecordSpec::ScrollConstraint { owner, spec } = &record.spec else {
+            continue;
+        };
+        let owner_local = all_local_ids.get(owner).copied().ok_or_else(|| {
+            EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id), EditId::Object(*owner)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        let parent_id = u32::try_from(owner_local).map_err(|_| {
+            EditDiagnostic::new(
+                origins.object(record.id, fallback_operation_index),
+                vec![EditId::Object(record.id)],
+                EditReason::CapacityExceeded,
+            )
+        })?;
+        scroll_constraint_locals.insert(record.id, objects_by_local.len());
+        records.push(scroll_constraint_record(spec, parent_id));
+        objects_by_local.push(Some(record.id));
+    }
+
     for node in artboard.visual_records() {
         let NodeSpec::NestedArtboard(spec) = node.spec else {
             continue;
@@ -22673,6 +23232,7 @@ fn lower_artboard(
         machines,
         events_by_local,
         objects_by_local,
+        scroll_constraints: scroll_constraint_locals,
     })
 }
 
@@ -24826,6 +25386,44 @@ fn node_record(
         }
     };
     Ok(ExportedRecord { kind, properties })
+}
+
+/// Lower one authored ScrollConstraint spec to its exported record. Sparse:
+/// properties matching the Rive schema defaults are omitted, so the imported
+/// occurrence settles identically to a `.riv`-authored one.
+fn scroll_constraint_record(spec: &ScrollConstraintSpec, parent_id: u32) -> ExportedRecord {
+    let mut properties = vec![
+        ExportedProperty::ParentId(parent_id),
+        ExportedProperty::ScrollDirectionValue(spec.direction.wire_value()),
+    ];
+    if spec.scroll_offset_x != 0.0 {
+        properties.push(ExportedProperty::ScrollOffsetX(spec.scroll_offset_x));
+    }
+    if spec.scroll_offset_y != 0.0 {
+        properties.push(ExportedProperty::ScrollOffsetY(spec.scroll_offset_y));
+    }
+    if spec.snap {
+        properties.push(ExportedProperty::ScrollSnap(true));
+    }
+    if spec.virtualize {
+        properties.push(ExportedProperty::ScrollVirtualize(true));
+    }
+    if spec.infinite {
+        properties.push(ExportedProperty::ScrollInfinite(true));
+    }
+    if !spec.interactive {
+        properties.push(ExportedProperty::ScrollInteractive(false));
+    }
+    if spec.threshold != 0.0 {
+        properties.push(ExportedProperty::ScrollThreshold(spec.threshold));
+    }
+    if spec.drag_multiplier != 1.0 {
+        properties.push(ExportedProperty::ScrollDragMultiplier(spec.drag_multiplier));
+    }
+    ExportedRecord {
+        kind: ExportedObjectKind::ScrollConstraint,
+        properties,
+    }
 }
 
 fn layout_component_style_record(
@@ -30604,6 +31202,7 @@ mod tests {
                 file,
                 image_intrinsic_dimensions_by_global: BTreeMap::new(),
                 objects,
+                scroll_constraints: BTreeMap::new(),
                 animations: BTreeMap::new(),
                 machines: BTreeMap::new(),
                 events_by_local: vec![None; local_count],
@@ -30750,6 +31349,7 @@ mod tests {
                 file,
                 image_intrinsic_dimensions_by_global: BTreeMap::new(),
                 objects,
+                scroll_constraints: BTreeMap::new(),
                 animations: BTreeMap::new(),
                 machines: BTreeMap::new(),
                 events_by_local: vec![None; local_count],

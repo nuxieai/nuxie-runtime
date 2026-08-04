@@ -11763,6 +11763,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "Feather::onAddedDirty",
         "FollowPathConstraint::onAddedClean",
         "GradientStop::onAddedDirty",
+        "GridItemPlacement::onAddedClean",
         "IKConstraint::onAddedClean",
         "InterpolatingKeyFrame::onAddedDirty",
         "Joystick::onAddedClean",
@@ -11776,6 +11777,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "LayoutComponent::onAddedClean",
         "LayoutComponent::onAddedDirty",
         "LayoutComponentStyle::onAddedDirty",
+        "LayoutParticipant::onAddedClean",
         "LinearAnimation::onAddedClean",
         "LinearAnimation::onAddedDirty",
         "LinearGradient::onAddedDirty",
@@ -13139,7 +13141,7 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
             });
     assert_eq!(
         read_bytes_len,
-        "constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
+        "//Guardagainstalength(whichisdecodedstraightfromthefileandmay//becorruptortruncated)thatwouldrunpasttheendofthebuffer.if(length>static_cast<size_t>(m_Bytes.end()-m_Position)){overflow();returnSpan<constuint8_t>(m_Bytes.end(),0);}constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
         "BinaryReader::readBytes(size_t) changed; audit Rust sized bytes reads and malformed-stream tests"
     );
 

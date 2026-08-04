@@ -4517,7 +4517,7 @@ impl ArtboardInstance {
                 let clip_left = -self.origin_x * self.width;
                 let clip_top = -self.origin_y * self.height;
                 let fill_rule = RenderFillRule::Clockwise;
-                let key = path_cache.retained_render_path_key(self, graph, fill_rule);
+                let key = path_cache.retained_render_path_key(self, graph, 0, fill_rule);
                 let clip = path_cache.artboard_clip_path(key, factory, || {
                     runtime_rect_commands(
                         clip_left,
@@ -6709,10 +6709,27 @@ impl ArtboardInstance {
         bounds: RuntimeLayoutBounds,
         all_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
+        let retain_mounted_artboard_root_only = local_id == 0
+            && self
+                .component(local_id)
+                .is_some_and(|component| component.type_name == "Artboard")
+            && self
+                .runtime_shapes
+                .paint_path_owner(local_id, RuntimeShapePaintPathKind::Local)
+                .is_none();
         if let Some(layout) = self
             .component(local_id)
             .and_then(|component| component.concrete.layout.as_ref())
         {
+            // A component-list row's Artboard root is a mounted Yoga node, but
+            // it is not itself a renderer-facing LayoutComponent unless it
+            // owns a local paint path. Retain the host-assigned bounds without
+            // publishing path/world dirt for that synthetic root. Descendant
+            // LayoutComponents still use the full invalidation path below.
+            if retain_mounted_artboard_root_only {
+                layout.retain_bounds(bounds.x, bounds.y, bounds.width, bounds.height);
+                return;
+            }
             // Renderer-facing bounds are accumulated in artboard space. C++
             // stores Yoga's parent-local Layout on the LayoutComponent and
             // its virtual x()/y() return that local left/top.
@@ -6734,6 +6751,15 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if size_changed {
+                // Pinned LayoutComponent::updateLayoutBounds publishes Path
+                // before propagateSize/markWorldTransformDirty whenever the
+                // retained width or height changes. That ordering lets a
+                // dependent ClippingShape rebuild from the resized source
+                // path in the same dependency traversal
+                // (`layout_component.cpp:1153-1178`).
+                self.add_dirt(local_id, ComponentDirt::PATH, false);
+            }
             if should_propagate_size {
                 // A layout position change does not rebuild geometry, but it
                 // does move the owner and its descendants. C++ separates the
@@ -15397,10 +15423,17 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
-            let bounds = match layout {
-                Some(layout) => Some(layout.bounds),
-                None => None,
+            let bounds = if instance.layout_node_owned_by_host {
+                // `Artboard::takeLayoutData()` disables the mounted child's
+                // own layout solve. Draw reads the last parent-owned Yoga
+                // snapshot instead of recomputing the transferred subtree
+                // from live child data binds (`artboard.cpp:1245-1253,
+                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
+                instance.layout_constraint_bounds.as_deref().cloned()
+            } else {
+                TaffyRuntimeLayoutEngine
+                    .compute_layout(instance, graph, runtime)
+                    .map(|layout| layout.bounds)
             };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
@@ -15512,12 +15545,13 @@ impl RuntimeArtboardPathState {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        local_id: usize,
         fill_rule: RenderFillRule,
     ) -> RuntimeRetainedRenderPathCacheKey {
         RuntimeRetainedRenderPathCacheKey {
             graph_global_id: graph.global_id,
             path_epoch: instance
-                .component(0)
+                .component(local_id)
                 .map_or(0, |component| component.path_revision()),
             world_epoch: 0,
             fill_rule,
@@ -17656,8 +17690,16 @@ fn runtime_draw_live_layout_family(
             instance.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
             && !paths.clip.is_empty()
         {
-            let key =
-                path_cache.retained_render_path_key(instance, graph, RenderFillRule::Clockwise);
+            // LayoutComponent owns an independent retained clip path. Key it
+            // by that concrete owner's Path revision; the artboard-root
+            // revision only governs Artboard::m_clipPath and left resized
+            // layout clips backed by stale renderer resources.
+            let key = path_cache.retained_render_path_key(
+                instance,
+                graph,
+                layout_local,
+                RenderFillRule::Clockwise,
+            );
             let path = runtime_cached_retained_render_path(
                 &mut backend.clip_path,
                 key,
@@ -19002,9 +19044,18 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
     // root Yoga node to the parent. The resulting width/height are therefore
     // the child's own layout constraints, not merely a draw-time frame.
-    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    changed |= !child.layout_constraint_bounds_enabled;
-    child.enable_layout_constraint_bounds();
+    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
+    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+        // The hosted root is still the child's LayoutComponent owner. Refresh
+        // its retained constraint frame before the same-pass child update so
+        // Artboard::updateRenderPath sees the newly assigned row size, as the
+        // pinned transferred Yoga node does (`artboard_component_list.cpp:
+        // 220-260`; `artboard.cpp:1138-1157`).
+        child.refresh_layout_constraint_bounds();
+    } else {
+        child.enable_layout_constraint_bounds();
+    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }

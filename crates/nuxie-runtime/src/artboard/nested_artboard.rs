@@ -10,7 +10,20 @@ use crate::scripting::ScriptError;
 use crate::state_machine::{StateMachineInstance, StateMachineReportedEvent};
 
 impl RuntimeNestedArtboardInstance {
-    pub(in crate::artboard) fn install_external_focus_domain(&mut self, parent_focus: &crate::focus::RuntimeFocusTree) {
+    /// A same-layer authored VMI write can be consumed by the mounted child
+    /// without publishing a second layout assignment back into its host.
+    /// Advance the transfer fence to that consumed child generation so the
+    /// parent-owned Yoga snapshot remains authoritative.
+    pub(crate) fn acknowledge_consumed_child_layout_revision(&mut self) {
+        if let Some(key) = self.layout_data_transfer_key.as_mut() {
+            key.child_layout_revision = self.child.layout_revision();
+        }
+    }
+
+    pub(in crate::artboard) fn install_external_focus_domain(
+        &mut self,
+        parent_focus: &crate::focus::RuntimeFocusTree,
+    ) {
         let child_identity = self.child.instance_identity();
         for animation in &mut self.animations {
             let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
@@ -21,7 +34,10 @@ impl RuntimeNestedArtboardInstance {
         self.child.install_external_focus_domain(parent_focus);
     }
 
-    pub(in crate::artboard) fn reuse_owned_stateful_view_model_context(&mut self, existing: &Self) -> bool {
+    pub(in crate::artboard) fn reuse_owned_stateful_view_model_context(
+        &mut self,
+        existing: &Self,
+    ) -> bool {
         if self.stateful_view_model_instance_local.is_some()
             || existing.stateful_view_model_instance_local.is_some()
         {
@@ -235,7 +251,10 @@ impl RuntimeNestedArtboardInstance {
     }
 
     // Mirrors src/nested_artboard.cpp NestedArtboard::calculateLocalElapsedSeconds.
-    pub(in crate::artboard) fn calculate_local_elapsed_seconds(&mut self, elapsed_seconds: f32) -> f32 {
+    pub(in crate::artboard) fn calculate_local_elapsed_seconds(
+        &mut self,
+        elapsed_seconds: f32,
+    ) -> f32 {
         let mut local_elapsed_seconds =
             elapsed_seconds * if self.speed >= 0.0 { self.speed } else { 1.0 };
         if self.quantize >= 0.0 {
@@ -297,7 +316,11 @@ impl RuntimeNestedArtboardInstance {
         false
     }
 
-    pub(in crate::artboard) fn set_simple_animation_speed(&mut self, local_id: usize, value: f32) -> bool {
+    pub(in crate::artboard) fn set_simple_animation_speed(
+        &mut self,
+        local_id: usize,
+        value: f32,
+    ) -> bool {
         for animation in &mut self.animations {
             let RuntimeNestedAnimationInstance::Simple {
                 local_id: animation_local_id,
@@ -316,7 +339,11 @@ impl RuntimeNestedArtboardInstance {
         false
     }
 
-    pub(in crate::artboard) fn set_simple_animation_is_playing(&mut self, local_id: usize, value: bool) -> bool {
+    pub(in crate::artboard) fn set_simple_animation_is_playing(
+        &mut self,
+        local_id: usize,
+        value: bool,
+    ) -> bool {
         for animation in &mut self.animations {
             let RuntimeNestedAnimationInstance::Simple {
                 local_id: animation_local_id,

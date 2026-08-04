@@ -370,10 +370,9 @@ fn syntax_and_unsupported_gpu_contracts_fail_closed() {
         "{no_occurrence}"
     );
 
-    let mut missing_draw = GpuCanvasProgram::compile(
-        "return function(context) context:gpuCanvas() return {} end",
-    )
-    .expect("shape compiles before execution");
+    let mut missing_draw =
+        GpuCanvasProgram::compile("return function(context) context:gpuCanvas() return {} end")
+            .expect("shape compiles before execution");
     let error = missing_draw.draw().unwrap_err();
     assert!(error.to_string().contains("drawCanvas"), "{error}");
 

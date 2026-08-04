@@ -2,7 +2,7 @@
 //!
 //! Faithful port of `Parser::parseAssignment` — `var {, var} = expr {, expr}`.
 //! Each assignment target is validated as an l-value (a non-l-value is replaced
-//! by an error node, gated on the export-value flag pair like the C++). The
+//! by an error node, gated on the export-value flag like the C++). The
 //! target and value lists are gathered in scratch arenas (vars/values share the
 //! comma-position arena, stack-disciplined) and copied into the node.
 
@@ -22,9 +22,7 @@ use crate::records::temp_vector::TempVector;
 impl Parser {
     pub fn parse_assignment(&mut self, mut initial: *mut AstExpr) -> *mut AstStat {
         if !is_expr_l_value(initial) {
-            initial = if luaur_common::FFlag::LuauExportValueSyntax.get()
-                && luaur_common::FFlag::LuauConst2.get()
-            {
+            initial = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(initial) as *mut AstExpr
             } else {
                 let expressions = self.copy_initializer_list_t(&[initial]);
@@ -49,9 +47,7 @@ impl Parser {
             let mut expr = self.parse_primary_expr(true);
 
             if !is_expr_l_value(expr) {
-                expr = if luaur_common::FFlag::LuauExportValueSyntax.get()
-                    && luaur_common::FFlag::LuauConst2.get()
-                {
+                expr = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                     self.report_l_value_error(expr) as *mut AstExpr
                 } else {
                     let expressions = self.copy_initializer_list_t(&[expr]);

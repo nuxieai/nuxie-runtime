@@ -120,15 +120,11 @@ pub fn compile_or_throw_bytecode_builder_parse_result_ast_name_table_compile_opt
             names,
         );
 
-        if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            && luaur_common::FFlag::LuauCompileFoldOptimize.get()
-        {
-            build_table_constant_map(
-                &mut compiler.table_constants,
-                &compiler.variables,
-                root_node,
-            );
-        }
+        build_table_constant_map(
+            &mut compiler.table_constants,
+            &compiler.variables,
+            root_node,
+        );
 
         fold_constants(
             &mut compiler.constants,

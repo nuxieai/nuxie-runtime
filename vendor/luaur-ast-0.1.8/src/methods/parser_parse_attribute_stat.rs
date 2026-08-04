@@ -5,17 +5,16 @@ use crate::records::ast_name::AstName;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_error::AstStatError;
 use crate::records::ast_stat_function::AstStatFunction;
+use crate::records::cst_attr_list::CstAttrList;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
-use crate::records::cst_attr_list::CstAttrList;
 use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_attribute_stat(&mut self) -> *mut AstStat {
         let start_location = self.lexer.current().location;
-        let mut cst_attr_lists = TempVector::<*mut CstAttrList>::new(
-            &mut self.scratch_cst_attr_list,
-        );
+        let mut cst_attr_lists =
+            TempVector::<*mut CstAttrList>::new(&mut self.scratch_cst_attr_list);
         let cst_attr_lists_ptr = if luaur_common::FFlag::LuauCstAttr.get() {
             &mut cst_attr_lists
         } else {
@@ -29,36 +28,27 @@ impl Parser {
                 self.parse_function_stat(&attributes, cst_attr_lists_ptr) as *mut AstStat
             }
             Type::ReservedLocal => {
-                if luaur_common::FFlag::LuauConst2.get() {
-                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
-                        self.get_attribute_start_location(
-                            &attributes,
-                            &cst_attr_lists,
-                            start_location,
-                        )
-                    } else if attributes.size > 0 {
-                        unsafe { (**attributes.data.add(0)).base.location }
-                    } else {
-                        self.lexer.current().location
-                    };
-
-                    self.parse_local(
-                        attr_loc,
-                        self.lexer.current().location.begin,
-                        &attributes,
-                        false,
-                        cst_attr_lists_ptr,
-                    ) as *mut AstStat
+                let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
+                    self.get_attribute_start_location(&attributes, &cst_attr_lists, start_location)
+                } else if attributes.size > 0 {
+                    unsafe { (**attributes.data.add(0)).base.location }
                 } else {
-                    self.parseLocal_DEPRECATED(&attributes, cst_attr_lists_ptr) as *mut AstStat
-                }
+                    self.lexer.current().location
+                };
+
+                self.parse_local(
+                    attr_loc,
+                    self.lexer.current().location.begin,
+                    &attributes,
+                    false,
+                    cst_attr_lists_ptr,
+                ) as *mut AstStat
             }
             Type::Name => {
                 let current = self.lexer.current();
                 let current_name = unsafe { current.data.name };
 
                 if luaur_common::FFlag::LuauExportValueSyntax.get()
-                    && luaur_common::FFlag::LuauConst2.get()
                     && unsafe {
                         AstName::operator_eq_c_char(
                             &AstName {
@@ -88,18 +78,15 @@ impl Parser {
                         keyword_loc.begin,
                         &attributes,
                         cst_attr_lists_ptr,
+                    ) as *mut AstStat
+                } else if unsafe {
+                    AstName::operator_eq_c_char(
+                        &AstName {
+                            value: current_name,
+                        },
+                        c"const".as_ptr(),
                     )
-                        as *mut AstStat
-                } else if luaur_common::FFlag::LuauConst2.get()
-                    && unsafe {
-                        AstName::operator_eq_c_char(
-                            &AstName {
-                                value: current_name,
-                            },
-                            c"const".as_ptr(),
-                        )
-                    }
-                {
+                } {
                     let keyword_loc = current.location;
                     self.next_lexeme();
 
@@ -150,38 +137,20 @@ impl Parser {
         let current = self.lexer.current();
         let loc = current.location;
 
-        if luaur_common::FFlag::LuauConst2.get() {
-            self.report_stat_error(
-                loc,
-                crate::records::ast_array::AstArray {
-                    data: core::ptr::null_mut(),
-                    size: 0,
-                },
-                crate::records::ast_array::AstArray {
-                    data: core::ptr::null_mut(),
-                    size: 0,
-                },
-                format_args!(
-                    "Expected 'function', 'local function', 'const function', 'declare function' or a function type declaration after attribute, but got {} instead",
-                    current.to_string()
-                ),
-            )
-        } else {
-            self.report_stat_error(
-                loc,
-                crate::records::ast_array::AstArray {
-                    data: core::ptr::null_mut(),
-                    size: 0,
-                },
-                crate::records::ast_array::AstArray {
-                    data: core::ptr::null_mut(),
-                    size: 0,
-                },
-                format_args!(
-                    "Expected 'function', 'local function', 'declare function' or a function type declaration after attribute, but got {} instead",
-                    current.to_string()
-                ),
-            )
-        }
+        self.report_stat_error(
+            loc,
+            crate::records::ast_array::AstArray {
+                data: core::ptr::null_mut(),
+                size: 0,
+            },
+            crate::records::ast_array::AstArray {
+                data: core::ptr::null_mut(),
+                size: 0,
+            },
+            format_args!(
+                "Expected 'function', 'local function', 'const function', 'declare function' or a function type declaration after attribute, but got {} instead",
+                current.to_string()
+            ),
+        )
     }
 }

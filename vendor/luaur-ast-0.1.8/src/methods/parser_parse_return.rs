@@ -53,10 +53,7 @@ impl Parser {
             );
         }
 
-        if luaur_common::FFlag::LuauExportValueSyntax.get()
-            && luaur_common::FFlag::LuauConst2.get()
-            && self.function_stack.len() == 1
-        {
+        if luaur_common::FFlag::LuauExportValueSyntax.get() && self.function_stack.len() == 1 {
             if !self.declared_export_bindings.is_empty() {
                 self.report_location_c_char_item(
                     unsafe { (*node).base.base.location },

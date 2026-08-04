@@ -55,6 +55,8 @@ pub struct Proto {
     pub feedbackvec: *mut FeedbackVectorSlot,
     pub feedbackvecsize: u32,
     pub funid: u32,
+    pub optimized: *mut Proto,
+    pub deoptimized: *mut Proto,
 }
 
 #[allow(non_camel_case_types)]

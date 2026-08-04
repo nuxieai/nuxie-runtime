@@ -7,11 +7,9 @@ use crate::functions::lua_d_rawrunprotected_ldo_alt_b::lua_d_rawrunprotected_mut
 use crate::functions::lua_d_seterrorobj::luaD_seterrorobj;
 use crate::functions::lua_f_close::lua_f_close as luaF_close;
 use crate::functions::restore_stack_limit::restore_stack_limit;
-use crate::macros::clvalue::clvalue;
 use crate::macros::restoreci::restoreci;
 use crate::macros::restorestack::restorestack;
 use crate::macros::saveci::saveci;
-use crate::records::call_info::CallInfo;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::pfunc::Pfunc;
 use crate::type_aliases::stk_id::StkId;
@@ -32,18 +30,6 @@ pub unsafe fn luaD_pcall(
     let mut status: i32 = lua_d_rawrunprotected_mut(L, func, u);
     if status != 0 {
         let mut errstatus: i32 = status;
-
-        if luaur_common::FFlag::LuauClosureUsageCounter.get() {
-            let mut lastci: *mut CallInfo = (*L).ci;
-            let savedci: *mut CallInfo = restoreci!(L, old_ci);
-            while lastci != savedci {
-                let cl =
-                    clvalue!((*lastci).func) as *const _ as *mut crate::records::closure::Closure;
-                LUAU_ASSERT!((*cl).usage > 0);
-                (*cl).usage -= 1;
-                lastci = lastci.offset(-1);
-            }
-        }
 
         // call user-defined error function (used in xpcall)
         if ef != 0 {

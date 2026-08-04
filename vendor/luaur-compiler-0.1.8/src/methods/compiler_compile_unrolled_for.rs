@@ -29,13 +29,8 @@ impl Compiler {
                 continue_used: core::ptr::null_mut(),
             });
 
-            let record_changes = luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && luaur_common::FFlag::LuauCompileFoldOptimize.get();
-
-            if record_changes {
-                self.expr_changes.clear();
-                self.local_changes.clear();
-            }
+            self.expr_changes.clear();
+            self.local_changes.clear();
 
             for iv in 0..trip_count {
                 *self.locstants.get_or_insert(stat_ref.var) = Constant {
@@ -53,15 +48,15 @@ impl Compiler {
                     self.builtins_fold,
                     self.builtins_fold_library_k,
                     self.options.library_member_constant_cb,
-                    stat_ref.body as *mut AstNode,
+                    stat as *mut AstNode,
                     &mut *self.names,
                     &self.table_constants,
-                    if record_changes && iv == 0 {
+                    if iv == 0 {
                         &mut self.expr_changes as *mut _
                     } else {
                         core::ptr::null_mut()
                     },
-                    if record_changes && iv == 0 {
+                    if iv == 0 {
                         &mut self.local_changes as *mut _
                     } else {
                         core::ptr::null_mut()
@@ -100,30 +95,14 @@ impl Compiler {
 
             self.locstants.get_or_insert(stat_ref.var).r#type = Type::Type_Unknown;
 
-            if record_changes {
-                undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
-                    &mut self.constants,
-                    &self.expr_changes,
-                );
-                undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
-                    &mut self.locstants,
-                    &self.local_changes,
-                );
-            } else {
-                fold_constants(
-                    &mut self.constants,
-                    &mut self.variables,
-                    &mut self.locstants,
-                    self.builtins_fold,
-                    self.builtins_fold_library_k,
-                    self.options.library_member_constant_cb,
-                    stat_ref.body as *mut AstNode,
-                    &mut *self.names,
-                    &self.table_constants,
-                    core::ptr::null_mut(),
-                    core::ptr::null_mut(),
-                );
-            }
+            undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
+                &mut self.constants,
+                &self.expr_changes,
+            );
+            undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
+                &mut self.locstants,
+                &self.local_changes,
+            );
         }
     }
 }

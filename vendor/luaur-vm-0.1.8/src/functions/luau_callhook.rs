@@ -14,6 +14,7 @@ use crate::records::lua_debug::lua_Debug;
 use crate::type_aliases::lua_hook::LuaHook;
 use crate::type_aliases::lua_state::lua_State;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
+use luaur_common::FFlag;
 
 /// C++ `LUAU_NOINLINE void luau_callhook(lua_State* L, lua_Hook hook, void* userdata)`.
 #[allow(non_snake_case)]
@@ -41,10 +42,13 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
     let oldsavedpc = (*(*L).ci).context.savedpc;
 
     if !(*(*L).ci).context.savedpc.is_null() {
-        let code_end = {
+        let p = if FFlag::LuauCIProto.get() {
+            (*(*L).ci).p
+        } else {
             let l = &(*cl).inner.l;
-            (*l.p).code.add((*l.p).sizecode as usize)
+            l.p
         };
+        let code_end = (*p).code.add((*p).sizecode as usize);
         if (*(*L).ci).context.savedpc != code_end {
             (*(*L).ci).context.savedpc = (*(*L).ci).context.savedpc.add(1);
         }
@@ -58,7 +62,9 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
     ar.currentline = if (*cl).isC != 0 {
         -1
     } else {
-        let p = {
+        let p = if FFlag::LuauCIProto.get() {
+            (*(*L).ci).p
+        } else {
             let l = &(*cl).inner.l;
             l.p
         };

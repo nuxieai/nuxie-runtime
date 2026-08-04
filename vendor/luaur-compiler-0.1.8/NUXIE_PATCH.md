@@ -11,3 +11,9 @@
 - Ported official Luau 0.726 delta (upstream 91caa731..86d2a9dc).
 - Touched areas: unconditional duptable constant packing and multi-return
   tracking for function-inlining eligibility.
+
+## Luau fork rung 3
+
+- Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
+- Touched areas: promoted table-property constant folding, change-log undo,
+  safe `next` specialization, and the FASTCALL3 cost model.

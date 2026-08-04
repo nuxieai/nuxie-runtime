@@ -23,3 +23,9 @@ Provenance:
 - Ported official Luau 0.725 delta (upstream 8f33df91..91caa731).
 - Touched areas: API stack growth, table cloning, custom yieldable protected
   calls, userdata-metatable GC pinning, and direct-field initialization.
+
+## Luau fork rung 3
+
+- Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
+- Touched areas: closure usage removal, CallInfo active protos, optimized proto
+  links and promotion, interpreter/debug proto selection, and GC accounting.

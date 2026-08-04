@@ -199,14 +199,14 @@ impl<'a> Printer<'a> {
             let cst_node = self.lookup_cst_node::<CstStatLocal>(
                 program as *mut AstStat as *mut crate::records::ast_node::AstNode,
             );
-            if FFlag::LuauExportValueSyntax.get() && FFlag::LuauConst2.get() && a.is_exported {
+            if FFlag::LuauExportValueSyntax.get() && a.is_exported {
                 self.writer.keyword("export");
                 if let Some(keyword_location) = a.keyword_location {
                     self.advance(keyword_location.begin);
                 }
                 self.writer
                     .keyword(if a.is_const { "const" } else { "local" });
-            } else if FFlag::LuauConst2.get() && a.is_const {
+            } else if a.is_const {
                 self.writer.keyword("const");
             } else {
                 self.writer.keyword("local");
@@ -482,16 +482,12 @@ impl<'a> Printer<'a> {
             );
             if FFlag::LuauCstAttr.get() {
                 if !cst_node.is_null() {
-                    self.visualize_attributes(
-                        unsafe { &(*a.func).attributes },
-                        unsafe { &(*cst_node).attr_lists },
-                    );
+                    self.visualize_attributes(unsafe { &(*a.func).attributes }, unsafe {
+                        &(*cst_node).attr_lists
+                    });
                     self.advance(unsafe { &(*cst_node).function_keyword_position });
                 } else {
-                    self.visualize_attributes(
-                        unsafe { &(*a.func).attributes },
-                        core::ptr::null(),
-                    );
+                    self.visualize_attributes(unsafe { &(*a.func).attributes }, core::ptr::null());
                 }
             } else {
                 for attr in unsafe { (*a.func).attributes.iter() } {
@@ -514,10 +510,9 @@ impl<'a> Printer<'a> {
                 program as *mut AstStat as *mut crate::records::ast_node::AstNode,
             );
             if FFlag::LuauCstAttr.get() && !cst_node.is_null() {
-                self.visualize_attributes(
-                    unsafe { &(*a.func).attributes },
-                    unsafe { &(*cst_node).attr_lists },
-                );
+                self.visualize_attributes(unsafe { &(*a.func).attributes }, unsafe {
+                    &(*cst_node).attr_lists
+                });
             } else {
                 for attr in unsafe { (*a.func).attributes.iter() } {
                     self.visualize_attribute(unsafe { &mut **attr });
@@ -526,12 +521,9 @@ impl<'a> Printer<'a> {
             if !cst_node.is_null() {
                 self.advance(unsafe { &(*cst_node).local_keyword_position });
             }
-            if FFlag::LuauExportValueSyntax.get()
-                && FFlag::LuauConst2.get()
-                && unsafe { (*a.name).is_exported }
-            {
+            if FFlag::LuauExportValueSyntax.get() && unsafe { (*a.name).is_exported } {
                 self.writer.keyword("export");
-            } else if FFlag::LuauConst2.get() && unsafe { (*a.name).is_const } {
+            } else if unsafe { (*a.name).is_const } {
                 self.writer.keyword("const");
             } else {
                 self.writer.keyword("local");

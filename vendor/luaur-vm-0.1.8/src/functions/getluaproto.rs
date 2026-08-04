@@ -4,9 +4,12 @@ use crate::macros::ci_func::ci_func;
 use crate::macros::is_lua::isLua;
 use crate::records::call_info::CallInfo;
 use crate::type_aliases::proto::Proto;
+use luaur_common::FFlag;
 
 pub(crate) unsafe fn get_lua_proto(ci: *mut CallInfo) -> *mut Proto {
-    if isLua!(ci) {
+    if FFlag::LuauCIProto.get() {
+        cast_to!(*mut Proto, (*ci).p)
+    } else if isLua!(ci) {
         let cl = ci_func!(ci);
         let lcl = core::ptr::addr_of!((*cl).inner.l).cast::<crate::records::closure::LClosure>();
         cast_to!(*mut Proto, (*lcl).p)

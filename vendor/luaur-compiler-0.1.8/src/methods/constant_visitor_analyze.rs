@@ -50,26 +50,31 @@ impl<'a> ConstantVisitor<'a> {
             result = self.analyze(expr.expr);
         } else if unsafe { ast_node_is::<AstExprConstantNil>(&*node_ptr) } {
             result.r#type = Type::Type_Nil;
-        } else if let Some(expr) = unsafe { ast_node_as::<AstExprConstantBool>(node_ptr).as_mut() } {
+        } else if let Some(expr) = unsafe { ast_node_as::<AstExprConstantBool>(node_ptr).as_mut() }
+        {
             result.r#type = Type::Type_Boolean;
             result.data.value_boolean = expr.value;
-        } else if let Some(expr) = unsafe { ast_node_as::<AstExprConstantNumber>(node_ptr).as_mut() } {
+        } else if let Some(expr) =
+            unsafe { ast_node_as::<AstExprConstantNumber>(node_ptr).as_mut() }
+        {
             result.r#type = Type::Type_Number;
             result.data.value_number = expr.value;
-        } else if let Some(expr) = unsafe { ast_node_as::<AstExprConstantInteger>(node_ptr).as_mut() } {
+        } else if let Some(expr) =
+            unsafe { ast_node_as::<AstExprConstantInteger>(node_ptr).as_mut() }
+        {
             result.r#type = Type::Type_Integer;
             result.data.value_integer64 = expr.value;
-        } else if let Some(expr) = unsafe { ast_node_as::<AstExprConstantString>(node_ptr).as_mut() } {
+        } else if let Some(expr) =
+            unsafe { ast_node_as::<AstExprConstantString>(node_ptr).as_mut() }
+        {
             result.r#type = Type::Type_String;
             result.data.value_string = expr.value.data;
             result.string_length = expr.value.size as core::ffi::c_uint;
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprLocal>(node_ptr).as_mut() } {
             if let Some(l) = self.locals.find(&expr.local) {
                 result = *l;
-            } else if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-                if let Some(l) = self.table_locals.find(&expr.local) {
-                    result = *l;
-                }
+            } else if let Some(l) = self.table_locals.find(&expr.local) {
+                result = *l;
             }
         } else if unsafe { ast_node_is::<AstExprGlobal>(&*node_ptr) }
             || unsafe { ast_node_is::<AstExprVarargs>(&*node_ptr) }
@@ -92,8 +97,7 @@ impl<'a> ConstantVisitor<'a> {
                         let ac = self.analyze(unsafe { *expr.args.data.add(i) });
                         let unknown = ac.r#type == Type::Type_Unknown;
                         let table = ac.r#type == Type::Type_Table;
-                        let propagate = luaur_common::FFlag::LuauCompilePropagateTableProps2.get();
-                        if (propagate && (unknown || table)) || (!propagate && unknown) {
+                        if unknown || table {
                             can_fold = false;
                         } else {
                             self.builtin_args.push(ac);
@@ -117,9 +121,7 @@ impl<'a> ConstantVisitor<'a> {
             }
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprIndexName>(node_ptr).as_mut() } {
             let value = self.analyze(expr.expr);
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && value.r#type == Type::Type_Table
-            {
+            if value.r#type == Type::Type_Table {
                 let table_idx = unsafe { value.data.value_table };
                 if table_idx < self.constant_tables.len() {
                     let props = &self.constant_tables[table_idx];
@@ -146,13 +148,16 @@ impl<'a> ConstantVisitor<'a> {
                 }
             } else if self.fold_library_k {
                 if let Some(eg) = unsafe {
-                    ast_node_as::<AstExprGlobal>(expr.expr as *mut luaur_ast::records::ast_node::AstNode)
-                        .as_mut()
+                    ast_node_as::<AstExprGlobal>(
+                        expr.expr as *mut luaur_ast::records::ast_node::AstNode,
+                    )
+                    .as_mut()
                 } {
                     if eg.name.operator_eq_c_char(c"math".as_ptr()) {
                         result = fold_builtin_math(expr.index);
                     }
-                    if !self.library_member_constant_cb.is_none() && result.r#type == Type::Type_Unknown
+                    if !self.library_member_constant_cb.is_none()
+                        && result.r#type == Type::Type_Unknown
                     {
                         unsafe {
                             (self.library_member_constant_cb.unwrap())(
@@ -168,10 +173,7 @@ impl<'a> ConstantVisitor<'a> {
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprIndexExpr>(node_ptr).as_mut() } {
             let index_val = self.analyze(expr.index);
             let table_val = self.analyze(expr.expr);
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && table_val.r#type == Type::Type_Table
-                && index_val.r#type == Type::Type_String
-            {
+            if table_val.r#type == Type::Type_Table && index_val.r#type == Type::Type_String {
                 let table_idx = unsafe { table_val.data.value_table };
                 if table_idx < self.constant_tables.len() && index_val.string_length != 0 {
                     let props = &self.constant_tables[table_idx];
@@ -189,40 +191,30 @@ impl<'a> ConstantVisitor<'a> {
                 (*expr.body).visit(self as &mut dyn luaur_ast::records::ast_visitor::AstVisitor);
             }
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprTable>(node_ptr).as_mut() } {
-            if luaur_common::FFlag::LuauCompilePropagateTableProps2.get() {
-                let mut props =
-                    luaur_common::records::dense_hash_map::DenseHashMap::new(AstName::new());
-                for i in 0..expr.items.size {
-                    let item = unsafe { &*expr.items.data.add(i) };
-                    let value_val = self.analyze(item.value);
-                    if !item.key.is_null() {
-                        let key_val = self.analyze(item.key);
-                        if key_val.r#type == Type::Type_String
-                            && value_val.r#type != Type::Type_Unknown
-                            && value_val.r#type != Type::Type_Table
-                            && key_val.string_length != 0
-                        {
-                            let const_key = self.string_table.get_or_add(
-                                unsafe { key_val.data.value_string },
-                                key_val.string_length as usize,
-                            );
-                            props.try_insert(const_key, value_val);
-                        }
+            let mut props =
+                luaur_common::records::dense_hash_map::DenseHashMap::new(AstName::new());
+            for i in 0..expr.items.size {
+                let item = unsafe { &*expr.items.data.add(i) };
+                let value_val = self.analyze(item.value);
+                if !item.key.is_null() {
+                    let key_val = self.analyze(item.key);
+                    if key_val.r#type == Type::Type_String
+                        && value_val.r#type != Type::Type_Unknown
+                        && value_val.r#type != Type::Type_Table
+                        && key_val.string_length != 0
+                    {
+                        let const_key = self.string_table.get_or_add(
+                            unsafe { key_val.data.value_string },
+                            key_val.string_length as usize,
+                        );
+                        props.try_insert(const_key, value_val);
                     }
                 }
-                if props.size() == expr.items.size {
-                    result.r#type = Type::Type_Table;
-                    result.data.value_table = self.constant_tables.len();
-                    self.constant_tables.push(props);
-                }
-            } else {
-                for i in 0..expr.items.size {
-                    let item = unsafe { &*expr.items.data.add(i) };
-                    if !item.key.is_null() {
-                        self.analyze(item.key);
-                    }
-                    self.analyze(item.value);
-                }
+            }
+            if props.size() == expr.items.size {
+                result.r#type = Type::Type_Table;
+                result.data.value_table = self.constant_tables.len();
+                self.constant_tables.push(props);
             }
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprUnary>(node_ptr).as_mut() } {
             let arg = self.analyze(expr.expr);
@@ -249,10 +241,14 @@ impl<'a> ConstantVisitor<'a> {
                     false_expr
                 };
             }
-        } else if let Some(expr) = unsafe { ast_node_as::<AstExprInterpString>(node_ptr).as_mut() } {
+        } else if let Some(expr) = unsafe { ast_node_as::<AstExprInterpString>(node_ptr).as_mut() }
+        {
             let mut only_constant = true;
             for i in 0..expr.expressions.size {
-                if self.analyze(unsafe { *expr.expressions.data.add(i) }).r#type != Type::Type_String
+                if self
+                    .analyze(unsafe { *expr.expressions.data.add(i) })
+                    .r#type
+                    != Type::Type_String
                 {
                     only_constant = false;
                 }

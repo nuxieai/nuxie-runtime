@@ -30,3 +30,9 @@ Provenance:
 - Ported official Luau 0.726 delta (upstream 91caa731..86d2a9dc).
 - Touched areas: bytecode version target and dark release-flag registration
   for attribute CST and virtual BytecodeBuilder scaffolding.
+
+## Luau fork rung 3
+
+- Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
+- Touched areas: removed-flag cleanup and dark registration of parser,
+  CallInfo/proto-promotion, and GC-accounting gates.

@@ -37,15 +37,7 @@ pub struct CostVisitor {
 
 impl CostVisitor {
     pub fn model(&mut self, node: *mut AstExpr) -> Cost {
-        if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            && !luaur_common::FFlag::LuauCompileFoldOptimize.get()
-        {
-            if let Some(c) = unsafe { &*self.constants }.find(&node) {
-                if c.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                    return Cost::new(0, Cost::kLiteral);
-                }
-            }
-        } else if unsafe { &*self.constants }.find(&node).is_some() {
+        if unsafe { &*self.constants }.find(&node).is_some() {
             return Cost::new(0, Cost::kLiteral);
         }
 
@@ -77,13 +69,7 @@ impl CostVisitor {
             let bfid = unsafe { &*self.builtins }.find(&(expr as *mut AstExprCall));
             let builtin = bfid.copied().unwrap_or(0)
                 != luaur_common::enums::luau_builtin_function::LuauBuiltinFunction::LBF_NONE as i32;
-            let builtin_short = builtin
-                && expr.args.size
-                    <= if luaur_common::FFlag::LuauCompileFastcall3CostModel.get() {
-                        3
-                    } else {
-                        2
-                    };
+            let builtin_short = builtin && expr.args.size <= 3;
 
             let mut cost = Cost::new(if builtin { 2 } else { 3 }, 0);
 

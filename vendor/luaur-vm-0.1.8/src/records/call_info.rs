@@ -1,3 +1,4 @@
+use crate::records::proto::Proto;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_camel_case_types)]
@@ -21,6 +22,7 @@ pub struct CallInfo {
     pub base: StkId,
     pub func: StkId,
     pub top: StkId,
+    pub p: *mut Proto,
     pub context: CallInfoContext,
     pub nresults: core::ffi::c_int,
     pub flags: core::ffi::c_uint,
@@ -35,6 +37,7 @@ impl Default for CallInfo {
             base: core::ptr::null_mut(),
             func: core::ptr::null_mut(),
             top: core::ptr::null_mut(),
+            p: core::ptr::null_mut(),
             context: CallInfoContext {
                 savedpc: core::ptr::null(),
             },

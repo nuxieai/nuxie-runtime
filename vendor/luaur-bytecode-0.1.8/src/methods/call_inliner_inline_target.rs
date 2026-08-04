@@ -19,6 +19,7 @@ const k_max_inliner_combined_stack_size: u8 = 250;
 
 impl<'a> CallInliner<'a> {
     pub fn inline_target(&mut self, target_proto_id: u32) -> bool {
+        LUAU_ASSERT!(self.validate());
         let mut new_max_stack_size: u32 =
             self.caller.maxstacksize as u32 + self.target.maxstacksize as u32;
 
@@ -55,6 +56,9 @@ impl<'a> CallInliner<'a> {
         }
 
         self.append_cmp_proto(&mut prev_block, target_op, target_proto_id);
+
+        // Seal the feedback slot of the inlined call.
+        self.call.set_fb_slot(u32::MAX);
 
         self.allocate_graph_entities_for_target();
 
@@ -129,7 +133,7 @@ impl<'a> CallInliner<'a> {
 
         self.drop_prep_var_args_in_inlined_path();
 
-        LUAU_ASSERT!(self.validate_cfg());
+        LUAU_ASSERT!(self.validate());
 
         true
     }

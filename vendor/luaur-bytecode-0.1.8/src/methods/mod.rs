@@ -212,5 +212,7 @@ pub mod call_inliner_set_fallthrough;
 pub mod call_inliner_set_return_op;
 pub mod call_inliner_split_block_on_op;
 pub mod call_inliner_validate_cfg;
+pub mod call_inliner_validate;
+pub mod call_inliner_validate_phis;
 pub mod comp_time_bytecode_graph_serializer_comp_time_bytecode_graph_serializer;
 pub mod comp_time_bytecode_graph_serializer_get_vm_const_input_raw;

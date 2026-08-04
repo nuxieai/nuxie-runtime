@@ -14,11 +14,11 @@ impl<'a> CallInliner<'a> {
         self.call_params
             .resize(self.target.numparams as usize, Default::default());
 
-        for param in (call_param_size..self.target.numparams).rev() {
+        for param in (call_param_size + 1..=self.target.numparams).rev() {
             let mut load_nil = BcLoadNil::<VmConst>::create(self.caller);
-            load_nil.set_out_reg(self.target_reg + 1 + param);
+            load_nil.set_out_reg(self.target_reg + param);
             load_nil.prepend_to(inline_entry_block);
-            self.call_params[param as usize] = load_nil.op();
+            self.call_params[(param - 1) as usize] = load_nil.op();
         }
     }
 }

@@ -7,7 +7,9 @@ pub fn inline_call(
     target: &mut BcFunction,
     call_op: BcOp,
     target_proto_id: u32,
+    caller_fb_vec_size: u32,
 ) -> bool {
-    let mut inliner = CallInliner::call_inliner(caller, target, call_op);
+    let mut inliner =
+        CallInliner::call_inliner(caller, target, call_op, caller_fb_vec_size);
     inliner.inline_target(target_proto_id)
 }

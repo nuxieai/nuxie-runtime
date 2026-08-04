@@ -39,6 +39,16 @@ impl<'a> CallInliner<'a> {
         let move_op = move_helper.op();
         drop(move_helper);
 
+        // GETTABLEKS can clobber the original source register of NAMECALL and
+        // put a function closure there. MOVE already holds the table.
+        let namecall_ref = unsafe { (&*caller_ptr).inst(namecall) };
+        let mut namecall_helper = BcInstHelper {
+            graph: unsafe { &mut *caller_ptr },
+            inst: namecall_ref,
+        };
+        namecall_helper.set_bc_op(0, move_op);
+        drop(namecall_helper);
+
         let mut get_table_ks_helper =
             BcGetTableKS::<crate::records::bc_function::VmConst>::create(self.caller);
         get_table_ks_helper.set_source(move_op);

@@ -15,6 +15,7 @@ pub struct CallInliner<'a> {
     pub(crate) call: BcCallFB<'a>,
     pub(crate) call_params: Vec<BcOp>,
     pub(crate) target_reg: Reg,
+    pub(crate) caller_fb_vec_size: u32,
 
     pub(crate) caller_blocks_size_before_inline: u32,
     pub(crate) caller_inst_size_before_inline: u32,

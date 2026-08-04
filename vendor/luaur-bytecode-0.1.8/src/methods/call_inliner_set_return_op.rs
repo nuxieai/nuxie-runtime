@@ -26,7 +26,10 @@ impl<'a> CallInliner<'a> {
             self.return_ops[idx as usize] = phi_op;
         } else {
             let mut phi = self.caller.phi(self.return_ops[idx as usize]);
-            phi.operator_deref_mut().ops.push_back(op);
+            let exists = phi.operator_deref().ops.iter().any(|phi_op| *phi_op == op);
+            if !exists {
+                phi.operator_deref_mut().ops.push_back(op);
+            }
         }
     }
 }

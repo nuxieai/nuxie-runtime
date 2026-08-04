@@ -11,6 +11,7 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 impl<'a> CallInliner<'a> {
     pub fn migrate_instructions(&mut self) {
+        let call_line = self.call.base.operator_deref().line;
         for i in 0..self.target.instructions.len() as u32 {
             let target_insn_op = BcOp::bc_op_bc_op_kind_u32(BcOpKind::Inst, i);
             let caller_insn_op =
@@ -50,6 +51,7 @@ impl<'a> CallInliner<'a> {
             );
             self.caller.instructions[caller_insn_op.index as usize].op = target_inst_data.op;
             self.caller.instructions[caller_insn_op.index as usize].block = mapped_block;
+            self.caller.instructions[caller_insn_op.index as usize].line = call_line;
 
             let last = *target_ops.last().unwrap();
             let last_is_get_var_arg = last.kind == BcOpKind::Inst
@@ -90,6 +92,18 @@ impl<'a> CallInliner<'a> {
             if let Some(reg) = target_reg {
                 let mapped_reg = self.map_to_caller_reg(reg);
                 self.caller.regs.insert(caller_insn_op, mapped_reg);
+            }
+
+            if self.caller.instructions[caller_insn_op.index as usize].op
+                == LuauOpcode::LOP_CALLFB
+            {
+                let caller_ptr: *mut crate::records::bc_function::BcFunction = self.caller;
+                let inst_ref = unsafe { (&*caller_ptr).inst(caller_insn_op) };
+                let mut fb_call = crate::records::bc_call_fb::BcCallFB::<
+                    crate::records::bc_function::VmConst,
+                >::from(caller_ptr, inst_ref);
+                let fb_slot = fb_call.fb_slot();
+                fb_call.set_fb_slot((fb_slot as u32).wrapping_add(self.caller_fb_vec_size));
             }
         }
     }

@@ -6158,6 +6158,38 @@ impl ArtboardInstance {
         owner.feather_dirty.set(false);
     }
 
+    /// Finish effect and feather owners dirtied after their authored update
+    /// slot by a later source-path rebuild in the same dependency wave.
+    ///
+    /// C++ expresses this through PathComposer -> ShapePaint/Feather
+    /// dependencies. Rust retains renderer sidecars separately, so settle the
+    /// still-dirty suffix once all component dependencies have run, before a
+    /// draw can observe it (`shape_paint.cpp:30-47`; `feather.cpp:36-89`).
+    pub(crate) fn settle_runtime_shape_paint_paths(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) {
+        for (shape_local, shape) in self.runtime_shapes.by_local.iter().enumerate() {
+            let Some(shape) = shape.as_ref() else {
+                continue;
+            };
+            for (owner_index, paint) in shape.paint_owners.iter().enumerate() {
+                if paint.effect_dirty_from.get().is_some() {
+                    self.update_runtime_shape_paint_effects(shape_local, owner_index, graph);
+                }
+                if paint.feather_dirty.get() {
+                    self.update_runtime_shape_paint_feather(
+                        shape_local,
+                        owner_index,
+                        graph,
+                        layout_bounds,
+                    );
+                }
+            }
+        }
+    }
+
     fn runtime_layout_component_paint_path_commands(
         &self,
         layout_local: usize,
@@ -6640,9 +6672,21 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
+            let target_bounds = (x, y, bounds.width, bounds.height);
             let should_propagate_size = layout.should_force_update_layout_bounds()
-                || layout.target_bounds() != (x, y, bounds.width, bounds.height);
-            if layout.retain_bounds(x, y, bounds.width, bounds.height) {
+                || layout.target_bounds() != target_bounds;
+            let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if should_propagate_size {
+                // A layout position change does not rebuild geometry, but it
+                // does move the owner and its descendants. C++ separates the
+                // width/height Path dirt above from this unconditional world
+                // transform invalidation (`layout_component.cpp:1167-1178`).
+                self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                self.layout_revision = self.layout_revision.wrapping_add(1);
+                self.runtime_drawables
+                    .mark_layout_resource_dirty_for_local(local_id);
+            }
+            if size_changed {
                 let layout_handle = self.component_handle(local_id);
                 let affected_text = self
                     .components()
@@ -9083,6 +9127,21 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    pub(crate) fn component_rebuilds_paint_path(&self, local_id: usize) -> bool {
+        self.paint_owners_by_component_local
+            .get(local_id)
+            .is_some_and(|owners| {
+                owners.iter().any(|owner| {
+                    self.get(owner.shape_local)
+                        .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                        .is_some_and(|paint| paint.feather_local == Some(local_id))
+                })
+            }) || self
+            .effect_owners_by_component_local
+            .get(local_id)
+            .is_some_and(|effects| !effects.is_empty())
+    }
+
     pub(crate) fn text_style_paint_container_for_component(
         &self,
         local_id: usize,

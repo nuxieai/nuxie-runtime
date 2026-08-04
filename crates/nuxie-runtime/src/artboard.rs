@@ -7927,6 +7927,9 @@ impl ArtboardInstance {
                     .runtime_shapes
                     .text_style_paint_container_for_component(local_id)
                     .is_some_and(|container_local| container_local != local_id)
+                    && !self
+                        .runtime_shapes
+                        .component_rebuilds_paint_path(local_id)
                 {
                     // ShapePaint mutators under TextStylePaint change the
                     // retained paint frame, not the glyph paths. FL-E7 routes
@@ -7936,6 +7939,10 @@ impl ArtboardInstance {
                     self.runtime_drawables
                         .mark_text_resource_dirty_for_local(text_local);
                 } else {
+                    // Feather and stroke-effect descendants replace the path
+                    // consumed by Text::buildRenderStyles, so they require a
+                    // full retained frame rebuild after authored properties
+                    // settle (`feather.cpp:36-89`).
                     self.runtime_drawables
                         .mark_text_render_styles_dirty_for_local(text_local);
                 }
@@ -9262,6 +9269,12 @@ impl ArtboardInstance {
         }
 
         report.max_steps_reached = self.has_dirt(ComponentDirt::COMPONENTS);
+        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
+            self.settle_runtime_shape_paint_paths(
+                &graphs[*graph_index],
+                layout_bounds.as_deref(),
+            );
+        }
         report
     }
 
@@ -17222,6 +17235,81 @@ mod tests {
         let revision = instance.layout_revision();
         assert!(!instance.set_double_property(3, font_size, 24.0));
         assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn text_vertical_trim_passthrough_dirties_shape_and_layout() {
+        // The generated top/bottom fields are bitmask passthrough setters for
+        // Text.verticalTrimValue. Their concrete callback is still
+        // Text::verticalTrimValueChanged, which invalidates shape and layout
+        // (`src/text/text.cpp:1403-1408`; generated text_base.hpp:225-241).
+        for property in ["verticalTrimTopValue", "verticalTrimBottomValue"] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_component_for_type(0, "Artboard"),
+                    synthetic_component_for_type(1, "LayoutComponent"),
+                    synthetic_component_for_type(2, "Text"),
+                ],
+                vec![0, 1, 2],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            for local_id in 0..3 {
+                instance.clear_component_dirt(local_id);
+            }
+
+            let key = property_key_for_name("Text", property).expect("vertical trim passthrough");
+            assert!(instance.set_uint_property(2, key, 1));
+            let text_dirt = instance.component(2).expect("text").dirt;
+            assert!(text_dirt.contains(ComponentDirt::PATH));
+            assert!(text_dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+            assert!(
+                instance
+                    .component(1)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .is_some_and(|layout| layout.layout_node_is_dirty())
+            );
+        }
+    }
+
+    #[test]
+    fn position_only_layout_change_dirties_world_transform() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+        for local_id in 0..2 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 25.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+
+        let layout = instance.component(1).expect("layout component");
+        assert!(layout.dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+        assert!(!layout.dirt.contains(ComponentDirt::PATH));
     }
 
     #[test]

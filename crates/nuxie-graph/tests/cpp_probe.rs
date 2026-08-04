@@ -6113,7 +6113,7 @@ fn cpp_scroll_constraint_dependency_method_is_tracked_by_graph_model() {
         "voidLayoutNodeProvider::addLayoutConstraint",
     );
     assert!(
-        add_layout_constraint_body.contains("m_layoutConstraints.push_back(constraint);"),
+        add_layout_constraint_body.contains("m_layoutConstraints->push_back(constraint);"),
         "LayoutNodeProvider::addLayoutConstraint no longer stores registered layout constraints"
     );
     assert!(

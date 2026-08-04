@@ -6836,6 +6836,17 @@ fn compare_view_model_instance_value_runtime_result(
                 ));
             }
         }
+        RuntimeDataType::AssetBlob => {
+            let rust_value = rust_file
+                .view_model_instance_blob_asset_index_for_object(rust_value)
+                .ok_or_else(|| format!("{label}: Rust did not resolve blob asset index"))?;
+            if cpp_runtime.asset_index != Some(rust_value) {
+                return Err(format!(
+                    "{label}: blob asset index mismatch, C++ {:?}, Rust {rust_value}",
+                    cpp_runtime.asset_index
+                ));
+            }
+        }
         RuntimeDataType::Artboard => {
             let rust_value = rust_file
                 .view_model_instance_artboard_index_for_object(rust_value)
@@ -6935,6 +6946,7 @@ fn compare_view_model_instance_source_data_value_result(
         | RuntimeDataValue::SymbolListIndex(rust_value)
         | RuntimeDataValue::AssetImage(rust_value)
         | RuntimeDataValue::AssetFont(rust_value)
+        | RuntimeDataValue::AssetBlob(rust_value)
         | RuntimeDataValue::Artboard(rust_value) => {
             if cpp_data_value.integer_value != Some(rust_value) {
                 return Err(format!(
@@ -8370,6 +8382,7 @@ fn compare_converter_output(
         | RuntimeConvertedDataValue::SymbolListIndex(value)
         | RuntimeConvertedDataValue::AssetImage(value)
         | RuntimeConvertedDataValue::AssetFont(value)
+        | RuntimeConvertedDataValue::AssetBlob(value)
         | RuntimeConvertedDataValue::Artboard(value) => assert_eq!(
             cpp_output.integer_value,
             Some(*value),
@@ -11750,6 +11763,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "Feather::onAddedDirty",
         "FollowPathConstraint::onAddedClean",
         "GradientStop::onAddedDirty",
+        "GridItemPlacement::onAddedClean",
         "IKConstraint::onAddedClean",
         "InterpolatingKeyFrame::onAddedDirty",
         "Joystick::onAddedClean",
@@ -11763,6 +11777,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "LayoutComponent::onAddedClean",
         "LayoutComponent::onAddedDirty",
         "LayoutComponentStyle::onAddedDirty",
+        "LayoutParticipant::onAddedClean",
         "LinearAnimation::onAddedClean",
         "LinearAnimation::onAddedDirty",
         "LinearGradient::onAddedDirty",
@@ -13126,7 +13141,7 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
             });
     assert_eq!(
         read_bytes_len,
-        "constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
+        "//Guardagainstalength(whichisdecodedstraightfromthefileandmay//becorruptortruncated)thatwouldrunpasttheendofthebuffer.if(length>static_cast<size_t>(m_Bytes.end()-m_Position)){overflow();returnSpan<constuint8_t>(m_Bytes.end(),0);}constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
         "BinaryReader::readBytes(size_t) changed; audit Rust sized bytes reads and malformed-stream tests"
     );
 

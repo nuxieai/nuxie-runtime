@@ -17,7 +17,7 @@ fn reference_runtime_dir() -> PathBuf {
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 350);
+    assert_eq!(DEFINITIONS.len(), 349);
     assert_eq!(
         definition_by_name("ViewModelPropertyAssetBlob")
             .expect("blob property definition")
@@ -37,7 +37,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 608);
+    assert_eq!(runtime_property_count, 604);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -65,7 +65,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 457);
+    assert_eq!(described_property_count, 453);
 }
 
 #[test]

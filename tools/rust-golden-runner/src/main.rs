@@ -3067,8 +3067,8 @@ fn advance_scene_to(
             // callback just reported over `(lastTime, newTime]` before the
             // host can observe it (`linear_animation_instance.cpp:208-217`,
             // `state_machine_instance.cpp:2649-2707`).
-            changed |=
-                instance.advance_state_machine_instance_after_state_probe(state_machine, 0.0);
+            changed |= instance
+                .advance_state_machine_instance_after_state_probe_for_tools(state_machine, 0.0);
         }
     } else {
         changed |= instance

@@ -6167,13 +6167,22 @@ impl ArtboardInstance {
         instance.advance_on_artboard(self, elapsed_seconds, true, owned_context)
     }
 
-    #[doc(hidden)]
-    pub fn advance_state_machine_instance_after_state_probe(
+    pub(crate) fn advance_state_machine_instance_after_state_probe(
         &mut self,
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
         instance.advance_on_artboard(self, elapsed_seconds, false, None)
+    }
+
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn advance_state_machine_instance_after_state_probe_for_tools(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_state_machine_instance_after_state_probe(instance, elapsed_seconds)
     }
 
     pub(crate) fn try_change_state_machine_instance(

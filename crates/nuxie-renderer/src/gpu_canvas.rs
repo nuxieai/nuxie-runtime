@@ -24,7 +24,7 @@ use nuxie_render_api::{
 };
 use wgpu::util::DeviceExt;
 
-use super::{RendererError, WgpuFactory, WgpuImage, WgpuImageTexture, align_to, map_buffer};
+use super::{align_to, map_buffer, RendererError, WgpuFactory, WgpuImage, WgpuImageTexture};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
 const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;

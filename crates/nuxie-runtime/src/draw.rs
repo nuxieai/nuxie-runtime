@@ -18242,7 +18242,6 @@ pub(crate) fn runtime_component_list_item_base_transforms(
         .is_some_and(|parent| matches!(parent.type_name, "Artboard" | "LayoutComponent"));
     let node_x_key = runtime_draw_property_key_for_name("Node", "x");
     let node_y_key = runtime_draw_property_key_for_name("Node", "y");
-
     let mut item_transforms = Vec::with_capacity(items.len());
     for item in items {
         // C++ derives the mounted origin and row advance from the mounted
@@ -18263,10 +18262,11 @@ pub(crate) fn runtime_component_list_item_base_transforms(
             continue;
         }
         let (item_x, item_y) = if !uses_hosted_layout {
-            // C++ `ArtboardComponentList::updateArtboardsWorldTransform` uses
-            // `Artboard::worldBounds()` when there is no layout parent. Those
-            // bounds begin at the mounted artboard root's authored Node x/y;
-            // they are not a sequential intrinsic-size layout.
+            // C++ reads the mounted Artboard's live `worldBounds()`. Its
+            // authored canvas placement was cleared by `onAddedClean`, while
+            // later animation/data-bind writes to root x/y remain visible
+            // (`artboard.cpp:1080-1092,1807-1814`;
+            // `artboard_component_list.cpp:1306-1329`).
             (
                 node_x_key
                     .and_then(|key| item.child.double_property(0, key))
@@ -24357,6 +24357,14 @@ fn rectangle_path_commands(
 
 const CIRCLE_CONSTANT: f32 = 0.552_284_8;
 
+fn ellipse_control(origin: f32, radius: f32, direction: f32) -> f32 {
+    // Candidate C++ contracts the authored expression into one multiply-add;
+    // retain that single rounding boundary for exact path streams
+    // (`include/rive/math/circle_constant.hpp:8`;
+    // `src/shapes/ellipse.cpp:27-43`).
+    radius.mul_add(direction * CIRCLE_CONSTANT, origin)
+}
+
 fn ellipse_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
@@ -24388,29 +24396,29 @@ fn ellipse_path_commands(
     push_cubic(
         &mut commands,
         transform,
-        (ox + radius_x * CIRCLE_CONSTANT, oy - radius_y),
-        (ox + radius_x, oy - CIRCLE_CONSTANT * radius_y),
+        (ellipse_control(ox, radius_x, 1.0), oy - radius_y),
+        (ox + radius_x, ellipse_control(oy, radius_y, -1.0)),
         right,
     );
     push_cubic(
         &mut commands,
         transform,
-        (ox + radius_x, oy + CIRCLE_CONSTANT * radius_y),
-        (ox + radius_x * CIRCLE_CONSTANT, oy + radius_y),
+        (ox + radius_x, ellipse_control(oy, radius_y, 1.0)),
+        (ellipse_control(ox, radius_x, 1.0), oy + radius_y),
         bottom,
     );
     push_cubic(
         &mut commands,
         transform,
-        (ox - radius_x * CIRCLE_CONSTANT, oy + radius_y),
-        (ox - radius_x, oy + radius_y * CIRCLE_CONSTANT),
+        (ellipse_control(ox, radius_x, -1.0), oy + radius_y),
+        (ox - radius_x, ellipse_control(oy, radius_y, 1.0)),
         left,
     );
     push_cubic(
         &mut commands,
         transform,
-        (ox - radius_x, oy - radius_y * CIRCLE_CONSTANT),
-        (ox - radius_x * CIRCLE_CONSTANT, oy - radius_y),
+        (ox - radius_x, ellipse_control(oy, radius_y, -1.0)),
+        (ellipse_control(ox, radius_x, -1.0), oy - radius_y),
         top,
     );
     commands.push(RuntimePathCommand::Close);
@@ -24876,6 +24884,11 @@ fn runtime_drawable_dispatch_is_nested_artboard(command: &RuntimeDrawableDispatc
 mod tests {
     use super::*;
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+
+    #[test]
+    fn ellipse_control_matches_upstream_fused_rounding() {
+        assert_eq!(ellipse_control(68.5, 68.5, 1.0), 106.331_505);
+    }
 
     fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
         AuthoringRecord {

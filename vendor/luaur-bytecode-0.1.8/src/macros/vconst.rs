@@ -30,11 +30,15 @@ macro_rules! VCONST {
     (@kind ClassShape) => {
         crate::enums::r#type::Type::Type_ClassShape
     };
-    ($v:expr, $kind:ident, $constants:expr) => {
-        LUAU_ASSERT!(
-            ($v as usize) < $constants.len()
-                && $constants[$v as usize].r#type == VCONST!(@kind $kind)
-        )
+    ($v:expr, $kind:ident, $builder:expr) => {
+        if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+            $builder.validate_const_type($v as i32, VCONST!(@kind $kind));
+        } else {
+            LUAU_ASSERT!(
+                ($v as usize) < $builder.constants.len()
+                    && $builder.constants[$v as usize].r#type == VCONST!(@kind $kind)
+            );
+        }
     };
 }
 

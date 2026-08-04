@@ -62,7 +62,7 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_LOADK => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONSTANY!(LUAU_INSN_D(insn) as usize, self.constants);
+                    VCONSTANY!(LUAU_INSN_D(insn) as usize, self);
                 }
                 LuauOpcode::LOP_MOVE => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
@@ -70,7 +70,7 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_GETGLOBAL | LuauOpcode::LOP_SETGLOBAL => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(self.insns[i + 1] as usize, String, self.constants);
+                    VCONST!(self.insns[i + 1] as usize, String, self);
                 }
                 LuauOpcode::LOP_GETUPVAL | LuauOpcode::LOP_SETUPVAL => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
@@ -86,16 +86,12 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_GETIMPORT => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(LUAU_INSN_D(insn) as usize, Import, self.constants);
+                    VCONST!(LUAU_INSN_D(insn) as usize, Import, self);
                     let id = self.insns[i + 1];
                     LUAU_ASSERT!((id >> 30) != 0); // import chain with length 1-3
                     let mut j: u32 = 0;
                     while j < (id >> 30) {
-                        VCONST!(
-                            ((id >> (20 - 10 * j)) & 1023) as usize,
-                            String,
-                            self.constants
-                        );
+                        VCONST!(((id >> (20 - 10 * j)) & 1023) as usize, String, self);
                         j += 1;
                     }
                 }
@@ -107,7 +103,7 @@ impl BytecodeBuilder {
                 LuauOpcode::LOP_GETTABLEKS | LuauOpcode::LOP_SETTABLEKS => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONST!(self.insns[i + 1] as usize, String, self.constants);
+                    VCONST!(self.insns[i + 1] as usize, String, self);
                 }
                 LuauOpcode::LOP_GETTABLEN | LuauOpcode::LOP_SETTABLEN => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
@@ -115,11 +111,15 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_NEWCLOSURE => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    let proto_idx = LUAU_INSN_D(insn) as usize;
-                    LUAU_ASSERT!(proto_idx < self.protos.len());
-                    let proto_val = self.protos[proto_idx];
-                    LUAU_ASSERT!(proto_val < self.functions.len() as u32);
-                    let numupvalues = self.functions[proto_val as usize].numupvalues as u32;
+                    let numupvalues = if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+                        self.validate_proto(LUAU_INSN_D(insn)) as u32
+                    } else {
+                        let proto_idx = LUAU_INSN_D(insn) as usize;
+                        LUAU_ASSERT!(proto_idx < self.protos.len());
+                        let proto_val = self.protos[proto_idx];
+                        LUAU_ASSERT!(proto_val < self.functions.len() as u32);
+                        self.functions[proto_val as usize].numupvalues as u32
+                    };
 
                     let mut j: u32 = 0;
                     while j < numupvalues {
@@ -132,7 +132,7 @@ impl BytecodeBuilder {
                 LuauOpcode::LOP_NAMECALL => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONST!(self.insns[i + 1] as usize, String, self.constants);
+                    VCONST!(self.insns[i + 1] as usize, String, self);
                     LUAU_ASSERT!(
                         LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALLFB as u32
                             || LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALL as u32
@@ -172,20 +172,12 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_JUMPXEQKN => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(
-                        (self.insns[i + 1] & 0xffffff) as usize,
-                        Number,
-                        self.constants
-                    );
+                    VCONST!((self.insns[i + 1] & 0xffffff) as usize, Number, self);
                     VJUMP!(LUAU_INSN_D(insn), i, self.insns, insnvalid);
                 }
                 LuauOpcode::LOP_JUMPXEQKS => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(
-                        (self.insns[i + 1] & 0xffffff) as usize,
-                        String,
-                        self.constants
-                    );
+                    VCONST!((self.insns[i + 1] & 0xffffff) as usize, String, self);
                     VJUMP!(LUAU_INSN_D(insn), i, self.insns, insnvalid);
                 }
                 LuauOpcode::LOP_ADD
@@ -206,11 +198,11 @@ impl BytecodeBuilder {
                 | LuauOpcode::LOP_POWK => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONST!(LUAU_INSN_C(insn) as usize, Number, self.constants);
+                    VCONST!(LUAU_INSN_C(insn) as usize, Number, self);
                 }
                 LuauOpcode::LOP_SUBRK | LuauOpcode::LOP_DIVRK => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(LUAU_INSN_B(insn) as usize, Number, self.constants);
+                    VCONST!(LUAU_INSN_B(insn) as usize, Number, self);
                     VREG!(LUAU_INSN_C(insn) as u8, func);
                 }
                 LuauOpcode::LOP_AND | LuauOpcode::LOP_OR => {
@@ -221,7 +213,7 @@ impl BytecodeBuilder {
                 LuauOpcode::LOP_ANDK | LuauOpcode::LOP_ORK => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONSTANY!(LUAU_INSN_C(insn) as usize, self.constants);
+                    VCONSTANY!(LUAU_INSN_C(insn) as usize, self);
                 }
                 LuauOpcode::LOP_CONCAT => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
@@ -238,7 +230,7 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_DUPTABLE => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(LUAU_INSN_D(insn) as usize, Table, self.constants);
+                    VCONST!(LUAU_INSN_D(insn) as usize, Table, self);
                 }
                 LuauOpcode::LOP_SETLIST => {
                     let count = (LUAU_INSN_C(insn) as i32) - 1;
@@ -271,14 +263,18 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_DUPCLOSURE => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONST!(LUAU_INSN_D(insn) as usize, Closure, self.constants);
-                    let proto = unsafe {
-                        self.constants[LUAU_INSN_D(insn) as usize]
-                            .value
-                            .valueClosure
+                    VCONST!(LUAU_INSN_D(insn) as usize, Closure, self);
+                    let numupvalues = if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+                        self.validate_closure(LUAU_INSN_D(insn)) as u32
+                    } else {
+                        let proto = unsafe {
+                            self.constants[LUAU_INSN_D(insn) as usize]
+                                .value
+                                .valueClosure
+                        };
+                        LUAU_ASSERT!(proto < self.functions.len() as u32);
+                        self.functions[proto as usize].numupvalues as u32
                     };
-                    LUAU_ASSERT!(proto < self.functions.len() as u32);
-                    let numupvalues = self.functions[proto as usize].numupvalues as u32;
 
                     let mut j: u32 = 0;
                     while j < numupvalues {
@@ -303,7 +299,7 @@ impl BytecodeBuilder {
                 }
                 LuauOpcode::LOP_LOADKX => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
-                    VCONSTANY!(self.insns[i + 1] as usize, self.constants);
+                    VCONSTANY!(self.insns[i + 1] as usize, self);
                 }
                 LuauOpcode::LOP_JUMPX => {
                     VJUMP!(LUAU_INSN_E(insn), i, self.insns, insnvalid);
@@ -339,7 +335,7 @@ impl BytecodeBuilder {
                         LUAU_INSN_OP(self.insns[i + 1 + LUAU_INSN_C(insn) as usize])
                             == LuauOpcode::LOP_CALL as u32
                     );
-                    VCONSTANY!(self.insns[i + 1] as usize, self.constants);
+                    VCONSTANY!(self.insns[i + 1] as usize, self);
                 }
                 LuauOpcode::LOP_FASTCALL3 => {
                     VREG!(LUAU_INSN_B(insn) as u8, func);
@@ -369,25 +365,17 @@ impl BytecodeBuilder {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     LUAU_ASSERT!(LUAU_INSN_B(insn) == 0);
                     VREG!(LUAU_INSN_C(insn) as u8, func);
-                    VCONST!(self.insns[i + 1] as usize, String, self.constants);
+                    VCONST!(self.insns[i + 1] as usize, String, self);
                 }
                 LuauOpcode::LOP_GETUDATAKS | LuauOpcode::LOP_SETUDATAKS => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONST!(
-                        LUAU_INSN_AUX_KV16(self.insns[i + 1]) as usize,
-                        String,
-                        self.constants
-                    );
+                    VCONST!(LUAU_INSN_AUX_KV16(self.insns[i + 1]) as usize, String, self);
                 }
                 LuauOpcode::LOP_NAMECALLUDATA => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
-                    VCONST!(
-                        LUAU_INSN_AUX_KV16(self.insns[i + 1]) as usize,
-                        String,
-                        self.constants
-                    );
+                    VCONST!(LUAU_INSN_AUX_KV16(self.insns[i + 1]) as usize, String, self);
                     LUAU_ASSERT!(LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALL as u32);
                 }
                 LuauOpcode::LOP_CMPPROTO => {

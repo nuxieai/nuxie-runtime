@@ -144,6 +144,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauUdataMetatablePinned.set(false);
     FFlag::LuauUdtfTypeIsSubtypeOf.set(value);
     FFlag::LuauUseNativeStackGuard.set(value);
+    FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
 }
@@ -419,6 +420,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdtfTypeIsSubtypeOf);
     // Analysis/src/NativeStackGuard.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUseNativeStackGuard);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauVirtualBcBuilder);
     // Analysis/src/DataFlowGraph.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauVisitCallTypeArgsInDfg);
     // VM/src/lvmexecute.cpp

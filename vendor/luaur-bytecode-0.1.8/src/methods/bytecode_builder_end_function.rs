@@ -74,25 +74,29 @@ impl BytecodeBuilder {
         self.current_function = u32::MAX;
         self.total_instruction_count += self.insns.len();
 
-        self.insns.clear();
-        self.lines.clear();
-        self.constants.clear();
-        self.protos.clear();
-        self.jumps.clear();
-        self.fb_slots.clear();
-        self.table_shapes.clear();
+        if luaur_common::FFlag::LuauVirtualBcBuilder.get() {
+            self.clear_state();
+        } else {
+            self.insns.clear();
+            self.lines.clear();
+            self.constants.clear();
+            self.protos.clear();
+            self.jumps.clear();
+            self.fb_slots.clear();
+            self.table_shapes.clear();
 
-        self.debug_locals.clear();
-        self.debug_upvals.clear();
+            self.debug_locals.clear();
+            self.debug_upvals.clear();
 
-        self.typed_locals.clear();
-        self.typed_upvals.clear();
+            self.typed_locals.clear();
+            self.typed_upvals.clear();
 
-        self.constant_map.clear();
-        self.table_shape_map.clear();
-        self.proto_map.clear();
+            self.constant_map.clear();
+            self.table_shape_map.clear();
+            self.proto_map.clear();
 
-        self.debug_remarks.clear();
-        self.debug_remark_buffer.clear();
+            self.debug_remarks.clear();
+            self.debug_remark_buffer.clear();
+        }
     }
 }

@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -58,6 +58,13 @@ PERF_RUNNER_ORDER ?= cpp-first
 PERF_CORPUS ?= corpus.toml
 PERF_GATE_MANIFEST ?= perf-corpus.toml
 PERF_GATE_TOOL ?= tools/perf-gate/perf_gate.py
+PERF_GATE_PINNER ?= tools/perf-gate/run-pinned.sh
+PERF_GATE_COMPARE ?= $(CURDIR)/target/release/perf-compare
+PERF_GATE_REPORT ?= $(CURDIR)/target/perf-gate.json
+PERF_GATE_ITERATIONS ?= 5
+PERF_GATE_WARMUPS ?= 0
+PERF_GATE_FRAMES ?= 100
+PERF_GATE_HZ ?= 60
 PERF_CORPUS_LIMIT ?= 10
 PERF_CORPUS_IDS ?= advance_blend_mode,ai_assitant,align_target,animated_clipping,animation_reset_cases,spotify_kids_demo
 PERF_CORPUS_SELECTION = $(if $(strip $(PERF_CORPUS_IDS)),--corpus-ids "$(PERF_CORPUS_IDS)",--corpus-limit "$(PERF_CORPUS_LIMIT)")
@@ -434,6 +441,19 @@ perf-json: RUST_PROFILE=release
 perf-json: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-order "$(PERF_RUNNER_ORDER)" --aggregate "$(PERF_AGGREGATE)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)" --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
 	@echo "perf-json wrote $(PERF_JSON_OUT)"
+
+perf-gate: CPP_CONFIG=release
+perf-gate: RUST_PROFILE=release
+perf-gate: perf-runtime-ref-check perf-corpus-check golden-runner rust-golden-runner
+	cargo build --quiet --release -p perf-compare --bin perf-compare
+	@set -e; \
+	ids=$$(python3 "$(PERF_GATE_TOOL)" ids --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"); \
+	mkdir -p "$(dir $(PERF_GATE_REPORT))"; \
+	"$(PERF_GATE_PINNER)" "$(PERF_GATE_COMPARE)" --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-ids "$$ids" --iterations "$(PERF_GATE_ITERATIONS)" --warmups "$(PERF_GATE_WARMUPS)" --aggregate median --runner-order cpp-first --runner-benchmark --benchmark-frames "$(PERF_GATE_FRAMES)" --benchmark-hz "$(PERF_GATE_HZ)" --json "$(PERF_GATE_REPORT)" $(PERF_JSON_META); \
+	python3 "$(PERF_GATE_TOOL)" check-report --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --report "$(PERF_GATE_REPORT)"
+
+perf-gate-tighten: perf-gate
+	python3 "$(PERF_GATE_TOOL)" tighten --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --report "$(PERF_GATE_REPORT)"
 
 browser-renderer-build:
 	tools/browser-renderer-smoke/build.sh

@@ -29,6 +29,22 @@ class PerfCorpusTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(self.manifest.files), 20)
 
+    def test_blocking_gate_is_wired_into_make_landing_and_ci(self):
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        land = (REPO_ROOT / "tools" / "land.sh").read_text()
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        perf_job = workflow.split("\n  perf-gate:", 1)[1].split(
+            "\n  parity-scorecard:", 1
+        )[0]
+
+        self.assertIn("perf-gate: perf-runtime-ref-check", makefile)
+        self.assertIn("perf-gate-tighten: perf-gate", makefile)
+        self.assertRegex(land, r"gates=\([\s\S]*\bperf-gate\b")
+        self.assertIn("make perf-gate PERF_JSON_META=", perf_job)
+        self.assertNotIn("continue-on-error", perf_job)
+        self.assertNotIn("make perf-hot-loop", workflow)
+        self.assertIn("      - perf-gate", workflow)
+
     def test_manifest_rejects_a_parked_source_entry(self):
         changed = copy.deepcopy(self.corpus)
         selected = {file.id for file in self.manifest.files}

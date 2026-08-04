@@ -26,7 +26,7 @@ make rust-sources-fresh || exit 1
 
 gates=(cpp-probe runtime-frame-loop-port-check rust-attribution-check
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
-       scripted-golden-compare silver-corpus-test)
+       scripted-golden-compare silver-corpus-test perf-gate)
 for extra in "$@"; do gates+=("$extra"); done
 
 run_gate() {

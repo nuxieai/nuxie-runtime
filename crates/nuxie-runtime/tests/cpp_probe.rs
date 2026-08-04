@@ -22029,6 +22029,120 @@ fn outer_settlement_evaluates_a_retained_view_model_trigger_before_resetting_it(
 }
 
 #[test]
+fn global_variables_mid_frame_view_model_comparator_matches_cpp_layer_count() {
+    let label = "global_variables_test.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("read pinned {label}: {error}"));
+    let (runtime, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.initialize_artboard_renderer(
+        &runtime,
+        &graph.artboards[0],
+        &graph.artboards,
+        &BTreeMap::new(),
+        &mut RecordingFactory::new(),
+        None,
+    )
+    .expect("initialize retained renderer resources");
+    let view_model_index = runtime
+        .artboard(0)
+        .and_then(|artboard| artboard.uint_property("viewModelId"))
+        .and_then(|index| usize::try_from(index).ok())
+        .unwrap_or_else(|| panic!("missing default ViewModel for {label}"));
+    let mut context = RuntimeOwnedViewModelContext::from_main(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
+            .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
+            .unwrap_or_else(|| panic!("missing owned default ViewModel for {label}")),
+    );
+    context.complete_for_artboard(&runtime, 0);
+    rust.bind_owned_view_model_artboard_contexts(&runtime, &context);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.bind_owned_view_model_contexts(&context));
+    state_machine.advance_data_context();
+
+    let mut changed = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let components = rust
+        .advance_frame_components_with_state_machine_report(0.0, &mut state_machine)
+        .expect("retained frame components advance");
+    changed |= components.changed;
+    if components.notified {
+        changed |= rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    }
+    changed |= rust
+        .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+            std::slice::from_mut(&mut state_machine),
+        )
+        .expect("mid-frame comparator settlement");
+
+    assert!(changed);
+    assert_eq!(
+        state_machine.changed_state_count(),
+        2,
+        "both pinned C++ root layers transition after the first update/data-bind pass (transition_viewmodel_condition.cpp:49-60; state_machine_instance.cpp:2665-2697)",
+    );
+}
+
+#[test]
+fn stateful_keyed_trigger_reaches_nested_comparator_in_the_same_frame() {
+    let label = "stateful_keyed_trigger.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("read pinned {label}: {error}"));
+    let (runtime, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.initialize_artboard_renderer(
+        &runtime,
+        &graph.artboards[0],
+        &graph.artboards,
+        &BTreeMap::new(),
+        &mut RecordingFactory::new(),
+        None,
+    )
+    .expect("initialize retained renderer resources");
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.bind_default_view_model_context_on_artboard(&mut rust));
+
+    state_machine
+        .advance_and_apply(&mut rust, 0.0)
+        .expect("initial stateful-keyed-trigger frame");
+    state_machine
+        .advance_and_apply(&mut rust, 0.5)
+        .expect("mid-frame stateful-keyed-trigger frame");
+    let mut nested_colors = Vec::new();
+    rust.try_visit_nested_artboard_instances_mut(&mut |_depth,
+                                                       graph_global_id,
+                                                       child|
+     -> Result<(), ()> {
+        let child_graph = graph
+            .artboards
+            .iter()
+            .find(|candidate| candidate.global_id == graph_global_id)
+            .unwrap_or_else(|| panic!("missing nested graph {graph_global_id}"));
+        nested_colors.extend(
+            child_graph
+                .local_objects
+                .iter()
+                .filter(|object| object.type_name == Some("SolidColor"))
+                .filter_map(|object| {
+                    child.color_property(
+                        object.local_id,
+                        property_key_for_name("SolidColor", "colorValue"),
+                    )
+                }),
+        );
+        Ok(())
+    })
+    .expect("visit nested stateful-keyed-trigger artboard");
+
+    assert_eq!(
+        nested_colors,
+        vec![0xff07_fb5a],
+        "the keyed trigger written by the outer data-bind pass must remain observable by the nested ConditionComparisonSelf probe before that layer consumes it (transition_viewmodel_condition.cpp:49-60; state_machine_instance.cpp:2665-2697)",
+    );
+}
+
+#[test]
 fn composite_listener_trigger_survives_a_later_view_model_write_until_transition_probe() {
     let label = "synthetic/runtime_view_model_listener_trigger_then_number.riv";
     let bytes = synthetic_view_model_listener_trigger_then_number_transition(9691);

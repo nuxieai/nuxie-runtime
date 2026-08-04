@@ -423,8 +423,11 @@ impl RuntimeNestedStateMachineInstance {
         let Some(state_machine) = self.state_machine.as_mut() else {
             return false;
         };
-        let changed = state_machine.bind_owned_view_model_data_context(data_context);
-        changed | state_machine.advance_data_context()
+        // C++ `NestedStateMachine::dataContext` forwards to
+        // `StateMachineInstance::dataContext`, which clears and rebinds but
+        // does not call `DataContext::advanced`. The outer settlement reset
+        // owns consumption after every nested transition probe.
+        state_machine.bind_owned_view_model_data_context(data_context)
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(

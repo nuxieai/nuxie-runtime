@@ -740,9 +740,11 @@ enum RuntimeStatefulViewModelValueUpdate {
 
 #[derive(Debug, Clone)]
 struct RuntimeStatefulViewModelUpdate {
+    source_local_id: usize,
     instance_local_id: usize,
     view_model_index: usize,
     property_path: Vec<usize>,
+    authored_number_value: Option<f32>,
     value: RuntimeStatefulViewModelValueUpdate,
 }
 
@@ -1071,6 +1073,16 @@ impl RuntimeOwnedDataContext {
         handles
     }
 
+    fn root_handle_for_view_model_index(
+        &self,
+        view_model_index: usize,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        self.resolve(&mut |instance, context| {
+            (instance.scope_path.is_empty() && context.view_model_index == view_model_index)
+                .then(|| instance.context.clone())
+        })
+    }
+
     pub(crate) fn main_context_chain(
         &self,
         file: &RuntimeFile,
@@ -1310,74 +1322,108 @@ impl RuntimeOwnedDataContext {
                 &instance.scope_path,
                 source_path,
             )?;
-            let property_path = path.as_slice();
-            let structural_source = context.structural_source_by_property_path(property_path);
-            let resolved = structural_source
-                .as_ref()
-                .and_then(|source| match value {
-                    RuntimeDataBindGraphValue::List { .. } => source
-                        .list_item_count()
-                        .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
-                    RuntimeDataBindGraphValue::ListLength(_) => source
-                        .list_item_count()
-                        .map(RuntimeDataBindGraphValue::ListLength),
-                    RuntimeDataBindGraphValue::ViewModel(_) => source
-                        .view_model_pointer()
-                        .map(RuntimeDataBindGraphValue::ViewModel),
-                    _ => None,
-                })
-                .or_else(|| Self::kind_matched_binding_value(context, property_path, value))?;
-            let cell = structural_source
-                .as_ref()
-                .map(RuntimeOwnedViewModelStructuralSource::cell)
-                .or_else(|| context.cell_by_property_path(property_path))
-                .filter(|cell| {
-                    matches!(
-                        (&cell.value(), &resolved),
-                        (
-                            RuntimeViewModelCellValue::Number(_),
-                            RuntimeDataBindGraphValue::Number(_)
-                        ) | (
-                            RuntimeViewModelCellValue::Boolean(_),
-                            RuntimeDataBindGraphValue::Boolean(_)
-                        ) | (
-                            RuntimeViewModelCellValue::String(_),
-                            RuntimeDataBindGraphValue::String(_)
-                        ) | (
-                            RuntimeViewModelCellValue::Color(_),
-                            RuntimeDataBindGraphValue::Color(_)
-                        ) | (
-                            RuntimeViewModelCellValue::Enum(_),
-                            RuntimeDataBindGraphValue::Enum(_)
-                        ) | (
-                            RuntimeViewModelCellValue::SymbolListIndex(_),
-                            RuntimeDataBindGraphValue::SymbolListIndex(_)
-                        ) | (
-                            RuntimeViewModelCellValue::AssetImage(_),
-                            RuntimeDataBindGraphValue::Asset(_)
-                        ) | (
-                            RuntimeViewModelCellValue::AssetFont(_),
-                            RuntimeDataBindGraphValue::Asset(_)
-                        ) | (
-                            RuntimeViewModelCellValue::Artboard(_),
-                            RuntimeDataBindGraphValue::Artboard(_)
-                        ) | (
-                            RuntimeViewModelCellValue::Trigger(_),
-                            RuntimeDataBindGraphValue::Trigger(_)
-                        ) | (
-                            RuntimeViewModelCellValue::List,
-                            RuntimeDataBindGraphValue::List { .. }
-                        ) | (
-                            RuntimeViewModelCellValue::List,
-                            RuntimeDataBindGraphValue::ListLength(_)
-                        ) | (
-                            RuntimeViewModelCellValue::ViewModel,
-                            RuntimeDataBindGraphValue::ViewModel(_)
-                        )
-                    )
-                });
-            Some((resolved, cell, structural_source))
+            Self::resolved_value_and_cell_for_property_path(context, path.as_slice(), value)
         })
+    }
+
+    pub(crate) fn resolve_value_and_cell_for_source_path_with_persistent_resolver(
+        &self,
+        file: &RuntimeFile,
+        value: &RuntimeDataBindGraphValue,
+        source_path: &[u32],
+        path_is_name_based: bool,
+    ) -> Option<(
+        RuntimeDataBindGraphValue,
+        Option<RuntimeViewModelCell>,
+        Option<RuntimeOwnedViewModelStructuralSource>,
+    )> {
+        self.resolve(&mut |instance, context| {
+            let property_path = context
+                .property_path_for_context_source_path_with_persistent_resolver(
+                    file,
+                    &instance.scope_path,
+                    source_path,
+                    path_is_name_based,
+                )?;
+            Self::resolved_value_and_cell_for_property_path(context, &property_path, value)
+        })
+    }
+
+    fn resolved_value_and_cell_for_property_path(
+        context: &RuntimeOwnedViewModelInstance,
+        property_path: &[usize],
+        value: &RuntimeDataBindGraphValue,
+    ) -> Option<(
+        RuntimeDataBindGraphValue,
+        Option<RuntimeViewModelCell>,
+        Option<RuntimeOwnedViewModelStructuralSource>,
+    )> {
+        let structural_source = context.structural_source_by_property_path(property_path);
+        let resolved = structural_source
+            .as_ref()
+            .and_then(|source| match value {
+                RuntimeDataBindGraphValue::List { .. } => source
+                    .list_item_count()
+                    .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
+                RuntimeDataBindGraphValue::ListLength(_) => source
+                    .list_item_count()
+                    .map(RuntimeDataBindGraphValue::ListLength),
+                RuntimeDataBindGraphValue::ViewModel(_) => source
+                    .view_model_pointer()
+                    .map(RuntimeDataBindGraphValue::ViewModel),
+                _ => None,
+            })
+            .or_else(|| Self::kind_matched_binding_value(context, property_path, value))?;
+        let cell = structural_source
+            .as_ref()
+            .map(RuntimeOwnedViewModelStructuralSource::cell)
+            .or_else(|| context.cell_by_property_path(property_path))
+            .filter(|cell| {
+                matches!(
+                    (&cell.value(), &resolved),
+                    (
+                        RuntimeViewModelCellValue::Number(_),
+                        RuntimeDataBindGraphValue::Number(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Boolean(_),
+                        RuntimeDataBindGraphValue::Boolean(_)
+                    ) | (
+                        RuntimeViewModelCellValue::String(_),
+                        RuntimeDataBindGraphValue::String(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Color(_),
+                        RuntimeDataBindGraphValue::Color(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Enum(_),
+                        RuntimeDataBindGraphValue::Enum(_)
+                    ) | (
+                        RuntimeViewModelCellValue::SymbolListIndex(_),
+                        RuntimeDataBindGraphValue::SymbolListIndex(_)
+                    ) | (
+                        RuntimeViewModelCellValue::AssetImage(_),
+                        RuntimeDataBindGraphValue::Asset(_)
+                    ) | (
+                        RuntimeViewModelCellValue::AssetFont(_),
+                        RuntimeDataBindGraphValue::Asset(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Artboard(_),
+                        RuntimeDataBindGraphValue::Artboard(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Trigger(_),
+                        RuntimeDataBindGraphValue::Trigger(_)
+                    ) | (
+                        RuntimeViewModelCellValue::List,
+                        RuntimeDataBindGraphValue::List { .. }
+                    ) | (
+                        RuntimeViewModelCellValue::List,
+                        RuntimeDataBindGraphValue::ListLength(_)
+                    ) | (
+                        RuntimeViewModelCellValue::ViewModel,
+                        RuntimeDataBindGraphValue::ViewModel(_)
+                    )
+                )
+            });
+        Some((resolved, cell, structural_source))
     }
 
     fn kind_matched_binding_value(
@@ -4936,6 +4982,16 @@ impl ArtboardInstance {
         }
     }
 
+    fn enqueue_artboard_shared_converter_direction(&mut self, data_bind_index: usize) {
+        if self
+            .artboard_authored_data_bind_states
+            .get(data_bind_index)
+            .is_some_and(|state| state.shared_converter.is_some())
+        {
+            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+        }
+    }
+
     fn enqueue_artboard_custom_property_binding_source(&mut self, index: usize) {
         let data_bind_index = self
             .artboard_custom_property_bindings
@@ -5434,7 +5490,7 @@ impl ArtboardInstance {
             if shared_converter {
                 // Primary source and OperationViewModel operands both add
                 // source-originated Bindings dirt to this exact outer bind.
-                self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+                self.enqueue_artboard_shared_converter_direction(data_bind_index);
             } else if to_target {
                 // This is the already-consumed retained source notification.
                 // Queue only this authored occurrence's execution adapters;
@@ -7459,7 +7515,7 @@ impl ArtboardInstance {
             }
         }
         for data_bind_index in shared_changed {
-            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
         }
         for index in 0..self.artboard_property_bindings.len() {
             if self.artboard_authored_data_bind_states
@@ -7534,7 +7590,7 @@ impl ArtboardInstance {
             }
         }
         for data_bind_index in shared_changed {
-            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
         }
         for index in 0..self.artboard_property_bindings.len() {
             if self.artboard_authored_data_bind_states
@@ -8245,7 +8301,7 @@ impl ArtboardInstance {
         }
         for data_bind_index in shared_changed {
             if Some(data_bind_index) != suppressed_data_bind_index {
-                self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+                self.enqueue_artboard_shared_converter_direction(data_bind_index);
             }
         }
 
@@ -8356,7 +8412,7 @@ impl ArtboardInstance {
             }
         }
         for data_bind_index in shared_changed {
-            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
         }
         for index in 0..self.artboard_property_bindings.len() {
             if self
@@ -8933,11 +8989,16 @@ impl ArtboardInstance {
         if !std::mem::replace(&mut self.stateful_nested_view_model_contexts_dirty, false) {
             return false;
         }
+        let authored_dirty_locals =
+            std::mem::take(&mut self.stateful_nested_view_model_dirty_locals);
         let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
             return false;
         };
         let Some(property_id_key) = runtime_data_bind_view_model_instance_value_property_id_key()
         else {
+            return false;
+        };
+        let Some(file) = self.runtime_file_arc() else {
             return false;
         };
 
@@ -9078,9 +9139,16 @@ impl ArtboardInstance {
                     .entry(*host_local_id)
                     .or_default()
                     .push(RuntimeStatefulViewModelUpdate {
+                        source_local_id: slot.local_id,
                         instance_local_id,
                         view_model_index,
                         property_path,
+                        authored_number_value: (type_name == "ViewModelInstanceNumber")
+                            .then(|| {
+                                file.object(slot.source_global_id as usize)
+                                    .and_then(|object| object.double_property("propertyValue"))
+                            })
+                            .flatten(),
                         value,
                     });
             }
@@ -9088,9 +9156,6 @@ impl ArtboardInstance {
 
         let mut changed = false;
         let mut child_layout_changed = false;
-        let Some(file) = self.runtime_file_arc() else {
-            return false;
-        };
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         for (host_local_id, mut updates) in updates {
             // A parent ViewModel selection must be applied before values below
@@ -9107,7 +9172,19 @@ impl ArtboardInstance {
             };
             let child_layout_revision = nested.child.layout_revision();
             let mut context_changed = false;
+            let mut preserve_mounted_layout_assignment = false;
             for update in updates {
+                if authored_dirty_locals.contains(&update.source_local_id)
+                    && let RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Number(value),
+                    ) = &update.value
+                    && let Some(context) = parent_data_context
+                        .root_handle_for_view_model_index(update.view_model_index)
+                {
+                    context_changed |= context
+                        .borrow_mut()
+                        .sync_number_by_property_path(&update.property_path, *value);
+                }
                 let context = if nested.stateful_view_model_instance_local
                     == Some(update.instance_local_id)
                 {
@@ -9119,6 +9196,17 @@ impl ArtboardInstance {
                 };
                 let Some(context) = context else { continue };
                 let mut context = context.borrow_mut();
+                if authored_dirty_locals.contains(&update.source_local_id)
+                    && nested.stateful_view_model_instance_local != Some(update.instance_local_id)
+                    && matches!(
+                        &update.value,
+                        RuntimeStatefulViewModelValueUpdate::Value(
+                            RuntimeDataBindGraphValue::Number(value)
+                        ) if update.authored_number_value.is_some_and(|authored| authored != *value)
+                    )
+                {
+                    preserve_mounted_layout_assignment = true;
+                }
                 // This host-first pass is the detached-copy equivalent of a
                 // keyed/property write on C++'s shared authored VMI pointer.
                 // Apply the authored arena value even when the retained cell
@@ -9196,7 +9284,8 @@ impl ArtboardInstance {
             // hug-sized NestedArtboardLayout from the child.
             changed |= nested.child.advance_artboard_data_binds();
             changed |= nested.child.update_pass();
-            child_layout_changed |= nested.child.layout_revision() != child_layout_revision;
+            child_layout_changed |= !preserve_mounted_layout_assignment
+                && nested.child.layout_revision() != child_layout_revision;
         }
         if child_layout_changed {
             // The mounted child can be a hug-sized provider in this artboard's

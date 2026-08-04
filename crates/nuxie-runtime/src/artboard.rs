@@ -452,6 +452,10 @@ pub struct ArtboardInstance {
     /// so clean frames do not reconcile detached copies. Rust only needs the
     /// full ordered reconciliation after a source value or context changes.
     pub(crate) stateful_nested_view_model_contexts_dirty: bool,
+    /// Authored `ViewModelInstanceValue` locals changed since the last
+    /// reconciliation. These writes are newer than the detached retained
+    /// cell, even when that cell still carries an unacknowledged child write.
+    pub(crate) stateful_nested_view_model_dirty_locals: BTreeSet<usize>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) image_render_overrides: BTreeMap<usize, crate::RuntimeViewModelImage>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
@@ -611,6 +615,9 @@ impl Clone for ArtboardInstance {
                 .clone(),
             stateful_nested_view_model_contexts_dirty: self
                 .stateful_nested_view_model_contexts_dirty,
+            stateful_nested_view_model_dirty_locals: self
+                .stateful_nested_view_model_dirty_locals
+                .clone(),
             image_asset_overrides: self.image_asset_overrides.clone(),
             image_render_overrides: self.image_render_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
@@ -2376,6 +2383,7 @@ impl ArtboardInstance {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
+            stateful_nested_view_model_dirty_locals: BTreeSet::new(),
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
@@ -3060,7 +3068,15 @@ impl ArtboardInstance {
             return Ok(false);
         }
         self.set_script_owner_advance_active_handle(component, true);
-        if entry.kind != AdvancingComponentKind::ScriptedPathEffect {
+        if entry.kind == AdvancingComponentKind::ScriptedPathEffect {
+            // The scripting facade exposes an advance result but has no
+            // separate `markNeedsUpdate` callback. A true path-effect advance
+            // therefore publishes the ScriptUpdate that C++ consumes at the
+            // effect's dependency slot before ShapePaint rebuilds its retained
+            // EffectPath (`scripted_path_effect.cpp:111-132,199-207`).
+            self.set_script_owner_update_pending(component, true);
+            self.add_component_dirt(component, ComponentDirt::SCRIPT_UPDATE, false);
+        } else {
             self.add_dirt(entry.local_id, ComponentDirt::PAINT, false);
         }
         Ok(true)
@@ -7838,6 +7854,8 @@ impl ArtboardInstance {
             .is_some_and(|type_name| type_name.starts_with("ViewModelInstance"))
         {
             self.stateful_nested_view_model_contexts_dirty = true;
+            self.stateful_nested_view_model_dirty_locals
+                .insert(local_id);
         }
     }
 
@@ -9947,6 +9965,21 @@ impl ArtboardInstance {
                     .uint_property(callback.target_local_id, property_value_key)
                     .unwrap_or(0)
                     + 1;
+                self.set_uint_property(callback.target_local_id, property_value_key, value)
+            }
+            Some("ViewModelInstanceTrigger")
+                if property_key_for_name("ViewModelInstanceTrigger", "fire")
+                    == Some(callback.property_key) =>
+            {
+                let Some(property_value_key) =
+                    property_key_for_name("ViewModelInstanceTrigger", "propertyValue")
+                else {
+                    return false;
+                };
+                let value = self
+                    .uint_property(callback.target_local_id, property_value_key)
+                    .unwrap_or(0)
+                    .wrapping_add(1);
                 self.set_uint_property(callback.target_local_id, property_value_key, value)
             }
             _ => false,
@@ -12766,6 +12799,7 @@ mod tests {
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
+            stateful_nested_view_model_dirty_locals: BTreeSet::new(),
             image_asset_overrides: BTreeMap::new(),
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
@@ -15145,6 +15179,32 @@ mod tests {
                 .expect("reactivated advance")
         );
         assert_eq!(advances.get(), 3);
+    }
+
+    #[test]
+    fn true_scripted_path_effect_advance_schedules_effect_invalidation() {
+        let mut effect = synthetic_component_for_type(0, "ScriptedPathEffect");
+        effect.global_id = 10;
+        let seconds = Rc::new(RefCell::new(Vec::new()));
+        let mut instance = synthetic_instance(vec![effect], vec![0]);
+        instance.set_script_instance_for_global(
+            10,
+            Box::new(RecordingAdvanceScriptInstance {
+                seconds: Rc::clone(&seconds),
+            }),
+        );
+        instance
+            .update_pass_with_script_errors()
+            .expect("consume the attachment-time ScriptUpdate");
+
+        assert!(instance.advance_script_instances(0.25).unwrap());
+        assert_eq!(seconds.borrow().as_slice(), [0.25]);
+        assert!(
+            instance
+                .debug_component_dirt(0)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            "a true advance must invalidate the retained EffectPath at the scripted effect's dependency slot (scripted_path_effect.cpp:111-132,199-207)",
+        );
     }
 
     #[test]

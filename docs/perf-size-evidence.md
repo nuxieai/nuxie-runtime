@@ -83,3 +83,28 @@ application footprint: archive member layout differs between Rust fat-LTO and
 C++, and a consuming linker dead-strips unreferenced members. The repository's
 post-link SDK budget remains governed separately by `make size-report`; this
 requested archive comparison does not replace or relax that gate.
+
+## 2026-08-04 perf-parity fix-lane addendum
+
+The measurements below use the same 100-frame, five-iteration median method
+described above, with C++ first and `rive-runtime` pinned at `4ac7b327`.
+Loading and process startup remain outside the reported `advance + draw`
+metric. The lane baseline was remeasured at source revision `3f94fe1f` before
+the first fix.
+
+| Step | Fixture | C++ ms/frame | Rust ms/frame | Change from lane baseline |
+|---|---|---:|---:|---:|
+| Lane baseline | `car_widgets_v01` | 0.033261 | 69.710143 | — |
+| Lane baseline | `zombie_skins` | 0.035936 | 1.361694 | — |
+| Fix 1: retained opacity-owner index | `car_widgets_v01` | 0.033128 | 8.861663 | -87.29% |
+| Fix 1: retained opacity-owner index | `zombie_skins` | 0.044959 | 0.912388 | -33.00% |
+| Fix 2: structure-gated renderer tree initialization | `car_widgets_v01` | 0.033028 | 6.895138 | -90.11% |
+| Fix 2: structure-gated renderer tree initialization | `zombie_skins` | 0.035613 | 0.590826 | -56.61% |
+| Fix 3: clean prepare-to-draw occurrence boundary | `car_widgets_v01` | 0.033063 | 6.833802 | -90.20% |
+| Fix 3: clean prepare-to-draw occurrence boundary | `zombie_skins` | 0.036598 | 0.582881 | -57.19% |
+
+The branch's original comparator predated the `advance_draw` derived phase and
+therefore printed total hot-loop time (including `prepare`). It was updated to
+the method above before all three revisions were remeasured. Authoritative raw
+reports are the `corrected-*` baseline/fix-1 files and the `fix2-*`/`fix3-*` files in
+[`evidence/perffix-2026-08-04/`](evidence/perffix-2026-08-04/).

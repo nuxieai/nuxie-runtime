@@ -51,8 +51,14 @@ pub(crate) fn family(type_name: &str) -> Option<RuntimeShapePaintContainerFamily
 pub(crate) fn runtime_shape_paint_container_is_occurrence_owned(
     container: &ShapePaintContainerNode,
 ) -> bool {
-    crate::shapes::shape_paint_container::family(container.type_name)
-        .is_some_and(|family| family.owns_shape_geometry())
+    matches!(
+        crate::shapes::shape_paint_container::family(container.type_name),
+        Some(
+            RuntimeShapePaintContainerFamily::Artboard
+                | RuntimeShapePaintContainerFamily::Shape
+                | RuntimeShapePaintContainerFamily::TextStylePaint
+        )
+    )
 }
 
 /// Direct owner for C++ `ShapePaintContainer::addPaint`.

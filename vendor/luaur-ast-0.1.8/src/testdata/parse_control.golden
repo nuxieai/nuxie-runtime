@@ -1,0 +1,86 @@
+Block 0:0-34:0 hasEnd=1
+  LocalFunction 0:0-8:3 name=66
+    Function 0:0-8:3 vararg=1 nargs=2 self=- debug=66
+      Block 0:27-8:0 hasEnd=1
+        If 1:4-7:7
+          Binary 1:7-1:12 op=10
+            Local 1:7-1:8 l=61 up=0
+            Local 1:11-1:12 l=62 up=0
+          Block 1:17-3:4 hasEnd=1
+            Return 2:8-2:16 n=1
+              Local 2:15-2:16 l=61 up=0
+          If 3:4-7:7
+            Binary 3:11-3:17 op=9
+              Local 3:11-3:12 l=61 up=0
+              Local 3:16-3:17 l=62 up=0
+            Block 3:22-5:4 hasEnd=1
+              Return 4:8-4:16 n=1
+                Number 4:15-4:16 v=0000000000000000 pr=0
+            Block 5:8-7:4 hasEnd=1
+              Return 6:8-6:16 n=1
+                Local 6:15-6:16 l=62 up=0
+  LocalStat 10:0-10:42 nvars=1 nvalues=1
+    Var n=74
+    Table 10:10-10:42 nitems=4
+      Item kind=0
+        Number 10:12-10:13 v=3ff0000000000000 pr=0
+      Item kind=0
+        Number 10:15-10:16 v=4000000000000000 pr=0
+      Item kind=1
+        String 10:18-10:22 v=6e616d65 q=3
+        String 10:25-10:28 v=76 q=0
+      Item kind=2
+        Global 10:31-10:32 n=78
+        Bool 10:36-10:40 v=1
+  While 12:0-15:3 hasDo=1
+    Bool 12:6-12:10 v=1
+    Block 12:13-15:0 hasEnd=1
+      ExprStat 13:4-13:11
+        Call 13:4-13:11 self=0 nargs=2
+          Local 13:4-13:5 l=66 up=0
+          Number 13:6-13:7 v=3ff0000000000000 pr=0
+          Number 13:9-13:10 v=4000000000000000 pr=0
+      Break 14:4-14:9
+  Repeat 17:0-19:12
+    Block 17:6-19:0 hasEnd=1
+      Assign 18:4-18:13 nvars=1 nvalues=1
+        Global 18:4-18:5 n=67
+        Binary 18:8-18:13 op=0
+          Global 18:8-18:9 n=67
+          Number 18:12-18:13 v=3ff0000000000000 pr=0
+    Binary 19:6-19:12 op=12
+      Global 19:6-19:7 n=67
+      Number 19:10-19:12 v=4024000000000000 pr=0
+  For 21:0-24:3 var=69 hasDo=1
+    Number 21:8-21:9 v=3ff0000000000000 pr=0
+    Number 21:11-21:13 v=4024000000000000 pr=0
+    Number 21:15-21:16 v=4000000000000000 pr=0
+    Block 21:19-24:0 hasEnd=1
+      Assign 22:4-22:12 nvars=1 nvalues=1
+        IndexExpr 22:4-22:8
+          Local 22:4-22:5 l=74 up=0
+          Local 22:6-22:7 l=69 up=0
+        Local 22:11-22:12 l=69 up=0
+      Assign 23:4-23:15 nvars=1 nvalues=1
+        IndexName 23:4-23:11 i=6669656c64 op=.
+          Local 23:4-23:5 l=74 up=0
+        Local 23:14-23:15 l=69 up=0
+  ForIn 26:0-28:3 nvars=2 nvalues=1 hasIn=1 hasDo=1
+    Var n=6b
+    Var n=76
+    Local 26:12-26:13 l=74 up=0
+    Block 26:16-28:0 hasEnd=1
+      ExprStat 27:4-27:15
+        Call 27:4-27:15 self=0 nargs=2
+          Global 27:4-27:9 n=7072696e74
+          Local 27:10-27:11 l=6b up=0
+          Local 27:13-27:14 l=76 up=0
+  Block 30:0-33:3 hasEnd=1
+    LocalStat 31:4-31:25 nvars=1 nvalues=1
+      Var n=696e6e6572
+      Call 31:18-31:25 self=0 nargs=2
+        Local 31:18-31:19 l=66 up=0
+        Number 31:20-31:21 v=3ff0000000000000 pr=0
+        Number 31:23-31:24 v=4000000000000000 pr=0
+    Return 32:4-32:16 n=1
+      Local 32:11-32:16 l=696e6e6572 up=0

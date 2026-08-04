@@ -77,16 +77,13 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileTypeAliases.set(value);
     FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
-    FFlag::LuauConstJustReportErrorForUnderfill.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCstAttr.set(false);
-    FFlag::LuauCstExprGroup.set(value);
     FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
     FFlag::LuauEmitCallFeedback.set(value);
-    FFlag::LuauErrorTolerantPrettyPrinting.set(value);
     FFlag::LuauExplicitTypeInstantiationSupport.set(value);
     // Experimental "export values" syntax is intentionally NOT enabled here: it
     // is incomplete in this port — a closure that captures an exported local
@@ -296,12 +293,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileUdataDirect);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauConstJustReportErrorForUnderfill);
     // Analysis/src/Constraint.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCstExprGroup);
     // VM/src/laux.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
@@ -313,8 +306,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowRedefiningBuiltinTypes);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauEmitCallFeedback);
-    // Ast/src/PrettyPrinter.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauErrorTolerantPrettyPrinting);
     // Analysis/src/TypeInfer.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp

@@ -2005,14 +2005,22 @@ impl CommandServer {
     fn check_subscriptions(&mut self) {
         let mut events = Vec::new();
         for index in 0..self.subscriptions.len() {
-            let (handle, path, data_type, request_id) = {
-                let (handle, path, data_type, request_id, _, _) = &self.subscriptions[index];
-                (*handle, path.clone(), *data_type, *request_id)
+            let Some((handle, path, data_type, request_id)) =
+                self.subscriptions
+                    .get(index)
+                    .map(|(handle, path, data_type, request_id, _, _)| {
+                        (*handle, path.clone(), *data_type, *request_id)
+                    })
+            else {
+                continue;
             };
             if let Some((value, revision)) = self.subscription_value(handle, &path, data_type) {
-                if value != self.subscriptions[index].4 || revision != self.subscriptions[index].5 {
-                    self.subscriptions[index].4 = value.clone();
-                    self.subscriptions[index].5 = revision;
+                let Some(subscription) = self.subscriptions.get_mut(index) else {
+                    continue;
+                };
+                if value != subscription.4 || revision != subscription.5 {
+                    subscription.4 = value.clone();
+                    subscription.5 = revision;
                     events.push(CommandEvent::ViewModelValue {
                         handle,
                         request_id,

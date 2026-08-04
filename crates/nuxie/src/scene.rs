@@ -3755,9 +3755,10 @@ impl Hierarchy<'_> {
         let anchor_indexed = self
             .indexed_object(anchor)
             .ok_or_else(|| self.abort(vec![EditId::Object(anchor)], EditReason::UnknownObject))?;
-        if anchor_indexed.visual_kind().is_none() {
-            return Err(self.abort(vec![EditId::Object(anchor)], EditReason::NonVisualObject));
-        }
+        // Any authored record works as an anchor. A satellite anchor is load-
+        // bearing: `After(layout style)` names the first-child slot directly
+        // after a parent's own records, which no visual anchor can express
+        // because `After(parent)` spans the parent's complete subtree.
         if anchor_indexed.artboard != artboard_id {
             return Err(self.abort(
                 vec![EditId::Object(object), EditId::Object(anchor)],

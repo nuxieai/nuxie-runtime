@@ -583,7 +583,7 @@ static_closure = "Cycle S4 ports the pin-introduced signed-keyframe, blob, grid,
 upstream = "src/advancing_component.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/advancing_component.rs", "crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
 status = "faithful"
 

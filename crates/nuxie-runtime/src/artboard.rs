@@ -67,7 +67,7 @@ use crate::draw::{
     runtime_component_list_item_layout_size,
 };
 use crate::joystick::{RuntimeJoystick, build_runtime_joysticks};
-use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot, ObjectHandle};
+use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     RuntimeArtboardDimensions, artboard_index_for_graph,
     layout_component_style_display_value_property_key, property_key_for_name,
@@ -100,6 +100,9 @@ use crate::{
     RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
     ScriptInterpolatorMethod,
 };
+
+mod advancing_component;
+pub(crate) use advancing_component::RuntimeAdvancingComponent;
 
 // C++ `Artboard::sm_frameId` is global across artboards and advances at each
 // public `Artboard::draw` entry. Scripted paths use it to distinguish a second
@@ -226,14 +229,6 @@ where
     fn into_iter(self) -> Self::IntoIter {
         (&self.0).into_iter()
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RuntimeAdvancingComponent {
-    pub(crate) local_id: usize,
-    pub(crate) object: ObjectHandle,
-    pub(crate) component: Option<ComponentHandle>,
-    pub(crate) kind: AdvancingComponentKind,
 }
 
 /// Test-owned equivalent of the C++ `PersistentDirtProbeComponent`.

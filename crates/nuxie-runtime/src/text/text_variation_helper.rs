@@ -68,19 +68,16 @@ fn shape_text_glyphs_for_style_with_variations(
 }
 
 /// Direct update for the embedded `TextVariationHelper` dependency owner.
-/// Axis dirt rebuilds the variation-bearing font by invalidating precisely the
-/// retained Text occurrence (`text_variation_helper.cpp:14-17`).
+///
+/// Rust shaping reads the live axis/feature values when the already-dirtied
+/// Text rebuilds, so there is no separate variable-font cache to refresh.
+/// Crucially, C++ `TextVariationHelper::update` only calls
+/// `TextStyle::updateVariableFont`; it does not publish fresh TextShape dirt.
+/// The helper-to-Text dependency has already propagated the source dirt before
+/// this update node runs (`text_variation_helper.cpp:7-17`).
 pub(crate) fn update_text_variation_helper(
-    instance: &mut ArtboardInstance,
-    text: crate::components::ComponentHandle,
-    dirt: crate::components::ComponentDirt,
+    _instance: &mut ArtboardInstance,
+    _text: crate::components::ComponentHandle,
+    _dirt: crate::components::ComponentDirt,
 ) {
-    let _ = dirt;
-    if let Some(text_local) = instance.component_local_id(text) {
-        instance.add_dirt(
-            text_local,
-            crate::components::ComponentDirt::TEXT_SHAPE,
-            false,
-        );
-    }
 }

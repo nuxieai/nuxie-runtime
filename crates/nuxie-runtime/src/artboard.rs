@@ -6245,19 +6245,14 @@ impl ArtboardInstance {
                         // component traversal performs `updatePass(false)`.
                         item.child.added_to_host();
                     }
-                    if let Some(layout) = item
-                        .child
-                        .component(0)
-                        .and_then(|component| component.concrete.layout.as_ref())
-                    {
-                        // The mounted root Yoga node remains owned by the
-                        // hosting layout. Retain its parent-local location
-                        // before the later child component traversal, which
-                        // must not solve the occurrence as a standalone root
-                        // (`artboard_component_list.cpp:220-229`;
-                        // `scroll_virtualizer.cpp:269-291`).
-                        layout.retain_bounds(bounds.x, bounds.y, bounds.width, bounds.height);
-                    }
+                    // The mounted root Yoga node remains owned by the hosting
+                    // layout. Retain its parent-local location through the
+                    // LayoutComponent owner so a size delta publishes the
+                    // same Path-before-World dirt as C++ before the later
+                    // child traversal (`artboard_component_list.cpp:220-229`;
+                    // `layout_component.cpp:1153-1178`).
+                    item.child
+                        .retain_runtime_layout_component_bounds(0, bounds, None);
                     // The transferred root Yoga node is the size owner after
                     // the parent solve. Do not immediately run a standalone
                     // child solve and overwrite its parent-local location.
@@ -15662,6 +15657,42 @@ mod tests {
             bounds,
             crate::semantic_data::SemanticBounds::new(0.0, 0.0, 100.0, 80.0)
         );
+    }
+
+    #[test]
+    fn retained_layout_size_change_publishes_path_before_world() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let style = synthetic_component_for_type(2, "LayoutComponentStyle");
+        let mut instance = synthetic_instance(vec![root, layout, style], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 80.0,
+            },
+            None,
+        );
+        instance.clear_component_dirt(1);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 120.0,
+            },
+            None,
+        );
+
+        let dirt = instance.component(1).expect("layout component").dirt;
+        assert!(dirt.contains(ComponentDirt::PATH));
+        assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
     }
 
     impl ScriptInstance for ScriptedLayoutTestInstance {

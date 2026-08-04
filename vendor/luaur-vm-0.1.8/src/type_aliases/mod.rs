@@ -33,6 +33,7 @@ pub mod lua_unsigned;
 pub mod lua_userdata_direct_access;
 pub mod lua_userdata_direct_field_get;
 pub mod lua_userdata_direct_namecall;
+pub mod lua_vector_type;
 pub mod luau_class;
 pub mod luau_fast_function;
 pub mod luau_object;

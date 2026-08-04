@@ -41,6 +41,7 @@ cli = ["native"]
 default = ["std"]
 native = ["std"]
 native-codegen = ["native"]
+lua_vector_double = []
 std = []
 wasm = ["dep:wasm-bindgen"]
 

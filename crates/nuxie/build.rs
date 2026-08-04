@@ -3430,6 +3430,18 @@ fn render_scene_schema() -> String {
         if object.rust_name == "LayoutComponent" {
             output.push_str("    pub style: LayoutComponentStyleSpec,\n");
         }
+        if object.rust_name == "Artboard" {
+            output.push_str(
+                "    /// Optional root layout style. Upstream Rive artboards ARE\n\
+                 \x20   /// LayoutComponents carrying their own LayoutComponentStyle via the\n\
+                 \x20   /// inherited styleId (dev/defs/artboard.json extends\n\
+                 \x20   /// layout_component.json); this authors that style. `None` emits no\n\
+                 \x20   /// style record: export stays byte-identical to the pre-seam format\n\
+                 \x20   /// and the runtime settles the style-less root as a Column (the\n\
+                 \x20   /// pinned Yoga zero-init default).\n\
+                 \x20   pub layout_style: Option<LayoutComponentStyleSpec>,\n",
+            );
+        }
         if object.rust_name == "Image" {
             output.push_str("    pub crop: Option<ImageCropRect>,\n");
         }

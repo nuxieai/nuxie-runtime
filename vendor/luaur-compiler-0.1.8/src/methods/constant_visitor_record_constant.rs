@@ -19,26 +19,17 @@ impl<'a> ConstantVisitor<'a> {
             + Default
             + 'static,
     {
-        let fold_optimize = luaur_common::FFlag::LuauCompileFoldOptimize.get();
-        if fold_optimize {
-            if value.r#type == Type::Type_Table {
-                // Table constants are recorded in a separate map
-            } else if value.r#type != Type::Type_Unknown {
-                self.log_change_internal(map, key.clone(), None);
-                *map.get_or_insert(key) = *value;
-            } else if self.was_empty {
-                // No need to clear out entries if we started with empty maps
-            } else if let Some(old) = map.find(&key) {
-                let old_val = *old;
-                self.log_change_internal(map, key.clone(), Some(&old_val));
-                if let Some(old_mut) = map.find_mut(&key) {
-                    old_mut.r#type = Type::Type_Unknown;
-                }
-            }
-        } else {
-            if value.r#type != Type::Type_Unknown {
-                *map.get_or_insert(key) = *value;
-            } else if let Some(old_mut) = map.find_mut(&key) {
+        if value.r#type == Type::Type_Table {
+            // Table constants are recorded in a separate map
+        } else if value.r#type != Type::Type_Unknown {
+            self.log_change_internal(map, key.clone(), None);
+            *map.get_or_insert(key) = *value;
+        } else if self.was_empty {
+            // No need to clear out entries if we started with empty maps
+        } else if let Some(old) = map.find(&key) {
+            let old_val = *old;
+            self.log_change_internal(map, key.clone(), Some(&old_val));
+            if let Some(old_mut) = map.find_mut(&key) {
                 old_mut.r#type = Type::Type_Unknown;
             }
         }

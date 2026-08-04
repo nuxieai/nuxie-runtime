@@ -132,10 +132,8 @@ impl<'a> ConstantVisitor<'a> {
         } {
             if let Some(l) = self.locals.find(&expr.local) {
                 result = *l;
-            } else if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-                if let Some(l) = self.table_locals.find(&expr.local) {
-                    result = *l;
-                }
+            } else if let Some(l) = self.table_locals.find(&expr.local) {
+                result = *l;
             }
         } else if luaur_ast::rtti::ast_node_is::<luaur_ast::records::ast_expr_global::AstExprGlobal>(
             node as *mut luaur_ast::records::ast_node::AstNode,
@@ -432,50 +430,32 @@ impl<'a> ConstantVisitor<'a> {
     }
 
     fn record_expr_constant(&mut self, key: *mut AstExpr, value: Constant) {
-        if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                // Table constants are recorded in a separate map
-            } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                self.log_expr_change(key, None);
-                *self.constants.get_or_insert(key) = value;
-            } else if self.was_empty {
-                // No need to clear out entries if we started with empty maps
-            } else if let Some(old) = self.constants.find(&key).copied() {
-                self.log_expr_change(key, Some(old));
-                // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
-                // when the key exists, so the stale constant survived across inline re-folds.
-                *self.constants.get_or_insert(key) = Constant::default();
-            }
-        } else {
-            if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                *self.constants.get_or_insert(key) = value;
-            } else if self.constants.find(&key).is_some() {
-                // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
-                // when the key exists, so the stale constant survived across inline re-folds.
-                *self.constants.get_or_insert(key) = Constant::default();
-            }
+        if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+            // Table constants are recorded in a separate map
+        } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
+            self.log_expr_change(key, None);
+            *self.constants.get_or_insert(key) = value;
+        } else if self.was_empty {
+            // No need to clear out entries if we started with empty maps
+        } else if let Some(old) = self.constants.find(&key).copied() {
+            self.log_expr_change(key, Some(old));
+            // C++ `old->type = Type_Unknown`: clear the STALE entry. try_insert is a no-op
+            // when the key exists, so the stale constant survived across inline re-folds.
+            *self.constants.get_or_insert(key) = Constant::default();
         }
     }
 
     fn record_local_constant(&mut self, key: *mut AstLocal, value: Constant) {
-        if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                // Table constants are recorded in a separate map
-            } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                self.log_local_change(key, None);
-                *self.locals.get_or_insert(key) = value;
-            } else if self.was_empty {
-                // No need to clear out entries if we started with empty maps
-            } else if let Some(old) = self.locals.find(&key).copied() {
-                self.log_local_change(key, Some(old));
-                *self.locals.get_or_insert(key) = Constant::default();
-            }
-        } else {
-            if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
-                *self.locals.get_or_insert(key) = value;
-            } else if self.locals.find(&key).is_some() {
-                *self.locals.get_or_insert(key) = Constant::default();
-            }
+        if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+            // Table constants are recorded in a separate map
+        } else if value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
+            self.log_local_change(key, None);
+            *self.locals.get_or_insert(key) = value;
+        } else if self.was_empty {
+            // No need to clear out entries if we started with empty maps
+        } else if let Some(old) = self.locals.find(&key).copied() {
+            self.log_local_change(key, Some(old));
+            *self.locals.get_or_insert(key) = Constant::default();
         }
     }
 
@@ -519,19 +499,12 @@ impl<'a> ConstantVisitor<'a> {
         let v = self.variables.find_mut(&local).unwrap();
 
         if !v.written {
-            if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-                if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
-                    v.constant = false;
-                    self.table_locals.try_insert(local, value);
-                } else {
-                    v.constant =
-                        value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown;
-                    self.record_local_constant(local, value);
-                }
+            if value.r#type == crate::enums::type_constant_folding::Type::Type_Table {
+                v.constant = false;
+                self.table_locals.try_insert(local, value);
             } else {
-                v.constant = value.r#type
-                    != crate::enums::type_constant_folding::Type::Type_Unknown
-                    && value.r#type != crate::enums::type_constant_folding::Type::Type_Table;
+                v.constant =
+                    value.r#type != crate::enums::type_constant_folding::Type::Type_Unknown;
                 self.record_local_constant(local, value);
             }
         }

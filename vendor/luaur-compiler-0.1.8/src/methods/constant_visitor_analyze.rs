@@ -73,10 +73,8 @@ impl<'a> ConstantVisitor<'a> {
         } else if let Some(expr) = unsafe { ast_node_as::<AstExprLocal>(node_ptr).as_mut() } {
             if let Some(l) = self.locals.find(&expr.local) {
                 result = *l;
-            } else if luaur_common::FFlag::LuauCompileFoldOptimize.get() {
-                if let Some(l) = self.table_locals.find(&expr.local) {
-                    result = *l;
-                }
+            } else if let Some(l) = self.table_locals.find(&expr.local) {
+                result = *l;
             }
         } else if unsafe { ast_node_is::<AstExprGlobal>(&*node_ptr) }
             || unsafe { ast_node_is::<AstExprVarargs>(&*node_ptr) }

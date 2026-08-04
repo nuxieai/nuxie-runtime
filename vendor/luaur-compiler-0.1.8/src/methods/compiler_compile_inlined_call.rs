@@ -242,12 +242,8 @@ impl Compiler {
                 self.inline_builtins.clear();
             }
 
-            let record_changes = luaur_common::FFlag::LuauCompileFoldOptimize.get();
-
-            if record_changes {
-                self.expr_changes.clear();
-                self.local_changes.clear();
-            }
+            self.expr_changes.clear();
+            self.local_changes.clear();
 
             fold_constants(
                 &mut self.constants,
@@ -324,30 +320,14 @@ impl Compiler {
                 self.inline_builtins_backup.clear();
             }
 
-            if record_changes {
-                undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
-                    &mut self.constants,
-                    &self.expr_changes,
-                );
-                undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
-                    &mut self.locstants,
-                    &self.local_changes,
-                );
-            } else {
-                fold_constants(
-                    &mut self.constants,
-                    &mut self.variables,
-                    &mut self.locstants,
-                    self.builtins_fold,
-                    self.builtins_fold_library_k,
-                    self.options.library_member_constant_cb,
-                    func_body as *mut AstNode,
-                    &mut *self.names,
-                    &self.table_constants,
-                    core::ptr::null_mut(),
-                    core::ptr::null_mut(),
-                );
-            }
+            undo_changes_dense_hash_map_ast_expr_constant_expr_constant_change_log(
+                &mut self.constants,
+                &self.expr_changes,
+            );
+            undo_changes_dense_hash_map_ast_local_constant_local_constant_change_log(
+                &mut self.locstants,
+                &self.local_changes,
+            );
         }
     }
 }

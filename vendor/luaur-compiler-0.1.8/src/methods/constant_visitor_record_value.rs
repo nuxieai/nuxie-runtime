@@ -3,7 +3,6 @@ use crate::records::constant::Constant;
 use crate::records::constant_visitor::ConstantVisitor;
 use luaur_ast::records::ast_local::AstLocal;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
-use luaur_common::FFlag;
 
 impl<'a> ConstantVisitor<'a> {
     pub fn record_value(&mut self, local: *mut AstLocal, value: &Constant) {
@@ -14,18 +13,11 @@ impl<'a> ConstantVisitor<'a> {
             let v = v.unwrap();
 
             if !v.written {
-                if FFlag::LuauCompileFoldOptimize.get() {
-                    if value.r#type == Type::Type_Table {
-                        v.constant = false;
-                        *self.table_locals.get_or_insert(local) = value.clone();
-                    } else {
-                        v.constant = value.r#type != Type::Type_Unknown;
-                        let locals_ptr = self.locals as *mut _;
-                        self.record_constant(&mut *locals_ptr, local, value);
-                    }
+                if value.r#type == Type::Type_Table {
+                    v.constant = false;
+                    *self.table_locals.get_or_insert(local) = *value;
                 } else {
-                    v.constant =
-                        value.r#type != Type::Type_Unknown && value.r#type != Type::Type_Table;
+                    v.constant = value.r#type != Type::Type_Unknown;
                     let locals_ptr = self.locals as *mut _;
                     self.record_constant(&mut *locals_ptr, local, value);
                 }

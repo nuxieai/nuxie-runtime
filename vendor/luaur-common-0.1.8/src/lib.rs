@@ -72,7 +72,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCodegenVmExitSync.set(value);
     FFlag::LuauCodegenVmExitSyncFix.set(value);
     FFlag::LuauCompileFastcall3CostModel.set(value);
-    FFlag::LuauCompileFoldOptimize.set(value);
     FFlag::LuauCompileInlineTableFunctions.set(value);
     FFlag::LuauCompileNewTableMutationTracker.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
@@ -286,8 +285,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
     // Compiler/src/CostModel.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileFastcall3CostModel);
-    // Compiler/src/ConstantFolding.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileFoldOptimize);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileInlineTableFunctions);
     // Compiler/src/ConstantFolding.cpp

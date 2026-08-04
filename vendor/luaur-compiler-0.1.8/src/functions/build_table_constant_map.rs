@@ -13,8 +13,6 @@ pub fn build_table_constant_map(
     variables: &DenseHashMap<*mut AstLocal, Variable>,
     root: *mut AstNode,
 ) {
-    luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCompileFoldOptimize.get());
-
     if luaur_common::FFlag::LuauCompileNewTableMutationTracker.get() {
         let mut tracker = TableMutationTracker::table_mutation_tracker(variables);
         unsafe {

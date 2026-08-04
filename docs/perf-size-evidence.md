@@ -185,3 +185,44 @@ The equivalent comparator arguments are:
 --rust-execute-scripts \
 --iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
 ```
+
+## 2026-08-04 retained text-topology addendum
+
+This lane measured the three requested text-heavy fixtures before the first
+change (`ed5b66e8`) and after the retained-topology implementation
+(`7e993be7`). Both runs used the pinned C++ runtime at `4ac7b327`, release
+scripted runners, 100 frames at 60 Hz, C++ first, script execution enabled,
+and the median of five iterations with no warmups. The table reports the
+runner's `advance + draw` phase divided by 100; loading, startup, and text
+topology construction before the measured loop are excluded.
+
+| Fixture | Baseline Rust ms/frame | Retained Rust ms/frame | Rust change | Retained Rust/C++ |
+|---|---:|---:|---:|---:|
+| `script_create_text_runs` | 1.527619 | 1.353785 | -11.38% | 319.635x |
+| `text_vertical_trim_test` | 0.094717 | 0.101325 | +6.98% | 21.683x |
+| `layout_text_match` | 0.171508 | 0.173455 | +1.14% | 11.843x |
+
+`script_create_text_runs`, the fixture that repeatedly dirties text, removes
+0.173834 ms/frame from the measured Rust hot loop. The two mostly static
+fixtures moved by 0.006608 ms/frame and 0.001947 ms/frame respectively; those
+small regressions are within the run-to-run host variance seen by the broader
+performance gate and are recorded rather than normalized away. The
+independent 24-row `make perf-gate` sample passed, including
+`script_create_text_runs` at 1.406114 ms/frame (271.253x, ceiling 378x) and
+`text_vertical_trim_test` at 0.081804 ms/frame (17.400x, ceiling 25x).
+
+Raw reports and their SHA-256 digests are checked in under
+[`evidence/texttop-2026-08-04/`](evidence/texttop-2026-08-04/):
+
+- `baseline.json`: `dd9e2cc89e4504b9b82eef58179dbe26b27f6bc6258e890c646e891fb3b93445`
+- `retained-topology.json`: `e1c05e420eceaadc0ab5a47e5fece50375f4ce44f5ec9781052ee384184c49a7`
+
+The equivalent comparator arguments are:
+
+```sh
+--corpus corpus.toml \
+--corpus-ids script_create_text_runs,text_vertical_trim_test,layout_text_match \
+--runner-benchmark --benchmark-frames 100 --benchmark-hz 60 \
+--rust-execute-scripts \
+--iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
+```

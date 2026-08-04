@@ -18,6 +18,7 @@ use crate::records::proto::Proto;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 use core::ffi::{c_char, c_int, c_void};
+use luaur_common::FFlag;
 
 pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
     extern "C" {
@@ -40,24 +41,32 @@ pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
     dumpref(f, obj2gco!((*th).gt));
 
     let mut tcl: *mut Closure = core::ptr::null_mut();
+    let mut cip: *mut Proto = core::ptr::null_mut();
     let mut ci = (*th).base_ci;
     while ci <= (*th).ci {
         if ttisfunction!((*ci).func) {
             tcl = clvalue!((*ci).func);
+            if FFlag::LuauCIProto.get() {
+                cip = (*ci).p;
+            }
             break;
         }
         ci = ci.add(1);
     }
 
-    if !tcl.is_null() && (*tcl).isC == 0 {
+    let thread_proto = if FFlag::LuauCIProto.get() {
+        cip
+    } else if !tcl.is_null() && (*tcl).isC == 0 {
         let tcl_l = core::ptr::addr_of!((*tcl).inner.l).cast::<crate::records::closure::LClosure>();
-        let tcl_p: *mut Proto = (*tcl_l).p;
-        if !(*tcl_p).source.is_null() {
-            let p: *mut Proto = tcl_p;
-            fprintf(f, c",\"source\":\"".as_ptr());
-            dumpstringdata(f, getstr((*p).source), (*(*p).source).len as usize);
-            fprintf(f, c"\",\"line\":%d".as_ptr(), (*p).linedefined);
-        }
+        (*tcl_l).p
+    } else {
+        core::ptr::null_mut()
+    };
+    if !thread_proto.is_null() && !(*thread_proto).source.is_null() {
+        let p = thread_proto;
+        fprintf(f, c",\"source\":\"".as_ptr());
+        dumpstringdata(f, getstr((*p).source), (*(*p).source).len as usize);
+        fprintf(f, c"\",\"line\":%d".as_ptr(), (*p).linedefined);
     }
 
     if (*th).top > (*th).stack {
@@ -96,9 +105,13 @@ pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
                             },
                         );
                     } else {
-                        let lcl = core::ptr::addr_of!((*cl).inner.l)
-                            .cast::<crate::records::closure::LClosure>();
-                        let p = (*lcl).p;
+                        let p = if FFlag::LuauCIProto.get() {
+                            (*ci).p
+                        } else {
+                            let lcl = core::ptr::addr_of!((*cl).inner.l)
+                                .cast::<crate::records::closure::LClosure>();
+                            (*lcl).p
+                        };
                         fprintf(f, c"\"frame:".as_ptr());
                         if !(*p).source.is_null() {
                             dumpstringdata(f, getstr((*p).source), (*(*p).source).len as usize);
@@ -115,10 +128,14 @@ pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
                         );
                     }
                 } else if isLua!(ci) {
-                    let cl = ci_func!(ci);
-                    let lcl = core::ptr::addr_of!((*cl).inner.l)
-                        .cast::<crate::records::closure::LClosure>();
-                    let p = (*lcl).p;
+                    let p = if FFlag::LuauCIProto.get() {
+                        (*ci).p
+                    } else {
+                        let cl = ci_func!(ci);
+                        let lcl = core::ptr::addr_of!((*cl).inner.l)
+                            .cast::<crate::records::closure::LClosure>();
+                        (*lcl).p
+                    };
                     let pc = pcRel!((*ci).context.savedpc, p);
                     let var: *const LocVar =
                         luaF_findlocal(p, v.offset_from((*ci).base) as c_int, pc);

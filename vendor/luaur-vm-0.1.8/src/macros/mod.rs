@@ -387,6 +387,7 @@ pub mod utag_proxy;
 pub mod utf_8_buffsz;
 pub mod utf_8_patt;
 pub mod uvalue;
+pub mod vm_assert_pc;
 pub mod vm_case;
 pub mod vm_case_instruction;
 pub mod vm_case_stkid;

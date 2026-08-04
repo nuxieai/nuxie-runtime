@@ -15,6 +15,7 @@ use crate::records::t_string::TString;
 use crate::type_aliases::closure::Closure;
 use crate::type_aliases::t_value::TValue;
 use core::ffi::{c_char, c_int};
+use luaur_common::FFlag;
 
 #[allow(non_snake_case)]
 pub unsafe fn enumthread(ctx: *mut EnumContext, th: *mut lua_State) {
@@ -23,45 +24,52 @@ pub unsafe fn enumthread(ctx: *mut EnumContext, th: *mut lua_State) {
         + core::mem::size_of::<CallInfo>() * (*th).size_ci as usize;
 
     let mut tcl: *mut Closure = core::ptr::null_mut();
+    let mut cip: *mut Proto = core::ptr::null_mut();
     let mut ci: *mut CallInfo = (*th).base_ci;
     while ci <= (*th).ci {
         if ttisfunction!((*ci).func) {
             tcl = clvalue!((*ci).func);
+            if FFlag::LuauCIProto.get() {
+                cip = (*ci).p;
+            }
             break;
         }
         ci = ci.wrapping_add(1);
     }
 
-    if !tcl.is_null() && (*tcl).isC == 0 {
+    let p = if FFlag::LuauCIProto.get() {
+        cip
+    } else if !tcl.is_null() && (*tcl).isC == 0 {
         let tcl_l = core::ptr::addr_of!((*tcl).inner.l).cast::<crate::records::closure::LClosure>();
-        let p: *mut Proto = (*tcl_l).p;
-        if !p.is_null() {
-            let mut buf: [c_char; 256] = [0; 256];
+        (*tcl_l).p
+    } else {
+        core::ptr::null_mut()
+    };
 
-            let src_str = if !(*p).source.is_null() {
-                getstr((*p).source)
-            } else {
-                c"unnamed".as_ptr()
-            };
-            let debugname_str = if !(*p).debugname.is_null() {
-                getstr((*p).debugname)
-            } else {
-                c"unnamed".as_ptr()
-            };
+    if !p.is_null() && !(*p).source.is_null() {
+        let mut buf: [c_char; 256] = [0; 256];
 
-            let _ = snprintf(
-                buf.as_mut_ptr(),
-                buf.len() as u32,
-                c"thread at %s:%d %s".as_ptr(),
-                debugname_str,
-                (*p).linedefined,
-                src_str,
-            );
-
-            enumnode(ctx, obj2gco!(th as *mut GCObject), size, buf.as_ptr());
+        let src_str = if !(*p).source.is_null() {
+            getstr((*p).source)
         } else {
-            enumnode(ctx, obj2gco!(th as *mut GCObject), size, core::ptr::null());
-        }
+            c"unnamed".as_ptr()
+        };
+        let debugname_str = if !(*p).debugname.is_null() {
+            getstr((*p).debugname)
+        } else {
+            c"unnamed".as_ptr()
+        };
+
+        let _ = snprintf(
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            c"thread at %s:%d %s".as_ptr(),
+            debugname_str,
+            (*p).linedefined,
+            src_str,
+        );
+
+        enumnode(ctx, obj2gco!(th as *mut GCObject), size, buf.as_ptr());
     } else {
         enumnode(ctx, obj2gco!(th as *mut GCObject), size, core::ptr::null());
     }

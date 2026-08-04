@@ -45,7 +45,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V36 | No divergence under the current contract; 2,285 lines align and the maximum numeric delta is `3.0e-5`. | **Artifact; see below.** |
 | V37 | At t=0.5, Rust text translation is y=`187.584229`; C++ is y=`182.76001` (delta 4.824219). | Animated vertical-trim shaping/layout propagation. The numeric pair in the register is stale. |
 | V38 | At t=0.5, draw path id 3 first differs in the selected child artboard's later glyph/path coordinates. | Scripted VM-instance-to-artboard selection and nested state propagation. |
-| V39 | At t=4, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Virtualized component-list keep-going/settle return only. |
+| V39 | **Closed:** draw and side-channel streams are exact at t=0/2/4. | Pooled row restoration now preserves concrete renderer owners. |
 | V40 | Before the t=1 `advance` record, Rust creates gradient id 30 while C++ creates no corresponding resource. | Post-zero retained paint/occurrence realization. |
 | Row | Why it is not the recorded runtime divergence on this fresh pin |
 |---|---|
@@ -96,7 +96,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V36 | No divergence under the current contract; 2,285 lines align and the maximum numeric delta is `3.0e-5`. | **Artifact; see below.** |
 | V37 | At t=0.5, Rust text translation is y=`187.584229`; C++ is y=`182.76001` (delta 4.824219). | Animated vertical-trim shaping/layout propagation. The numeric pair in the register is stale. |
 | V38 | At t=0.5, draw path id 3 first differs in the selected child artboard's later glyph/path coordinates. | Scripted VM-instance-to-artboard selection and nested state propagation. |
-| V39 | At t=4, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Virtualized component-list keep-going/settle return only. |
+| V39 | **Closed:** draw and side-channel streams are exact at t=0/2/4. | Pooled row restoration now preserves concrete renderer owners. |
 | V40 | Before the t=1 `advance` record, Rust creates gradient id 30 while C++ creates no corresponding resource. | Post-zero retained paint/occurrence realization. |
 | Row | Why it is not the recorded runtime divergence on this fresh pin |
 |---|---|
@@ -147,7 +147,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V36 | No divergence under the current contract; 2,285 lines align and the maximum numeric delta is `3.0e-5`. | **Artifact; see below.** |
 | V37 | At t=0.5, Rust text translation is y=`187.584229`; C++ is y=`182.76001` (delta 4.824219). | Animated vertical-trim shaping/layout propagation. The numeric pair in the register is stale. |
 | V38 | At t=0.5, draw path id 3 first differs in the selected child artboard's later glyph/path coordinates. | Scripted VM-instance-to-artboard selection and nested state propagation. |
-| V39 | At t=4, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Virtualized component-list keep-going/settle return only. |
+| V39 | **Closed:** draw and side-channel streams are exact at t=0/2/4. | Pooled row restoration now preserves concrete renderer owners. |
 | V40 | Before the t=1 `advance` record, Rust creates gradient id 30 while C++ creates no corresponding resource. | Post-zero retained paint/occurrence realization. |
 | Row | Why it is not the recorded runtime divergence on this fresh pin |
 |---|---|
@@ -198,7 +198,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V36 | No divergence under the current contract; 2,285 lines align and the maximum numeric delta is `3.0e-5`. | **Artifact; see below.** |
 | V37 | At t=0.5, Rust text translation is y=`187.584229`; C++ is y=`182.76001` (delta 4.824219). | Animated vertical-trim shaping/layout propagation. The numeric pair in the register is stale. |
 | V38 | At t=0.5, draw path id 3 first differs in the selected child artboard's later glyph/path coordinates. | Scripted VM-instance-to-artboard selection and nested state propagation. |
-| V39 | At t=4, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Virtualized component-list keep-going/settle return only. |
+| V39 | **Closed:** draw and side-channel streams are exact at t=0/2/4. | Pooled row restoration now preserves concrete renderer owners. |
 | V40 | Before the t=1 `advance` record, Rust creates gradient id 30 while C++ creates no corresponding resource. | Post-zero retained paint/occurrence realization. |
 | Row | Why it is not the recorded runtime divergence on this fresh pin |
 |---|---|
@@ -249,7 +249,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V36 | No divergence under the current contract; 2,285 lines align and the maximum numeric delta is `3.0e-5`. | **Artifact; see below.** |
 | V37 | At t=0.5, Rust text translation is y=`187.584229`; C++ is y=`182.76001` (delta 4.824219). | Animated vertical-trim shaping/layout propagation. The numeric pair in the register is stale. |
 | V38 | At t=0.5, draw path id 3 first differs in the selected child artboard's later glyph/path coordinates. | Scripted VM-instance-to-artboard selection and nested state propagation. |
-| V39 | At t=4, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Virtualized component-list keep-going/settle return only. |
+| V39 | **Closed:** draw and side-channel streams are exact at t=0/2/4. | Pooled row restoration now preserves concrete renderer owners. |
 | V40 | Before the t=1 `advance` record, Rust creates gradient id 30 while C++ creates no corresponding resource. | Post-zero retained paint/occurrence realization. |
 | Row | Why it is not the recorded runtime divergence on this fresh pin |
 |---|---|

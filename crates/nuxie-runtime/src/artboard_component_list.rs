@@ -39,6 +39,14 @@ impl RuntimeComponentListItemInstance {
     /// renderer resources; C++ rewinds the occurrence's authored properties
     /// without replacing its RenderPath/RenderPaint owners.
     fn restore_from_fresh(&mut self, mut fresh: Self) {
+        fresh
+            .child
+            .runtime_shapes
+            .adopt_pooled_backend_owners(&mut self.child.runtime_shapes);
+        fresh
+            .child
+            .runtime_drawables
+            .adopt_pooled_backend_owners(&mut self.child.runtime_drawables);
         std::mem::swap(
             &mut self.child.instance_identity,
             &mut fresh.child.instance_identity,

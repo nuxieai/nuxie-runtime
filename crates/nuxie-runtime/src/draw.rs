@@ -9163,6 +9163,48 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    /// Move the renderer members owned by a pooled Artboard occurrence onto
+    /// its freshly reconstructed CPU/property state.
+    ///
+    /// C++ `ArtboardComponentList::applyRecorders` writes authored properties
+    /// back onto the same cloned objects. Rust reconstructs that authored
+    /// state in a temporary occurrence, so explicitly retain the concrete
+    /// `ShapePaint` and `ShapePaintPath` backend sidecars from the pooled
+    /// occurrence before installing the fresh state.
+    pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
+        self.backend_context_id.set(pooled.backend_context_id.take());
+        for (fresh_shape, pooled_shape) in self.by_local.iter_mut().zip(&mut pooled.by_local) {
+            let (Some(fresh_shape), Some(pooled_shape)) = (fresh_shape, pooled_shape) else {
+                continue;
+            };
+            for (fresh_path, pooled_path) in fresh_shape
+                .paint_paths
+                .iter_mut()
+                .zip(&mut pooled_shape.paint_paths)
+            {
+                std::mem::swap(&mut fresh_path.backend, &mut pooled_path.backend);
+            }
+            for (fresh_paint, pooled_paint) in fresh_shape
+                .paint_owners
+                .iter_mut()
+                .zip(&mut pooled_shape.paint_owners)
+            {
+                std::mem::swap(&mut fresh_paint.backend, &mut pooled_paint.backend);
+                std::mem::swap(
+                    &mut fresh_paint.inner_feather_backend,
+                    &mut pooled_paint.inner_feather_backend,
+                );
+                for (fresh_effect, pooled_effect) in fresh_paint
+                    .effect_paths
+                    .iter_mut()
+                    .zip(&mut pooled_paint.effect_paths)
+                {
+                    std::mem::swap(&mut fresh_effect.backend, &mut pooled_effect.backend);
+                }
+            }
+        }
+    }
+
     fn text_style_paint_owner(&self, paint_local: usize) -> Option<&RuntimeShapePaintOwner> {
         self.paint_owners_by_component_local
             .get(paint_local)?
@@ -10143,6 +10185,37 @@ pub(crate) struct RuntimeDrawableList {
 }
 
 impl RuntimeDrawableList {
+    /// Preserve backend sidecars when a virtualized component-list row is
+    /// restored from a fresh authored-property snapshot. The drawable CPU
+    /// state comes from the snapshot; the RenderPath/RenderPaint objects stay
+    /// with the pooled occurrence, matching C++ property-recorder replay.
+    pub(crate) fn adopt_pooled_backend_owners(&mut self, pooled: &mut Self) {
+        for (fresh_drawable, pooled_drawable) in
+            self.drawables.iter_mut().zip(&mut pooled.drawables)
+        {
+            if fresh_drawable.local_id != pooled_drawable.local_id
+                || fresh_drawable.type_name != pooled_drawable.type_name
+            {
+                continue;
+            }
+            if let (Some(fresh_owner), Some(pooled_owner)) = (
+                fresh_drawable.text_draw_owner.as_mut(),
+                pooled_drawable.text_draw_owner.as_mut(),
+            ) {
+                std::mem::swap(&mut fresh_owner.backend, &mut pooled_owner.backend);
+            }
+        }
+        for (fresh_owner, pooled_owner) in self
+            .layout_draw_owners
+            .iter_mut()
+            .zip(&mut pooled.layout_draw_owners)
+        {
+            if let (Some(fresh_owner), Some(pooled_owner)) = (fresh_owner, pooled_owner) {
+                std::mem::swap(&mut fresh_owner.backend, &mut pooled_owner.backend);
+            }
+        }
+    }
+
     pub(crate) fn from_graph(graph: &ArtboardGraph, objects: &InstanceObjectArena) -> Self {
         let mut drawables = graph
             .drawable_order
@@ -25065,6 +25138,108 @@ mod tests {
                 render_opacity: 1.0,
                 stops: Vec::new(),
             }
+        );
+    }
+
+    #[test]
+    fn pooled_component_list_renderer_backends_survive_authored_state_restore() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("virtualize_blendmode.riv"))
+            .expect("virtualize_blendmode imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("virtualize_blendmode graphs build");
+        let child_graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("child"))
+            .expect("fixture has a pooled child artboard");
+        let mut pooled = RuntimeShapeList::from_graph(child_graph);
+        let mut fresh = RuntimeShapeList::from_graph(child_graph);
+        let shape_local = pooled
+            .by_local
+            .iter()
+            .position(|shape| {
+                shape
+                    .as_ref()
+                    .is_some_and(|shape| !shape.paint_owners.is_empty())
+            })
+            .expect("child has a painted shape");
+        let context_id = 73;
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        pooled.backend_context_id.set(Some(context_id));
+        let pooled_shape = pooled.by_local[shape_local]
+            .as_mut()
+            .expect("painted shape remains addressable");
+        pooled_shape.paint_owners[0]
+            .backend
+            .value
+            .get_mut()
+            .context_id = Some(context_id);
+        pooled_shape.paint_owners[0]
+            .backend
+            .value
+            .get_mut()
+            .paint = Some(factory.make_render_paint());
+        *pooled_shape.paint_paths[0].backend.value.get_mut() = Some(RuntimePathBackendState {
+            path: factory.make_empty_render_path(),
+            raw_mutation_id: 11,
+            fill_rule: RenderFillRule::Clockwise,
+            context_id,
+        });
+
+        fresh.adopt_pooled_backend_owners(&mut pooled);
+
+        assert_eq!(fresh.backend_context_id.get(), Some(context_id));
+        let fresh_shape = fresh.by_local[shape_local]
+            .as_mut()
+            .expect("fresh painted shape remains addressable");
+        assert!(
+            fresh_shape.paint_owners[0]
+                .backend
+                .value
+                .get_mut()
+                .paint
+                .is_some(),
+            "the pooled ShapePaint keeps its RenderPaint"
+        );
+        assert!(
+            fresh_shape.paint_paths[0]
+                .backend
+                .value
+                .get_mut()
+                .is_some(),
+            "the pooled ShapePaintPath keeps its RenderPath"
+        );
+
+        let mut pooled_instance = ArtboardInstance::from_graph(&runtime, child_graph)
+            .expect("pooled child instance builds");
+        let mut fresh_instance = ArtboardInstance::from_graph(&runtime, child_graph)
+            .expect("fresh child instance builds");
+        let pooled_layout = pooled_instance
+            .runtime_drawables
+            .layout_draw_owners
+            .iter_mut()
+            .flatten()
+            .next()
+            .expect("child has a layout draw owner");
+        pooled_layout.backend.get_mut().context_id = Some(context_id);
+
+        fresh_instance
+            .runtime_drawables
+            .adopt_pooled_backend_owners(&mut pooled_instance.runtime_drawables);
+
+        assert_eq!(
+            fresh_instance
+                .runtime_drawables
+                .layout_draw_owners
+                .iter_mut()
+                .flatten()
+                .next()
+                .expect("fresh child has a layout draw owner")
+                .backend
+                .get_mut()
+                .context_id,
+            Some(context_id),
+            "the pooled LayoutComponent keeps its backend owner"
         );
     }
 

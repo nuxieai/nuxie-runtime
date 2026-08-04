@@ -95,6 +95,7 @@ pub mod bytecode_builder_fold_jumps;
 pub mod bytecode_builder_get_bytecode;
 pub mod bytecode_builder_get_debug_pc;
 pub mod bytecode_builder_get_error;
+pub mod bytecode_builder_get_function_count;
 pub mod bytecode_builder_get_function_data;
 pub mod bytecode_builder_get_import_id_bytecode_builder;
 pub mod bytecode_builder_get_import_id_bytecode_builder_alt_b;

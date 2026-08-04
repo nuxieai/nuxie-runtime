@@ -119,7 +119,7 @@ pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
                     let lcl = core::ptr::addr_of!((*cl).inner.l)
                         .cast::<crate::records::closure::LClosure>();
                     let p = (*lcl).p;
-                    let pc = pcRel!((*ci).savedpc, p);
+                    let pc = pcRel!((*ci).context.savedpc, p);
                     let var: *const LocVar =
                         luaF_findlocal(p, v.offset_from((*ci).base) as c_int, pc);
 

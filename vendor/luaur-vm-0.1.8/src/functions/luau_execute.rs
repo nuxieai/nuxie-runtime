@@ -189,7 +189,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
     'reentry: loop {
         LUAU_ASSERT!(isLua!((*L).ci));
 
-        pc = (*(*L).ci).savedpc;
+        pc = (*(*L).ci).context.savedpc;
         cl = clvalue!((*(*L).ci).func);
         base = (*L).base;
         k = {
@@ -689,7 +689,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         } else if fastnotm((*h).metatable, TMS::TM_NEWINDEX as i32)
                             && (*h).readonly == 0
                         {
-                            (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): set may fail
+                            (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): set may fail
 
                             let res = luaH_setstr(
                                 L,
@@ -903,7 +903,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     };
                     LUAU_ASSERT!((LUAU_INSN_D!(insn) as u32) < sizep as u32);
 
-                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaF_newLclosure may fail due to OOM
+                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaF_newLclosure may fail due to OOM
 
                     // note: we save closure to stack early in case the code below
                     // wants to capture it by value
@@ -1161,14 +1161,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     if !ttisfunction!(ra as *const TValue) {
                         // slow-path: not a function call
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
 
                         lua_v_tryfunc_tm(L, ra);
                         argtop = argtop.add(1); // __call adds an extra self
                     }
 
                     let ccl = clvalue!(ra as *const TValue);
-                    (*(*L).ci).savedpc = pc;
+                    (*(*L).ci).context.savedpc = pc;
 
                     incr_ci!(L);
                     let ci = (*L).ci;
@@ -1176,7 +1176,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);
-                    (*ci).savedpc = core::ptr::null();
+                    (*ci).context.savedpc = core::ptr::null();
                     (*ci).flags = 0;
                     (*ci).nresults = nresults;
 
@@ -1308,14 +1308,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             VM_PATCH_AUX(pc.sub(1), LUAU_INSN_FBSLOT_SEALED as i32);
                         }
 
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
 
                         lua_v_tryfunc_tm(L, ra);
                         argtop = argtop.add(1); // __call adds an extra self
                     }
 
                     let ccl = clvalue!(ra as *const TValue);
-                    (*(*L).ci).savedpc = pc;
+                    (*(*L).ci).context.savedpc = pc;
 
                     incr_ci!(L);
                     let ci = (*L).ci;
@@ -1323,7 +1323,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     (*ci).base = ra.add(1);
                     // note: technically UB since we haven't reallocated the stack yet
                     (*ci).top = argtop.add((*ccl).stacksize as usize);
-                    (*ci).savedpc = core::ptr::null();
+                    (*ci).context.savedpc = core::ptr::null();
                     (*ci).flags = 0;
                     (*ci).nresults = nresults;
 
@@ -1518,7 +1518,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     }
 
                     // reentry
-                    pc = (*cip).savedpc;
+                    pc = (*cip).context.savedpc;
                     cl = nextcl;
                     base = (*L).base;
                     k = (*nextproto).k;
@@ -3051,7 +3051,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let aux: u32 = *pc;
                     pc = pc.add(1);
 
-                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaH_new may fail due to OOM
+                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_new may fail due to OOM
 
                     sethvalue!(
                         L,
@@ -3070,7 +3070,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                     let kv = VM_KV!(LUAU_INSN_D!(insn), cl, k) as *mut TValue;
 
-                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaH_clone may fail due to OOM
+                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_clone may fail due to OOM
 
                     sethvalue!(L, ra, lua_h_clone(L, hvalue!(kv as *const TValue)));
                     vm_protect!(L, pc, base, {
@@ -3105,7 +3105,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     let last = index as i32 + c - 1;
                     if last > (*h).sizearray {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaH_resizearray may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_resizearray may fail due to OOM
 
                         lua_h_resizearray(L, h, last);
                     }
@@ -3135,7 +3135,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     {
                         // slow-path: can convert arguments to numbers and trigger Lua errors
                         // Note: this doesn't reallocate stack so we don't need to recompute ra/base
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC()
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC()
 
                         lua_v_prepare_forn(L, ra.add(0), ra.add(1), ra.add(2));
                     }
@@ -3223,7 +3223,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 fn_tm = lua_t_gettmbyobj(L, ra as *const TValue, TMS::TM_ITER);
                                 // if the metamethod is not present, error.
                                 if ttisnil!(fn_tm) {
-                                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                                     luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
@@ -3250,7 +3250,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // protect against __iter returning nil, since nil is used
                                 // as a marker for builtin iteration in FORGLOOP
                                 if ttisnil!(ra as *const TValue) {
-                                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                                     luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
@@ -3271,7 +3271,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 );
                                 setnilvalue!(ra);
                             } else {
-                                (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                                (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                                 luaG_typeerrorL(
                                     L,
                                     ra as *const TValue,
@@ -3310,7 +3310,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // protect against __iter returning nil, since nil is used
                                 // as a marker for builtin iteration in FORGLOOP
                                 if ttisnil!(ra as *const TValue) {
-                                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                                     luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
@@ -3331,7 +3331,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 );
                                 setnilvalue!(ra);
                             } else {
-                                (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                                (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                                 luaG_typeerrorL(
                                     L,
                                     ra as *const TValue,
@@ -3508,7 +3508,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // ra+1 is already the table
                         setpvalue!(ra.add(2), 0usize as *mut core::ffi::c_void, LU_TAG_ITERATOR);
                     } else if !ttisfunction!(ra as *const TValue) {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                         luaG_typeerrorL(
                             L,
                             ra as *const TValue,
@@ -3539,7 +3539,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // ra+1 is already the table
                         setpvalue!(ra.add(2), 0usize as *mut core::ffi::c_void, LU_TAG_ITERATOR);
                     } else if !ttisfunction!(ra as *const TValue) {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): next call always errors
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
                         luaG_typeerrorL(
                             L,
                             ra as *const TValue,
@@ -3565,7 +3565,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     let ci = (*L).ci;
                     (*ci).flags = LUA_CALLINFO_NATIVE as u32;
-                    (*ci).savedpc = (*p).code;
+                    (*ci).context.savedpc = (*p).code;
 
                     // VM_HAS_NATIVE
                     if let Some(enter) = (*(*L).global).ecb.enter {
@@ -3634,7 +3634,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     let kcl = clvalue!(kv as *const TValue);
 
-                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): luaF_newLclosure may fail due to OOM
+                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaF_newLclosure may fail due to OOM
 
                     // clone closure if the environment is not shared
                     // note: we save closure to stack early in case the code below
@@ -3835,7 +3835,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(f.is_some());
 
                     if (*(*cl).env).safeenv != 0 {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
                         let n = f.unwrap()(L, ra, ra.add(1), nresults, ra.add(2), nparams);
 
@@ -3989,7 +3989,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(f.is_some());
 
                     if (*(*cl).env).safeenv != 0 {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
                         let n = f.unwrap()(L, ra, arg, nresults, core::ptr::null_mut(), nparams);
 
@@ -4048,7 +4048,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(f.is_some());
 
                     if (*(*cl).env).safeenv != 0 {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
                         let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams);
 
@@ -4107,7 +4107,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(f.is_some());
 
                     if (*(*cl).env).safeenv != 0 {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
                         let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams);
 
@@ -4167,7 +4167,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(f.is_some());
 
                     if (*(*cl).env).safeenv != 0 {
-                        (*(*L).ci).savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
+                        (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
                         // note: it's safe to push arguments past top for complicated reasons (see top of the file)
                         LUAU_ASSERT!((*L).top.add(2) < (*L).stack.add((*L).stacksize as usize));
@@ -4367,7 +4367,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     setobj_2_s!(L, top.add(2), kv as *const TValue);
                                     (*L).top = (*L).top.add(3);
 
-                                    (*(*L).ci).savedpc = pc;
+                                    (*(*L).ci).context.savedpc = pc;
 
                                     (*L).nCcalls += 1;
 
@@ -4471,7 +4471,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     setobj_2_s!(L, top.add(3), ra as *const TValue);
                                     (*L).top = (*L).top.add(4);
 
-                                    (*(*L).ci).savedpc = pc;
+                                    (*(*L).ci).context.savedpc = pc;
 
                                     (*L).nCcalls += 1;
 
@@ -4581,7 +4581,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let nparams = LUAU_INSN_B!(call_insn) as i32 - 1;
                                     let nresults = LUAU_INSN_C!(call_insn) as i32 - 1;
 
-                                    (*(*L).ci).savedpc = pc;
+                                    (*(*L).ci).context.savedpc = pc;
                                     (*L).namecall = tsvalue!(kv as *const TValue)
                                         as *mut crate::records::t_string::TString;
                                     (*L).top = if nparams == LUA_MULTRET {
@@ -4682,7 +4682,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     LUAU_ASSERT!(ttisstring!(membername as *const TValue));
                     LUAU_ASSERT!(LUAU_INSN_B!(insn) == 0);
                     let rc = VM_REG!(LUAU_INSN_C!(insn), L, base) as *mut TValue;
-                    (*(*L).ci).savedpc = pc; // VM_PROTECT_PC()
+                    (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC()
                     lua_r_addclassmember(
                         L,
                         &mut **classvalue!(ra as *const TValue) as *mut LuauClass,

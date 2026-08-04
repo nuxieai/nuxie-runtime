@@ -21,7 +21,7 @@ pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
         (*ci).func = fun;
         (*ci).base = fun.add(1);
         (*ci).top = (*L).top.add(LUA_MINSTACK as usize);
-        (*ci).savedpc = core::ptr::null();
+        (*ci).context.savedpc = core::ptr::null();
         (*ci).flags = 0;
         (*ci).nresults = nresults;
 

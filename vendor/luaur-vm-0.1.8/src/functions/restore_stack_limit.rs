@@ -15,5 +15,7 @@ pub unsafe fn restore_stack_limit(L: *mut lua_State) {
         if inuse + 1 < LUAI_MAXCALLS {
             lua_d_realloc_ci(L, LUAI_MAXCALLS);
         }
+    } else {
+        crate::condhardstacktests!(lua_d_realloc_ci(L, (*L).size_ci));
     }
 }

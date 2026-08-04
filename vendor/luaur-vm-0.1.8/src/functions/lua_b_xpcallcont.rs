@@ -2,6 +2,7 @@ use crate::enums::lua_status::lua_Status;
 use crate::functions::lua_d_pcall::luaD_pcall;
 use crate::functions::lua_d_seterrorobj::luaD_seterrorobj;
 use crate::functions::lua_gettop::lua_gettop;
+use crate::functions::lua_insert::lua_insert;
 use crate::functions::lua_pushboolean::lua_pushboolean;
 use crate::functions::lua_pushvalue::lua_pushvalue;
 use crate::functions::lua_rawcheckstack::lua_rawcheckstack;
@@ -18,6 +19,11 @@ pub unsafe fn lua_b_xpcallcont(L: *mut lua_State, status: i32) -> i32 {
         lua_pushboolean(L, 1);
         lua_replace(L, 1);
         lua_gettop(L)
+    } else if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+        lua_rawcheckstack(L, 1);
+        lua_pushboolean(L, 0);
+        lua_insert(L, -2);
+        2
     } else {
         lua_rawcheckstack(L, 3);
         lua_pushboolean(L, 0);

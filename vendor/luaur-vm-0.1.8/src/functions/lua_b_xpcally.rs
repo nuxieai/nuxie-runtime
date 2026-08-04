@@ -2,6 +2,7 @@ use crate::enums::lua_type::lua_Type;
 use crate::functions::lua_d_pcall::luaD_pcall;
 use crate::functions::lua_gettop::lua_gettop;
 use crate::functions::lua_l_checktype::lua_l_checktype;
+use crate::functions::lua_l_pcallyieldable::lua_l_pcallyieldable;
 use crate::functions::lua_pushboolean::lua_pushboolean;
 use crate::functions::lua_pushvalue::lua_pushvalue;
 use crate::functions::lua_rawcheckstack::lua_rawcheckstack;
@@ -10,6 +11,7 @@ use crate::macros::c_call_yield::C_CALL_YIELD;
 use crate::macros::expandstacklimit::expandstacklimit;
 use crate::macros::isyielded::isyielded;
 use crate::macros::lua_callinfo_handle::LUA_CALLINFO_HANDLE;
+use crate::macros::lua_multret::LUA_MULTRET;
 use crate::macros::savestack::savestack;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
@@ -24,6 +26,10 @@ pub unsafe fn lua_b_xpcally(L: *mut lua_State) -> i32 {
     lua_replace(L, 1);
     lua_replace(L, 2);
     // at this point the stack looks like err, f, args
+
+    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+        return lua_l_pcallyieldable(L, lua_gettop(L) - 2, LUA_MULTRET, 1);
+    }
 
     // any errors from this point on are handled by continuation
     (*(*L).ci).flags |= LUA_CALLINFO_HANDLE as u32;

@@ -386,6 +386,7 @@ pub mod lua_l_buffinit;
 pub mod lua_l_buffinitsize;
 pub mod lua_l_callmeta;
 pub mod lua_l_callyieldable;
+pub mod lua_l_pcallyieldable;
 pub mod lua_l_checkany;
 pub mod lua_l_checkboolean;
 pub mod lua_l_checkbuffer;

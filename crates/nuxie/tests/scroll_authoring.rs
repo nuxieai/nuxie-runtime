@@ -394,6 +394,75 @@ fn virtualized_clamp_includes_content_padding_at_the_pin() -> Result<()> {
 }
 
 #[test]
+fn scrolled_bounds_shift_along_transformed_ancestor_axes() -> Result<()> {
+    // Pinned C++ post-multiplies the scroll translate onto the child's world
+    // transform (`constrainChild`: `worldTransform * m_scrollTransform`,
+    // `scroll_constraint.cpp:215-230` at
+    // `4ac7b32798da0482e441ef09304dc3b480ed3ee5`), so under a rotated and
+    // scaled ancestor the settled box shifts along the transformed axis:
+    // an offset of -24 displaces by `linear * (0, -24)`.
+    let rotation = 0.5_f32;
+    let scale = 1.5_f32;
+    let mut scene = Scene::new();
+    let ((artboard, constraint, child2), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Transformed".into(),
+            width: 400.0,
+            height: 400.0,
+        })?;
+        let mut container_node = layout("Container", 120.0, 120.0);
+        let NodeSpec::LayoutComponent(container_spec) = &mut container_node else {
+            unreachable!("layout helper always returns a LayoutComponent")
+        };
+        container_spec.rotation = rotation;
+        container_spec.scale_x = scale;
+        container_spec.scale_y = scale;
+        let container = tx.create(Parent::Artboard(artboard), container_node)?;
+        let mut viewport_node = layout("Viewport", 100.0, 100.0);
+        let NodeSpec::LayoutComponent(viewport_spec) = &mut viewport_node else {
+            unreachable!("layout helper always returns a LayoutComponent")
+        };
+        viewport_spec.clip = true;
+        let viewport = tx.create(Parent::Object(container), viewport_node)?;
+        let mut content_node = layout("Content", 100.0, 140.0);
+        let NodeSpec::LayoutComponent(content_spec) = &mut content_node else {
+            unreachable!("layout helper always returns a LayoutComponent")
+        };
+        content_spec.style.flex_direction = SceneLayoutFlexDirection::Column;
+        let content = tx.create(Parent::Object(viewport), content_node)?;
+        tx.create(Parent::Object(content), layout("First", 100.0, 60.0))?;
+        let child2 = tx.create(Parent::Object(content), layout("Second", 100.0, 80.0))?;
+        let constraint = tx.create_scroll_constraint(content, ScrollConstraintSpec::default())?;
+        Ok((artboard, constraint, child2))
+    })?;
+    let instance = settle(&mut scene, artboard)?;
+
+    let before = scene.scrolled_layout_bounds(instance, child2)?;
+    assert_eq!(
+        before,
+        scene.solved_layout_bounds(instance, child2)?,
+        "a zero offset reads exactly the solved box, transformed ancestors or not",
+    );
+    let _ = scene.set_scroll_property(instance, constraint, ScrollProperty::OffsetY, -24.0)?;
+    let after = scene.scrolled_layout_bounds(instance, child2)?;
+    let expected_dx = 24.0 * scale * rotation.sin();
+    let expected_dy = -24.0 * scale * rotation.cos();
+    assert!(
+        ((after.min_x - before.min_x) - expected_dx).abs() < 0.001,
+        "dx {} must follow the transformed axis {expected_dx}",
+        after.min_x - before.min_x,
+    );
+    assert!(
+        ((after.min_y - before.min_y) - expected_dy).abs() < 0.001,
+        "dy {} must follow the transformed axis {expected_dy}",
+        after.min_y - before.min_y,
+    );
+    assert!((after.max_x - after.min_x - (before.max_x - before.min_x)).abs() < 0.001);
+    assert!((after.max_y - after.min_y - (before.max_y - before.min_y)).abs() < 0.001);
+    Ok(())
+}
+
+#[test]
 fn scroll_writes_are_occurrence_scoped() -> Result<()> {
     let mut scene = Scene::new();
     let fixture = author_scroll_scene(&mut scene, ScrollConstraintSpec::default())?;

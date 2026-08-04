@@ -4306,31 +4306,32 @@ impl ArtboardInstance {
     pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
         self.update_pass();
         let layout = self.layout_bounds(local_id)?;
-        let scroll = match self.component_parent_local(local_id) {
-            Some(parent_local) => {
-                self.runtime_component_apply_ancestor_scroll(parent_local, Mat2D::IDENTITY)
-            }
-            None => Mat2D::IDENTITY,
+        // Pinned C++ post-multiplies the scroll translate onto the child's
+        // world transform (`constrainChild`: `worldTransform *
+        // m_scrollTransform`, `scroll_constraint.cpp:215-230`), so the
+        // world-space displacement is the world linear applied to the local
+        // scroll offset — under a rotated or scaled ancestor the settled box
+        // shifts along the transformed axis, not the artboard axis. The
+        // displacement is the translation delta between the layout-derived
+        // world with and without ancestor scroll; at a zero offset it
+        // vanishes and this read equals `layout_bounds` exactly.
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        let with_scroll = match self.component_parent_local(local_id) {
+            Some(parent_local) => self.runtime_component_apply_ancestor_scroll(parent_local, world),
+            None => world,
         };
-        let corners = [
-            scroll.transform_point(layout.x, layout.y),
-            scroll.transform_point(layout.x + layout.width, layout.y),
-            scroll.transform_point(layout.x, layout.y + layout.height),
-            scroll.transform_point(layout.x + layout.width, layout.y + layout.height),
-        ];
-        let (mut min_x, mut min_y) = corners[0];
-        let (mut max_x, mut max_y) = corners[0];
-        for (x, y) in corners.into_iter().skip(1) {
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-        }
         Some(RuntimeLayoutBounds {
-            x: min_x,
-            y: min_y,
-            width: max_x - min_x,
-            height: max_y - min_y,
+            x: layout.x + (with_scroll.0[4] - world.0[4]),
+            y: layout.y + (with_scroll.0[5] - world.0[5]),
+            width: layout.width,
+            height: layout.height,
         })
     }
 

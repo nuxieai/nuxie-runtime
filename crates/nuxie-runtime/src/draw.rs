@@ -5454,6 +5454,9 @@ impl ArtboardInstance {
                             matches!(
                                 paint.mutator_type_name,
                                 Some("LinearGradient" | "RadialGradient")
+                            ) && Self::runtime_gradient_update_rebuilds(
+                                dirt,
+                                runtime_live_shape_paint_path_kind(self, paint),
                             )
                         })
                 {
@@ -5485,6 +5488,25 @@ impl ArtboardInstance {
                 );
             }
         }
+    }
+
+    /// Pinned C++ calls every dirty gradient component's `update`, but only
+    /// rebuilds its shader for paint/opacity/local-transform/NSlicer dirt, or
+    /// for world-transform dirt when the attached ShapePaint uses its world
+    /// path (`linear_gradient.cpp:86-126`). Keep that decision at the update
+    /// event producer so equal-valued legitimate dirt events remain distinct.
+    fn runtime_gradient_update_rebuilds(
+        dirt: ComponentDirt,
+        path_kind: Option<RuntimeShapePaintPathKind>,
+    ) -> bool {
+        !(dirt
+            & (ComponentDirt::PAINT
+                | ComponentDirt::RENDER_OPACITY
+                | ComponentDirt::TRANSFORM
+                | ComponentDirt::N_SLICER))
+            .is_empty()
+            || (path_kind == Some(RuntimeShapePaintPathKind::World)
+                && dirt.contains(ComponentDirt::WORLD_TRANSFORM))
     }
 
     fn invalidate_runtime_non_shape_paint_container_effects(
@@ -17812,15 +17834,6 @@ fn runtime_realize_owned_shape_gradient(
             owner.paint_global_id
         )
     })?;
-    if backend.shader_state.as_ref() == Some(state) {
-        // Multiple Rust-side dirt sources can converge on the same mutator
-        // dependency node. The retained C++ occurrence still owns the shader
-        // already installed on its RenderPaint; an unchanged settled state is
-        // not a second LinearGradient::update materialization
-        // (`linear_gradient.cpp:86-126`, `shape_paint_mutator.cpp:7-25`).
-        backend.paint = Some(render_paint);
-        return Ok(());
-    }
     match state {
         state @ RuntimeShapePaintState::LinearGradient {
             start_x,
@@ -33490,6 +33503,22 @@ mod tests {
     // reconfigure them when a keyed transform write moves the shape between
     // two prepared positions. Mirrors C++ linear_gradient.cpp:98-106
     // (PathFlags::world && WorldTransform dirt).
+    #[test]
+    fn gradient_update_rebuild_gate_matches_cpp_dirt_and_path_space() {
+        assert!(!ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::WORLD_TRANSFORM,
+            Some(RuntimeShapePaintPathKind::Local),
+        ));
+        assert!(ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::WORLD_TRANSFORM,
+            Some(RuntimeShapePaintPathKind::World),
+        ));
+        assert!(ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::PAINT,
+            Some(RuntimeShapePaintPathKind::Local),
+        ));
+    }
+
     #[test]
     fn world_space_gradient_stroke_reconfigures_after_transform_write() {
         use crate::TransformProperty;

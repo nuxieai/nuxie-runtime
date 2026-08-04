@@ -17,7 +17,7 @@ use nuxie_schema::{
     core_registry_setter_field_kind_by_property_key, definition_by_type_key,
     is_callback_property_key, object_supports_property,
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
 

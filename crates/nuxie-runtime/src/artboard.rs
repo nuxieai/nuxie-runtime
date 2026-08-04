@@ -507,6 +507,11 @@ pub struct ArtboardInstance {
     /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
     pub(crate) runtime_meshes: crate::draw::RuntimeMeshList,
     pub(crate) did_change: Cell<bool>,
+    /// Component occurrences that consumed C++ semantic-bounds dirt since the
+    /// last semantic-tree synchronization. `SemanticData` is a dependent of
+    /// its geometry owner, so either local can appear here
+    /// (`semantic_data.cpp:258-293`).
+    semantic_bounds_dirty_locals: BTreeSet<usize>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -639,6 +644,7 @@ impl Clone for ArtboardInstance {
             runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
             solved_layout_bounds: self.solved_layout_bounds.clone(),
@@ -2390,6 +2396,7 @@ impl ArtboardInstance {
             runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -4077,6 +4084,25 @@ impl ArtboardInstance {
         fallback_root.cloned()
     }
 
+    pub(crate) fn scripted_interpolator_owned_data_context(
+        &self,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> RuntimeOwnedDataContext {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            return data_context.clone();
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return RuntimeOwnedDataContext::from_context_handle(context);
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            return RuntimeOwnedDataContext::from_owned_context(context);
+        }
+        fallback_root
+            .cloned()
+            .map(RuntimeOwnedDataContext::from_root_handle)
+            .unwrap_or_default()
+    }
+
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
         self.state_machines.get(index)
     }
@@ -4165,6 +4191,9 @@ impl ArtboardInstance {
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
     pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
+        if self.component(local_id)?.type_name != "LayoutComponent" {
+            return None;
+        }
         let layout = self.layout_bounds(local_id)?;
         let transform = self.component(local_id)?.transform.world_transform;
         let corners = [
@@ -8403,6 +8432,10 @@ impl ArtboardInstance {
         self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
     }
 
+    pub(crate) fn take_semantic_bounds_dirty_locals(&mut self) -> BTreeSet<usize> {
+        std::mem::take(&mut self.semantic_bounds_dirty_locals)
+    }
+
     #[doc(hidden)]
     pub fn debug_update_pass_with_root_transform(&mut self, root_transform: Mat2D) -> bool {
         if let Some(root) = self.objects.root() {
@@ -9225,6 +9258,9 @@ impl ArtboardInstance {
                 let dirt = component.dirt;
                 if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
+                }
+                if !(dirt & (ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH)).is_empty() {
+                    self.semantic_bounds_dirty_locals.insert(local_id);
                 }
                 #[cfg(test)]
                 self.update_persistent_dirt_component_fixture(local_id);
@@ -12649,6 +12685,7 @@ mod tests {
             runtime_clipping_shapes: RuntimeClippingShapeList::default(),
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -16345,6 +16382,33 @@ mod tests {
         assert_eq!(
             artboard.update_pass_data_bind_call_count, 5,
             "initial, two late-joystick, final component, and did-update source passes each poll DataBinds"
+        );
+    }
+
+    #[test]
+    fn component_settlement_journals_generic_semantic_bounds_dirt_once() {
+        let mut artboard = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+
+        assert!(artboard.add_dirt(
+            1,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+            false,
+        ));
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.take_semantic_bounds_dirty_locals(),
+            BTreeSet::from([1]),
+            "SemanticData::update receives its geometry owner's settled WorldTransform/Path dirt",
+        );
+        assert!(
+            artboard.take_semantic_bounds_dirty_locals().is_empty(),
+            "the journal is occurrence-local and consumed by one semantic synchronization",
         );
     }
 

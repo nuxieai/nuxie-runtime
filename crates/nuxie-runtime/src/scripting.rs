@@ -2463,6 +2463,18 @@ pub trait ScriptInstance {
         Ok(false)
     }
 
+    /// Advance clone-owned DataBind converter state parked behind a scripted
+    /// object. ScriptedInterpolator uses this seam because its lazy clones are
+    /// owned by LinearAnimationInstance rather than Artboard's ordinary bind
+    /// collection (`linear_animation_instance.cpp:109-172`).
+    fn advance_scripted_data_binds(
+        &mut self,
+        _elapsed_seconds: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> bool {
+        false
+    }
+
     fn set_context_view_model(
         &mut self,
         _view_model: Option<ScriptViewModel>,

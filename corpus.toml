@@ -2429,10 +2429,11 @@ id = "semantic_data_binding_action_lt1"
 path = "tests/unit_tests/assets/semantic/data_binding_lists.riv"
 input_script = "tests/input_scripts/semantic_data_binding_tap.txt"
 semantic_default_view_model = true
+semantic_side_channel_only = true
 samples = [0.0, 1.0, 2.0]
-status = "not-yet"
+status = "exact"
 milestone = "LT-1"
-features = ["type-key:668:SemanticData", "type-key:669:ListenerInputTypeSemantic", "type-key:670:SemanticInput", "lt-1-semantic-action", "draw-stream-radial-gradient-vs-render-paint:LT-1"]
+features = ["type-key:134:Text", "type-key:668:SemanticData", "type-key:669:ListenerInputTypeSemantic", "type-key:670:SemanticInput", "lt-1-full-semantics-diff", "lt-1-semantic-action", "lt-1-text-glyph-bounds"]
 
 [[file]]
 id = "semantic_text_inference_lt1"

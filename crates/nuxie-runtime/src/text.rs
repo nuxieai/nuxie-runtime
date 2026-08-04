@@ -1679,6 +1679,7 @@ impl<'a> StaticTextSlice<'a> {
                         // supported static Text draw subset.
                         | "SemanticData"
                         | "SemanticInput"
+                        | "AudioEvent"
                         | "FocusData"
                         | "KeyboardInput"
                         | "GamepadInput"
@@ -5229,13 +5230,16 @@ mod tests {
     }
 
     #[test]
-    fn semantic_metadata_siblings_do_not_narrow_the_static_text_subset() {
+    fn non_shaping_metadata_siblings_do_not_narrow_the_static_text_subset() {
         let (runtime, mut graphs) = baseline_origin_text_runtime();
         let graph = graphs
             .artboards
             .first_mut()
             .expect("fixture has an artboard");
-        for (offset, type_name) in ["SemanticData", "SemanticInput"].into_iter().enumerate() {
+        for (offset, type_name) in ["SemanticData", "SemanticInput", "AudioEvent"]
+            .into_iter()
+            .enumerate()
+        {
             let mut metadata = graph
                 .local_objects
                 .iter()
@@ -5249,7 +5253,7 @@ mod tests {
         }
 
         StaticTextSlice::from_graph(&runtime, graph, 1)
-            .expect("semantic metadata cannot invalidate Text drawing");
+            .expect("non-shaping metadata cannot invalidate Text drawing");
     }
 
     #[test]

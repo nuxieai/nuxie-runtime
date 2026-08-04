@@ -566,13 +566,30 @@ struct DataBoundScriptedInterpolatorInstance {
     bindings: nuxie_runtime::RuntimeScriptedInterpolatorBindingOccurrence,
     script: Box<dyn ScriptInstance>,
     runtime: Arc<RuntimeFile>,
-    root: Option<RuntimeOwnedViewModelHandle>,
+    data_bind_error: Option<ScriptError>,
 }
 
 #[cfg(feature = "scripting")]
 impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
     fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
         self.script.poll_async_work()
+    }
+
+    fn advance_scripted_data_binds(
+        &mut self,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> bool {
+        match self
+            .bindings
+            .advance_stateful_converters(elapsed_seconds, host)
+        {
+            Ok(keep_going) => keep_going,
+            Err(error) => {
+                self.data_bind_error = Some(error);
+                false
+            }
+        }
     }
 
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
@@ -603,10 +620,11 @@ impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
         args: &[f32],
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_runtime::ScriptOptionalNumberResult, ScriptError> {
-        if let Some(root) = self.root.as_ref() {
-            self.bindings
-                .refresh_inputs(&self.runtime, root, self.script.as_mut())?;
+        if let Some(error) = self.data_bind_error.take() {
+            return Err(error.with_context("scripted interpolator DataBind advance failed"));
         }
+        self.bindings
+            .refresh_inputs(&self.runtime, self.script.as_mut())?;
         self.script.call_interpolator(method, args, host)
     }
 
@@ -3201,7 +3219,12 @@ fn attach_prepared_script_mounts(
                         })?
                         .instantiate();
                     bindings
-                        .hydrate_inputs(&runtime, hydration_root.as_ref(), script.as_mut())
+                        .hydrate_inputs(
+                            &runtime,
+                            artboard,
+                            hydration_root.as_ref(),
+                            script.as_mut(),
+                        )
                         .map_err(|error| {
                             error.with_context(format!(
                                 "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase cloned ScriptInput/DataBind hydration failed"
@@ -3225,7 +3248,7 @@ fn attach_prepared_script_mounts(
                         bindings,
                         script,
                         runtime: Arc::clone(&runtime),
-                        root: hydration_root,
+                        data_bind_error: None,
                     }) as Box<dyn ScriptInstance>)
                 }),
             );

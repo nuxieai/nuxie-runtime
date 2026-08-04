@@ -732,6 +732,8 @@
             build_context: None,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
@@ -788,6 +790,8 @@
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: false,
+            suppress_mounted_component_list_layout_updates: false,
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -11384,4 +11388,40 @@
             Some(1.0),
             "the row's synthetic itemIndex is a numeric converter input for child Artboard DataBinds (`data_converter_operation.cpp:9-16`; `artboard_component_list.cpp:715-814,1492-1543`)"
         );
+    }
+
+    #[test]
+    fn retained_layout_size_change_publishes_path_before_world() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let style = synthetic_component_for_type(2, "LayoutComponentStyle");
+        let mut instance = synthetic_instance(vec![root, layout, style], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 80.0,
+            },
+            None,
+        );
+        instance.clear_component_dirt(1);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 120.0,
+            },
+            None,
+        );
+
+        let dirt = instance.component(1).expect("layout component").dirt;
+        assert!(dirt.contains(ComponentDirt::PATH));
+        assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
     }

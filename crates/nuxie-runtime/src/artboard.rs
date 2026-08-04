@@ -8,9 +8,9 @@ use std::sync::{
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind};
 #[cfg(test)]
 use nuxie_graph::ResettingComponentKind;
+use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind};
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 
@@ -41,9 +41,9 @@ use crate::artboard_data_bind::{
 };
 use crate::audio_event::RuntimeAudioEventPlayback;
 use crate::components::{
-    ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent,
-    RuntimeConstrainableListState, RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents,
-    TransformProperty, UpdateComponentsReport, retain_runtime_component_layout_topology,
+    ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent, RuntimeConstrainableListState,
+    RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents, TransformProperty,
+    UpdateComponentsReport, retain_runtime_component_layout_topology,
     retain_runtime_layout_component_styles, retain_runtime_solos,
     retain_runtime_text_input_scroll_constraints,
 };
@@ -106,12 +106,12 @@ mod artboard_component_list;
 pub(crate) use advancing_component::RuntimeAdvancingComponent;
 #[path = "artboard/bones/bone.rs"]
 mod bone;
-#[path = "artboard/node.rs"]
-mod node;
-#[path = "artboard/nested_artboard_layout.rs"]
-mod nested_artboard_layout;
 #[path = "artboard/nested_artboard.rs"]
 mod nested_artboard;
+#[path = "artboard/nested_artboard_layout.rs"]
+mod nested_artboard_layout;
+#[path = "artboard/node.rs"]
+mod node;
 #[path = "artboard/animation/property_recorder.rs"]
 mod property_recorder;
 mod resetting_component;
@@ -424,6 +424,14 @@ pub struct ArtboardInstance {
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
+    previous_nested_layout_transfers: BTreeMap<
+        usize,
+        (
+            RuntimeNestedLayoutDataTransferKey,
+            Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
+        ),
+    >,
+    consumed_mounted_layout_hosts: BTreeSet<usize>,
     pub(crate) artboard_data_bind_values: BTreeMap<Arc<[u32]>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
@@ -525,6 +533,11 @@ pub struct ArtboardInstance {
     /// its geometry owner, so either local can appear here
     /// (`semantic_data.cpp:258-293`).
     semantic_bounds_dirty_locals: BTreeSet<usize>,
+    /// `Artboard::takeLayoutData()` transferred this occurrence's root Yoga
+    /// node to a hosting layout. Child-local solves still retain descendants,
+    /// but must not overwrite the parent-owned root result.
+    pub(crate) layout_node_owned_by_host: bool,
+    pub(crate) suppress_mounted_component_list_layout_updates: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -583,6 +596,8 @@ impl Clone for ArtboardInstance {
             build_context: self.build_context.clone(),
             nested_context_source_tree_cache: self.nested_context_source_tree_cache.clone(),
             nested_layout_bounds: self.nested_layout_bounds.clone(),
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values: self.artboard_data_bind_values.clone(),
             artboard_formula_random_source: self.artboard_formula_random_source.clone(),
             artboard_owned_view_model_context: self.artboard_owned_view_model_context.clone(),
@@ -661,6 +676,9 @@ impl Clone for ArtboardInstance {
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: self.layout_node_owned_by_host,
+            suppress_mounted_component_list_layout_updates: self
+                .suppress_mounted_component_list_layout_updates,
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
             solved_layout_bounds: self.solved_layout_bounds.clone(),
@@ -2406,6 +2424,8 @@ impl ArtboardInstance {
             build_context,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
@@ -2471,6 +2491,8 @@ impl ArtboardInstance {
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: false,
+            suppress_mounted_component_list_layout_updates: false,
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -7156,16 +7178,21 @@ impl ArtboardInstance {
             // settlement; pushed Core properties remain queue-driven.
             self.update_data_binds_for_update_pass(root_transform);
         }
-        if did_update
-            || self.component_list_locals().into_iter().any(|local_id| {
+        let has_unsettled_component_list_rows =
+            self.component_list_locals().into_iter().any(|local_id| {
                 self.component_list_items(local_id).is_some_and(|items| {
                     items
                         .iter()
                         .any(|item| item.settled_layout_size.get().is_none())
                 })
-            })
+            });
+        if (!self.suppress_mounted_component_list_layout_updates && did_update)
+            || has_unsettled_component_list_rows
         {
             did_update |= self.update_component_list_layout_bounds(root_transform);
+        }
+        if self.suppress_mounted_component_list_layout_updates && !self.layout_node_owned_by_host {
+            self.suppress_mounted_component_list_layout_updates = false;
         }
         for host_local_id in deferred_nested_opacity_hosts {
             if self
@@ -7749,6 +7776,9 @@ impl ArtboardInstance {
         self.solved_layout_bounds = layout_bounds.clone();
         if let Some(layout_bounds) = layout_bounds.as_deref() {
             for (&local_id, &bounds) in layout_bounds {
+                if local_id == 0 && self.layout_node_owned_by_host {
+                    continue;
+                }
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
             }
             // The solve above can dirty a Text owner after the pre-guard
@@ -8029,7 +8059,9 @@ impl ArtboardInstance {
                 // transforms remain owned by ScrollVirtualizer; draw only
                 // reads `m_artboardTransforms`
                 // (`artboard_component_list.cpp:1300-1331`).
-                if component_list_virtualization(self, local_id).is_none() {
+                if component_list_virtualization(self, local_id).is_none()
+                    && !self.suppress_mounted_component_list_layout_updates
+                {
                     let transforms = runtime_component_list_item_base_transforms(self, local_id);
                     if let Some(list) = self.component_list_state_mut(local_id) {
                         list.item_transforms = transforms;

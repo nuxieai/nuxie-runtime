@@ -18872,6 +18872,129 @@ fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
     );
 }
 
+// UNIV-1276 investigation probe A: a style-less Artboard (no styleId) with two
+// fixed top-level LayoutComponent children. Upstream C++ syncStyle() early
+// returns on a null style, leaving the Yoga node at Yoga's zero-initialized
+// default (YGFlexDirectionColumn); the Rust port falls back to Taffy
+// Style::default() (FlexDirection::Row). This probe prints both settlements to
+// resolve whether that fallback is a live parity divergence.
+#[test]
+fn univ_1276_probe_styleless_artboard_root_flow_direction() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/univ_1276_styleless_artboard_root_flow.riv";
+    let bytes = synthetic_runtime_file(9871, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "LayoutComponent", "width", 200.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 100.0);
+        });
+        // Local 1/2: first fixed 100x20 top-level flow item.
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 20.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+        // Local 3/4: second fixed item; its settled origin discloses the
+        // root flow direction (row => x=100, column => y=20).
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 20.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_pass();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    for local in [1usize, 3usize] {
+        let cpp_xy = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local)
+            .and_then(|component| component.world_transform)
+            .map(|matrix| (matrix[4], matrix[5]));
+        let rust_bounds = rust.layout_bounds(local);
+        eprintln!(
+            "UNIV-1276 probe A (style-less artboard) local {local}: cpp world xy = {cpp_xy:?}, rust solved bounds = {rust_bounds:?}"
+        );
+    }
+}
+
+// UNIV-1276 investigation probe B ("step 0"): an Artboard that DOES carry its
+// own LayoutComponentStyle with flexDirectionValue=0 (column). If both
+// runtimes settle the second child at y=20, the pure-Rust runtime already
+// honors an authored root style with no changes, and the UNIV-1276 fix is
+// confined to Scene authoring/export in crates/nuxie.
+#[test]
+fn univ_1276_probe_artboard_column_style_root_flow_direction() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/univ_1276_artboard_column_style_root_flow.riv";
+    let bytes = synthetic_runtime_file(9872, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "LayoutComponent", "width", 200.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 100.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 1);
+        });
+        // Local 1: the artboard's own root style, column direction.
+        push_object_with_properties(bytes, "LayoutComponentStyle", |bytes| {
+            push_uint_property(bytes, "LayoutComponentStyle", "flexDirectionValue", 0);
+        });
+        // Local 2/3: first fixed 100x20 top-level flow item.
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 20.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 3);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+        // Local 4/5: second fixed item; column semantics settle it at y=20.
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 20.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 5);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_pass();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    for local in [2usize, 4usize] {
+        let cpp_xy = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local)
+            .and_then(|component| component.world_transform)
+            .map(|matrix| (matrix[4], matrix[5]));
+        let rust_bounds = rust.layout_bounds(local);
+        eprintln!(
+            "UNIV-1276 probe B (column root style) local {local}: cpp world xy = {cpp_xy:?}, rust solved bounds = {rust_bounds:?}"
+        );
+    }
+}
+
 #[test]
 fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
     let Some(probe) = probe_path() else {

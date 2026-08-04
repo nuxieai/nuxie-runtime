@@ -2193,9 +2193,15 @@ def check(
                         resolver_seam_exists=semantic_resolver_seam_exists,
                     )
                 elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
+                    relative_path = pathlib.PurePosixPath(path.relative_to(repo_root))
                     if (
-                        pathlib.PurePosixPath(path.relative_to(repo_root))
-                        == NESTED_EVENT_OWNER_MODULE
+                        relative_path.stem == "tests"
+                        or relative_path.stem.endswith("_tests")
+                        or "tests" in relative_path.parts
+                    ):
+                        continue
+                    if (
+                        relative_path == NESTED_EVENT_OWNER_MODULE
                     ):
                         continue
                     detector_kind = NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[

@@ -88,6 +88,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCstExprGroup.set(value);
     FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
+    FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
     FFlag::LuauEmitCallFeedback.set(value);
     FFlag::LuauErrorTolerantPrettyPrinting.set(value);
@@ -128,6 +129,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauResumeRestoreCcalls.set(value);
     FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
     FFlag::LuauSolverV2.set(value);
+    FFlag::LuauStoreConstKeywordBegin.set(false);
     FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
     FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
     FFlag::LuauTableEntriesDontNeedToMatchIndent.set(value);
@@ -318,6 +320,8 @@ pub mod FFlag {
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
     crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 2);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowExternClassInTypeDefinitions);
     // Analysis/src/ConstraintGenerator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowRedefiningBuiltinTypes);
     // Compiler/src/Compiler.cpp
@@ -389,6 +393,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauSolverV2);
     // Analysis/src/Subtyping.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingMissingPropertiesAsNil);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauStoreConstKeywordBegin);
     // Analysis/src/Subtyping.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingTablesHasBetterErrorSuppression);
     // Ast/src/Parser.cpp

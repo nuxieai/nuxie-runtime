@@ -128,23 +128,32 @@ impl Parser {
                     ret_types,
                 }) as *mut AstStat
             }
-        } else if (unsafe {
-            AstName::ast_name_c_char(self.lexer.current().data.name)
-                .operator_eq_c_char(c"class".as_ptr())
-        } && (if FFlag::LuauAllowGlobalDeclarationToBeCalledClass.get() {
-            self.lexer.lookahead().r#type != Type(':' as i32)
+        } else if if FFlag::LuauDisallowExternClassInTypeDefinitions.get() {
+            unsafe {
+                AstName::ast_name_c_char(self.lexer.current().data.name)
+                    .operator_eq_c_char(c"extern".as_ptr())
+            }
         } else {
-            true
-        })) || unsafe {
-            AstName::ast_name_c_char(self.lexer.current().data.name)
-                .operator_eq_c_char(c"extern".as_ptr())
+            (unsafe {
+                AstName::ast_name_c_char(self.lexer.current().data.name)
+                    .operator_eq_c_char(c"class".as_ptr())
+            } && (if FFlag::LuauAllowGlobalDeclarationToBeCalledClass.get() {
+                self.lexer.lookahead().r#type != Type(':' as i32)
+            } else {
+                true
+            })) || unsafe {
+                AstName::ast_name_c_char(self.lexer.current().data.name)
+                    .operator_eq_c_char(c"extern".as_ptr())
+            }
         } {
             let mut found_extern = false;
             if unsafe {
                 AstName::ast_name_c_char(self.lexer.current().data.name)
                     .operator_eq_c_char(c"extern".as_ptr())
             } {
-                found_extern = true;
+                if !FFlag::LuauDisallowExternClassInTypeDefinitions.get() {
+                    found_extern = true;
+                }
                 self.next_lexeme();
                 if unsafe {
                     AstName::ast_name_c_char(self.lexer.current().data.name)
@@ -179,7 +188,7 @@ impl Parser {
                 super_name = Some(self.parse_name("supertype name").name);
             }
 
-            if found_extern {
+            if FFlag::LuauDisallowExternClassInTypeDefinitions.get() || found_extern {
                 if unsafe {
                     AstName::ast_name_c_char(self.lexer.current().data.name)
                         .operator_ne_c_char(c"with".as_ptr())

@@ -18872,14 +18872,13 @@ fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
     );
 }
 
-// UNIV-1276 investigation probe A: a style-less Artboard (no styleId) with two
-// fixed top-level LayoutComponent children. Upstream C++ syncStyle() early
-// returns on a null style, leaving the Yoga node at Yoga's zero-initialized
-// default (YGFlexDirectionColumn); the Rust port falls back to Taffy
-// Style::default() (FlexDirection::Row). This probe prints both settlements to
-// resolve whether that fallback is a live parity divergence.
+// UNIV-1276: a style-less Artboard (no styleId) with two fixed top-level
+// LayoutComponent children settles as a COLUMN. Upstream C++ syncStyle()
+// early returns on a null style, leaving the Yoga node at Yoga's
+// zero-initialized default (YGFlexDirectionColumn); the Rust port must pin
+// that default over Taffy Style::default() (FlexDirection::Row).
 #[test]
-fn univ_1276_probe_styleless_artboard_root_flow_direction() {
+fn styleless_artboard_settles_top_level_children_as_column_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -18918,27 +18917,36 @@ fn univ_1276_probe_styleless_artboard_root_flow_direction() {
         .runtime_update
         .as_ref()
         .expect("C++ runtime update");
-    for local in [1usize, 3usize] {
+    for (local, expected_xy) in [(1usize, (0.0, 0.0)), (3usize, (0.0, 20.0))] {
         let cpp_xy = cpp_update
             .components
             .iter()
             .find(|component| component.local_id == local)
             .and_then(|component| component.world_transform)
             .map(|matrix| (matrix[4], matrix[5]));
-        let rust_bounds = rust.layout_bounds(local);
-        eprintln!(
-            "UNIV-1276 probe A (style-less artboard) local {local}: cpp world xy = {cpp_xy:?}, rust solved bounds = {rust_bounds:?}"
+        assert_eq!(cpp_xy, Some(expected_xy), "C++ settled xy for local {local}");
+        let rust_bounds = rust
+            .layout_bounds(local)
+            .unwrap_or_else(|| panic!("Rust solved bounds for local {local}"));
+        assert_eq!(
+            (rust_bounds.x, rust_bounds.y),
+            expected_xy,
+            "Rust settled xy for local {local}"
+        );
+        assert_eq!(
+            (rust_bounds.width, rust_bounds.height),
+            (100.0, 20.0),
+            "Rust settled size for local {local}"
         );
     }
 }
 
-// UNIV-1276 investigation probe B ("step 0"): an Artboard that DOES carry its
-// own LayoutComponentStyle with flexDirectionValue=0 (column). If both
-// runtimes settle the second child at y=20, the pure-Rust runtime already
-// honors an authored root style with no changes, and the UNIV-1276 fix is
-// confined to Scene authoring/export in crates/nuxie.
+// UNIV-1276: an Artboard that carries its own LayoutComponentStyle (the
+// upstream root-layout model — Artboard extends LayoutComponent and resolves
+// the inherited styleId in LayoutComponent::onAddedDirty) honors the style's
+// column direction identically in both runtimes.
 #[test]
-fn univ_1276_probe_artboard_column_style_root_flow_direction() {
+fn artboard_own_column_style_drives_root_flow_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -18981,16 +18989,26 @@ fn univ_1276_probe_artboard_column_style_root_flow_direction() {
         .runtime_update
         .as_ref()
         .expect("C++ runtime update");
-    for local in [2usize, 4usize] {
+    for (local, expected_xy) in [(2usize, (0.0, 0.0)), (4usize, (0.0, 20.0))] {
         let cpp_xy = cpp_update
             .components
             .iter()
             .find(|component| component.local_id == local)
             .and_then(|component| component.world_transform)
             .map(|matrix| (matrix[4], matrix[5]));
-        let rust_bounds = rust.layout_bounds(local);
-        eprintln!(
-            "UNIV-1276 probe B (column root style) local {local}: cpp world xy = {cpp_xy:?}, rust solved bounds = {rust_bounds:?}"
+        assert_eq!(cpp_xy, Some(expected_xy), "C++ settled xy for local {local}");
+        let rust_bounds = rust
+            .layout_bounds(local)
+            .unwrap_or_else(|| panic!("Rust solved bounds for local {local}"));
+        assert_eq!(
+            (rust_bounds.x, rust_bounds.y),
+            expected_xy,
+            "Rust settled xy for local {local}"
+        );
+        assert_eq!(
+            (rust_bounds.width, rust_bounds.height),
+            (100.0, 20.0),
+            "Rust settled size for local {local}"
         );
     }
 }

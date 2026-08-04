@@ -25706,9 +25706,11 @@ mod tests {
         assert!(runtime.bind_view_model(&root));
         runtime.advance(0.0);
 
-        let occurrence_at = |runtime: &mut OwnedArtboardInstance, x| -> Result<Vec<_>> {
+        // The style-less Root artboard flows its list items as a column
+        // (upstream Yoga zero-init default), so occurrences stack vertically.
+        let occurrence_at = |runtime: &mut OwnedArtboardInstance, y| -> Result<Vec<_>> {
             let hit = runtime
-                .hit_test_path_segments_with_bounds(crate::Vec2D::new(x, 5.0))
+                .hit_test_path_segments_with_bounds(crate::Vec2D::new(5.0, y))
                 .into_iter()
                 .next()
                 .context("repeated occurrence hit")?;

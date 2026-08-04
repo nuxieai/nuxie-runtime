@@ -109,6 +109,8 @@ pub(crate) use resetting_component::RuntimeResettingComponent;
 #[path = "artboard/text/text_style.rs"]
 mod text_style;
 use text_style::RuntimeTextStyleFeatureOption;
+#[path = "artboard/text/text_variation_helper.rs"]
+mod text_variation_helper;
 
 // C++ `Artboard::sm_frameId` is global across artboards and advances at each
 // public `Artboard::draw` entry. Scripted paths use it to distinguish a second
@@ -4764,28 +4766,6 @@ impl ArtboardInstance {
         self.mark_changed();
         self.mark_prepared_changed();
         true
-    }
-
-    pub(crate) fn text_variation_modifier_tag(&self, local_id: usize, authored_tag: u32) -> u32 {
-        let shape_revision = self.text_shape_revision;
-        let mut tags = self.text_variation_modifier_tags.borrow_mut();
-        let (revision, tag) = tags.entry(local_id).or_insert_with(|| {
-            (
-                shape_revision,
-                property_key_for_name("TextVariationModifier", "axisTag")
-                    .and_then(|key| self.uint_property(local_id, key))
-                    .and_then(|value| u32::try_from(value).ok())
-                    .unwrap_or(authored_tag),
-            )
-        });
-        if *revision != shape_revision {
-            *tag = property_key_for_name("TextVariationModifier", "axisTag")
-                .and_then(|key| self.uint_property(local_id, key))
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(authored_tag);
-            *revision = shape_revision;
-        }
-        *tag
     }
 
     #[cfg(any(test, feature = "tools"))]

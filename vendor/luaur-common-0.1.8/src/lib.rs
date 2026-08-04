@@ -2,6 +2,8 @@ extern crate alloc;
 
 #[cfg(test)]
 mod dense_hash_tests;
+#[cfg(test)]
+mod dense_hash2_tests;
 pub mod enums;
 pub mod functions;
 #[cfg(test)]

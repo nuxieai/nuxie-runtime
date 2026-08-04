@@ -1,8 +1,12 @@
 pub mod const_iterator;
+pub(crate) mod bit_set;
 pub mod dense_hash_map;
+pub mod dense_hash_map2;
 pub mod dense_hash_pointer;
 pub mod dense_hash_set;
+pub mod dense_hash_set2;
 pub mod dense_hash_table;
+pub mod dense_hash_table2;
 pub mod event;
 pub mod f_value;
 pub mod f_value_version_setter;

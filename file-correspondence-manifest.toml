@@ -4731,13 +4731,13 @@ note = "W120 faithful candidate: pinned dependency wiring, path-measure rebuild/
 upstream = "src/text/text_input.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/text_input.rs; crates/nuxie-runtime/src/components.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/text.rs"
+rust_module = "crates/nuxie-runtime/src/text_input.rs; crates/nuxie-runtime/src/components.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/text/text_input.rs; crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/text.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0388"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F2/F5 closure via FL-E6 ports TextInput retained source/display text, generated callbacks, key and committed-text editing, multiline behavior, cursor/selection geometry, pointer drag, edge scrolling, scroll-constraint ownership, clone-cold state, and update/draw integration. MR-2b/C04 justified exception: remaining update and hit-test dispatch is shared with B6-0258 layout ownership. C17 exception: retained modules are `crates/nuxie-runtime/src/text_input.rs`; `crates/nuxie-runtime/src/components.rs`; `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/constraints.rs`; `crates/nuxie-runtime/src/text.rs`; TextInput editing depends on common component state, Artboard update/hit testing, scroll constraints, and text shaping/draw integration, so its full lifecycle cannot move to the leaf atomically."
+note = "F2/F5 closure via FL-E6 ports TextInput retained source/display text, generated callbacks, key and committed-text editing, multiline behavior, cursor/selection geometry, pointer drag, edge scrolling, scroll-constraint ownership, clone-cold state, and update/draw integration. The Artboard-side advance and tools layout seam lives in `crates/nuxie-runtime/src/artboard/text/text_input.rs`. MR-2b/C04 justified exception: remaining update and hit-test dispatch is shared with B6-0258 layout ownership."
 
 [[file]]
 upstream = "src/text/text_input_cursor.cpp"

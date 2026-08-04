@@ -2896,7 +2896,7 @@ status = "faithful"
 upstream = "src/text/text_input.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/text_input.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints.rs", "crates/nuxie-runtime/src/text.rs"]
+rust_modules = ["crates/nuxie-runtime/src/text_input.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/text/text_input.rs", "crates/nuxie-runtime/src/constraints.rs", "crates/nuxie-runtime/src/text.rs"]
 dynamically_reached = false
 status = "faithful"
 

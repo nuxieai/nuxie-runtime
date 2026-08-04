@@ -457,7 +457,15 @@ pub mod FInt {
     // Analysis/src/Error.cpp
     crate::LUAU_FASTINTVARIABLE!(LuauIndentTypeMismatchMaxTypeLength, 10);
     // VM/src/lfunc.cpp
-    crate::LUAU_FASTINTVARIABLE!(LuauInlineHitsThreshold, 3);
+    crate::LUAU_FASTINTVARIABLE!(LuauInlineHitsThreshold, 32);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineSmallFunSize, 128);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineThreshold, 25);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineThresholdMaxBoost, 300);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineTooLongFunSize, 0xffff);
     // Analysis/src/NonStrictTypeChecker.cpp
     crate::LUAU_FASTINTVARIABLE!(LuauNonStrictTypeCheckerRecursionLimit, 300);
     // Analysis/src/Normalize.cpp

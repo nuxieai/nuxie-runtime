@@ -2620,10 +2620,6 @@ impl FileScriptArtboard {
             )
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         instance.set_frame_origin(false);
-        let state_machine = file
-            .artboard(artboard_index)
-            .and_then(|artboard| artboard.default_state_machine_index())
-            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
         let view_model = supplied_view_model.or_else(|| {
             let owned_view_model = file
                 .runtime
@@ -2650,6 +2646,30 @@ impl FileScriptArtboard {
                 nuxie_runtime::script_view_model_from_owned(&file.runtime, instance)
             })
         });
+        // Build one complete projected occurrence: bind the selected VMI to
+        // the mounted child before constructing its state machine, then
+        // forward that exact child DataContext. This is the scripted-artboard
+        // counterpart of C++ `NestedArtboard::bindStateful` and replacement
+        // construction (`src/nested_artboard.cpp:156-185,228-350`).
+        let data_context = view_model.as_ref().map(|view_model| {
+            let local = view_model.owned_handle();
+            parent_context
+                .map(|parent| parent.with_local_view_model(&local))
+                .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local))
+        });
+        if let Some(context) = data_context.as_ref() {
+            instance.bind_script_artboard_data_context(&file.runtime, context);
+        }
+        let mut state_machine = file
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.default_state_machine_index())
+            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
+        if let (Some(state_machine), Some(context)) =
+            (state_machine.as_mut(), data_context.as_ref())
+        {
+            state_machine.bind_script_artboard_data_context(context);
+            state_machine.advance_data_context();
+        }
         let (width, height) = instance.artboard_dimensions();
         let mut scripted = Self {
             file,
@@ -2658,33 +2678,13 @@ impl FileScriptArtboard {
             state_machine,
             view_model,
             parent_context: parent_context.cloned(),
-            _data_context: None,
+            _data_context: data_context,
             width,
             height,
             frame_origin: false,
         };
-        scripted.bind_view_model_once();
         scripted.prepare_state_machine_once()?;
         Ok(scripted)
-    }
-
-    fn bind_view_model_once(&mut self) {
-        let Some(state_machine) = self.state_machine.as_mut() else {
-            return;
-        };
-        let Some(view_model) = self.view_model.as_ref() else {
-            return;
-        };
-        let local = view_model.owned_handle();
-        let context = self
-            .parent_context
-            .as_ref()
-            .map(|parent| parent.with_local_view_model(&local))
-            .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local));
-        self.instance
-            .bind_script_artboard_data_context(&self.file.runtime, &context);
-        state_machine.bind_script_artboard_data_context(&context);
-        self._data_context = Some(context);
     }
 
     fn prepare_state_machine_once(

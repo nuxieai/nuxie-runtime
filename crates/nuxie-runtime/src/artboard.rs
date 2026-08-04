@@ -4218,6 +4218,14 @@ impl ArtboardInstance {
             })
             .collect::<Vec<_>>();
         for text_local in controlled_text {
+            // A hosting-layout resize dirties TextShape but does not run
+            // `Text::clearRenderStyles`; TextStylePaint keeps and rewinds its
+            // existing opacity paths. Classify the pending rebuild before
+            // publishing Path dirt so pooled component-list rows reuse those
+            // concrete RenderPath owners (`layout_component.cpp:1116-1124`,
+            // `text.cpp:1209-1230`).
+            self.runtime_drawables
+                .mark_text_resource_dirty_for_local(text_local);
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
         self.mark_changed();
@@ -7439,9 +7447,10 @@ impl ArtboardInstance {
             {
                 source_changed = true;
             }
-            if row_changed {
-                item.settled_layout_size.set(None);
-            }
+            // The row Artboard's root Yoga node belongs to the hosting list.
+            // Nested animation/data-bind dirt does not detach that node or
+            // discard its parent-assigned size; only topology/pool mounting
+            // creates an occurrence without a hosted result.
             keep_going |= row_changed;
         }
         if source_changed {
@@ -23296,6 +23305,9 @@ mod tests {
         let pooled_identity = parent.component_list_items(list_local_id).unwrap()[0]
             .child
             .instance_identity();
+        parent.component_list_items(list_local_id).unwrap()[0]
+            .settled_layout_size
+            .set(Some((119.666_664, 58.0)));
         let source_global_id = parent.component_list_items(list_local_id).unwrap()[0]
             .child
             .graph_global_id;
@@ -23309,6 +23321,11 @@ mod tests {
         assert!(parent.add_component_list_virtualizable(&file, list_local_id, 0));
         let remounted = &parent.component_list_items(list_local_id).unwrap()[0];
         assert_eq!(remounted.child.instance_identity(), pooled_identity);
+        assert_eq!(
+            remounted.settled_layout_size.get(),
+            Some((119.666_664, 58.0)),
+            "pool reuse keeps the transferred root layout result until the hosting parent solves it again"
+        );
         assert_eq!(
             remounted.state_machines[0].changed_state_count(),
             0,

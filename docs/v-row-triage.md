@@ -25,7 +25,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V16 | At t=2, `drawPath` id 54 first differs by about 0.01406 in the animated compound points. | Animated compound/feather path interpolation. |
 | V17 | At t=0.5, stroke path id 19 endpoints are `(6.45296,-6.45239)..(10.4287,-10.4278)` vs C++ `(15.2899,-15.2885)..(15.3052,-15.3038)`. | Skin/constraint update order. |
 | V18 | At t=0.5, Rust applies translation `(1121,259)` where C++ applies identity. | Mounted component-list child/draw-order transform. |
-| V19 | At t=1, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Component-list child-origin keep-going/settle return only. |
+| V19 | **Closed 2026-08-04.** Scripted settle and draw streams are exact after retaining pooled hosted sizes/path owners and composing the fresh list layout base with its parent scroll constraint. | Closed component-list occurrence/layout ownership residual. |
 | V20 | At t=1, the first ellipse is radius 30 in Rust and radius 50 in C++. | Stateful nested VMI number propagation. |
 | V21 | At t=1, Rust applies scale `-1.5`; C++ applies `+1.5`. | Stateful nested VMI binding/typed comparator consumption. |
 | V22 | No divergence under the current contract; 147 lines align and the maximum numeric delta is `3.9e-6`. | **Artifact; see below.** |
@@ -76,7 +76,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V16 | At t=2, `drawPath` id 54 first differs by about 0.01406 in the animated compound points. | Animated compound/feather path interpolation. |
 | V17 | At t=0.5, stroke path id 19 endpoints are `(6.45296,-6.45239)..(10.4287,-10.4278)` vs C++ `(15.2899,-15.2885)..(15.3052,-15.3038)`. | Skin/constraint update order. |
 | V18 | At t=0.5, Rust applies translation `(1121,259)` where C++ applies identity. | Mounted component-list child/draw-order transform. |
-| V19 | At t=1, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Component-list child-origin keep-going/settle return only. |
+| V19 | **Closed 2026-08-04.** Scripted settle and draw streams are exact after retaining pooled hosted sizes/path owners and composing the fresh list layout base with its parent scroll constraint. | Closed component-list occurrence/layout ownership residual. |
 | V20 | At t=1, the first ellipse is radius 30 in Rust and radius 50 in C++. | Stateful nested VMI number propagation. |
 | V21 | At t=1, Rust applies scale `-1.5`; C++ applies `+1.5`. | Stateful nested VMI binding/typed comparator consumption. |
 | V22 | No divergence under the current contract; 147 lines align and the maximum numeric delta is `3.9e-6`. | **Artifact; see below.** |
@@ -127,7 +127,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V16 | At t=2, `drawPath` id 54 first differs by about 0.01406 in the animated compound points. | Animated compound/feather path interpolation. |
 | V17 | At t=0.5, stroke path id 19 endpoints are `(6.45296,-6.45239)..(10.4287,-10.4278)` vs C++ `(15.2899,-15.2885)..(15.3052,-15.3038)`. | Skin/constraint update order. |
 | V18 | At t=0.5, Rust applies translation `(1121,259)` where C++ applies identity. | Mounted component-list child/draw-order transform. |
-| V19 | At t=1, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Component-list child-origin keep-going/settle return only. |
+| V19 | **Closed 2026-08-04.** Scripted settle and draw streams are exact after retaining pooled hosted sizes/path owners and composing the fresh list layout base with its parent scroll constraint. | Closed component-list occurrence/layout ownership residual. |
 | V20 | At t=1, the first ellipse is radius 30 in Rust and radius 50 in C++. | Stateful nested VMI number propagation. |
 | V21 | At t=1, Rust applies scale `-1.5`; C++ applies `+1.5`. | Stateful nested VMI binding/typed comparator consumption. |
 | V22 | No divergence under the current contract; 147 lines align and the maximum numeric delta is `3.9e-6`. | **Artifact; see below.** |
@@ -178,7 +178,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V16 | At t=2, `drawPath` id 54 first differs by about 0.01406 in the animated compound points. | Animated compound/feather path interpolation. |
 | V17 | At t=0.5, stroke path id 19 endpoints are `(6.45296,-6.45239)..(10.4287,-10.4278)` vs C++ `(15.2899,-15.2885)..(15.3052,-15.3038)`. | Skin/constraint update order. |
 | V18 | At t=0.5, Rust applies translation `(1121,259)` where C++ applies identity. | Mounted component-list child/draw-order transform. |
-| V19 | At t=1, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Component-list child-origin keep-going/settle return only. |
+| V19 | **Closed 2026-08-04.** Scripted settle and draw streams are exact after retaining pooled hosted sizes/path owners and composing the fresh list layout base with its parent scroll constraint. | Closed component-list occurrence/layout ownership residual. |
 | V20 | At t=1, the first ellipse is radius 30 in Rust and radius 50 in C++. | Stateful nested VMI number propagation. |
 | V21 | At t=1, Rust applies scale `-1.5`; C++ applies `+1.5`. | Stateful nested VMI binding/typed comparator consumption. |
 | V22 | No divergence under the current contract; 147 lines align and the maximum numeric delta is `3.9e-6`. | **Artifact; see below.** |
@@ -229,7 +229,7 @@ Evidence captures: vtriage-capture/ (per-row cpp/rust streams). 26 runtime diver
 | V16 | At t=2, `drawPath` id 54 first differs by about 0.01406 in the animated compound points. | Animated compound/feather path interpolation. |
 | V17 | At t=0.5, stroke path id 19 endpoints are `(6.45296,-6.45239)..(10.4287,-10.4278)` vs C++ `(15.2899,-15.2885)..(15.3052,-15.3038)`. | Skin/constraint update order. |
 | V18 | At t=0.5, Rust applies translation `(1121,259)` where C++ applies identity. | Mounted component-list child/draw-order transform. |
-| V19 | At t=1, Rust reports `settled=false`; C++ reports `settled=true`. With side-channel off, draw streams are contract-exact. | Component-list child-origin keep-going/settle return only. |
+| V19 | **Closed 2026-08-04.** Scripted settle and draw streams are exact after retaining pooled hosted sizes/path owners and composing the fresh list layout base with its parent scroll constraint. | Closed component-list occurrence/layout ownership residual. |
 | V20 | At t=1, the first ellipse is radius 30 in Rust and radius 50 in C++. | Stateful nested VMI number propagation. |
 | V21 | At t=1, Rust applies scale `-1.5`; C++ applies `+1.5`. | Stateful nested VMI binding/typed comparator consumption. |
 | V22 | No divergence under the current contract; 147 lines align and the maximum numeric delta is `3.9e-6`. | **Artifact; see below.** |

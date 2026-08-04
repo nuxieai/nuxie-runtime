@@ -1177,20 +1177,12 @@ impl ArtboardInstance {
                 let Some(items) = self.component_list_items(host_local_id) else {
                     continue;
                 };
-                let host_transform_local =
-                    if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(self, host_local_id)
-                        .is_some()
-                    {
-                        self.component_parent_local(host_local_id)
-                            .unwrap_or(host_local_id)
-                    } else {
-                        host_local_id
-                    };
-                let host_world = path_cache.component_world_transform_with_bounds(
+                let host_world = runtime_component_list_host_world_transform(
                     self,
                     graph,
-                    host_transform_local,
+                    host_local_id,
                     layout_bounds,
+                    path_cache,
                 );
                 let Some(item_transforms) = self
                     .component_list_state(host_local_id)
@@ -6812,21 +6804,30 @@ impl ArtboardInstance {
         list_locals
             .into_iter()
             .map(|list_local| {
-                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                let host_world = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
                     self, list_local,
                 )
-                .is_some()
-                {
-                    self.component_parent_local(list_local)
-                        .unwrap_or(list_local)
+                .is_some() {
+                    let host_transform_local = self.component_parent_local(list_local).unwrap_or(list_local);
+                    self.runtime_component_world_transform_with_bounds(
+                        host_transform_local,
+                        graph,
+                        layout_bounds.as_ref(),
+                    )
                 } else {
-                    list_local
+                    let base = self.runtime_component_world_transform_with_bounds(
+                        list_local,
+                        graph,
+                        layout_bounds.as_ref(),
+                    );
+                    self.component_handle(list_local)
+                        .map(|list| {
+                            crate::constraints::constrain_component_list_world_transform(
+                                self, list, base,
+                            )
+                        })
+                        .unwrap_or(base)
                 };
-                let host_world = self.runtime_component_world_transform_with_bounds(
-                    host_transform_local,
-                    graph,
-                    layout_bounds.as_ref(),
-                );
                 let host_root = root_transform.multiply(host_world);
                 let item_transforms = self
                     .component_list_state(list_local)
@@ -6855,19 +6856,21 @@ impl ArtboardInstance {
     ) -> BTreeMap<usize, Vec<Mat2D>> {
         self.component_list_locals()
             .map(|list_local| {
-                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                let host_root = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
                     self, list_local,
                 )
-                .is_some()
-                {
-                    self.component_parent_local(list_local)
-                        .unwrap_or(list_local)
+                .is_some() {
+                    let host_transform_local = self.component_parent_local(list_local).unwrap_or(list_local);
+                    root_transform.multiply(
+                        self.runtime_component_world_transform_with_scroll(host_transform_local),
+                    )
                 } else {
-                    list_local
+                    root_transform.multiply(
+                        self.component(list_local)
+                            .map(|component| component.transform.world_transform)
+                            .unwrap_or(Mat2D::IDENTITY),
+                    )
                 };
-                let host_root = root_transform.multiply(
-                    self.runtime_component_world_transform_with_scroll(host_transform_local),
-                );
                 let item_transforms = self
                     .component_list_state(list_local)
                     .into_iter()
@@ -10203,6 +10206,13 @@ impl RuntimeDrawableList {
                 pooled_drawable.text_draw_owner.as_mut(),
             ) {
                 std::mem::swap(&mut fresh_owner.backend, &mut pooled_owner.backend);
+                // The pooled C++ Text keeps its concrete TextStylePaint
+                // opacity paths while property recorders and the new row
+                // context rebuild CPU draw commands. Mark this as the
+                // layout/property refresh branch so the next Text update
+                // rewinds those paths instead of treating the fresh snapshot
+                // as `clearRenderStyles` ownership replacement.
+                fresh_owner.mark_paths_retained_dirty();
             }
         }
         for (fresh_owner, pooled_owner) in self
@@ -18485,6 +18495,40 @@ pub(crate) fn runtime_component_list_item_base_transforms(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn runtime_component_list_host_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeArtboardPathState,
+) -> Mat2D {
+    if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+        instance, local_id,
+    )
+    .is_some()
+    {
+        let parent_local = instance.component_parent_local(local_id).unwrap_or(local_id);
+        return path_cache.component_world_transform_with_bounds(
+            instance,
+            graph,
+            parent_local,
+            layout_bounds,
+        );
+    }
+    let base = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        local_id,
+        layout_bounds,
+    );
+    instance
+        .component_handle(local_id)
+        .map(|list| {
+            crate::constraints::constrain_component_list_world_transform(instance, list, base)
+        })
+        .unwrap_or(base)
+}
+
 fn runtime_draw_live_component_list(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -18551,23 +18595,12 @@ fn runtime_draw_component_list_with_state(
     // A virtualized list's row positions already include the scroll window.
     // C++ therefore draws it in its parent's world space; non-virtualized
     // lists continue to use their own world transform.
-    let host_transform_local =
-        if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
-            instance, local_id,
-        )
-        .is_some()
-        {
-            instance
-                .component_parent_local(local_id)
-                .unwrap_or(local_id)
-        } else {
-            local_id
-        };
-    let host_world = path_cache.component_world_transform_with_bounds(
+    let host_world = runtime_component_list_host_world_transform(
         instance,
         graph,
-        host_transform_local,
+        local_id,
         layout_bounds,
+        path_cache,
     );
     if needs_save_operation {
         renderer.save();

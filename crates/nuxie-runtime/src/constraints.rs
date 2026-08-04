@@ -2024,8 +2024,7 @@ pub(crate) fn constrain_component_list_world_transform(
             continue;
         };
         let constraint_local = artboard.component_at(constraint).local_id;
-        let strength =
-            constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+        let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
         world = scroll_constrained_world_transform(world, scroll_transform, strength).0;
     }
     world
@@ -3074,10 +3073,10 @@ mod tests {
         RUNTIME_CONSTRAINT_PROPERTY_KEYS, RuntimeDraggableProxyKind, RuntimeScrollAxis,
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
         RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
-        constrain_component_list_world_transform,
-        interpolated_rotation, interpolated_rotation_from_modded_base, point_length,
-        runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
-        runtime_scroll_intent_axes, scroll_viewport_axis_size,
+        constrain_component_list_world_transform, interpolated_rotation,
+        interpolated_rotation_from_modded_base, point_length, runtime_draggable_proxy_drag,
+        runtime_draggable_proxy_end, runtime_draggable_proxy_start, runtime_scroll_intent_axes,
+        scroll_viewport_axis_size,
     };
 
     #[test]

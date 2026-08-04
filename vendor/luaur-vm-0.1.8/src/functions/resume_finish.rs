@@ -30,21 +30,14 @@ pub unsafe fn resume_finish(l: *mut lua_State, mut status: c_int, oldnCcalls: c_
             }
         }
 
-        if luaur_common::FFlag::LuauResumeRestoreCcalls.get() {
-            (*l).nCcalls = oldnCcalls as u16;
-            (*l).baseCcalls = (*l).nCcalls;
-        }
+        (*l).nCcalls = oldnCcalls as u16;
+        (*l).baseCcalls = (*l).nCcalls;
 
         (*l).status = status as u8;
         status = luaD_rawrunprotected(l, Some(resume_handle), ch as *mut core::ffi::c_void);
     }
 
-    if luaur_common::FFlag::LuauResumeRestoreCcalls.get() {
-        (*l).nCcalls = (oldnCcalls - 1) as u16;
-    } else {
-        (*l).baseCcalls = (*l).baseCcalls.wrapping_sub(1);
-        (*l).nCcalls = (*l).baseCcalls;
-    }
+    (*l).nCcalls = (oldnCcalls - 1) as u16;
 
     (*l).baseCcalls = (*l).nCcalls;
     (*l).isactive = false;

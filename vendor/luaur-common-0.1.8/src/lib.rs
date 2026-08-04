@@ -119,7 +119,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauRemoveConstraintSolverEmplace.set(value);
     FFlag::LuauReplacerIsSolverAgnostic.set(value);
     FFlag::LuauRequireResolveAliasNullCheck.set(value);
-    FFlag::LuauResumeRestoreCcalls.set(value);
     FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
     FFlag::LuauSolverV2.set(value);
     FFlag::LuauStoreConstKeywordBegin.set(false);
@@ -366,8 +365,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauReplacerIsSolverAgnostic);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauRequireResolveAliasNullCheck);
-    // VM/src/ldo.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauResumeRestoreCcalls);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSilenceDynamicFormatStringErrors);
     // Ast/src/Parser.cpp

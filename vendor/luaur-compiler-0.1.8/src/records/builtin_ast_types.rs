@@ -28,6 +28,7 @@ impl Default for BuiltinAstTypes {
                 loc,
                 false,
                 empty_arr.clone(),
+                core::ptr::null_mut(),
             )
         };
 

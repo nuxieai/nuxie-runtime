@@ -230,6 +230,7 @@ impl Parser {
                         null_type_location,
                         false,
                         AstArray::default(),
+                        core::ptr::null_mut(),
                     ))
                 } as *mut AstType;
                 indexer = unsafe {

@@ -21,13 +21,11 @@ use luaur_common::enums::luau_bytecode_type::{
 };
 use luaur_common::records::dense_hash_map::DenseHashMap;
 use luaur_common::records::dense_hash_set::DenseHashSet;
-use luaur_common::FFlag;
 
 pub fn get_type(
     ty: *const AstType,
     generics: AstArray<*mut AstGenericType>,
     type_aliases: &DenseHashMap<AstName, *mut AstStatTypeAlias>,
-    resolve_aliases_deprecated: bool,
     host_vector_type: *const core::ffi::c_char,
     userdata_types: &DenseHashMap<AstName, u8>,
     bytecode: &mut BytecodeBuilder,
@@ -54,39 +52,20 @@ pub fn get_type(
             .filter(|p| !p.is_null())
         {
             let alias = unsafe { &*alias_ptr };
-            if FFlag::LuauCompileTypeAliases.get() {
-                if seen_aliases.contains(&alias.name) {
-                    seen_aliases.clear();
-                    return LBC_TYPE_ANY;
-                } else {
-                    seen_aliases.insert(ref_node.name);
-                    return get_type(
-                        alias.type_ptr,
-                        alias.generics,
-                        type_aliases,
-                        /* resolveAliases_DEPRECATED= */ false,
-                        host_vector_type,
-                        userdata_types,
-                        bytecode,
-                        seen_aliases,
-                    );
-                }
+            if seen_aliases.contains(&alias.name) {
+                seen_aliases.clear();
+                return LBC_TYPE_ANY;
             } else {
-                // note: we only resolve aliases to the depth of 1 to avoid dealing with recursive aliases
-                if resolve_aliases_deprecated {
-                    return get_type(
-                        alias.type_ptr,
-                        alias.generics,
-                        type_aliases,
-                        /* resolveAliases_DEPRECATED= */ false,
-                        host_vector_type,
-                        userdata_types,
-                        bytecode,
-                        seen_aliases,
-                    );
-                } else {
-                    return LBC_TYPE_ANY;
-                }
+                seen_aliases.insert(ref_node.name);
+                return get_type(
+                    alias.type_ptr,
+                    alias.generics,
+                    type_aliases,
+                    host_vector_type,
+                    userdata_types,
+                    bytecode,
+                    seen_aliases,
+                );
             }
         }
 
@@ -123,7 +102,6 @@ pub fn get_type(
                 ty,
                 generics,
                 type_aliases,
-                resolve_aliases_deprecated,
                 host_vector_type,
                 userdata_types,
                 bytecode,
@@ -164,7 +142,6 @@ pub fn get_type(
             group.type_,
             generics,
             type_aliases,
-            resolve_aliases_deprecated,
             host_vector_type,
             userdata_types,
             bytecode,

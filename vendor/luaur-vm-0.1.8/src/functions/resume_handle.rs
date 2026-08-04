@@ -24,10 +24,6 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
     LUAU_ASSERT!((*cl).isC != 0 && (*c).cont.is_some());
     LUAU_ASSERT!((*l).status != 0);
 
-    if !luaur_common::FFlag::LuauResumeRestoreCcalls.get() {
-        (*l).nCcalls = (*l).baseCcalls;
-    }
-
     (*ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
 
     let mut status = (*l).status as i32;

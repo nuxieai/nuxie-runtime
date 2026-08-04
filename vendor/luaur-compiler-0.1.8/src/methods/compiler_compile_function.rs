@@ -140,19 +140,27 @@ impl Compiler {
             // C: `isInlinable = !hasMultiRet && !getfenvUsed && !setfenvUsed;
             //     if (FFlag::LuauEmitCallFeedback && isInlinable && upvals.empty()) flags |= LPF_INLINABLE;`
             // This whole block was missing, so the Rust compiler never marked functions inlinable.
-            let is_inlinable =
-                !self.has_multi_ret && !self.getfenv_used && !self.setfenv_used;
+            let is_inlinable = !self.has_multi_ret && !self.getfenv_used && !self.setfenv_used;
+            let mut cost_model = 0;
             if luaur_common::FFlag::LuauEmitCallFeedback.get()
                 && is_inlinable
                 && self.upvals.len() == 0
             {
                 *protoflags |= 8; // LPF_INLINABLE = 1 << 3
+                cost_model = model_cost_ast_node_ast_local_usize_dense_hash_map_ast_expr_call_i32_dense_hash_map_ast_expr_constant(
+                    func_ref.body as *mut AstNode,
+                    func_ref.args.data as *const _,
+                    func_ref.args.size,
+                    &self.builtins,
+                    &self.constants,
+                );
             }
 
             (*self.bytecode).end_function(
                 self.stack_size as u8,
                 self.upvals.len() as u8,
                 *protoflags,
+                cost_model,
             );
 
             {
@@ -167,13 +175,17 @@ impl Compiler {
                 && !self.getfenv_used
                 && !self.setfenv_used
             {
-                let cost_model = model_cost_ast_node_ast_local_usize_dense_hash_map_ast_expr_call_i32_dense_hash_map_ast_expr_constant(
-                    func_ref.body as *mut AstNode,
-                    func_ref.args.data as *const _,
-                    func_ref.args.size,
-                    &*self.builtins_fold,
-                    &self.constants,
-                );
+                let cost_model = if cost_model == 0 {
+                    model_cost_ast_node_ast_local_usize_dense_hash_map_ast_expr_call_i32_dense_hash_map_ast_expr_constant(
+                        func_ref.body as *mut AstNode,
+                        func_ref.args.data as *const _,
+                        func_ref.args.size,
+                        &self.builtins,
+                        &self.constants,
+                    )
+                } else {
+                    cost_model
+                };
                 let returns_one = if self.always_terminates(func_ref.body as *mut AstStat) {
                     let mut rv = self.return_visitor_return_visitor();
                     luaur_ast::visit::ast_stat_block_visit(&*func_ref.body, &mut rv);

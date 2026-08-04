@@ -3,6 +3,7 @@ pub mod assert_handler;
 pub mod create_scope_data;
 pub mod create_thread;
 pub mod create_token;
+pub mod count_trailing_zeroes;
 pub mod edit_distance;
 pub mod equals_lower;
 pub mod escape;

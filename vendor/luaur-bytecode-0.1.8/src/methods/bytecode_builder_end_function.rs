@@ -36,7 +36,7 @@ pub fn has_native_comment_directive(hotcomments: &[HotComment]) -> bool {
 }
 
 impl BytecodeBuilder {
-    pub fn end_function(&mut self, maxstacksize: u8, numupvalues: u8, flags: u8) {
+    pub fn end_function(&mut self, maxstacksize: u8, numupvalues: u8, flags: u8, cost: u64) {
         LUAU_ASSERT!(self.current_function != u32::MAX);
 
         let current_function = self.current_function;
@@ -68,7 +68,7 @@ impl BytecodeBuilder {
         }
 
         let mut data = String::new();
-        self.write_function(&mut data, current_function, flags);
+        self.write_function(&mut data, current_function, flags, cost);
         self.functions[current_function as usize].data = data;
 
         self.current_function = u32::MAX;

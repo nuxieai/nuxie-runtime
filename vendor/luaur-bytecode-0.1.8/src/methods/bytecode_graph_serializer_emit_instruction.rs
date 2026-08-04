@@ -84,8 +84,18 @@ impl<'a> BytecodeGraphSerializer<'a> {
                 let out = self.get_register(insn_op);
                 self.bcb
                     .emit_ad(LuauOpcode::LOP_GETIMPORT, out, vm_const_input_d as i16);
-                let imm_import = self.get_imm_import(insn, 1);
-                self.bcb.emit_aux(imm_import);
+                let components_count = self.get_imm_int(insn, 1) as u32;
+                LUAU_ASSERT!(components_count > 0 && components_count <= 3);
+                LUAU_ASSERT!(insn.ops.len() - 2 == components_count as usize);
+                let mut aux = components_count << 30;
+                for component in 0..components_count {
+                    let component_id = self.get_vm_const_input_raw(insn, (2 + component) as u8);
+                    if component_id > 0x3ff {
+                        self.error = true;
+                    }
+                    aux |= component_id << (20 - 10 * component);
+                }
+                self.bcb.emit_aux(aux);
             }
             LuauOpcode::LOP_GETTABLE => {
                 let reg_input_0 = self.get_reg_input(insn, 0);

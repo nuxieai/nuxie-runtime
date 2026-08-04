@@ -1,4 +1,5 @@
 use crate::records::ast_array::AstArray;
+use crate::records::ast_local::AstLocal;
 use crate::records::ast_name::AstName;
 use crate::records::ast_type::AstType;
 use crate::records::ast_type_or_pack::AstTypeOrPack;
@@ -11,6 +12,7 @@ pub struct AstTypeReference {
     pub has_parameter_list: bool,
     pub prefix: Option<AstName>,
     pub prefix_location: Option<Location>,
+    pub prefix_local: *mut AstLocal,
     pub name: AstName,
     pub name_location: Location,
     pub parameters: AstArray<AstTypeOrPack>,

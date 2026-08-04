@@ -131,6 +131,12 @@ impl<'a> CallInliner<'a> {
 
         self.replace_call_usages_with_return_phis();
 
+        for return_op in &self.return_ops {
+            if return_op.kind == BcOpKind::Phi {
+                next_block.operator_deref_mut().phis.push_back(*return_op);
+            }
+        }
+
         self.drop_prep_var_args_in_inlined_path();
 
         LUAU_ASSERT!(self.validate());

@@ -27,7 +27,7 @@ impl<'a> BytecodeGraphParser<'a> {
 
         let mut r = reg;
         while r < multi_return_start {
-            let static_reg_op = self.find_producer_bc_op_reg(block, r);
+            let static_reg_op = self.read_variable(block, r);
             LUAU_ASSERT!(static_reg_op.is_some());
             res.push(static_reg_op.unwrap());
             r += 1;

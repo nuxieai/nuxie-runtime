@@ -17,3 +17,15 @@
 - Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
 - Touched areas: const syntax promotion, grouped type CSTs, local-function
   const keyword positions, and extern type-definition compatibility.
+
+## Luau fork rung 4
+
+- Ported official Luau 0.728 delta (upstream f1f121dc..ddcea05e).
+- Touched areas: removed parser/CST flags, const-underfill AST recovery, and
+  unconditional grouped-expression CST storage.
+
+## Luau fork rung 5
+
+- Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
+- Touched areas: qualified-type prefix-local tracking and duplicate binary
+  prefix validation, both registered dark behind their new flags.

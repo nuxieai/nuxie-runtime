@@ -10,7 +10,10 @@ impl<'a> CallInliner<'a> {
             // across the method call. Since BcOps is a SmallVector (which is Clone),
             // we clone the ops, modify them, and put them back.
             let mut ops = self.caller.instructions[i as usize].ops.clone();
-            self.replace_call_usages_in_ops(&mut ops);
+            self.replace_call_usages_in_ops(
+                BcOp::bc_op_bc_op_kind_u32(BcOpKind::Inst, i),
+                &mut ops,
+            );
             self.caller.instructions[i as usize].ops = ops;
         }
 
@@ -27,7 +30,7 @@ impl<'a> CallInliner<'a> {
 
             if !found {
                 let mut ops = self.caller.phis[i].ops.clone();
-                self.replace_call_usages_in_ops(&mut ops);
+                self.replace_call_usages_in_ops(candidate, &mut ops);
                 self.caller.phis[i].ops = ops;
             }
         }

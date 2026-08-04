@@ -1,4 +1,5 @@
 use crate::enums::bc_block_edge_kind::BcBlockEdgeKind;
+use crate::enums::bc_block_flag::BcBlockFlag;
 use crate::enums::bc_op_kind::BcOpKind;
 use crate::records::bc_block::BcBlock;
 use crate::records::bc_function::VmConst;
@@ -27,6 +28,9 @@ impl<'a> BytecodeGraphSerializer<'a> {
             };
             if let Some(fallthrough_op) = fallthrough {
                 if fallthrough_op != self.func.exit_block
+                    && (self.func.blocks[fallthrough_op.index as usize].flags
+                        & BcBlockFlag::Dead as u8)
+                        == 0
                     && (i + 1 >= schedule.len() || fallthrough_op != schedule[(i + 1) as usize])
                 {
                     let mut jump = BcJump::<VmConst>::create(self.func);

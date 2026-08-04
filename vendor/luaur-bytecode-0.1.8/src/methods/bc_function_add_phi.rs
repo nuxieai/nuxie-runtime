@@ -8,6 +8,7 @@ impl BcFunction {
     pub fn add_phi(&mut self) -> BcOp {
         self.phis.push(BcPhi {
             ops: Default::default(),
+            uses: Default::default(),
         });
         BcOp::bc_op_bc_op_kind_u32(BcOpKind::Phi, (self.phis.len() - 1) as u32)
     }

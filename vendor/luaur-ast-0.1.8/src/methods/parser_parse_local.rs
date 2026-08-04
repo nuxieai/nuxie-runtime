@@ -178,81 +178,38 @@ impl Parser {
                 unsafe { (**values.back()).base.location }
             };
 
-            if luaur_common::FFlag::LuauConstJustReportErrorForUnderfill.get() {
-                let node = unsafe {
-                    (*self.allocator).alloc(AstStatLocal::new(
-                        Location::new(start.begin, end.end),
-                        self.copy_temp_vector_t(&vars),
-                        self.copy_temp_vector_t(&values),
-                        equals_sign_location,
-                        is_const,
+            let node = unsafe {
+                (*self.allocator).alloc(AstStatLocal::new(
+                    Location::new(start.begin, end.end),
+                    self.copy_temp_vector_t(&vars),
+                    self.copy_temp_vector_t(&values),
+                    equals_sign_location,
+                    is_const,
+                ))
+            };
+
+            if self.options.store_cst_data {
+                let cst_node = unsafe {
+                    (*self.allocator).alloc(CstStatLocal::new(
+                        self.extract_annotation_colon_positions(&names),
+                        vars_comma_positions,
+                        self.copy_temp_vector_t(&values_comma_positions),
                     ))
                 };
-
-                if self.options.store_cst_data {
-                    let cst_node = unsafe {
-                        (*self.allocator).alloc(CstStatLocal::new(
-                            self.extract_annotation_colon_positions(&names),
-                            vars_comma_positions,
-                            self.copy_temp_vector_t(&values_comma_positions),
-                        ))
-                    };
-                    self.cst_node_map.try_insert(
-                        node as *mut crate::records::ast_node::AstNode,
-                        cst_node as *mut crate::records::cst_node::CstNode,
-                    );
-                }
-
-                if is_const && !is_enough_values(&mut values, vars.size()) {
-                    self.report(
-                        unsafe { (*node).base.base.location },
-                        format_args!("Missing initializer in const declaration"),
-                    );
-                }
-
-                return node as *mut AstStat;
-            } else {
-                if is_const && !is_enough_values(&mut values, vars.size()) {
-                    return self.report_stat_error(
-                        Location::new(start.begin, end.end),
-                        AstArray {
-                            data: core::ptr::null_mut(),
-                            size: 0,
-                        },
-                        AstArray {
-                            data: core::ptr::null_mut(),
-                            size: 0,
-                        },
-                        format_args!("Missing initializer in const declaration"),
-                    ) as *mut AstStat;
-                }
-
-                let node = unsafe {
-                    (*self.allocator).alloc(AstStatLocal::new(
-                        Location::new(start.begin, end.end),
-                        self.copy_temp_vector_t(&vars),
-                        self.copy_temp_vector_t(&values),
-                        equals_sign_location,
-                        is_const,
-                    ))
-                };
-
-                if self.options.store_cst_data {
-                    let cst_node = unsafe {
-                        (*self.allocator).alloc(CstStatLocal::new(
-                            self.extract_annotation_colon_positions(&names),
-                            vars_comma_positions,
-                            self.copy_temp_vector_t(&values_comma_positions),
-                        ))
-                    };
-                    self.cst_node_map.try_insert(
-                        node as *mut crate::records::ast_node::AstNode,
-                        cst_node as *mut crate::records::cst_node::CstNode,
-                    );
-                }
-
-                return node as *mut AstStat;
+                self.cst_node_map.try_insert(
+                    node as *mut crate::records::ast_node::AstNode,
+                    cst_node as *mut crate::records::cst_node::CstNode,
+                );
             }
+
+            if is_const && !is_enough_values(&mut values, vars.size()) {
+                self.report(
+                    unsafe { (*node).base.base.location },
+                    format_args!("Missing initializer in const declaration"),
+                );
+            }
+
+            return node as *mut AstStat;
         }
     }
 }

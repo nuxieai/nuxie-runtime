@@ -25,18 +25,24 @@ impl<'a> CallInliner<'a> {
                 )
             }
             BcOpKind::Phi => {
-                let phi_op = self.caller.add_phi();
-                let target_phi_ref = self.target.phi(target_op);
-                let ops_len = target_phi_ref.operator_deref().ops.len();
+                if let Some(mapped) = self.mapped_phis.find(&target_op) {
+                    return *mapped;
+                }
 
-                for i in 0..ops_len {
-                    let target_phi_op = {
-                        let target_phi = self.target.phi(target_op);
-                        target_phi.operator_deref().ops[i]
-                    };
+                let phi_op = self.caller.add_phi();
+                self.mapped_phis.try_insert(target_op, phi_op);
+                let target_phi_ops: Vec<BcOp> = self
+                    .target
+                    .phi(target_op)
+                    .operator_deref()
+                    .ops
+                    .iter()
+                    .copied()
+                    .collect();
+
+                for target_phi_op in target_phi_ops {
                     let mapped = self.map_to_caller_op(target_phi_op);
-                    let mut phi = self.caller.phi(phi_op);
-                    phi.operator_deref_mut().ops.push_back(mapped);
+                    self.caller.add_use_phi(phi_op, mapped);
                 }
                 phi_op
             }

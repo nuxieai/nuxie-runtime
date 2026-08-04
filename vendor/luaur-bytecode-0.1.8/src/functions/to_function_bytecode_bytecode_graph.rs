@@ -106,7 +106,7 @@ pub fn to_function_bytecode_bytecode_builder_comp_time_bc_function(
 
     bcb.fold_jumps();
     bcb.expand_jumps();
-    bcb.end_function(fn_.maxstacksize, fn_.nups, fn_.flags);
+    bcb.end_function(fn_.maxstacksize, fn_.nups, fn_.flags, 0);
 
     if serializer.error() {
         return String::new();

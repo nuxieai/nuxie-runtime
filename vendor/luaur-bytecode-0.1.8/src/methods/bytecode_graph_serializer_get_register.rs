@@ -1,6 +1,5 @@
 use crate::enums::bc_op_kind::BcOpKind;
 use crate::records::bc_op::BcOp;
-use crate::records::bc_phi::BcPhi;
 use crate::type_aliases::reg::Reg;
 
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
@@ -10,39 +9,14 @@ impl<'a> crate::records::bytecode_graph_serializer::BytecodeGraphSerializer<'a> 
     pub fn get_register(&mut self, op: BcOp) -> Reg {
         match op.kind {
             BcOpKind::Phi => {
-                // Avoid holding `&mut` to `self.func` while recursively calling `self.get_register`.
-                let ops_len;
-                let first_op;
-                {
-                    let phi: &mut BcPhi = self.func.phi_op(op);
-                    LUAU_ASSERT!(phi.ops.len() > 0);
-                    LUAU_ASSERT!(phi.ops[0] != op);
-
-                    ops_len = phi.ops.len();
-                    first_op = phi.ops[0];
-
-                    // Additional assert: all phi operands map to the same register.
-                    // We snapshot the operands count now to iterate after recursion.
+                LUAU_ASSERT!(!self.func.phis[op.index as usize].ops.is_empty());
+                if let Some(reg) = self.func.regs.get(&op) {
+                    return *reg;
                 }
 
-                let res = self.get_register(first_op);
-
-                let mut i = 0usize;
-                loop {
-                    if i >= ops_len {
-                        break;
-                    }
-
-                    let phi_op = {
-                        let phi: &mut BcPhi = self.func.phi_op(op);
-                        phi.ops[i]
-                    };
-
-                    LUAU_ASSERT!(res == self.get_register(phi_op));
-                    i += 1;
-                }
-
-                res
+                let first_op = self.func.phis[op.index as usize].ops[0];
+                LUAU_ASSERT!(first_op != op);
+                self.get_register(first_op)
             }
             BcOpKind::Inst => {
                 let res = self.func.regs.get(&op);

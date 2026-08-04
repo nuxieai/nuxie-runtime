@@ -52,6 +52,7 @@ impl Parser {
                         data: core::ptr::null_mut(),
                         size: 0,
                     },
+                    core::ptr::null_mut(),
                 )) as *mut AstType
             };
         } else {

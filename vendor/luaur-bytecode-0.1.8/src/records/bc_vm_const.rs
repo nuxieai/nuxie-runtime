@@ -7,6 +7,33 @@ pub struct BcVmConst {
     pub value: BcVmConstValue,
 }
 
+impl PartialEq for BcVmConst {
+    fn eq(&self, rhs: &Self) -> bool {
+        if self.kind != rhs.kind {
+            return false;
+        }
+
+        unsafe {
+            match self.kind {
+                BcVmConstKind::Nil => true,
+                BcVmConstKind::Boolean => self.value.valueBoolean == rhs.value.valueBoolean,
+                BcVmConstKind::Number => self.value.valueNumber == rhs.value.valueNumber,
+                BcVmConstKind::Vector => {
+                    self.value.valueVector[0] == rhs.value.valueVector[0]
+                        && self.value.valueVector[1] == rhs.value.valueVector[1]
+                        && self.value.valueVector[2] == rhs.value.valueVector[2]
+                        && self.value.valueVector[3] == rhs.value.valueVector[3]
+                }
+                BcVmConstKind::String => self.value.valueString == rhs.value.valueString,
+                BcVmConstKind::Import => self.value.valueImport == rhs.value.valueImport,
+                BcVmConstKind::Table => self.value.valueTable == rhs.value.valueTable,
+                BcVmConstKind::Closure => self.value.valueClosure == rhs.value.valueClosure,
+                BcVmConstKind::Integer => self.value.valueInteger == rhs.value.valueInteger,
+            }
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union BcVmConstValue {

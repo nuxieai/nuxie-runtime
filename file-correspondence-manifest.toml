@@ -5443,13 +5443,13 @@ note = "MR-3 justification: Consolidated Rust port for viewmodel. Schema-derived
 upstream = "src/virtualizing_component.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard/virtualizing_component.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0446"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port. C17 exception: retained modules are `crates/nuxie-runtime/src/lib.rs`; the retained crate root is live wiring while virtualization behavior is expressed through shared layout/component capabilities, leaving no complete VirtualizingComponent body to extract."
+note = "Consolidated runtime port. The direct C++-counterpart module `crates/nuxie-runtime/src/artboard/virtualizing_component.rs` owns the retained virtualization interface while the crate root keeps unchanged live wiring."
 
 [[file]]
 upstream = "src/world_transform_component.cpp"

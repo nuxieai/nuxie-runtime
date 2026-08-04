@@ -3376,7 +3376,7 @@ status = "faithful"
 upstream = "src/virtualizing_component.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard/virtualizing_component.rs"]
 dynamically_reached = false
 status = "faithful"
 

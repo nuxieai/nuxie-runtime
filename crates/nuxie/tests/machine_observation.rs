@@ -21,6 +21,7 @@ struct ObservedMachine {
 fn observed_machine(scene: &mut Scene, name: &str) -> Result<(nuxie::ArtboardId, MachineId)> {
     let ((artboard, machine), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: name.into(),
             width: 100.0,
             height: 100.0,
@@ -225,6 +226,7 @@ fn snapshot_distinguishes_foreign_and_unknown_machines() -> Result<()> {
     let mut lonely = Scene::new();
     let ((lonely_artboard, _), _) = lonely.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Lonely".into(),
             width: 100.0,
             height: 100.0,

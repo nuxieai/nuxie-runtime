@@ -3272,7 +3272,7 @@ b6_row_id = "B6-0265"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "LUABIND-report.md"
-note = "2026-08-03 LT-2 faithful candidate: lua_data_value.rs now ports pinned luaL_checknumber/string/boolean/unsigned coercion, signed/spill channel writes, silent non-color/unknown writes, and named invalid-channel reads. crates/nuxie-scripting/tests/vm_boot.rs::scripted_data_values_match_lua_check_coercion_and_index_semantics directly exercises every previously cited gap against src/lua/lua_data_value.cpp:21-503."
+note = "2026-08-03 LT-2/F7 faithful candidate: lua_data_value.rs now ports pinned luaL_checknumber/string/boolean/unsigned coercion, signed/spill channel writes, silent non-color/unknown writes, and named invalid-channel reads. crates/nuxie-scripting/tests/vm_boot.rs::scripted_data_values_match_lua_check_coercion_and_index_semantics directly exercises every previously cited gap against src/lua/lua_data_value.cpp:21-503."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -3356,7 +3356,7 @@ b6_row_id = "B6-0272"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "LUABIND-report.md"
-note = "2026-08-03 LT-2 faithful candidate: Data.<ViewModel>.new dispatches exactly one nil/string-or-number/other argument like pinned lua_state.cpp, returns nil for boolean/table, and treats zero or multiple arguments as a fresh instance. crates/nuxie-scripting/src/vm/view_model.rs::data_constructor_matches_pinned_argument_count_and_type_dispatch is direct evidence."
+note = "2026-08-03 LT-2/F7 faithful candidate: Data.<ViewModel>.new dispatches exactly one nil/string-or-number/other argument like pinned lua_state.cpp, returns nil for boolean/table, and treats zero or multiple arguments as a fresh instance. crates/nuxie-scripting/src/vm/view_model.rs::data_constructor_matches_pinned_argument_count_and_type_dispatch is direct evidence."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
@@ -3463,7 +3463,7 @@ b6_row_id = "B6-0281"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "LUABIND-report.md"
-note = "2026-08-03 LT-2 faithful candidate: Gradient stop iteration now terminates at the first non-table and positions/colors use the pinned Lua check/coercion path, including luaL_checkunsigned wrapping. crates/nuxie-scripting/tests/renderer_bindings.rs::gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors closes both cited gaps; scripted_draw_can_allocate_and_apply_gradients covers allocation and shader use."
+note = "2026-08-03 LT-2/F7 faithful candidate: Gradient stop iteration now terminates at the first non-table and positions/colors use the pinned Lua check/coercion path, including luaL_checkunsigned wrapping. crates/nuxie-scripting/tests/renderer_bindings.rs::gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors closes both cited gaps; scripted_draw_can_allocate_and_apply_gradients covers allocation and shader use."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"

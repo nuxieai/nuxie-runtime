@@ -35,3 +35,9 @@ Provenance:
 - Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
 - Touched areas: bytecode-v12 loading and proto cost storage, coroutine C-call
   restoration, userdata tag APIs, and direct-field GC atomic remarking.
+
+## Luau fork rung 6
+
+- Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
+- Touched areas: unsigned user-defined-class member offsets, dark negative-zero
+  rounding, and flag-gated userdata direct-access GC marking/validation.

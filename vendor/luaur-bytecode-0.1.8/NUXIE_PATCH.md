@@ -18,3 +18,9 @@
 - Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
 - Touched areas: bytecode-v12 proto sizing and cost metadata, graph-parser
   metadata consumption, and the new SCCP constant-evaluation entities.
+
+## Luau fork rung 6
+
+- Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
+- Touched areas: unconditional bytecode-v9 emission, `DenseHash2`-backed SCCP
+  state, and the SCCP evaluator, propagation driver, and graph rewrites.

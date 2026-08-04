@@ -83,6 +83,7 @@ mod data_converter_group;
 mod listener_viewmodel_change;
 mod state_machine_instance;
 mod text_input_listener_group;
+mod viewmodel_instance_trigger;
 
 #[cfg(test)]
 use state_machine_instance::RuntimeDeferredCallbackProbe;

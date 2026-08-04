@@ -3328,7 +3328,7 @@ status = "faithful"
 upstream = "src/viewmodel/viewmodel_instance_trigger.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-binary/src/lib.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs", "crates/nuxie-runtime/src/view_model.rs", "crates/nuxie-runtime/src/view_model_cell.rs", "crates/nuxie-runtime/src/viewmodel/viewmodel_instance_trigger.rs"]
+rust_modules = ["crates/nuxie-binary/src/lib.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/viewmodel_instance_trigger.rs", "crates/nuxie-runtime/src/view_model.rs", "crates/nuxie-runtime/src/view_model_cell.rs", "crates/nuxie-runtime/src/viewmodel/viewmodel_instance_trigger.rs"]
 dynamically_reached = true
 status = "faithful"
 

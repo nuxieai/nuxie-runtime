@@ -1044,16 +1044,13 @@ impl ArtboardInstance {
                 let mut child_ancestors = nested_ancestors.to_vec();
                 child_ancestors.push(child_graph.global_id);
                 let host_world = match command.object_kind {
-                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => {
-                        runtime_nested_artboard_layout_world_transform(
+                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => path_cache
+                        .component_world_transform_with_bounds(
                             self,
                             graph,
                             host_local_id,
-                            nested.child.as_ref(),
                             layout_bounds,
-                            path_cache,
-                        )
-                    }
+                        ),
                     RuntimeDrawableDispatchObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -1659,15 +1656,7 @@ impl ArtboardInstance {
                     path_cache,
                 )
                 .ok()?,
-                "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
-                    self,
-                    graph,
-                    local_id,
-                    nested.child.as_ref(),
-                    layout_bounds,
-                    path_cache,
-                ),
-                "NestedArtboard" => path_cache
+                "NestedArtboard" | "NestedArtboardLayout" => path_cache
                     .component_world_transform_with_bounds(self, graph, local_id, layout_bounds),
                 _ => unreachable!("nested-artboard type was preflighted"),
             };
@@ -15379,17 +15368,10 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let bounds = if instance.layout_node_owned_by_host {
-                // `Artboard::takeLayoutData()` disables the mounted child's
-                // own layout solve. Draw reads the last parent-owned Yoga
-                // snapshot instead of recomputing the transferred subtree
-                // from live child data binds (`artboard.cpp:1245-1253,
-                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
-                instance.layout_constraint_bounds.as_deref().cloned()
-            } else {
-                TaffyRuntimeLayoutEngine
-                    .compute_layout(instance, graph, runtime)
-                    .map(|layout| layout.bounds)
+            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
+            let bounds = match layout {
+                Some(layout) => Some(layout.bounds),
+                None => None,
             };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
@@ -17715,13 +17697,11 @@ fn runtime_draw_live_nested_artboard(
         .context("mounted nested artboard graph is missing")?;
 
     let host_world = match drawable.type_name {
-        "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
+        "NestedArtboardLayout" => path_cache.component_world_transform_with_bounds(
             instance,
             graph,
             host_local,
-            child,
             layout_bounds,
-            path_cache,
         ),
         "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
             instance,
@@ -18829,61 +18809,6 @@ impl RuntimeAabb {
             height: bounds.height,
         }
     }
-}
-
-/// Port the translation owner used by `NestedArtboardLayout::update`.
-///
-/// The parent solve supplies size/target bounds, but the mounted child
-/// Artboard retains the current interpolated Yoga left/top. Start with the
-/// ordinary host transform and replace only the solved parent-local
-/// translation with that retained position, preserving authored linear
-/// transforms and parent affine composition
-/// (`nested_artboard_layout.cpp:53-78`; `artboard.cpp:1120-1137`).
-fn runtime_nested_artboard_layout_world_transform(
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    local_id: usize,
-    child: &ArtboardInstance,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    path_cache: &mut RuntimeArtboardPathState,
-) -> Mat2D {
-    let mut world = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        local_id,
-        layout_bounds,
-    );
-    let Some((retained_x, retained_y)) = child
-        .component(0)
-        .and_then(|component| component.concrete.layout.as_ref())
-        .map(|layout| layout.position())
-    else {
-        return world;
-    };
-    let Some(solved) = layout_bounds.and_then(|bounds| bounds.get(&local_id).copied()) else {
-        return world;
-    };
-    let parent_local = instance.component_parent_local(local_id);
-    let solved_parent_local = parent_local
-        .and_then(|parent_local| {
-            layout_bounds
-                .and_then(|bounds| bounds.get(&parent_local).copied())
-                .map(|parent| (solved.x - parent.x, solved.y - parent.y))
-        })
-        .unwrap_or((solved.x, solved.y));
-    let parent_world = parent_local.map_or(Mat2D::IDENTITY, |parent_local| {
-        path_cache.component_world_transform_with_bounds(
-            instance,
-            graph,
-            parent_local,
-            layout_bounds,
-        )
-    });
-    let delta_x = retained_x - solved_parent_local.0;
-    let delta_y = retained_y - solved_parent_local.1;
-    world.0[4] += parent_world.0[0] * delta_x + parent_world.0[2] * delta_y;
-    world.0[5] += parent_world.0[1] * delta_x + parent_world.0[3] * delta_y;
-    world
 }
 
 fn runtime_nested_artboard_leaf_world_transform(

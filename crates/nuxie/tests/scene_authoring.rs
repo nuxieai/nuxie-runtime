@@ -15672,3 +15672,281 @@ fn layout_display_bind_swaps_a_flex_slot_and_relayouts_live() -> Result<()> {
     );
     Ok(())
 }
+
+/// Authors one `LayoutComponent` chain whose visual leaves are Shapes, the
+/// shape the projection corpus emits for nested views. Returns the artboard,
+/// the two layout owners, and the parent-opacity timeline.
+fn inherited_opacity_scene() -> Result<(Scene, ArtboardId, ObjectId, ObjectId, AnimationId)> {
+    fn layout_spec(name: &str, opacity: f32, width: f32, height: f32) -> LayoutComponentSpec {
+        LayoutComponentSpec {
+            name: name.into(),
+            x: 0.0,
+            y: 0.0,
+            opacity,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            clip: false,
+            width,
+            height,
+            fractional_width: 1.0,
+            fractional_height: 1.0,
+            style: LayoutComponentStyleSpec::default(),
+        }
+    }
+
+    fn background(
+        tx: &mut SceneTx<'_>,
+        owner: ObjectId,
+        name: &str,
+        width: f32,
+        height: f32,
+        color: ColorInt,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let shape = tx.create(
+            Parent::Object(owner),
+            NodeSpec::Shape(ShapeSpec {
+                name: format!("{name} Shape"),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new(
+                format!("{name} Rectangle"),
+                width,
+                height,
+            )),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: format!("{name} Fill"),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} Color"),
+                color,
+            }),
+        )?;
+        Ok(shape)
+    }
+
+    let mut scene = Scene::new();
+    let ((artboard, parent, child, fade), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Inherited opacity".into(),
+            width: 160.0,
+            height: 100.0,
+        })?;
+        let parent = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(layout_spec("Parent", 0.35, 100.0, 80.0)),
+        )?;
+        background(tx, parent, "Parent", 100.0, 80.0, 0xff11_2233)?;
+        let child = tx.create(
+            Parent::Object(parent),
+            NodeSpec::LayoutComponent(layout_spec("Child", 0.5, 40.0, 20.0)),
+        )?;
+        background(tx, child, "Child", 40.0, 20.0, 0xffff_0000)?;
+
+        let fade = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Fade parent".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        let mut animations = tx.animations();
+        animations.set_key(fade, parent, props::WORLD_OPACITY, 0, 0.0)?;
+        animations.set_key(fade, parent, props::WORLD_OPACITY, 60, 1.0)?;
+        Ok((artboard, parent, child, fade))
+    })?;
+    Ok((scene, artboard, parent, child, fade))
+}
+
+/// `TransformComponent::update` multiplies a component's authored opacity by
+/// its parent's settled `childOpacity`, and `WorldTransformComponent::
+/// opacityChanged` recurses `RenderOpacity` to every graph dependent
+/// (`src/transform_component.cpp:110-116`,
+/// `src/world_transform_component.cpp:25-28`). A retained descendant must
+/// therefore draw the product, not its local opacity, at first settlement and
+/// after every later parent write.
+#[test]
+fn retained_descendants_draw_the_product_of_local_and_settled_parent_opacity() -> Result<()> {
+    let (mut scene, artboard, parent, child, fade) = inherited_opacity_scene()?;
+    let instance = scene.instantiate(artboard)?;
+
+    // Initial settlement: 0.35 parent x 0.5 child = 0.175.
+    let settled = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        settled.contains("color=0x59112233"),
+        "the parent background records its own settled opacity: {settled}",
+    );
+    assert!(
+        settled.contains("color=0x2dff0000"),
+        "the retained child must record local x settled parent opacity: {settled}",
+    );
+
+    // A live parent opacity write recomposes the descendant in the same frame.
+    let parent_opacity = scene.cursor(instance, parent, props::WORLD_OPACITY)?;
+    assert!(scene.frame().set(parent_opacity, 0.5_f32)?);
+    let written = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        written.contains("color=0x80112233") && written.contains("color=0x40ff0000"),
+        "a live parent opacity write must recompose the retained child: {written}",
+    );
+
+    // A timeline parent opacity write drives the same recomposition.
+    scene.frame().scrub(instance, fade, 1.0)?;
+    let opaque = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        opaque.contains("color=0xff112233") && opaque.contains("color=0x80ff0000"),
+        "an opaque parent timeline must reveal the child at its local opacity: {opaque}",
+    );
+    scene.frame().scrub(instance, fade, 0.5)?;
+    let midpoint = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        midpoint.contains("color=0x80112233") && midpoint.contains("color=0x40ff0000"),
+        "a timeline parent opacity write must recompose the retained child: {midpoint}",
+    );
+
+    // A live descendant write composes against the parent settled above it.
+    let child_opacity = scene.cursor(instance, child, props::WORLD_OPACITY)?;
+    assert!(scene.frame().set(child_opacity, 1.0_f32)?);
+    let opaque_child = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        opaque_child.contains("color=0x80ff0000"),
+        "an opaque child still inherits the parent's settled opacity: {opaque_child}",
+    );
+    assert!(scene.frame().set(child_opacity, 0.5_f32)?);
+
+    // Nested visibility composes with opacity: a fully transparent parent
+    // removes the whole subtree from the draw stream, and restoring the
+    // parent restores the composed child alpha at the same fixpoint.
+    scene.frame().scrub(instance, fade, 0.0)?;
+    let hidden = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        !hidden.contains("112233") && !hidden.contains("ff0000"),
+        "a transparent parent hides itself and its retained descendants: {hidden}",
+    );
+    scene.frame().scrub(instance, fade, 0.5)?;
+    let restored = canonical_draw_stream(&mut scene, instance)?;
+    assert_eq!(
+        restored, midpoint,
+        "restoring the parent returns the composed subtree to one fixpoint",
+    );
+    Ok(())
+}
+
+/// `TransformComponent::update` reads `m_ParentTransformComponent`, the typed
+/// parent retained by `onAddedClean` — opacity composes along the transform
+/// parent chain only (`src/transform_component.cpp:9-16,110-116`). A branch
+/// that is a *sibling* of a descendant never contributes to it, however deep
+/// its own subtree runs.
+#[test]
+fn parent_opacity_composes_along_the_transform_chain_not_sibling_branches() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Sibling branches".into(),
+            width: 160.0,
+            height: 100.0,
+        })?;
+        let owner = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Owner".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 100.0,
+                height: 80.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        // A dimmed sibling branch under the same owner.
+        let dimmed = tx.create(
+            Parent::Object(owner),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Dimmed sibling".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 0.5,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(dimmed),
+            NodeSpec::Rectangle(RectangleSpec::new("Dimmed Rectangle", 100.0, 80.0)),
+        )?;
+        let dimmed_fill = tx.create(
+            Parent::Object(dimmed),
+            NodeSpec::Fill(FillSpec {
+                name: "Dimmed Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(dimmed_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Dimmed Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        // A cousin branch under the same owner keeps its own local opacity.
+        let cousin = tx.create(
+            Parent::Object(owner),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Cousin".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 0.5,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(cousin),
+            NodeSpec::Rectangle(RectangleSpec::new("Cousin Rectangle", 40.0, 20.0)),
+        )?;
+        let cousin_fill = tx.create(
+            Parent::Object(cousin),
+            NodeSpec::Fill(FillSpec {
+                name: "Cousin Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(cousin_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Cousin Color".into(),
+                color: 0xffff_0000,
+            }),
+        )?;
+        Ok(artboard)
+    })?;
+
+    let instance = scene.instantiate(artboard)?;
+    let stream = canonical_draw_stream(&mut scene, instance)?;
+    assert!(
+        stream.contains("color=0x80112233") && stream.contains("color=0x80ff0000"),
+        "a sibling branch's opacity never reaches a cousin subtree: {stream}",
+    );
+    Ok(())
+}

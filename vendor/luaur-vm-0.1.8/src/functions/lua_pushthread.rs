@@ -16,6 +16,7 @@ pub unsafe fn lua_pushthread(l: *mut lua_State) -> i32 {
         );
     }
 
+    crate::ensure_stack!(l, 1);
     setthvalue!(l, (*l).top, l);
     api_incr_top!(l);
     ((*(*l).global).mainthread == l) as i32

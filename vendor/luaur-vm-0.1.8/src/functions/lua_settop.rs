@@ -8,10 +8,7 @@ use crate::type_aliases::lua_state::lua_State;
 #[export_name = "luaur_lua_settop"]
 pub unsafe fn lua_settop(L: *mut lua_State, idx: c_int) {
     if idx >= 0 {
-        api_check!(
-            L,
-            idx as isize <= unsafe { (*L).stack_last.offset_from((*L).base) }
-        );
+        crate::ensure_stack!(L, idx - (*L).top.offset_from((*L).base) as c_int);
         while unsafe { (*L).top < (*L).base.add(idx as usize) } {
             setnilvalue!(unsafe { (*L).top });
             unsafe {

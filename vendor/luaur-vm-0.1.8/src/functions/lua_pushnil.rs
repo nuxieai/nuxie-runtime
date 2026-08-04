@@ -5,6 +5,7 @@ use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_pushnil"]
 pub unsafe fn lua_pushnil(l: *mut lua_State) {
+    crate::ensure_stack!(l, 1);
     setnilvalue!((*l).top);
     api_incr_top!(l);
 }

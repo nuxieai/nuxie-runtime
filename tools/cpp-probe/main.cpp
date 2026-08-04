@@ -301,6 +301,7 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_artboard.hpp"
+#include "rive/viewmodel/viewmodel_instance_asset_blob.hpp"
 #include "rive/viewmodel/viewmodel_instance_asset_font.hpp"
 #include "rive/viewmodel/viewmodel_instance_asset_image.hpp"
 #include "rive/viewmodel/viewmodel_instance_boolean.hpp"
@@ -315,6 +316,7 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/viewmodel_instance_symbol_list_index.hpp"
 #include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_artboard_runtime.hpp"
+#include "rive/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_asset_font_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_asset_image_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_boolean_runtime.hpp"
@@ -13651,6 +13653,14 @@ void write_view_model_instance_value_runtime(
         out << ",\"assetIndex\":"
             << value->as<rive::ViewModelInstanceAssetFont>()->propertyValue();
     }
+    else if (value->is<rive::ViewModelInstanceAssetBlob>())
+    {
+        rive::ViewModelInstanceAssetBlobRuntime runtime(
+            value->as<rive::ViewModelInstanceAssetBlob>());
+        out << static_cast<unsigned int>(runtime.dataType());
+        out << ",\"assetIndex\":"
+            << value->as<rive::ViewModelInstanceAssetBlob>()->propertyValue();
+    }
     else if (value->is<rive::ViewModelInstanceArtboard>())
     {
         rive::ViewModelInstanceArtboardRuntime runtime(
@@ -13758,6 +13768,12 @@ void write_view_model_instance_source_data_value(
         out << static_cast<unsigned int>(rive::DataType::assetFont);
         out << ",\"integerValue\":"
             << value->as<rive::ViewModelInstanceAssetFont>()->propertyValue();
+    }
+    else if (value->is<rive::ViewModelInstanceAssetBlob>())
+    {
+        out << static_cast<unsigned int>(rive::DataType::assetBlob);
+        out << ",\"integerValue\":"
+            << value->as<rive::ViewModelInstanceAssetBlob>()->propertyValue();
     }
     else if (value->is<rive::ViewModelInstanceArtboard>())
     {

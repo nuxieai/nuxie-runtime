@@ -1,4 +1,6 @@
 use crate::enums::lua_status::lua_Status;
+use crate::functions::callerrfunc::callerrfunc;
+use crate::functions::lua_d_rawrunprotected_ldo::luaD_rawrunprotected;
 use crate::functions::lua_d_seterrorobj::luaD_seterrorobj;
 use crate::functions::lua_f_close::luaF_close;
 use crate::functions::luau_poscall::luau_poscall;
@@ -14,7 +16,7 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
 pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
-    let ci = ud as *mut CallInfo;
+    let mut ci = ud as *mut CallInfo;
     let cl = ci_func!(ci);
 
     LUAU_ASSERT!(((*ci).flags & LUA_CALLINFO_HANDLE as u32) != 0);
@@ -28,25 +30,69 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
 
     (*ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
 
-    let status = (*l).status as i32;
+    let mut status = (*l).status as i32;
     (*l).status = lua_Status::LUA_OK as u8;
 
     if status != lua_Status::LUA_ERRRUN as i32 {
         luaD_seterrorobj(l, status, (*l).top);
     }
 
-    (*l).base = (*ci).base;
-    (*ci).top = (*l).top;
+    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() && (*ci).context.errfunc != 0 {
+        let old_ci = saveci!(l, ci);
+        let errfunc = (*ci).context.errfunc;
+        let err = luaD_rawrunprotected(
+            l,
+            Some(callerrfunc),
+            (*ci).base.add((errfunc - 1) as usize) as *mut core::ffi::c_void,
+        );
 
-    let old_ci = saveci!(l, ci);
+        (*l).nCcalls = (*l).baseCcalls;
 
-    let n = (*c).cont.unwrap()(l, status);
+        if err == 0 {
+            status = lua_Status::LUA_ERRRUN as i32;
+        } else if status == lua_Status::LUA_ERRMEM as i32 && err == lua_Status::LUA_ERRMEM as i32 {
+            status = lua_Status::LUA_ERRMEM as i32;
+        } else {
+            status = lua_Status::LUA_ERRERR as i32;
+        }
 
-    (*l).ci = restoreci!(l, old_ci);
+        luaD_seterrorobj(l, status, (*l).top.offset(-1));
 
-    luaF_close(l, (*(*l).ci).base);
-    restore_stack_limit(l);
+        ci = restoreci!(l, old_ci);
+        (*ci).context.errfunc = 0;
+    }
 
-    luau_poscall(l, (*l).top.offset(-(n as isize)));
+    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+        (*l).ci = ci;
+        luaF_close(l, (*(*l).ci).base);
+
+        (*l).base = (*ci).base;
+        (*ci).top = (*l).top;
+
+        restore_stack_limit(l);
+
+        let n = (*c).cont.unwrap()(l, status);
+
+        if (*l).status != lua_Status::LUA_OK as u8 {
+            return;
+        }
+
+        luau_poscall(l, (*l).top.offset(-(n as isize)));
+    } else {
+        (*l).base = (*ci).base;
+        (*ci).top = (*l).top;
+
+        let old_ci = saveci!(l, ci);
+
+        let n = (*c).cont.unwrap()(l, status);
+
+        (*l).ci = restoreci!(l, old_ci);
+
+        luaF_close(l, (*(*l).ci).base);
+        restore_stack_limit(l);
+
+        luau_poscall(l, (*l).top.offset(-(n as isize)));
+    }
+
     resume_continue(l);
 }

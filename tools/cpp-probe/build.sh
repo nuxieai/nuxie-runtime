@@ -54,10 +54,8 @@ else
 fi
 if [[ "$runtime_out" = /* ]]; then
     runtime_libdir="$runtime_out"
-    runtime_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$runtime_libdir" "$rive_runtime")"
 else
     runtime_libdir="$rive_runtime/$runtime_out"
-    runtime_build_out="$runtime_out"
 fi
 runtime_archive="$runtime_libdir/librive.a"
 runtime_makefile="$runtime_libdir/rive.make"
@@ -72,16 +70,25 @@ if ! "$provenance" verify \
     "$config" \
     "$runtime_mode" >/dev/null 2>&1; then
     echo "==== Building provenance-bound C++ probe librive ($config) ===="
+    # Registered oracle patches build from an isolated patched copy of the
+    # pin; the shared checkout is never written. The copy is per-invocation
+    # so concurrent batteries cannot delete each other's build sources
+    # mid-compile. See runtime-provenance.sh.
+    mkdir -p "$repo_target/cpp-probe-librive"
+    materialize_dest="$(mktemp -d "$repo_target/cpp-probe-librive/patched-runtime-src.XXXXXX")"
+    runtime_build_src="$("$provenance" materialize "$rive_runtime" "$materialize_dest")"
+    runtime_build_out_from_src="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$runtime_libdir" "$runtime_build_src")"
     (
-        cd "$rive_runtime"
-        PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
+        cd "$runtime_build_src"
+        DEPENDENCIES="$rive_runtime/dependencies" \
+            PREMAKE_PATH="$runtime_build_src/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
             premake5 gmake2 \
             --file=premake5_v2.lua \
             --config="$config" \
-            --out="$runtime_build_out" \
+            --out="$runtime_build_out_from_src" \
             "${runtime_premake_flags[@]}"
-        make -C "$runtime_build_out" clean
-        make -C "$runtime_build_out" -j"$jobs" "${runtime_targets[@]}"
+        make -C "$runtime_build_out_from_src" clean
+        make -C "$runtime_build_out_from_src" -j"$jobs" "${runtime_targets[@]}"
     )
     "$provenance" write \
         "$rive_runtime" \
@@ -90,6 +97,7 @@ if ! "$provenance" verify \
         "$runtime_stamp" \
         "$config" \
         "$runtime_mode"
+    rm -rf "$materialize_dest"
 fi
 "$provenance" verify \
     "$rive_runtime" \

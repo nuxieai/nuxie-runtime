@@ -21,7 +21,7 @@ pub unsafe fn luau_finishop(L: *mut lua_State) {
     let cl = clvalue!((*(*L).ci).func);
     let _base = (*L).base;
 
-    let pc_ptr = ci.savedpc;
+    let pc_ptr = ci.context.savedpc;
     let insn: Instruction = *pc_ptr.offset(-1); // the interrupted instruction
 
     let mut pc = pc_ptr;
@@ -54,5 +54,5 @@ pub unsafe fn luau_finishop(L: *mut lua_State) {
         }
     }
 
-    (*(*L).ci).savedpc = pc;
+    (*(*L).ci).context.savedpc = pc;
 }

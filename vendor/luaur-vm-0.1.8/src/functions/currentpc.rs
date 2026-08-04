@@ -30,5 +30,5 @@ use crate::type_aliases::lua_state::lua_State;
 pub(crate) unsafe fn currentpc(_l: *mut lua_State, ci: *mut CallInfo) -> core::ffi::c_int {
     let cl = ci_func!(ci);
     let lcl = core::ptr::addr_of!((*cl).inner.l).cast::<crate::records::closure::LClosure>();
-    pcRel!((*ci).savedpc, (*lcl).p)
+    pcRel!((*ci).context.savedpc, (*lcl).p)
 }

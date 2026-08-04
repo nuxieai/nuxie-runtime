@@ -17,6 +17,7 @@ pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c
         api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32 || tag == UTAG_PROXY);
         luaC_checkGC!(L);
         lua_c_threadbarrier_lapi(L);
+        crate::ensure_stack!(L, 1);
 
         let u = lua_u_newudata(L, sz, tag);
         (*(*L).top).value.gc = u as *mut GCObject;

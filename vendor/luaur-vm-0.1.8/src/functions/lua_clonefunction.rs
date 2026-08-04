@@ -15,6 +15,7 @@ use crate::type_aliases::stk_id::StkId;
 pub unsafe fn lua_clonefunction(L: *mut lua_State, idx: core::ffi::c_int) {
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     let p: StkId = index2addr(L, idx);
     let cl = core::ptr::addr_of_mut!((*(*p).value.gc).cl) as *mut Closure;
     api_check!(

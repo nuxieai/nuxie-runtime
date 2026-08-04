@@ -13,13 +13,13 @@ macro_rules! VM_INTERRUPT {
             // the interrupt hook is called right before we advance pc
             $crate::macros::vm_protect::vm_protect!($L, $pc, $base, {
                 unsafe {
-                    (*(*$L).ci).savedpc = (*(*$L).ci).savedpc.add(1);
+                    (*(*$L).ci).context.savedpc = (*(*$L).ci).context.savedpc.add(1);
                     interrupt($L, -1);
                 }
             });
             if unsafe { (*$L).status } != 0 {
                 unsafe {
-                    (*(*$L).ci).savedpc = (*(*$L).ci).savedpc.sub(1);
+                    (*(*$L).ci).context.savedpc = (*(*$L).ci).context.savedpc.sub(1);
                 }
                 return;
             }

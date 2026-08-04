@@ -1656,6 +1656,12 @@ fn cpp_probe_matches_rust_file_view_models_and_enums_when_available() {
         return;
     };
 
+    // data_bind_blob_test.riv is not in this list: it carries an .rml
+    // ScriptAsset, and the non-scripting probe compiles out the ScriptAsset
+    // importer case, so its FileAssetContents mis-routes to the previous
+    // FileAssetImporter and trips `assert(!m_content)`. Blob view-model
+    // coverage runs through the synthetic blob differential below and the
+    // scripted-probe `make blob-differential` gate instead.
     for fixture_path in [
         "car_widgets_v01.riv",
         "databind_solo_to_enum.riv",
@@ -4531,6 +4537,153 @@ fn rust_imports_view_model_font_assets_as_a_distinct_runtime_type() {
 }
 
 #[test]
+fn rust_imports_view_model_blob_assets_as_a_distinct_runtime_type() {
+    let bytes = synthetic_runtime_file(6154, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "BlobAsset", |bytes| {
+            push_string_property(bytes, "BlobAsset", "name", "authored.bin");
+            push_uint_property(bytes, "BlobAsset", "assetId", 42);
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyAssetBlob", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyAssetBlob", "name", "blob");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceAssetBlob", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceAssetBlob",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceAssetBlob", "propertyValue", 0);
+        });
+    });
+
+    let file = read_runtime_file(&bytes).expect("blob view-model fixture imports");
+    let view_model = file.view_model(0).expect("root view model");
+    assert_eq!(
+        view_model.properties[0].type_name,
+        "ViewModelPropertyAssetBlob"
+    );
+    let value = view_model.instances[0].values[0].object;
+    assert_eq!(value.type_name, "ViewModelInstanceAssetBlob");
+    assert_eq!(
+        file.view_model_instance_value_data_type_for_object(value),
+        Some(RuntimeDataType::AssetBlob)
+    );
+    assert_eq!(RuntimeDataType::AssetBlob.as_cpp_u32(), 14);
+    assert_eq!(
+        file.view_model_instance_blob_asset_index_for_object(value),
+        Some(0)
+    );
+    assert_eq!(
+        file.view_model_instance_asset_index_for_object(value),
+        None,
+        "blob identities must not leak through the image-asset accessor"
+    );
+    assert_eq!(
+        file.view_model_instance_font_asset_index_for_object(value),
+        None,
+        "blob identities must not leak through the font-asset accessor"
+    );
+    assert!(matches!(
+        file.view_model_instance_source_data_value_for_object(value),
+        Some(RuntimeDataValue::AssetBlob(0))
+    ));
+    assert_eq!(
+        file.resolved_file_asset_for_view_model_instance_asset_object(value)
+            .map(|asset| asset.type_name),
+        Some("BlobAsset")
+    );
+}
+
+#[test]
+fn cpp_probe_matches_rust_view_model_instance_blob_assets_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!(
+            "skipping C++ view-model blob asset comparison; set RIVE_CPP_PROBE or run make cpp-probe"
+        );
+        return;
+    };
+
+    let name = "view_model_instance_blob_assets";
+    let bytes = synthetic_runtime_file(6155, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "BlobAsset", |bytes| {
+            push_string_property(bytes, "BlobAsset", "name", "payload.bin");
+            push_uint_property(bytes, "BlobAsset", "assetId", 5);
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyAssetBlob", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyAssetBlob", "name", "blob");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceAssetBlob", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceAssetBlob",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceAssetBlob", "propertyValue", 0);
+        });
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "rive-rust-cpp-view-model-instance-blob-assets-{}-{name}.riv",
+        std::process::id()
+    ));
+    std::fs::write(&path, &bytes)
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+    let cpp = read_cpp_probe_path_inner(&probe, &path, name, false);
+    let _ = std::fs::remove_file(&path);
+    let rust =
+        read_runtime_file(&bytes).expect("Rust imports synthetic view-model blob asset stream");
+    let rust_view_models = runtime_file_view_models(&rust);
+
+    assert_eq!(cpp.view_models.len(), rust_view_models.len());
+    for (view_model_index, (cpp_view_model, rust_view_model)) in
+        cpp.view_models.iter().zip(&rust_view_models).enumerate()
+    {
+        compare_view_model_instances(
+            &rust,
+            &cpp_view_model.instances,
+            &rust_view_model.instances,
+            view_model_index,
+            name,
+        );
+    }
+
+    let cpp_value = &cpp.view_models[0].instances[0].values[0];
+    let cpp_runtime = cpp_value
+        .value_runtime
+        .as_ref()
+        .expect("C++ probe emits a blob value runtime");
+    assert_eq!(
+        cpp_runtime.data_type, 14,
+        "C++ ViewModelInstanceAssetBlobRuntime reports DataType::assetBlob"
+    );
+    assert_eq!(cpp_runtime.asset_index, Some(0));
+    let cpp_source = cpp_value
+        .source_data_value
+        .as_ref()
+        .expect("C++ probe emits a blob source data value");
+    assert_eq!(cpp_source.data_type, 14);
+    assert_eq!(cpp_source.integer_value, Some(0));
+}
+
+#[test]
 fn cpp_probe_matches_rust_view_model_instance_asset_snapshots_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!(
@@ -6836,6 +6989,17 @@ fn compare_view_model_instance_value_runtime_result(
                 ));
             }
         }
+        RuntimeDataType::AssetBlob => {
+            let rust_value = rust_file
+                .view_model_instance_blob_asset_index_for_object(rust_value)
+                .ok_or_else(|| format!("{label}: Rust did not resolve blob asset index"))?;
+            if cpp_runtime.asset_index != Some(rust_value) {
+                return Err(format!(
+                    "{label}: blob asset index mismatch, C++ {:?}, Rust {rust_value}",
+                    cpp_runtime.asset_index
+                ));
+            }
+        }
         RuntimeDataType::Artboard => {
             let rust_value = rust_file
                 .view_model_instance_artboard_index_for_object(rust_value)
@@ -6935,6 +7099,7 @@ fn compare_view_model_instance_source_data_value_result(
         | RuntimeDataValue::SymbolListIndex(rust_value)
         | RuntimeDataValue::AssetImage(rust_value)
         | RuntimeDataValue::AssetFont(rust_value)
+        | RuntimeDataValue::AssetBlob(rust_value)
         | RuntimeDataValue::Artboard(rust_value) => {
             if cpp_data_value.integer_value != Some(rust_value) {
                 return Err(format!(
@@ -8370,6 +8535,7 @@ fn compare_converter_output(
         | RuntimeConvertedDataValue::SymbolListIndex(value)
         | RuntimeConvertedDataValue::AssetImage(value)
         | RuntimeConvertedDataValue::AssetFont(value)
+        | RuntimeConvertedDataValue::AssetBlob(value)
         | RuntimeConvertedDataValue::Artboard(value) => assert_eq!(
             cpp_output.integer_value,
             Some(*value),
@@ -11750,6 +11916,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "Feather::onAddedDirty",
         "FollowPathConstraint::onAddedClean",
         "GradientStop::onAddedDirty",
+        "GridItemPlacement::onAddedClean",
         "IKConstraint::onAddedClean",
         "InterpolatingKeyFrame::onAddedDirty",
         "Joystick::onAddedClean",
@@ -11763,6 +11930,7 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "LayoutComponent::onAddedClean",
         "LayoutComponent::onAddedDirty",
         "LayoutComponentStyle::onAddedDirty",
+        "LayoutParticipant::onAddedClean",
         "LinearAnimation::onAddedClean",
         "LinearAnimation::onAddedDirty",
         "LinearGradient::onAddedDirty",
@@ -13126,7 +13294,7 @@ fn cpp_binary_reader_methods_match_runtime_reader_model() {
             });
     assert_eq!(
         read_bytes_len,
-        "constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
+        "//Guardagainstalength(whichisdecodedstraightfromthefileandmay//becorruptortruncated)thatwouldrunpasttheendofthebuffer.if(length>static_cast<size_t>(m_Bytes.end()-m_Position)){overflow();returnSpan<constuint8_t>(m_Bytes.end(),0);}constuint8_t*start=m_Position;m_Position+=length;return{start,(size_t)length};",
         "BinaryReader::readBytes(size_t) changed; audit Rust sized bytes reads and malformed-stream tests"
     );
 

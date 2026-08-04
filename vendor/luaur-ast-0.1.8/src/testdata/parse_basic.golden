@@ -1,0 +1,40 @@
+Block 0:0-9:0 hasEnd=1
+  LocalStat 0:0-0:11 nvars=1 nvalues=1
+    Var n=78
+    Number 0:10-0:11 v=3ff0000000000000 pr=0
+  LocalStat 1:0-1:20 nvars=2 nvalues=2
+    Var n=79
+    Var n=7a
+    Number 1:13-1:14 v=4000000000000000 pr=0
+    String 1:16-1:20 v=6869 q=0
+  LocalStat 2:0-2:23 nvars=1 nvalues=1
+    Var n=61
+    Binary 2:10-2:23 op=1
+      Binary 2:10-2:19 op=0
+        Local 2:10-2:11 l=78 up=0
+        Binary 2:14-2:19 op=2
+          Local 2:14-2:15 l=79 up=0
+          Local 2:18-2:19 l=7a up=0
+      Number 2:22-2:23 v=3ff0000000000000 pr=0
+  LocalStat 3:0-3:15 nvars=1 nvalues=1
+    Var n=62
+    Unary 3:10-3:15 op=0
+      Local 3:14-3:15 l=61 up=0
+  LocalStat 4:0-4:12 nvars=1 nvalues=1
+    Var n=63
+    Unary 4:10-4:12 op=1
+      Local 4:11-4:12 l=78 up=0
+  LocalStat 5:0-5:12 nvars=1 nvalues=1
+    Var n=64
+    Unary 5:10-5:12 op=2
+      Local 5:11-5:12 l=7a up=0
+  Assign 6:0-6:5 nvars=1 nvalues=1
+    Global 6:0-6:1 n=67
+    Local 6:4-6:5 l=61 up=0
+  CompoundAssign 7:0-7:6 op=0
+    Global 7:0-7:1 n=67
+    Number 7:5-7:6 v=3ff0000000000000 pr=0
+  Return 8:0-8:14 n=3
+    Local 8:7-8:8 l=61 up=0
+    Local 8:10-8:11 l=62 up=0
+    Local 8:13-8:14 l=63 up=0

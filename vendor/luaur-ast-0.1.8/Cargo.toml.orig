@@ -1,0 +1,25 @@
+[package]
+name = "luaur-ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lexer, parser, and AST for Luau (faithful Rust port)."
+keywords = ["luau", "lua", "parser", "lexer", "ast"]
+categories = ["parser-implementations", "parsing"]
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+luaur-common = { path = "../luaur-common", version = "0.1.8" }
+
+[features]
+default = ["std"]
+std = []
+native = ["std"]
+cli = ["native"]
+native-codegen = ["native"]
+wasm = ["dep:wasm-bindgen"]

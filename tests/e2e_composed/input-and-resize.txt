@@ -1,0 +1,3 @@
+# Exercise host resize and a scripted pointer input in the same loaded session.
+0 resize 320 180 2
+0.05 pointerMove 10 10

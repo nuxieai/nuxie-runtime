@@ -1029,7 +1029,7 @@ fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
         durations[index] = Some(parse_millis(value, key)?);
     }
 
-    let phases = BENCHMARK_PHASES
+    let mut phases = BENCHMARK_PHASES
         .iter()
         .zip(durations)
         .map(|((name, key), duration)| {
@@ -1038,6 +1038,8 @@ fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
                 .ok_or_else(|| format!("missing {key}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let advance_draw = phases[0].1 + phases[3].1;
+    phases.push(("advance_draw", advance_draw));
 
     Ok(BenchmarkOutput { total, phases })
 }
@@ -1707,6 +1709,7 @@ status = "exact"
                 ("input", Duration::from_micros(250)),
                 ("prepare", Duration::from_micros(2_000)),
                 ("draw", Duration::from_micros(4_250)),
+                ("advance_draw", Duration::from_micros(5_750)),
             ]
         );
     }
@@ -1757,16 +1760,15 @@ status = "exact"
     }
 
     fn sample(advance: u64, input: u64, prepare: u64, draw: u64) -> RunSample {
+        let total = Duration::from_millis(advance + input + prepare + draw);
         let phases = vec![
             ("advance", Duration::from_millis(advance)),
             ("input", Duration::from_millis(input)),
             ("prepare", Duration::from_millis(prepare)),
             ("draw", Duration::from_millis(draw)),
+            ("advance_draw", Duration::from_millis(advance + draw)),
         ];
-        RunSample {
-            total: phases.iter().map(|(_, duration)| *duration).sum(),
-            phases,
-        }
+        RunSample { total, phases }
     }
 
     fn file_result() -> FileResult {
@@ -1904,7 +1906,14 @@ status = "exact"
         assert!(report.contains("\"timestamp\":\"2026-07-07T00:00:00Z\""));
         assert!(report.contains("\"fixture \\\"quoted\\\".riv\""));
         // Per-phase stats and ratios for every hot-loop phase plus the total.
-        for phase in ["total", "advance", "input", "prepare", "draw"] {
+        for phase in [
+            "total",
+            "advance",
+            "input",
+            "prepare",
+            "draw",
+            "advance_draw",
+        ] {
             assert!(
                 report.contains(&format!("\"{phase}\":{{\"median_ms\":")),
                 "missing phase stats for {phase}"

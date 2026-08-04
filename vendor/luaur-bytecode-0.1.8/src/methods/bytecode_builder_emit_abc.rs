@@ -1,0 +1,11 @@
+use crate::records::bytecode_builder::BytecodeBuilder;
+use luaur_common::enums::luau_opcode::LuauOpcode;
+
+impl BytecodeBuilder {
+    pub fn emit_abc(&mut self, op: LuauOpcode, a: u8, b: u8, c: u8) {
+        let insn = (op as u32) | ((a as u32) << 8) | ((b as u32) << 16) | ((c as u32) << 24);
+
+        self.insns.push(insn);
+        self.lines.push(self.debug_line);
+    }
+}

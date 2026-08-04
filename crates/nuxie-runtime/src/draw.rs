@@ -2208,6 +2208,7 @@ impl ArtboardInstance {
                     }
                     runtime_realize_next_owned_shape_gradient(
                         self,
+                        graph,
                         container,
                         paint_ref.paint_index,
                         factory,
@@ -3763,6 +3764,7 @@ impl ArtboardInstance {
                 }
                 runtime_realize_next_owned_shape_gradient(
                     self,
+                    graph,
                     container,
                     paint_ref.paint_index,
                     factory,
@@ -17746,8 +17748,71 @@ fn runtime_realize_owned_shape_paints(
 /// artboard gradients through the same `LinearGradient::update` traversal
 /// (`linear_gradient.cpp:86-126`); Shape paint membership order is draw order,
 /// not shader-creation order.
+fn runtime_initial_root_gradient_state_before_data_bind_source_writes(
+    graph: &ArtboardGraph,
+    owner: &RuntimeShapePaintOwner,
+    state: &RuntimeShapePaintState,
+) -> RuntimeShapePaintState {
+    let Some(mutator_local) = owner.mutator_local else {
+        return state.clone();
+    };
+    let mut state = state.clone();
+    let type_name = match state {
+        RuntimeShapePaintState::LinearGradient { .. } => "LinearGradient",
+        RuntimeShapePaintState::RadialGradient { .. } => "RadialGradient",
+        RuntimeShapePaintState::SolidColor { .. } => return state,
+    };
+    for data_bind in graph.data_binds.iter().filter(|data_bind| {
+        data_bind.target_local == Some(mutator_local)
+            && crate::data_bind_flags_apply_source_to_target(data_bind.flags)
+    }) {
+        let bound = |property_name| {
+            runtime_draw_property_key_for_name(type_name, property_name)
+                .is_some_and(|key| u64::from(key) == data_bind.property_key)
+        };
+        match &mut state {
+            RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            }
+            | RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            } => {
+                // A C++ root Artboard owns its RenderPaint while the default
+                // view-model context is being attached. The first gradient
+                // update therefore observes the numeric ContextValue default;
+                // a target-to-source sibling write is queued for the next
+                // DataBindContainer turn and does not rewrite that retained
+                // shader (`artboard.cpp:1195-1203`,
+                // `data_bind_container.cpp:156-203`). Rust attaches the
+                // renderer later, so preserve that one-time resource state
+                // instead of sampling the already-reconciled property.
+                if bound("startX") {
+                    *start_x = 0.0;
+                } else if bound("startY") {
+                    *start_y = 0.0;
+                } else if bound("endX") {
+                    *end_x = 0.0;
+                } else if bound("endY") {
+                    *end_y = 0.0;
+                }
+            }
+            RuntimeShapePaintState::SolidColor { .. } => {}
+        }
+    }
+    state
+}
+
 fn runtime_realize_owned_shape_gradient(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     container: &ShapePaintContainerNode,
     paint_index: usize,
     state: &RuntimeShapePaintState,
@@ -17779,6 +17844,14 @@ fn runtime_realize_owned_shape_gradient(
             owner.paint_global_id
         )
     })?;
+    let initial_state;
+    let state = if backend.shader_state.is_none() && container.type_name == "Artboard" {
+        initial_state =
+            runtime_initial_root_gradient_state_before_data_bind_source_writes(graph, owner, state);
+        &initial_state
+    } else {
+        state
+    };
     match state {
         state @ RuntimeShapePaintState::LinearGradient {
             start_x,
@@ -17833,6 +17906,7 @@ fn runtime_realize_owned_shape_gradient(
 
 fn runtime_realize_next_owned_shape_gradient(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     container: &ShapePaintContainerNode,
     paint_index: usize,
     factory: &mut dyn RenderFactory,
@@ -17854,6 +17928,7 @@ fn runtime_realize_next_owned_shape_gradient(
     };
     runtime_realize_owned_shape_gradient(
         instance,
+        graph,
         container,
         paint_index,
         &state,
@@ -17924,6 +17999,7 @@ fn runtime_realize_owned_shape_gradients_in_dependency_order(
             if let Some(state) = state {
                 runtime_realize_owned_shape_gradient(
                     instance,
+                    graph,
                     container,
                     *paint_index,
                     &state,
@@ -24943,6 +25019,53 @@ mod tests {
                 .join(relative),
         )
         .unwrap_or_else(|error| panic!("read pinned C++ fixture {relative}: {error}"))
+    }
+
+    #[test]
+    fn root_gradient_first_backend_state_precedes_sibling_data_bind_write() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("rewards_demo.riv"))
+            .expect("rewards_demo imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("rewards_demo graphs build");
+        let graph = graphs.artboards.first().expect("rewards_demo has Main");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("Main instance builds");
+        let container = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.type_name == "Artboard")
+            .expect("Main owns root paints");
+        let owner = instance
+            .runtime_shapes
+            .get(container.local_id)
+            .expect("root paint container is retained")
+            .paint_owners
+            .iter()
+            .find(|owner| owner.mutator_local == Some(1))
+            .expect("root LinearGradient is retained");
+        let state = RuntimeShapePaintState::LinearGradient {
+            start_x: 11.0,
+            start_y: 22.0,
+            end_x: 33.0,
+            end_y: 44.0,
+            opacity: 1.0,
+            render_opacity: 1.0,
+            stops: Vec::new(),
+        };
+
+        let initial = runtime_initial_root_gradient_state_before_data_bind_source_writes(
+            graph, owner, &state,
+        );
+        assert_eq!(
+            initial,
+            RuntimeShapePaintState::LinearGradient {
+                start_x: 11.0,
+                start_y: 0.0,
+                end_x: 33.0,
+                end_y: 44.0,
+                opacity: 1.0,
+                render_opacity: 1.0,
+                stops: Vec::new(),
+            }
+        );
     }
 
     fn image_asset_id_for_named_image(file: &RuntimeFile, name: &str) -> u32 {

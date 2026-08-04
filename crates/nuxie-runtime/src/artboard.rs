@@ -7191,6 +7191,9 @@ impl ArtboardInstance {
         {
             did_update |= self.update_component_list_layout_bounds(root_transform);
         }
+        if self.suppress_mounted_component_list_layout_updates && !self.layout_node_owned_by_host {
+            self.suppress_mounted_component_list_layout_updates = false;
+        }
         for host_local_id in deferred_nested_opacity_hosts {
             if self
                 .nested_artboards
@@ -8056,7 +8059,9 @@ impl ArtboardInstance {
                 // transforms remain owned by ScrollVirtualizer; draw only
                 // reads `m_artboardTransforms`
                 // (`artboard_component_list.cpp:1300-1331`).
-                if component_list_virtualization(self, local_id).is_none() {
+                if component_list_virtualization(self, local_id).is_none()
+                    && !self.suppress_mounted_component_list_layout_updates
+                {
                     let transforms = runtime_component_list_item_base_transforms(self, local_id);
                     if let Some(list) = self.component_list_state_mut(local_id) {
                         list.item_transforms = transforms;

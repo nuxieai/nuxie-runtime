@@ -1,6 +1,10 @@
 use super::*;
 
 impl ArtboardInstance {
+    pub(crate) fn mounted_layout_host_is_fenced(&self, host_local_id: usize) -> bool {
+        self.consumed_mounted_layout_hosts.contains(&host_local_id)
+    }
+
     pub(in crate::artboard) fn runtime_nested_artboard_layout_bounds_frame(
         &mut self,
     ) -> RuntimeNestedLayoutBoundsFrame {
@@ -171,6 +175,7 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            nested.child.suppress_mounted_component_list_layout_updates = true;
             nested.child.layout_constraint_bounds = child_bounds.clone();
             nested.child.solved_layout_bounds = child_bounds;
             nested.child.added_to_host();
@@ -215,8 +220,8 @@ impl ArtboardInstance {
 
         if self.consumed_mounted_layout_hosts.contains(&host_local_id) {
             if let Some(key) = nested.layout_data_transfer_key.as_mut() {
-                let consumed_generation_arrived = key.assigned_bounds != bounds
-                    || key.child_layout_revision != nested.child.layout_revision();
+                let consumed_generation_arrived =
+                    key.child_layout_revision != nested.child.layout_revision();
                 key.parent_layout = parent_layout;
                 if consumed_generation_arrived {
                     if let Some((_, retained_bounds)) =
@@ -230,6 +235,7 @@ impl ArtboardInstance {
                         nested.child.mark_layout_changed();
                     }
                     self.consumed_mounted_layout_hosts.remove(&host_local_id);
+                    nested.child.suppress_mounted_component_list_layout_updates = false;
                 }
                 key.child_layout_revision = nested.child.layout_revision();
             }
@@ -311,6 +317,10 @@ impl ArtboardInstance {
         nested
             .child
             .retain_runtime_layout_component_bounds(0, hosted_bounds, None);
+        // Release the detached-update suppression only after the parent Yoga
+        // assignment arrives, so the same-pass child update settles mounted
+        // component-list rows in the accepted constraint frame.
+        nested.child.suppress_mounted_component_list_layout_updates = false;
         nested.layout_data_transferred = true;
         if changed {
             nested.child.update_pass();

@@ -9300,17 +9300,29 @@ impl ArtboardInstance {
                 // `artboard.cpp:1245-1253`).
                 nested.acknowledge_consumed_child_layout_revision();
             }
-            child_layout_changed |= !preserve_mounted_layout_assignment && mounted_layout_changed;
+            child_layout_changed |= mounted_layout_changed;
         }
-        // Every transferred root remains an independent Yoga node. Advance
-        // only the fence whose same-layer source was actually consumed; a
-        // sibling must still accept the current parent solve and interpolation
-        // target (`nested_artboard_layout.cpp:24-42,53-78`).
+        if !consumed_mounted_layout_hosts.is_empty() {
+            // The consumed child must participate in the next parent solve so
+            // its new intrinsic size reaches the transferred Yoga node. Fence
+            // each *other* mounted host independently: their retained
+            // positions remain authoritative even though the detached parent
+            // solver sees the consumed global through shared Rust context.
+            consumed_mounted_layout_hosts = self
+                .nested_artboard_locals
+                .iter()
+                .copied()
+                .filter(|host| !consumed_mounted_layout_hosts.contains(host))
+                .collect();
+        }
         self.acknowledge_consumed_mounted_layout_generation(&consumed_mounted_layout_hosts);
         if child_layout_changed {
             // The mounted child can be a hug-sized provider in this artboard's
             // layout tree, so its live text/shape size participates in the
             // parent's layout cache key.
+            if !self.layout_node_owned_by_host {
+                self.suppress_mounted_component_list_layout_updates = true;
+            }
             self.mark_layout_changed();
         }
         changed

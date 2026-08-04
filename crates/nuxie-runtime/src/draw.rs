@@ -1044,13 +1044,16 @@ impl ArtboardInstance {
                 let mut child_ancestors = nested_ancestors.to_vec();
                 child_ancestors.push(child_graph.global_id);
                 let host_world = match command.object_kind {
-                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => path_cache
-                        .component_world_transform_with_bounds(
+                    RuntimeDrawableDispatchObjectKind::NestedArtboardLayout => {
+                        runtime_nested_artboard_layout_world_transform(
                             self,
                             graph,
                             host_local_id,
+                            nested.child.as_ref(),
                             layout_bounds,
-                        ),
+                            path_cache,
+                        )
+                    }
                     RuntimeDrawableDispatchObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -12187,6 +12190,8 @@ impl TaffyRuntimeLayoutEngine {
         // independently positioned siblings (`nested_artboard_layout.cpp:24-42`;
         // `artboard.cpp:1245-1253`).
         if nested.child.layout_node_owned_by_host
+            && (instance.mounted_layout_host_is_fenced(local)
+                || !nested.child.suppress_mounted_component_list_layout_updates)
             && let Some(layout) = nested
                 .child
                 .component(0)
@@ -17768,11 +17773,13 @@ fn runtime_draw_live_nested_artboard(
         .context("mounted nested artboard graph is missing")?;
 
     let host_world = match drawable.type_name {
-        "NestedArtboardLayout" => path_cache.component_world_transform_with_bounds(
+        "NestedArtboardLayout" => runtime_nested_artboard_layout_world_transform(
             instance,
             graph,
             host_local,
+            child,
             layout_bounds,
+            path_cache,
         ),
         "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
             instance,

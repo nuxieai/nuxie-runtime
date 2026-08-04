@@ -141,11 +141,14 @@ impl UserData for ScriptedDataValue {
 
 pub(super) fn create_data_value(lua: &Lua, value: ScriptValue) -> Result<AnyUserData> {
     let userdata = lua.create_userdata(ScriptedDataValue::new(value))?;
-    let patcher: Function = lua.named_registry_value(DATA_VALUE_METATABLE_PATCHER)?;
+    let patcher = data_value_metatable_patcher(lua)?;
     patcher.call(userdata)
 }
 
-pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
+fn data_value_metatable_patcher(lua: &Lua) -> Result<Function> {
+    if let Value::Function(patcher) = lua.named_registry_value(DATA_VALUE_METATABLE_PATCHER)? {
+        return Ok(patcher);
+    }
     let patcher: Function = lua
         .load(
             r#"
@@ -176,7 +179,12 @@ pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
             "#,
         )
         .eval()?;
-    lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, patcher)?;
+    lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, patcher.clone())?;
+    Ok(patcher)
+}
+
+pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
+    data_value_metatable_patcher(lua)?;
 
     let data_value = lua.create_table();
     data_value.set(

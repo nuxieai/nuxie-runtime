@@ -36,6 +36,18 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     cumulated_seconds: f32,
 }
 
+impl RuntimeNestedArtboardInstance {
+    /// A same-layer authored VMI write can be consumed by the mounted child
+    /// without publishing a second layout assignment back into its host.
+    /// Advance the transfer fence to that consumed child generation so the
+    /// parent-owned Yoga snapshot remains authoritative.
+    pub(crate) fn acknowledge_consumed_child_layout_revision(&mut self) {
+        if let Some(key) = self.layout_data_transfer_key.as_mut() {
+            key.child_layout_revision = self.child.layout_revision();
+        }
+    }
+}
+
 impl Clone for RuntimeNestedArtboardInstance {
     fn clone(&self) -> Self {
         // A normal Artboard clone creates a new mounted occurrence. Pinned C++

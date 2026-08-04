@@ -415,6 +415,14 @@ pub struct ArtboardInstance {
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
+    previous_nested_layout_transfers: BTreeMap<
+        usize,
+        (
+            RuntimeNestedLayoutDataTransferKey,
+            Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
+        ),
+    >,
+    consumed_mounted_layout_hosts: BTreeSet<usize>,
     pub(crate) artboard_data_bind_values: BTreeMap<Arc<[u32]>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
@@ -516,6 +524,11 @@ pub struct ArtboardInstance {
     /// its geometry owner, so either local can appear here
     /// (`semantic_data.cpp:258-293`).
     semantic_bounds_dirty_locals: BTreeSet<usize>,
+    /// `Artboard::takeLayoutData()` transferred this occurrence's root Yoga
+    /// node to a hosting layout. Child-local solves still retain descendants,
+    /// but must not overwrite the parent-owned root result.
+    pub(crate) layout_node_owned_by_host: bool,
+    pub(crate) suppress_mounted_component_list_layout_updates: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -574,6 +587,8 @@ impl Clone for ArtboardInstance {
             build_context: self.build_context.clone(),
             nested_context_source_tree_cache: self.nested_context_source_tree_cache.clone(),
             nested_layout_bounds: self.nested_layout_bounds.clone(),
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values: self.artboard_data_bind_values.clone(),
             artboard_formula_random_source: self.artboard_formula_random_source.clone(),
             artboard_owned_view_model_context: self.artboard_owned_view_model_context.clone(),
@@ -652,6 +667,9 @@ impl Clone for ArtboardInstance {
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: self.layout_node_owned_by_host,
+            suppress_mounted_component_list_layout_updates: self
+                .suppress_mounted_component_list_layout_updates,
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
             solved_layout_bounds: self.solved_layout_bounds.clone(),
@@ -2397,6 +2415,8 @@ impl ArtboardInstance {
             build_context,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
@@ -2462,6 +2482,8 @@ impl ArtboardInstance {
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: false,
+            suppress_mounted_component_list_layout_updates: false,
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -7569,6 +7591,79 @@ impl ArtboardInstance {
         changed
     }
 
+    pub(crate) fn acknowledge_consumed_mounted_layout_generation(
+        &mut self,
+        host_local_ids: &BTreeSet<usize>,
+    ) {
+        if host_local_ids.is_empty() {
+            return;
+        }
+        let parent_layout = RuntimeNestedLayoutBoundsCacheKey {
+            graph_global_id: self.graph_global_id,
+            layout_revision: self.layout_revision,
+        };
+        let retained_transfers = host_local_ids
+            .iter()
+            .filter_map(|host_local_id| {
+                self.previous_nested_layout_transfers
+                    .remove(host_local_id)
+                    .or_else(|| {
+                        self.nested_artboards.get(host_local_id).and_then(|nested| {
+                            nested
+                                .layout_data_transfer_key
+                                .map(|key| (key, nested.child.layout_constraint_bounds.clone()))
+                        })
+                    })
+                    .map(|(key, child_bounds)| (*host_local_id, key, child_bounds))
+            })
+            .collect::<Vec<_>>();
+        // The same-layer comparator has consumed this authored global write.
+        // Preserve the already-transferred Yoga frame while advancing only
+        // its generation fence; a later independent layout write will still
+        // produce a new key and solve normally.
+        if let Some(frame) = self.nested_layout_bounds.as_mut() {
+            frame.key = parent_layout;
+            if let Some(bounds) = Arc::make_mut(&mut frame.bounds).as_mut() {
+                for (host_local_id, key, _) in &retained_transfers {
+                    bounds.insert(*host_local_id, key.assigned_bounds);
+                }
+            }
+        }
+        for (host_local_id, mut key, child_bounds) in retained_transfers {
+            let retained_child_bounds = child_bounds.clone();
+            let hosted_bounds = self
+                .component_parent_local(host_local_id)
+                .and_then(|parent_local| {
+                    self.nested_layout_bounds
+                        .as_ref()
+                        .and_then(|frame| frame.bounds.as_ref().as_ref())
+                        .and_then(|bounds| bounds.get(&parent_local).copied())
+                })
+                .map_or(key.assigned_bounds, |parent| RuntimeLayoutBounds {
+                    x: key.assigned_bounds.x - parent.x,
+                    y: key.assigned_bounds.y - parent.y,
+                    width: key.assigned_bounds.width,
+                    height: key.assigned_bounds.height,
+                });
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            nested.child.layout_constraint_bounds = child_bounds.clone();
+            nested.child.solved_layout_bounds = child_bounds;
+            nested.child.added_to_host();
+            nested
+                .child
+                .retain_runtime_layout_component_bounds(0, hosted_bounds, None);
+            key.parent_layout = parent_layout;
+            key.child_layout_revision = nested.child.layout_revision();
+            nested.layout_data_transfer_key = Some(key);
+            self.previous_nested_layout_transfers
+                .insert(host_local_id, (key, retained_child_bounds));
+        }
+        self.consumed_mounted_layout_hosts
+            .extend(host_local_ids.iter().copied());
+    }
+
     fn apply_nested_artboard_layout_bounds(
         &mut self,
         host_local_id: usize,
@@ -7582,9 +7677,41 @@ impl ArtboardInstance {
         else {
             return false;
         };
+        let hosted_bounds = self
+            .component_parent_local(host_local_id)
+            .and_then(|parent_local| layout_bounds.and_then(|all| all.get(&parent_local).copied()))
+            .map_or(bounds, |parent| RuntimeLayoutBounds {
+                x: bounds.x - parent.x,
+                y: bounds.y - parent.y,
+                width: bounds.width,
+                height: bounds.height,
+            });
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
             return false;
         };
+
+        if self.consumed_mounted_layout_hosts.contains(&host_local_id) {
+            if let Some(key) = nested.layout_data_transfer_key.as_mut() {
+                let consumed_generation_arrived = key.assigned_bounds != bounds
+                    || key.child_layout_revision != nested.child.layout_revision();
+                key.parent_layout = parent_layout;
+                if consumed_generation_arrived {
+                    if let Some((_, retained_bounds)) =
+                        self.previous_nested_layout_transfers.remove(&host_local_id)
+                    {
+                        nested.child.layout_constraint_bounds = retained_bounds.clone();
+                        nested.child.solved_layout_bounds = retained_bounds;
+                        // The child draw cache may already have memoized the
+                        // consumed detached solve. Publish the restored
+                        // parent-owned snapshot as a new local generation.
+                        nested.child.mark_layout_changed();
+                    }
+                    self.consumed_mounted_layout_hosts.remove(&host_local_id);
+                }
+                key.child_layout_revision = nested.child.layout_revision();
+            }
+            return false;
+        }
 
         let first_transfer = !nested.layout_data_transferred;
         let refresh_constraint_bounds = nested.layout_data_transfer_key.is_none_or(|key| {
@@ -7592,6 +7719,14 @@ impl ArtboardInstance {
                 || key.assigned_bounds != bounds
                 || key.child_layout_revision != nested.child.layout_revision
         });
+        if !first_transfer && refresh_constraint_bounds {
+            if let Some(key) = nested.layout_data_transfer_key {
+                self.previous_nested_layout_transfers.insert(
+                    host_local_id,
+                    (key, nested.child.layout_constraint_bounds.clone()),
+                );
+            }
+        }
         let mut changed = nested
             .child
             .set_artboard_dimensions(bounds.width, bounds.height);
@@ -7601,6 +7736,26 @@ impl ArtboardInstance {
             // that unconstrained component state before taking the one Yoga
             // layout snapshot owned by the parent.
             changed |= nested.child.update_components().did_update;
+            // The standalone settle above must not consume the mounted
+            // Artboard's first-host placement. C++ keeps m_justAddedToHost
+            // armed until the transferred Yoga node receives its first
+            // parent-owned result (`artboard.cpp:1061-1073`;
+            // `layout_component.cpp:1117-1137`).
+            nested.child.added_to_host();
+            nested.child.layout_node_owned_by_host = true;
+            // The standalone pre-transfer settle measured list rows in the
+            // child's old root space. Re-arm exactly one hosted list tail so
+            // the first parent-owned Yoga snapshot establishes their mounted
+            // transforms; later child updates do not run an independent
+            // layout solve while `takeLayoutData()` ownership is active.
+            let list_locals = nested.child.component_list_locals().collect::<Vec<_>>();
+            for list_local in list_locals {
+                if let Some(items) = nested.child.component_list_items_mut(list_local) {
+                    for item in items {
+                        item.settled_layout_size.set(None);
+                    }
+                }
+            }
         }
 
         // Match NestedArtboardLayout's mounted ordering: the constraint space
@@ -7621,6 +7776,18 @@ impl ArtboardInstance {
                 .child
                 .set_double_property(0, height_key, bounds.height);
         }
+        // `NestedArtboardLayout::layoutNode` transfers the mounted Artboard's
+        // root Yoga node into the parent tree. Retain that node's parent-local
+        // left/top on the child occurrence; C++ draw later reads
+        // Artboard::layoutX/layoutY rather than resolving the parent Yoga tree
+        // a second time. The transfer consumes the root node's first Yoga
+        // result; later child-local constraint refreshes must not republish a
+        // fresh Taffy root position into that mounted owner
+        // (`nested_artboard_layout.cpp:24-42,53-78`;
+        // `artboard.cpp:1245-1253,1332-1341`).
+        nested
+            .child
+            .retain_runtime_layout_component_bounds(0, hosted_bounds, None);
         nested.layout_data_transferred = true;
         if changed {
             nested.child.update_pass();
@@ -7629,11 +7796,18 @@ impl ArtboardInstance {
         // writes dirty the transferred root node themselves; only a later
         // child layout generation should emulate C++ `markHostingLayoutDirty`
         // and request another parent-owned constraint refresh.
-        nested.layout_data_transfer_key = Some(RuntimeNestedLayoutDataTransferKey {
+        let transfer_key = RuntimeNestedLayoutDataTransferKey {
             parent_layout,
             assigned_bounds: bounds,
             child_layout_revision: nested.child.layout_revision,
-        });
+        };
+        nested.layout_data_transfer_key = Some(transfer_key);
+        if first_transfer {
+            self.previous_nested_layout_transfers.insert(
+                host_local_id,
+                (transfer_key, nested.child.layout_constraint_bounds.clone()),
+            );
+        }
         changed
     }
 
@@ -8711,14 +8885,16 @@ impl ArtboardInstance {
             // settlement; pushed Core properties remain queue-driven.
             self.update_data_binds_for_update_pass(root_transform);
         }
-        if did_update
-            || self.component_list_locals().into_iter().any(|local_id| {
+        let has_unsettled_component_list_rows =
+            self.component_list_locals().into_iter().any(|local_id| {
                 self.component_list_items(local_id).is_some_and(|items| {
                     items
                         .iter()
                         .any(|item| item.settled_layout_size.get().is_none())
                 })
-            })
+            });
+        if (!self.suppress_mounted_component_list_layout_updates && did_update)
+            || has_unsettled_component_list_rows
         {
             did_update |= self.update_component_list_layout_bounds(root_transform);
         }
@@ -9342,6 +9518,9 @@ impl ArtboardInstance {
         self.solved_layout_bounds = layout_bounds.clone();
         if let Some(layout_bounds) = layout_bounds.as_deref() {
             for (&local_id, &bounds) in layout_bounds {
+                if local_id == 0 && self.layout_node_owned_by_host {
+                    continue;
+                }
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
             }
             // The solve above can dirty a Text owner after the pre-guard
@@ -12826,6 +13005,8 @@ mod tests {
             build_context: None,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
+            previous_nested_layout_transfers: BTreeMap::new(),
+            consumed_mounted_layout_hosts: BTreeSet::new(),
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
@@ -12882,6 +13063,8 @@ mod tests {
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
             semantic_bounds_dirty_locals: BTreeSet::new(),
+            layout_node_owned_by_host: false,
+            suppress_mounted_component_list_layout_updates: false,
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -17401,8 +17584,7 @@ mod tests {
         host.type_name = "NestedArtboardLayout";
         let mut parent = synthetic_instance(vec![host], vec![0]);
 
-        let mut child_layout = synthetic_component(0, 0);
-        child_layout.type_name = "LayoutComponent";
+        let child_layout = synthetic_component_for_type(0, "LayoutComponent");
         let mut child =
             synthetic_instance(vec![child_layout, synthetic_component(1, 1)], vec![0, 1]);
         synthetic_add_dependent(&mut child, 0, 1);
@@ -17427,6 +17609,16 @@ mod tests {
             Some(&layout_bounds),
             first_parent_layout,
         ));
+        assert_eq!(
+            parent.nested_artboards[&0]
+                .child
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("mounted child root layout")
+                .position(),
+            (assigned_bounds.x, assigned_bounds.y),
+            "the first parent solve owns the mounted root placement"
+        );
         let first_transfer_key = parent.nested_artboards[&0].layout_data_transfer_key;
         let first_cache_epoch = parent.nested_artboards[&0].child.cache_epoch();
 
@@ -17435,6 +17627,30 @@ mod tests {
             Some(&layout_bounds),
             first_parent_layout,
         ));
+        assert_eq!(
+            parent.nested_artboards[&0].child.cache_epoch(),
+            first_cache_epoch
+        );
+
+        parent
+            .nested_artboards
+            .get_mut(&0)
+            .expect("nested child")
+            .child
+            .mark_layout_changed();
+        parent
+            .nested_artboards
+            .get_mut(&0)
+            .expect("nested child")
+            .acknowledge_consumed_child_layout_revision();
+        assert!(
+            !parent.apply_nested_artboard_layout_bounds(
+                0,
+                Some(&layout_bounds),
+                first_parent_layout,
+            ),
+            "a consumed same-layer child generation must not republish the mounted layout"
+        );
         assert_eq!(
             parent.nested_artboards[&0].child.cache_epoch(),
             first_cache_epoch

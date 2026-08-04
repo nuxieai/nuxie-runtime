@@ -52,13 +52,13 @@ use crate::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands;
 use crate::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned;
 use crate::text::{
     RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
-    RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
-    runtime_text_draw_data, runtime_text_input_shape_paint_commands,
-    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_clip_bounds,
-    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
-    static_text_layout_debug_report, static_text_layout_measure_bounds,
-    static_text_selection_rects, static_text_value, static_text_value_run_hit,
-    text_input_layout_measure_bounds,
+    RuntimeTextLayoutDebugReport, StaticTextClipBounds, StaticTextSlice,
+    build_static_text_constraint_bounds, build_static_text_constraint_bounds_from_slice,
+    runtime_text_draw_data_from_slice, runtime_text_input_shape_paint_commands,
+    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_constraint_bounds,
+    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
+    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
+    static_text_value_run_hit, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -5319,6 +5319,7 @@ impl ArtboardInstance {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: Some(source_path.raw_path),
@@ -9821,6 +9822,9 @@ struct RuntimeTextDrawOwner {
     dirty: Cell<bool>,
     render_styles_dirty: Cell<bool>,
     retain_paths_on_rebuild: Cell<bool>,
+    /// C++ `Text::{m_allRuns,m_textStylePaints,m_modifierGroups}`: immutable
+    /// imported topology retained by this concrete Text occurrence.
+    topology: RefCell<Option<Arc<StaticTextSlice>>>,
     retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
     backend: RefCell<RuntimeTextBackendResources>,
 }
@@ -9834,7 +9838,9 @@ impl Clone for RuntimeTextDrawOwner {
         // (`src/generated/text/text_base.cpp:6-10`,
         // `include/rive/generated/text/text_base.hpp:244-262`,
         // `src/text/text_style_paint.cpp:13-19,125-134`).
-        Self::default()
+        let cloned = Self::default();
+        *cloned.topology.borrow_mut() = self.topology.borrow().clone();
+        cloned
     }
 }
 
@@ -9844,6 +9850,7 @@ impl Default for RuntimeTextDrawOwner {
             dirty: Cell::new(true),
             render_styles_dirty: Cell::new(true),
             retain_paths_on_rebuild: Cell::new(false),
+            topology: RefCell::new(None),
             retained: RefCell::new(None),
             backend: RefCell::new(RuntimeTextBackendResources::default()),
         }
@@ -9851,6 +9858,20 @@ impl Default for RuntimeTextDrawOwner {
 }
 
 impl RuntimeTextDrawOwner {
+    fn topology_or_build(
+        &self,
+        build: impl FnOnce() -> Result<StaticTextSlice>,
+    ) -> Result<Arc<StaticTextSlice>> {
+        if self.topology.borrow().is_none() {
+            *self.topology.borrow_mut() = Some(Arc::new(build()?));
+        }
+        self.topology
+            .borrow()
+            .as_ref()
+            .cloned()
+            .context("Text occurrence did not retain its imported topology")
+    }
+
     fn is_dirty(&self) -> bool {
         self.dirty.get() || self.retained.borrow().is_none()
     }
@@ -9877,6 +9898,35 @@ impl RuntimeTextDrawOwner {
         if !self.retain_paths_on_rebuild.get() {
             self.render_styles_dirty.set(true);
         }
+    }
+
+    fn propagate_render_opacity(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        opacity_owner_local: usize,
+    ) -> bool {
+        let render_opacity = instance
+            .component(opacity_owner_local)
+            .map_or(1.0, |component| component.transform.render_opacity);
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        for command in Arc::make_mut(&mut frame.commands) {
+            let effective_opacity =
+                render_opacity * command.text_path_bucket_opacity.unwrap_or(1.0);
+            command.render_opacity = effective_opacity;
+            if let Some(paint) = graph
+                .shape_paint_containers
+                .iter()
+                .flat_map(|container| container.paints.iter())
+                .find(|paint| paint.local_id == command.paint_local)
+            {
+                command.paint_state = runtime_shape_paint_state(instance, paint, effective_opacity);
+            }
+        }
+        true
     }
 
     fn retained_or_build(
@@ -13702,6 +13752,7 @@ pub struct RuntimeShapePaintCommand {
     pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
     pub(crate) text_path_bucket_slot: Option<usize>,
+    pub(crate) text_path_bucket_opacity: Option<f32>,
     pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
     pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
     // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
@@ -16749,6 +16800,7 @@ fn runtime_prepare_gradient_paint_command(
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -16892,10 +16944,27 @@ fn runtime_build_text_draw_frame(
             });
         }
     }
+    let topology = if drawable.type_name == "Text" {
+        Some(
+            drawable
+                .text_draw_owner
+                .as_ref()
+                .context("live Text is missing its retained owner")?
+                .topology_or_build(|| {
+                    StaticTextSlice::from_graph(runtime, graph, drawable_local)
+                })?,
+        )
+    } else {
+        None
+    };
     let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
-        let draw_data = runtime_text_draw_data(
+        let topology = topology
+            .as_deref()
+            .context("live Text did not retain its imported topology")?;
+        let draw_data = runtime_text_draw_data_from_slice(
+            topology,
             runtime,
             instance,
             graph,
@@ -16905,7 +16974,7 @@ fn runtime_build_text_draw_frame(
         )?;
         (
             draw_data.commands,
-            static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+            topology.clip_bounds(runtime, instance, layout_constraint)?,
             (!draw_data.color_glyphs.is_empty()).then(|| {
                 Arc::new(RuntimeRetainedColorGlyphs {
                     glyphs: draw_data.color_glyphs,
@@ -16946,7 +17015,10 @@ fn runtime_build_text_draw_frame(
             ))
         });
     if drawable.type_name == "Text"
-        && let Some(bounds) = build_static_text_constraint_bounds(
+        && let Some(bounds) = build_static_text_constraint_bounds_from_slice(
+            topology
+                .as_deref()
+                .expect("Text topology is retained before bounds publication"),
             runtime,
             graph,
             instance,
@@ -17111,6 +17183,21 @@ impl ArtboardInstance {
             let Some(owner) = drawable.text_draw_owner.as_ref() else {
                 continue;
             };
+            if (dirt
+                & (ComponentDirt::TEXT_SHAPE
+                    | ComponentDirt::PAINT
+                    | ComponentDirt::WORLD_TRANSFORM))
+                .is_empty()
+                && dirt.contains(ComponentDirt::RENDER_OPACITY)
+            {
+                // C++ `Text::update(RenderOpacity)` only calls
+                // `TextStylePaint::propagateOpacity`; shaped paragraphs,
+                // lines, draw commands, and render paths remain retained.
+                // Refresh the command-side opacity used by Rust's pooled
+                // paints without reconstructing glyph topology or geometry.
+                owner.propagate_render_opacity(self, graph, target_local);
+                continue;
+            }
             if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
                 // A direct dependency Path/Paint propagation is a C++
                 // buildRenderStyles boundary. Layout propagation explicitly
@@ -20219,6 +20306,7 @@ fn runtime_shape_paint_command_with_effect_path(
         aliases_local_clockwise_path,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -26304,6 +26392,66 @@ mod tests {
     }
 
     #[test]
+    fn text_render_opacity_propagates_without_rebuilding_retained_paths() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let retained_before = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .retained_frame()
+            .expect("initial update retains text");
+        let paths_before = Arc::clone(&retained_before.paths);
+        let path_commands_before = retained_before
+            .commands
+            .iter()
+            .map(|command| command.path_commands.clone())
+            .collect::<Vec<_>>();
+
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            0.25,
+        ));
+        assert!(instance.update_pass());
+
+        let owner = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner");
+        assert!(!owner.is_dirty());
+        let retained_after = owner
+            .retained_frame()
+            .expect("opacity propagation retains text");
+        assert!(Arc::ptr_eq(&paths_before, &retained_after.paths));
+        assert_eq!(
+            path_commands_before,
+            retained_after
+                .commands
+                .iter()
+                .map(|command| command.path_commands.clone())
+                .collect::<Vec<_>>()
+        );
+        for command in retained_after.commands.iter() {
+            assert_eq!(
+                command.render_opacity,
+                0.25 * command.text_path_bucket_opacity.unwrap_or(1.0)
+            );
+        }
+    }
+
+    #[test]
     fn transform_only_wave_through_text_variation_helper_retains_text_render_paths() {
         let bytes = include_bytes!("../../../fixtures/fl-e8/text_variation_modifier.riv");
         let runtime = read_runtime_file(bytes).expect("text variation fixture imports");
@@ -26656,6 +26804,7 @@ mod tests {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: None,

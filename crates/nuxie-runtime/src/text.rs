@@ -574,6 +574,26 @@ pub(crate) fn runtime_text_draw_data(
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<RuntimeTextDrawData> {
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
+    runtime_text_draw_data_from_slice(
+        &slice,
+        runtime,
+        instance,
+        graph,
+        text_local,
+        layout_bounds,
+        layout_constraint,
+    )
+}
+
+pub(crate) fn runtime_text_draw_data_from_slice(
+    slice: &StaticTextSlice,
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    text_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Result<RuntimeTextDrawData> {
     let render_opacity = instance
         .component(text_local)
         .map(|component| component.transform.render_opacity)
@@ -601,7 +621,7 @@ pub(crate) fn runtime_text_draw_data(
     for style_index in style_order {
         let style = &slice.styles[style_index];
         let path_buckets = render_data.path_buckets_by_style[style_index].clone();
-        let Some(container) = style.container else {
+        let Some(container) = style.container.as_ref() else {
             continue;
         };
         let path_buckets = order_opacity_buckets_like_cpp(path_buckets);
@@ -642,6 +662,7 @@ pub(crate) fn runtime_text_draw_data(
                         command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                     }
                     command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                    command.text_path_bucket_opacity = Some(path_bucket.opacity);
                     command.ensure_text_paint_pool_after_draw = Some(paint_pool);
                     commands.push(command);
                 }
@@ -679,6 +700,7 @@ pub(crate) fn runtime_text_draw_data(
                 }
                 command.uses_temporary_paint = true;
                 command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                command.text_path_bucket_opacity = Some(path_bucket.opacity);
                 command.text_paint_pool = Some(RuntimeTextPaintPoolUse {
                     spec: paint_pool,
                     paint_index,
@@ -804,12 +826,13 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
     )
 }
 
-struct StaticTextSlice<'a> {
+#[derive(Debug)]
+pub(crate) struct StaticTextSlice {
     kind: StaticTextKind,
     text_local: usize,
     text_global: u32,
     runs: Vec<StaticTextRun>,
-    styles: Vec<StaticTextStyle<'a>>,
+    styles: Vec<StaticTextStyle>,
     modifiers: Vec<StaticTextModifierGroup>,
 }
 
@@ -838,14 +861,13 @@ struct StaticResolvedRun {
 }
 
 #[derive(Debug, Clone)]
-struct StaticTextStyle<'a> {
+struct StaticTextStyle {
     local_id: usize,
     global_id: u32,
     name: Option<String>,
-    container: Option<&'a ShapePaintContainerNode>,
+    container: Option<ShapePaintContainerNode>,
     font_asset_global: Option<u32>,
     font_asset_id: Option<u32>,
-    font_bytes: Option<&'a [u8]>,
     variations: Vec<StaticTextVariation>,
     features: Vec<StaticTextStyleFeature>,
 }
@@ -1505,7 +1527,7 @@ impl StaticTextLayoutInfo {
     }
 }
 
-impl<'a> StaticTextSlice<'a> {
+impl StaticTextSlice {
     fn text_geometry_supported(
         &self,
         runtime: &RuntimeFile,
@@ -1566,9 +1588,9 @@ impl<'a> StaticTextSlice<'a> {
         Ok(participating_style_locals.is_empty())
     }
 
-    fn from_graph(
-        runtime: &'a RuntimeFile,
-        graph: &'a ArtboardGraph,
+    pub(crate) fn from_graph(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
         text_local: usize,
     ) -> Result<Self> {
         let text_object = graph
@@ -1884,8 +1906,8 @@ impl<'a> StaticTextSlice<'a> {
     }
 
     fn from_text_input_graph(
-        runtime: &'a RuntimeFile,
-        graph: &'a ArtboardGraph,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
         text_input_local: usize,
     ) -> Result<Self> {
         let text_input_object = graph
@@ -2796,7 +2818,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        style: &StaticTextStyle<'_>,
+        style: &StaticTextStyle,
     ) -> Result<f32> {
         let property_key = property_key_for_name("TextStyle", "fontSize")
             .context("missing TextStyle.fontSize key")?;
@@ -2821,7 +2843,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        style: &StaticTextStyle<'_>,
+        style: &StaticTextStyle,
     ) -> f32 {
         let Some(property_key) = property_key_for_name("TextStyle", "letterSpacing") else {
             return 0.0;
@@ -2926,7 +2948,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        style: &StaticTextStyle<'_>,
+        style: &StaticTextStyle,
     ) -> Result<f32> {
         let property_key = property_key_for_name("TextStyle", "lineHeight")
             .context("missing TextStyle.lineHeight key")?;
@@ -3506,7 +3528,7 @@ impl<'a> StaticTextSlice<'a> {
             .collect())
     }
 
-    fn base_style(&self) -> Result<&StaticTextStyle<'a>> {
+    fn base_style(&self) -> Result<&StaticTextStyle> {
         self.styles
             .first()
             .context("static text subset requires a base TextStylePaint")
@@ -3624,7 +3646,7 @@ impl<'a> StaticTextSlice<'a> {
         Ok(Some((-width * origin_x, -height * origin_y, width, height)))
     }
 
-    fn clip_bounds(
+    pub(crate) fn clip_bounds(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
@@ -4383,6 +4405,7 @@ impl<'a> StaticTextSlice<'a> {
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
+                command.text_path_bucket_opacity = Some(path_bucket.opacity);
                 commands.push(command);
             }
         }
@@ -4390,9 +4413,10 @@ impl<'a> StaticTextSlice<'a> {
     }
 }
 
-impl<'a> StaticTextStyle<'a> {
+impl StaticTextStyle {
     fn foreground_color(&self, instance: &ArtboardInstance) -> u32 {
         self.container
+            .as_ref()
             .into_iter()
             .flat_map(|container| container.paints.iter())
             .find(|paint| {
@@ -4462,16 +4486,17 @@ impl<'a> StaticTextStyle<'a> {
     }
 
     fn from_graph(
-        runtime: &'a RuntimeFile,
-        graph: &'a ArtboardGraph,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
         style_local: usize,
     ) -> Result<Self> {
         let style_global = global_for_local(graph, style_local)?;
         let container = graph
             .shape_paint_containers
             .iter()
-            .find(|container| container.local_id == style_local);
-        if let Some(container) = container {
+            .find(|container| container.local_id == style_local)
+            .cloned();
+        if let Some(container) = container.as_ref() {
             for paint in &container.paints {
                 if !matches!(
                     paint.paint_type,
@@ -4502,35 +4527,30 @@ impl<'a> StaticTextStyle<'a> {
         let style = runtime
             .object(style_global as usize)
             .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
-        let (font_asset_global, font_asset_id, font_bytes) =
-            if style.property("fontAssetId").is_some() {
-                let font_asset_index = style
-                    .uint_property("fontAssetId")
-                    .context("TextStylePaint serialized fontAssetId is not a uint")?;
-                let font_asset = runtime
-                    .file_asset(
-                        usize::try_from(font_asset_index).context("font asset id is too large")?,
-                    )
-                    .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
-                if font_asset.type_name != "FontAsset" {
-                    bail!(
-                        "static text subset expected FontAsset, found {} global {}",
-                        font_asset.type_name,
-                        font_asset.id
-                    );
-                }
-                let asset_id = font_asset
-                    .uint_property("assetId")
-                    .context("FontAsset is missing its semantic assetId")?;
-                let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
-                (
-                    Some(font_asset.id),
-                    Some(asset_id),
-                    embedded_file_asset_bytes(runtime, font_asset.id),
+        let (font_asset_global, font_asset_id) = if style.property("fontAssetId").is_some() {
+            let font_asset_index = style
+                .uint_property("fontAssetId")
+                .context("TextStylePaint serialized fontAssetId is not a uint")?;
+            let font_asset = runtime
+                .file_asset(
+                    usize::try_from(font_asset_index).context("font asset id is too large")?,
                 )
-            } else {
-                (None, None, None)
-            };
+                .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
+            if font_asset.type_name != "FontAsset" {
+                bail!(
+                    "static text subset expected FontAsset, found {} global {}",
+                    font_asset.type_name,
+                    font_asset.id
+                );
+            }
+            let asset_id = font_asset
+                .uint_property("assetId")
+                .context("FontAsset is missing its semantic assetId")?;
+            let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
+            (Some(font_asset.id), Some(asset_id))
+        } else {
+            (None, None)
+        };
 
         let style_component = graph
             .components
@@ -4576,7 +4596,6 @@ impl<'a> StaticTextStyle<'a> {
             container,
             font_asset_global,
             font_asset_id,
-            font_bytes,
             variations,
             features,
         })
@@ -4592,7 +4611,10 @@ impl<'a> StaticTextStyle<'a> {
         }
         self.font_asset_global
             .and_then(|asset_global| instance.runtime_font_asset_bytes(asset_global))
-            .or(self.font_bytes)
+            .or_else(|| {
+                self.font_asset_global
+                    .and_then(|asset_global| embedded_file_asset_bytes(runtime, asset_global))
+            })
             .or_else(|| {
                 self.font_asset_id
                     .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))

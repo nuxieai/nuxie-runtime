@@ -29359,6 +29359,210 @@ mod tests {
         );
     }
 
+    /// A static child of a free-placed parent settles at
+    /// `parent_origin + padding`, not `parent_origin + parent_origin + padding`.
+    ///
+    /// C++ keeps Yoga's parent-local `layout.position` on the child
+    /// (`layoutFromYoga`, `src/layout_component.cpp:1082-1088`) and composes it
+    /// onto the parent world once (`src/layout_component.cpp:210-246`). The
+    /// child's own solved slot therefore already excludes the parent origin;
+    /// re-adding it double-counts free placement for every padded parent.
+    /// Settled bounds, the semantic world-bounds read, draw, and hit testing
+    /// must all agree on that one box.
+    #[test]
+    fn static_children_of_a_free_placed_padded_parent_settle_without_the_parent_origin_twice() {
+        for (parent_x, parent_y) in [(10.0_f32, 20.0_f32), (0.0, 0.0)] {
+            let bytes = synthetic_free_placed_padded_parent_riv(parent_x, parent_y);
+            let file = read_runtime_file(&bytes).expect("free-placed padded parent riv imports");
+            let graphs =
+                GraphFile::from_runtime_file(&file).expect("free-placed padded parent graphs");
+            let graph = graphs
+                .artboards
+                .first()
+                .expect("synthetic riv has an artboard");
+            let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+            instance.update_pass();
+            instance
+                .debug_taffy_layout_bounds_report(&file, graph)
+                .expect("the fixture settles with Taffy");
+
+            // The child slot is the parent origin plus the parent's padding —
+            // the parent origin appears exactly once.
+            let child_x = parent_x + 12.0;
+            let child_y = parent_y + 44.0;
+
+            assert_eq!(
+                instance.layout_bounds(1),
+                Some(RuntimeLayoutBounds {
+                    x: parent_x,
+                    y: parent_y,
+                    width: 80.0,
+                    height: 100.0,
+                }),
+                "the free-placed parent settles at its authored inset"
+            );
+            assert_eq!(
+                instance.layout_bounds(3),
+                Some(RuntimeLayoutBounds {
+                    x: child_x,
+                    y: child_y,
+                    width: 20.0,
+                    height: 10.0,
+                }),
+                "the static child settles at parent origin + padding, once"
+            );
+
+            // The settled world transform is the same translation the solved
+            // slot reports, so semantic reads cannot drift from settlement.
+            assert_mat2d_near(
+                instance.runtime_component_world_transform(3, graph).0,
+                [1.0, 0.0, 0.0, 1.0, child_x, child_y],
+            );
+            let (min_x, min_y, max_x, max_y) = instance
+                .layout_world_bounds(3)
+                .expect("the child reports layout world bounds");
+            assert_aabb_near(
+                RenderAabb::new(min_x, min_y, max_x, max_y),
+                RenderAabb::new(child_x, child_y, child_x + 20.0, child_y + 10.0),
+            );
+
+            // The child's visual geometry lands on the same box, and hit
+            // testing agrees: the settled box hits, the double-counted box
+            // (parent origin applied twice) does not.
+            let mut cache = RuntimeGeometryState::default();
+            assert_aabb_near(
+                instance
+                    .geometry_world_bounds_with_context(&file, graph, 5, &mut cache)
+                    .expect("the child's visual root has geometry"),
+                RenderAabb::new(child_x, child_y, child_x + 20.0, child_y + 10.0),
+            );
+            assert_eq!(
+                instance.geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(child_x + 10.0, child_y + 5.0),
+                    &mut cache,
+                ),
+                vec![5],
+                "the settled child box is hit testable"
+            );
+            if parent_x != 0.0 || parent_y != 0.0 {
+                assert!(
+                    instance
+                        .geometry_hit_test_with_context(
+                            &file,
+                            graph,
+                            RenderVec2D::new(child_x + parent_x + 10.0, child_y + parent_y + 5.0),
+                            &mut cache,
+                        )
+                        .is_empty(),
+                    "the double-counted box must not be hit testable"
+                );
+            }
+
+            // Draw agrees: the child's fill is recorded at the settled slot.
+            let stats = Rc::new(CountingStats::default());
+            let mut factory = CountingFactory {
+                stats,
+                next_path_id: 0,
+            };
+            let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+                &file,
+                &instance,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+            );
+            let mut path_cache = RuntimeArtboardPathState::default();
+            let mut renderer = WorldPathRecordingRenderer::default();
+            instance
+                .update_artboard_backend_tree(
+                    &file,
+                    graph,
+                    &graphs.artboards,
+                    &mut factory,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .expect("paint preparation succeeds");
+            instance
+                .draw_artboard_internal_with_render_cache(
+                    &file,
+                    graph,
+                    &graphs.artboards,
+                    &mut factory,
+                    &mut renderer,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .expect("draw succeeds");
+            let drawn = renderer
+                .draw_paths
+                .last()
+                .expect("the painted child records a draw");
+            assert!(!drawn.is_empty(), "the recorded draw has geometry");
+            let (mut min_x, mut min_y) = drawn[0];
+            let (mut max_x, mut max_y) = drawn[0];
+            for (x, y) in drawn.iter().copied() {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+            assert_aabb_near(
+                RenderAabb::new(min_x, min_y, max_x, max_y),
+                RenderAabb::new(child_x, child_y, child_x + 20.0, child_y + 10.0),
+            );
+        }
+    }
+
+    /// The runtime composes every layout node's own inset exactly once, so two
+    /// nested nodes carrying the same inset settle at twice that origin. That
+    /// is faithful to C++ (`src/layout_component.cpp:210-246`) — a producer that
+    /// authors placement on both an outer item and an inner content wrapper is
+    /// double-authoring, and the runtime must not silently absorb it.
+    #[test]
+    fn nested_free_placed_insets_each_compose_once() {
+        let bytes = synthetic_nested_free_placed_inset_riv(10.0, 20.0);
+        let file = read_runtime_file(&bytes).expect("nested free-placed inset riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested free-placed inset graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+
+        assert_eq!(
+            instance.layout_bounds(1).map(|bounds| (bounds.x, bounds.y)),
+            Some((10.0, 20.0)),
+            "the outer node owns its inset"
+        );
+        assert_eq!(
+            instance.layout_bounds(3).map(|bounds| (bounds.x, bounds.y)),
+            Some((20.0, 40.0)),
+            "the inner node adds its own inset on top of the outer slot"
+        );
+        assert_eq!(
+            instance.layout_bounds(5).map(|bounds| (bounds.x, bounds.y)),
+            Some((32.0, 84.0)),
+            "a static grandchild lands at both insets plus the inner padding"
+        );
+
+        // With the inset authored once, the same tree collapses to the padding.
+        let bytes = synthetic_nested_free_placed_inset_riv(0.0, 0.0);
+        let file = read_runtime_file(&bytes).expect("zero-inset riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("zero-inset graphs");
+        let graph = graphs.artboards.first().expect("artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        assert_eq!(
+            instance.layout_bounds(5).map(|bounds| (bounds.x, bounds.y)),
+            Some((12.0, 44.0)),
+            "with no inset authored the grandchild is exactly the inner padding"
+        );
+    }
+
     #[test]
     fn nested_layout_translation_composes_through_parent_layout_affine() {
         let bytes = synthetic_nested_affine_layout_geometry_riv();
@@ -30137,6 +30341,76 @@ mod tests {
                     .fill_rule,
             );
         }
+
+        fn draw_image(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        fn draw_image_mesh(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _vertices: Option<&dyn RenderBuffer>,
+            _uv_coords: Option<&dyn RenderBuffer>,
+            _indices: Option<&dyn RenderBuffer>,
+            _vertex_count: u32,
+            _index_count: u32,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        fn modulate_opacity(&mut self, _opacity: f32) {}
+    }
+
+    /// Records drawn path geometry in world space by resolving the renderer's
+    /// save/restore transform stack, so a test can compare what is painted
+    /// against a settled layout box.
+    struct WorldPathRecordingRenderer {
+        transform: Mat2D,
+        stack: Vec<Mat2D>,
+        draw_paths: Vec<Vec<(f32, f32)>>,
+    }
+
+    impl Default for WorldPathRecordingRenderer {
+        fn default() -> Self {
+            Self {
+                transform: Mat2D::IDENTITY,
+                stack: Vec::new(),
+                draw_paths: Vec::new(),
+            }
+        }
+    }
+
+    impl Renderer for WorldPathRecordingRenderer {
+        fn save(&mut self) {
+            self.stack.push(self.transform);
+        }
+
+        fn restore(&mut self) {
+            self.transform = self.stack.pop().unwrap_or(Mat2D::IDENTITY);
+        }
+
+        fn transform(&mut self, transform: RenderMat2D) {
+            self.transform = self.transform.multiply(Mat2D(transform.0));
+        }
+
+        fn draw_path(&mut self, path: &dyn RenderPath, _paint: &dyn RenderPaint) {
+            let transform = self.transform;
+            self.draw_paths.push(
+                PathGeometryRecordingRenderer::path_points(path)
+                    .into_iter()
+                    .map(|(x, y)| transform.transform_point(x, y))
+                    .collect(),
+            );
+        }
+
+        fn clip_path(&mut self, _path: &dyn RenderPath) {}
 
         fn draw_image(
             &mut self,
@@ -31637,6 +31911,127 @@ mod tests {
 
     fn synthetic_affine_layout_geometry_riv() -> Vec<u8> {
         synthetic_layout_geometry_riv_with_affine(Some((std::f32::consts::FRAC_PI_2, 2.0, 0.5)))
+    }
+
+    /// A free-placed padded parent with one painted static child.
+    ///
+    /// The parent is `YGPositionTypeAbsolute` with point `positionLeft`/
+    /// `positionTop` insets — the shape authoring tools produce when they lower
+    /// a free-placed view's x/y onto the layout node — and carries
+    /// `paddingLeft`/`paddingTop`. The child is an ordinary static layout node.
+    fn synthetic_free_placed_padded_parent_riv(parent_x: f32, parent_y: f32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 320.0);
+            push_f32(bytes, "LayoutComponent", "height", 640.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 80.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_uint(bytes, "LayoutComponentStyle", "positionTypeValue", 2);
+            push_f32(bytes, "LayoutComponentStyle", "positionLeft", parent_x);
+            push_uint(bytes, "LayoutComponentStyle", "positionLeftUnitsValue", 1);
+            push_f32(bytes, "LayoutComponentStyle", "positionTop", parent_y);
+            push_uint(bytes, "LayoutComponentStyle", "positionTopUnitsValue", 1);
+            push_f32(bytes, "LayoutComponentStyle", "paddingLeft", 12.0);
+            push_f32(bytes, "LayoutComponentStyle", "paddingTop", 44.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "LayoutComponent", "width", 20.0);
+            push_f32(bytes, "LayoutComponent", "height", 10.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        // The child's visual root: a 20x10 rectangle centred in the child slot,
+        // so its geometry spans exactly the settled child box.
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "Node", "x", 10.0);
+            push_f32(bytes, "Node", "y", 5.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 5);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 6);
+            push_color(bytes, "SolidColor", "colorValue", 0xff44_5566);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    /// Two nested free-placed layout nodes that each carry the same absolute
+    /// inset, with the padding on the inner one.
+    ///
+    /// C++ stores Yoga's parent-local `layout.position` on each
+    /// `LayoutComponent` and composes it onto the parent world
+    /// (`src/layout_component.cpp:210-246`), so every node on the chain
+    /// contributes its own inset exactly once. This fixture pins that the
+    /// runtime does not collapse or dedupe a repeated inset: authoring the same
+    /// origin on two nested nodes legitimately settles at twice that origin.
+    fn synthetic_nested_free_placed_inset_riv(origin_x: f32, origin_y: f32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 320.0);
+            push_f32(bytes, "LayoutComponent", "height", 640.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 80.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_uint(bytes, "LayoutComponentStyle", "positionTypeValue", 2);
+            push_f32(bytes, "LayoutComponentStyle", "positionLeft", origin_x);
+            push_uint(bytes, "LayoutComponentStyle", "positionLeftUnitsValue", 1);
+            push_f32(bytes, "LayoutComponentStyle", "positionTop", origin_y);
+            push_uint(bytes, "LayoutComponentStyle", "positionTopUnitsValue", 1);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "LayoutComponent", "width", 80.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_uint(bytes, "LayoutComponentStyle", "positionTypeValue", 2);
+            push_f32(bytes, "LayoutComponentStyle", "positionLeft", origin_x);
+            push_uint(bytes, "LayoutComponentStyle", "positionLeftUnitsValue", 1);
+            push_f32(bytes, "LayoutComponentStyle", "positionTop", origin_y);
+            push_uint(bytes, "LayoutComponentStyle", "positionTopUnitsValue", 1);
+            push_f32(bytes, "LayoutComponentStyle", "paddingLeft", 12.0);
+            push_f32(bytes, "LayoutComponentStyle", "paddingTop", 44.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "LayoutComponent", "width", 20.0);
+            push_f32(bytes, "LayoutComponent", "height", 10.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 6);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        bytes
     }
 
     fn synthetic_nested_affine_layout_geometry_riv() -> Vec<u8> {

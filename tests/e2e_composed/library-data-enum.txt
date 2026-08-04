@@ -1,0 +1,1 @@
+0.1 setVmEnum mycolor 1

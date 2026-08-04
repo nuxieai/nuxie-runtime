@@ -1,0 +1,103 @@
+# Composed runtime-session evidence. Every exact row is loaded once by each
+# scripted golden runner, then advances through pointer input, host resize,
+# view-model mutation, semantic reads, drawing, and full-stream comparison.
+
+[[file]]
+id = "composed_listener_view_model"
+path = "tests/unit_tests/assets/listener_view_model.riv"
+artboard = "main"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/listener-view-model.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "listeners", "data-binding", "view-model-number"]
+
+[[file]]
+id = "composed_data_converter_to_number"
+path = "tests/unit_tests/assets/data_converter_to_number.riv"
+artboard = "main"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/data-converter-to-number.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "text", "data-converter", "view-model-number"]
+
+[[file]]
+id = "composed_scripted_boolean"
+path = "tests/unit_tests/assets/scripted_boolean.riv"
+artboard = "BooleanArtboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/scripted-boolean.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "animation", "view-model-bool"]
+
+[[file]]
+id = "composed_relative_data_binding"
+path = "tests/unit_tests/assets/relative_data_binding.riv"
+artboard = "main"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/relative-data-binding.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "nested-artboard", "nested-view-model", "data-binding"]
+
+[[file]]
+id = "composed_scripted_color"
+path = "tests/unit_tests/assets/scripted_color.riv"
+artboard = "ColorArtboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/scripted-color.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "animation", "data-binding", "view-model-color"]
+
+[[file]]
+id = "composed_scripted_enum"
+path = "tests/unit_tests/assets/scripted_enum.riv"
+artboard = "EnumArtboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/scripted-enum.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "animation", "custom-enum", "view-model-enum"]
+
+[[file]]
+id = "composed_scripted_string"
+path = "tests/unit_tests/assets/scripted_string.riv"
+artboard = "StringArtboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/scripted-string.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "animation", "view-model-string"]
+
+[[file]]
+id = "composed_collapsable_data_binding"
+path = "tests/unit_tests/assets/collapsable_data_binding.riv"
+artboard = "Main"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/collapsable-data-binding.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "solo", "data-binding", "view-model-number"]
+
+[[file]]
+id = "composed_data_converter_interpolator_reset"
+path = "tests/unit_tests/assets/data_converter_interpolator_reset.riv"
+artboard = "Artboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/data-converter-interpolator-reset.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "data-converter", "interpolator", "view-model-number"]
+
+[[file]]
+id = "composed_library_data_enum"
+path = "tests/unit_tests/assets/library_data_enum_test.riv"
+artboard = "my_artboard"
+input_script = "tests/e2e_composed/input-and-resize.txt"
+view_model_script = "tests/e2e_composed/library-data-enum.txt"
+samples = [0.0, 0.05, 0.1, 0.25]
+status = "exact"
+features = ["e2e-composed", "events", "data-binding", "view-model-enum"]

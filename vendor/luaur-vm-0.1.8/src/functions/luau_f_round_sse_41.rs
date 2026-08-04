@@ -17,23 +17,39 @@ pub unsafe fn luau_f_round_sse_41(
     _args: StkId,
     nparams: core::ffi::c_int,
 ) -> core::ffi::c_int {
-    if LUAU_TARGET_SSE41 && nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
-        let a1 = nvalue!(arg0);
+    if LUAU_TARGET_SSE41 {
+        if luaur_common::FFlag::LuauMathRoundNegZero.get() {
+            if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
+                let a1 = nvalue!(arg0);
+                // roundsd only supports bankers rounding natively, so we need to emulate rounding by using truncation
+                // offset is prevfloat(0.5), which is important so that we round prevfloat(0.5) to 0.
+                const OFFSET: f64 = 0.49999999999999994;
 
-        // roundsd only supports bankers rounding natively, so we need to emulate rounding by using truncation
-        // offset is prevfloat(0.5), which is important so that we round prevfloat(0.5) to 0.
-        const OFFSET: f64 = 0.49999999999999994;
+                #[cfg(target_arch = "x86_64")]
+                {
+                    use core::arch::x86_64::*;
 
-        // _MM_FROUND_TO_ZERO is 3
-        const MM_FROUND_TO_ZERO: i32 = 3;
-
-        setnvalue!(
-            res,
-            roundsd_sse41::<MM_FROUND_TO_ZERO>(a1 + if a1 < 0.0 { -OFFSET } else { OFFSET })
-        );
-
-        1
-    } else {
-        -1
+                    let va1 = _mm_set_sd(a1);
+                    let sign = _mm_and_pd(va1, _mm_set_sd(-0.0));
+                    let off = _mm_or_pd(_mm_set_sd(OFFSET), sign);
+                    let sum = _mm_add_sd(va1, off);
+                    let result = _mm_round_sd(sum, sum, 3 | 8);
+                    setnvalue!(res, _mm_cvtsd_f64(result));
+                    return 1;
+                }
+            }
+        } else if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
+            let a1 = nvalue!(arg0);
+            // roundsd only supports bankers rounding natively, so we need to emulate rounding by using truncation
+            // offset is prevfloat(0.5), which is important so that we round prevfloat(0.5) to 0.
+            const OFFSET: f64 = 0.49999999999999994;
+            setnvalue!(
+                res,
+                roundsd_sse41::<3>(a1 + if a1 < 0.0 { -OFFSET } else { OFFSET })
+            );
+            return 1;
+        }
     }
+
+    -1
 }

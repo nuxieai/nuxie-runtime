@@ -107,6 +107,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauKnowsTheDataModel3.set(value);
     FFlag::LuauLValueCompoundAssignmentVisitLhs.set(value);
     FFlag::LuauLimitUnificationRecursion.set(value);
+    FFlag::LuauMathRoundNegZero.set(false);
     FFlag::LuauNativeCodeTargetCheck.set(value);
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
     FFlag::LuauNoDuplicateBinaryPrefix.set(false);
@@ -338,6 +339,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauLValueCompoundAssignmentVisitLhs);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauLimitUnificationRecursion);
+    // VM/src/lbuiltins.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauMathRoundNegZero);
     // CodeGen/src/CodeGenUtils.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauNativeCodeTargetCheck);
     // Analysis/src/NonStrictTypeChecker.cpp

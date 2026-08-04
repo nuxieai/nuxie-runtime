@@ -77,7 +77,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileInlineTableFunctions.set(value);
     FFlag::LuauCompileNewTableMutationTracker.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
-    FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCostModel.set(false);
@@ -293,8 +292,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileNewTableMutationTracker);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
-    // Bytecode/src/BytecodeBuilder.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileUdataDirect);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
     // Analysis/src/Constraint.cpp

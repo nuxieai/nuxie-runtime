@@ -14,7 +14,7 @@ impl LuauBytecodeTag {
     /// Bytecode version; runtime supports [MIN, MAX], compiler emits TARGET by default but may emit a higher version when flags are enabled
     pub const LBC_VERSION_MIN: Self = Self(3);
     pub const LBC_VERSION_MAX: Self = Self(12);
-    pub const LBC_VERSION_TARGET: Self = Self(7);
+    pub const LBC_VERSION_TARGET: Self = Self(9);
 
     /// Type encoding version
     pub const LBC_TYPE_VERSION_MIN: Self = Self(1);

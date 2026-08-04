@@ -4101,14 +4101,41 @@ impl ArtboardInstance {
             factory,
             max_retained_decoded_image_bytes,
         )?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
-        self.seed_runtime_shape_paint_opacity_tree();
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(true);
         Ok(())
+    }
+
+    fn attach_initialized_renderer_tree_if_needed(&self, seed_opacity: bool) {
+        let structure_epoch = self.nested_structure_epoch();
+        let (attach_images, seed_opacity) = {
+            let resources = self.render_resources.borrow();
+            (
+                (resources.image_tree_structure_epoch != Some(structure_epoch))
+                    .then(|| Arc::clone(&resources.image_assets)),
+                seed_opacity
+                    && resources.opacity_tree_structure_epoch != Some(structure_epoch),
+            )
+        };
+        if let Some(images) = attach_images.as_ref() {
+            self.attach_runtime_image_assets_tree(Arc::clone(images));
+        }
+        if seed_opacity {
+            self.seed_runtime_shape_paint_opacity_tree();
+        }
+        let mut resources = self.render_resources.borrow_mut();
+        if attach_images.is_some() {
+            resources.image_tree_structure_epoch = Some(structure_epoch);
+        }
+        if seed_opacity {
+            resources.opacity_tree_structure_epoch = Some(structure_epoch);
+        }
     }
 
     fn seed_runtime_shape_paint_opacity_tree(&self) {
         let graph = self.runtime_graph();
-        for owner_ref in &self.runtime_shapes.paint_owner_refs {
+        let pending_owners = self.runtime_shapes.pending_backend_paints.borrow().clone();
+        for owner_ref in pending_owners {
             let Some(owner) = self
                 .runtime_shapes
                 .get(owner_ref.shape_local)
@@ -4170,7 +4197,8 @@ impl ArtboardInstance {
             factory,
             max_retained_decoded_image_bytes,
         )?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(false);
         Ok(())
     }
 
@@ -4207,7 +4235,8 @@ impl ArtboardInstance {
             max_retained_decoded_image_bytes,
         );
         resources.install_root_cache(cache)?;
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
+        drop(resources);
+        self.attach_initialized_renderer_tree_if_needed(false);
         Ok(())
     }
 
@@ -4236,7 +4265,6 @@ impl ArtboardInstance {
             max_retained_decoded_image_bytes,
         )?;
         let mut resources = self.render_resources.borrow_mut();
-        self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
         if resources.needs_paint_preparation(self, graph) {
             self.prepare_artboard_occurrence_resources(
                 runtime,
@@ -13896,6 +13924,12 @@ pub(crate) struct RuntimeArtboardResourceBundle {
 pub(crate) struct RuntimeOccurrenceRenderResources {
     parent_backend_context_id: Option<u64>,
     initialized: bool,
+    /// `None` means the late backend has not attached this occurrence tree;
+    /// `Some(epoch)` records the exact mounted structure already attached.
+    /// The nested option preserves graph-less synthetic occurrences, whose
+    /// stable epoch is itself `None`.
+    image_tree_structure_epoch: Option<Option<u64>>,
+    opacity_tree_structure_epoch: Option<Option<u64>>,
     paints: RuntimeRenderPaints,
     paint_configurations: RuntimePaintOwnerSlots,
     preparation_without_nested_layout: RuntimeOptionalPaintPreparation,
@@ -28928,6 +28962,55 @@ mod tests {
         assert!(
             nslicer_cache.needs_paint_preparation(&nslicer_instance, nslicer_graph),
             "authored NSlicer mesh work must never be hidden by the paint fast path"
+        );
+    }
+
+    #[test]
+    fn renderer_initialization_does_not_reseed_a_clean_occurrence_tree() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let file = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("text style graphs build");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+
+        instance
+            .initialize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("first renderer initialization succeeds");
+        let owner_ref = *instance
+            .runtime_shapes
+            .paint_owner_refs
+            .first()
+            .expect("fixture retains a paint owner");
+        let owner = instance
+            .runtime_shapes
+            .get(owner_ref.shape_local)
+            .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            .expect("retained owner resolves");
+        owner.render_opacity.set(0.25);
+
+        instance
+            .initialize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("repeated renderer initialization succeeds");
+        assert_eq!(
+            owner.render_opacity.get(),
+            0.25,
+            "a clean initialized occurrence must not re-enter opacity-tree seeding",
         );
     }
 

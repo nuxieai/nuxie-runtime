@@ -94,9 +94,15 @@ the first fix.
 
 | Step | Fixture | C++ ms/frame | Rust ms/frame | Change from lane baseline |
 |---|---|---:|---:|---:|
-| Lane baseline | `car_widgets_v01` | 0.033140 | 73.478530 | — |
-| Lane baseline | `zombie_skins` | 0.034810 | 2.144770 | — |
-| Fix 1: retained opacity-owner index | `car_widgets_v01` | 0.033370 | 9.438670 | -87.15% |
-| Fix 1: retained opacity-owner index | `zombie_skins` | 0.035480 | 1.550700 | -27.70% |
+| Lane baseline | `car_widgets_v01` | 0.033261 | 69.710143 | — |
+| Lane baseline | `zombie_skins` | 0.035936 | 1.361694 | — |
+| Fix 1: retained opacity-owner index | `car_widgets_v01` | 0.033128 | 8.861663 | -87.29% |
+| Fix 1: retained opacity-owner index | `zombie_skins` | 0.044959 | 0.912388 | -33.00% |
+| Fix 2: structure-gated renderer tree initialization | `car_widgets_v01` | 0.033028 | 6.895138 | -90.11% |
+| Fix 2: structure-gated renderer tree initialization | `zombie_skins` | 0.035613 | 0.590826 | -56.61% |
 
-Raw reports are in [`evidence/perffix-2026-08-04/`](evidence/perffix-2026-08-04/).
+The branch's original comparator predated the `advance_draw` derived phase and
+therefore printed total hot-loop time (including `prepare`). It was updated to
+the method above before all three revisions were remeasured. Authoritative raw
+reports are the `corrected-*` baseline/fix-1 files and the `fix2-*` files in
+[`evidence/perffix-2026-08-04/`](evidence/perffix-2026-08-04/).

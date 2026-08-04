@@ -42,6 +42,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauAddRecursionCounterToNonStrictTypeChecker.set(value);
     FFlag::LuauAllowGlobalDeclarationToBeCalledClass.set(value);
     FFlag::LuauAlsoInstantiateInferredArguments.set(value);
+    FFlag::LuauAutoStack.set(false);
     FFlag::LuauAutocompleteConst.set(value);
     FFlag::LuauAutocompleteExport.set(value);
     FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
@@ -221,6 +222,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauAllowGlobalDeclarationToBeCalledClass);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAlsoInstantiateInferredArguments);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauAutoStack);
     // Analysis/src/AutocompleteCore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAutocompleteConst);
     // Analysis/src/AutocompleteCore.cpp

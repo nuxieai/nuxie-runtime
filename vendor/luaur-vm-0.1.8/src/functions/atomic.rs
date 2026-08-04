@@ -6,6 +6,7 @@ use crate::functions::markudatadirectaccess::markudatadirectaccess;
 use crate::functions::markudatadirectfields::markudatadirectfields;
 use crate::functions::propagateall::propagateall;
 use crate::functions::remarkupvals::remarkupvals;
+use crate::functions::embeddermarkref::embeddermarkref;
 use crate::macros::gc_satomic::GCSatomic;
 use crate::macros::gc_satomic::GCSsweep;
 use crate::macros::markobject::markobject;
@@ -47,6 +48,16 @@ pub unsafe fn atomic(l: *mut lua_State) -> usize {
     (*g).gray = (*g).grayagain;
     (*g).grayagain = core::ptr::null_mut();
     work += propagateall(g);
+
+    if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        if let Some(embeddergc) = (*g).embeddergc {
+            embeddergc((*g).mainthread, Some(embeddermarkref));
+            while !(*g).gray.is_null() {
+                work += propagateall(g);
+                embeddergc((*g).mainthread, Some(embeddermarkref));
+            }
+        }
+    }
 
     work += cleartable(l, (*g).weak);
     (*g).weak = core::ptr::null_mut();

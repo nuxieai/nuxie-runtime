@@ -33,10 +33,20 @@ pub unsafe fn reallymarkobject(g: *mut global_State, o: *mut GCObject) {
     LUAU_ASSERT!(iswhite!(o) && !isdead!(g, o));
     white2gray!(o);
     match (*o).gch.tt as i32 {
-        t if t == lua_Type::LUA_TSTRING as i32 => {}
+        t if t == lua_Type::LUA_TSTRING as i32 => {
+            gray2black!(o); // strings are never gray
+        }
         t if t == lua_Type::LUA_TUSERDATA as i32 => {
-            let mt: *mut LuaTable = (*gco2u!(o)).metatable;
             gray2black!(o); // udata are never gray
+            let u = gco2u!(o) as *const _ as *mut crate::records::udata::Udata;
+            if luaur_common::FFlag::LuauGcTraceUdata.get()
+                && ((*u).tag as usize) < crate::macros::lua_utag_limit::LUA_UTAG_LIMIT as usize
+            {
+                if let Some(markfn) = (*g).udatamark[(*u).tag as usize] {
+                    markfn((*g).mainthread, (*u).data.as_mut_ptr() as *mut core::ffi::c_void);
+                }
+            }
+            let mt: *mut LuaTable = (*u).metatable;
             if !mt.is_null() {
                 markobject!(g, mt);
             }
@@ -60,6 +70,10 @@ pub unsafe fn reallymarkobject(g: *mut global_State, o: *mut GCObject) {
         t if t == lua_Type::LUA_TTHREAD as i32 => {
             (*(gco2th!(o) as *const _ as *mut lua_State)).gclist = (*g).gray;
             (*g).gray = o;
+        }
+        #[cfg(feature = "lua_vector_double")]
+        t if t == lua_Type::LUA_TVECTOR as i32 => {
+            gray2black!(o); // vectors are never gray
         }
         t if t == lua_Type::LUA_TBUFFER as i32 => {
             gray2black!(o); // buffers are never gray

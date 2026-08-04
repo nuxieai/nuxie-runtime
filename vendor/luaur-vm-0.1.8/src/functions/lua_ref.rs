@@ -21,6 +21,16 @@ use crate::type_aliases::t_value::TValue;
 pub unsafe fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int {
     api_check!(L, idx != LUA_REGISTRYINDEX);
 
+    if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        let g = (*L).global;
+        return crate::functions::registryref::registryref(
+            L,
+            idx,
+            core::ptr::addr_of_mut!((*g).registry),
+            core::ptr::addr_of_mut!((*g).registryfree),
+        );
+    }
+
     let mut ref_ = LUA_REFNIL;
     let g = (*L).global;
     let p: StkId = index2addr(L, idx);

@@ -9,6 +9,8 @@ use crate::functions::enumtable::enumtable;
 use crate::functions::enumthread::enumthread;
 use crate::functions::enumudata::enumudata;
 use crate::functions::enumupval::enumupval;
+#[cfg(feature = "lua_vector_double")]
+use crate::functions::enumnode::enumnode;
 use crate::macros::gco_2_buf::gco2buf;
 use crate::macros::gco_2_cl::gco2cl;
 use crate::macros::gco_2_class::gco2class;
@@ -40,6 +42,15 @@ pub(crate) unsafe fn enumobj(ctx: *mut EnumContext, o: *mut GCObject) {
         }
         t if t == lua_Type::LUA_TTHREAD as i32 => {
             enumthread(ctx, gco2th!(o) as *const _ as *mut _);
+        }
+        #[cfg(feature = "lua_vector_double")]
+        t if t == lua_Type::LUA_TVECTOR as i32 => {
+            enumnode(
+                ctx,
+                o,
+                core::mem::size_of::<crate::records::luau_vector::LuauVector>(),
+                core::ptr::null(),
+            );
         }
         t if t == lua_Type::LUA_TBUFFER as i32 => {
             enumbuffer(ctx, gco2buf!(o) as *const _ as *mut _);

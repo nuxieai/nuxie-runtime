@@ -20,9 +20,19 @@ unsafe fn gc_interrupt(l: *mut lua_State, state: c_int) {
 pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
     let g = (*l).global;
 
-    let lim = ((*g).gcstepsize as usize * (*g).gcstepmul as usize) / 100;
+    let mut lim = ((*g).gcstepsize as usize * (*g).gcstepmul as usize) / 100;
     LUAU_ASSERT!((*g).totalbytes >= (*g).GCthreshold);
     let debt = (*g).totalbytes - (*g).GCthreshold;
+
+    if (luaur_common::FFlag::LuauBackedgeHeapCheck.get()
+        || cfg!(feature = "lua_vector_double"))
+        && assist
+    {
+        let need = debt * (*g).gcstepmul as usize / 100;
+        if need > lim {
+            lim = need;
+        }
+    }
 
     gc_interrupt(l, 0);
 

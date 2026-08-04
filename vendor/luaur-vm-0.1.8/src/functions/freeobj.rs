@@ -9,6 +9,8 @@ use crate::functions::lua_r_freeclass::lua_r_freeclass;
 use crate::functions::lua_r_freeobject::lua_r_freeobject;
 use crate::functions::lua_s_free::luaS_free;
 use crate::functions::lua_u_freeudata::lua_u_freeudata;
+#[cfg(feature = "lua_vector_double")]
+use crate::functions::lua_vec_freevector::luaVec_freevector;
 use crate::records::gc_object::GCObject;
 use crate::records::lua_page::lua_Page;
 use crate::type_aliases::lua_state::lua_State;
@@ -39,6 +41,10 @@ pub unsafe fn freeobj(l: *mut lua_State, o: *mut GCObject, page: *mut lua_Page) 
         }
         x if x == lua_Type::LUA_TUSERDATA as i32 => {
             lua_u_freeudata(l, core::ptr::addr_of_mut!((*o).u) as *mut _, page);
+        }
+        #[cfg(feature = "lua_vector_double")]
+        x if x == lua_Type::LUA_TVECTOR as i32 => {
+            luaVec_freevector(l, core::ptr::addr_of_mut!((*o).vec) as *mut _, page);
         }
         x if x == lua_Type::LUA_TBUFFER as i32 => {
             lua_b_freebuffer(l, core::ptr::addr_of_mut!((*o).buf) as *mut _, page);

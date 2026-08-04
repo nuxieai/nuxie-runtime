@@ -10,7 +10,7 @@ macro_rules! vvalue {
             {
                 #[cfg(feature = "lua_vector_double")]
                 {
-                    &(*(*($o)).value.gc).vec.v
+                    &(&(*(*($o)).value.gc).vec).v
                 }
                 #[cfg(not(feature = "lua_vector_double"))]
                 {

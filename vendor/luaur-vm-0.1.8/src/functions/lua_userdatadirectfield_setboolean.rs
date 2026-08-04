@@ -9,5 +9,9 @@ pub unsafe fn lua_userdatadirectfield_setboolean(
     b: core::ffi::c_int,
 ) {
     LUAU_ASSERT!(luaur_common::FFlag::LuauDirectFieldGet.get());
-    setbvalue!(result as *mut TValue, b);
+    #[cfg(feature = "lua_vector_double")]
+    let slot = (*(result as *mut crate::records::direct_field_result::DirectFieldResult)).slot;
+    #[cfg(not(feature = "lua_vector_double"))]
+    let slot = result as *mut TValue;
+    setbvalue!(slot, b);
 }

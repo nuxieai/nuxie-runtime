@@ -15,7 +15,7 @@ pub unsafe fn vector_cross(L: *mut lua_State) -> core::ffi::c_int {
             (*a.offset(1)) * (*b.offset(2)) - (*a.offset(2)) * (*b.offset(1)),
             (*a.offset(2)) * (*b.offset(0)) - (*a.offset(0)) * (*b.offset(2)),
             (*a.offset(0)) * (*b.offset(1)) - (*a.offset(1)) * (*b.offset(0)),
-            0.0f32,
+            0.0 as crate::type_aliases::lua_vector_type::LuaVectorType,
         );
     } else {
         lua_pushvector_lua_state_f32_f32_f32(

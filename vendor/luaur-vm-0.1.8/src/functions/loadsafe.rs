@@ -58,6 +58,7 @@ use luaur_common::enums::luau_bytecode_tag::{
     LBC_CONSTANT_BOOLEAN, LBC_CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLOSURE, LBC_CONSTANT_IMPORT,
     LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL, LBC_CONSTANT_NUMBER, LBC_CONSTANT_STRING,
     LBC_CONSTANT_TABLE, LBC_CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_VECTOR,
+    LBC_CONSTANT_VECTORD,
     LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_MAX, LBC_VERSION_MIN,
 };
 use luaur_common::enums::luau_bytecode_type::{
@@ -78,6 +79,7 @@ const LBC_CONSTANT_IMPORT_U8: u8 = LBC_CONSTANT_IMPORT.0 as u8;
 const LBC_CONSTANT_TABLE_U8: u8 = LBC_CONSTANT_TABLE.0 as u8;
 const LBC_CONSTANT_CLOSURE_U8: u8 = LBC_CONSTANT_CLOSURE.0 as u8;
 const LBC_CONSTANT_VECTOR_U8: u8 = LBC_CONSTANT_VECTOR.0 as u8;
+const LBC_CONSTANT_VECTORD_U8: u8 = LBC_CONSTANT_VECTORD.0 as u8;
 const LBC_CONSTANT_TABLE_WITH_CONSTANTS_U8: u8 = LBC_CONSTANT_TABLE_WITH_CONSTANTS.0 as u8;
 const LBC_CONSTANT_INTEGER_U8: u8 = LBC_CONSTANT_INTEGER.0 as u8;
 const LBC_CONSTANT_CLASS_SHAPE_U8: u8 = LBC_CONSTANT_CLASS_SHAPE.0 as u8;
@@ -332,7 +334,15 @@ pub unsafe fn loadsafe(
                     let y: f32 = read(data, size, &mut offset);
                     let z: f32 = read(data, size, &mut offset);
                     let w: f32 = read(data, size, &mut offset);
-                    setvvalue!(k, x, y, z, w);
+                    setvvalue!(L, k, x, y, z, w);
+                }
+
+                LBC_CONSTANT_VECTORD_U8 => {
+                    let x: f64 = read(data, size, &mut offset);
+                    let y: f64 = read(data, size, &mut offset);
+                    let z: f64 = read(data, size, &mut offset);
+                    let w: f64 = read(data, size, &mut offset);
+                    setvvalue!(L, k, x, y, z, w);
                 }
 
                 LBC_CONSTANT_STRING_U8 => {

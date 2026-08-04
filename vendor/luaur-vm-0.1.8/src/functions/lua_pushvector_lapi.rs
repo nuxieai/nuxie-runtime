@@ -6,12 +6,17 @@ use crate::type_aliases::t_value::TValue;
 #[export_name = "luaur_lua_pushvector_lua_state_f32_f32_f32_f32"]
 pub unsafe fn lua_pushvector_lua_state_f32_f32_f32_f32(
     l: *mut lua_State,
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
+    x: crate::type_aliases::lua_vector_type::LuaVectorType,
+    y: crate::type_aliases::lua_vector_type::LuaVectorType,
+    z: crate::type_aliases::lua_vector_type::LuaVectorType,
+    w: crate::type_aliases::lua_vector_type::LuaVectorType,
 ) {
+    #[cfg(feature = "lua_vector_double")]
+    {
+        crate::macros::lua_c_check_gc::luaC_checkGC!(l);
+        crate::macros::lua_c_threadbarrier::luaC_threadbarrier!(l);
+    }
     crate::ensure_stack!(l, 1);
-    setvvalue!((*l).top, x, y, z, w);
+    setvvalue!(l, (*l).top, x, y, z, w);
     api_incr_top!(l);
 }

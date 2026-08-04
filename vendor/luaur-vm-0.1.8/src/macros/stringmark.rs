@@ -6,14 +6,18 @@ pub const WHITE1BIT: i32 = 1;
 #[allow(non_snake_case)]
 #[macro_export]
 macro_rules! stringmark {
-    ($s:expr) => {
+    ($s:expr) => {{
         $crate::macros::reset_2_bits::reset2bits!(
             // TString embeds CommonHeader as `hdr`; C++ reads ts->marked directly
             (*$s).hdr.marked,
             $crate::macros::stringmark::WHITE0BIT,
             $crate::macros::stringmark::WHITE1BIT
+        );
+        $crate::macros::l_setbit::l_setbit!(
+            (*$s).hdr.marked,
+            $crate::macros::maskmarks::BLACKBIT
         )
-    };
+    }};
 }
 
 pub use stringmark;

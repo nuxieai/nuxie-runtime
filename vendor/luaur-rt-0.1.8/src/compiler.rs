@@ -37,6 +37,7 @@ pub struct Compiler {
     vector_lib: Option<CString>,
     vector_ctor: Option<CString>,
     vector_type: Option<CString>,
+    vector_precision: u8,
     mutable_globals: Vec<CString>,
 }
 
@@ -59,6 +60,7 @@ impl Compiler {
             vector_lib: None,
             vector_ctor: None,
             vector_type: None,
+            vector_precision: defaults.vector_precision as u8,
             mutable_globals: Vec::new(),
         }
     }
@@ -111,6 +113,12 @@ impl Compiler {
         self
     }
 
+    /// Select vector constant precision (`0` for float components, `1` for doubles).
+    pub fn set_vector_precision(mut self, precision: u8) -> Self {
+        self.vector_precision = precision;
+        self
+    }
+
     /// Set the list of globals the compiler is allowed to treat as mutable
     /// (so it won't constant-fold reads of them). Mirrors
     /// `mlua::Compiler::set_mutable_globals`.
@@ -136,6 +144,7 @@ impl Compiler {
         options.debug_level = self.debug_level as core::ffi::c_int;
         options.type_info_level = self.type_info_level as core::ffi::c_int;
         options.coverage_level = self.coverage_level as core::ffi::c_int;
+        options.vector_precision = self.vector_precision as core::ffi::c_int;
         if let Some(s) = &self.vector_lib {
             options.vector_lib = s.as_ptr();
         }

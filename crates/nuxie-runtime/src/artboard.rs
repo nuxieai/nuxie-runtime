@@ -6606,6 +6606,11 @@ impl ArtboardInstance {
             &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
         >,
     ) -> Result<bool, ScriptError> {
+        // Stateful VMI children are shared pointers in C++. Apply the host's
+        // newly keyed values to Rust's detached occurrence before any nested
+        // state machine consumes the child DataContext this frame
+        // (`src/nested_artboard.cpp:156-185`).
+        let mut changed = self.sync_stateful_nested_view_model_contexts();
         let retained_result = self.advance_retained_components_collect_events_with_scripts(
             elapsed_seconds,
             true,
@@ -6613,7 +6618,7 @@ impl ArtboardInstance {
             nested_events,
             nested_event_dispatch,
         );
-        let mut changed = retained_result.as_ref().copied().unwrap_or(false);
+        changed |= retained_result.as_ref().copied().unwrap_or(false);
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         if let Err(error) = retained_result {
             return Err(error);
@@ -10591,13 +10596,21 @@ impl ArtboardInstance {
                 0
             }
         });
+        // Pinned C++ completes replacement VMI selection and binds the mounted
+        // child plus its NestedStateMachine before the replacement operation
+        // returns (`src/nested_artboard.cpp:228-350`). Keep the detached Rust
+        // occurrence private until that replacement binding is complete too.
+        if let Some(file) = self.runtime_file_arc() {
+            self.rebind_owned_view_model_context_after_nested_artboard_swap(
+                &file,
+                local_id,
+                &mut nested,
+            );
+        }
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
         self.mark_nested_structure_changed();
         self.mark_nested_artboard_layout_changed(local_id);
-        if let Some(file) = self.runtime_file_arc() {
-            self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
-        }
         self.stateful_nested_view_model_contexts_dirty = true;
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
@@ -11076,6 +11089,26 @@ impl RuntimeNestedArtboardInstance {
         changed
     }
 
+    /// Bind one mounted occurrence in the same order as C++
+    /// `NestedArtboard::bindStateful`: first install the context on the child
+    /// Artboard, then forward the child's context to every nested state
+    /// machine (`src/nested_artboard.cpp:156-185`).
+    pub(crate) fn bind_owned_view_model_occurrence_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        allow_full_context_bindings: bool,
+    ) -> bool {
+        let mut changed = self.child.bind_owned_view_model_artboard_data_context(
+            file,
+            data_context,
+            true,
+            allow_full_context_bindings,
+        );
+        changed |= self.bind_owned_view_model_animation_data_context(data_context);
+        changed
+    }
+
     fn begin_advance(&mut self, elapsed_seconds: f32) -> Result<f32, bool> {
         if self.is_paused {
             return Err(false);
@@ -11483,6 +11516,11 @@ fn build_runtime_nested_artboard_instance(
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
     }
+    // C++ initializes the authored nested animation occurrences before
+    // `onAddedClean` discovers the active stateful VMI
+    // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
+    // consume its default context during construction; the child-first bind
+    // below supplies the context once the complete occurrence exists.
     let animations =
         runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child);
     let data_bind_view_model_instance_locals_by_id =
@@ -11528,24 +11566,38 @@ fn build_runtime_nested_artboard_instance(
         None
     }
     .map(RuntimeOwnedViewModelHandle::new);
-    let stateful_global_view_model_contexts = data_bind_view_model_instance_locals_by_id
-        .iter()
-        .filter_map(|(&view_model_id, &local_id)| {
-            let view_model_index = usize::try_from(view_model_id).ok()?;
-            let view_model = file.view_model(view_model_index)?;
-            if view_model.object.uint_property("viewModelType") != Some(2) {
-                return None;
-            }
-            let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
-            let instance = file.object(slot.source_global_id as usize)?;
-            let context = RuntimeOwnedViewModelInstance::from_instance_object(
-                file,
-                view_model_index,
-                instance,
-            )?;
-            Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
-        })
-        .collect();
+    let stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle> =
+        data_bind_view_model_instance_locals_by_id
+            .iter()
+            .filter_map(|(&view_model_id, &local_id)| {
+                let view_model_index = usize::try_from(view_model_id).ok()?;
+                let view_model = file.view_model(view_model_index)?;
+                if view_model.object.uint_property("viewModelType") != Some(2) {
+                    return None;
+                }
+                let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
+                let instance = file.object(slot.source_global_id as usize)?;
+                let context = RuntimeOwnedViewModelInstance::from_instance_object(
+                    file,
+                    view_model_index,
+                    instance,
+                )?;
+                Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
+            })
+            .collect();
+    let mut local_handles = Vec::new();
+    if let Some(context) = stateful_view_model_context.clone() {
+        local_handles.push(context);
+    }
+    local_handles.extend(stateful_global_view_model_contexts.values().cloned());
+    let initial_data_context = if local_handles.is_empty() {
+        child.artboard_owned_data_context.clone()
+    } else {
+        Some(RuntimeOwnedDataContext::with_local_handles(
+            local_handles,
+            None,
+        ))
+    };
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -11555,7 +11607,7 @@ fn build_runtime_nested_artboard_instance(
     );
     let (data_bind_property_source_locals, data_bind_image_source_locals) =
         build_nested_host_data_bind_source_local_slots(&child, &data_bind_source_locals_by_path);
-    Ok(RuntimeNestedArtboardInstance {
+    let mut nested = RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
         render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -11576,7 +11628,14 @@ fn build_runtime_nested_artboard_instance(
         speed,
         quantize,
         cumulated_seconds: 0.0,
-    })
+    };
+    if let Some(data_context) = initial_data_context.as_ref() {
+        // `NestedArtboard::bindStateful` binds the active local/global VMI
+        // list to the mounted child before its NestedStateMachine consumes the
+        // child's DataContext (`src/nested_artboard.cpp:156-185`).
+        nested.bind_owned_view_model_occurrence_data_context(file, data_context, true);
+    }
+    Ok(nested)
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {

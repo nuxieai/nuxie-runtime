@@ -141,6 +141,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauTypeFunctionStructuredErrors.set(value);
     FFlag::LuauTypeFunctionSupportsFrozen.set(value);
     FFlag::LuauUdataDirectAccess6.set(value);
+    FFlag::LuauUdataMetatablePinned.set(false);
     FFlag::LuauUdtfTypeIsSubtypeOf.set(value);
     FFlag::LuauUseNativeStackGuard.set(value);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
@@ -411,6 +412,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauTypeFunctionSupportsFrozen);
     // VM/src/lvmload.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdataDirectAccess6);
+    // VM/src/lgc.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauUdataMetatablePinned);
     // Analysis/src/TypeFunctionRuntime.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdtfTypeIsSubtypeOf);
     // Analysis/src/NativeStackGuard.cpp

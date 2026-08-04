@@ -737,6 +737,7 @@ pub mod luaui_signf;
 pub mod mainposition;
 pub mod markmt;
 pub mod markroot;
+pub mod marktaggetmt;
 pub mod r#match;
 pub mod match_capture;
 pub mod match_class;

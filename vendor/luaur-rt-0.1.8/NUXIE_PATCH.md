@@ -3,5 +3,6 @@
 ## Luau fork rung 7
 
 - Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
-- Touched areas: safe compiler configuration for float or double vector
-  constant precision.
+- Touched areas: compiler configuration for float or double vector constant
+  precision, runtime vector push/read conversion, and feature-sensitive VM type
+  tag mapping.

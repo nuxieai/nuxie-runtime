@@ -48,6 +48,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
     FFlag::LuauBidirectionalInferenceBetterUnionHandling.set(value);
     FFlag::LuauCallFeedback.set(value);
+    FFlag::LuauBytecodeCostModel.set(false);
     FFlag::LuauCIProto.set(false);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
     FFlag::LuauCloneTableFix.set(false);
@@ -77,6 +78,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
+    FFlag::LuauCostModel.set(false);
     FFlag::LuauCstAttr.set(false);
     FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
@@ -233,6 +235,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauBidirectionalInferenceBetterUnionHandling);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCallFeedback);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeCostModel);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCIProto);
     // Analysis/src/TypeChecker2.cpp
@@ -293,6 +297,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
     // Analysis/src/Constraint.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
+    // Bytecode/src/BytecodeGraph.cpp; VM/src/lvmload.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCostModel);
     // VM/src/laux.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp

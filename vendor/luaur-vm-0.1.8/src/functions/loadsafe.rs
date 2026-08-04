@@ -203,6 +203,13 @@ pub unsafe fn loadsafe(
     protos.allocate(L, proto_count as usize);
 
     for i in 0..proto_count {
+        let proto_size = if version >= 12 {
+            read_var_int(data, size, &mut offset)
+        } else {
+            0
+        };
+        let proto_start_offset = offset;
+
         let p = lua_f_newproto(L);
         (*p).source = source;
         (*p).bytecodeid = i as c_int;
@@ -558,7 +565,6 @@ pub unsafe fn loadsafe(
         }
 
         if version >= 11 {
-            LUAU_ASSERT!(luaur_common::FFlag::LuauCallFeedback.get());
             (*p).feedbackvecsize = read_var_int(data, size, &mut offset);
 
             if (*p).feedbackvecsize > 0 {
@@ -578,6 +584,14 @@ pub unsafe fn loadsafe(
                 (*slot).data.call_target.proto = 0;
                 (*slot).data.call_target.hits = 0;
             }
+        }
+
+        if version >= 12 && ((*p).flags & 8) != 0 {
+            (*p).cost = read_var_int_64(data, size, &mut offset);
+        }
+
+        if version >= 12 {
+            offset = proto_start_offset + proto_size as usize;
         }
 
         *protos.data.add(i as usize) = p;

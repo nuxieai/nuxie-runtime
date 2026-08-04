@@ -57,6 +57,7 @@ pub unsafe fn luaF_newproto(l: *mut lua_State) -> *mut Proto {
     (*f).funid = 0;
     (*f).optimized = core::ptr::null_mut();
     (*f).deoptimized = core::ptr::null_mut();
+    (*f).cost = 0;
 
     f
 }

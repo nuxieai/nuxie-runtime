@@ -12,7 +12,7 @@ pub fn ctype(c: &Constant) -> Constant {
         Type::Type_Boolean => cstring_c_char(c"boolean".as_ptr()),
         Type::Type_Number => cstring_c_char(c"number".as_ptr()),
         Type::Type_Integer => cstring_c_char(c"integer".as_ptr()),
-        Type::Type_Vector => cstring_c_char(c"vector".as_ptr()),
+        Type::Type_Vectorf | Type::Type_Vectord => cstring_c_char(c"vector".as_ptr()),
         Type::Type_String => cstring_c_char(c"string".as_ptr()),
         _ => {
             LUAU_ASSERT!(false);

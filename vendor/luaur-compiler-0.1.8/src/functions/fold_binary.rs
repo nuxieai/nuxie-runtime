@@ -24,12 +24,20 @@ pub fn fold_binary(
                 unsafe {
                     result.data.value_number = la.data.value_number + ra.data.value_number;
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Vector {
-                result.r#type = Type::Type_Vector;
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Vectorf {
+                result.r#type = Type::Type_Vectorf;
                 unsafe {
                     for i in 0..4 {
-                        result.data.value_vector[i] =
-                            la.data.value_vector[i] + ra.data.value_vector[i];
+                        result.data.value_vectorf[i] =
+                            la.data.value_vectorf[i] + ra.data.value_vectorf[i];
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Vectord {
+                result.r#type = Type::Type_Vectord;
+                unsafe {
+                    for i in 0..4 {
+                        result.data.value_vectord[i] =
+                            la.data.value_vectord[i] + ra.data.value_vectord[i];
                     }
                 }
             }
@@ -40,12 +48,20 @@ pub fn fold_binary(
                 unsafe {
                     result.data.value_number = la.data.value_number - ra.data.value_number;
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Vector {
-                result.r#type = Type::Type_Vector;
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Vectorf {
+                result.r#type = Type::Type_Vectorf;
                 unsafe {
                     for i in 0..4 {
-                        result.data.value_vector[i] =
-                            la.data.value_vector[i] - ra.data.value_vector[i];
+                        result.data.value_vectorf[i] =
+                            la.data.value_vectorf[i] - ra.data.value_vectorf[i];
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Vectord {
+                result.r#type = Type::Type_Vectord;
+                unsafe {
+                    for i in 0..4 {
+                        result.data.value_vectord[i] =
+                            la.data.value_vectord[i] - ra.data.value_vectord[i];
                     }
                 }
             }
@@ -56,43 +72,82 @@ pub fn fold_binary(
                 unsafe {
                     result.data.value_number = la.data.value_number * ra.data.value_number;
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0 || ra.data.value_vector[3] != 0.0;
-                    let result_w = la.data.value_vector[3] * ra.data.value_vector[3];
+                    let had_w = la.data.value_vectorf[3] != 0.0 || ra.data.value_vectorf[3] != 0.0;
+                    let result_w = la.data.value_vectorf[3] * ra.data.value_vectorf[3];
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                la.data.value_vector[i] * ra.data.value_vector[i];
+                            result.data.value_vectorf[i] =
+                                la.data.value_vectorf[i] * ra.data.value_vectorf[i];
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = ra.data.value_vector[3] != 0.0;
-                    let result_w = (la.data.value_number as f32) * ra.data.value_vector[3];
+                    let had_w = ra.data.value_vectorf[3] != 0.0;
+                    let result_w = (la.data.value_number as f32) * ra.data.value_vectorf[3];
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                (la.data.value_number as f32) * ra.data.value_vector[i];
+                            result.data.value_vectorf[i] =
+                                (la.data.value_number as f32) * ra.data.value_vectorf[i];
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Number {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Number {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0;
-                    let result_w = la.data.value_vector[3] * (ra.data.value_number as f32);
+                    let had_w = la.data.value_vectorf[3] != 0.0;
+                    let result_w = la.data.value_vectorf[3] * (ra.data.value_number as f32);
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                la.data.value_vector[i] * (ra.data.value_number as f32);
+                            result.data.value_vectorf[i] =
+                                la.data.value_vectorf[i] * (ra.data.value_number as f32);
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0 || ra.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_vectord[3] * ra.data.value_vectord[3];
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_vectord[i] * ra.data.value_vectord[i];
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = ra.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_number * ra.data.value_vectord[3];
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_number * ra.data.value_vectord[i];
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Number {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_vectord[3] * ra.data.value_number;
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_vectord[i] * ra.data.value_number;
+                        }
+                        result.data.value_vectord[3] = result_w;
                     }
                 }
             }
@@ -103,43 +158,82 @@ pub fn fold_binary(
                 unsafe {
                     result.data.value_number = la.data.value_number / ra.data.value_number;
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0 || ra.data.value_vector[3] != 0.0;
-                    let result_w = la.data.value_vector[3] / ra.data.value_vector[3];
+                    let had_w = la.data.value_vectorf[3] != 0.0 || ra.data.value_vectorf[3] != 0.0;
+                    let result_w = la.data.value_vectorf[3] / ra.data.value_vectorf[3];
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                la.data.value_vector[i] / ra.data.value_vector[i];
+                            result.data.value_vectorf[i] =
+                                la.data.value_vectorf[i] / ra.data.value_vectorf[i];
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = ra.data.value_vector[3] != 0.0;
-                    let result_w = (la.data.value_number as f32) / ra.data.value_vector[3];
+                    let had_w = ra.data.value_vectorf[3] != 0.0;
+                    let result_w = (la.data.value_number as f32) / ra.data.value_vectorf[3];
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                (la.data.value_number as f32) / ra.data.value_vector[i];
+                            result.data.value_vectorf[i] =
+                                (la.data.value_number as f32) / ra.data.value_vectorf[i];
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Number {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Number {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0;
-                    let result_w = la.data.value_vector[3] / (ra.data.value_number as f32);
+                    let had_w = la.data.value_vectorf[3] != 0.0;
+                    let result_w = la.data.value_vectorf[3] / (ra.data.value_number as f32);
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                la.data.value_vector[i] / (ra.data.value_number as f32);
+                            result.data.value_vectorf[i] =
+                                la.data.value_vectorf[i] / (ra.data.value_number as f32);
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0 || ra.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_vectord[3] / ra.data.value_vectord[3];
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_vectord[i] / ra.data.value_vectord[i];
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = ra.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_number / ra.data.value_vectord[3];
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_number / ra.data.value_vectord[i];
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Number {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0;
+                    let result_w = la.data.value_vectord[3] / ra.data.value_number;
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                la.data.value_vectord[i] / ra.data.value_number;
+                        }
+                        result.data.value_vectord[3] = result_w;
                     }
                 }
             }
@@ -151,45 +245,85 @@ pub fn fold_binary(
                     result.data.value_number =
                         (la.data.value_number / ra.data.value_number).floor();
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0 || ra.data.value_vector[3] != 0.0;
-                    let result_w = (la.data.value_vector[3] / ra.data.value_vector[3]).floor();
+                    let had_w = la.data.value_vectorf[3] != 0.0 || ra.data.value_vectorf[3] != 0.0;
+                    let result_w = (la.data.value_vectorf[3] / ra.data.value_vectorf[3]).floor();
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                (la.data.value_vector[i] / ra.data.value_vector[i]).floor();
+                            result.data.value_vectorf[i] =
+                                (la.data.value_vectorf[i] / ra.data.value_vectorf[i]).floor();
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vector {
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectorf {
                 unsafe {
-                    let had_w = ra.data.value_vector[3] != 0.0;
+                    let had_w = ra.data.value_vectorf[3] != 0.0;
                     let result_w =
-                        ((la.data.value_number as f32) / ra.data.value_vector[3]).floor();
+                        ((la.data.value_number as f32) / ra.data.value_vectorf[3]).floor();
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                ((la.data.value_number as f32) / ra.data.value_vector[i]).floor();
+                            result.data.value_vectorf[i] =
+                                ((la.data.value_number as f32) / ra.data.value_vectorf[i]).floor();
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
                     }
                 }
-            } else if la.r#type == Type::Type_Vector && ra.r#type == Type::Type_Number {
+            } else if la.r#type == Type::Type_Vectorf && ra.r#type == Type::Type_Number {
                 unsafe {
-                    let had_w = la.data.value_vector[3] != 0.0;
+                    let had_w = la.data.value_vectorf[3] != 0.0;
                     let result_w =
-                        (la.data.value_vector[3] / (ra.data.value_number as f32)).floor();
+                        (la.data.value_vectorf[3] / (ra.data.value_number as f32)).floor();
                     if result_w == 0.0 || had_w {
-                        result.r#type = Type::Type_Vector;
+                        result.r#type = Type::Type_Vectorf;
                         for i in 0..3 {
-                            result.data.value_vector[i] =
-                                (la.data.value_vector[i] / (ra.data.value_number as f32)).floor();
+                            result.data.value_vectorf[i] =
+                                (la.data.value_vectorf[i] / (ra.data.value_number as f32)).floor();
                         }
-                        result.data.value_vector[3] = result_w;
+                        result.data.value_vectorf[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0 || ra.data.value_vectord[3] != 0.0;
+                    let result_w = (la.data.value_vectord[3] / ra.data.value_vectord[3]).floor();
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                (la.data.value_vectord[i] / ra.data.value_vectord[i]).floor();
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Number && ra.r#type == Type::Type_Vectord {
+                unsafe {
+                    let had_w = ra.data.value_vectord[3] != 0.0;
+                    let result_w = (la.data.value_number / ra.data.value_vectord[3]).floor();
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                (la.data.value_number / ra.data.value_vectord[i]).floor();
+                        }
+                        result.data.value_vectord[3] = result_w;
+                    }
+                }
+            } else if la.r#type == Type::Type_Vectord && ra.r#type == Type::Type_Number {
+                unsafe {
+                    let had_w = la.data.value_vectord[3] != 0.0;
+                    let result_w = (la.data.value_vectord[3] / ra.data.value_number).floor();
+                    if result_w == 0.0 || had_w {
+                        result.r#type = Type::Type_Vectord;
+                        for i in 0..3 {
+                            result.data.value_vectord[i] =
+                                (la.data.value_vectord[i] / ra.data.value_number).floor();
+                        }
+                        result.data.value_vectord[3] =
+                            (la.data.value_vectord[3] / ra.data.value_number).floor();
                     }
                 }
             }

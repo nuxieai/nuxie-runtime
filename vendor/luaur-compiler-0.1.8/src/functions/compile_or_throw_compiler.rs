@@ -132,6 +132,7 @@ pub fn compile_or_throw_bytecode_builder_parse_result_ast_name_table_compile_opt
             &mut compiler.locstants,
             compiler.builtins_fold,
             compiler.builtins_fold_library_k,
+            options.vector_precision == 1,
             options.library_member_constant_cb,
             root_node,
             names,

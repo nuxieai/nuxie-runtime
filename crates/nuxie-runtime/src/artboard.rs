@@ -17316,6 +17316,170 @@ mod tests {
     }
 
     #[test]
+    fn animated_justify_self_write_dirties_only_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let justify_self = property_key_for_name("LayoutComponentStyle", "justifySelfValue")
+            .expect("LayoutComponentStyle.justifySelfValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, justify_self, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, justify_self, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn animated_justify_items_write_dirties_only_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let justify_items = property_key_for_name("LayoutComponentStyle", "justifyItemsValue")
+            .expect("LayoutComponentStyle.justifyItemsValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, justify_items, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, justify_items, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn layout_type_write_dirties_retained_parent_layout_and_its_layout_children() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+                synthetic_component_for_type(4, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 1);
+        synthetic_link_parent(&mut instance, 4, 0);
+        for local_id in 0..5 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let layout_type = property_key_for_name("LayoutComponentStyle", "layoutTypeValue")
+            .expect("LayoutComponentStyle.layoutTypeValue");
+        let prepared_epoch = instance.prepared_epoch();
+        assert!(instance.set_uint_property(2, layout_type, 1));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let child = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("child layout owner");
+        let sibling = instance
+            .component(4)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(child.layout_node_is_dirty());
+        assert_eq!(child.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_uint_property(2, layout_type, 1));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
     fn fractional_height_write_dirties_retained_layout_node() {
         let mut instance = synthetic_instance(
             vec![synthetic_component_for_type(0, "LayoutComponent")],

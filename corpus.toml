@@ -2611,6 +2611,14 @@ features = ["type-key:1058:GridTrack", "type-key:1066:LayoutParticipant", "type-
 
 
 [[file]]
+id = "grid_justify_items_bind"
+path = "fixtures/layout-dirt/grid_justify_items_bind.riv"
+view_model_script = "tests/view_model_scripts/grid_justify_items_bind.txt"
+samples = [0.0, 0.1, 0.5]
+status = "exact"
+features = ["grid-justify-items-data-bind", "type-key:1058:GridTrack", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext"]
+
+[[file]]
 id = "grid_track_types"
 path = "tests/unit_tests/assets/layout/grid_track_types.riv"
 samples = [0.0]

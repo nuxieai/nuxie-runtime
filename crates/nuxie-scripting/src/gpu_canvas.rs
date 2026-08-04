@@ -970,14 +970,43 @@ impl GpuCanvasShaderCatalog {
 
 #[derive(Clone)]
 pub(crate) struct GpuCanvasContextBindings {
-    canvas: GpuCanvas,
+    canvases: Rc<RefCell<Vec<Rc<RefCell<GpuCanvasState>>>>>,
     shaders: GpuCanvasShaderCatalog,
     renderer_bindings: Option<RendererBindings>,
 }
 
 impl GpuCanvasContextBindings {
     pub(crate) fn canvas_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
-        lua.create_userdata(self.canvas.clone())
+        self.canvas_userdata_with_size(lua, 0, 0)
+    }
+
+    pub(crate) fn canvas_userdata_with_size(
+        &self,
+        lua: &luaur_rt::Lua,
+        width: u32,
+        height: u32,
+    ) -> Result<AnyUserData> {
+        if width > MAX_GPU_CANVAS_DIMENSION || height > MAX_GPU_CANVAS_DIMENSION {
+            return Err(Error::runtime(format!(
+                "GPUCanvas:resize dimensions must be at most {MAX_GPU_CANVAS_DIMENSION}"
+            )));
+        }
+        let state = Rc::new(RefCell::new(GpuCanvasState {
+            width,
+            height,
+            ..GpuCanvasState::default()
+        }));
+        self.canvases.borrow_mut().push(Rc::clone(&state));
+        lua.create_userdata(GpuCanvas { state })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test() -> Self {
+        Self {
+            canvases: Rc::new(RefCell::new(Vec::new())),
+            shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::new())),
+            renderer_bindings: None,
+        }
     }
 
     pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<MultiValue> {
@@ -1001,10 +1030,11 @@ impl UserData for GpuCanvasContextBindings {
     }
 }
 
-/// Per-script retained GPU-canvas state. The Lua context and image userdata
-/// share this state, while canonical shader bytes remain VM-owned.
+/// Per-script retained GPU-canvas occurrences. The Lua context creates each
+/// state independently and image userdata retains its occurrence, while
+/// canonical shader bytes remain VM-owned.
 pub(crate) struct ImportedGpuCanvasInstance {
-    state: Rc<RefCell<GpuCanvasState>>,
+    canvases: Rc<RefCell<Vec<Rc<RefCell<GpuCanvasState>>>>>,
     renderer_bindings: RendererBindings,
 }
 
@@ -1013,17 +1043,15 @@ impl ImportedGpuCanvasInstance {
         shaders: ImportedGpuCanvasShaderAssets,
         renderer_bindings: RendererBindings,
     ) -> (Self, GpuCanvasContextBindings) {
-        let state = Rc::new(RefCell::new(GpuCanvasState::default()));
+        let canvases = Rc::new(RefCell::new(Vec::new()));
         let bindings = GpuCanvasContextBindings {
-            canvas: GpuCanvas {
-                state: Rc::clone(&state),
-            },
+            canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Imported(Rc::clone(&shaders)),
             renderer_bindings: Some(renderer_bindings.clone()),
         };
         (
             Self {
-                state,
+                canvases,
                 renderer_bindings,
             },
             bindings,
@@ -1039,49 +1067,58 @@ impl ImportedGpuCanvasInstance {
         let Value::Function(function) = value else {
             return Ok(());
         };
-        {
-            let mut state = self.state.borrow_mut();
+        let canvases = self.canvases.borrow().clone();
+        for canvas in &canvases {
+            let mut state = canvas.borrow_mut();
             state.completed = None;
             state.image = None;
             state.unfinished_passes = 0;
         }
         self.renderer_bindings.verify_render_context(factory)?;
         function.call::<()>((table.clone(),))?;
-        if self.state.borrow().unfinished_passes != 0 {
-            self.state.borrow_mut().completed = None;
+        let mut completed_count = 0;
+        for canvas in canvases {
+            if canvas.borrow().unfinished_passes != 0 {
+                canvas.borrow_mut().completed = None;
+                return Err(Error::runtime(
+                    "GPU render pass left open at script return; call finish() on every pass",
+                ));
+            }
+            let Some(completed) = canvas.borrow_mut().completed.take() else {
+                continue;
+            };
+            completed_count += 1;
+            let pipelines = completed
+                .pipelines
+                .iter()
+                .map(|pipeline| {
+                    let vertex = pipeline.vertex_shader.module.clone().ok_or_else(|| {
+                        Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
+                    })?;
+                    let fragment = pipeline
+                        .fragment_shader
+                        .as_ref()
+                        .map(|shader| {
+                            shader.module.clone().ok_or_else(|| {
+                                Error::runtime(
+                                    "GPU-canvas fragment shader has no backend module occurrence",
+                                )
+                            })
+                        })
+                        .transpose()?;
+                    Ok(GpuCanvasPipelineShaders { vertex, fragment })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let image = factory
+                .make_gpu_canvas_image_with_pipelines(&pipelines, &completed.plan)
+                .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
+            canvas.borrow_mut().image = Some(image);
+        }
+        if completed_count == 0 {
             return Err(Error::runtime(
-                "GPU render pass left open at script return; call finish() on every pass",
+                "gpu-canvas drawCanvas did not finish a render pass",
             ));
         }
-        let completed =
-            self.state.borrow_mut().completed.take().ok_or_else(|| {
-                Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
-            })?;
-        let pipelines = completed
-            .pipelines
-            .iter()
-            .map(|pipeline| {
-                let vertex = pipeline.vertex_shader.module.clone().ok_or_else(|| {
-                    Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
-                })?;
-                let fragment = pipeline
-                    .fragment_shader
-                    .as_ref()
-                    .map(|shader| {
-                        shader.module.clone().ok_or_else(|| {
-                            Error::runtime(
-                                "GPU-canvas fragment shader has no backend module occurrence",
-                            )
-                        })
-                    })
-                    .transpose()?;
-                Ok(GpuCanvasPipelineShaders { vertex, fragment })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let image = factory
-            .make_gpu_canvas_image_with_pipelines(&pipelines, &completed.plan)
-            .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
-        self.state.borrow_mut().image = Some(image);
         Ok(())
     }
 }
@@ -1854,11 +1891,9 @@ impl GpuCanvasProgram {
         });
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
-        let state = Rc::new(RefCell::new(GpuCanvasState::default()));
+        let canvases = Rc::new(RefCell::new(Vec::new()));
         let bindings = GpuCanvasContextBindings {
-            canvas: GpuCanvas {
-                state: Rc::clone(&state),
-            },
+            canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::from([(
                 "scene".into(),
                 vec![
@@ -1890,6 +1925,9 @@ impl GpuCanvasProgram {
         let instance: Table = generator
             .call(context)
             .map_err(|error| Error::runtime(format!("gpu-canvas generator failed: {error}")))?;
+        let state = canvases.borrow().first().cloned().ok_or_else(|| {
+            Error::runtime("gpu-canvas generator did not create a GPUCanvas occurrence")
+        })?;
         Ok(Self {
             vm,
             instance,

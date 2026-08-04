@@ -1480,7 +1480,7 @@ note = "MR-3 justification: row-specific Weight behavior lives in bones/weight.r
 
 [[file]]
 upstream = "src/command_queue.cpp"
-status = "pending"
+status = "partial"
 verification = "pending-verification"
 rust_module = "crates/nuxie/src/command_queue.rs"
 legacy_port_status = "partial"
@@ -1507,7 +1507,7 @@ upstream = "src/component.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/components.rs; crates/nuxie-runtime/src/artboard.rs"
-legacy_port_status = "ported"
+legacy_port_status = "partial"
 b6_row_id = "B6-0123"
 b6_verdict = "DIVERGENT"
 b6_cluster = "bones-math-components"
@@ -3336,15 +3336,15 @@ note = "P1G faithful candidate: pinned src/lua/lua_rive_base.cpp:5-39 replaces _
 
 [[file]]
 upstream = "src/lua/lua_scripted_context.cpp"
-status = "pending"
+status = "partial"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/gpu_canvas.rs"
+legacy_port_status = "partial"
 b6_row_id = "B6-0271"
-b6_verdict = "N/A"
-b6_cluster = "unavailable"
+b6_verdict = "TRACKED-GAP"
+b6_cluster = "scripted"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "2026-08-03 F3F6/LT-2 audit: remains pending. Current origin/main does contain a partial ScriptedContext at crates/nuxie-scripting/src/vm/view_model.rs:1072-1221 (viewModel/rootViewModel/dataContext, markNeedsUpdate, image/blob/decodeImage/audio, gpuCanvas, shader), but pinned src/lua/lua_scripted_context.cpp:129-569 also requires full ScriptedObject-backed lifecycle and canvas/features branches; markNeedsUpdate is still a base-owner no-op. Local LT-2 commit 7f486955 is not an ancestor of origin/main and changes lua_properties/runtime bindings, not this remaining Context surface, so it does not unblock faithful promotion."
+note = "FTAIL evidence at pinned 4ac7b327 promotes this row from pending to partial. crates/nuxie-scripting/src/vm/view_model.rs and gpu_canvas.rs cover the Context method-name surface at lua_scripted_context.cpp:28-123,188-567: readonly conservative headless features, independent gpuCanvas occurrences with optional width/height descriptors, and the previously retained viewModel/rootViewModel/dataContext, image/blob/audio, shader, decodeImage, lifetime, and base markNeedsUpdate behavior. Canvas 2D remains deliberately out of scope and fails with the exact named diagnostic `unsupported: scripted-context-canvas binding is unavailable`; context_canvas_names_the_missing_binding spot-checks the missing binding name. Honest remainders: no pinned/importable fixture exercises canvas(), so the requested unsupported corpus gate remains open; component-derived ScriptedObject Context owners still need owner-specific markNeedsUpdate overrides. The base ScriptedObject no-op matches lua_scripted_context.cpp:206-210. C17 exception: view_model.rs owns the Context/ViewModel Lua API while gpu_canvas.rs owns the GPU userdata and shared render state; consolidating them would cross the existing VM-to-GPU module boundary."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
@@ -3949,15 +3949,15 @@ note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
-status = "pending"
+status = "partial"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs; tools/rust-golden-runner/src/main.rs"
-legacy_port_status = "ported"
+legacy_port_status = "partial"
 b6_row_id = "B6-0323"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "INTEV evidence at pinned 4ac7b327: ordinary cloned ScriptInput DataBind/converter ownership now has a direct lifecycle regression. Each lazy keyframe receives fresh target/converter state, converted values hydrate before init, later source changes refresh the retained RangeMapper occurrence, and field/drop order unbinds the occurrence before its Lua target; focused nuxie scripted_interpolator tests and the shared clone/drop tests are green. The row remains pending after closeout review found two unported cloneProperties surfaces: cloned ScriptedDataConverter tables are not instantiated/attached and stateful converter occurrences are not advanced; binding also retains one root handle rather than the complete parent-scoped/rebindable Artboard DataContext. The RangeMapper evidence is valid but cannot promote the full converter/DataContext surface. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes. Runtime, VM adapter, public facade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "FTAIL partial promotion at pinned 4ac7b327 (`scripted_interpolator.cpp:108-150`; `linear_animation_instance.cpp:109-183`): each lazy keyframe owns a fresh ScriptInput/DataBind/converter occurrence; hydration and later refresh resolve against the complete parent-scoped Artboard DataContext; stateful converters advance in authored clone order after lazy apply with each owning LinearAnimationInstance; teardown drops binds before their Lua targets. Existing fixture-shaped tests cover converted hydration, source refresh, teardown/replacement, and per-keyframe table identity; a focused runtime test covers per-clone advancement. Honest named remainders: cloneProperties-created ScriptedDataConverter operands are cloned structurally but their clone-specific Lua converter tables are not yet instantiated and attached; no imported binary fixture yet exercises parent-scope fallback with a real stateful scripted converter. Pinned upstream has no direct ScriptedInterpolator TEST_CASE row, so no test-correspondence count changes. Runtime, VM adapter, public facade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
@@ -3997,15 +3997,15 @@ note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32
 
 [[file]]
 upstream = "src/semantic/semantic_data.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/semantic_data.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0327"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID against 4ac7b327 integrates RuntimeSemanticData into the retained StateMachineInstance semantic tree and owner-qualifies repeated mounted occurrences. SEMRES mirrors SemanticData::stateFlagsChanged/syncSemanticTreeVisibility and makes data_binding_lists exact for Selected propagation, collapsed-list removals, hierarchy patches, and every post-action frame. Four initial mounted Text glyph bounds remain red in the sampled corpus, and generic bounds dirt remains snapshot-adapted rather than owner-pushed, so this row remains pending—not promoted; see SEMRES-report.md."
+note = "FTAIL closure against 4ac7b327: RuntimeSemanticData remains owner-qualified in the retained tree; data_binding_lists is exact across all three semantic samples, including the four initial glyph-shaped mounted Text bounds. Component settlement now journals generic owner WorldTransform/Path dirt for one-shot updateWorldBounds refresh (`semantic_data.cpp:273-293,501-532`; `text.cpp:534-615,1154-1233`)."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
@@ -4021,27 +4021,27 @@ note = "The pinned WITH_RIVE_TEXT rule is implemented as authored-order Text/Tex
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/semantic_manager.rs; crates/nuxie-runtime/src/semantic_runtime_tree.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0329"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID installs the retained manager/tree on StateMachineInstance and serializes every SemanticsDiff field and action/focus outcome. SEMRES mirrors SemanticManager::removeChild/refresh/buildDiffFromFlats: nested focus and Simpsons are exact, while data_binding_lists matches removals, hierarchy patches, Selected propagation, and every post-action frame. Four initial mounted Text glyph bounds and snapshot-adapted generic bounds dirt keep this row pending—not promoted; see SEMRES-report.md. MR exception (scatter ratchet): the retained runtime tree is required OUT of state_machine_instance.rs by state_machine_semantic_manager_internal_implementation; it lives beside the semantic owners."
+note = "FTAIL closure: the retained manager/tree serializes every SemanticsDiff field and action/focus outcome; nested focus, Simpsons, and data_binding_lists are exact. The runtime tree consumes occurrence-local owner WorldTransform/Path dirt after component settlement and refreshes matching SemanticData bounds once, matching semantic_manager.cpp owner-pushed update flow. MR exception: the retained runtime tree stays outside state_machine_instance.rs beside the semantic owners."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/semantic_provider.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0330"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6FID maps all four bounds corners through each mounted occurrence root transform and composes live ancestor scroll transforms. SEMRES mirrors SemanticProvider::tryNodeWorldBounds/rootTransformAABB/semanticBounds and SemanticData::updateWorldBounds timing: nested focus and Simpsons are exact, including root/pre-layout bounds and action updates. Four initial mounted Text glyph bounds plus the remaining owner-pushed generic bounds-dirt port keep the provider family pending—not promoted; see SEMRES-report.md."
+note = "FTAIL closure: all four bounds corners map through mounted root and live ancestor scroll transforms; semantic reads prepare retained Text geometry before objectWorldBounds, yielding exact initial glyph bounds in data_binding_lists. Generic owner WorldTransform/Path settlement now drives updateWorldBounds instead of relying on snapshots."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"

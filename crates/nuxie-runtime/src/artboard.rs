@@ -507,6 +507,11 @@ pub struct ArtboardInstance {
     /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
     pub(crate) runtime_meshes: crate::draw::RuntimeMeshList,
     pub(crate) did_change: Cell<bool>,
+    /// Component occurrences that consumed C++ semantic-bounds dirt since the
+    /// last semantic-tree synchronization. `SemanticData` is a dependent of
+    /// its geometry owner, so either local can appear here
+    /// (`semantic_data.cpp:258-293`).
+    semantic_bounds_dirty_locals: BTreeSet<usize>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -639,6 +644,7 @@ impl Clone for ArtboardInstance {
             runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
             solved_layout_bounds: self.solved_layout_bounds.clone(),
@@ -2390,6 +2396,7 @@ impl ArtboardInstance {
             runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -4077,6 +4084,25 @@ impl ArtboardInstance {
         fallback_root.cloned()
     }
 
+    pub(crate) fn scripted_interpolator_owned_data_context(
+        &self,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> RuntimeOwnedDataContext {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            return data_context.clone();
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return RuntimeOwnedDataContext::from_context_handle(context);
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            return RuntimeOwnedDataContext::from_owned_context(context);
+        }
+        fallback_root
+            .cloned()
+            .map(RuntimeOwnedDataContext::from_root_handle)
+            .unwrap_or_default()
+    }
+
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
         self.state_machines.get(index)
     }
@@ -4165,6 +4191,9 @@ impl ArtboardInstance {
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
     pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
+        if self.component(local_id)?.type_name != "LayoutComponent" {
+            return None;
+        }
         let layout = self.layout_bounds(local_id)?;
         let transform = self.component(local_id)?.transform.world_transform;
         let corners = [
@@ -4188,7 +4217,7 @@ impl ArtboardInstance {
     /// transforms applied. The draw cache computes the same combination;
     /// semantic/focus providers need it without creating renderer state.
     pub(crate) fn runtime_component_world_transform_with_scroll(&self, local_id: usize) -> Mat2D {
-        let mut world = self
+        let world = self
             .runtime_graph()
             .map(|graph| self.runtime_component_world_transform(local_id, graph))
             .or_else(|| {
@@ -4196,6 +4225,13 @@ impl ArtboardInstance {
                     .map(|component| component.transform.world_transform)
             })
             .unwrap_or(Mat2D::IDENTITY);
+        self.runtime_component_apply_ancestor_scroll(local_id, world)
+    }
+
+    /// Fold the live ancestor ScrollConstraint scroll transforms for one
+    /// component occurrence onto `world`, in the exact order the semantic
+    /// provider and draw cache compose them.
+    fn runtime_component_apply_ancestor_scroll(&self, local_id: usize, mut world: Mat2D) -> Mat2D {
         let mut current = Some(local_id);
         while let Some(ancestor_local) = current {
             if let Some(component) = self.component(ancestor_local) {
@@ -4213,6 +4249,89 @@ impl ArtboardInstance {
             current = self.component_parent_local(ancestor_local);
         }
         world
+    }
+
+    /// Public seam over the layout-derived world transform with live ancestor
+    /// ScrollConstraint transforms applied — the combination the semantic
+    /// provider and draw cache already compose internally.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`), so the fold starts at
+    /// the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    ///
+    /// Returns `None` for an unknown component occurrence.
+    pub fn component_world_transform_with_scroll(&mut self, local_id: usize) -> Option<Mat2D> {
+        self.update_pass();
+        self.component(local_id)?;
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        Some(match self.component_parent_local(local_id) {
+            Some(parent_local) => self.runtime_component_apply_ancestor_scroll(parent_local, world),
+            None => world,
+        })
+    }
+
+    /// `layout_bounds` mapped through the live ancestor ScrollConstraint
+    /// scroll transforms, composed exactly as
+    /// [`Self::component_world_transform_with_scroll`] composes them.
+    /// Identical to `layout_bounds` when no ancestor ScrollConstraint is
+    /// live.
+    ///
+    /// The settled layout rect itself never reflects scroll in pinned C++:
+    /// `ScrollConstraint::offsetY` only marks the content world transform
+    /// dirty and `constrainChild` composes a world translate, leaving
+    /// `layoutBounds()` untouched (`scroll_constraint.cpp:182-230` at
+    /// `4ac7b32798da0482e441ef09304dc3b480ed3ee5`). Callers that need the
+    /// settled box in scrolled space compose here instead of mutating the
+    /// solve.
+    ///
+    /// A ScrollConstraint owned by the queried component itself does not
+    /// displace it: pinned C++ constrains the content's layout children,
+    /// never the content (`scroll_constraint.cpp:215-230`), so the fold
+    /// starts at the parent.
+    ///
+    /// Settles pending update dirt first so a scroll offset written this
+    /// frame is reflected in the same read.
+    pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
+        self.update_pass();
+        let layout = self.layout_bounds(local_id)?;
+        let scroll = match self.component_parent_local(local_id) {
+            Some(parent_local) => {
+                self.runtime_component_apply_ancestor_scroll(parent_local, Mat2D::IDENTITY)
+            }
+            None => Mat2D::IDENTITY,
+        };
+        let corners = [
+            scroll.transform_point(layout.x, layout.y),
+            scroll.transform_point(layout.x + layout.width, layout.y),
+            scroll.transform_point(layout.x, layout.y + layout.height),
+            scroll.transform_point(layout.x + layout.width, layout.y + layout.height),
+        ];
+        let (mut min_x, mut min_y) = corners[0];
+        let (mut max_x, mut max_y) = corners[0];
+        for (x, y) in corners.into_iter().skip(1) {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        Some(RuntimeLayoutBounds {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        })
     }
 
     /// Run the `FocusData::scrollIntoView` ancestor walk for one mounted
@@ -8313,6 +8432,10 @@ impl ArtboardInstance {
         self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
     }
 
+    pub(crate) fn take_semantic_bounds_dirty_locals(&mut self) -> BTreeSet<usize> {
+        std::mem::take(&mut self.semantic_bounds_dirty_locals)
+    }
+
     #[doc(hidden)]
     pub fn debug_update_pass_with_root_transform(&mut self, root_transform: Mat2D) -> bool {
         if let Some(root) = self.objects.root() {
@@ -9135,6 +9258,9 @@ impl ArtboardInstance {
                 let dirt = component.dirt;
                 if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
+                }
+                if !(dirt & (ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH)).is_empty() {
+                    self.semantic_bounds_dirty_locals.insert(local_id);
                 }
                 #[cfg(test)]
                 self.update_persistent_dirt_component_fixture(local_id);
@@ -12559,6 +12685,7 @@ mod tests {
             runtime_clipping_shapes: RuntimeClippingShapeList::default(),
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
+            semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
@@ -16255,6 +16382,33 @@ mod tests {
         assert_eq!(
             artboard.update_pass_data_bind_call_count, 5,
             "initial, two late-joystick, final component, and did-update source passes each poll DataBinds"
+        );
+    }
+
+    #[test]
+    fn component_settlement_journals_generic_semantic_bounds_dirt_once() {
+        let mut artboard = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+
+        assert!(artboard.add_dirt(
+            1,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+            false,
+        ));
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.take_semantic_bounds_dirty_locals(),
+            BTreeSet::from([1]),
+            "SemanticData::update receives its geometry owner's settled WorldTransform/Path dirt",
+        );
+        assert!(
+            artboard.take_semantic_bounds_dirty_locals().is_empty(),
+            "the journal is occurrence-local and consumed by one semantic synchronization",
         );
     }
 

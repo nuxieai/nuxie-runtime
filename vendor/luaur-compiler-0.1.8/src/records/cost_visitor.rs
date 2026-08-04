@@ -37,9 +37,7 @@ pub struct CostVisitor {
 
 impl CostVisitor {
     pub fn model(&mut self, node: *mut AstExpr) -> Cost {
-        if luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-            && !luaur_common::FFlag::LuauCompileFoldOptimize.get()
-        {
+        if !luaur_common::FFlag::LuauCompileFoldOptimize.get() {
             if let Some(c) = unsafe { &*self.constants }.find(&node) {
                 if c.r#type != crate::enums::type_constant_folding::Type::Type_Unknown {
                     return Cost::new(0, Cost::kLiteral);

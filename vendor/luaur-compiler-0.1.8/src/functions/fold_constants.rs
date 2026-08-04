@@ -5,7 +5,6 @@ use luaur_ast::records::ast_name_table::AstNameTable;
 use luaur_ast::records::ast_node::AstNode;
 use luaur_common::records::dense_hash_map::DenseHashMap;
 use luaur_common::FFlag::LuauCompileFoldOptimize;
-use luaur_common::FFlag::LuauCompilePropagateTableProps2;
 use luaur_common::LUAU_ASSERT;
 
 use crate::enums::table_constant_kind::TableConstantKind;
@@ -32,7 +31,7 @@ pub fn fold_constants(
 ) {
     let mut constant_tables_deprecated = DenseHashMap::new(core::ptr::null_mut::<AstLocal>());
 
-    if LuauCompilePropagateTableProps2.get() && !LuauCompileFoldOptimize.get() {
+    if !LuauCompileFoldOptimize.get() {
         let mut mutation_tracker = TableMutationTrackerDeprecated {
             constant_tables: &mut constant_tables_deprecated,
             variables,
@@ -65,7 +64,7 @@ pub fn fold_constants(
         luaur_ast::visit::ast_node_visit(root, &mut visitor);
     }
 
-    if LuauCompilePropagateTableProps2.get() && !LuauCompileFoldOptimize.get() {
+    if !LuauCompileFoldOptimize.get() {
         for (_key, constant) in constants.iter_mut() {
             if constant.r#type == crate::enums::type_constant_folding::Type::Type_Table {
                 constant.r#type = crate::enums::type_constant_folding::Type::Type_Unknown;

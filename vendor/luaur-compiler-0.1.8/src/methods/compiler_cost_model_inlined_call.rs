@@ -51,8 +51,7 @@ impl Compiler {
                 }
             }
 
-            let record_changes = luaur_common::FFlag::LuauCompilePropagateTableProps2.get()
-                && luaur_common::FFlag::LuauCompileFoldOptimize.get();
+            let record_changes = luaur_common::FFlag::LuauCompileFoldOptimize.get();
 
             if record_changes {
                 self.expr_changes.clear();

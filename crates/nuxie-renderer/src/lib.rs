@@ -50,10 +50,10 @@ use nuxie_image_codec::{
 };
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
-    GpuCanvasPlan, GpuCanvasShader,
-    ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    GpuCanvasPlan, GpuCanvasShader, ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 use std::any::Any;
 #[cfg(test)]
@@ -611,10 +611,9 @@ pub use gpu_canvas::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
     GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
-    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasSamplerBinding,
-    GpuCanvasResourceLifetime, GpuCanvasStencilFace, GpuCanvasTextureBinding,
-    GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
-    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use surface::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};

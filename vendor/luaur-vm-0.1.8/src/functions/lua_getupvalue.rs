@@ -12,6 +12,7 @@ use crate::type_aliases::t_value::TValue;
 #[allow(non_snake_case)]
 pub unsafe fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char {
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     let mut val: *mut TValue = core::ptr::null_mut();
     let name: *const c_char = aux_upvalue(index2addr(L, funcindex), n, &mut val);
 

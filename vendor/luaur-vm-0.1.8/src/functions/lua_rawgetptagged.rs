@@ -20,6 +20,7 @@ pub unsafe fn lua_rawgetptagged(
     tag: c_int,
 ) -> c_int {
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
 
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));

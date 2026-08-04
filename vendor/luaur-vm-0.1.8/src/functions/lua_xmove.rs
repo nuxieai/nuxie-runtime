@@ -14,13 +14,13 @@ pub unsafe fn lua_xmove(from: *mut lua_State, to: *mut lua_State, n: core::ffi::
 
     api_checknelems!(from, n);
     api_check!(from, (*from).global == (*to).global);
-    api_check!(from, (*(*to).ci).top.offset_from((*to).top) >= n as isize);
 
     // Manual inline of lua_c_threadbarrier!(to) to bypass broken macros
     let marked = (*to).hdr.marked as i32;
     if (marked & (1 << BLACKBIT)) != 0 {
         crate::functions::lua_c_barrierback::lua_c_barrierback(to, to as *mut _, &mut (*to).gclist);
     }
+    crate::ensure_stack_impl!(to, from, n);
 
     let ttop = (*to).top;
     let ftop = (*from).top.offset(-(n as isize));

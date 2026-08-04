@@ -13,6 +13,7 @@ pub unsafe fn lua_createtable(L: *mut lua_State, narray: c_int, nrec: c_int) {
     api_check!(L, narray >= 0 && nrec >= 0);
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     sethvalue!(L, (*L).top, lua_h_new(L, narray, nrec));
     api_incr_top!(L);
 }

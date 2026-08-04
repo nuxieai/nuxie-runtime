@@ -201,8 +201,8 @@ impl<'a> Printer<'a> {
             );
             if FFlag::LuauExportValueSyntax.get() && FFlag::LuauConst2.get() && a.is_exported {
                 self.writer.keyword("export");
-                if !cst_node.is_null() {
-                    self.advance(unsafe { (*cst_node).declaration_keyword_position });
+                if let Some(keyword_location) = a.keyword_location {
+                    self.advance(keyword_location.begin);
                 }
                 self.writer
                     .keyword(if a.is_const { "const" } else { "local" });

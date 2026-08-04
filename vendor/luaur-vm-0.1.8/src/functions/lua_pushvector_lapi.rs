@@ -11,6 +11,7 @@ pub unsafe fn lua_pushvector_lua_state_f32_f32_f32_f32(
     z: f32,
     w: f32,
 ) {
+    crate::ensure_stack!(l, 1);
     setvvalue!((*l).top, x, y, z, w);
     api_incr_top!(l);
 }

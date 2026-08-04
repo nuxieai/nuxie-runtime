@@ -22,7 +22,7 @@ impl Compiler {
         if !self.locals.contains(&export_local) {
             let table_reg = self.alloc_reg(self.current_function as *mut _, 1);
             let hash_size = Compiler::encode_hash_size(
-                (self.exported_locals.len() + self.exported_classes.len()) as u32,
+                (self.exported_locals.len() + self.exported_classes.size()) as u32,
             );
 
             unsafe {
@@ -40,8 +40,8 @@ impl Compiler {
 
         if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
             let exported_classes = self.exported_classes.clone();
-            for (class_name, class_reg) in exported_classes {
-                let class_name_ref = sref_ast_name(class_name);
+            for (class_local, class_reg) in exported_classes.iter() {
+                let class_name_ref = unsafe { sref_ast_name((**class_local).name) };
                 let class_name_cid =
                     unsafe { (*self.bytecode).add_constant_string(class_name_ref) };
                 if class_name_cid < 0 {
@@ -56,7 +56,7 @@ impl Compiler {
                 unsafe {
                     (*self.bytecode).emit_abc(
                         LuauOpcode::LOP_SETTABLEKS,
-                        class_reg,
+                        *class_reg,
                         table_reg,
                         bytecode_builder_get_string_hash(class_name_ref) as u8,
                     );

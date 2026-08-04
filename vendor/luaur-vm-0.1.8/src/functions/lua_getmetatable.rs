@@ -16,6 +16,7 @@ use crate::type_aliases::stk_id::StkId;
 #[allow(non_snake_case)]
 pub unsafe fn lua_getmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
 
     let mut mt: *mut LuaTable = core::ptr::null_mut();
     let obj: StkId = index2addr(L, objindex);

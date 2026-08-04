@@ -35,9 +35,13 @@ crates.io, vendored byte-for-byte under `vendor/`:
 - Upstream commit for all six packages:
   `f0eac7f7cce691d0cdb0b93c3eef9d599f71d739` (per each package's
   `.cargo_vcs_info.json`)
-- Luau base: 0.724-era — luaur 0.1.8 advertises validation against upstream
-  Luau commit `8f33df9` (luaur README; see also the pin comment in
-  `crates/nuxie-scripting/Cargo.toml`)
+- Luau base: commit `8f33df91` of `luigi-rosso/luau` — the RIVE FORK's
+  "Sync to upstream/release/724" commit. Note this tree is not official
+  luau-lang 0.724: the fork line already carries the rive engine extensions
+  (bytecode versions 7–11, `CALLFB`/call feedback, integer builtins,
+  userdata-direct access, user-defined classes). luaur was translated
+  against the fork tree, which is why those extensions exist in the Rust
+  baseline. Verified by the 2026-08-04 baseline audit (see below).
 - Original crates.io checksums are recorded in each vendored package's
   provenance file. `luaur-common` and `luaur-vm` predate this fork as
   vendored patched packages; the other four were added at the fork point,
@@ -78,33 +82,103 @@ package's `NUXIE_PATCH.md` (create one when a baseline package is first
 modified) plus a row in this document, so fork-vs-crates.io drift stays
 enumerable.
 
-## Port plan: Luau 0.724 → 0.732
+## Baseline audit findings (2026-08-04)
 
-Upstream C++ is on Luau `rive_0_732` (the `luigi-rosso/luau` fork; final
-pin landed via S4-43 `395defdb`, progressing `rive_0_730` → `rive_0_731` →
-`rive_0_732`; the exact 0.732 C++ runner completes all 321 scripted corpus
-entries — docs/sync/triage-2026-08-02-e0d4913f.md).
+A full audit of the vendored translation against the `8f33df91` C tree
+(codex read-only fan-out, adjudicated) resolved the standing "advertised
+base lags" suspicion: **the base is confirmed** — bytecode constants,
+all 89 opcodes, all 133 builtin IDs, userdata/typeinfo surface, and
+compiler options match exactly. Six baseline TRANSLATION divergences are
+carried (not version lag; all pre-date the fork and are gate-green today):
 
-Plan, as structure-preserving lanes against the pinned C++ scripted corpus:
+1. Every VM fast-call dispatch slot is `luauF_missing` — all fastcalls
+   fall back to ordinary calls (semantically equivalent by Luau's design;
+   a standing perf divergence; candidate post-ladder lane).
+2. `LuauCompileDuptableConstantPack2` table-shape equality/hash baked ON;
+   `LuauCompileNoOptNext` omitted (baked OFF); `LuauIntegerBufferFastcalls`
+   conjunct baked ON.
+3. `math.ldexp` constant folding uses `x * 2^exp` instead of `ldexp`
+   (edge-case divergence, e.g. `ldexp(0, 2000)`).
+4. Assertion handler's "do not trap" return value is ignored (Rust always
+   traps).
+5. `luaur-rt`'s effective flag profile: `set_all_flags(true)` with an
+   explicit keep-OFF exception for `LuauExportValueSyntax`; also
+   `FixMathNoisePrecision` ON (Luau CLI keeps it OFF).
+6. `luaur-rt::Compiler` exposes a subset of engine `CompileOptions`.
 
-1. Port the Luau 0.725→0.732 VM/JIT/GC deltas into the vendored fork,
-   lane by lane, keeping luaur's translation structure so future upstream
-   luaur diffs stay comparable.
-2. **Known target symptom to retire:** `scope_probe` SIGTRAPs on
+## Oracle facts that bind the port
+
+- The pinned rive C++ runtime (`ScriptingVM` in `src/lua/rive_lua_libs.cpp`)
+  never touches Luau FFlags: the oracle runs the engine's **raw
+  static defaults — every FFlag OFF**.
+- The pinned oracle's engine is fork branch `rive_0_36`, which branches
+  from the fork line at `81ac7c3c` — BEFORE the 0.724 sync. Corpus behavior
+  stays invariant across engine versions because upstream ships new
+  behavior dark behind FFlags; this is also why the exact-0.732 candidate
+  runner completed the corpus (triage-2026-08-02).
+- **Binding FFlag policy for rung ports:** new flags are translated into
+  luaur-common's registry AND added to the keep-OFF exception set that
+  `set_all_flags(true)` skips (the `LuauExportValueSyntax` mechanism), so
+  Nuxie's effective profile tracks the oracle's flags-OFF profile. A flag
+  is flipped ON only as its own change with gate evidence, recorded here.
+  When upstream removes a flag and hardwires a path, the port removes the
+  Rust flag and hardwires the same path.
+- The pinned rive C++ does not compile Luau's `Require/` library (it
+  registers its own `lua_require`); `Require/` deltas are out of the fork's
+  port scope.
+
+## Port plan: Luau 0.724 → 0.732 (rung ladder)
+
+Upstream C++ HEAD is on Luau `rive_0_732` (final pin via S4-43 `395defdb`).
+The fork advances one upstream release sync at a time — each rung lands as
+its own PR with the full gate battery green (corpus exactness is the
+ratchet floor at every rung):
+
+| rung | range | scoped delta | status |
+|---|---|---|---|
+| 1 | `8f33df91..91caa731` (0.725) | 549+/209- | landed 2026-08-04: 75 rows ported, 29 no-op (C++-only scoping), 10 Require rows out of scope; new dark flags `LuauAutoStack`, `LuauCloneTableFix`, `LuauCustomYieldablePcalls`, `LuauUdataMetatablePinned` in the keep-OFF set; `DesugaredArrayTypeReferenceIsEmpty` removed (ON path hardwired) |
+| 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | inventoried |
+| 3 | `86d2a9dc..f1f121dc` (0.727) | 867+/626- | inventoried |
+| 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | inventoried |
+| 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | inventoried |
+| 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | inventoried |
+| 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | inventoried |
+| 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | inventoried |
+| 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | inventoried |
+
+Rung 9 is the rive patch set: vector fast functions on 3 components,
+native `math.fround`, `LBC_VERSION_TARGET` held at 7 (which is why the
+bytecode-v7 fixtures remain valid), unconditional `udatadirectfields`
+init, buffer extension declarations, require-path behaviors, `RIVE_LUAU`.
+
+Method per rung (established rung 1): codex read-only inventory (every
+hunk → C symbol → Rust twin → FFlag posture → class), orchestrator
+adjudication, then a codex writer lane in its own worktree — structure-
+preserving, row-by-row commits, focused gates per row, rung-level
+`cargo test -p nuxie --features scripting` + `make scripted-golden-compare`
++ land.sh battery.
+
+Additional plan points:
+
+1. **Known target symptom to retire:** `scope_probe` SIGTRAPs on
    `lua_pushcclosurek`'s stack assertion under newer-engine comparison
-   (S4-3 carry-forward; C++ completes the stream while Rust traps). Fork
-   parity is not claimed until this reproduces green.
-3. Oracles: the real bytecode-v7 fixture and the full forced-scripted
+   (S4-3 carry-forward; C++ completes the stream while Rust traps —
+   C++ release builds compile the assertion out and survive on stack
+   slack). The upstream fix class is `LuauAutoStack` (rung 1, dark);
+   retiring the SIGTRAP will be a recorded flag-enable change validated
+   by scope_probe going exact, not a silent flip. Fork parity is not
+   claimed until this reproduces green.
+2. Oracles: the real bytecode-v7 fixture and the full forced-scripted
    ratchet remain the floor; the exact-0.732 C++ runner is the target
    comparison. The editor-emitted-bytecode compatibility matrix
    (upstream_ref `4ac7b327` discipline — read `port-manifest.toml`, not
    triage briefs, for the pin) is a valid interim evidence step.
-4. Versioning: vendored crate versions stay `0.1.8` while the `=0.1.8`
+3. Versioning: vendored crate versions stay `0.1.8` while the `=0.1.8`
    pins hold (a `[patch]` must satisfy the dependency requirement); the
    fork state is identified by this document plus per-package patch files,
    not by version bumps. Revisit the version scheme if the fork diverges
    enough that a distinct version communicates better.
-5. When fork parity lands, update the `deferred-2026-07-19-luau-engine`
+4. When fork parity lands, update the `deferred-2026-07-19-luau-engine`
    WATCH row to CLOSED with the fork-parity evidence.
 
 Out of scope for the fork-setup change that introduced this document: no

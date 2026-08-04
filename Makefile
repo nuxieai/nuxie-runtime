@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -49,6 +49,7 @@ GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
 SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner-scripted
+E2E_COMPOSED_CORPUS ?= $(CURDIR)/e2e-composed.toml
 PERF_FILE ?= $(RIVE_RUNTIME_DIR)/tests/unit_tests/assets/shapetest.riv
 PERF_SAMPLES ?= 0
 PERF_ITERATIONS ?= 10
@@ -265,6 +266,11 @@ golden-compare: fixtures golden-runner rust-golden-runner
 scripted-golden-compare: CPP_CONFIG=release
 scripted-golden-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
+
+e2e-composed-compare: CPP_CONFIG=release
+e2e-composed-compare: RUST_PROFILE=release
+e2e-composed-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus "$(E2E_COMPOSED_CORPUS)" --side-channel --require-composed-session --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 silver-corpus-test:
 	cargo test -p silver-corpus

@@ -38,11 +38,11 @@ pub use records::f_value::set_luau_bool_flags;
 /// (Rust statics cannot self-register, so the list is generated explicitly.)
 #[allow(non_snake_case)]
 pub fn set_all_flags(value: bool) {
-    FFlag::DesugaredArrayTypeReferenceIsEmpty.set(value);
     FFlag::FixMathNoisePrecision.set(value);
     FFlag::LuauAddRecursionCounterToNonStrictTypeChecker.set(value);
     FFlag::LuauAllowGlobalDeclarationToBeCalledClass.set(value);
     FFlag::LuauAlsoInstantiateInferredArguments.set(value);
+    FFlag::LuauAutoStack.set(false);
     FFlag::LuauAutocompleteConst.set(value);
     FFlag::LuauAutocompleteExport.set(value);
     FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
@@ -50,6 +50,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCallFeedback.set(value);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
     FFlag::LuauClosureUsageCounter.set(value);
+    FFlag::LuauCloneTableFix.set(false);
     FFlag::LuauCodeGenCallWrapperEmitInst.set(value);
     FFlag::LuauCodegenBufferInteger.set(value);
     FFlag::LuauCodegenDsePtrStoreTagCheck.set(value);
@@ -86,6 +87,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCstExprGroup.set(value);
     FFlag::LuauCstTypeGroup.set(value);
+    FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
     FFlag::LuauEmitCallFeedback.set(value);
@@ -139,6 +141,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauTypeFunctionStructuredErrors.set(value);
     FFlag::LuauTypeFunctionSupportsFrozen.set(value);
     FFlag::LuauUdataDirectAccess6.set(value);
+    FFlag::LuauUdataMetatablePinned.set(false);
     FFlag::LuauUdtfTypeIsSubtypeOf.set(value);
     FFlag::LuauUseNativeStackGuard.set(value);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
@@ -214,8 +217,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(DebugLuauUserDefinedClasses);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(DebugLuauUserDefinedClassesRuntime);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(DesugaredArrayTypeReferenceIsEmpty);
     // VM/src/lmathlib.cpp
     crate::LUAU_FASTFLAGVARIABLE!(FixMathNoisePrecision);
     // Analysis/src/NonStrictTypeChecker.cpp
@@ -224,6 +225,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauAllowGlobalDeclarationToBeCalledClass);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAlsoInstantiateInferredArguments);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauAutoStack);
     // Analysis/src/AutocompleteCore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAutocompleteConst);
     // Analysis/src/AutocompleteCore.cpp
@@ -238,6 +241,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCheckFunctionStatementTypes);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauClosureUsageCounter);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCloneTableFix);
     // CodeGen/src/EmitInstructionX64.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodeGenCallWrapperEmitInst);
     // CodeGen/src/IrTranslateBuiltins.cpp
@@ -310,8 +315,11 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCstExprGroup);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCstTypeGroup);
+    // VM/src/laux.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
+    crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 2);
     // Analysis/src/ConstraintGenerator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowRedefiningBuiltinTypes);
     // Compiler/src/Compiler.cpp
@@ -322,6 +330,7 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueSyntax);
+    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 3);
     // Analysis/src/Frontend.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueTypecheck);
     // Analysis/src/Normalize.cpp
@@ -404,6 +413,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauTypeFunctionSupportsFrozen);
     // VM/src/lvmload.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdataDirectAccess6);
+    // VM/src/lgc.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauUdataMetatablePinned);
     // Analysis/src/TypeFunctionRuntime.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdtfTypeIsSubtypeOf);
     // Analysis/src/NativeStackGuard.cpp

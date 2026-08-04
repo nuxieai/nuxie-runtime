@@ -99,10 +99,8 @@ pub unsafe fn lua_newstate(f: lua_Alloc, ud: *mut core::ffi::c_void) -> *mut lua
         (*g).lightuserdataname[i] = core::ptr::null_mut();
     }
 
-    if luaur_common::FFlag::LuauDirectFieldGet.get() {
-        for i in 0..UTAG_INTERNAL_LIMIT as usize {
-            (*g).udatadirectfields[i] = core::ptr::null_mut();
-        }
+    for i in 0..UTAG_INTERNAL_LIMIT as usize {
+        (*g).udatadirectfields[i] = core::ptr::null_mut();
     }
 
     for i in 0..LUA_MEMORY_CATEGORIES as usize {

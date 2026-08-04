@@ -18,3 +18,9 @@ Provenance:
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
 - Patch: Apple-vendor cfg widening in `get_clock_timestamp.rs` and
   `get_clock_period.rs`
+
+## Luau fork rung 1
+
+- Ported official Luau 0.725 delta (upstream 8f33df91..91caa731).
+- Touched areas: release flag registration, raw-default-OFF exceptions, and
+  flag-version metadata.

@@ -298,6 +298,20 @@ projection and forward `--semantic-side-channel-only` to both runners. Such
 entries remain `status = "exact"`; they cannot carry a relaxed verification
 mode or a side-channel-divergence feature.
 
+### Composed-session differential
+
+`make e2e-composed-compare` uses this grammar without a second parser or
+stream format. Each `e2e-composed.toml` row launches each release scripted
+runner exactly once. The runner loads the file once, merges the input and
+view-model command streams by timestamp, advances and drains semantics around
+the commands and samples, then draws every sampled frame. `golden-compare`
+compares the complete streams and additionally requires both streams to
+contain an `advance`, pointer `input`, `viewModel`, `resize`, `semantics`,
+`sample`, and terminal `frame` record. A row with non-exact verification,
+missing either script, or `semantic_side_channel_only` projection is rejected
+before execution. The final `composed sessions: exact=N/N` line therefore
+counts only full, unprojected session-stream matches.
+
 ## Sampling caveat (register V2)
 
 Most corpus entries sample `t=0` only, where `settled` is forced

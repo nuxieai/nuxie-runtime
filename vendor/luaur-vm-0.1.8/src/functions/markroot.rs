@@ -2,6 +2,7 @@
 //! Source: `VM/src/lgc.cpp` (lgc.cpp:805-837, hand-ported)
 
 use crate::functions::markmt::markmt;
+use crate::functions::marktaggetmt::marktaggetmt;
 use crate::macros::gc_spropagate::GCSpropagate;
 use crate::macros::markobject::markobject;
 use crate::macros::markvalue::markvalue;
@@ -50,5 +51,10 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
     }
 
     markmt(g);
+
+    if luaur_common::FFlag::LuauUdataMetatablePinned.get() {
+        marktaggetmt(g);
+    }
+
     (*g).gcstate = GCSpropagate as u8;
 }

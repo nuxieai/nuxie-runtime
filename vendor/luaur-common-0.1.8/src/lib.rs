@@ -115,6 +115,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
     FFlag::LuauPropertyModifierMismatchErrors.set(value);
+    FFlag::LuauPromoteProto.set(false);
     FFlag::LuauReadOnlyIndexers.set(value);
     FFlag::LuauRefineNilFromTableIndexerResultType.set(value);
     FFlag::LuauRemoveConstraintSolverEmplace.set(value);
@@ -357,6 +358,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauPropagateTypeAnnotationsInForInLoops);
     // Analysis/src/TypeChecker2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauPropertyModifierMismatchErrors);
+    // VM/src/lfunc.h
+    crate::LUAU_FASTFLAGVARIABLE!(LuauPromoteProto);
     // Analysis/src/ConstraintGenerator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauReadOnlyIndexers);
     // Analysis/src/ConstraintSolver.cpp

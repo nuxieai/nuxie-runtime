@@ -315,6 +315,7 @@ pub mod lua_f_getlocal;
 pub mod lua_f_new_cclosure;
 pub mod lua_f_new_lclosure;
 pub mod lua_f_newproto;
+pub mod lua_f_promoteproto;
 pub mod lua_f_recordhit;
 pub mod lua_g_aritherror;
 pub mod lua_g_breakpoint;

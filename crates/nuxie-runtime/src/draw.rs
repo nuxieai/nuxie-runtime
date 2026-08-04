@@ -16743,7 +16743,7 @@ fn runtime_text_replay_order(
 }
 
 impl ArtboardInstance {
-    /// Build the live solved box observed by C++ `Node::localBounds`.
+    /// Build the live current-frame box observed by C++ `Node::localBounds`.
     ///
     /// D3 Taffy adapter: Rust's horizontal fill result excludes the layout
     /// component's own padding, while Rive's Yoga-backed
@@ -16756,32 +16756,33 @@ impl ArtboardInstance {
     ) -> Option<(f32, f32, f32, f32)> {
         const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
 
-        if self.component(local_id)?.type_name != "LayoutComponent" {
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
             return None;
         }
-        let layout = self.layout_bounds(local_id)?;
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
         let style_local = self.runtime_layout_component_style_local(local_id)?;
         let mut min_x = 0.0;
-        let mut max_x = layout.width;
+        let mut max_x = width;
         if self.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_FILL {
             let padding_left = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingLeft,
                 RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
-                layout.width,
+                width,
             )?;
             let padding_right = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingRight,
                 RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
-                layout.width,
+                width,
             )?;
             min_x -= padding_left;
             max_x += padding_left + padding_right;
         }
         let bounds = runtime_transformed_rect_bounds(
-            (min_x, 0.0, max_x, layout.height),
-            self.component(local_id)?.transform.world_transform,
+            (min_x, 0.0, max_x, height),
+            component.transform.world_transform,
         );
         Some((bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
     }

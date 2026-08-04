@@ -4190,17 +4190,23 @@ impl ArtboardInstance {
     }
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
+    ///
+    /// Pinned C++ `LayoutComponent::localBounds` reads the current `m_layout`
+    /// frame, not the newly solved animation target retained separately by
+    /// Rust. Keep semantic bounds on that live frame so `SemanticData` can
+    /// apply its exact bounds-delta gate.
     pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
-        if self.component(local_id)?.type_name != "LayoutComponent" {
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
             return None;
         }
-        let layout = self.layout_bounds(local_id)?;
-        let transform = self.component(local_id)?.transform.world_transform;
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
+        let transform = component.transform.world_transform;
         let corners = [
             transform.transform_point(0.0, 0.0),
-            transform.transform_point(layout.width, 0.0),
-            transform.transform_point(0.0, layout.height),
-            transform.transform_point(layout.width, layout.height),
+            transform.transform_point(width, 0.0),
+            transform.transform_point(0.0, height),
+            transform.transform_point(width, height),
         ];
         let (mut min_x, mut min_y) = corners[0];
         let (mut max_x, mut max_y) = corners[0];
@@ -15399,6 +15405,53 @@ mod tests {
     struct ScriptedLayoutTestInstance {
         measures: Rc<Cell<usize>>,
         resizes: Rc<RefCell<Vec<(f32, f32)>>>,
+    }
+
+    #[test]
+    fn semantic_layout_bounds_use_current_animation_frame_not_solved_target() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let style = synthetic_component_for_type(2, "LayoutComponentStyle");
+        let mut instance = synthetic_instance(vec![root, layout, style], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let style = instance.component_handle(2).expect("layout style");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.layout.as_mut())
+            .expect("layout state")
+            .style = Some(style);
+
+        let current = RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 80.0,
+        };
+        instance.retain_runtime_layout_component_bounds(1, current, None);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout state")
+            .set_animation_style(2, 1, 1.0, None);
+
+        let solved_target = RuntimeLayoutBounds {
+            height: 40.0,
+            ..current
+        };
+        instance.retain_runtime_layout_component_bounds(1, solved_target, None);
+        instance.solved_layout_bounds = Some(Arc::new(BTreeMap::from([(1, solved_target)])));
+
+        // Pinned C++ asks LayoutComponent::localBounds, which reads the
+        // current m_layout frame, before SemanticData's bounds-delta gate:
+        // semantic_provider.cpp:13-32,76-94;
+        // layout_component.hpp:192-211; semantic_data.cpp:501-531.
+        let bounds = crate::semantic_provider::SemanticProvider::semantic_bounds(&mut instance, 1);
+
+        assert_eq!(
+            bounds,
+            crate::semantic_data::SemanticBounds::new(0.0, 0.0, 100.0, 80.0)
+        );
     }
 
     impl ScriptInstance for ScriptedLayoutTestInstance {

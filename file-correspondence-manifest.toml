@@ -4923,13 +4923,13 @@ note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_target_
 upstream = "src/text/text_value_run.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/text/text_value_run.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/artboard.rs"
+rust_module = "crates/nuxie-runtime/src/text/text_value_run.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/text/text_value_run.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0404"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "FL-E5 direct callbacks and text coordinator preserve parent/run registration, style resolution, cached length invalidation, Unicode offsets, selected-run coverage, and retained hit bounds/contours; W65 run-query/modifier assertions pass. MR-2b/C04 justified exception: remaining run mutation invalidation walks the shared Text owner path with B6-0385. C17 exception: retained modules are `crates/nuxie-runtime/src/text/text_value_run.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs`; the dedicated run callbacks, common retained run geometry, and Artboard mutation invalidation are one shared Text lifecycle, preventing a complete per-row extraction."
+note = "FL-E5 direct callbacks and text coordinator preserve parent/run registration, style resolution, cached length invalidation, Unicode offsets, selected-run coverage, and retained hit bounds/contours; W65 run-query/modifier assertions pass. MR-2b/C04 justified exception: remaining run mutation invalidation walks the shared Text owner path with B6-0385. C17 exception: retained modules are `crates/nuxie-runtime/src/text/text_value_run.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/artboard/text/text_value_run.rs`; the direct C++-counterpart module owns root-run lookup and mutation while dedicated callbacks and retained run geometry remain shared."
 
 [[file]]
 upstream = "src/text/text_variation_helper.cpp"

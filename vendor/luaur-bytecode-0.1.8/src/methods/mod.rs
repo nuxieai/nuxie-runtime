@@ -7,6 +7,7 @@ pub mod bc_function_add_inst;
 pub mod bc_function_add_phi;
 pub mod bc_function_add_proj;
 pub mod bc_function_add_use;
+pub mod bc_function_add_use_alt_b;
 pub mod bc_function_as;
 pub mod bc_function_as_inst_op;
 pub mod bc_function_block;

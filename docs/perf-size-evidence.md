@@ -26,10 +26,10 @@ process startup are outside this metric.
 |---:|---|---:|---:|---:|---:|
 | 1 | `text_vertical_trim_test` | 10,467,863 | 0.004629 | 0.117580 | 25.402x |
 | 2 | `jellyfish_test` | 3,057,595 | 0.000500 | 0.011172 | 22.341x |
-| 3 | `car_widgets_v01` | 2,875,164 | 0.035157 | 76.895463 | 2,187.196x |
-| 4 | `zombie_skins` | 1,952,536 | 0.037295 | 1.494437 | 40.071x |
-| 5 | `script_dependency_test_using_library_v2` | 1,755,498 | 0.000234 | 0.001224 | 5.225x |
-| **500-frame weighted aggregate** | — | — | **0.015563** | **15.703975** | **1,009.063x** |
+| 3 | `echo_show_demo` | 3,012,517 | 0.050823 | 2.085713 | 41.039x |
+| 4 | `car_widgets_v01` | 2,875,164 | 0.035157 | 76.895463 | 2,187.196x |
+| 5 | `zombie_skins` | 1,952,536 | 0.037295 | 1.494437 | 40.071x |
+| **500-frame weighted aggregate** | — | — | **0.025681** | **16.120873** | **627.741x** |
 
 The aggregate sums the five fixture medians and divides each runtime by 500
 frames. The especially large `car_widgets_v01` result is not rounded away: its
@@ -47,9 +47,9 @@ Raw `rive-perf-compare-json-v1` reports:
 
 - [`text_vertical_trim_test.json`](evidence/tier5-2026-08-04/text_vertical_trim_test.json)
 - [`jellyfish_test.json`](evidence/tier5-2026-08-04/jellyfish_test.json)
+- [`echo_show_demo.json`](evidence/tier5-2026-08-04/echo_show_demo.json)
 - [`car_widgets_v01.json`](evidence/tier5-2026-08-04/car_widgets_v01.json)
 - [`zombie_skins.json`](evidence/tier5-2026-08-04/zombie_skins.json)
-- [`script_dependency_test_using_library_v2.json`](evidence/tier5-2026-08-04/script_dependency_test_using_library_v2.json)
 
 The measurement commands were equivalent to:
 

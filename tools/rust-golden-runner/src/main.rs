@@ -3396,6 +3396,8 @@ impl nuxie_runtime::ScriptArtboardResolver for RunnerScriptArtboardResolver {
             Rc::clone(&self.render_state),
             parent_context,
             Some(&self.registered_file),
+            None,
+            true,
         )
         .map_err(|error| ScriptError::new(error.to_string()))?;
         artboard.bind_view_model();
@@ -3506,7 +3508,16 @@ impl RunnerScriptArtboard {
         artboard_index: usize,
         render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     ) -> Result<Self> {
-        Self::new_with_parent_context(runtime, artboards, artboard_index, render_state, None, None)
+        Self::new_with_parent_context(
+            runtime,
+            artboards,
+            artboard_index,
+            render_state,
+            None,
+            None,
+            None,
+            false,
+        )
     }
 
     fn new_with_parent_context(
@@ -3516,6 +3527,8 @@ impl RunnerScriptArtboard {
         render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
         registered_file: Option<&RegisteredScriptFile>,
+        supplied_view_model: Option<nuxie_runtime::ScriptViewModel>,
+        prebind_occurrence: bool,
     ) -> Result<Self> {
         let graph = artboards
             .get(artboard_index)
@@ -3531,6 +3544,34 @@ impl RunnerScriptArtboard {
             .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
             .and_then(|index| usize::try_from(index).ok())
             .filter(|index| graph.state_machines.get(*index).is_some());
+        let view_model = supplied_view_model.or_else(|| {
+            selected_artboard_owned_view_model_context(runtime, artboard_index)
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
+        });
+        if prebind_occurrence && let Some(view_model) = view_model.as_ref() {
+            // Complete the mounted Artboard side before its replacement state
+            // machine occurrence is created. The subsequent `bind_view_model`
+            // call forwards this exact context to the machine, matching the
+            // child-first atomic replacement in pinned C++
+            // (`src/nested_artboard.cpp:156-185,228-350`).
+            if let Some(parent_context) = parent_context {
+                let local = view_model.owned_handle();
+                let data_context = parent_context.with_local_view_model(&local);
+                instance
+                    .borrow_mut()
+                    .bind_script_artboard_data_context(runtime, &data_context);
+            } else {
+                bind_script_view_model_artboard_context(
+                    &mut instance.borrow_mut(),
+                    runtime,
+                    artboard_index,
+                    None,
+                    view_model,
+                );
+            }
+        }
         let state_machine = state_machine_index
             .and_then(|index| instance.borrow_mut().state_machine_instance(index));
         let object = runtime.object(graph.global_id as usize);
@@ -3544,10 +3585,7 @@ impl RunnerScriptArtboard {
             instance,
             state_machine_index,
             state_machine,
-            view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
-                .as_ref()
-                .and_then(RuntimeOwnedViewModelContext::main_handle)
-                .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
+            view_model,
             registered_file: registered_file.cloned(),
             parent_context: parent_context.cloned(),
             _data_context: None,
@@ -3574,6 +3612,7 @@ impl RunnerScriptArtboard {
                 .bind_script_artboard_data_context(&self.runtime, &data_context);
             if let Some(state_machine) = self.state_machine.as_mut() {
                 state_machine.bind_script_artboard_data_context(&data_context);
+                state_machine.advance_data_context();
             }
             self._data_context = Some(data_context);
             return;
@@ -3667,14 +3706,13 @@ impl ScriptArtboard for RunnerScriptArtboard {
             Rc::clone(&self.render_state),
             self.parent_context.as_ref(),
             self.registered_file.as_ref(),
+            view_model,
+            true,
         )
         .map_err(|error| ScriptError::new(error.to_string()))?;
         // Pinned `ScriptedArtboard::instance(nil)` keeps the referenced
         // Artboard's authored default instance; only an explicit model
         // replaces it (`lua_artboards.cpp:20-38,334-345`).
-        if let Some(view_model) = view_model {
-            instance.view_model = Some(view_model);
-        }
         instance.bind_view_model();
         instance
             .prepare_state_machine_once()
@@ -3687,14 +3725,14 @@ impl ScriptArtboard for RunnerScriptArtboard {
         // use advanceAndApply(..., false), so a child step must not consume its
         // data context or the VM-wide detached-model frame.
         let mut instance = self.instance.borrow_mut();
-        let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
-            instance.advance_state_machine_instance(state_machine, seconds)
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            state_machine.advance_and_apply_with_view_models(&mut instance, seconds, false)
         } else {
-            instance.advance_nested_artboards(seconds)
-        };
-        changed |= instance.advance_artboard_data_binds_with_elapsed(seconds);
-        changed |= instance.update_pass();
-        Ok(changed)
+            let mut changed = instance.advance_nested_artboards(seconds);
+            changed |= instance.advance_artboard_data_binds_with_elapsed(seconds);
+            changed |= instance.update_pass();
+            Ok(changed)
+        }
     }
 
     fn animation(
@@ -4100,6 +4138,7 @@ fn initialize_scripted_drawables_for_artboard(
                 local_object.local_id,
                 script_instance.as_mut(),
                 Rc::clone(&render_state),
+                bound_context_model.as_ref(),
             )?;
             if has_init {
                 let initialized = match script_instance.call_init_with_factory(&mut host, factory) {
@@ -5667,6 +5706,7 @@ fn hydrate_script_inputs(
     scripted_local_id: usize,
     script_instance: &mut dyn nuxie_runtime::ScriptInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    context_view_model: Option<&ScriptViewModel>,
 ) -> Result<()> {
     let object_range = artboard_object_range(runtime, artboard, artboards);
     for global_id in object_range {
@@ -5687,11 +5727,18 @@ fn hydrate_script_inputs(
             let Some(artboard_index) = object.uint_property("artboardId") else {
                 continue;
             };
-            let mut artboard = RunnerScriptArtboard::new(
+            let parent_context = context_view_model.map(|view_model| {
+                nuxie_runtime::ScriptArtboardParentContext::root(&view_model.owned_handle())
+            });
+            let mut artboard = RunnerScriptArtboard::new_with_parent_context(
                 runtime,
                 artboards,
                 artboard_index as usize,
                 Rc::clone(&render_state),
+                parent_context.as_ref(),
+                None,
+                None,
+                false,
             )?;
             artboard.bind_view_model();
             script_instance
@@ -5830,11 +5877,17 @@ fn rehydrate_script_inputs(
             let Some(artboard_index) = object.uint_property("artboardId") else {
                 continue;
             };
-            let artboard = RunnerScriptArtboard::new(
+            let parent_context =
+                owned_view_model_context.map(nuxie_runtime::ScriptArtboardParentContext::root);
+            let artboard = RunnerScriptArtboard::new_with_parent_context(
                 runtime,
                 artboards,
                 artboard_index as usize,
                 Rc::clone(&render_state),
+                parent_context.as_ref(),
+                None,
+                None,
+                false,
             )?;
             instance
                 .set_script_artboard_input_for_global(scripted_global_id, name, Box::new(artboard))

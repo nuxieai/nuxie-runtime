@@ -73,11 +73,13 @@ fn upstream_fl_bc_resolved_silver_assertions() {
 
 #[test]
 fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
+    // bidirectional_stateful_property went exact when the nested-VMI binding
+    // order was fixed (V20/V21/V34/V38): the stateful VMI now binds to the
+    // mounted child before its state machine consumes the DataContext, so the
+    // frame-3 transform no longer lags a pass behind.
+    compare_case("bidirectional_stateful_property")
+        .unwrap_or_else(|error| panic!("promoted fixture regressed: {error:#}"));
     for (id, expected) in [
-        (
-            "bidirectional_stateful_property",
-            "bidirectional_stateful_property: frame 3, op 180 (transform), field tx: expected 150, got 100",
-        ),
         (
             "paused_nested_artboard_opacity",
             "paused_nested_artboard_opacity: frame 1, op 103 (rewind): expected rewind, got drawPath",

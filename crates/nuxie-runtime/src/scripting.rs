@@ -2387,6 +2387,13 @@ pub struct ScriptArtboardParentContext {
 }
 
 impl ScriptArtboardParentContext {
+    #[doc(hidden)]
+    pub fn root(local: &RuntimeOwnedViewModelContextHandle) -> Self {
+        Self {
+            inner: RuntimeOwnedDataContext::from_context_handle(local),
+        }
+    }
+
     pub(crate) fn from_runtime(inner: RuntimeOwnedDataContext) -> Self {
         Self { inner }
     }

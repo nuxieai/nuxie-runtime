@@ -2044,9 +2044,9 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_keyframe_machine_teardown_before_layers_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)[\\s\\S]{0,800}fn\\s+teardown_layers\\b"
-min_occurrences = 1
-max_occurrences = 1
+pattern = "(?:fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)|impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}self\\.teardown_bind_occurrences\\(\\);[\\s\\S]{0,200}self\\.teardown_layers\\(\\);)"
+min_occurrences = 2
+max_occurrences = 2
 
 [[ratchet]]
 id = "state_machine_keyframe_cpp_initialize_converter_order_required"

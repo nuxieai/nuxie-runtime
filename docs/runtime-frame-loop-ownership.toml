@@ -1954,7 +1954,7 @@ status = "faithful"
 upstream = "src/data_bind/data_bind_container.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-binary/src/lib.rs", "crates/nuxie-runtime/src/data_bind/data_bind_container.rs", "crates/nuxie-runtime/src/state_machine/data_converter_binding.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs", "crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs", "crates/nuxie-runtime/src/view_model_cell.rs"]
+rust_modules = ["crates/nuxie-binary/src/lib.rs", "crates/nuxie-runtime/src/data_bind/data_bind_container.rs", "crates/nuxie-runtime/src/state_machine/data_converter_binding.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/data_bind_container.rs", "crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs", "crates/nuxie-runtime/src/view_model_cell.rs"]
 dynamically_reached = true
 status = "faithful"
 

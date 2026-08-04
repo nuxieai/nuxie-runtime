@@ -6278,6 +6278,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_keyframe_machine_teardown_before_layers_required",
                 "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
                 """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                    }
+                }
                 fn teardown_bind_occurrences() {
                     layer.remove_key_frame_data_binds();
                     self.key_frame_data_bind_graphs.clear();
@@ -6287,6 +6293,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                    }
+                }
                 fn teardown_bind_occurrences() {
                     self.key_frame_data_bind_graphs.clear();
                 }

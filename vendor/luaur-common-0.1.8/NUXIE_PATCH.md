@@ -24,3 +24,9 @@ Provenance:
 - Ported official Luau 0.725 delta (upstream 8f33df91..91caa731).
 - Touched areas: release flag registration, raw-default-OFF exceptions, and
   flag-version metadata.
+
+## Luau fork rung 2
+
+- Ported official Luau 0.726 delta (upstream 91caa731..86d2a9dc).
+- Touched areas: bytecode version target and dark release-flag registration
+  for attribute CST and virtual BytecodeBuilder scaffolding.

@@ -19,8 +19,8 @@ pub unsafe fn lua_r_newclass(
     name: *mut TString,
     memberstooffset: *mut LuaTable,
     offsettomember: *mut *mut TString,
-    numberofinstancemembers: i32,
-    numberofstaticmembers: i32,
+    numberofinstancemembers: u32,
+    numberofstaticmembers: u32,
 ) -> *mut LuauClass {
     let global = (*L).global;
     LUAU_ASSERT!((*global).GCthreshold == usize::MAX);

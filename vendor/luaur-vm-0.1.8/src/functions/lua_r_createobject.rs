@@ -30,7 +30,7 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
     let numargs: core::ffi::c_int = lua_gettop(L);
 
     // We need to initialize all of the instance members to `nil` to start.
-    for idx in 0..(*classobject).numberofinstancemembers as core::ffi::c_int {
+    for idx in 0..(*classobject).numberofinstancemembers {
         setnilvalue!((*classinst).members.add(idx as usize));
     }
 
@@ -50,7 +50,7 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
         }
         2 => {
             // If given a second argument, use it to initialize all class members.
-            for idx in 0..(*classobject).numberofinstancemembers as core::ffi::c_int {
+            for idx in 0..(*classobject).numberofinstancemembers {
                 let mut key: TValue = TValue::default();
                 setsvalue!(
                     L,

@@ -69,13 +69,7 @@ impl CostVisitor {
             let bfid = unsafe { &*self.builtins }.find(&(expr as *mut AstExprCall));
             let builtin = bfid.copied().unwrap_or(0)
                 != luaur_common::enums::luau_builtin_function::LuauBuiltinFunction::LBF_NONE as i32;
-            let builtin_short = builtin
-                && expr.args.size
-                    <= if luaur_common::FFlag::LuauCompileFastcall3CostModel.get() {
-                        3
-                    } else {
-                        2
-                    };
+            let builtin_short = builtin && expr.args.size <= 3;
 
             let mut cost = Cost::new(if builtin { 2 } else { 3 }, 0);
 

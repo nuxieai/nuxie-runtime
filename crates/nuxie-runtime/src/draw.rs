@@ -25947,6 +25947,103 @@ mod tests {
     }
 
     #[test]
+    fn transform_only_wave_through_text_variation_helper_retains_text_render_paths() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_variation_modifier.riv");
+        let runtime = read_runtime_file(bytes).expect("text variation fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text variation graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let axis_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextStyleAxis")
+            .expect("fixture has TextStyleAxis")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+
+        let mut cold_factory = nuxie_render_api::RecordingFactory::new();
+        let mut cold_renderer = cold_factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut cold_factory,
+                &mut cold_renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("initial retained text draws");
+        let cold = cold_factory.canonical_recording().stream().to_string();
+
+        // A position-only layout move publishes recursive WORLD_TRANSFORM dirt
+        // from the moved owner (`layout_component.cpp:1167-1178`). When that
+        // wave reaches the embedded TextVariationHelper through its artboard
+        // dependency, C++ only refreshes the style's cached variable font
+        // (`text_variation_helper.cpp:14-17`); the Text must not reshape and
+        // `Text::buildRenderStyles` must not replace the retained opacity
+        // render paths. Round-trip the wave twice so the drawn state is
+        // byte-identical to the cold frame.
+        instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
+        instance.update_pass();
+        instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
+        instance.update_pass();
+
+        let mut fresh_factory = nuxie_render_api::RecordingFactory::new();
+        let mut fresh_renderer = fresh_factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut fresh_factory,
+                &mut fresh_renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("restored transform state redraws");
+        assert!(
+            !fresh_factory.stream().contains("makeEmptyRenderPath"),
+            "a transform-only wave must not replace retained text render paths: {}",
+            fresh_factory.stream(),
+        );
+        // Hosts that record each frame with a fresh factory (the nuxie-dev
+        // editor parity harness) rely on this identity: a mid-frame path
+        // re-creation restarts the new factory's id space and collides with
+        // the retained objects created by the previous factory, so the
+        // canonical recording only stays a cold-frame fixpoint when the
+        // retained paths survive the wave.
+        assert_eq!(
+            fresh_factory.canonical_recording().stream(),
+            cold,
+            "a fresh-factory redraw of restored state must replay the cold recording identity",
+        );
+
+        // The authored axis-change chain still reshapes: the TextStyleAxis
+        // setter dirties its TextStyle, whose onDirty marks the owning Text
+        // and the helper (`text_style_axis.cpp:27-30`, `text_style.cpp:27-43`).
+        assert!(instance.set_double_property(
+            axis_local,
+            property_key_for_name("TextStyleAxis", "axisValue").expect("TextStyleAxis.axisValue"),
+            900.0,
+        ));
+        assert!(
+            instance
+                .debug_component_dirt(text_local)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::TEXT_SHAPE)),
+            "an axis value change must still reshape the owning Text",
+        );
+    }
+
+    #[test]
     fn setter_dirt_between_update_and_draw_renders_the_stale_retained_text_frame() {
         let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
         let runtime = read_runtime_file(bytes).expect("text style fixture imports");

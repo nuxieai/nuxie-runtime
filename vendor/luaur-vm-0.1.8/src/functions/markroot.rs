@@ -3,6 +3,7 @@
 
 use crate::functions::markmt::markmt;
 use crate::functions::marktaggetmt::marktaggetmt;
+use crate::functions::markudatadirectfields::markudatadirectfields;
 use crate::macros::gc_spropagate::GCSpropagate;
 use crate::macros::markobject::markobject;
 use crate::macros::markvalue::markvalue;
@@ -43,11 +44,7 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
     }
 
     if luaur_common::FFlag::LuauDirectFieldGet.get() {
-        for i in 0..UTAG_INTERNAL_LIMIT as usize {
-            if !(*g).udatadirectfields[i].is_null() {
-                markobject!(g, (*g).udatadirectfields[i]);
-            }
-        }
+        markudatadirectfields(g);
     }
 
     markmt(g);

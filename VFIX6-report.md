@@ -29,4 +29,11 @@ Upstream reference: `rive-runtime` at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 ## Commit status
 
-The V28 and V32 commits are present. The environment denied creation of the Git worktree `index.lock` while committing the later coherent V37/V16/report steps (`Operation not permitted`); their diffs remain in the working tree. `docs/v-row-triage.md` remains untracked and is excluded from all commit attempts.
+- `302a0911` — V32 retained authored paths for script draw.
+- `92117367` — V28 keyed callback-report preservation.
+- `22fbf5ae` — V16/V37 dependent render-output settlement, corpus/register evidence, and this report.
+
+The V17 Skin contract was already present and passed its focused tests, so a
+no-op source commit was not manufactured for it. Its independently isolated
+TrimPath corpus remainder stays open. `docs/v-row-triage.md` remains untracked
+and was excluded from every commit.

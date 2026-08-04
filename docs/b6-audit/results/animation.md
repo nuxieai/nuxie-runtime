@@ -2041,3 +2041,42 @@ idiom_rules_invoked: []
 confidence: high
 notes: "UNKNOWN blocker: Manifest status is partial: Rust retains animation indices and applies them, but no counterpart to C++ Joystick::handleSource/addDependent/removeDependent push ownership was found. Family grep and sibling sweep found no mutation-gated mechanism that could justify DIVERGENT; no inference was made."
 ~~~
+
+## B6-0449
+
+Post-audit addition (2026-08-04): `src/animation/keyframe_int.cpp` first
+appears upstream after the frozen audit ref — it is absent at `d788e8ec` and
+present at the live pin `4ac7b327` (sync cycle S4, `docs/sync/triage-2026-08-02-e0d4913f.md`).
+It is therefore audited against `4ac7b327` with the same five axes as its
+`B6-0033..0041` keyframe siblings; C++ anchors cite that pin and Rust anchors
+cite the current tree, not the tree the original sweep cited.
+
+~~~yaml
+row_id: B6-0449
+cpp_files: ["src/animation/keyframe_int.cpp"]
+rust_module: "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+subsystem_cluster: animation
+sibling_files_swept:
+  - "src/animation/keyframe_uint.cpp"
+  - "src/animation/keyframe_bool.cpp"
+  - "src/animation/keyframe.cpp"
+  - "crates/nuxie-runtime/src/animation.rs"
+  - "crates/nuxie-runtime/src/animation/keyframe.rs"
+  - "crates/nuxie-runtime/src/animation/keyed_property.rs"
+  - "crates/nuxie-runtime/src/animation/linear_animation.rs"
+  - "crates/nuxie-runtime/src/artboard.rs"
+verdict: ADAPTED
+axes:
+  retained_identity: {status: adapted, idiom_rule: "AF-7 own-by-value", evidence: ["cpp@4ac7b327:src/animation/keyframe_int.cpp:6-24", "crates/nuxie-runtime/src/animation/keyframe_int.rs:1-9", "crates/nuxie-runtime/src/animation/keyframe.rs:53-61"]}
+  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["cpp@4ac7b327:src/animation/keyframe_int.cpp:6-24", "crates/nuxie-runtime/src/animation/keyed_property.rs:275-295"], note: "C++ itself indexes keyframes by time with no observer, so the Rust closest-frame index lookup is AF-3 correct."}
+  update_ordering: {status: isomorphic, phases_cpp: ["import KeyFrameInt", "seek/advance to seconds", "CoreRegistry::setInt"], phases_rust: ["import immutable RuntimeKeyFrameInt", "seek/advance to seconds", "set_int_property"]}
+  ownership: {status: adapted, idiom_rule: "AF-7 own-by-value", evidence: ["cpp@4ac7b327:src/animation/keyframe_int.cpp:6-24", "crates/nuxie-runtime/src/animation.rs:380-407"]}
+  compensation:
+    status: adapted
+    mechanisms: []
+    import_time_constants:
+      - {name: "RuntimeKeyFrame::Int discriminant + interpolation_type/interpolator_id descriptor", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:380-407", "crates/nuxie-runtime/src/animation/keyframe.rs:88-94,125-131"]}
+idiom_rules_invoked: ["AF-3 poll only where C++ polls", "AF-5 import-time devirtualization", "AF-7 own-by-value"]
+confidence: high
+notes: "Both C++ entry points are the same hold write — `apply` and `applyInterpolation` each call `CoreRegistry::setInt(object, propertyKey, value())` and ignore `mix`/`nextFrame`, so an int property steps at its frame and never interpolates. `RuntimeKeyedProperty::int_value_at` reproduces exactly that: it takes the closest frame index and returns the `to` value only when `seconds == to.seconds`, otherwise the `from` value, and `linear_animation.rs:295` writes it through the ordinary int property setter. This row does not touch the bindable-keyframe path that made B6-0034 DIVERGENT: `RuntimeKeyFrame::bindable_global_id` returns `None` for `Int` (keyframe.rs:88-94), so the copied value-holder and prototype-revision mechanisms never reach an int frame. Crate-wide family grep (generation|epoch|revision|dirty|observed|snapshot|candidate|alias) plus the sibling sweep above was clean for this row; the disposition matches B6-0041, its uint twin."
+~~~

@@ -847,3 +847,40 @@ idiom_rules_invoked: ["AF-1 arena id"]
 confidence: high
 notes: "World-transform dependency propagation remains within the canonical component dirt model."
 ~~~
+
+## B6-0450
+
+Post-audit addition (2026-08-04): `src/component_origin.cpp` first appears
+upstream after the frozen audit ref — it is absent at `d788e8ec` and present at
+the live pin `4ac7b327` (sync cycle S4). It is the direct successor of
+`src/nested_artboard_origin.cpp` (B6-0306), which the same cycle removed
+upstream, so it inherits that row's cluster and is audited against `4ac7b327`
+with the same axes. C++ anchors cite that pin; Rust anchors cite the current
+tree.
+
+~~~yaml
+row_id: B6-0450
+cpp_files: ["src/component_origin.cpp"]
+rust_module: "crates/nuxie-runtime/src/component_origin.rs"
+subsystem_cluster: misc-core
+sibling_files_swept:
+  - "src/nested_artboard.cpp"
+  - "src/layout_component.cpp"
+  - "crates/nuxie-runtime/src/artboard.rs"
+  - "crates/nuxie-runtime/src/components.rs"
+  - "crates/nuxie-runtime/src/draw.rs"
+verdict: ADAPTED
+axes:
+  retained_identity: {status: adapted, idiom_rule: "AF-1 arena id", evidence: ["cpp@4ac7b327:src/component_origin.cpp:8-32", "crates/nuxie-runtime/src/component_origin.rs:16-49", "crates/nuxie-runtime/src/artboard.rs:9783"]}
+  push_vs_poll: {status: isomorphic, cpp_pushes: true, evidence: ["cpp@4ac7b327:src/component_origin.cpp:34-35", "crates/nuxie-runtime/src/component_origin.rs:3-14", "crates/nuxie-runtime/src/artboard.rs:8851-8856"]}
+  update_ordering: {status: isomorphic, phases_cpp: ["originX/originY change", "resolve owner kind", "write nested instance origin or mark the layout world transform dirty"], phases_rust: ["originX/originY change", "resolve owner kind", "write retained nested occurrence origin or add WORLD_TRANSFORM dirt"]}
+  ownership: {status: adapted, idiom_rule: "AF-1 arena id", evidence: ["cpp@4ac7b327:src/component_origin.cpp:10-14", "crates/nuxie-runtime/src/component_origin.rs:16-19,53-68"]}
+  compensation:
+    status: adapted
+    mechanisms: []
+    import_time_constants:
+      - {name: "ComponentOrigin/Artboard origin property keys", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/component_origin.rs:9-11,28-33"]}
+idiom_rules_invoked: ["AF-1 arena id", "AF-3 poll only where C++ polls", "AF-5 import-time devirtualization"]
+confidence: high
+notes: "`ComponentOrigin::reapply` is a two-branch push off the generated `originXChanged`/`originYChanged` callbacks, and `component_origin_double_property_changed` is wired into the same position of the Rust double-property callback chain (`artboard.rs:8851-8856`), before target-property notification. The NestedArtboard branch writes the retained child artboard occupant's `originX`/`originY` (Artboard property keys) exactly as C++ writes `instance->originX/originY`; the LayoutComponent branch marks the host dirty. Rust publishes `WORLD_TRANSFORM | PATH` where C++ calls `markWorldTransformDirty()` alone — a wider dirt set on the same push, not a drift tracker. The mount-time `apply_nested_artboard_origin_override` child scan is AF-3 correct: C++ resolves this child the same way, by walking `children()` with no retained pointer or observer (`nested_artboard.cpp:138-154`, `layout_component.cpp:116-126`). Crate-wide family grep plus the sibling sweep above was clean; the disposition matches the superseded B6-0306."
+~~~

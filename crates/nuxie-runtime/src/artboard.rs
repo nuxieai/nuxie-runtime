@@ -803,6 +803,13 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
         let mut remaining = slots.len().saturating_add(1);
         while remaining != 0 {
             remaining -= 1;
+            // ClippingShape is a sibling renderer owner mounted below Text,
+            // not part of Text's shaped/style content. Its generated
+            // callbacks dirty the retained clipping path only
+            // (`clipping_shape.cpp:117-173`).
+            if slots.get(current_local).and_then(|slot| slot.type_name) == Some("ClippingShape") {
+                break;
+            }
             if matches!(
                 slots.get(current_local).and_then(|slot| slot.type_name),
                 Some("Text" | "TextInput")
@@ -4190,17 +4197,23 @@ impl ArtboardInstance {
     }
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
+    ///
+    /// Pinned C++ `LayoutComponent::localBounds` reads the current `m_layout`
+    /// frame, not the newly solved animation target retained separately by
+    /// Rust. Keep semantic bounds on that live frame so `SemanticData` can
+    /// apply its exact bounds-delta gate.
     pub(crate) fn layout_world_bounds(&self, local_id: usize) -> Option<(f32, f32, f32, f32)> {
-        if self.component(local_id)?.type_name != "LayoutComponent" {
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
             return None;
         }
-        let layout = self.layout_bounds(local_id)?;
-        let transform = self.component(local_id)?.transform.world_transform;
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
+        let transform = component.transform.world_transform;
         let corners = [
             transform.transform_point(0.0, 0.0),
-            transform.transform_point(layout.width, 0.0),
-            transform.transform_point(0.0, layout.height),
-            transform.transform_point(layout.width, layout.height),
+            transform.transform_point(width, 0.0),
+            transform.transform_point(0.0, height),
+            transform.transform_point(width, height),
         ];
         let (mut min_x, mut min_y) = corners[0];
         let (mut max_x, mut max_y) = corners[0];
@@ -6304,6 +6317,16 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         instance.advance_on_artboard(self, elapsed_seconds, false, None)
+    }
+
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn advance_state_machine_instance_after_state_probe_for_tools(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_state_machine_instance_after_state_probe(instance, elapsed_seconds)
     }
 
     pub(crate) fn try_change_state_machine_instance(
@@ -15475,6 +15498,53 @@ mod tests {
         resizes: Rc<RefCell<Vec<(f32, f32)>>>,
     }
 
+    #[test]
+    fn semantic_layout_bounds_use_current_animation_frame_not_solved_target() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let style = synthetic_component_for_type(2, "LayoutComponentStyle");
+        let mut instance = synthetic_instance(vec![root, layout, style], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let style = instance.component_handle(2).expect("layout style");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.layout.as_mut())
+            .expect("layout state")
+            .style = Some(style);
+
+        let current = RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 80.0,
+        };
+        instance.retain_runtime_layout_component_bounds(1, current, None);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout state")
+            .set_animation_style(2, 1, 1.0, None);
+
+        let solved_target = RuntimeLayoutBounds {
+            height: 40.0,
+            ..current
+        };
+        instance.retain_runtime_layout_component_bounds(1, solved_target, None);
+        instance.solved_layout_bounds = Some(Arc::new(BTreeMap::from([(1, solved_target)])));
+
+        // Pinned C++ asks LayoutComponent::localBounds, which reads the
+        // current m_layout frame, before SemanticData's bounds-delta gate:
+        // semantic_provider.cpp:13-32,76-94;
+        // layout_component.hpp:192-211; semantic_data.cpp:501-531.
+        let bounds = crate::semantic_provider::SemanticProvider::semantic_bounds(&mut instance, 1);
+
+        assert_eq!(
+            bounds,
+            crate::semantic_data::SemanticBounds::new(0.0, 0.0, 100.0, 80.0)
+        );
+    }
+
     impl ScriptInstance for ScriptedLayoutTestInstance {
         fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
             Ok(matches!(
@@ -17627,6 +17697,81 @@ mod tests {
     }
 
     #[test]
+    fn text_vertical_trim_passthrough_dirties_shape_and_layout() {
+        // The generated top/bottom fields are bitmask passthrough setters for
+        // Text.verticalTrimValue. Their concrete callback is still
+        // Text::verticalTrimValueChanged, which invalidates shape and layout
+        // (`src/text/text.cpp:1403-1408`; generated text_base.hpp:225-241).
+        for property in ["verticalTrimTopValue", "verticalTrimBottomValue"] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_component_for_type(0, "Artboard"),
+                    synthetic_component_for_type(1, "LayoutComponent"),
+                    synthetic_component_for_type(2, "Text"),
+                ],
+                vec![0, 1, 2],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            for local_id in 0..3 {
+                instance.clear_component_dirt(local_id);
+            }
+
+            let key = property_key_for_name("Text", property).expect("vertical trim passthrough");
+            assert!(instance.set_uint_property(2, key, 1));
+            let text_dirt = instance.component(2).expect("text").dirt;
+            assert!(text_dirt.contains(ComponentDirt::PATH));
+            assert!(text_dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+            assert!(
+                instance
+                    .component(1)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .is_some_and(|layout| layout.layout_node_is_dirty())
+            );
+        }
+    }
+
+    #[test]
+    fn position_only_layout_change_dirties_world_transform() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+        for local_id in 0..2 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 25.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            None,
+        );
+
+        let layout = instance.component(1).expect("layout component");
+        assert!(layout.dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+        assert!(!layout.dirt.contains(ComponentDirt::PATH));
+    }
+
+    #[test]
     fn joystick_generated_callback_publishes_only_root_components_dirt() {
         let mut root = synthetic_component(0, 0);
         root.type_name = "Artboard";
@@ -18304,6 +18449,64 @@ mod tests {
                 .unwrap()
                 .chain
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn scripted_path_snapshot_exposes_current_retained_authored_geometry() {
+        let root = synthetic_component_for_type(0, "Node");
+        let shape = synthetic_component_for_type(1, "Shape");
+        let path = synthetic_component_for_type(2, "PointsPath");
+        let mut instance = synthetic_instance(vec![root, shape, path], vec![2, 0]);
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 1.0, y: 2.0 },
+                crate::draw::RuntimePathCommand::Line { x: 3.0, y: 4.0 },
+            ],
+            false,
+        );
+        let first = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("updated Path exposes its retained rawPath to scripts");
+        assert_eq!(first.verbs().len(), 2);
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 5.0, y: 6.0 },
+                crate::draw::RuntimePathCommand::Line { x: 7.0, y: 8.0 },
+            ],
+            false,
+        );
+        let current = instance
+            .runtime_shapes
+            .retained_script_path(2)
+            .expect("subsequent lookup exposes the rebuilt path");
+        assert_eq!(
+            first.points(),
+            &[
+                nuxie_render_api::Vec2D::new(1.0, 2.0),
+                nuxie_render_api::Vec2D::new(3.0, 4.0),
+            ]
+        );
+        assert_eq!(
+            current.points(),
+            &[
+                nuxie_render_api::Vec2D::new(5.0, 6.0),
+                nuxie_render_api::Vec2D::new(7.0, 8.0),
+            ]
         );
     }
 

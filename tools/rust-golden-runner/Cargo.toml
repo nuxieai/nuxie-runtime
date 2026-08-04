@@ -15,6 +15,6 @@ anyhow = "1"
 nuxie-binary = { path = "../../crates/nuxie-binary" }
 nuxie-graph = { path = "../../crates/nuxie-graph" }
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }
-nuxie-runtime = { path = "../../crates/nuxie-runtime" }
+nuxie-runtime = { path = "../../crates/nuxie-runtime", features = ["tools"] }
 nuxie-schema = { path = "../../crates/nuxie-schema" }
 nuxie-scripting = { path = "../../crates/nuxie-scripting", optional = true }

@@ -5374,6 +5374,9 @@ impl ArtboardInstance {
                             matches!(
                                 paint.mutator_type_name,
                                 Some("LinearGradient" | "RadialGradient")
+                            ) && Self::runtime_gradient_update_rebuilds(
+                                dirt,
+                                runtime_live_shape_paint_path_kind(self, paint),
                             )
                         })
                 {
@@ -5405,6 +5408,25 @@ impl ArtboardInstance {
                 );
             }
         }
+    }
+
+    /// Pinned C++ calls every dirty gradient component's `update`, but only
+    /// rebuilds its shader for paint/opacity/local-transform/NSlicer dirt, or
+    /// for world-transform dirt when the attached ShapePaint uses its world
+    /// path (`linear_gradient.cpp:86-126`). Keep that decision at the update
+    /// event producer so equal-valued legitimate dirt events remain distinct.
+    fn runtime_gradient_update_rebuilds(
+        dirt: ComponentDirt,
+        path_kind: Option<RuntimeShapePaintPathKind>,
+    ) -> bool {
+        !(dirt
+            & (ComponentDirt::PAINT
+                | ComponentDirt::RENDER_OPACITY
+                | ComponentDirt::TRANSFORM
+                | ComponentDirt::N_SLICER))
+            .is_empty()
+            || (path_kind == Some(RuntimeShapePaintPathKind::World)
+                && dirt.contains(ComponentDirt::WORLD_TRANSFORM))
     }
 
     fn invalidate_runtime_non_shape_paint_container_effects(
@@ -5804,9 +5826,9 @@ impl ArtboardInstance {
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
                 settled_owner = true;
-                settle_concrete_sidecar |= shape
-                    .paint_container_family
-                    .is_some_and(|family| !family.owns_shape_geometry());
+                settle_concrete_sidecar |= shape.paint_container_family.is_some_and(|family| {
+                    !family.owns_shape_geometry() && !family.owns_text_paint()
+                });
                 let Some(paint) = self
                     .runtime_shapes
                     .get(owner.shape_local)
@@ -5930,25 +5952,6 @@ impl ArtboardInstance {
             return;
         };
         let render_color = color_modulate_opacity(value, 1.0);
-        let mut settled_text_paint = false;
-        for drawable in self.runtime_drawables.iter() {
-            let Some(owner) = drawable.text_draw_owner.as_ref() else {
-                continue;
-            };
-            let mut backend = owner.backend.borrow_mut();
-            let Some(authored) = backend.authored_paints.get_mut(&paint_global) else {
-                continue;
-            };
-            authored.paint.color(render_color);
-            if let Some(cached) = authored.configuration.as_mut() {
-                cached.configuration.shader =
-                    RuntimeRenderPaintShaderConfiguration::SolidColor(render_color);
-            }
-            settled_text_paint = true;
-        }
-        if settled_text_paint {
-            return;
-        }
         let mut resources = self.render_resources.borrow_mut();
         if let Some(render_paint) = resources.paints.paint_mut(paint_global) {
             render_paint.color(render_color);
@@ -6677,9 +6680,21 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
+            let target_bounds = (x, y, bounds.width, bounds.height);
             let should_propagate_size = layout.should_force_update_layout_bounds()
-                || layout.target_bounds() != (x, y, bounds.width, bounds.height);
-            if layout.retain_bounds(x, y, bounds.width, bounds.height) {
+                || layout.target_bounds() != target_bounds;
+            let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if should_propagate_size {
+                // A layout position change does not rebuild geometry, but it
+                // does move the owner and its descendants. C++ separates the
+                // width/height Path dirt above from this unconditional world
+                // transform invalidation (`layout_component.cpp:1167-1178`).
+                self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                self.layout_revision = self.layout_revision.wrapping_add(1);
+                self.runtime_drawables
+                    .mark_layout_resource_dirty_for_local(local_id);
+            }
+            if size_changed {
                 let layout_handle = self.component_handle(local_id);
                 let affected_text = self
                     .components()
@@ -9120,6 +9135,20 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    fn text_style_paint_owner(&self, paint_local: usize) -> Option<&RuntimeShapePaintOwner> {
+        self.paint_owners_by_component_local
+            .get(paint_local)?
+            .iter()
+            .find_map(|owner_ref| {
+                let shape = self.get(owner_ref.shape_local)?;
+                shape
+                    .paint_container_family
+                    .is_some_and(|family| family.owns_text_paint())
+                    .then(|| shape.paint_owners.get(owner_ref.owner_index))
+                    .flatten()
+            })
+    }
+
     pub(crate) fn text_style_paint_container_for_component(
         &self,
         local_id: usize,
@@ -9210,10 +9239,10 @@ impl RuntimeShapeList {
                     shape_local: container.local_id,
                     owner_index,
                 };
-                // Shape/Artboard feed the common ShapePaint backend owner.
-                // Layout and text families retain their concrete C++-shaped
-                // backend sidecars in the live layout/text draw owners.
-                if family.owns_shape_geometry() {
+                // ShapePaint and its TextStylePaint subclass retain the
+                // common occurrence-owned RenderPaint. Geometry ownership is
+                // separate: only Shape/Artboard use the paint-path slots.
+                if family.owns_shape_geometry() || family.owns_text_paint() {
                     self.paint_owner_refs.push(owner_ref);
                 }
                 self.register_paint_component(container.local_id, owner_ref);
@@ -9356,6 +9385,19 @@ impl RuntimeShapeList {
             Arc::clone(&retained.raw_path),
             retained.has_weighted_context,
         ))
+    }
+
+    /// Snapshot the current clone-owned `Path::rawPath()` for script-facing
+    /// node lookup. The retained owner is populated only after the Path's
+    /// dependency update; callers preserve C++'s pre-update empty path when
+    /// this returns `None` (`src/lua/lua_artboards.cpp:884-900`).
+    pub(crate) fn retained_script_path(&self, path_local: usize) -> Option<Arc<RawPath>> {
+        let owner = self.paths_by_local.get(path_local)?.as_ref()?;
+        owner
+            .retained
+            .borrow()
+            .as_ref()
+            .map(|path| Arc::clone(&path.raw_path))
     }
 
     #[cfg(test)]
@@ -9786,7 +9828,6 @@ impl RuntimeTextDrawOwner {
 #[derive(Default)]
 struct RuntimeTextBackendResources {
     context_id: Option<u64>,
-    authored_paints: BTreeMap<u32, RuntimeTextPaintBackend>,
     pooled_paints: BTreeMap<(usize, usize), RuntimeTextPooledPaintBackend>,
     paths: BTreeMap<RuntimeTextPathOwnerKey, RuntimeTextPathBackend>,
     clip_path: Option<RuntimeTextPathBackend>,
@@ -9799,7 +9840,6 @@ impl std::fmt::Debug for RuntimeTextBackendResources {
         formatter
             .debug_struct("RuntimeTextBackendResources")
             .field("context_id", &self.context_id)
-            .field("authored_paints", &self.authored_paints.len())
             .field("pooled_paints", &self.pooled_paints.len())
             .field("paths", &self.paths.len())
             .field("clip_path", &self.clip_path.is_some())
@@ -9807,13 +9847,6 @@ impl std::fmt::Debug for RuntimeTextBackendResources {
             .field("emoji_images", &self.emoji_images.len())
             .finish()
     }
-}
-
-struct RuntimeTextPaintBackend {
-    paint: Box<dyn RenderPaint>,
-    shader: Option<Box<dyn RenderShader>>,
-    shader_state: Option<RuntimeShapePaintState>,
-    configuration: Option<RuntimeCachedRenderPaintConfiguration>,
 }
 
 struct RuntimeTextPooledPaintBackend {
@@ -16153,8 +16186,10 @@ fn preallocate_artboard_render_paint_tree_batch_into(
 
     for local_object in &graph.local_objects {
         if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
-            preallocate_render_paint_for_instance(
+            preallocate_render_paint_for_mounted_instance(
                 runtime,
+                instance,
+                graph,
                 *paint_global_id,
                 Some(local_object.global_id),
                 factory,
@@ -16169,8 +16204,10 @@ fn preallocate_artboard_render_paint_tree_batch_into(
             continue;
         };
         if matches!(object.type_name, "Fill" | "Stroke") {
-            preallocate_render_paint_for_instance(
+            preallocate_render_paint_for_mounted_instance(
                 runtime,
+                instance,
+                graph,
                 object.id,
                 None,
                 factory,
@@ -16346,6 +16383,67 @@ fn preallocate_render_paint_for_instance(
         // onto this retained backend object.
         initialize_authored_shape_render_paint(render_paint.as_mut(), paint_object, mutator_object);
     }
+    if !paints.contains(global_id) {
+        paints.insert(global_id, render_paint);
+    }
+}
+
+/// Allocate the cloned ShapePaint backend directly into its live occurrence.
+/// TextStylePaint inherits ShapePaint's one `m_renderPaint`; it must never
+/// enter the parallel global paint cache and later be rediscovered by id
+/// (`shape_paint.cpp:50-57`, `text_style_paint.cpp:13-19`).
+#[allow(clippy::too_many_arguments)]
+fn preallocate_render_paint_for_mounted_instance(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    global_id: u32,
+    mutator_global_id: Option<u32>,
+    factory: &mut dyn RenderFactory,
+    paints: &mut RuntimeRenderPaints,
+    allocated_for_instance: &mut BTreeSet<u32>,
+) {
+    if !allocated_for_instance.insert(global_id) {
+        return;
+    }
+
+    let mut render_paint = factory.make_render_paint();
+    if let Some(paint_object) = runtime.object(global_id as usize) {
+        let mutator_object =
+            mutator_global_id.and_then(|mutator_global| runtime.object(mutator_global as usize));
+        initialize_authored_shape_render_paint(render_paint.as_mut(), paint_object, mutator_object);
+    }
+
+    let text_owner = graph
+        .shape_paint_containers
+        .iter()
+        .filter(|container| {
+            crate::shapes::shape_paint_container::family(container.type_name)
+                .is_some_and(|family| family.owns_text_paint())
+        })
+        .find_map(|container| {
+            let owner_index = container
+                .paints
+                .iter()
+                .position(|paint| paint.global_id == global_id)?;
+            instance
+                .runtime_shapes
+                .get(container.local_id)?
+                .paint_owners
+                .get(owner_index)
+        });
+    if let Some(owner) = text_owner {
+        let mut backend = owner.backend.value.borrow_mut();
+        if backend.context_id != Some(paints.backend_context_id) {
+            *backend = RuntimePaintBackendState {
+                context_id: Some(paints.backend_context_id),
+                ..RuntimePaintBackendState::default()
+            };
+        }
+        backend.paint = Some(render_paint);
+        return;
+    }
+
     if !paints.contains(global_id) {
         paints.insert(global_id, render_paint);
     }
@@ -16718,7 +16816,7 @@ fn runtime_text_replay_order(
 }
 
 impl ArtboardInstance {
-    /// Build the live solved box observed by C++ `Node::localBounds`.
+    /// Build the live current-frame box observed by C++ `Node::localBounds`.
     ///
     /// D3 Taffy adapter: Rust's horizontal fill result excludes the layout
     /// component's own padding, while Rive's Yoga-backed
@@ -16731,32 +16829,33 @@ impl ArtboardInstance {
     ) -> Option<(f32, f32, f32, f32)> {
         const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
 
-        if self.component(local_id)?.type_name != "LayoutComponent" {
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
             return None;
         }
-        let layout = self.layout_bounds(local_id)?;
+        let (_, _, width, height) = component.concrete.layout.as_ref()?.current_bounds();
         let style_local = self.runtime_layout_component_style_local(local_id)?;
         let mut min_x = 0.0;
-        let mut max_x = layout.width;
+        let mut max_x = width;
         if self.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_FILL {
             let padding_left = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingLeft,
                 RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
-                layout.width,
+                width,
             )?;
             let padding_right = self.runtime_layout_style_length(
                 style_local,
                 RuntimeLayoutStyleProperty::PaddingRight,
                 RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
-                layout.width,
+                width,
             )?;
             min_x -= padding_left;
             max_x += padding_left + padding_right;
         }
         let bounds = runtime_transformed_rect_bounds(
-            (min_x, 0.0, max_x, layout.height),
-            self.component(local_id)?.transform.world_transform,
+            (min_x, 0.0, max_x, height),
+            component.transform.world_transform,
         );
         Some((bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
     }
@@ -16857,129 +16956,6 @@ fn runtime_text_backend_path<'a>(
         backend.path.fill_rule(fill_rule);
     }
     backend.path.as_ref()
-}
-
-fn runtime_text_gradient_state(paint: &RuntimeShapePaintCommand) -> Option<RuntimeShapePaintState> {
-    let state = paint.paint_state.as_ref()?;
-    let (start_x, start_y, end_x, end_y) = match state {
-        RuntimeShapePaintState::LinearGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            ..
-        }
-        | RuntimeShapePaintState::RadialGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            ..
-        } => runtime_gradient_space_endpoints(
-            paint.paint_space_transform,
-            *start_x,
-            *start_y,
-            *end_x,
-            *end_y,
-        ),
-        RuntimeShapePaintState::SolidColor { .. } => return None,
-    };
-    Some(runtime_shape_paint_state_with_endpoints(
-        state.clone(),
-        start_x,
-        start_y,
-        end_x,
-        end_y,
-    ))
-}
-
-fn runtime_configure_text_authored_paint(
-    backend: &mut RuntimeTextPaintBackend,
-    instance: &ArtboardInstance,
-    object: &RuntimeObject,
-    paint: &RuntimeShapePaintCommand,
-    factory: &mut dyn RenderFactory,
-) -> Result<()> {
-    let gradient_state = runtime_text_gradient_state(paint);
-    if backend.shader_state != gradient_state {
-        backend.shader =
-            match gradient_state.as_ref() {
-                Some(RuntimeShapePaintState::LinearGradient {
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                    stops,
-                    ..
-                }) => {
-                    let colors = stops
-                        .iter()
-                        .map(|stop| stop.render_color)
-                        .collect::<Vec<_>>();
-                    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
-                    Some(factory.make_linear_gradient(
-                        *start_x, *start_y, *end_x, *end_y, &colors, &positions,
-                    ))
-                }
-                Some(RuntimeShapePaintState::RadialGradient {
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                    stops,
-                    ..
-                }) => {
-                    let colors = stops
-                        .iter()
-                        .map(|stop| stop.render_color)
-                        .collect::<Vec<_>>();
-                    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
-                    let dx = *end_x - *start_x;
-                    let dy = *end_y - *start_y;
-                    Some(factory.make_radial_gradient(
-                        *start_x,
-                        *start_y,
-                        dx.mul_add(dx, dy * dy).sqrt(),
-                        &colors,
-                        &positions,
-                    ))
-                }
-                Some(RuntimeShapePaintState::SolidColor { .. }) | None => None,
-            };
-        backend.shader_state = gradient_state;
-        backend.paint.shader(backend.shader.as_deref());
-    }
-
-    let instance_epoch = runtime_paint_configuration_epoch(instance, paint);
-    if backend
-        .configuration
-        .as_ref()
-        .is_some_and(|cached| cached.instance_epoch == instance_epoch)
-    {
-        return Ok(());
-    }
-    let configuration = runtime_render_paint_configuration(instance, object, paint)?;
-    if backend
-        .configuration
-        .as_ref()
-        .is_some_and(|cached| cached.configuration == configuration)
-    {
-        backend
-            .configuration
-            .as_mut()
-            .expect("configuration was just checked")
-            .instance_epoch = instance_epoch;
-        return Ok(());
-    }
-    runtime_configure_paint(backend.paint.as_mut(), instance, object, paint, None)?;
-    if backend.shader.is_some() {
-        backend.paint.shader(backend.shader.as_deref());
-    }
-    backend.configuration = Some(RuntimeCachedRenderPaintConfiguration {
-        instance_epoch,
-        configuration,
-    });
-    Ok(())
 }
 
 fn runtime_configure_text_pooled_paint(
@@ -17190,38 +17166,33 @@ fn runtime_draw_live_text_family(
         let object = runtime
             .object(global_id as usize)
             .with_context(|| format!("missing occurrence-owned text paint global {global_id}"))?;
-        if !backend.authored_paints.contains_key(&global_id) {
-            let (shader_state, shader) = path_cache
-                .gradient_shaders
-                .remove(&global_id)
-                .map_or((None, None), |entry| {
-                    (Some(entry.state), Some(entry.shader))
-                });
-            backend.authored_paints.insert(
-                global_id,
-                RuntimeTextPaintBackend {
-                    paint: paint_by_global
-                        .take_paint(global_id)
-                        .unwrap_or_else(|| factory.make_render_paint()),
-                    shader,
-                    shader_state,
-                    configuration: None,
-                },
+        let paint_owner = instance
+            .runtime_shapes
+            .text_style_paint_owner(paint.paint_local)
+            .with_context(|| {
+                format!(
+                    "missing occurrence-owned TextStylePaint for local {}",
+                    paint.paint_local
+                )
+            })?;
+        let paint_backend = paint_owner.backend.value.borrow();
+        if paint_backend.context_id != Some(backend_context_id) {
+            anyhow::bail!(
+                "TextStylePaint local {} was not realized for backend context {}",
+                paint.paint_local,
+                backend_context_id
             );
         }
-        let authored = backend
-            .authored_paints
-            .get_mut(&global_id)
-            .expect("text authored paint was just inserted");
-        runtime_configure_text_authored_paint(authored, instance, object, paint, factory)?;
+        let authored_paint = paint_backend.paint.as_deref().with_context(|| {
+            format!(
+                "TextStylePaint local {} has no occurrence-owned RenderPaint",
+                paint.paint_local
+            )
+        })?;
 
         if let Some(pool_use) = paint.text_paint_pool {
             let key = (pool_use.spec.style_local, pool_use.paint_index);
-            let RuntimeTextBackendResources {
-                authored_paints,
-                pooled_paints,
-                ..
-            } = &mut *backend;
+            let RuntimeTextBackendResources { pooled_paints, .. } = &mut *backend;
             // C++ grows the complete TextStylePaint::m_paintPool before it
             // iterates the non-opaque opacity buckets
             // (`src/text/text_style_paint.cpp:68-81`).
@@ -17233,18 +17204,16 @@ fn runtime_draw_live_text_family(
                         configuration: None,
                     });
             }
-            let authored_shader = authored_paints
-                .get(&global_id)
-                .and_then(|paint| paint.shader.as_deref());
+            let authored_shader = paint_backend.shader.as_deref();
             let pooled = pooled_paints
                 .get_mut(&key)
-                .expect("text pooled paint was just inserted");
+                .context("TextStylePaint pool allocation did not retain its paint")?;
             runtime_configure_text_pooled_paint(pooled, authored_shader, instance, object, paint)?;
         }
 
         let paint_world =
             runtime_text_paint_shape_world(true, paint.shape_world_override, live_world)
-                .expect("live Text paint always has a shape-world transform");
+                .context("live Text paint is missing its shape-world transform")?;
 
         let mut saved = !paint.needs_save_operation;
         if let Some(feather) = paint.feather_state.as_ref()
@@ -17361,7 +17330,6 @@ fn runtime_draw_live_text_family(
             RenderFillRule::Clockwise
         };
         let RuntimeTextBackendResources {
-            authored_paints,
             pooled_paints,
             paths,
             ..
@@ -17385,11 +17353,7 @@ fn runtime_draw_live_text_family(
                 .paint
                 .as_ref()
         } else {
-            authored_paints
-                .get(&global_id)
-                .context("missing occurrence-owned TextStylePaint authored paint")?
-                .paint
-                .as_ref()
+            authored_paint
         };
         renderer.draw_path(path.path.as_ref(), render_paint);
         if saved && paint.needs_save_operation {
@@ -19043,14 +19007,9 @@ fn runtime_configure_owned_shape_paint(
             render_paint.shader(None);
         }
     }
-    render_paint.feather(
-        paint
-            .feather_state
-            .borrow()
-            .as_ref()
-            .map(|feather| feather.strength)
-            .unwrap_or(0.0),
-    );
+    render_paint.feather(runtime_live_owned_shape_paint_feather_strength(
+        instance, paint,
+    ));
     Ok(())
 }
 
@@ -20087,12 +20046,52 @@ fn runtime_live_owned_shape_paint_blend_mode_value(
         .shape_paint_blend_mode_value(paint.paint_local)
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or(paint.authored_blend_mode_value);
+    // TextStylePaint::draw copies the concrete Text drawable's blend mode to
+    // each child ShapePaint before drawing (`text_style_paint.cpp:51-55`).
+    // Text-input paint containers follow the same split ownership: the
+    // ShapePaint owns RenderPaint while the concrete text drawable owns the
+    // inherited opacity/blend state.
+    let blend_owner_local = instance
+        .runtime_graph()
+        .map_or(paint.container_local, |graph| {
+            crate::shapes::shape_paint_container::opacity_owner_local(graph, paint.container_local)
+        });
     let container_blend_mode_value =
         runtime_draw_property_key_for_name("Drawable", "blendModeValue")
-            .and_then(|key| instance.uint_property(paint.container_local, key))
+            .and_then(|key| instance.uint_property(blend_owner_local, key))
             .and_then(|value| u32::try_from(value).ok())
             .unwrap_or(3);
     runtime_shape_paint_blend_mode_value(paint_blend_mode_value, container_blend_mode_value)
+}
+
+/// C++ `Feather::update(Paint)` writes the authored/live strength directly to
+/// its parent ShapePaint's retained RenderPaint. That write is independent of
+/// whether the concrete container owns Shape geometry: TextStylePaint and the
+/// TextInput paint containers keep their paths elsewhere but still inherit the
+/// same ShapePaint RenderPaint member.
+fn runtime_live_owned_shape_paint_feather_strength(
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintOwner,
+) -> f32 {
+    instance
+        .runtime_graph()
+        .and_then(|graph| {
+            let container_index = instance
+                .runtime_shapes
+                .get(paint.container_local)?
+                .paint_container_index?;
+            graph
+                .shape_paint_containers
+                .get(container_index)?
+                .paints
+                .get(paint.paint_index)?
+                .feather
+                .as_ref()
+        })
+        .map(|feather| {
+            runtime_feather_double_property(instance, feather, "strength", feather.strength)
+        })
+        .unwrap_or(0.0)
 }
 
 fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
@@ -25727,12 +25726,16 @@ mod tests {
             .find(|component| component.type_name == "Text")
             .expect("fixture has Text")
             .local_id;
-        let style_local = graph
-            .components
+        let style_container = graph
+            .shape_paint_containers
             .iter()
-            .find(|component| component.type_name == "TextStylePaint")
-            .expect("fixture has TextStylePaint")
-            .local_id;
+            .find(|container| container.type_name == "TextStylePaint")
+            .expect("fixture has TextStylePaint");
+        let style_local = style_container.local_id;
+        let style_paint = style_container
+            .paints
+            .first()
+            .expect("TextStylePaint has an authored paint");
         let color_local = graph
             .components
             .iter()
@@ -25758,6 +25761,55 @@ mod tests {
                 true,
             )
             .expect("initial retained text draws");
+        let retained_owner = instance
+            .runtime_shapes
+            .text_style_paint_owner(style_paint.local_id)
+            .expect("TextStylePaint resolves by occurrence-local paint id");
+        assert!(
+            retained_owner.backend.value.borrow().paint.is_some(),
+            "mounted construction must put RenderPaint directly on TextStylePaint"
+        );
+        assert!(
+            instance
+                .render_resources
+                .borrow()
+                .paints
+                .paint(style_paint.global_id)
+                .is_none(),
+            "TextStylePaint must never enter the parallel global paint cache"
+        );
+
+        let cloned = instance.clone();
+        assert!(
+            cloned
+                .runtime_shapes
+                .text_style_paint_owner(style_paint.local_id)
+                .expect("clone retains TextStylePaint membership")
+                .backend
+                .value
+                .borrow()
+                .paint
+                .is_none(),
+            "a cloned TextStylePaint starts with a fresh backend slot"
+        );
+
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("clean retained text redraws");
+        assert!(
+            !factory.stream().contains("makeRenderPaint"),
+            "an unchanged draw must reuse TextStylePaint's RenderPaint"
+        );
 
         instance.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, false);
         let mut wrote_style = false;
@@ -25801,6 +25853,10 @@ mod tests {
         assert!(
             !stream.contains("makeEmptyRenderPath"),
             "paint-only TextStylePaint dirt must retain unchanged glyph paths: {stream}"
+        );
+        assert!(
+            !stream.contains("makeRenderPaint"),
+            "TextStylePaint dirt must refill its retained RenderPaint: {stream}"
         );
     }
 
@@ -25965,8 +26021,8 @@ mod tests {
         }
         assert_eq!(
             owners.paint_owner_refs.len(),
-            2,
-            "only Artboard/Shape use the common geometry backend; concrete layout/text sidecars remain separate"
+            7,
+            "Artboard/Shape own geometry and all text families share the common ShapePaint backend"
         );
     }
 
@@ -33480,6 +33536,22 @@ mod tests {
     // reconfigure them when a keyed transform write moves the shape between
     // two prepared positions. Mirrors C++ linear_gradient.cpp:98-106
     // (PathFlags::world && WorldTransform dirt).
+    #[test]
+    fn gradient_update_rebuild_gate_matches_cpp_dirt_and_path_space() {
+        assert!(!ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::WORLD_TRANSFORM,
+            Some(RuntimeShapePaintPathKind::Local),
+        ));
+        assert!(ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::WORLD_TRANSFORM,
+            Some(RuntimeShapePaintPathKind::World),
+        ));
+        assert!(ArtboardInstance::runtime_gradient_update_rebuilds(
+            ComponentDirt::PAINT,
+            Some(RuntimeShapePaintPathKind::Local),
+        ));
+    }
+
     #[test]
     fn world_space_gradient_stroke_reconfigures_after_transform_write() {
         use crate::TransformProperty;

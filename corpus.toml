@@ -428,6 +428,7 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 
 [[file]]
 id = "data_binding_artboards_test"
+side_channel_divergence = "WATCH-cpp-nest-semantic-uaf: pinned C++ NestedArtboard::nest() frees the outgoing ArtboardInstance without evicting its SemanticManager nodes; the next drainDiff crashes on a freed LayoutComponent. Upstream-blocked at 4ac7b327; ASan evidence in CPPCRASH-report (branch levi/vfix-convergence). Draw-stream comparison remains active."
 path = "tests/unit_tests/assets/data_binding_artboards_test.riv"
 samples = [0.0, 0.5, 1.0]
 status = "exact"
@@ -1404,6 +1405,7 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 
 [[file]]
 id = "replace_view_model"
+side_channel_divergence = "WATCH-cpp-nest-semantic-uaf: pinned C++ NestedArtboard::nest() frees the outgoing ArtboardInstance without evicting its SemanticManager nodes; the next drainDiff crashes on a freed LayoutComponent. Upstream-blocked at 4ac7b327; ASan evidence in CPPCRASH-report (branch levi/vfix-convergence). Draw-stream comparison remains active."
 path = "tests/unit_tests/assets/replace_view_model.riv"
 samples = [0.0, 0.1]
 status = "exact"

@@ -243,4 +243,5 @@ appear.
    *frame parity* (golden ratchet + V1 e2e), *interaction parity* (V4/V5
    channels), *SDK parity* (A-tier table), *platform parity* (V7/V8 matrix),
    *performance* (V10 blocking ratio ≤ 1.0). "Verifiable replacement" =
-   every tier green or its exceptions listed in D.
+   every tier green or its exceptions listed in D.| W3 | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff()` dereferences a freed `LayoutComponent` (heap-use-after-free, ASan-proven, deterministic in debug) | WATCH (upstream-blocked at `4ac7b327`) | Side-channel comparison quarantined for `replace_view_model` and `data_binding_artboards_test` via `side_channel_divergence`; draw streams stay compared. Rust port must be audited for the mirrored eviction gap (nested-VMI lane adjudication). Evidence: CPPCRASH-report on `levi/vfix-convergence`. |
+

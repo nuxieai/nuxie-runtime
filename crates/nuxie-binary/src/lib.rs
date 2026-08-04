@@ -9110,11 +9110,14 @@ mod computed_scroll_polling_tests {
 }
 
 fn cpp_property_key(definition_name: &str, property_name: &str) -> u64 {
+    // C++ property-key constants live on whichever generated base class
+    // declares the property, so the lookup must walk the ancestor chain.
     definition_by_name(definition_name)
         .and_then(|definition| {
-            definition
-                .properties
-                .iter()
+            std::iter::once(definition.name)
+                .chain(definition.ancestors.iter().copied())
+                .filter_map(definition_by_name)
+                .flat_map(|definition| definition.properties.iter())
                 .find(|property| property.name == property_name)
         })
         .map(|property| u64::from(property.key.int))
@@ -12720,9 +12723,13 @@ mod uint_wire_tests {
             .expect("FileAsset.assetId schema");
         let uint8_property = definition_by_name("LayoutComponentStyle")
             .expect("LayoutComponentStyle schema")
-            .properties
-            .iter()
-            .find(|property| property.name == "displayValue")
+            .property_by_key_in_hierarchy(
+                u16::try_from(crate::cpp_property_key(
+                    "LayoutComponentStyle",
+                    "displayValue",
+                ))
+                .expect("displayValue key fits u16"),
+            )
             .expect("LayoutComponentStyle.displayValue schema");
 
         let over_u32 = encoded_var_uint(u64::from(u32::MAX) + 1);

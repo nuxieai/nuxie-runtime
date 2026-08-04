@@ -456,6 +456,22 @@ fn write_imported_texture_uploads(
     Ok(())
 }
 
+fn write_imported_buffer(queue: &wgpu::Queue, gpu_buffer: &wgpu::Buffer, bytes: &[u8]) {
+    // Queue::write_buffer requires the copy size to respect COPY_BUFFER_ALIGNMENT,
+    // but embedder payloads may not (e.g. an odd u16 index count). The GPU buffer
+    // was created with create_buffer_init, whose size is padded to the same
+    // alignment, so a zero-padded write always fits.
+    let alignment = wgpu::COPY_BUFFER_ALIGNMENT as usize;
+    let remainder = bytes.len() % alignment;
+    if remainder == 0 {
+        queue.write_buffer(gpu_buffer, 0, bytes);
+    } else {
+        let mut padded = bytes.to_vec();
+        padded.resize(bytes.len() + alignment - remainder, 0);
+        queue.write_buffer(gpu_buffer, 0, &padded);
+    }
+}
+
 fn collect_retained_texture_specs(
     plan: &GpuCanvasPlan,
 ) -> Result<BTreeMap<u64, GpuCanvasTextureBinding>, GpuCanvasError> {
@@ -2074,20 +2090,14 @@ impl WgpuFactory {
                 })?;
             for (buffer, gpu_buffer) in pipeline.uniform_buffers.iter().zip(&cached.uniform_buffers)
             {
-                self.context
-                    .queue
-                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+                write_imported_buffer(&self.context.queue, gpu_buffer, &buffer.bytes);
             }
             for (buffer, gpu_buffer) in pipeline.vertex_buffers.iter().zip(&cached.vertex_buffers) {
-                self.context
-                    .queue
-                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+                write_imported_buffer(&self.context.queue, gpu_buffer, &buffer.bytes);
             }
             if let (Some(buffer), Some(gpu_buffer)) = (&pipeline.index_buffer, &cached.index_buffer)
             {
-                self.context
-                    .queue
-                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+                write_imported_buffer(&self.context.queue, gpu_buffer, &buffer.bytes);
             }
         }
         let target = self
@@ -2636,13 +2646,13 @@ impl WgpuFactory {
                 .expect("imported GPU-canvas pipeline was initialized")
         });
         for (buffer, gpu_buffer) in plan.uniform_buffers.iter().zip(&cached.uniform_buffers) {
-            queue.write_buffer(gpu_buffer, 0, &buffer.bytes);
+            write_imported_buffer(queue, gpu_buffer, &buffer.bytes);
         }
         for (buffer, gpu_buffer) in plan.vertex_buffers.iter().zip(&cached.vertex_buffers) {
-            queue.write_buffer(gpu_buffer, 0, &buffer.bytes);
+            write_imported_buffer(queue, gpu_buffer, &buffer.bytes);
         }
         if let (Some(buffer), Some(gpu_buffer)) = (&plan.index_buffer, &cached.index_buffer) {
-            queue.write_buffer(gpu_buffer, 0, &buffer.bytes);
+            write_imported_buffer(queue, gpu_buffer, &buffer.bytes);
         }
         for (texture, gpu_texture) in plan.texture_bindings.iter().zip(&cached.textures) {
             for upload in &texture.uploads {

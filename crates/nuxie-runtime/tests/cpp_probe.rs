@@ -21943,6 +21943,65 @@ fn global_variables_mid_frame_view_model_comparator_matches_cpp_layer_count() {
 }
 
 #[test]
+fn stateful_keyed_trigger_reaches_nested_comparator_in_the_same_frame() {
+    let label = "stateful_keyed_trigger.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("read pinned {label}: {error}"));
+    let (runtime, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.initialize_artboard_renderer(
+        &runtime,
+        &graph.artboards[0],
+        &graph.artboards,
+        &BTreeMap::new(),
+        &mut RecordingFactory::new(),
+        None,
+    )
+    .expect("initialize retained renderer resources");
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.bind_default_view_model_context_on_artboard(&mut rust));
+
+    state_machine
+        .advance_and_apply(&mut rust, 0.0)
+        .expect("initial stateful-keyed-trigger frame");
+    state_machine
+        .advance_and_apply(&mut rust, 0.5)
+        .expect("mid-frame stateful-keyed-trigger frame");
+    let mut nested_colors = Vec::new();
+    rust.try_visit_nested_artboard_instances_mut(&mut |_depth,
+                                                       graph_global_id,
+                                                       child|
+     -> Result<(), ()> {
+        let child_graph = graph
+            .artboards
+            .iter()
+            .find(|candidate| candidate.global_id == graph_global_id)
+            .unwrap_or_else(|| panic!("missing nested graph {graph_global_id}"));
+        nested_colors.extend(
+            child_graph
+                .local_objects
+                .iter()
+                .filter(|object| object.type_name == Some("SolidColor"))
+                .filter_map(|object| {
+                    child.color_property(
+                        object.local_id,
+                        property_key_for_name("SolidColor", "colorValue"),
+                    )
+                }),
+        );
+        Ok(())
+    })
+    .expect("visit nested stateful-keyed-trigger artboard");
+
+    assert_eq!(
+        nested_colors,
+        vec![0xff07_fb5a],
+        "the keyed trigger written by the outer data-bind pass must remain observable by the nested ConditionComparisonSelf probe before that layer consumes it (transition_viewmodel_condition.cpp:49-60; state_machine_instance.cpp:2665-2697)",
+    );
+}
+
+#[test]
 fn composite_listener_trigger_survives_a_later_view_model_write_until_transition_probe() {
     let label = "synthetic/runtime_view_model_listener_trigger_then_number.riv";
     let bytes = synthetic_view_model_listener_trigger_then_number_transition(9691);

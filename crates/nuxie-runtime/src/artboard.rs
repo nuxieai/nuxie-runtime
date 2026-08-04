@@ -9784,6 +9784,21 @@ impl ArtboardInstance {
                     + 1;
                 self.set_uint_property(callback.target_local_id, property_value_key, value)
             }
+            Some("ViewModelInstanceTrigger")
+                if property_key_for_name("ViewModelInstanceTrigger", "fire")
+                    == Some(callback.property_key) =>
+            {
+                let Some(property_value_key) =
+                    property_key_for_name("ViewModelInstanceTrigger", "propertyValue")
+                else {
+                    return false;
+                };
+                let value = self
+                    .uint_property(callback.target_local_id, property_value_key)
+                    .unwrap_or(0)
+                    .wrapping_add(1);
+                self.set_uint_property(callback.target_local_id, property_value_key, value)
+            }
             _ => false,
         }
     }

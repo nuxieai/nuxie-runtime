@@ -190,7 +190,7 @@ The equivalent comparator arguments are:
 
 This lane measured the three requested text-heavy fixtures before the first
 change (`ed5b66e8`) and after the retained-topology implementation
-(`01e3ae4f`). Both runs used the pinned C++ runtime at `4ac7b327`, release
+(`7351bd3b`). Both runs used the pinned C++ runtime at `4ac7b327`, release
 scripted runners, 100 frames at 60 Hz, C++ first, script execution enabled,
 and the median of five iterations with no warmups. The table reports the
 runner's `advance + draw` phase divided by 100; loading, startup, and text
@@ -198,22 +198,22 @@ topology construction before the measured loop are excluded.
 
 | Fixture | Baseline Rust ms/frame | Retained Rust ms/frame | Rust change | Retained Rust/C++ |
 |---|---:|---:|---:|---:|
-| `script_create_text_runs` | 1.527619 | 1.367418 | -10.49% | 246.323x |
-| `text_vertical_trim_test` | 0.094717 | 0.064614 | -31.78% | 14.412x |
-| `layout_text_match` | 0.171508 | 0.146746 | -14.44% | 12.914x |
+| `script_create_text_runs` | 1.527619 | 1.322319 | -13.44% | 276.536x |
+| `text_vertical_trim_test` | 0.094717 | 0.069925 | -26.18% | 15.111x |
+| `layout_text_match` | 0.171508 | 0.156473 | -8.77% | 10.786x |
 
 `script_create_text_runs`, the fixture that repeatedly dirties text, removes
-0.160200 ms/frame from the measured Rust hot loop. The two mostly static
-fixtures remove 0.030103 ms/frame and 0.024763 ms/frame respectively. The
+0.205300 ms/frame from the measured Rust hot loop. The two mostly static
+fixtures remove 0.024792 ms/frame and 0.015035 ms/frame respectively. The
 independent 24-row `make perf-gate` sample passed, including
-`script_create_text_runs` at 1.229818 ms/frame (293.690x, ceiling 378x) and
-`text_vertical_trim_test` at 0.069744 ms/frame (11.500x, ceiling 25x).
+`script_create_text_runs` at 1.207693 ms/frame (221.884x, ceiling 378x) and
+`text_vertical_trim_test` at 0.089322 ms/frame (14.331x, ceiling 25x).
 
 Raw reports and their SHA-256 digests are checked in under
 [`evidence/texttop-2026-08-04/`](evidence/texttop-2026-08-04/):
 
 - `baseline.json`: `dd9e2cc89e4504b9b82eef58179dbe26b27f6bc6258e890c646e891fb3b93445`
-- `retained-topology.json`: `5ec6576938cbcac85d9bd8895c5e12761e4a751534e7ceadaf94f079b4b021d4`
+- `retained-topology.json`: `f487093fdb347d0c20adfe53a5a8671c2d086f6fab40e091e2c3eea33522425a`
 
 The equivalent comparator arguments are:
 

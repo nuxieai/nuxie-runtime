@@ -11,9 +11,10 @@ Pinned C++ runtime: `rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 The imported Text topology is now retained per concrete Text occurrence rather
 than reconstructed on every dirty draw. The retained slice owns the imported
 run, style, modifier, variation, feature, paint-container handle, and font-asset
-identity topology. Shaping is rerun only at the existing text-shape
-invalidation boundary; its final draw commands, raw paths, clip state, paint
-pools, and backend resources remain in the existing retained draw frame.
+identity topology. Shaped paragraphs and lines are retained alongside it and
+rerun only at the existing text-shape invalidation boundary; Paint dirt rebuilds
+styles from that retained shape. Final draw commands, raw paths, clip state,
+paint pools, and backend resources remain in the existing retained draw frame.
 Runtime file import now also builds a dense index of imported
 FileAsset object ids, so font and other file-asset resolution no longer scans
 every object in the file.
@@ -24,6 +25,7 @@ The work was landed in independent rows:
 2. `d9dc3be4 perf(text): retain imported text topology`
 3. `7e993be7 test(silver): promote animated clipping nodes`
 4. `01e3ae4f perf(text): retain style handles across transform dirt`
+5. `7351bd3b perf(text): retain shaped lines across paint dirt`
 
 The third row is a silver-oracle ratchet only: `animated_clipping-nodes` was
 already byte-exact and was promoted from an allowed difference to exact.
@@ -41,7 +43,7 @@ The port mirrors the pinned C++ ownership boundaries as follows:
 | Pinned C++ owner | Rust retained owner |
 |---|---|
 | `Text::m_allRuns`, styles, modifier groups | one lazy `Arc<StaticTextSlice>` on each `RuntimeTextDrawOwner` |
-| shaped paragraphs and lines | rebuilt at text-shape invalidation; their materialized command/path output is retained in the draw frame |
+| shaped paragraphs and lines | `RuntimeTextDrawOwner::shaped_layout` retains one `Arc<StaticShapedTextLayout>` per concrete occurrence |
 | style paints and draw commands | `RuntimeCachedTextShapePaints::commands` |
 | font references | stable font asset global/id identities in `StaticTextStyle`; bytes remain live runtime inputs |
 | render paths, clip path, paint pools, backend handles | existing `RuntimeCachedTextShapePaints` and `RuntimeTextBackendResources` |
@@ -62,10 +64,10 @@ topology.
   id.
 - Text modifiers and variation helpers still participate in the existing dirt
   propagation and shaping path.
-- Text-shape, layout, Path, and Paint dirt retain their prior rebuild
-  boundaries. Render-opacity-only dirt now follows pinned `Text::update`: it
-  updates effective command paint opacity without rebuilding shaped geometry
-  or render paths.
+- Text-shape, layout, and Path dirt invalidate the retained shaped layout.
+  Paint-only dirt rebuilds styles from the retained shape and lines.
+  Render-opacity-only dirt follows pinned `Text::update`: it updates effective
+  command paint opacity without rebuilding shaped geometry or render paths.
 - World-transform dirt updates cached world geometry, clip state, paint-space
   transforms, and color transforms in place. It does not reshape local text or
   rebuild local paths. The imported local transform is retained directly so
@@ -83,12 +85,12 @@ frame.
 
 | Fixture | Baseline ms/frame | Retained ms/frame | Change |
 |---|---:|---:|---:|
-| `script_create_text_runs` | 1.527619 | 1.367418 | -10.49% |
-| `text_vertical_trim_test` | 0.094717 | 0.064614 | -31.78% |
-| `layout_text_match` | 0.171508 | 0.146746 | -14.44% |
+| `script_create_text_runs` | 1.527619 | 1.322319 | -13.44% |
+| `text_vertical_trim_test` | 0.094717 | 0.069925 | -26.18% |
+| `layout_text_match` | 0.171508 | 0.156473 | -8.77% |
 
-All three requested fixtures improve; the dirty-text fixture removes 0.160200
-ms/frame and the two mostly static fixtures remove 0.030103 and 0.024763
+All three requested fixtures improve; the dirty-text fixture removes 0.205300
+ms/frame and the two mostly static fixtures remove 0.024792 and 0.015035
 ms/frame. The dated methodology, digests, and raw JSON links are in
 [`docs/perf-size-evidence.md`](docs/perf-size-evidence.md) and
 [`docs/evidence/texttop-2026-08-04/`](docs/evidence/texttop-2026-08-04/).
@@ -96,8 +98,8 @@ ms/frame. The dated methodology, digests, and raw JSON links are in
 The independent 24-row performance ratchet is green:
 
 - `make perf-gate`: `PASS files=24`
-- `script_create_text_runs`: 1.229818 Rust ms/frame, 293.690x, ceiling 378x
-- `text_vertical_trim_test`: 0.069744 Rust ms/frame, 11.500x, ceiling 25x
+- `script_create_text_runs`: 1.207693 Rust ms/frame, 221.884x, ceiling 378x
+- `text_vertical_trim_test`: 0.089322 Rust ms/frame, 14.331x, ceiling 25x
 
 ## Exactness and focused verification
 

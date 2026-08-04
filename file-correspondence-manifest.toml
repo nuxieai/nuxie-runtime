@@ -3819,13 +3819,13 @@ note = "P3-g faithful candidate against d788e8ec: `computeAlignment` (`src/rende
 upstream = "src/resetting_component.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard/resetting_component.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0312"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port. C17 exception: retained modules are `crates/nuxie-runtime/src/lib.rs`; the retained crate root is live wiring while resetting-component state and ordering are embedded in the Artboard reset lifecycle, so no standalone body can move without splitting shared methods."
+note = "Direct C++-counterpart module: `crates/nuxie-runtime/src/artboard/resetting_component.rs` owns resetting-component occurrence state and dispatch."
 
 [[file]]
 upstream = "src/scene.cpp"

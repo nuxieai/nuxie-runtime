@@ -10,7 +10,6 @@ use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
     AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind,
-    ResettingComponentKind,
 };
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
@@ -103,6 +102,8 @@ use crate::{
 
 mod advancing_component;
 pub(crate) use advancing_component::RuntimeAdvancingComponent;
+mod resetting_component;
+pub(crate) use resetting_component::RuntimeResettingComponent;
 
 // C++ `Artboard::sm_frameId` is global across artboards and advances at each
 // public `Artboard::draw` entry. Scripted paths use it to distinguish a second
@@ -288,13 +289,6 @@ impl RuntimeScriptUpdateMode<'_> {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RuntimeResettingComponent {
-    pub(crate) local_id: usize,
-    pub(crate) component: ComponentHandle,
-    pub(crate) kind: ResettingComponentKind,
 }
 
 #[derive(Clone, Copy)]
@@ -9040,44 +9034,6 @@ impl ArtboardInstance {
                 Err(error)
             }
             None => Ok(changed),
-        }
-    }
-
-    pub(crate) fn reset_retained_components_for_state_machine_settlement(&mut self) {
-        if self.resetting_components.is_empty() {
-            return;
-        }
-        for index in 0..self.resetting_components.len() {
-            let entry = self.resetting_components[index];
-            match entry.kind {
-                ResettingComponentKind::NestedArtboard => {
-                    let Some(nested) = self.nested_artboards.get_mut(&entry.local_id) else {
-                        continue;
-                    };
-                    nested
-                        .child
-                        .reset_retained_components_for_state_machine_settlement();
-                    if let Some(context) = nested.stateful_view_model_context.as_ref() {
-                        context.borrow_mut().advanced_data_context();
-                    }
-                }
-                ResettingComponentKind::ArtboardComponentList => {
-                    let should_reset_instances =
-                        self.artboard_component_list_should_reset_instances(entry.local_id);
-                    let Some(list) = self.component_list_state_mut(entry.local_id) else {
-                        continue;
-                    };
-                    reset_component_list_instances(list, should_reset_instances);
-                }
-                ResettingComponentKind::CustomPropertyTrigger => {
-                    let Some(property_value_key) =
-                        property_key_for_name("CustomPropertyTrigger", "propertyValue")
-                    else {
-                        continue;
-                    };
-                    let _ = self.set_uint_property(entry.local_id, property_value_key, 0);
-                }
-            }
         }
     }
 

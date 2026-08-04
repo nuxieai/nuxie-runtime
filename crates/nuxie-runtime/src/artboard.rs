@@ -106,6 +106,8 @@ pub(crate) use advancing_component::RuntimeAdvancingComponent;
 mod property_recorder;
 mod resetting_component;
 pub(crate) use resetting_component::RuntimeResettingComponent;
+#[path = "artboard/shapes/paint/solid_color.rs"]
+mod solid_color;
 #[path = "artboard/text/text_style.rs"]
 mod text_style;
 use text_style::RuntimeTextStyleFeatureOption;
@@ -4548,10 +4550,6 @@ impl ArtboardInstance {
         self.objects.color_property(local_id, property_key)
     }
 
-    pub(crate) fn solid_color_value(&self, local_id: usize) -> Option<u32> {
-        self.objects.solid_color_value(local_id)
-    }
-
     /// Typed property write with dirt propagation — the write path the
     /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
     /// embeddings): returns whether a matching property existed and its
@@ -4610,28 +4608,6 @@ impl ArtboardInstance {
             self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         }
         true
-    }
-
-    fn settle_runtime_solid_color_callback(&self, local_id: usize, value: u32) {
-        let Some(context) = self.build_context.as_ref() else {
-            return;
-        };
-        let Ok(graph_global_id) = usize::try_from(self.graph_global_id) else {
-            return;
-        };
-        let Some(graph_index) = context
-            .artboard_index_by_global
-            .get(graph_global_id)
-            .copied()
-            .flatten()
-        else {
-            return;
-        };
-        let graphs = Arc::clone(&context.artboards);
-        let Some(graph) = graphs.get(graph_index) else {
-            return;
-        };
-        self.settle_runtime_solid_color_callback_with_graph(local_id, value, graph);
     }
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {

@@ -2648,7 +2648,7 @@ status = "faithful"
 upstream = "src/shapes/paint/solid_color.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/shapes/paint/solid_color.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/animation/property_recorder.rs", "crates/nuxie-runtime/src/artboard/shapes/paint/solid_color.rs", "crates/nuxie-runtime/src/shapes/paint/solid_color.rs"]
 dynamically_reached = true
 status = "faithful"
 

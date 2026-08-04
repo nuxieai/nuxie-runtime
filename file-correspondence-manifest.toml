@@ -4335,13 +4335,13 @@ note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/ef
 upstream = "src/shapes/paint/solid_color.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/shapes/paint/solid_color.rs; crates/nuxie-runtime/src/artboard.rs"
+rust_module = "crates/nuxie-runtime/src/shapes/paint/solid_color.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/shapes/paint/solid_color.rs; crates/nuxie-runtime/src/artboard/animation/property_recorder.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0355"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining color-set invalidation is shared with B6-0352 paint lifecycle dispatch."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. Artboard-side retained paint settlement lives in `crates/nuxie-runtime/src/artboard/shapes/paint/solid_color.rs`, and keyed solid-color recording lives in `crates/nuxie-runtime/src/artboard/animation/property_recorder.rs`. MR-2b/C04 justified exception: remaining color-set invalidation is shared with B6-0352 paint lifecycle dispatch."
 
 [[file]]
 upstream = "src/shapes/paint/stroke.cpp"

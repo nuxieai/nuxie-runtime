@@ -1166,13 +1166,13 @@ note = "FL-D7 closes the whole-file Artboard owner: updatePass polls live DataBi
 upstream = "src/artboard_component_list.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/artboard_component_list.rs; crates/nuxie-runtime/src/artboard_component_list_order.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/artboard_component_list.rs; crates/nuxie-runtime/src/artboard_component_list_order.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/artboard_component_list.rs; crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0095"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 direct owner: each retained row owns its child, state machines, DataContext relink sinks, layout size, transform, and renderer resources with C++ teardown order; virtual removal pools by list/source and remount restores authored state while preserving the child allocation identity. MR-2b/C04 justified exception: Artboard-side construction and advance dispatch are shared with B6-0094 and cannot move without splitting common frame-loop methods. MR-2b/C05 justified exception: the draw.rs component-list mount/draw path is shared with sibling B6-0258 LayoutComponent settlement, so no behavior-neutral per-row function seam exists."
+note = "FL-D5 direct owner: each retained row owns its child, state machines, DataContext relink sinks, layout size, transform, and renderer resources with C++ teardown order; virtual removal pools by list/source and remount restores authored state while preserving the child allocation identity. MR-2b/C04 justified exception: Artboard-side synchronization, row construction, layout settlement, and advance live in `crates/nuxie-runtime/src/artboard/artboard_component_list.rs`; retained state, ordering, and drawing remain in their existing counterparts."
 
 [[file]]
 upstream = "src/artboard_list_map_rule.cpp"

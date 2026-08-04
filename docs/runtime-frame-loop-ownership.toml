@@ -1351,7 +1351,7 @@ status = "faithful"
 upstream = "src/artboard_component_list.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_component_list.rs", "crates/nuxie-runtime/src/artboard_component_list_order.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard_component_list.rs", "crates/nuxie-runtime/src/artboard_component_list_order.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/artboard_component_list.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
 status = "faithful"
 

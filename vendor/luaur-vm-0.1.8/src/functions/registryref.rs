@@ -25,9 +25,7 @@ pub unsafe fn registryref(
         if *registryfree != 0 {
             reference = *registryfree;
         } else {
-            let getn: unsafe extern "C" fn(*mut LuaTable) -> core::ffi::c_int =
-                core::mem::transmute(lua_h_getn as *const core::ffi::c_void);
-            reference = getn(reg) + 1;
+            reference = lua_h_getn(reg) + 1;
         }
         let slot = luaH_setnum(l, reg, reference);
         if *registryfree != 0 {

@@ -9,9 +9,9 @@ use luaur_common::macros::luau_insn_d::LUAU_INSN_D;
 use luaur_common::macros::luau_insn_op::LUAU_INSN_OP;
 
 impl BytecodeBuilder {
-    pub fn expand_jumps(&mut self) {
+    pub fn expand_jumps(&mut self) -> Vec<u32> {
         if !self.has_long_jumps {
-            return;
+            return Vec::new();
         }
 
         // we have some jump instructions that couldn't be patched which means their offset didn't fit into 16 bits
@@ -153,5 +153,7 @@ impl BytecodeBuilder {
 
             typed_local.startpc = remap[typed_local.startpc as usize];
         }
+
+        remap
     }
 }

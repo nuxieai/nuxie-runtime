@@ -79,6 +79,7 @@ use std::rc::Rc;
 #[cfg(test)]
 use crate::ScriptListenerActionMethod;
 
+mod data_bind;
 mod data_bind_container;
 mod data_bind_context;
 mod data_context;

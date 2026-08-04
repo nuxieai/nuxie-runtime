@@ -3054,7 +3054,15 @@ impl ArtboardInstance {
             return Ok(false);
         }
         self.set_script_owner_advance_active_handle(component, true);
-        if entry.kind != AdvancingComponentKind::ScriptedPathEffect {
+        if entry.kind == AdvancingComponentKind::ScriptedPathEffect {
+            // The scripting facade exposes an advance result but has no
+            // separate `markNeedsUpdate` callback. A true path-effect advance
+            // therefore publishes the ScriptUpdate that C++ consumes at the
+            // effect's dependency slot before ShapePaint rebuilds its retained
+            // EffectPath (`scripted_path_effect.cpp:111-132,199-207`).
+            self.set_script_owner_update_pending(component, true);
+            self.add_component_dirt(component, ComponentDirt::SCRIPT_UPDATE, false);
+        } else {
             self.add_dirt(entry.local_id, ComponentDirt::PAINT, false);
         }
         Ok(true)
@@ -14936,6 +14944,32 @@ mod tests {
                 .expect("reactivated advance")
         );
         assert_eq!(advances.get(), 3);
+    }
+
+    #[test]
+    fn true_scripted_path_effect_advance_schedules_effect_invalidation() {
+        let mut effect = synthetic_component_for_type(0, "ScriptedPathEffect");
+        effect.global_id = 10;
+        let seconds = Rc::new(RefCell::new(Vec::new()));
+        let mut instance = synthetic_instance(vec![effect], vec![0]);
+        instance.set_script_instance_for_global(
+            10,
+            Box::new(RecordingAdvanceScriptInstance {
+                seconds: Rc::clone(&seconds),
+            }),
+        );
+        instance
+            .update_pass_with_script_errors()
+            .expect("consume the attachment-time ScriptUpdate");
+
+        assert!(instance.advance_script_instances(0.25).unwrap());
+        assert_eq!(seconds.borrow().as_slice(), [0.25]);
+        assert!(
+            instance
+                .debug_component_dirt(0)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            "a true advance must invalidate the retained EffectPath at the scripted effect's dependency slot (scripted_path_effect.cpp:111-132,199-207)",
+        );
     }
 
     #[test]

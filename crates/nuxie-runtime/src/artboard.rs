@@ -4234,7 +4234,7 @@ impl ArtboardInstance {
             // concrete RenderPath owners (`layout_component.cpp:1116-1124`,
             // `text.cpp:1209-1230`).
             self.runtime_drawables
-                .mark_text_resource_dirty_for_local(text_local);
+                .mark_text_shape_paths_retained_for_local(text_local);
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
         self.mark_changed();
@@ -6630,7 +6630,7 @@ impl ArtboardInstance {
                     // dependency update, matching C++'s ordinary ShapePaint
                     // lifecycle without rewinding unchanged opacity paths.
                     self.runtime_drawables
-                        .mark_text_resource_dirty_for_local(text_local);
+                        .mark_text_paint_dirty_for_local(text_local);
                 } else {
                     self.runtime_drawables
                         .mark_text_render_styles_dirty_for_local(text_local);
@@ -7720,11 +7720,11 @@ impl ArtboardInstance {
                 .flatten()?;
             Some((Arc::clone(&context.artboards), graph_index))
         });
-        // Every retained Text render owner dirt transition corresponds to
-        // C++ Text Path dirt. Enroll exactly those occurrences before the
-        // clean-frame guard so update, never draw, owns reconstruction.
-        for text_local in self.runtime_drawables.dirty_text_locals() {
-            self.add_dirt(text_local, ComponentDirt::PATH, false);
+        // Enroll the concrete pending C++ Text dirt reason before the clean
+        // frame guard. ShapePaint changes remain Paint-only; text, font, and
+        // layout changes publish Path/TextShape.
+        for (text_local, text_dirt) in self.runtime_drawables.dirty_text_locals() {
+            self.add_dirt(text_local, text_dirt, false);
         }
         // Core::clone copies generated properties into fresh concrete
         // Components, then Artboard::initialize runs one FILTHY traversal over
@@ -7754,8 +7754,8 @@ impl ArtboardInstance {
             // The solve above can dirty a Text owner after the pre-guard
             // enrollment. Mirror `propagateSizeToChildren -> controlSize` by
             // enrolling that exact second set before component traversal.
-            for text_local in self.runtime_drawables.dirty_text_locals() {
-                self.add_dirt(text_local, ComponentDirt::PATH, false);
+            for (text_local, text_dirt) in self.runtime_drawables.dirty_text_locals() {
+                self.add_dirt(text_local, text_dirt, false);
             }
             if let Some((graphs, graph_index)) = graph_owner.as_ref() {
                 self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);

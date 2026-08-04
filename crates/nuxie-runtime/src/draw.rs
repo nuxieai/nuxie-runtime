@@ -5551,7 +5551,7 @@ impl ArtboardInstance {
                 let text_local =
                     crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
                 self.runtime_drawables
-                    .mark_text_resource_dirty_for_local(text_local);
+                    .mark_text_paint_dirty_for_local(text_local);
                 self.add_dirt(text_local, ComponentDirt::PAINT, false);
             }
         }
@@ -6761,7 +6761,7 @@ impl ArtboardInstance {
                         text_input.raw.borrow_mut().mark_geometry_dirty();
                     }
                     self.runtime_drawables
-                        .mark_text_resource_dirty_for_local(text_local);
+                        .mark_text_shape_paths_retained_for_local(text_local);
                     self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
                 }
                 let has_layout_draw_owner = self
@@ -9821,6 +9821,8 @@ impl RuntimeClippingShapeOwner {
 #[derive(Debug)]
 struct RuntimeTextDrawOwner {
     dirty: Cell<bool>,
+    pending_update_dirt: Cell<ComponentDirt>,
+    reuse_shaped_layout_on_paint: Cell<bool>,
     render_styles_dirty: Cell<bool>,
     retain_paths_on_rebuild: Cell<bool>,
     /// C++ `Text::{m_allRuns,m_textStylePaints,m_modifierGroups}`: immutable
@@ -9853,6 +9855,8 @@ impl Default for RuntimeTextDrawOwner {
     fn default() -> Self {
         Self {
             dirty: Cell::new(true),
+            pending_update_dirt: Cell::new(ComponentDirt::PATH),
+            reuse_shaped_layout_on_paint: Cell::new(false),
             render_styles_dirty: Cell::new(true),
             retain_paths_on_rebuild: Cell::new(false),
             topology: RefCell::new(None),
@@ -9885,10 +9889,28 @@ impl RuntimeTextDrawOwner {
 
     fn mark_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        self.reuse_shaped_layout_on_paint.set(false);
     }
 
     fn mark_paths_retained_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        self.reuse_shaped_layout_on_paint.set(false);
+        if !self.render_styles_dirty.get() {
+            self.retain_paths_on_rebuild.set(true);
+        }
+    }
+
+    fn mark_paint_paths_retained_dirty(&self) {
+        self.dirty.set(true);
+        if self.pending_update_dirt.get().is_empty() {
+            self.reuse_shaped_layout_on_paint.set(true);
+        }
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
         if !self.render_styles_dirty.get() {
             self.retain_paths_on_rebuild.set(true);
         }
@@ -9896,6 +9918,9 @@ impl RuntimeTextDrawOwner {
 
     fn mark_render_styles_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
+        self.reuse_shaped_layout_on_paint.set(false);
         self.render_styles_dirty.set(true);
         self.retain_paths_on_rebuild.set(false);
     }
@@ -9904,6 +9929,17 @@ impl RuntimeTextDrawOwner {
         self.shaped_layout_valid.set(false);
         self.shaped_layout.borrow_mut().take();
         self.mark_render_styles_dirty_unless_paths_retained();
+    }
+
+    fn mark_external_font_shape_dirty(&self) {
+        self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        self.reuse_shaped_layout_on_paint.set(false);
+        self.shaped_layout_valid.set(false);
+        self.shaped_layout.borrow_mut().take();
+        self.render_styles_dirty.set(true);
+        self.retain_paths_on_rebuild.set(false);
     }
 
     fn shaped_layout_or_build(
@@ -10048,6 +10084,8 @@ impl RuntimeTextDrawOwner {
             }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
+            self.pending_update_dirt.set(ComponentDirt::NONE);
+            self.reuse_shaped_layout_on_paint.set(false);
             self.render_styles_dirty.set(false);
             self.retain_paths_on_rebuild.set(false);
         }
@@ -10543,28 +10581,44 @@ impl RuntimeDrawableList {
                 // A font-resource replacement is C++ FontAsset::fontChanged
                 // -> TextShape dirt, so every affected Text executes
                 // buildRenderStyles and clears its opacity paths.
-                owner.mark_render_styles_dirty();
+                owner.mark_external_font_shape_dirty();
             }
         }
     }
 
-    pub(crate) fn dirty_text_locals(&self) -> Vec<usize> {
+    pub(crate) fn dirty_text_locals(&self) -> Vec<(usize, ComponentDirt)> {
         self.drawables
             .iter()
             .take(self.imported_count)
             .filter(|drawable| drawable.type_name == "Text")
             .filter_map(|drawable| {
-                drawable
-                    .text_draw_owner
-                    .as_ref()
-                    .is_some_and(RuntimeTextDrawOwner::is_dirty)
-                    .then_some(drawable.local_id)
-                    .flatten()
+                let owner = drawable.text_draw_owner.as_ref()?;
+                if !owner.is_dirty() {
+                    return None;
+                }
+                let pending = owner.pending_update_dirt.get();
+                Some((
+                    drawable.local_id?,
+                    if pending.is_empty() {
+                        ComponentDirt::PATH
+                    } else {
+                        pending
+                    },
+                ))
             })
             .collect()
     }
 
-    pub(crate) fn mark_text_resource_dirty_for_local(&self, local_id: usize) {
+    pub(crate) fn mark_text_paint_dirty_for_local(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.mark_paint_paths_retained_dirty();
+        }
+    }
+
+    pub(crate) fn mark_text_shape_paths_retained_for_local(&self, local_id: usize) {
         let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
             return;
         };
@@ -17325,10 +17379,17 @@ impl ArtboardInstance {
                 // render styles from the new shaped topology.
                 owner.mark_shape_dirty_unless_paths_retained();
             } else if dirt.contains(ComponentDirt::PAINT) {
-                // Paint dirt is a C++ buildRenderStyles boundary over the
-                // retained shape/line topology. Prior layout propagation can
-                // still classify its retained-path refresh independently.
-                owner.mark_render_styles_dirty_unless_paths_retained();
+                if owner.reuse_shaped_layout_on_paint.get() {
+                    // ShapePaint-only dirt is a C++ buildRenderStyles
+                    // boundary over retained shape/line topology.
+                    owner.mark_render_styles_dirty_unless_paths_retained();
+                } else {
+                    // Several generated Text properties share Paint dirt but
+                    // participate in line positioning or the local render
+                    // transform. This cache currently retains that positioned
+                    // phase too, so invalidate it for those Text-owned writes.
+                    owner.mark_shape_dirty_unless_paths_retained();
+                }
             } else {
                 owner.mark_dirty();
             }
@@ -26539,6 +26600,33 @@ mod tests {
         assert!(
             !stream.contains("makeRenderPaint"),
             "TextStylePaint dirt must refill its retained RenderPaint: {stream}"
+        );
+
+        let shaped_before_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_layout
+            .borrow()
+            .clone()
+            .expect("Text keeps shaped paragraphs and lines after Paint rebuild");
+        assert!(instance.set_color_property(color_local, color_key, 0xff66_7788));
+        instance.add_dirt(style_local, ComponentDirt::PAINT, false);
+        assert!(instance.update_pass());
+        let shaped_after_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_layout
+            .borrow()
+            .clone()
+            .expect("pre-update Paint dirt keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(
+                &shaped_before_pre_update_paint,
+                &shaped_after_pre_update_paint
+            ),
+            "pre-update ShapePaint dirt must not be promoted to TextShape dirt"
         );
     }
 

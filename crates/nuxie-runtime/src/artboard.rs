@@ -8,10 +8,9 @@ use std::sync::{
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::{
-    AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind,
-    ResettingComponentKind,
-};
+use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind};
+#[cfg(test)]
+use nuxie_graph::ResettingComponentKind;
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 

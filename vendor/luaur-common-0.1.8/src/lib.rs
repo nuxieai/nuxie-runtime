@@ -50,6 +50,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCallFeedback.set(value);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
     FFlag::LuauClosureUsageCounter.set(value);
+    FFlag::LuauCloneTableFix.set(false);
     FFlag::LuauCodeGenCallWrapperEmitInst.set(value);
     FFlag::LuauCodegenBufferInteger.set(value);
     FFlag::LuauCodegenDsePtrStoreTagCheck.set(value);
@@ -238,6 +239,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCheckFunctionStatementTypes);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauClosureUsageCounter);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCloneTableFix);
     // CodeGen/src/EmitInstructionX64.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodeGenCallWrapperEmitInst);
     // CodeGen/src/IrTranslateBuiltins.cpp

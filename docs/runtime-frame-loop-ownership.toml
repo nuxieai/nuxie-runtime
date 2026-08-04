@@ -1391,7 +1391,7 @@ status = "faithful"
 upstream = "src/bones/bone.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/bones/bone.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = ["crates/nuxie-runtime/src/bones/bone.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/bones/bone.rs"]
 dynamically_reached = false
 status = "faithful"
 

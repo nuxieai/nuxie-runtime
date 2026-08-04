@@ -102,6 +102,8 @@ use crate::{
 
 mod advancing_component;
 pub(crate) use advancing_component::RuntimeAdvancingComponent;
+#[path = "artboard/bones/bone.rs"]
+mod bone;
 #[path = "artboard/animation/property_recorder.rs"]
 mod property_recorder;
 mod resetting_component;
@@ -7374,13 +7376,6 @@ impl ArtboardInstance {
             child_layout_revision: nested.child.layout_revision,
         });
         changed
-    }
-
-    pub(crate) fn bone_length(&self, local_id: usize) -> Option<f32> {
-        self.component(local_id)?.concrete.bone.as_ref()?;
-        self.objects
-            .double_property_by_name(local_id, "length")
-            .or(Some(0.0))
     }
 
     pub(crate) fn runtime_node_computed_local_transform(&self, local_id: usize) -> Option<Mat2D> {

@@ -17,5 +17,6 @@ pub trait VmConstOps {
     fn eq_bool(&self, lhs_op: &BcOp, rhs: bool) -> Option<bool>;
     fn eq_int(&self, lhs_op: &BcOp, rhs: i32) -> Option<bool>;
     fn is_arithmetic_constant(&self, vm_const_op: &BcOp) -> bool;
+    fn as_number(&self, vm_const_op: &BcOp) -> f64;
     fn as_imm(&self, op: BcOp) -> BcRef<'_, BcImm>;
 }

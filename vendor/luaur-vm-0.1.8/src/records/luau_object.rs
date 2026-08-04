@@ -14,7 +14,7 @@ pub struct LuauObject {
     /// The number of members that this instance contains. We need this in order
     /// to free ourselves if we got swept in the same GC cycle as our class
     /// pointer.
-    pub numberofmembers: core::ffi::c_int,
+    pub numberofmembers: u32,
 
     /// The fields of this instance.
     pub members: *mut crate::records::lua_t_value::TValue,

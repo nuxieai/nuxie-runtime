@@ -74,10 +74,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCodegenSuggestArgumentRegisterX64.set(value);
     FFlag::LuauCodegenVmExitSync.set(value);
     FFlag::LuauCodegenVmExitSyncFix.set(value);
-    FFlag::LuauCompileInlineTableFunctions.set(value);
-    FFlag::LuauCompileNewTableMutationTracker.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
-    FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCostModel.set(false);
@@ -110,6 +107,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauKnowsTheDataModel3.set(value);
     FFlag::LuauLValueCompoundAssignmentVisitLhs.set(value);
     FFlag::LuauLimitUnificationRecursion.set(value);
+    FFlag::LuauMathRoundNegZero.set(false);
     FFlag::LuauNativeCodeTargetCheck.set(value);
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
     FFlag::LuauNoDuplicateBinaryPrefix.set(false);
@@ -145,6 +143,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
+    DFFlag::LuauGcMarkUdataAccess.set(false);
     DFFlag::LuauGcTableStepFix.set(false);
 }
 
@@ -288,13 +287,7 @@ pub mod FFlag {
     // Ast/src/Cst.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
     // Compiler/src/Compiler.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileInlineTableFunctions);
-    // Compiler/src/ConstantFolding.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileNewTableMutationTracker);
-    // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
-    // Bytecode/src/BytecodeBuilder.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileUdataDirect);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
     // Analysis/src/Constraint.cpp
@@ -347,6 +340,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauLValueCompoundAssignmentVisitLhs);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauLimitUnificationRecursion);
+    // VM/src/lbuiltins.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauMathRoundNegZero);
     // CodeGen/src/CodeGenUtils.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauNativeCodeTargetCheck);
     // Analysis/src/NonStrictTypeChecker.cpp
@@ -525,6 +520,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(AddReturnExectargetCheck, false);
     // Ast/src/Parser.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(DebugLuauReportReturnTypeVariadicWithTypeSuffix, false);
+    // VM/src/lgc.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcMarkUdataAccess, false);
     // VM/src/lgc.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // Require/src/RequireNavigator.cpp

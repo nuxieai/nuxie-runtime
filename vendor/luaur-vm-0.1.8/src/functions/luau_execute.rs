@@ -627,11 +627,11 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             // to the class member with the same name.
                             let slot = LUAU_INSN_C!(insn) as u8;
                             let inst = &mut **objectvalue!(rb as *const TValue) as *mut LuauObject;
-                            if (slot as i32) < (*(*inst).lclass).numberofallmembers
+                            if (slot as u32) < (*(*inst).lclass).numberofallmembers
                                 && tsvalue!(kv as *const TValue)
                                     == *(*(*inst).lclass).offsettomember.add(slot as usize)
                             {
-                                setobj_2_s!(L, ra, luaR_lookupmemberatoffset!(inst, slot as i32));
+                                setobj_2_s!(L, ra, luaR_lookupmemberatoffset!(inst, slot as u32));
                                 continue 'dispatch;
                             } else {
                                 // slow-er path: the slot mismatched so we fall back to
@@ -648,10 +648,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                         kv as *const TValue,
                                     );
                                 }
-                                LUAU_ASSERT!(ttisnumber!(offset));
-                                let offsetnum = nvalue!(offset) as i32;
+                                let offsetnum = nvalue!(offset) as u32;
                                 setobj_2_s!(L, ra, luaR_lookupmemberatoffset!(inst, offsetnum));
-                                VM_PATCH_C(pc.sub(2), offsetnum);
+                                VM_PATCH_C(pc.sub(2), offsetnum as i32);
                                 continue 'dispatch;
                             }
                         }
@@ -1092,16 +1091,20 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             } else if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get()
                                 && ttisobject!(rb as *const TValue)
                             {
-                                let slot = LUAU_INSN_C!(insn) as i32;
+                                let slot = LUAU_INSN_C!(insn) as u8;
                                 let inst =
                                     &mut **objectvalue!(rb as *const TValue) as *mut LuauObject;
-                                if slot < (*(*inst).lclass).numberofallmembers
+                                if (slot as u32) < (*(*inst).lclass).numberofallmembers
                                     && tsvalue!(kv as *const TValue)
                                         == *(*(*inst).lclass).offsettomember.add(slot as usize)
                                 {
                                     // note: order of copies allows rb to alias ra+1 or ra
                                     setobj_2_s!(L, ra.add(1), rb as *const TValue);
-                                    setobj_2_s!(L, ra, luaR_lookupmemberatoffset!(inst, slot));
+                                    setobj_2_s!(
+                                        L,
+                                        ra,
+                                        luaR_lookupmemberatoffset!(inst, slot as u32)
+                                    );
                                 } else {
                                     // slow-er path: try to fetch the field manually.
                                     let offset = luaH_getstr(
@@ -1116,11 +1119,10 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                             kv as *const TValue,
                                         );
                                     }
-                                    LUAU_ASSERT!(ttisnumber!(offset));
-                                    let offsetnum = nvalue!(offset) as i32;
+                                    let offsetnum = nvalue!(offset) as u32;
                                     setobj_2_s!(L, ra.add(1), rb as *const TValue);
                                     setobj_2_s!(L, ra, luaR_lookupmemberatoffset!(inst, offsetnum));
-                                    VM_PATCH_C(pc.sub(2), offsetnum);
+                                    VM_PATCH_C(pc.sub(2), offsetnum as i32);
                                 }
                             } else {
                                 // slow-path: handles non-table __index

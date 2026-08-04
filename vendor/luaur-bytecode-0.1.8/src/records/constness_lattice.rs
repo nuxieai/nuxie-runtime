@@ -18,3 +18,9 @@ impl Default for ConstnessLattice {
         }
     }
 }
+
+impl luaur_common::records::dense_hash_table::DenseDefault for ConstnessLattice {
+    fn dense_default() -> Self {
+        Self::default()
+    }
+}

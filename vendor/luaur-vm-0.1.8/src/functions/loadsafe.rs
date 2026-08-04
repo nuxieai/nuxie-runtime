@@ -432,8 +432,8 @@ pub unsafe fn loadsafe(
                         tsvalue!(classname) as *mut TString,
                         members_to_offset,
                         offset_to_member,
-                        num_properties as c_int,
-                        num_methods as c_int,
+                        num_properties,
+                        num_methods,
                     );
                     setclassvalue!(L, k, lco);
                 }

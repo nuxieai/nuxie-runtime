@@ -740,6 +740,7 @@ pub mod mainposition;
 pub mod markmt;
 pub mod markroot;
 pub mod marktaggetmt;
+pub mod markudatadirectaccess;
 pub mod markudatadirectfields;
 pub mod r#match;
 pub mod match_capture;

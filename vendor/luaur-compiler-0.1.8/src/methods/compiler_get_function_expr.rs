@@ -22,7 +22,7 @@ impl Compiler {
             }
 
             let expr_index = luaur_ast::rtti::ast_node_as::<AstExprIndexName>(node as *mut AstNode);
-            if !expr_index.is_null() && luaur_common::FFlag::LuauCompileInlineTableFunctions.get() {
+            if !expr_index.is_null() {
                 let value = self.try_index_constant_table(expr_index);
                 if !value.is_null() {
                     return self.get_function_expr(value);
@@ -44,9 +44,7 @@ impl Compiler {
 
             let expr_instantiate =
                 luaur_ast::rtti::ast_node_as::<AstExprInstantiate>(node as *mut AstNode);
-            if !expr_instantiate.is_null()
-                && luaur_common::FFlag::LuauCompileInlineTableFunctions.get()
-            {
+            if !expr_instantiate.is_null() {
                 return self.get_function_expr((*expr_instantiate).expr);
             }
 

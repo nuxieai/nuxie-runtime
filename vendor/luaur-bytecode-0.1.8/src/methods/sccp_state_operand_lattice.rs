@@ -13,6 +13,6 @@ impl SccpState {
             return ConstnessLattice::from_kind(Constness::NotAConstant);
         }
 
-        *self.op_constness.entry(*op).or_default()
+        *self.op_constness.get_or_insert(*op)
     }
 }

@@ -23,3 +23,9 @@
 - Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
 - Touched areas: recursive type-alias bytecode typing and bytecode-v12 packed
   cost computation/emission for inlinable functions.
+
+## Luau fork rung 6
+
+- Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
+- Touched areas: unconditional table-function inlining and escape-based table
+  mutation tracking, including removal of the deprecated tracker.

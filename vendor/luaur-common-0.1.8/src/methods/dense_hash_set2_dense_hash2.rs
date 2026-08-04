@@ -27,11 +27,13 @@ where
     pub fn insert(&mut self, key: K) -> &K {
         self.impl_.rehash_if_full(&key);
         let bucket = self.impl_.insert_unsafe(key);
-        &self.impl_.data[bucket]
+        self.impl_.data[bucket].as_ref().expect("occupied bucket")
     }
 
     pub fn find(&self, key: &K) -> Option<&K> {
-        self.impl_.find(key).map(|bucket| &self.impl_.data[bucket])
+        self.impl_
+            .find(key)
+            .map(|bucket| self.impl_.data[bucket].as_ref().expect("occupied bucket"))
     }
 
     pub fn contains(&self, key: &K) -> bool {
@@ -71,6 +73,17 @@ where
     E: DenseEq<K> + Default,
 {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K, H, E> DenseDefault for DenseHashSet2<K, H, E>
+where
+    K: Clone + DenseDefault,
+    H: DenseHasher<K> + Default,
+    E: DenseEq<K> + Default,
+{
+    fn dense_default() -> Self {
         Self::new()
     }
 }

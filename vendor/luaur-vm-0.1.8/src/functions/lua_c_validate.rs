@@ -6,6 +6,7 @@ use crate::macros::checkliveness::checkliveness;
 use crate::macros::isblack::isblack;
 use crate::macros::isdead::isdead;
 use crate::macros::lua_utag_limit::LUA_UTAG_LIMIT;
+use crate::macros::utag_internal_limit::UTAG_INTERNAL_LIMIT;
 use crate::macros::obj_2_gco::obj2gco;
 use crate::macros::upisopen::upisopen;
 use crate::records::gc_object::GCObject;
@@ -38,6 +39,19 @@ pub unsafe fn lua_c_validate(L: *mut lua_State) {
         let mt = (*g).udatamt[i];
         if !mt.is_null() {
             LUAU_ASSERT!(!isdead!(g, mt as *mut GCObject));
+        }
+    }
+
+    for i in 0..UTAG_INTERNAL_LIMIT as usize {
+        checkliveness!(g, &(*g).udatadirect[i].indextm);
+        checkliveness!(g, &(*g).udatadirect[i].newindextm);
+        checkliveness!(g, &(*g).udatadirect[i].namecalltm);
+
+        if !(*g).udatadirectfields[i].is_null() {
+            LUAU_ASSERT!(!isdead!(
+                g,
+                (*g).udatadirectfields[i] as *mut GCObject
+            ));
         }
     }
 

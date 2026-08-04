@@ -30,7 +30,6 @@ pub mod return_visitor;
 pub mod shape_visitor;
 pub mod symbol;
 pub mod table_mutation_tracker;
-pub mod table_mutation_tracker_deprecated;
 pub mod table_shape;
 pub mod type_map_visitor;
 pub mod undefined_local_visitor;

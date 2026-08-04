@@ -9,7 +9,6 @@ use crate::macros::nvalue::nvalue;
 use crate::macros::setobj_2_class::setobj2class;
 use crate::macros::setobj_2_t::setobj2t;
 use crate::macros::ttisfunction::ttisfunction;
-use crate::macros::ttisnumber::ttisnumber;
 use crate::records::global_state::global_State;
 use crate::records::lua_state::lua_State;
 use crate::records::luau_class::LuauClass;
@@ -28,8 +27,7 @@ pub unsafe fn lua_r_addclassmember(
     LUAU_ASSERT!(!(*classobject).staticmembers.is_null());
 
     let offset = lua_h_getstr((*classobject).memberstooffset, name);
-    LUAU_ASSERT!(ttisnumber!(offset));
-    let offsetint = nvalue!(offset) as i32;
+    let offsetint = nvalue!(offset) as u32;
     LUAU_ASSERT!(
         offsetint >= (*classobject).numberofinstancemembers
             && offsetint < (*classobject).numberofallmembers

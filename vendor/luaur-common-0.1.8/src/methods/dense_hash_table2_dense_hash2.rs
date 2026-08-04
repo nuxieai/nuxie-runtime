@@ -41,7 +41,7 @@ where
     pub fn new(buckets: usize) -> Self {
         debug_assert_eq!(buckets & buckets.wrapping_sub(1), 0);
 
-        let data = (0..buckets).map(|_| Iface::make_empty()).collect();
+        let data = (0..buckets).map(|_| None).collect();
         let hash_shift = if buckets == 0 {
             64
         } else {
@@ -69,8 +69,8 @@ where
         if self.capacity > threshold_to_destroy {
             self.destroy();
         } else {
-            for item in &mut self.data {
-                *item = Iface::make_empty();
+            for bucket in self.used_table.iter() {
+                self.data[bucket] = None;
             }
             self.used_table.clear();
         }
@@ -86,6 +86,7 @@ where
     }
 
     fn do_hash(&self, key: &K) -> usize {
+        debug_assert!(self.hash_shift > 32);
         ((self.hasher.hash(key) as u64).wrapping_mul(11_400_714_819_323_198_485) >> self.hash_shift)
             as usize
     }
@@ -106,7 +107,7 @@ where
 
         if !result.found {
             self.used_table.set(result.bucket, true);
-            Iface::set_key(&mut self.data[result.bucket], key);
+            self.data[result.bucket] = Some(Iface::make(key));
             self.count += 1;
         }
 
@@ -130,16 +131,13 @@ where
         };
         let mut new_table = Self::new(new_size);
 
-        for word_index in 0..self.used_table.num_words() {
-            let mut word = self.used_table.word_at(word_index);
-            while word != 0 {
-                let bit = count_trailing_zeroes(word);
-                let bucket = word_index * BitSet::NUM_ELEMENTS + bit;
-                let key = Iface::get_key(&self.data[bucket]).clone();
-                let target = new_table.insert_unsafe(key);
-                new_table.data[target] = mem::replace(&mut self.data[bucket], Iface::make_empty());
-                word &= word - 1;
-            }
+        for bucket in self.used_table.iter() {
+            let item = self.data[bucket].take().expect("occupied bucket");
+            let result = new_table.get_bucket(Iface::get_key(&item));
+            debug_assert!(!result.found);
+            new_table.used_table.set(result.bucket, true);
+            new_table.count += 1;
+            new_table.data[result.bucket] = Some(item);
         }
 
         debug_assert_eq!(self.count, new_table.count);
@@ -185,7 +183,10 @@ where
                     found: false,
                 };
             }
-            if self.eq.eq(Iface::get_key(&self.data[bucket]), key) {
+            if self.eq.eq(
+                Iface::get_key(self.data[bucket].as_ref().expect("occupied bucket")),
+                key,
+            ) {
                 return BucketResult {
                     bucket,
                     found: true,
@@ -206,19 +207,22 @@ where
                 break;
             }
 
-            let r = self.do_hash(Iface::get_key(&self.data[j]));
+            let r = self.do_hash(Iface::get_key(
+                self.data[j].as_ref().expect("occupied bucket"),
+            ));
             let left = i.wrapping_sub(r) & hash_mod;
             let right = j.wrapping_sub(r) & hash_mod;
 
             if left < right {
-                self.data[i] = mem::replace(&mut self.data[j], Iface::make_empty());
                 self.used_table.set(i, true);
                 self.used_table.set(j, false);
+                self.data[i] = self.data[j].take();
                 i = j;
             }
         }
 
         self.used_table.set(i, false);
+        self.data[i] = None;
         self.count -= 1;
     }
 }
@@ -229,7 +233,7 @@ impl<'a, I> Iterator for DenseHashTable2ConstIterator<'a, I> {
     fn next(&mut self) -> Option<Self::Item> {
         for (index, item) in self.inner.by_ref() {
             if self.used_table.contains(index) {
-                return Some(item);
+                return Some(item.as_ref().expect("occupied bucket"));
             }
         }
         None
@@ -242,7 +246,7 @@ impl<'a, I> Iterator for DenseHashTable2Iterator<'a, I> {
     fn next(&mut self) -> Option<Self::Item> {
         for (index, item) in self.inner.by_ref() {
             if self.used_table.contains(index) {
-                return Some(item);
+                return Some(item.as_mut().expect("occupied bucket"));
             }
         }
         None

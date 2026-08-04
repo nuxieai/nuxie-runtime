@@ -2,7 +2,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TableConstantKind {
     ConstantTable,
-    ConstantOther,
     NotConstant,
 }
 

@@ -32,19 +32,27 @@ where
     pub fn get_or_insert(&mut self, key: K) -> &mut V {
         self.impl_.rehash_if_full(&key);
         let bucket = self.impl_.insert_unsafe(key);
-        &mut self.impl_.data[bucket].1
+        &mut self.impl_.data[bucket]
+            .as_mut()
+            .expect("occupied bucket")
+            .1
     }
 
     pub fn find(&self, key: &K) -> Option<&V> {
         self.impl_
             .find(key)
-            .map(|bucket| &self.impl_.data[bucket].1)
+            .map(|bucket| &self.impl_.data[bucket].as_ref().expect("occupied bucket").1)
     }
 
     pub fn find_mut(&mut self, key: &K) -> Option<&mut V> {
         self.impl_
             .find(key)
-            .map(|bucket| &mut self.impl_.data[bucket].1)
+            .map(|bucket| {
+                &mut self.impl_.data[bucket]
+                    .as_mut()
+                    .expect("occupied bucket")
+                    .1
+            })
     }
 
     pub fn contains(&self, key: &K) -> bool {
@@ -66,10 +74,19 @@ where
         let fresh = self.impl_.size() > before;
 
         if fresh {
-            self.impl_.data[bucket].1 = value.clone();
+            self.impl_.data[bucket]
+                .as_mut()
+                .expect("occupied bucket")
+                .1 = value.clone();
         }
 
-        (&mut self.impl_.data[bucket].1, fresh)
+        (
+            &mut self.impl_.data[bucket]
+                .as_mut()
+                .expect("occupied bucket")
+                .1,
+            fresh,
+        )
     }
 
     /// C++ `try_insert(Value&&)`: move only when the key is fresh.
@@ -83,10 +100,19 @@ where
         let fresh = self.impl_.size() > before;
 
         if fresh {
-            self.impl_.data[bucket].1 = mem::replace(value, V::dense_default());
+            self.impl_.data[bucket]
+                .as_mut()
+                .expect("occupied bucket")
+                .1 = mem::replace(value, V::dense_default());
         }
 
-        (&mut self.impl_.data[bucket].1, fresh)
+        (
+            &mut self.impl_.data[bucket]
+                .as_mut()
+                .expect("occupied bucket")
+                .1,
+            fresh,
+        )
     }
 
     pub fn size(&self) -> usize {

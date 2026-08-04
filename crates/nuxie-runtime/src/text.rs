@@ -594,13 +594,36 @@ pub(crate) fn runtime_text_draw_data_from_slice(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<RuntimeTextDrawData> {
+    let text_world =
+        instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
+    let layout = slice.render_layout(runtime, instance, layout_constraint, text_world)?;
+    runtime_text_draw_data_from_retained_layout(
+        slice,
+        runtime,
+        instance,
+        graph,
+        text_local,
+        layout_bounds,
+        layout.as_ref(),
+    )
+}
+
+pub(crate) fn runtime_text_draw_data_from_retained_layout(
+    slice: &StaticTextSlice,
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    text_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout: Option<&StaticShapedTextLayout>,
+) -> Result<RuntimeTextDrawData> {
     let render_opacity = instance
         .component(text_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
     let text_world =
         instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
-    let render_data = slice.render_data(runtime, instance, graph, layout_constraint, text_world)?;
+    let render_data = slice.render_data_from_layout(runtime, instance, graph, layout, None)?;
     if render_data
         .path_buckets_by_style
         .iter()
@@ -1985,6 +2008,29 @@ impl StaticTextSlice {
         )
     }
 
+    /// C++ `Text::{m_shape,m_lines}` for the render path. The concrete Text
+    /// owner retains this result across Paint-only rebuilds.
+    pub(crate) fn render_layout(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+    ) -> Result<Option<StaticShapedTextLayout>> {
+        let resolved_runs = self.resolved_runs(runtime, instance)?;
+        if resolved_runs.iter().all(|run| run.text.is_empty()) {
+            return Ok(None);
+        }
+        self.shaped_layout_from_resolved_runs(
+            runtime,
+            instance,
+            layout_constraint,
+            text_world,
+            &resolved_runs,
+            StaticShapedTextPurpose::Render,
+        )
+    }
+
     fn shaped_layout_from_resolved_runs(
         &self,
         runtime: &RuntimeFile,
@@ -2297,24 +2343,6 @@ impl StaticTextSlice {
         }))
     }
 
-    fn render_data(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        layout_constraint: Option<RuntimeTextLayoutConstraint>,
-        text_world: Mat2D,
-    ) -> Result<StaticTextRenderData> {
-        self.render_data_filtered(
-            runtime,
-            instance,
-            graph,
-            layout_constraint,
-            text_world,
-            None,
-        )
-    }
-
     fn render_data_filtered(
         &self,
         runtime: &RuntimeFile,
@@ -2324,24 +2352,19 @@ impl StaticTextSlice {
         text_world: Mat2D,
         selection_filter: Option<(std::ops::Range<usize>, bool)>,
     ) -> Result<StaticTextRenderData> {
-        let resolved_runs = self.resolved_runs(runtime, instance)?;
-        if resolved_runs.iter().all(|run| run.text.is_empty()) {
-            return Ok(StaticTextRenderData {
-                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
-                color_glyphs: Vec::new(),
-                order: Vec::new(),
-                local_transform: Mat2D::IDENTITY,
-            });
-        }
-        let Some(layout) = self.shaped_layout_from_resolved_runs(
-            runtime,
-            instance,
-            layout_constraint,
-            text_world,
-            &resolved_runs,
-            StaticShapedTextPurpose::Render,
-        )?
-        else {
+        let layout = self.render_layout(runtime, instance, layout_constraint, text_world)?;
+        self.render_data_from_layout(runtime, instance, graph, layout.as_ref(), selection_filter)
+    }
+
+    fn render_data_from_layout(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout: Option<&StaticShapedTextLayout>,
+        selection_filter: Option<(std::ops::Range<usize>, bool)>,
+    ) -> Result<StaticTextRenderData> {
+        let Some(layout) = layout else {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
                 color_glyphs: Vec::new(),

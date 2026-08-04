@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct StyledTextGlyph {
     glyph_id: u32,
     char_index: usize,

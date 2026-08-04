@@ -53,6 +53,7 @@ fn create_border_scene(
             name: "UNIV-1408 border".into(),
             width,
             height,
+            layout_style: None,
         })?;
         let shape = tx.create(
             Parent::Artboard(artboard),
@@ -215,6 +216,7 @@ fn create_text_scene(line_height: f32) -> Result<(Scene, nuxie::ArtboardId)> {
             name: "UNIV-1408 tight line height".into(),
             width: 180.0,
             height: 40.0,
+            layout_style: None,
         })?;
         let text = tx.create(
             Parent::Artboard(artboard),
@@ -282,6 +284,7 @@ fn create_absolute_badge_scene() -> Result<(Scene, nuxie::ArtboardId)> {
             name: "UNIV-1408 absolute badge".into(),
             width: 390.0,
             height: 188.0,
+            layout_style: None,
         })?;
         let parent = tx.create(
             Parent::Artboard(artboard),

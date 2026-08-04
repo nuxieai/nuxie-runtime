@@ -7,6 +7,8 @@ use crate::records::ast_expr_function::AstExprFunction;
 use crate::records::ast_name::AstName;
 use crate::records::ast_stat_function::AstStatFunction;
 use crate::records::cst_stat_function::CstStatFunction;
+use crate::records::cst_attr_list::CstAttrList;
+use crate::records::temp_vector::TempVector;
 use crate::records::lexeme::Lexeme;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
@@ -16,8 +18,18 @@ impl Parser {
     pub fn parse_function_stat(
         &mut self,
         attributes: &AstArray<*mut AstAttr>,
+        cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> *mut AstStatFunction {
-        let start = if attributes.size > 0 {
+        if !cst_attr_lists.is_null() {
+            luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
+        }
+        let start = if luaur_common::FFlag::LuauCstAttr.get() {
+            self.get_attribute_start_location(
+                attributes,
+                cst_attr_lists,
+                self.lexer.current().location,
+            )
+        } else if attributes.size > 0 {
             unsafe { (**attributes.data).base.location }
         } else {
             self.lexer.current().location
@@ -55,6 +67,7 @@ impl Parser {
             None,
             attributes,
             false,
+            core::ptr::null_mut(),
         );
 
         self.match_recovery_stop_on_token[Type::ReservedEnd.0 as usize] -= 1;
@@ -69,7 +82,14 @@ impl Parser {
 
         if self.options.store_cst_data {
             let cst_node = unsafe {
-                (*self.allocator).alloc(CstStatFunction::new(match_function.location.begin))
+                if luaur_common::FFlag::LuauCstAttr.get() && !cst_attr_lists.is_null() {
+                    (*self.allocator).alloc(CstStatFunction::new_with_attr_lists(
+                        self.copy_temp_vector_t(&*cst_attr_lists),
+                        match_function.location.begin,
+                    ))
+                } else {
+                    (*self.allocator).alloc(CstStatFunction::new(match_function.location.begin))
+                }
             };
             self.cst_node_map.try_insert(
                 node as *mut crate::records::ast_node::AstNode,

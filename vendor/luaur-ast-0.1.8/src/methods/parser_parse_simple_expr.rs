@@ -1,5 +1,4 @@
 use crate::records::ast_array::AstArray;
-use crate::records::ast_attr::AstAttr;
 use crate::records::ast_expr::AstExpr;
 use crate::records::ast_expr_constant_bool::AstExprConstantBool;
 use crate::records::ast_expr_constant_nil::AstExprConstantNil;
@@ -12,29 +11,10 @@ impl Parser {
     pub fn parse_simple_expr(&mut self) -> *mut AstExpr {
         let start = self.lexer.current().location;
 
-        let mut attributes: AstArray<*mut AstAttr> = AstArray {
-            data: core::ptr::null_mut(),
-            size: 0,
-        };
-
         if self.lexer.current().r#type == Type::Attribute
             || self.lexer.current().r#type == Type::AttributeOpen
         {
-            attributes = self.parse_attributes();
-
-            if self.lexer.current().r#type != Type::ReservedFunction {
-                return self.report_expr_error(
-                    start,
-                    AstArray {
-                        data: core::ptr::null_mut(),
-                        size: 0,
-                    },
-                    format_args!(
-                        "Expected 'function' declaration after attribute, but got {} instead",
-                        self.lexer.current().to_string()
-                    ),
-                ) as *mut AstExpr;
-            }
+            return self.parse_attributed_function(start);
         }
 
         if self.lexer.current().r#type == Type::ReservedNil {
@@ -59,8 +39,9 @@ impl Parser {
                 &match_function,
                 &AstName::new(),
                 None,
-                &attributes,
+                &AstArray::default(),
                 false,
+                core::ptr::null_mut(),
             )
             .0 as *mut AstExpr
         } else if self.lexer.current().r#type == Type::Number {

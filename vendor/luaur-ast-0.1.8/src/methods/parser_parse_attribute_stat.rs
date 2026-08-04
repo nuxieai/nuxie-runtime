@@ -7,17 +7,36 @@ use crate::records::ast_stat_error::AstStatError;
 use crate::records::ast_stat_function::AstStatFunction;
 use crate::records::location::Location;
 use crate::records::parser::Parser;
+use crate::records::cst_attr_list::CstAttrList;
+use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_attribute_stat(&mut self) -> *mut AstStat {
-        let attributes = self.parse_attributes();
+        let start_location = self.lexer.current().location;
+        let mut cst_attr_lists = TempVector::<*mut CstAttrList>::new(
+            &mut self.scratch_cst_attr_list,
+        );
+        let cst_attr_lists_ptr = if luaur_common::FFlag::LuauCstAttr.get() {
+            &mut cst_attr_lists
+        } else {
+            core::ptr::null_mut()
+        };
+        let attributes = self.parse_attributes(cst_attr_lists_ptr);
         let current_type = self.lexer.current().r#type;
 
         match current_type {
-            Type::ReservedFunction => self.parse_function_stat(&attributes) as *mut AstStat,
+            Type::ReservedFunction => {
+                self.parse_function_stat(&attributes, cst_attr_lists_ptr) as *mut AstStat
+            }
             Type::ReservedLocal => {
                 if luaur_common::FFlag::LuauConst2.get() {
-                    let attr_loc = if attributes.size > 0 {
+                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
+                        self.get_attribute_start_location(
+                            &attributes,
+                            &cst_attr_lists,
+                            start_location,
+                        )
+                    } else if attributes.size > 0 {
                         unsafe { (**attributes.data.add(0)).base.location }
                     } else {
                         self.lexer.current().location
@@ -28,9 +47,10 @@ impl Parser {
                         self.lexer.current().location.begin,
                         &attributes,
                         false,
+                        cst_attr_lists_ptr,
                     ) as *mut AstStat
                 } else {
-                    self.parseLocal_DEPRECATED(&attributes) as *mut AstStat
+                    self.parseLocal_DEPRECATED(&attributes, cst_attr_lists_ptr) as *mut AstStat
                 }
             }
             Type::Name => {
@@ -51,13 +71,24 @@ impl Parser {
                     let keyword_loc = current.location;
                     self.next_lexeme();
 
-                    let attr_loc = if attributes.size > 0 {
+                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
+                        self.get_attribute_start_location(
+                            &attributes,
+                            &cst_attr_lists,
+                            start_location,
+                        )
+                    } else if attributes.size > 0 {
                         unsafe { (**attributes.data.add(0)).base.location }
                     } else {
                         keyword_loc
                     };
 
-                    self.parse_export_value(&attr_loc, keyword_loc.begin, &attributes)
+                    self.parse_export_value(
+                        &attr_loc,
+                        keyword_loc.begin,
+                        &attributes,
+                        cst_attr_lists_ptr,
+                    )
                         as *mut AstStat
                 } else if luaur_common::FFlag::LuauConst2.get()
                     && unsafe {
@@ -72,13 +103,25 @@ impl Parser {
                     let keyword_loc = current.location;
                     self.next_lexeme();
 
-                    let attr_loc = if attributes.size > 0 {
+                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
+                        self.get_attribute_start_location(
+                            &attributes,
+                            &cst_attr_lists,
+                            start_location,
+                        )
+                    } else if attributes.size > 0 {
                         unsafe { (**attributes.data.add(0)).base.location }
                     } else {
                         keyword_loc
                     };
 
-                    self.parse_local(attr_loc, keyword_loc.begin, &attributes, true) as *mut AstStat
+                    self.parse_local(
+                        attr_loc,
+                        keyword_loc.begin,
+                        &attributes,
+                        true,
+                        cst_attr_lists_ptr,
+                    ) as *mut AstStat
                 } else if self.options.allow_declaration_syntax
                     && unsafe {
                         AstName::operator_eq_c_char(

@@ -24,7 +24,7 @@ impl Parser {
                 return self.parse_function_stat(&AstArray {
                     data: core::ptr::null_mut(),
                     size: 0,
-                }) as *mut AstStat;
+                }, core::ptr::null_mut()) as *mut AstStat;
             }
             Type::ReservedLocal => {
                 if luaur_common::FFlag::LuauConst2.get() {
@@ -37,12 +37,13 @@ impl Parser {
                             size: 0,
                         },
                         false,
+                        core::ptr::null_mut(),
                     );
                 } else {
                     return self.parseLocal_DEPRECATED(&AstArray {
                         data: core::ptr::null_mut(),
                         size: 0,
-                    });
+                    }, core::ptr::null_mut());
                 }
             }
             Type::ReservedReturn => return self.parse_return(),
@@ -107,6 +108,7 @@ impl Parser {
                             data: core::ptr::null_mut(),
                             size: 0,
                         },
+                        core::ptr::null_mut(),
                     );
                 } else if current.r#type == Type::Name
                     && AstName::ast_name_c_char(unsafe { current.data.name })
@@ -153,6 +155,7 @@ impl Parser {
                     size: 0,
                 },
                 true,
+                core::ptr::null_mut(),
             );
         }
 

@@ -3797,19 +3797,71 @@ impl Hierarchy<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
-        let sibling_order = |records: &[RecordDefinition]| {
-            records
-                .iter()
-                .filter_map(|record| match &record.spec {
-                    RecordSpec::Visual {
-                        parent: record_parent,
-                        ..
-                    } if *record_parent == parent => Some(record.id),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        };
-        let previous_siblings = sibling_order(&artboard.records);
+        // One non-mutating scan derives everything the validity check needs:
+        // the destination in remaining-record coordinates, the current
+        // sibling order, and where the moved root would land among its
+        // siblings. The record stream is the single source of per-parent
+        // child order, so a slot that carries the block across one of its own
+        // siblings would silently reorder the parent's children; reject it
+        // BEFORE mutating so a caller can treat the rejection as a skip and
+        // keep issuing operations in the same transaction.
+        let mut remaining_len = 0usize;
+        let mut anchor_first = None;
+        let mut anchor_last = None;
+        let mut previous_siblings = Vec::new();
+        let mut remaining_sibling_positions = Vec::new();
+        for record in &artboard.records {
+            let is_sibling = matches!(
+                &record.spec,
+                RecordSpec::Visual {
+                    parent: record_parent,
+                    ..
+                } if *record_parent == parent
+            );
+            if is_sibling {
+                previous_siblings.push(record.id);
+            }
+            if block_ids.contains(&record.id) {
+                continue;
+            }
+            if anchor_ids.contains(&record.id) {
+                anchor_first.get_or_insert(remaining_len);
+                anchor_last = Some(remaining_len);
+            }
+            if is_sibling {
+                remaining_sibling_positions.push((record.id, remaining_len));
+            }
+            remaining_len = remaining_len.saturating_add(1);
+        }
+        let insertion_index = match slot {
+            RecordSlot::Before(_) => anchor_first,
+            RecordSlot::After(_) => anchor_last.map(|last| last.saturating_add(1)),
+        }
+        .ok_or_else(|| {
+            EditAbort::new(
+                self.operation_index,
+                vec![EditId::Object(anchor)],
+                EditReason::InternalInvariant,
+            )
+        })?;
+        let mut next_siblings = Vec::with_capacity(previous_siblings.len());
+        let mut moved_inserted = false;
+        for (sibling, position) in &remaining_sibling_positions {
+            if !moved_inserted && *position >= insertion_index {
+                next_siblings.push(object);
+                moved_inserted = true;
+            }
+            next_siblings.push(*sibling);
+        }
+        if !moved_inserted {
+            next_siblings.push(object);
+        }
+        if next_siblings != previous_siblings {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(anchor)],
+                EditReason::RecordSlotCrossesSiblings,
+            ));
+        }
 
         let records = std::mem::take(&mut artboard.records);
         let mut block = Vec::with_capacity(block_ids.len());
@@ -3821,47 +3873,8 @@ impl Hierarchy<'_> {
                 remaining.push(record);
             }
         }
-        let anchor_positions = remaining
-            .iter()
-            .enumerate()
-            .filter_map(|(index, record)| anchor_ids.contains(&record.id).then_some(index))
-            .collect::<Vec<_>>();
-        let insertion_index = match slot {
-            RecordSlot::Before(_) => anchor_positions.first().copied(),
-            RecordSlot::After(_) => anchor_positions.last().map(|last| last.saturating_add(1)),
-        }
-        .ok_or_else(|| {
-            EditAbort::new(
-                self.operation_index,
-                vec![EditId::Object(anchor)],
-                EditReason::InternalInvariant,
-            )
-        })?;
         remaining.splice(insertion_index..insertion_index, block);
         artboard.records = remaining;
-
-        // The record stream is the single source of per-parent child order,
-        // so a slot that carries the block across one of its own siblings
-        // would silently reorder the parent's children. This operation is
-        // record placement only; reject order-changing slots so layout and
-        // sibling semantics stay exactly as authored.
-        let artboard = self
-            .definitions
-            .artboards
-            .get(artboard_index)
-            .ok_or_else(|| {
-                EditAbort::new(
-                    self.operation_index,
-                    vec![EditId::Object(object)],
-                    EditReason::InternalInvariant,
-                )
-            })?;
-        if sibling_order(&artboard.records) != previous_siblings {
-            return Err(self.abort(
-                vec![EditId::Object(object), EditId::Object(anchor)],
-                EditReason::RecordSlotCrossesSiblings,
-            ));
-        }
         Ok(artboard_id)
     }
 

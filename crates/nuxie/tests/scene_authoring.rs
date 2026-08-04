@@ -5885,7 +5885,7 @@ fn typed_list_string_equality_mutates_stable_items_rejects_mismatches_and_replay
     let selected = canonical_draw_stream(&mut scene, instance)?;
     let selected_hits = scene
         .frame()
-        .hit_test_paths(instance, nuxie::Vec2D::new(26.0, 8.0));
+        .hit_test_paths(instance, nuxie::Vec2D::new(6.0, 28.0));
     assert_eq!(selected_hits.len(), 1);
     assert_eq!(
         selected_hits[0].objects(),

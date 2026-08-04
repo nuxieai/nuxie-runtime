@@ -91,8 +91,21 @@ fn hug_container_reports_its_hugged_solve() -> Result<()> {
             width: 500.0,
             height: 852.0,
         })?;
-        tx.create(
+        // The style-less artboard root flows as a column (upstream Yoga
+        // zero-init default), so author an explicit Row wrapper to keep the
+        // horizontal-spacer offset this test exercises.
+        let row = tx.create(
             Parent::Artboard(artboard),
+            layout(
+                "Row wrapper",
+                500.0,
+                852.0,
+                SceneLayoutScale::Fixed,
+                SceneLayoutScale::Fixed,
+            ),
+        )?;
+        tx.create(
+            Parent::Object(row),
             layout(
                 "Horizontal spacer",
                 17.0,
@@ -112,7 +125,7 @@ fn hug_container_reports_its_hugged_solve() -> Result<()> {
             unreachable!("layout helper always returns a LayoutComponent")
         };
         column_spec.style.flex_direction = SceneLayoutFlexDirection::Column;
-        let outer = tx.create(Parent::Artboard(artboard), column_node)?;
+        let outer = tx.create(Parent::Object(row), column_node)?;
         tx.create(
             Parent::Object(outer),
             layout(

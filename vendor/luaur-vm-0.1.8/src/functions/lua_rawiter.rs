@@ -21,6 +21,7 @@ pub unsafe fn lua_rawiter(
     iter: core::ffi::c_int,
 ) -> core::ffi::c_int {
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 2);
 
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));

@@ -4,7 +4,6 @@ use crate::records::ast_local::AstLocal;
 use crate::records::ast_name::AstName;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_local::AstStatLocal;
-use crate::records::cst_stat_local::CstStatLocal;
 use crate::records::lexeme::Type;
 use crate::records::location::Location;
 use crate::records::name::Name;
@@ -25,7 +24,7 @@ impl Parser {
     fn export_local_stat_value(
         &mut self,
         stat: *mut AstStat,
-        keyword_position: Position,
+        keyword_location: Location,
     ) -> *mut AstStat {
         let local_stat = unsafe {
             crate::rtti::ast_node_as::<AstStatLocal>(stat as *mut crate::records::ast_node::AstNode)
@@ -41,18 +40,13 @@ impl Parser {
                 if !self.check_duplicate_export_value(unsafe { (*local).name }, unsafe {
                     (*local).location
                 }) {
-                    let stats = self.copy_initializer_list_t(&[stat as *mut AstStat]);
-                    return self.report_stat_error(
+                    self.report_location_c_char_item(
                         unsafe { (*local).location },
-                        AstArray {
-                            data: core::ptr::null_mut(),
-                            size: 0,
-                        },
-                        stats,
                         format_args!("Duplicate exported identifier '{}'", unsafe {
                             core::ffi::CStr::from_ptr((*local).name.value).to_string_lossy()
                         }),
-                    ) as *mut AstStat;
+                    );
+                    continue;
                 }
 
                 unsafe {
@@ -60,23 +54,8 @@ impl Parser {
                 }
             }
 
-            if self.options.store_cst_data {
-                let cst_stat_local = unsafe {
-                    let cst_node = self
-                        .cst_node_map
-                        .find(&(stat as *mut crate::records::ast_node::AstNode));
-                    if let Some(cst_node_ptr) = cst_node {
-                        crate::rtti::cst_node_as::<CstStatLocal>(*cst_node_ptr)
-                    } else {
-                        core::ptr::null_mut()
-                    }
-                };
-                LUAU_ASSERT!(!cst_stat_local.is_null());
-                if !cst_stat_local.is_null() {
-                    unsafe {
-                        (*cst_stat_local).declaration_keyword_position = keyword_position;
-                    }
-                }
+            unsafe {
+                (*local_stat).keyword_location = Some(keyword_location);
             }
         } else {
             LUAU_ASSERT!(
@@ -119,15 +98,22 @@ impl Parser {
         }
 
         if self.lexer.current().r#type == Type::ReservedLocal {
-            let local_keyword_position = self.lexer.current().location.begin;
+            let local_keyword_location = self.lexer.current().location;
 
             if self.lexer.lookahead().r#type == Type::ReservedFunction {
-                return self.report_stat_error(
+                self.report_location_c_char_item(
                     *start,
-                    AstArray { data: core::ptr::null_mut(), size: 0 },
-                    AstArray { data: core::ptr::null_mut(), size: 0 },
                     format_args!("'export' must be followed by an identifier or 'function'; try removing 'local'"),
-                ) as *mut AstStat;
+                );
+                return self.parse_local(
+                    *start,
+                    local_keyword_location.begin,
+                    &AstArray {
+                        data: core::ptr::null_mut(),
+                        size: 0,
+                    },
+                    true,
+                );
             }
 
             let stat = self.parse_local(
@@ -139,7 +125,7 @@ impl Parser {
                 },
                 false,
             );
-            return self.export_local_stat_value(stat, local_keyword_position);
+            return self.export_local_stat_value(stat, local_keyword_location);
         } else if self.lexer.current().r#type == Type::ReservedFunction {
             let func_stat = self.parse_local(*start, keyword_position, attributes, true);
             if !crate::rtti::ast_node_is::<
@@ -156,18 +142,12 @@ impl Parser {
             if !self
                 .check_duplicate_export_value(unsafe { (*name).name }, unsafe { (*name).location })
             {
-                let stats = self.copy_initializer_list_t(&[func_stat as *mut AstStat]);
-                return self.report_stat_error(
+                self.report_location_c_char_item(
                     unsafe { (*name).location },
-                    AstArray {
-                        data: core::ptr::null_mut(),
-                        size: 0,
-                    },
-                    stats,
                     format_args!("Duplicate exported identifier '{}'", unsafe {
                         core::ffi::CStr::from_ptr((*name).name.value).to_string_lossy()
                     }),
-                ) as *mut AstStat;
+                );
             }
 
             unsafe {
@@ -179,34 +159,35 @@ impl Parser {
             && unsafe { AstName::ast_name_c_char(self.lexer.current().data.name) }
                 .operator_eq_c_char(b"const\0".as_ptr() as *const core::ffi::c_char)
         {
-            let const_keyword_position = self.lexer.current().location.begin;
+            let const_keyword_location = self.lexer.current().location;
             self.next_lexeme();
 
             if self.lexer.current().r#type == Type::ReservedFunction {
-                return self.report_stat_error(
+                self.report_location_c_char_item(
                     *start,
-                    AstArray {
-                        data: core::ptr::null_mut(),
-                        size: 0,
-                    },
-                    AstArray {
-                        data: core::ptr::null_mut(),
-                        size: 0,
-                    },
                     format_args!("'export' must be followed by an identifier or 'function'"),
-                ) as *mut AstStat;
+                );
+                return self.parse_local(
+                    *start,
+                    const_keyword_location.begin,
+                    &AstArray {
+                        data: core::ptr::null_mut(),
+                        size: 0,
+                    },
+                    true,
+                );
             }
 
             let stat = self.parse_local(
                 *start,
-                const_keyword_position,
+                const_keyword_location.begin,
                 &AstArray {
                     data: core::ptr::null_mut(),
                     size: 0,
                 },
                 true,
             );
-            return self.export_local_stat_value(stat, const_keyword_position);
+            return self.export_local_stat_value(stat, const_keyword_location);
         } else if luaur_common::FFlag::DebugLuauUserDefinedClasses.get()
             && self.lexer.current().r#type == Type::Name
             && unsafe { AstName::ast_name_c_char(self.lexer.current().data.name) }
@@ -220,18 +201,12 @@ impl Parser {
                 if !self.check_duplicate_export_value(unsafe { (*name).name }, unsafe {
                     (*name).location
                 }) {
-                    let stats = self.copy_initializer_list_t(&[stat as *mut AstStat]);
-                    return self.report_stat_error(
+                    self.report_location_c_char_item(
                         unsafe { (*name).location },
-                        AstArray {
-                            data: core::ptr::null_mut(),
-                            size: 0,
-                        },
-                        stats,
                         format_args!("Duplicate exported class '{}'", unsafe {
                             core::ffi::CStr::from_ptr((*name).name.value).to_string_lossy()
                         }),
-                    ) as *mut AstStat;
+                    );
                 }
 
                 unsafe {

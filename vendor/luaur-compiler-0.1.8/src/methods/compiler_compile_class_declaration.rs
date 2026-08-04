@@ -9,6 +9,10 @@ impl Compiler {
     pub fn compile_class_declaration(&mut self, decl: *mut AstStatClass) {
         let dest = self.alloc_reg(decl as *mut _, 1);
         self.push_local(unsafe { (*decl).name }, dest, !0u32);
+        if luaur_common::FFlag::LuauExportValueSyntax.get() && unsafe { (*decl).exported } {
+            self.ensure_export_table(decl as *mut _);
+            *self.exported_classes.get_or_insert(unsafe { (*decl).name }) = dest;
+        }
         // C++ `RegScope _(this)` after pushLocal: reclaims the transient `temp` register on
         // scope exit so it doesn't leak past the declaration (the port had dropped this).
         let _rs = self.reg_scope_compiler();
@@ -50,9 +54,6 @@ impl Compiler {
             let class_const = (*self.bytecode).add_class_shape(shape);
             self.check_constant(class_const, &(*decl).base.base.location);
             (*self.bytecode).patch_aux(aux_offset, class_const);
-            if luaur_common::FFlag::LuauExportValueSyntax.get() && (*decl).exported {
-                self.exported_classes.push((class_name, dest));
-            }
         }
     }
 }

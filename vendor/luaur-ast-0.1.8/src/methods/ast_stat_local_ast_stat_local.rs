@@ -26,6 +26,7 @@ impl AstStatLocal {
             values,
             is_const,
             is_exported: false,
+            keyword_location: None,
             equals_sign_location,
         }
     }

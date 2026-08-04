@@ -6,12 +6,14 @@ use crate::functions::lua_d_pcall::luaD_pcall;
 use crate::functions::lua_gettop::lua_gettop;
 use crate::functions::lua_insert::lua_insert;
 use crate::functions::lua_l_checkany::lua_l_checkany;
+use crate::functions::lua_l_pcallyieldable::lua_l_pcallyieldable;
 use crate::functions::lua_pushboolean::lua_pushboolean;
 use crate::functions::lua_rawcheckstack::lua_rawcheckstack;
 use crate::macros::c_call_yield::C_CALL_YIELD;
 use crate::macros::expandstacklimit::expandstacklimit;
 use crate::macros::isyielded::isyielded;
 use crate::macros::lua_callinfo_handle::LUA_CALLINFO_HANDLE;
+use crate::macros::lua_multret::LUA_MULTRET;
 use crate::macros::savestack::savestack;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
@@ -19,6 +21,10 @@ use crate::type_aliases::stk_id::StkId;
 #[allow(non_snake_case)]
 pub unsafe fn lua_b_pcally(L: *mut lua_State) -> i32 {
     lua_l_checkany(L, 1);
+
+    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+        return lua_l_pcallyieldable(L, lua_gettop(L) - 1, LUA_MULTRET, 0);
+    }
 
     let func: StkId = (*L).base;
     (*(*L).ci).flags |= LUA_CALLINFO_HANDLE as u32;

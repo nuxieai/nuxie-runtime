@@ -24,5 +24,5 @@ pub unsafe fn luaG_onbreak(l: *mut lua_State) -> bool {
         return false;
     }
 
-    LUAU_INSN_OP(*(*(*l).ci).savedpc) == LuauOpcode::LOP_BREAK as u32
+    LUAU_INSN_OP(*(*(*l).ci).context.savedpc) == LuauOpcode::LOP_BREAK as u32
 }

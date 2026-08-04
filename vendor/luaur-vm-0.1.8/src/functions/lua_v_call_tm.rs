@@ -34,7 +34,7 @@ pub unsafe fn lua_v_call_tm(L: *mut lua_State, nparams: i32, res: i32) {
     (*ci).func = fun;
     (*ci).base = fun.add(1);
     (*ci).top = top.add(LUA_MINSTACK as usize);
-    (*ci).savedpc = std::ptr::null_mut();
+    (*ci).context.savedpc = std::ptr::null_mut();
     (*ci).flags = 0;
     (*ci).nresults = if res >= 0 { 1 } else { 0 };
     LUAU_ASSERT!((*ci).top <= (*L).stack_last);

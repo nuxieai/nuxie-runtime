@@ -220,50 +220,27 @@ impl Parser {
                 let r#type = self.parse_type_bool(false);
                 is_array = true;
 
-                if luaur_common::FFlag::DesugaredArrayTypeReferenceIsEmpty.get() {
-                    let null_type_location = Location::with_length(start.begin, 0);
-                    let index = unsafe {
-                        (*self.allocator).alloc(AstTypeReference::new(
-                            null_type_location,
-                            None,
-                            self.name_number,
-                            None,
-                            null_type_location,
-                            false,
-                            AstArray::default(),
-                        ))
-                    } as *mut AstType;
-                    indexer = unsafe {
-                        (*self.allocator).alloc(AstTableIndexer {
-                            index_type: index,
-                            result_type: r#type,
-                            location: (*r#type).base.location,
-                            access,
-                            access_location,
-                        })
-                    };
-                } else {
-                    let index = unsafe {
-                        (*self.allocator).alloc(AstTypeReference::new(
-                            (*r#type).base.location,
-                            None,
-                            self.name_number,
-                            None,
-                            (*r#type).base.location,
-                            false,
-                            AstArray::default(),
-                        ))
-                    } as *mut AstType;
-                    indexer = unsafe {
-                        (*self.allocator).alloc(AstTableIndexer {
-                            index_type: index,
-                            result_type: r#type,
-                            location: (*r#type).base.location,
-                            access,
-                            access_location,
-                        })
-                    };
-                }
+                let null_type_location = Location::with_length(start.begin, 0);
+                let index = unsafe {
+                    (*self.allocator).alloc(AstTypeReference::new(
+                        null_type_location,
+                        None,
+                        self.name_number,
+                        None,
+                        null_type_location,
+                        false,
+                        AstArray::default(),
+                    ))
+                } as *mut AstType;
+                indexer = unsafe {
+                    (*self.allocator).alloc(AstTableIndexer {
+                        index_type: index,
+                        result_type: r#type,
+                        location: (*r#type).base.location,
+                        access,
+                        access_location,
+                    })
+                };
 
                 break;
             } else {

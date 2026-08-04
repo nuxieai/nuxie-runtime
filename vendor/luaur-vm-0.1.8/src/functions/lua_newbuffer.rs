@@ -16,6 +16,7 @@ pub fn lua_newbuffer(L: *mut lua_State, sz: usize) -> *mut core::ffi::c_void {
     unsafe {
         luaC_checkGC!(L);
         lua_c_threadbarrier_lapi(L);
+        crate::ensure_stack!(L, 1);
         let b = lua_b_newbuffer(L, sz);
         setbufvalue!(L, (*L).top, b);
         api_incr_top!(L);

@@ -136,7 +136,7 @@ ratchet floor at every rung):
 
 | rung | range | scoped delta | status |
 |---|---|---|---|
-| 1 | `8f33df91..91caa731` (0.725) | 549+/209- | in progress |
+| 1 | `8f33df91..91caa731` (0.725) | 549+/209- | landed 2026-08-04: 75 rows ported, 29 no-op (C++-only scoping), 10 Require rows out of scope; new dark flags `LuauAutoStack`, `LuauCloneTableFix`, `LuauCustomYieldablePcalls`, `LuauUdataMetatablePinned` in the keep-OFF set; `DesugaredArrayTypeReferenceIsEmpty` removed (ON path hardwired) |
 | 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | inventoried |
 | 3 | `86d2a9dc..f1f121dc` (0.727) | 867+/626- | inventoried |
 | 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | inventoried |

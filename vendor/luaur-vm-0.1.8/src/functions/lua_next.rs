@@ -18,6 +18,7 @@ use crate::type_aliases::stk_id::StkId;
 pub unsafe fn lua_next(L: *mut lua_State, idx: c_int) -> c_int {
     api_checknelems!(L, 1);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));
 

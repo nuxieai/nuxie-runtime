@@ -38,15 +38,15 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
     // continue execution from the same point, this is called with savedpc at
     // the *current* instruction. this needs to be called before
     // luaD_checkstack in case it fails to reallocate stack
-    let oldsavedpc = (*(*L).ci).savedpc;
+    let oldsavedpc = (*(*L).ci).context.savedpc;
 
-    if !(*(*L).ci).savedpc.is_null() {
+    if !(*(*L).ci).context.savedpc.is_null() {
         let code_end = {
             let l = &(*cl).inner.l;
             (*l.p).code.add((*l.p).sizecode as usize)
         };
-        if (*(*L).ci).savedpc != code_end {
-            (*(*L).ci).savedpc = (*(*L).ci).savedpc.add(1);
+        if (*(*L).ci).context.savedpc != code_end {
+            (*(*L).ci).context.savedpc = (*(*L).ci).context.savedpc.add(1);
         }
     }
 
@@ -62,7 +62,7 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
             let l = &(*cl).inner.l;
             l.p
         };
-        luaG_getline(p, pcRel!((*(*L).ci).savedpc, p))
+        luaG_getline(p, pcRel!((*(*L).ci).context.savedpc, p))
     };
     ar.userdata = userdata;
 
@@ -70,7 +70,7 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
         hook(L, &mut ar);
     }
 
-    (*(*L).ci).savedpc = oldsavedpc;
+    (*(*L).ci).context.savedpc = oldsavedpc;
 
     (*(*L).ci).top = restorestack!(L, ci_top);
     (*L).top = restorestack!(L, top);

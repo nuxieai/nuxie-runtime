@@ -64,7 +64,7 @@ impl Compiler {
             inline_frames: Vec::new(),
             captures: Vec::new(),
             exported_locals: Vec::new(),
-            exported_classes: Vec::new(),
+            exported_classes: DenseHashMap::new(core::ptr::null_mut()),
         };
 
         compiler.local_stack.reserve(16);

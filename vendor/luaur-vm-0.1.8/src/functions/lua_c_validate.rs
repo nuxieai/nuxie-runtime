@@ -5,6 +5,7 @@ use crate::functions::validategraylist::validategraylist;
 use crate::macros::checkliveness::checkliveness;
 use crate::macros::isblack::isblack;
 use crate::macros::isdead::isdead;
+use crate::macros::lua_utag_limit::LUA_UTAG_LIMIT;
 use crate::macros::obj_2_gco::obj2gco;
 use crate::macros::upisopen::upisopen;
 use crate::records::gc_object::GCObject;
@@ -28,6 +29,13 @@ pub unsafe fn lua_c_validate(L: *mut lua_State) {
 
     for i in 0..(crate::enums::lua_type::LUA_T_COUNT as i32) {
         let mt = (*g).mt[i as usize];
+        if !mt.is_null() {
+            LUAU_ASSERT!(!isdead!(g, mt as *mut GCObject));
+        }
+    }
+
+    for i in 0..LUA_UTAG_LIMIT as usize {
+        let mt = (*g).udatamt[i];
         if !mt.is_null() {
             LUAU_ASSERT!(!isdead!(g, mt as *mut GCObject));
         }

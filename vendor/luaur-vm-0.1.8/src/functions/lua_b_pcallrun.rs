@@ -6,6 +6,7 @@ use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
 pub unsafe fn lua_b_pcallrun(L: *mut lua_State, ud: *mut core::ffi::c_void) {
+    luaur_common::LUAU_ASSERT!(!luaur_common::FFlag::LuauCustomYieldablePcalls.get());
     let func: StkId = ud as StkId;
     let preparereentry = lua_isyieldable(L) != 0;
     lua_d_callint(L, func, LUA_MULTRET, preparereentry);

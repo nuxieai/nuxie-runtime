@@ -32,6 +32,7 @@ pub unsafe fn lua_pushcclosurek(
     api_check!(L, nup >= 0);
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     api_checknelems!(L, nup);
 
     let cl = luaF_newCclosure(L, nup, getcurrenv(L));

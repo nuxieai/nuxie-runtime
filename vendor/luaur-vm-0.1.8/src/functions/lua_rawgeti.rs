@@ -15,6 +15,7 @@ use crate::type_aliases::stk_id::StkId;
 #[allow(non_snake_case)]
 pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: c_int) -> c_int {
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
 
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));

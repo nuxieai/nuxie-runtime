@@ -37,7 +37,7 @@ pub unsafe fn luau_precall(
     (*ci).func = func;
     (*ci).base = func.add(1);
     (*ci).top = (*L).top.add((*ccl).stacksize as usize);
-    (*ci).savedpc = core::ptr::null();
+    (*ci).context.savedpc = core::ptr::null();
     (*ci).flags = 0;
     (*ci).nresults = nresults;
     if luaur_common::FFlag::LuauClosureUsageCounter.get() {
@@ -65,7 +65,7 @@ pub unsafe fn luau_precall(
         }
         (*L).top = if (*p).is_vararg != 0 { argi } else { (*ci).top };
 
-        (*ci).savedpc = (*p).code;
+        (*ci).context.savedpc = (*p).code;
 
         // VM_HAS_NATIVE
         if (*p).exectarget != 0 && !(*p).execdata.is_null() {

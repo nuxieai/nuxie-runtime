@@ -17,6 +17,7 @@ pub unsafe fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: UserdataDt
     api_check!(L, dtor.is_some());
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
 
     let dtor_size = core::mem::size_of::<UserdataDtor>();
     let as_ = if sz < usize::MAX - dtor_size {

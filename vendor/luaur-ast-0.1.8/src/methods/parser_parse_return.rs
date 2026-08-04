@@ -1,5 +1,4 @@
 use crate::functions::is_expr_l_value::is_expr_l_value;
-use crate::records::ast_expr::AstExpr;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_return::AstStatReturn;
 use crate::records::cst_stat_return::CstStatReturn;
@@ -59,13 +58,10 @@ impl Parser {
             && self.function_stack.len() == 1
         {
             if !self.declared_export_bindings.is_empty() {
-                let expressions = self.copy_initializer_list_t(&[node as *mut AstExpr]);
-                return self.report_stat_error(
+                self.report_location_c_char_item(
                     unsafe { (*node).base.base.location },
-                    expressions,
-                    crate::records::ast_array::AstArray { data: std::ptr::null_mut(), size: 0 },
                     format_args!("Exporting values is not compatible with top-level return (export/return conflict)"),
-                ) as *mut AstStat;
+                );
             }
 
             self.has_module_return = true;

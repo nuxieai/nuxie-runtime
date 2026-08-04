@@ -13,6 +13,7 @@ pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, len: usize) {
     api_check!(L, !s.is_null());
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
+    crate::ensure_stack!(L, 1);
     setsvalue!(L, (*L).top, luaS_newlstr(L, s, len));
     api_incr_top!(L);
 }

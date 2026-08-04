@@ -6,8 +6,8 @@ use crate::records::constant::Constant;
 use crate::records::function::Function;
 use crate::records::inline_frame::InlineFrame;
 use crate::records::local::Local;
-use crate::records::loop_jump::LoopJump;
 use crate::records::r#loop::Loop;
+use crate::records::loop_jump::LoopJump;
 use crate::records::table_shape::TableShape;
 use crate::records::variable::Variable;
 use alloc::string::String;
@@ -64,5 +64,5 @@ pub struct Compiler {
     pub inline_frames: Vec<InlineFrame>,
     pub captures: Vec<Capture>,
     pub exported_locals: Vec<*mut AstLocal>,
-    pub exported_classes: Vec<(AstName, u8)>,
+    pub exported_classes: DenseHashMap<*mut AstLocal, u8>,
 }

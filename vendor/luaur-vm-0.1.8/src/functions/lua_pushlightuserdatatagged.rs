@@ -9,6 +9,7 @@ pub fn lua_pushlightuserdatatagged(
     p: *mut core::ffi::c_void,
     tag: core::ffi::c_int,
 ) {
+    crate::ensure_stack!(L, 1);
     api_check!(L, (tag as u32) < LUA_LUTAG_LIMIT as u32);
     unsafe {
         setpvalue!((*L).top, p, tag);

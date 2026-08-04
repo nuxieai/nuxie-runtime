@@ -5320,6 +5320,7 @@ impl ArtboardInstance {
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
                 text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: Some(source_path.raw_path),
@@ -9917,15 +9918,80 @@ impl RuntimeTextDrawOwner {
             let effective_opacity =
                 render_opacity * command.text_path_bucket_opacity.unwrap_or(1.0);
             command.render_opacity = effective_opacity;
-            if let Some(paint) = graph
-                .shape_paint_containers
-                .iter()
-                .flat_map(|container| container.paints.iter())
-                .find(|paint| paint.local_id == command.paint_local)
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
             {
                 command.paint_state = runtime_shape_paint_state(instance, paint, effective_opacity);
             }
         }
+        true
+    }
+
+    fn propagate_world_transform(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        text_local: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> bool {
+        let text_world = instance.runtime_component_world_transform_with_bounds(
+            text_local,
+            graph,
+            layout_bounds,
+        );
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        let shape_world = text_world.multiply(frame.shape_local_transform);
+        let commands = Arc::make_mut(&mut frame.commands);
+        let mut world_geometry_changed = false;
+        for command in commands.iter_mut() {
+            let previous_shape_world = command.shape_world_override.unwrap_or(shape_world);
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
+            {
+                let path_kind = runtime_live_shape_paint_path_kind(instance, paint)
+                    .unwrap_or(command.path_kind);
+                command.paint_space_transform =
+                    runtime_shape_paint_space_transform(path_kind, shape_world);
+                if path_kind == RuntimeShapePaintPathKind::World {
+                    let delta = shape_world.multiply(previous_shape_world.invert_or_identity());
+                    transform_path_commands(&mut command.path_commands, delta);
+                    transform_path_commands(&mut command.effect_path_commands, delta);
+                    if let Some(feather) = command.feather_state.as_mut() {
+                        transform_path_commands(&mut feather.inner_path_commands, delta);
+                    }
+                    world_geometry_changed = true;
+                }
+            }
+            command.shape_world_override = Some(shape_world);
+        }
+        if world_geometry_changed {
+            frame.paths = Arc::new(runtime_text_owned_raw_paths(commands));
+        }
+        if let Some(color) = frame.color.as_mut() {
+            Arc::make_mut(color).shape_world = shape_world;
+        }
+        frame.clip_path = frame.clip_bounds.map(|bounds| {
+            Arc::new(runtime_raw_path_from_commands(
+                &runtime_text_clip_path_commands(bounds, text_world),
+            ))
+        });
         true
     }
 
@@ -13753,6 +13819,7 @@ pub struct RuntimeShapePaintCommand {
     pub uses_temporary_paint: bool,
     pub(crate) text_path_bucket_slot: Option<usize>,
     pub(crate) text_path_bucket_opacity: Option<f32>,
+    pub(crate) text_paint_ref: Option<(usize, usize)>,
     pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
     pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
     // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
@@ -14861,7 +14928,9 @@ struct RuntimeCachedTextShapePaints {
     replay: Arc<Vec<RuntimeTextReplay>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    clip_bounds: Option<StaticTextClipBounds>,
     color: Option<Arc<RuntimeRetainedColorGlyphs>>,
+    shape_local_transform: Mat2D,
     publishes_layout_dirty: bool,
 }
 
@@ -16801,6 +16870,7 @@ fn runtime_prepare_gradient_paint_command(
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
         text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -16939,7 +17009,9 @@ fn runtime_build_text_draw_frame(
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: false,
             });
         }
@@ -16957,7 +17029,8 @@ fn runtime_build_text_draw_frame(
     } else {
         None
     };
-    let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
+    let (mut commands, clip_bounds, color, shape_local_transform) = if drawable.type_name == "Text"
+    {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
         let topology = topology
@@ -16972,6 +17045,7 @@ fn runtime_build_text_draw_frame(
             layout_bounds,
             layout_constraint,
         )?;
+        let shape_local_transform = draw_data.local_transform;
         (
             draw_data.commands,
             topology.clip_bounds(runtime, instance, layout_constraint)?,
@@ -16982,6 +17056,7 @@ fn runtime_build_text_draw_frame(
                     shape_world: draw_data.shape_world,
                 })
             }),
+            shape_local_transform,
         )
     } else {
         (
@@ -16994,6 +17069,7 @@ fn runtime_build_text_draw_frame(
             )?,
             None,
             None,
+            Mat2D::IDENTITY,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
@@ -17036,7 +17112,9 @@ fn runtime_build_text_draw_frame(
         replay: Arc::new(replay),
         paths,
         clip_path,
+        clip_bounds,
         color,
+        shape_local_transform,
         publishes_layout_dirty: true,
     })
 }
@@ -17183,19 +17261,28 @@ impl ArtboardInstance {
             let Some(owner) = drawable.text_draw_owner.as_ref() else {
                 continue;
             };
-            if (dirt
-                & (ComponentDirt::TEXT_SHAPE
-                    | ComponentDirt::PAINT
-                    | ComponentDirt::WORLD_TRANSFORM))
-                .is_empty()
-                && dirt.contains(ComponentDirt::RENDER_OPACITY)
-            {
+            let rebuild_dirt = dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT);
+            if rebuild_dirt.is_empty() && dirt.contains(ComponentDirt::RENDER_OPACITY) {
                 // C++ `Text::update(RenderOpacity)` only calls
                 // `TextStylePaint::propagateOpacity`; shaped paragraphs,
                 // lines, draw commands, and render paths remain retained.
                 // Refresh the command-side opacity used by Rust's pooled
                 // paints without reconstructing glyph topology or geometry.
                 owner.propagate_render_opacity(self, graph, target_local);
+            }
+            if rebuild_dirt.is_empty()
+                && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                && drawable.type_name == "Text"
+            {
+                // C++ updates m_shapeWorldTransform and m_clipPath after the
+                // shape/paint branch. Preserve shaped glyph topology and the
+                // retained backend objects while refreshing world-space
+                // command and clip data.
+                owner.propagate_world_transform(self, graph, target_local, layout_bounds);
+            }
+            if rebuild_dirt.is_empty()
+                && (!dirt.contains(ComponentDirt::WORLD_TRANSFORM) || drawable.type_name == "Text")
+            {
                 continue;
             }
             if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
@@ -20307,6 +20394,7 @@ fn runtime_shape_paint_command_with_effect_path(
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
         text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -26182,7 +26270,9 @@ mod tests {
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: true,
             })
         };
@@ -26210,7 +26300,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26487,6 +26579,18 @@ mod tests {
             )
             .expect("initial retained text draws");
         let cold = cold_factory.canonical_recording().stream().to_string();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let (commands_before, paths_before) = {
+            let owner = instance.runtime_drawables.drawables[drawable_index]
+                .text_draw_owner
+                .as_ref()
+                .expect("Text has a retained owner");
+            let frame_before = owner.retained_frame().expect("initial update retains text");
+            (
+                Arc::as_ptr(&frame_before.commands),
+                Arc::as_ptr(&frame_before.paths),
+            )
+        };
 
         // A position-only layout move publishes recursive WORLD_TRANSFORM dirt
         // from the moved owner (`layout_component.cpp:1167-1178`). When that
@@ -26500,6 +26604,23 @@ mod tests {
         instance.update_pass();
         instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
         instance.update_pass();
+
+        let frame_after = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner")
+            .retained_frame()
+            .expect("world transform keeps retained text");
+        assert_eq!(
+            Arc::as_ptr(&frame_after.commands),
+            commands_before,
+            "world-transform dirt must not reconstruct shaped draw commands",
+        );
+        assert_eq!(
+            Arc::as_ptr(&frame_after.paths),
+            paths_before,
+            "world-transform dirt must retain local glyph paths",
+        );
 
         let mut fresh_factory = nuxie_render_api::RecordingFactory::new();
         let mut fresh_renderer = fresh_factory.make_renderer();
@@ -26753,7 +26874,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26805,6 +26928,7 @@ mod tests {
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
                 text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: None,
@@ -26812,7 +26936,9 @@ mod tests {
             replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner.mark_render_styles_dirty();
@@ -26841,7 +26967,9 @@ mod tests {
                     replay: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    clip_bounds: None,
                     color: None,
+                    shape_local_transform: Mat2D::IDENTITY,
                     publishes_layout_dirty: true,
                 })
             })

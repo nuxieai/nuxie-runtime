@@ -600,7 +600,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
         .unwrap_or(1.0);
     let text_world =
         instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
-    let render_data = slice.render_data(runtime, instance, layout_constraint, text_world)?;
+    let render_data = slice.render_data(runtime, instance, graph, layout_constraint, text_world)?;
     if render_data
         .path_buckets_by_style
         .iter()
@@ -621,7 +621,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
     for style_index in style_order {
         let style = &slice.styles[style_index];
         let path_buckets = render_data.path_buckets_by_style[style_index].clone();
-        let Some(container) = style.container.as_ref() else {
+        let Some(container) = style.container(graph) else {
             continue;
         };
         let path_buckets = order_opacity_buckets_like_cpp(path_buckets);
@@ -637,7 +637,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
             .iter()
             .enumerate()
             .find(|(_, path_bucket)| path_bucket.opacity == 1.0);
-        for paint in &container.paints {
+        for (paint_index, paint) in container.paints.iter().enumerate() {
             if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
                 if runtime_live_shape_paint_path_kind(instance, paint)
@@ -663,6 +663,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
                     }
                     command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
                     command.text_path_bucket_opacity = Some(path_bucket.opacity);
+                    command.text_paint_ref = Some((style.container_index.unwrap(), paint_index));
                     command.ensure_text_paint_pool_after_draw = Some(paint_pool);
                     commands.push(command);
                 }
@@ -701,6 +702,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
                 command.uses_temporary_paint = true;
                 command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
                 command.text_path_bucket_opacity = Some(path_bucket.opacity);
+                command.text_paint_ref = Some((style.container_index.unwrap(), paint_index));
                 command.text_paint_pool = Some(RuntimeTextPaintPoolUse {
                     spec: paint_pool,
                     paint_index,
@@ -714,6 +716,7 @@ pub(crate) fn runtime_text_draw_data_from_slice(
         color_glyphs: render_data.color_glyphs,
         order: render_data.order,
         shape_world,
+        local_transform: render_data.local_transform,
     })
 }
 
@@ -739,13 +742,14 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
     {
         bail!("TextInputDrawable parent is not TextInput");
     }
-    let container = graph
+    let container_index = graph
         .shape_paint_containers
         .iter()
-        .find(|container| container.local_id == drawable_local)
+        .position(|container| container.local_id == drawable_local)
         .with_context(|| {
             format!("TextInputDrawable local {drawable_local} missing shape paint container")
         })?;
+    let container = &graph.shape_paint_containers[container_index];
     let slice = StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)?;
     let layout_constraint =
         instance.runtime_text_input_layout_constraint(text_input_local, graph, layout_bounds);
@@ -778,6 +782,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
             let render_data = slice.render_data_filtered(
                 runtime,
                 instance,
+                graph,
                 layout_constraint,
                 text_input_world,
                 filter,
@@ -786,6 +791,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
             return slice.text_input_paint_commands(
                 instance,
                 container,
+                container_index,
                 needs_save_operation,
                 render_opacity,
                 shape_world,
@@ -819,6 +825,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
     slice.text_input_paint_commands(
         instance,
         container,
+        container_index,
         needs_save_operation,
         render_opacity,
         text_input_world,
@@ -865,7 +872,10 @@ struct StaticTextStyle {
     local_id: usize,
     global_id: u32,
     name: Option<String>,
-    container: Option<ShapePaintContainerNode>,
+    /// Stable handle into `ArtboardGraph::shape_paint_containers`; the graph
+    /// remains the sole owner of paint descriptors and mutable occurrence
+    /// state remains on `ArtboardInstance`.
+    container_index: Option<usize>,
     font_asset_global: Option<u32>,
     font_asset_id: Option<u32>,
     variations: Vec<StaticTextVariation>,
@@ -935,6 +945,7 @@ pub(crate) struct RuntimeTextDrawData {
     pub(crate) color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
     pub(crate) order: Vec<RuntimeTextDrawOrder>,
     pub(crate) shape_world: Mat2D,
+    pub(crate) local_transform: Mat2D,
 }
 
 impl Default for RuntimeTextDrawData {
@@ -944,6 +955,7 @@ impl Default for RuntimeTextDrawData {
             color_glyphs: Vec::new(),
             order: Vec::new(),
             shape_world: Mat2D::IDENTITY,
+            local_transform: Mat2D::IDENTITY,
         }
     }
 }
@@ -2289,16 +2301,25 @@ impl StaticTextSlice {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
         text_world: Mat2D,
     ) -> Result<StaticTextRenderData> {
-        self.render_data_filtered(runtime, instance, layout_constraint, text_world, None)
+        self.render_data_filtered(
+            runtime,
+            instance,
+            graph,
+            layout_constraint,
+            text_world,
+            None,
+        )
     }
 
     fn render_data_filtered(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
         text_world: Mat2D,
         selection_filter: Option<(std::ops::Range<usize>, bool)>,
@@ -2352,7 +2373,7 @@ impl StaticTextSlice {
                         let layers = runtime_extract_color_glyph_layers(
                             style_font_bytes,
                             glyph.glyph_id,
-                            style.foreground_color(instance),
+                            style.foreground_color(instance, graph),
                         );
                         if !layers.is_empty() {
                             let color_index = color_glyphs.len();
@@ -4373,6 +4394,7 @@ impl StaticTextSlice {
         &self,
         instance: &ArtboardInstance,
         container: &ShapePaintContainerNode,
+        container_index: usize,
         needs_save_operation: bool,
         render_opacity: f32,
         shape_world: Mat2D,
@@ -4380,7 +4402,7 @@ impl StaticTextSlice {
     ) -> Result<Vec<RuntimeShapePaintCommand>> {
         let mut commands = Vec::new();
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
-            for paint in &container.paints {
+            for (paint_index, paint) in container.paints.iter().enumerate() {
                 let mut path_commands = path_bucket.commands.clone();
                 if runtime_live_shape_paint_path_kind(instance, paint)
                     == Some(RuntimeShapePaintPathKind::World)
@@ -4406,6 +4428,7 @@ impl StaticTextSlice {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
                 command.text_path_bucket_opacity = Some(path_bucket.opacity);
+                command.text_paint_ref = Some((container_index, paint_index));
                 commands.push(command);
             }
         }
@@ -4414,9 +4437,17 @@ impl StaticTextSlice {
 }
 
 impl StaticTextStyle {
-    fn foreground_color(&self, instance: &ArtboardInstance) -> u32 {
-        self.container
-            .as_ref()
+    fn container<'graph>(
+        &self,
+        graph: &'graph ArtboardGraph,
+    ) -> Option<&'graph ShapePaintContainerNode> {
+        self.container_index
+            .and_then(|index| graph.shape_paint_containers.get(index))
+            .filter(|container| container.local_id == self.local_id)
+    }
+
+    fn foreground_color(&self, instance: &ArtboardInstance, graph: &ArtboardGraph) -> u32 {
+        self.container(graph)
             .into_iter()
             .flat_map(|container| container.paints.iter())
             .find(|paint| {
@@ -4491,12 +4522,13 @@ impl StaticTextStyle {
         style_local: usize,
     ) -> Result<Self> {
         let style_global = global_for_local(graph, style_local)?;
-        let container = graph
+        let container_index = graph
             .shape_paint_containers
             .iter()
-            .find(|container| container.local_id == style_local)
-            .cloned();
-        if let Some(container) = container.as_ref() {
+            .position(|container| container.local_id == style_local);
+        if let Some(container) =
+            container_index.and_then(|index| graph.shape_paint_containers.get(index))
+        {
             for paint in &container.paints {
                 if !matches!(
                     paint.paint_type,
@@ -4593,7 +4625,7 @@ impl StaticTextStyle {
             local_id: style_local,
             global_id: style_global,
             name: style.string_property("name").map(str::to_owned),
-            container,
+            container_index,
             font_asset_global,
             font_asset_id,
             variations,

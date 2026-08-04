@@ -13,7 +13,7 @@ impl DenseHasher<u64> for ConstantHasher {
 
 #[test]
 fn set_grows_and_erases_across_probe_chains() {
-    let mut set = DenseHashSet2::<u64>::new(0);
+    let mut set = DenseHashSet2::<u64>::new();
 
     for key in 0..256 {
         assert_eq!(*set.insert(key), key);
@@ -31,13 +31,13 @@ fn set_grows_and_erases_across_probe_chains() {
 
 #[test]
 fn map_try_insert_preserves_existing_value() {
-    let mut map = DenseHashMap2::<u64, u64>::new(0);
+    let mut map = DenseHashMap2::<u64, u64>::new();
 
-    let (value, fresh) = map.try_insert(7, 41);
+    let (value, fresh) = map.try_insert(7, &41);
     assert!(fresh);
     assert_eq!(*value, 41);
 
-    let (value, fresh) = map.try_insert(7, 99);
+    let (value, fresh) = map.try_insert(7, &99);
     assert!(!fresh);
     assert_eq!(*value, 41);
 
@@ -47,12 +47,12 @@ fn map_try_insert_preserves_existing_value() {
 
 #[test]
 fn erase_preserves_a_degenerate_linear_probe_cluster() {
-    let mut map = DenseHashMap2::<u64, u64, ConstantHasher, DenseEqDefault<u64>>::new(16);
+    let mut map = DenseHashMap2::<u64, u64, ConstantHasher, DenseEqDefault<u64>>::with_buckets(16);
 
     // Every key starts at bucket zero, forcing Algorithm R to repair the
     // longest possible probe chain after each deletion.
     for key in 0..12 {
-        map.try_insert(key, key + 100);
+        map.try_insert(key, &(key + 100));
     }
 
     let mut erased = alloc::vec::Vec::new();
@@ -67,4 +67,21 @@ fn erase_preserves_a_degenerate_linear_probe_cluster() {
             }
         }
     }
+}
+
+#[test]
+fn move_insert_leaves_an_existing_keys_source_untouched() {
+    let mut map = DenseHashMap2::<u64, alloc::string::String>::new();
+    map.try_insert(1, &alloc::string::String::from("stored"));
+
+    let mut collision = alloc::string::String::from("unmoved");
+    let (_, fresh) = map.try_insert_move(1, &mut collision);
+    assert!(!fresh);
+    assert_eq!(collision, "unmoved");
+
+    let mut fresh_value = alloc::string::String::from("moved");
+    let (stored, fresh) = map.try_insert_move(2, &mut fresh_value);
+    assert!(fresh);
+    assert_eq!(stored, "moved");
+    assert!(fresh_value.is_empty());
 }

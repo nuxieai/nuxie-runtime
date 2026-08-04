@@ -34,6 +34,13 @@ pub fn parse_integer_64(result: &mut i64, data: &str, base: i32) -> ConstantNumb
             }
         }
     } else {
+        if luaur_common::FFlag::LuauNoDuplicateBinaryPrefix.get()
+            && base == 2
+            && (data.starts_with("0b") || data.starts_with("0B"))
+        {
+            return ConstantNumberParseResult::Malformed;
+        }
+
         // hex and binary literals represent bit patterns covering the full uint64 range
         let i_pos = data.find('i');
         if i_pos.is_none()

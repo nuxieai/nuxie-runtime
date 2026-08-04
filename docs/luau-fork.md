@@ -106,6 +106,13 @@ carried (not version lag; all pre-date the fork and are gate-green today):
    explicit keep-OFF exception for `LuauExportValueSyntax`; also
    `FixMathNoisePrecision` ON (Luau CLI keeps it OFF).
 6. `luaur-rt::Compiler` exposes a subset of engine `CompileOptions`.
+7. `&str`-based error formatting (rung-5 audit finding, adjudicated
+   2026-08-04): luaur's error layer takes `&str`, so non-UTF-8 bytes in a
+   userdata `__type` name are lossy-replaced (U+FFFD) in error messages
+   where C passes raw bytes — affects baseline `luaL_checkudata` and
+   rung-5 `luaL_checkudatatagged` alike. Unreachable for Nuxie's ASCII
+   type registrations; the scripted side-channel referees any
+   corpus-visible divergence.
 
 ## Oracle facts that bind the port
 
@@ -141,7 +148,7 @@ ratchet floor at every rung):
 | 2 | `91caa731..86d2a9dc` (0.726) | 924+/212- | landed 2026-08-04: 68 rows ported, 3 no-op; upstream removed `LuauCompileDuptableConstantPack2` (packed table constants + `LBC_VERSION_TARGET` 7 now unconditional — retires the baked-ON parts of baseline divergence 2); new dark flags `LuauCstAttr`, `LuauVirtualBcBuilder` in the keep-OFF set |
 | 3 | `86d2a9dc..f1f121dc` (0.727) | 867+/626- | landed 2026-08-04: 116 rows ported, 5 no-op, 25 deferred (Inliner/ JIT infra unreachable under keep-OFF profile; Require untranslated); layout changes Closure(-usage)/CallInfo(+p)/Proto(+optimized,+deoptimized); seven flag removals hardwired; new dark flags incl. `LuauCIProto`, `LuauPromoteProto`, `LuauGcTableStepFix` |
 | 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | landed 2026-08-04: 57 rows ported, 9 no-op; three flag removals hardwired ON (`LuauConstJustReportErrorForUnderfill`, `LuauCstExprGroup`, `LuauErrorTolerantPrettyPrinting`); bytecode-graph SSA maturation (reverse def-use, sealed SSA, inliner phi anchoring, cyclic-phi serialization) |
-| 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | inventoried |
+| 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | landed 2026-08-04: bytecode v12 unit (dark emission + unconditional loader), Proto::cost, SCCP + DenseHash2 foundation, resume-ccalls hardwiring, direct-field GC remarking; audit REJECT adjudicated to documented divergence 7 (&str error layer) |
 | 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | inventoried |
 | 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | inventoried |
 | 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | inventoried |

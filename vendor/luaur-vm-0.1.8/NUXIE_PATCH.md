@@ -29,3 +29,9 @@ Provenance:
 - Ported official Luau 0.727 delta (upstream 86d2a9dc..f1f121dc).
 - Touched areas: closure usage removal, CallInfo active protos, optimized proto
   links and promotion, interpreter/debug proto selection, and GC accounting.
+
+## Luau fork rung 5
+
+- Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
+- Touched areas: bytecode-v12 loading and proto cost storage, coroutine C-call
+  restoration, userdata tag APIs, and direct-field GC atomic remarking.

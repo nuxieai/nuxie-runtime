@@ -2,6 +2,8 @@ extern crate alloc;
 
 #[cfg(test)]
 mod dense_hash_tests;
+#[cfg(test)]
+mod dense_hash2_tests;
 pub mod enums;
 pub mod functions;
 #[cfg(test)]
@@ -48,6 +50,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
     FFlag::LuauBidirectionalInferenceBetterUnionHandling.set(value);
     FFlag::LuauCallFeedback.set(value);
+    FFlag::LuauBytecodeCostModel.set(false);
     FFlag::LuauCIProto.set(false);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
     FFlag::LuauCloneTableFix.set(false);
@@ -74,10 +77,10 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCompileInlineTableFunctions.set(value);
     FFlag::LuauCompileNewTableMutationTracker.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
-    FFlag::LuauCompileTypeAliases.set(value);
     FFlag::LuauCompileUdataDirect.set(value);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
+    FFlag::LuauCostModel.set(false);
     FFlag::LuauCstAttr.set(false);
     FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauDirectFieldGet.set(value);
@@ -109,6 +112,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauLimitUnificationRecursion.set(value);
     FFlag::LuauNativeCodeTargetCheck.set(value);
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
+    FFlag::LuauNoDuplicateBinaryPrefix.set(false);
     FFlag::LuauOccursCheckForAllBindings.set(value);
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
@@ -119,13 +123,13 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauRemoveConstraintSolverEmplace.set(value);
     FFlag::LuauReplacerIsSolverAgnostic.set(value);
     FFlag::LuauRequireResolveAliasNullCheck.set(value);
-    FFlag::LuauResumeRestoreCcalls.set(value);
     FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
     FFlag::LuauSolverV2.set(value);
     FFlag::LuauStoreConstKeywordBegin.set(false);
     FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
     FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
     FFlag::LuauTableEntriesDontNeedToMatchIndent.set(value);
+    FFlag::LuauTrackPrefixLocal.set(false);
     FFlag::LuauTableFreezeCheckIsSubtype.set(value);
     FFlag::LuauTidyTypePrototyping.set(value);
     FFlag::LuauTransitiveSubtyping.set(value);
@@ -233,6 +237,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauBidirectionalInferenceBetterUnionHandling);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCallFeedback);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeCostModel);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCIProto);
     // Analysis/src/TypeChecker2.cpp
@@ -287,19 +293,19 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileNewTableMutationTracker);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
-    // Compiler/src/Types.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileTypeAliases);
     // Bytecode/src/BytecodeBuilder.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileUdataDirect);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
     // Analysis/src/Constraint.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
+    // Bytecode/src/BytecodeGraph.cpp; VM/src/lvmload.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCostModel);
     // VM/src/laux.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
-    crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 2);
+    crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 3);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowExternClassInTypeDefinitions);
     // Analysis/src/ConstraintGenerator.cpp
@@ -345,6 +351,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauNativeCodeTargetCheck);
     // Analysis/src/NonStrictTypeChecker.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauNonStrictModeUseErrorSupressingTag);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauNoDuplicateBinaryPrefix);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauOccursCheckForAllBindings);
     // Analysis/src/Unifier2.cpp
@@ -365,8 +373,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauReplacerIsSolverAgnostic);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauRequireResolveAliasNullCheck);
-    // VM/src/ldo.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauResumeRestoreCcalls);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSilenceDynamicFormatStringErrors);
     // Ast/src/Parser.cpp
@@ -379,6 +385,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingTablesHasBetterErrorSuppression);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTableEntriesDontNeedToMatchIndent);
+    // Ast/src/Parser.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauTrackPrefixLocal);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTableFreezeCheckIsSubtype);
     // Analysis/src/ConstraintGenerator.cpp
@@ -457,7 +465,15 @@ pub mod FInt {
     // Analysis/src/Error.cpp
     crate::LUAU_FASTINTVARIABLE!(LuauIndentTypeMismatchMaxTypeLength, 10);
     // VM/src/lfunc.cpp
-    crate::LUAU_FASTINTVARIABLE!(LuauInlineHitsThreshold, 3);
+    crate::LUAU_FASTINTVARIABLE!(LuauInlineHitsThreshold, 32);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineSmallFunSize, 128);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineThreshold, 25);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineThresholdMaxBoost, 300);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTINTVARIABLE!(LuauJitInlineTooLongFunSize, 0xffff);
     // Analysis/src/NonStrictTypeChecker.cpp
     crate::LUAU_FASTINTVARIABLE!(LuauNonStrictTypeCheckerRecursionLimit, 300);
     // Analysis/src/Normalize.cpp

@@ -79,6 +79,7 @@ impl Parser {
                         data: core::ptr::null_mut(),
                         size: 0,
                     },
+                    core::ptr::null_mut(),
                 )) as *mut AstType
             };
             return AstTypeOrPack {
@@ -186,6 +187,7 @@ impl Parser {
             let mut prefix: Option<AstName> = None;
             let mut prefix_point_position = Position::missing();
             let mut prefix_location: Option<Location> = None;
+            let mut prefix_local = core::ptr::null_mut();
             let mut name = self.parse_name("type name");
 
             if self.lexer.current().r#type == Type(b'.' as i32) {
@@ -194,6 +196,16 @@ impl Parser {
 
                 prefix = Some(name.name);
                 prefix_location = Some(name.location);
+
+                if luaur_common::FFlag::LuauTrackPrefixLocal.get() {
+                    prefix_local = self
+                        .local_map
+                        .find(&name.name)
+                        .copied()
+                        .filter(|local| !local.is_null())
+                        .unwrap_or(core::ptr::null_mut());
+                }
+
                 name = self.parse_index_name("field name", &prefix_point_position);
             } else if self.lexer.current().r#type == Type::Dot3 {
                 self.report(
@@ -277,6 +289,7 @@ impl Parser {
                     name.location,
                     has_parameters,
                     parameters,
+                    prefix_local,
                 )) as *mut AstType
             };
             if self.options.store_cst_data {

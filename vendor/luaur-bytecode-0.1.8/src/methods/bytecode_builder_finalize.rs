@@ -79,6 +79,9 @@ impl BytecodeBuilder {
         write_var_int(&mut bytecode, self.functions.len() as u64);
 
         for func in &self.functions {
+            if luaur_common::FFlag::LuauBytecodeCostModel.get() {
+                write_var_int(&mut bytecode, func.data.len() as u64);
+            }
             unsafe {
                 bytecode
                     .as_mut_vec()

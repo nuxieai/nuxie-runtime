@@ -102,11 +102,11 @@ impl RuntimeNestedStateMachineInstance {
             .uint_property("animationId")
             .and_then(|value| usize::try_from(value).ok())
             .unwrap_or(u32::MAX as usize);
-        let mut state_machine = child.state_machine_instance(animation_id);
-        if let Some(state_machine) = state_machine.as_mut() {
-            state_machine.bind_default_view_model_context();
-            state_machine.advance_data_context();
-        }
+        // Construction only creates the occurrence. The hosting
+        // NestedArtboard binds its mounted child first, then forwards that
+        // resulting DataContext to this machine, matching C++
+        // `NestedArtboard::bindStateful` (`src/nested_artboard.cpp:156-185`).
+        let state_machine = child.state_machine_instance(animation_id);
 
         let nested_inputs = graph
             .local_objects
@@ -146,11 +146,7 @@ impl RuntimeNestedStateMachineInstance {
     }
 
     pub(crate) fn cold_clone(&self, child: &mut ArtboardInstance) -> Self {
-        let mut state_machine = child.state_machine_instance(self.animation_id);
-        if let Some(state_machine) = state_machine.as_mut() {
-            state_machine.bind_default_view_model_context();
-            state_machine.advance_data_context();
-        }
+        let state_machine = child.state_machine_instance(self.animation_id);
         let nested_inputs = self
             .nested_inputs
             .iter()

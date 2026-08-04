@@ -69,6 +69,33 @@ fn fl_e8_fixtures_are_reproducible_importable_and_schema_typed() {
             .any(|object| object.type_key == 409)
     );
 
+    let first = root.join("grid_justify_items_bind.riv");
+    let second = root.join("second-grid_justify_items_bind.riv");
+    emit_without_font("grid-justify-items-bind", &first);
+    emit_without_font("grid-justify-items-bind", &second);
+    let first_bytes = fs::read(&first).unwrap();
+    assert_eq!(first_bytes, fs::read(&second).unwrap());
+    assert_eq!(
+        first_bytes,
+        fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/layout-dirt/grid_justify_items_bind.riv")
+        )
+        .unwrap(),
+        "the checked-in layout-dirt fixture must be regenerated through nuxie-codegen",
+    );
+    let runtime = nuxie_binary::read_runtime_file(&first_bytes).unwrap();
+    for type_key in [1058, 447] {
+        assert!(
+            runtime
+                .objects
+                .iter()
+                .filter_map(Option::as_ref)
+                .any(|object| object.type_key == type_key),
+            "grid-justify-items-bind fixture must keep type key {type_key}",
+        );
+    }
+
     let first = root.join("parent_child_opacity.riv");
     let second = root.join("second-parent_child_opacity.riv");
     emit_without_font("parent-child-opacity", &first);

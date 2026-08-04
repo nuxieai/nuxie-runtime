@@ -160,9 +160,15 @@ pub(crate) fn uint_property_changed(
             false
         });
     }
-    if ["alignValue", "sizingValue", "verticalTrimValue"]
-        .into_iter()
-        .any(|name| property_key_for_name("Text", name) == Some(property_key))
+    if [
+        "alignValue",
+        "sizingValue",
+        "verticalTrimValue",
+        "verticalTrimTopValue",
+        "verticalTrimBottomValue",
+    ]
+    .into_iter()
+    .any(|name| property_key_for_name("Text", name) == Some(property_key))
     {
         return Some(mark_shape_dirty(instance, local_id));
     }

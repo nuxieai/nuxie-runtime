@@ -8,10 +8,10 @@
 //! before accepting a measurement.
 
 use nuxie::{
-    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule,
-    GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader, ImageFilter, ImageSampler, ImageWrap,
-    Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderMode,
-    RenderPaint, RenderPath, Renderer, WgpuFactory, WgpuFrame,
+    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, GpuCanvasPassState,
+    GpuCanvasPipelineShaders, GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, ImageFilter,
+    ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderMode, RenderPaint, RenderPath, Renderer, WgpuFactory, WgpuFrame,
 };
 use std::ffi::c_void;
 use std::future::Future;
@@ -372,8 +372,8 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                 indexed_draw: None,
                 texture_bindings: Vec::new(),
                 sampler_bindings: Vec::new(),
-                pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
-                pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+                pipeline_state: GpuCanvasPipelineState::default(),
+                pass_state: GpuCanvasPassState::default(),
                 pipelines: Vec::new(),
                 render_passes: Vec::new(),
             };
@@ -408,8 +408,8 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                 indexed_draw: None,
                 texture_bindings: Vec::new(),
                 sampler_bindings: Vec::new(),
-                pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
-                pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+                pipeline_state: GpuCanvasPipelineState::default(),
+                pass_state: GpuCanvasPassState::default(),
                 pipelines: Vec::new(),
                 render_passes: Vec::new(),
             };

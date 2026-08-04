@@ -67,6 +67,7 @@ struct ScrollFixture {
 fn author_scroll_scene(scene: &mut Scene, initial: ScrollConstraintSpec) -> Result<ScrollFixture> {
     let (fixture, _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Screen".into(),
             width: 200.0,
             height: 200.0,
@@ -342,6 +343,7 @@ fn virtualized_clamp_includes_content_padding_at_the_pin() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, constraint), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Padded".into(),
             width: 200.0,
             height: 200.0,
@@ -406,6 +408,7 @@ fn scrolled_bounds_shift_along_transformed_ancestor_axes() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, constraint, child2), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Transformed".into(),
             width: 400.0,
             height: 400.0,
@@ -497,6 +500,7 @@ fn scroll_reads_equal_plain_reads_without_a_live_constraint() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, container), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Plain".into(),
             width: 100.0,
             height: 100.0,
@@ -523,6 +527,7 @@ fn scroll_constraint_authoring_rejects_invalid_owners_and_values() -> Result<()>
     let mut scene = Scene::new();
     let result = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
             name: "Invalid".into(),
             width: 100.0,
             height: 100.0,

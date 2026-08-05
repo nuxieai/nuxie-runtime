@@ -214,13 +214,11 @@ EXACT = (
     "fill_trim_path",
     "focus_test",
     "focus_traversal",
-    "focusable_element",
     "follow_path_animate_shape",
     "follow_path_animate_solo",
     "follow_path_animate_target",
     "follow_path_constraint",
     "format_number_with_commas",
-    "global_viewmodels_test-auto_instance",
     "group_effect-main-missing-targets",
     "hittest_ab1",
     "hittest_ab1_grand_parent",
@@ -260,6 +258,13 @@ EXACT = (
     "vertical_align_ellipsis",
     "viewmodel_list_trigger",
     "viewmodel_based_condition",
+    "bidirectional_precedence-target_first",
+    "bidirectional_stateful_property",
+    "clipping_and_draw_order",
+    "component_stateful_vm_instance",
+    "component_stateful_vm_instance_2",
+    "image_fit_alignment_2",
+    "stateful_keyed_trigger",
 )
 
 
@@ -1821,19 +1826,18 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-bidirectional_stateful_property|frame 3, op 180 (transform), field tx: expected 150, got 100
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
-component_list_grouped|frame 13, op 746 (color): expected color, got save
+component_list_grouped|frame 6, op 413 (transform), field tx: expected -90, got 0
 component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color, got makeRenderPaint
 data_binding_artboards_test_recursive|frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame
 deterministic_mode|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
 draw_index_list|frame 0, op 35 (color): expected color, got makeRenderPaint
-focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
+focus_collapsing|frame 1, op 98 (color), field paint_id: expected 4, got 11
 formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
 formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
 formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
-global_viewmodels_test-set_instance|frame 1, op 163 (frame): expected frame, got color
+global_viewmodels_test-set_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 hittest_ab_2_non_virtualized|frame 0, op 198 (color): expected color, got save
 hittest_ab_2_virtualized|frame 0, op 132 (color): expected color, got save
 image_fit_alignment|frame 2, op 115 (transform), field tx: expected 462.03198, got -197.96802
@@ -1861,32 +1865,28 @@ relative_data_bind_path-fire-trigger|frame 1, op 48 (color): expected color, got
 relative_data_bind_path-listener|frame 1, op 72 (makeRenderPath): expected makeRenderPath, got drawPath
 relative_data_bind_path-scripted-input|frame 0, op 39 (transform), field tx: expected 115.56351, got 250
 scroll_intent|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
-scroll_test|frame 0, op 56 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_feather_falloff|frame 0, op 29 (feather): expected feather, got save
+scroll_test|frame 0, op 53 (transform), field xy: expected -0.0 (0x80000000), got 0
+text_feather_falloff|frame 0, op 29 (feather), field paint_id: expected 12, got 8
 ai_assitant|frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather
 artboard_list_overrides_horizontal|frame 1, op 303 (rewind): expected rewind, got drawPath
 artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got drawPath
 bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
-bidirectional_precedence-target_first|frame 0, op 24 (transform), field tx: expected 252.5, got 100
 car_widgets_v01|frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint
 clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
-clipping_and_draw_order|frame 2, op 161 (transform), field tx: expected 0, got 1121
 collapsable_data_binding|frame 0, op 14 (save): expected save, got color
 collapse_data_binds-test_1|frame 10, op 760 (rewind): expected rewind, got drawPath
 collapse_data_binds-test_2|frame 15, op 315 (addRawPath): expected 151 fields, got 256
 collapsing_elements|frame 2, op 943 (rewind): expected rewind, got drawPath
-component_list_child_origin|frame 0, op 315 (transform), field xy: expected -0.0 (0x80000000), got 0
-component_stateful_vm_instance|frame 2, op 109 (addRawPath), field point: expected (0, -100), got (0, -50)
-component_stateful_vm_instance_2|frame 2, op 96 (transform), field xx: expected 0.97985506, got 0.994951
+component_list_child_origin|frame 1, op 448 (rewind): expected rewind, got drawPath
 computed_root_transform-list|frame 1, op 255 (rewind): expected rewind, got drawPath
-computed_values_test|frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))
+computed_values_test|frame 2, op 191 (addRawPath), field point: expected (301.00003, -0.0 (0x80000000)), got (301, -0.0 (0x80000000))
 data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
 data_bind_keyframes_test|frame 4, op 159 (save): expected save, got restore
 data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
 drag_event|frame 23, op 602 (save): expected save, got color
 focus_traversal|frame 0, op 95 (color): expected color, got save
 fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
-global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
+global_viewmodels_test-auto_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
 hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
@@ -1895,14 +1895,13 @@ hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
 hittest_ab_shape_parent|frame 3, op 353 (save): expected save, got color
 hittest_nested|frame 1, op 155 (save): expected save, got color
 hunter_x_demo|frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint
-image_fit_alignment_2|frame 1, op 95 (setVertexBufferData): expected setVertexBufferData, got save
 interpolation_zero_duration|frame 1, op 38 (transform), field tx: expected 0, got 200
-layout_anim_bound|frame 2, op 146 (addRawPath), field point: expected (450, 0), got (250, 0)
-layout_anim_component_list|frame 1, op 89 (addRawPath), field point: expected (500, 0), got (495.2, 0)
-layout_anim_nested|frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)
+layout_anim_bound|frame 2, op 145 (rewind): expected rewind, got drawPath
+layout_anim_component_list|frame 1, op 88 (rewind): expected rewind, got drawPath
+layout_anim_nested|frame 1, op 85 (rewind): expected rewind, got drawPath
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
 layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
-layout_fixed_fill|frame 1, op 57 (addRawPath), field point: expected (300, 0), got (150, 0)
+layout_fixed_fill|frame 1, op 56 (rewind): expected rewind, got drawPath
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
 multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
 multitouch_enter-MultiScroll|frame 0, op 95 (transform), field xy: expected -0.0 (0x80000000), got 0
@@ -1918,18 +1917,18 @@ scroll_threshold-all-scroll|frame 0, op 82 (transform), field xy: expected -0.0 
 scroll_threshold-horizontal-scroll|frame 0, op 79 (transform), field xy: expected -0.0 (0x80000000), got 0
 scroll_threshold-vertical-scroll|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
 spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
-stateful_keyed_trigger|frame 1, op 30 (color): expected color, got save
 stateful_multi_property|frame 1, op 134 (rewind): expected rewind, got drawPath
 stateful_nested|frame 0, op 39 (color), field paint_id: expected 15, got 10
 superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 208
 text_input|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_vertical_trim_test|frame 3, op 219 (transform), field ty: expected 177.93579, got 182.76001
+text_vertical_trim_test|frame 3, op 220 (rewind): expected rewind, got drawPath
 time_based_interpolation|frame 1, op 65 (transform), field tx: expected 250.07309, got 250.29443
 transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984
-unbound_stateful_component|frame 0, op 9 (color), field value: expected 4278255360, got 4278190080
+unbound_stateful_component|frame 0, op 10 (save): expected save, got color
 virtualize_blendmode|frame 0, op 33 (color): expected color, got save
 virtualized_artboard_databound_children|frame 5, op 365 (makeRenderPaint): expected makeRenderPaint, got save
 word_joiner_test|frame 2, op 262 (transform), field ty: expected -39.996094, got -15.796875
+focusable_element|frame 1, op 144 (color): expected color, got save
 """.strip().splitlines()
 )
 

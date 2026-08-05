@@ -23,6 +23,8 @@ mod gradient_pipeline;
 #[allow(dead_code)]
 mod intersection_board;
 mod logical_flush;
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+mod metal;
 mod mipmap_pipeline;
 mod msaa_atlas_pipeline;
 mod msaa_image_mesh_pipeline;
@@ -34,17 +36,15 @@ mod present_pipeline;
 mod presentation;
 mod skyline;
 mod storage_texture;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
-mod surface;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
-use nuxie_image_codec::{
-    decoded_rgba_len, preflight_encoded_image, MAX_DECODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION,
-};
+#[cfg(test)]
+use nuxie_image_codec::MAX_IMAGE_DIMENSION;
+use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, MAX_DECODED_IMAGE_BYTES};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
     GpuCanvasPlan, GpuCanvasShader, ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath,
@@ -172,15 +172,6 @@ const MAX_VERTEX_STORAGE_BUFFERS: u32 = 4;
 const WEBGPU_SUPPORTS_CLOCKWISE_ATOMIC_MODE: bool = false;
 // RenderContextWebGPUImpl retains PlatformFeatures' default texture limit.
 const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
-// wgpu-hal's Metal backend exposes at least 8,192 on every supported Apple GPU,
-// including the fallback family used by iOS 15-era devices. Trusted imports
-// use this floor so accepted encoded images cannot fail a later Apple upload
-// solely because of their dimensions.
-const APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION: u32 = MAX_IMAGE_DIMENSION;
-// Bound the peak product-facing decoded image size to 64 MiB per asset. This
-// admits a 4,096-by-4,096 RGBA image while rejecting compressed pixel bombs
-// before the codec allocates its output buffer.
-const APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH: usize = MAX_DECODED_IMAGE_BYTES;
 // RenderContext::atlasMaxSize applies an additional 4096 cap.
 const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
 const FEATHER_ATLAS_PADDING: u32 = 2;
@@ -273,17 +264,6 @@ impl RendererCapabilities {
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
-}
-
-fn apple_safe_image_decoded_byte_length(width: u32, height: u32) -> Option<usize> {
-    if !texture_extent_supported(width, height, APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION) {
-        return None;
-    }
-    let decoded_byte_length = usize::try_from(width)
-        .ok()?
-        .checked_mul(usize::try_from(height).ok()?)?
-        .checked_mul(4)?;
-    (decoded_byte_length <= APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH).then_some(decoded_byte_length)
 }
 
 fn validate_texture_extent(
@@ -616,7 +596,7 @@ pub use gpu_canvas::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-pub use surface::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};
+pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
 pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -794,29 +774,6 @@ fn compatibility_fallback_error(
 }
 
 impl WgpuFactory {
-    /// Fully decode image bytes for trusted Apple import without retaining
-    /// decoded pixels or creating GPU resources. The conservative dimension
-    /// cap is supported by every Apple GPU exposed by the Metal backend.
-    pub fn validate_image_bytes(data: &[u8]) -> Result<(), ImageDecodeError> {
-        let Some((encoded_width, encoded_height)) = encoded_image_dimensions(data) else {
-            return Err(ImageDecodeError);
-        };
-        let Some(expected_decoded_byte_length) =
-            apple_safe_image_decoded_byte_length(encoded_width, encoded_height)
-        else {
-            return Err(ImageDecodeError);
-        };
-        let Some((decoded_width, decoded_height, pixels)) = decode_image_rgba(data) else {
-            return Err(ImageDecodeError);
-        };
-        if (decoded_width, decoded_height) != (encoded_width, encoded_height)
-            || pixels.len() != expected_decoded_byte_length
-        {
-            return Err(ImageDecodeError);
-        }
-        Ok(())
-    }
-
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
         Self::new_with_mode(width, height, RenderMode::Msaa)
@@ -3151,7 +3108,7 @@ impl WgpuFrame {
         Some((updates, parent_id))
     }
 
-    fn metrics(&self) -> WgpuFrameMetrics {
+    pub fn metrics(&self) -> WgpuFrameMetrics {
         let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
         let mut atomic_strategy_partitions = 0_u64;
         if self.mode == RenderMode::ClockwiseAtomic {

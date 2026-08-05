@@ -1,26 +1,61 @@
 //! Apple drawable-presentation adapter.
 //!
-//! The adapter exposes only the existing high-level surface lifecycle. It has
-//! no direct dependency on Objective-C, Metal, `wgpu`, device, queue, surface,
-//! or texture types. UNIV-1626 moves the implementation and image-admission
-//! policy here; `nuxie-renderer` keeps temporary compatibility exports until
-//! then.
+//! This package owns drawable validation and wrapping, surface lifecycle,
+//! presentation scheduling/completion policy, and trusted Apple image
+//! admission. The renderer remains behind an opaque Metal-capable seam.
 
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-pub use nuxie_renderer::{
-    ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError,
-};
+mod apple;
+#[cfg(all(
+    feature = "size-report-roots",
+    any(target_os = "ios", target_os = "macos")
+))]
+mod size_report_roots;
 
-#[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
-mod tests {
-    use super::AppleSurface;
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub use apple::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};
+
+/// Trusted-artifact image admission for Apple product imports.
+pub struct AppleImageAdmission;
+
+impl AppleImageAdmission {
+    /// Fully decodes a supported image and enforces the Apple-safe 8,192-pixel
+    /// dimension and 64 MiB decoded-RGBA ceilings without retaining pixels.
+    pub fn validate_image_bytes(data: &[u8]) -> Result<(), nuxie_render_api::ImageDecodeError> {
+        nuxie_image_codec::validate_encoded_image(data)
+            .map(|_| ())
+            .ok_or(nuxie_render_api::ImageDecodeError)
+    }
+}
+
+#[cfg(test)]
+mod image_admission_tests {
+    use super::AppleImageAdmission;
 
     #[test]
-    fn apple_contract_keeps_legacy_type_identity() {
-        fn accepts_legacy(value: nuxie_renderer::AppleSurface) -> AppleSurface {
-            value
-        }
+    fn accepts_a_fully_decodable_image() {
+        let mut encoded = Vec::new();
+        let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&[10, 20, 30, 255])
+            .unwrap();
 
-        let _ = accepts_legacy;
+        assert!(AppleImageAdmission::validate_image_bytes(&encoded).is_ok());
+    }
+
+    #[test]
+    fn rejects_images_over_the_decoded_byte_ceiling_during_preflight() {
+        const PIXEL_BOMB_DIMENSION: u32 = 4_097;
+        let mut encoded = Vec::new();
+        let writer = png::Encoder::new(&mut encoded, PIXEL_BOMB_DIMENSION, PIXEL_BOMB_DIMENSION)
+            .write_header()
+            .expect("PNG header encodes");
+        drop(writer);
+
+        assert!(AppleImageAdmission::validate_image_bytes(&encoded).is_err());
     }
 }

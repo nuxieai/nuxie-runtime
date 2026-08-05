@@ -72,8 +72,6 @@ MIXED_FACADE_ALLOWED_PROVIDER_DEPENDENCIES = {
     "nuxie-renderer": "nuxie-renderer",
 }
 MIXED_FACADE_ALLOWED_SYMBOLS = {
-    "ApplePresentationCompletion",
-    "AppleSurface",
     "Artboard",
     "ArtboardInstance",
     "BlendMode",
@@ -132,15 +130,8 @@ MIXED_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
 # should happen as the migration in docs/pure-runtime-boundary.md proceeds.
 INTERNAL_DEBT_FILES = {
     "editor-gpu-tooling": set(),
-    "apple-image-admission": {
-        "crates/nux-capi/src/size_report_roots.rs",
-        "crates/nuxie-renderer/src/lib.rs",
-    },
-    "apple-presentation": {
-        "crates/nux-capi/src/size_report_roots.rs",
-        "crates/nuxie-renderer/src/lib.rs",
-        "crates/nuxie-renderer/src/surface.rs",
-    },
+    "apple-image-admission": set(),
+    "apple-presentation": set(),
     "binary-authoring": {
         "crates/nuxie-binary/src/lib.rs",
         "crates/nuxie-runtime/src/artboard/tests.rs",

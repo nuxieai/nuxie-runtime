@@ -75,10 +75,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             "nuxie-renderer",
             "",
         )
-        (renderer / "src/lib.rs").write_text(
-            "fn validate_image_bytes() {}\n"
-            "pub struct AppleSurface;\n"
-        )
+        (renderer / "src/lib.rs").write_text("// portable renderer facade\n")
         self.create_package(
             "crates/nuxie",
             "nuxie",
@@ -1505,16 +1502,13 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("apple-presentation boundary debt spread", result.stderr)
 
-    def test_current_apple_measurement_file_is_a_ratchet_exception(self) -> None:
-        package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/size_report_roots.rs").write_text(
-            "fn validate_image_bytes() {}\nfn root(surface: AppleSurface) {}\n"
+    def test_apple_policy_has_no_debt_exceptions(self) -> None:
+        self.assertEqual(
+            BOUNDARY_TOOL.INTERNAL_DEBT_FILES["apple-image-admission"], set()
         )
-
-        result = self.run_check()
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("apple-presentation=1", result.stdout)
+        self.assertEqual(
+            BOUNDARY_TOOL.INTERNAL_DEBT_FILES["apple-presentation"], set()
+        )
 
     def test_rejects_binary_authoring_debt_in_new_file(self) -> None:
         package = self.create_package(

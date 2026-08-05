@@ -1290,7 +1290,7 @@ impl RuntimeLayoutComponentState {
         }
     }
 
-    fn animates(&self) -> bool {
+    pub(crate) fn animates(&self) -> bool {
         self.animation_style.get() != 0
             && self.effective_interpolation() != 0
             && self.effective_interpolation_time() > 0.0

@@ -6306,6 +6306,7 @@ impl ArtboardInstance {
         if let Some(layout) = self
             .component(layout_local)
             .and_then(|component| component.concrete.layout.as_ref())
+            .filter(|layout| layout.animates())
         {
             let (_, _, width, height) = layout.current_bounds();
             bounds.width = width;
@@ -8745,7 +8746,12 @@ impl ArtboardInstance {
         let current_local = self.runtime_layout_control_owner_for_path(path_local)?;
         let component = self.component(current_local)?;
         let mut bounds = layout_bounds.get(&current_local).copied()?;
-        if let Some(layout) = component.concrete.layout.as_ref() {
+        if let Some(layout) = component
+            .concrete
+            .layout
+            .as_ref()
+            .filter(|layout| layout.animates())
+        {
             let (_, _, width, height) = layout.current_bounds();
             bounds.width = width;
             bounds.height = height;
@@ -30758,6 +30764,11 @@ mod tests {
             .component_parent_local(rectangle_local)
             .and_then(|shape_local| instance.component_parent_local(shape_local))
             .expect("rectangle is controlled by a layout");
+        instance
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("fixture has retained layout state")
+            .set_animation_style(0, 0, 0.0, None);
 
         instance.enable_layout_constraint_bounds();
         instance.update_components();
@@ -30814,7 +30825,9 @@ mod tests {
             .component(layout_local)
             .and_then(|component| component.concrete.layout.as_ref())
             .expect("fixture has retained layout state");
+        layout.set_animation_style(2, 1, 1.0, None);
         layout.retain_bounds(0.0, 0.0, 90.0, 60.0);
+        layout.retain_bounds(0.0, 0.0, 140.0, 100.0);
         let solved_bounds = BTreeMap::from([(
             layout_local,
             RuntimeLayoutBounds {

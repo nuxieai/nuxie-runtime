@@ -54,7 +54,7 @@ impl ScriptVmSourceTestExt for ScriptVm {
     }
 
     fn run_source_bytecode<R: FromLuaMulti>(&self, name: &str, source: &str) -> Result<R> {
-        self.run_bytecode(name, &compile_source(source)?)
+        self.eval_bytecode(name, &compile_source(source)?)
     }
 
     fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {

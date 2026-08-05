@@ -1609,6 +1609,22 @@ impl ScriptVm {
         self.execute_loaded_module(chunk_name, chunk)
     }
 
+    /// Evaluate precompiled Luau bytecode in the VM's shared global
+    /// environment while preserving the baseline execution accounting used by
+    /// other VM entry points.
+    ///
+    /// Runtime modules should use [`Self::run_bytecode`] for isolated globals.
+    /// Editor tooling uses this bytecode-only seam when interactive source
+    /// evaluation must define globals for later calls.
+    pub fn eval_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
+        self.ensure_initialized()?;
+        self.reserve_parent_stack_headroom()?;
+        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.reset_execution_budget();
+        let result = chunk.call(());
+        self.track_resource_result(result)
+    }
+
     /// Execute a loaded script/module with the same environment isolation as
     /// C++ `loadModule`: the chunk gets a fresh writable globals proxy whose
     /// reads fall through to the VM's sandboxed Rive globals. C++ installs this

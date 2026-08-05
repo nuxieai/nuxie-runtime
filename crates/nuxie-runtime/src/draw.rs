@@ -17683,6 +17683,24 @@ fn runtime_draw_live_text_family(
                 continue;
             }
         };
+        // C++ `TextStylePaint::draw` gates each ShapePaint on
+        // `shouldDraw()` — `isVisible() && m_PaintMutator->isVisible()` —
+        // every draw, ahead of growing `m_paintPool`
+        // (`src/text/text_style_paint.cpp:53-58,69-77`,
+        // `include/rive/shapes/paint/shape_paint.hpp:71-74`). The
+        // `ShapePaint::isVisible()` half is Paint-dirty driven and stays
+        // baked into command construction; the mutator half depends on the
+        // live render opacity, so it must be re-tested here. Testing it at
+        // build time instead would let a Text shaped while its ancestor
+        // opacity is 0 retain an empty command set that a later
+        // RenderOpacity-only propagation can never repopulate.
+        //
+        // TextInput drawables keep their own construction-time predicate
+        // (`StaticTextSlice::text_input_paint_commands` already builds every
+        // command) and are not routed through `TextStylePaint::draw`.
+        if is_text && !runtime_shape_paint_state_is_effectively_visible(&paint.paint_state) {
+            continue;
+        }
         let global_id = paint.paint_global_id;
         let object = runtime
             .object(global_id as usize)

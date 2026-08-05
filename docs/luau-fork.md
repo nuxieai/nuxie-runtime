@@ -225,6 +225,40 @@ read-only audit bound to the C diff:
 | 8 — 0.732 | #289 | 2 CONFIRMED → stale stack rebased; class-shape decode fixed to mirror C |
 | 9 — rive_0_732 patch set | #290 | ACCEPT, 0 findings |
 
+## Editor-emitted bytecode compatibility matrix
+
+Each row is a real Nuxie Editor artifact: a small `.riv` materialized
+through the production scene publish path (`editor-publisher-wasm`
+`publish()`), with the script's compiled bytecode SHA-256 recorded BEFORE
+materialization. Row acceptance: the ScriptAsset bytes re-extracted from
+the fixture (behind the `0x00` unsigned `SignedContentHeader` byte)
+hash-match the recorded compiler output, and the script's effect is
+observable in render. The harness is the scripted golden runner pair
+(corpus id below) plus the focused acceptance tests in
+`crates/nuxie/tests/editor_bytecode_matrix.rs`.
+
+Corpus disposition: ordinary lane `exact` (script inert, both sides draw
+the same background), scripted lane `scripted-status:diverges` — the
+pinned C++ oracle only registers Rive-signed script modules
+(`ScriptAsset doesn't have a generator function`), while the Rust runner
+executes unsigned editor bytecode the way the device SDK does behind
+`allowsUnverifiedScripts` / `import_with_unsigned_scripts`. The scripted
+render-observability proof therefore lives in the Rust-side acceptance
+test, not in a cross-runner match.
+
+| row | emitter | emitter commit | compiler FFlag posture | LBC | bytecode sha256 | fixture | corpus id |
+|---|---|---|---|---|---|---|---|
+| current Nuxie Editor v7 (2026-08-05) | `scripted-resource-compiler` via `editor-publisher-wasm` `publish_json` (nuxie-dev; compiler activated at `8562bc6687`) | nuxie-dev `4a63abca` | all Luau FFlags forced OFF during compile (`DeviceLuauFlagsGuard`), flags-off floor v7 | 7 | `50d69e465eb4413f342a38b1c6c3dbb71531559c98d0a0514a0d2b782ed477bd` | `fixtures/editor/editor_scripted_vector_v7.riv` (sha256 `9a2affb093890685c39f3172de93dd2dad242d35eda21fe2783b177c191d0b24`) | `editor_scripted_vector_v7` |
+
+The v7 row's source is the e4 `scripted-vector.luau` fixture (draws a
+path with `color=0xff7f33cc` at translation `(24,18)` — the render
+observability oracle). The recorded bytecode hash is the same one the
+compiler crate's own contract test pins, so editor-side compiler drift
+breaks both repos' gates at once. Regenerate a row by publishing the e4
+scripted-vector snapshot through `publish_json` with the bytecode
+live-compiled by `compile_luau_bytecode` (script only, no shader
+mutation) and re-recording commit + hashes.
+
 Method (reusable for the next engine bump): per rung, a read-only inventory
 maps every C hunk to its Rust twin with FFlag posture and scope class; the
 orchestrator adjudicates; a writer lane ports row-by-row with per-row focused

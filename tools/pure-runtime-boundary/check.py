@@ -297,30 +297,41 @@ def dependency_package(dependency_name: str, specification: object) -> str:
 def workspace_packages(
     repo_root: pathlib.Path,
 ) -> tuple[
-    list[tuple[str, str, dict[str, object]]], dict[str, object], list[str]
+    list[tuple[str, str, dict[str, object]]],
+    dict[str, object],
+    set[str],
+    list[str],
 ]:
     errors: list[str] = []
     workspace_path = repo_root / "Cargo.toml"
     try:
         workspace_manifest = tomllib.loads(workspace_path.read_text())
     except (OSError, tomllib.TOMLDecodeError) as error:
-        return [], {}, [f"Cargo.toml: cannot parse workspace manifest: {error}"]
+        return [], {}, set(), [
+            f"Cargo.toml: cannot parse workspace manifest: {error}"
+        ]
 
     workspace = workspace_manifest.get("workspace")
     members = workspace.get("members") if isinstance(workspace, dict) else None
     if not isinstance(members, list) or not all(
         isinstance(member, str) for member in members
     ):
-        return [], {}, ["Cargo.toml: [workspace].members must be a string array"]
+        return [], {}, set(), [
+            "Cargo.toml: [workspace].members must be a string array"
+        ]
 
     workspace_dependencies = workspace.get("dependencies", {})
     if not isinstance(workspace_dependencies, dict):
-        return [], {}, ["Cargo.toml: [workspace.dependencies] must be a table"]
+        return [], {}, set(), [
+            "Cargo.toml: [workspace.dependencies] must be a table"
+        ]
     excluded = workspace.get("exclude", [])
     if not isinstance(excluded, list) or not all(
         isinstance(pattern, str) for pattern in excluded
     ):
-        return [], {}, ["Cargo.toml: [workspace].exclude must be a string array"]
+        return [], {}, set(), [
+            "Cargo.toml: [workspace].exclude must be a string array"
+        ]
 
     excluded_paths: set[str] = set()
     for excluded_path in excluded:
@@ -417,7 +428,7 @@ def workspace_packages(
                     pending_paths.append(implicit_relative)
                     pending_paths.sort()
 
-    return packages, workspace_dependencies, errors
+    return packages, workspace_dependencies, excluded_paths, errors
 
 
 def mixed_facade_debt_error(
@@ -804,15 +815,21 @@ def missing_debt_exception_errors(
 def package_rust_sources(
     package_root: pathlib.Path,
     manifest: dict[str, object],
-    workspace_package_roots: set[pathlib.Path] | None = None,
+    separate_package_roots: set[pathlib.Path] | None = None,
 ) -> Iterator[pathlib.Path]:
     package_root = package_root.resolve()
-    workspace_package_roots = workspace_package_roots or {package_root}
+    separate_package_roots = separate_package_roots or {package_root}
     sources: set[pathlib.Path] = set()
+    source_tree_roots = {
+        (package_root / conventional).resolve()
+        for conventional in ("src", "examples", "tests", "benches")
+    }
     package = manifest.get("package")
     build = package.get("build") if isinstance(package, dict) else None
     if isinstance(build, str):
-        sources.add((package_root / build).resolve())
+        build_path = (package_root / build).resolve()
+        sources.add(build_path)
+        source_tree_roots.add(build_path.parent)
     elif build is not False:
         build_script = package_root / "build.rs"
         if build_script.is_file():
@@ -825,7 +842,9 @@ def package_rust_sources(
     for target in target_tables:
         target_path = target.get("path") if isinstance(target, dict) else None
         if isinstance(target_path, str):
-            sources.add((package_root / target_path).resolve())
+            resolved_target = (package_root / target_path).resolve()
+            sources.add(resolved_target)
+            source_tree_roots.add(resolved_target.parent)
 
     # A custom target can place its module tree anywhere below the package
     # root. Scan every Rust file there, not only Cargo's conventional folders.
@@ -833,12 +852,22 @@ def package_rust_sources(
         relative_parts = path.relative_to(package_root).parts
         if relative_parts and relative_parts[0] in {"target", ".git"}:
             continue
-        # A non-virtual workspace root may contain other package roots. Their
-        # sources are owned by those packages (which can intentionally be
-        # unprotected), not by the root package.
-        if any(
-            package_root in owner.parents and owner in path.parents
-            for owner in workspace_package_roots
+        # A non-virtual workspace root may contain member or explicitly
+        # excluded package roots. Outside this package's actual source trees,
+        # their sources are separately owned rather than claimed by the root.
+        separate_owner = next(
+            (
+                owner
+                for owner in separate_package_roots
+                if package_root in owner.parents and owner in path.parents
+            ),
+            None,
+        )
+        if separate_owner is not None and not any(
+            tree == separate_owner
+            or tree in separate_owner.parents
+            or separate_owner in tree.parents
+            for tree in source_tree_roots
         ):
             continue
         sources.add(path.resolve())
@@ -933,6 +962,14 @@ def cross_package_source_edge_errors(
         if not any(start <= match.start() < end for start, end in attribute_ranges):
             continue
         verified_path_starts.add(match.start())
+        preceding_code = code_mask[: match.start()]
+        if preceding_code.count("{") != preceding_code.count("}"):
+            line = source.count("\n", 0, match.start()) + 1
+            errors.append(
+                f"{relative}:{line}: protected source path attribute inside an "
+                "inline/block context could not be verified"
+            )
+            continue
         error = source_edge_boundary_error(
             relative, source_path, package_root, source, match, "path attribute"
         )
@@ -1009,10 +1046,16 @@ def inherited_dependency_specification(
 def check_repository(
     repo_root: pathlib.Path,
 ) -> tuple[list[str], dict[str, set[str]], int, int, int]:
-    packages, workspace_dependencies, errors = workspace_packages(repo_root)
-    workspace_package_roots = {
+    packages, workspace_dependencies, excluded_paths, errors = workspace_packages(
+        repo_root
+    )
+    separate_package_roots = {
         (repo_root / package).resolve() for package, _, _ in packages
     }
+    for excluded in excluded_paths:
+        resolved_excluded = (repo_root / excluded).resolve()
+        if manifest_declares_package(resolved_excluded / "Cargo.toml"):
+            separate_package_roots.add(resolved_excluded)
     observed_debt = {family: set() for family in INTERNAL_DEBT_FILES}
     reported_debt_spread: set[tuple[str, str]] = set()
     manifest_debt_count = 0
@@ -1099,7 +1142,7 @@ def check_repository(
                     )
 
         for source_path in package_rust_sources(
-            package_root, manifest, workspace_package_roots
+            package_root, manifest, separate_package_roots
         ):
             try:
                 relative = source_path.relative_to(repo_root).as_posix()

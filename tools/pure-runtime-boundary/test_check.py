@@ -360,6 +360,69 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("src/hidden/mod.rs", result.stderr)
         self.assertIn("project-data boundary debt", result.stderr)
 
+    def test_excluded_standalone_package_is_not_claimed_by_root(self) -> None:
+        standalone = self.root / "vendor/standalone"
+        (standalone / "src").mkdir(parents=True)
+        (standalone / "src/lib.rs").write_text("pub struct ProjectDataSecret;\n")
+        (standalone / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "standalone-product"
+                version = "0.0.0"
+
+                [workspace]
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text("// protected root package\n")
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                exclude = ["vendor/standalone"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_excluded_package_inside_source_tree_cannot_hide_module(self) -> None:
+        hidden = self.root / "src/hidden"
+        hidden.mkdir(parents=True)
+        (hidden / "Cargo.toml").write_text(
+            "[package]\nname = \"hidden\"\nversion = \"0.0.0\"\n"
+        )
+        (hidden / "mod.rs").write_text("pub struct ProjectDataSecret;\n")
+        (self.root / "src/lib.rs").write_text("mod hidden;\n")
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                exclude = ["src/hidden"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("src/hidden/mod.rs", result.stderr)
+        self.assertIn("project-data boundary debt", result.stderr)
+
     def test_root_package_cannot_path_import_nested_product_source(self) -> None:
         product = self.root / "crates/nuxie-authoring"
         (product / "src").mkdir(parents=True)
@@ -432,6 +495,49 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("path attribute crosses a package boundary", result.stderr)
+
+    def test_inline_module_path_attribute_fails_closed(self) -> None:
+        product = self.root / "src/inline/nuxie-authoring"
+        product.mkdir(parents=True)
+        (product / "secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+
+                [lib]
+                path = "secret.rs"
+                """
+            )
+        )
+        (self.root / "src/lib.rs").write_text(
+            "mod inline {\n"
+            '    #[path = "nuxie-authoring/secret.rs"]\n'
+            "    mod secret;\n"
+            "}\n"
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = [
+                    "crates/nuxie-runtime",
+                    "src/inline/nuxie-authoring",
+                ]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inline/block context could not be verified", result.stderr)
 
     def test_root_package_cannot_include_nested_product_source(self) -> None:
         product = self.root / "crates/nuxie-authoring"

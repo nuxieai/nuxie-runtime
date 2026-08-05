@@ -914,13 +914,13 @@ impl Execution {
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .focus_next();
+                        .focus_next(&instance);
                 }
                 Action::FocusPrevious => {
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .focus_previous();
+                        .focus_previous(&instance);
                 }
                 Action::KeyInput {
                     key,

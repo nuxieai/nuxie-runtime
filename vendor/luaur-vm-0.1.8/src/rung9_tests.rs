@@ -12,6 +12,74 @@ fn address(function: luau_FastFunction) -> usize {
 }
 
 #[test]
+fn rawget_fastcall_reads_the_requested_table_entry() {
+    unsafe {
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+
+        crate::functions::lua_createtable::lua_createtable(state, 0, 1);
+        crate::functions::lua_pushnumber::lua_pushnumber(state, 7.0);
+        crate::functions::lua_pushnumber::lua_pushnumber(state, 42.0);
+        crate::functions::lua_rawset::lua_rawset(state, -3);
+
+        let table = (*state).top.sub(1);
+        crate::functions::lua_pushnumber::lua_pushnumber(state, 7.0);
+        let key = (*state).top.sub(1);
+        let result = (*state).top;
+
+        assert_eq!(
+            crate::functions::luau_f_rawget::luau_f_rawget(state, result, table, 1, key, 2),
+            1
+        );
+        assert_eq!(nvalue!(result), 42.0);
+
+        crate::functions::lua_close::lua_close(state);
+    }
+}
+
+#[test]
+fn select_fastcall_reads_varargs_before_the_frame_base() {
+    unsafe {
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+
+        let original_base = (*state).base;
+        let original_func = (*(*state).ci).func;
+        let original_proto = (*(*state).ci).p;
+        let stack = (*state).stack;
+        let mut proto: crate::records::proto::Proto = core::mem::zeroed();
+        proto.numparams = 2;
+
+        (*(*state).ci).func = stack;
+        (*(*state).ci).p = &mut proto;
+        (*state).base = stack.add(6);
+        setnvalue!(stack.add(3), 11.0);
+        setnvalue!(stack.add(4), 22.0);
+        setnvalue!(stack.add(5), 33.0);
+        setnvalue!(stack.add(7), 2.0);
+
+        luaur_common::FFlag::LuauCIProto.push_test_override(true);
+        let status = crate::functions::luau_f_select::luau_f_select(
+            state,
+            stack.add(8),
+            stack.add(7),
+            1,
+            core::ptr::null_mut(),
+            1,
+        );
+        luaur_common::FFlag::LuauCIProto.pop_test_override();
+
+        assert_eq!(status, 1);
+        assert_eq!(nvalue!(stack.add(8)), 22.0);
+
+        (*state).base = original_base;
+        (*(*state).ci).func = original_func;
+        (*(*state).ci).p = original_proto;
+        crate::functions::lua_close::lua_close(state);
+    }
+}
+
+#[test]
 fn rive_fastcall_table_only_wires_the_fork_delta() {
     let missing = crate::functions::luau_f_missing::luau_f_missing as *const () as usize;
     assert_eq!(luauF_table.len(), 256);

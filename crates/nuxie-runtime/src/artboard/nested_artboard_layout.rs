@@ -335,6 +335,12 @@ impl ArtboardInstance {
         // Reversing these two operations changes the first layout solve.
         if refresh_constraint_bounds {
             nested.child.refresh_layout_constraint_bounds();
+            // C++ calculates the transferred child node and its descendants
+            // inside the parent's Yoga tree, then publishes every provider's
+            // new bounds in the same `updateLayoutBounds` traversal. Rust's
+            // decomposed child graph has already consumed its dirty-layout
+            // membership, so publish the host-owned solve here directly.
+            nested.child.retain_host_owned_layout_constraint_bounds();
             changed = true;
         } else {
             changed |= !nested.child.layout_constraint_bounds_enabled;
@@ -368,6 +374,9 @@ impl ArtboardInstance {
         if changed {
             nested.child.update_pass();
         }
+        nested
+            .transferred_hug_layout_generation
+            .set(nested.child.runtime_transferred_layout_generation());
         // Record after assigned-root writes and their child update pass. Those
         // writes dirty the transferred root node themselves; only a later
         // child layout generation should emulate C++ `markHostingLayoutDirty`

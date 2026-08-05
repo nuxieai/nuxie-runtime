@@ -6279,12 +6279,8 @@ impl ArtboardInstance {
         // and clip from the retained background RawPath rebuilt by ordinary
         // layout/path dirt. Unlike the pre-caa91f21 path, this does not create
         // a virtual Rectangle/four-vertex object graph just to copy its path.
+        let bounds = self.runtime_layout_component_draw_bounds(layout_local, graph, layout_bounds);
         self.runtime_drawables.layout_draw_paths(layout_local, || {
-            let bounds = self.runtime_layout_component_bounds_with_bounds(
-                layout_local,
-                graph,
-                layout_bounds,
-            );
             let corners = self.runtime_layout_component_corners(layout_local);
             let background = Arc::new(runtime_layout_rect_raw_path(bounds, corners));
             let mut paint = runtime_path_commands_from_raw_path(background.as_ref());
@@ -6297,6 +6293,23 @@ impl ArtboardInstance {
                 clip: Arc::new(clip),
             }
         })
+    }
+
+    fn runtime_layout_component_draw_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> RuntimeLayoutBounds {
+        let mut bounds =
+            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
+        if let Some(layout) = self
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+        {
+            (bounds.x, bounds.y, bounds.width, bounds.height) = layout.current_bounds();
+        }
+        bounds
     }
 
     fn runtime_layout_component_clip_path_commands(
@@ -6708,6 +6721,12 @@ impl ArtboardInstance {
         TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
     }
 
+    pub(crate) fn runtime_transferred_layout_generation(&self) -> u64 {
+        let (mounted_component_list_layout_revision, _) =
+            runtime_mounted_component_list_revisions(self);
+        mounted_component_list_layout_revision.wrapping_mul(0x100000001b3) ^ self.layout_revision()
+    }
+
     pub(crate) fn retain_runtime_layout_component_bounds(
         &mut self,
         local_id: usize,
@@ -6772,8 +6791,6 @@ impl ArtboardInstance {
                 // transform invalidation (`layout_component.cpp:1167-1178`).
                 self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
                 self.layout_revision = self.layout_revision.wrapping_add(1);
-                self.runtime_drawables
-                    .mark_layout_resource_dirty_for_local(local_id);
             }
             if size_changed {
                 let layout_handle = self.component_handle(local_id);
@@ -8719,9 +8736,22 @@ impl ArtboardInstance {
         layout_bounds: &BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<RuntimeLayoutBounds> {
         // Ported from C++ `src/layout_component.cpp::propagateSizeToChildren`
-        // and `src/shapes/parametric_path.cpp::controlSize`: solved layout
+        // and `src/shapes/parametric_path.cpp::controlSize`: the live layout
         // width/height are pushed through non-Node containers into parametric
-        // paths before those paths build render geometry.
+        // paths before those paths build render geometry. During animation
+        // this is `m_layout`, not the newer retained Yoga target.
+        let current_local = self.runtime_layout_control_owner_for_path(path_local)?;
+        let component = self.component(current_local)?;
+        let mut bounds = layout_bounds.get(&current_local).copied()?;
+        if let Some(layout) = component.concrete.layout.as_ref() {
+            let (_, _, width, height) = layout.current_bounds();
+            bounds.width = width;
+            bounds.height = height;
+        }
+        Some(bounds)
+    }
+
+    fn runtime_layout_control_owner_for_path(&self, path_local: usize) -> Option<usize> {
         let mut current_local = self.component_parent_local(path_local)?;
         let mut visited = BTreeSet::new();
         loop {
@@ -8736,12 +8766,12 @@ impl ArtboardInstance {
                 .runtime_layout_participant_local(current_local)
                 .is_some()
             {
-                return layout_bounds.get(&current_local).copied();
+                return Some(current_local);
             }
             match component.type_name {
                 "LayoutComponent" => {
                     self.runtime_layout_component_style_local(current_local)?;
-                    return layout_bounds.get(&current_local).copied();
+                    return Some(current_local);
                 }
                 type_name if crate::shapes::deformer::supports_component(type_name) => return None,
                 "Artboard" | "Node" => return None,
@@ -8749,6 +8779,31 @@ impl ArtboardInstance {
                     current_local = self.component_parent_local(current_local)?;
                 }
             }
+        }
+    }
+
+    pub(crate) fn mark_runtime_layout_controlled_paths_dirty(&mut self, layout_local: usize) {
+        let controlled_paths = self
+            .runtime_graph()
+            .map(|graph| {
+                graph
+                    .paths
+                    .iter()
+                    .filter(|path| path.parametric.is_some())
+                    .filter_map(|path| {
+                        (self.runtime_layout_control_owner_for_path(path.local_id)
+                            == Some(layout_local))
+                        .then_some(path.local_id)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for path_local in controlled_paths {
+            self.add_dirt(
+                path_local,
+                ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                false,
+            );
         }
     }
 
@@ -12390,6 +12445,17 @@ impl TaffyRuntimeLayoutEngine {
     ) -> Option<f32> {
         let nested = instance.nested_artboards.get(&local)?;
         if nested.layout_data_transferred {
+            let child_layout_generation = nested.child.runtime_transferred_layout_generation();
+            if nested.transferred_hug_layout_generation.get() != child_layout_generation {
+                let (retained_hug_size, _) =
+                    nested.child.transferred_hug_size_after_child_layout_change(
+                        nested.transferred_hug_size.get(),
+                    );
+                nested.transferred_hug_size.set(retained_hug_size);
+                nested
+                    .transferred_hug_layout_generation
+                    .set(child_layout_generation);
+            }
             // `takeLayoutData()` has transferred this root node into the
             // parent. Its assigned Artboard dimensions are the retained Yoga
             // node size; the child's local root bounds can additionally carry
@@ -30726,6 +30792,156 @@ mod tests {
     }
 
     #[test]
+    fn parametric_layout_control_uses_the_live_animated_frame() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let rectangle_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Rectangle")
+            .expect("fixture has a rectangle")
+            .local_id;
+        let layout_local = instance
+            .component_parent_local(rectangle_local)
+            .and_then(|shape_local| instance.component_parent_local(shape_local))
+            .expect("rectangle is controlled by a layout");
+        let layout = instance
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("fixture has retained layout state");
+        layout.retain_bounds(0.0, 0.0, 90.0, 60.0);
+        let solved_bounds = BTreeMap::from([(
+            layout_local,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 140.0,
+                height: 100.0,
+            },
+        )]);
+
+        assert_eq!(
+            instance.runtime_layout_control_size_for_path(rectangle_local, &solved_bounds),
+            Some(RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 90.0,
+                height: 60.0,
+            }),
+            "LayoutComponent::propagateSize reads the interpolating m_layout frame, not its newer Yoga target"
+        );
+        assert_eq!(
+            instance.runtime_layout_component_draw_bounds(
+                layout_local,
+                graph,
+                Some(&solved_bounds),
+            ),
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 90.0,
+                height: 60.0,
+            },
+            "LayoutComponent::updateRenderPath also reads the live m_layout frame"
+        );
+    }
+
+    #[test]
+    fn animated_layout_size_dirties_its_controlled_parametric_path() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let rectangle_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Rectangle")
+            .expect("fixture has a rectangle")
+            .local_id;
+        let layout_local = instance
+            .component_parent_local(rectangle_local)
+            .and_then(|shape_local| instance.component_parent_local(shape_local))
+            .expect("rectangle is controlled by a layout");
+        instance.component_mut(rectangle_local).unwrap().dirt = ComponentDirt::NONE;
+
+        instance.mark_runtime_layout_controlled_paths_dirty(layout_local);
+
+        assert!(
+            instance
+                .component(rectangle_local)
+                .expect("rectangle remains live")
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH),
+            "LayoutComponent::applyInterpolation propagates each live size change through ParametricPath::controlSize"
+        );
+    }
+
+    #[test]
+    fn host_owned_solve_publishes_descendants_but_not_the_transferred_root() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.layout_node_owned_by_host = true;
+        instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("root layout state")
+            .retain_bounds(0.0, 0.0, 200.0, 100.0);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("child layout state")
+            .retain_bounds(0.0, 0.0, 40.0, 50.0);
+        instance.layout_constraint_bounds = Some(Arc::new(BTreeMap::from([
+            (
+                0,
+                RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 300.0,
+                    height: 150.0,
+                },
+            ),
+            (
+                1,
+                RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 50.0,
+                },
+            ),
+        ])));
+
+        instance.retain_host_owned_layout_constraint_bounds();
+
+        assert_eq!(
+            instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("root remains live")
+                .current_bounds(),
+            (0.0, 0.0, 200.0, 100.0),
+            "the parent publishes the transferred root separately"
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("child remains live")
+                .current_bounds(),
+            (0.0, 0.0, 100.0, 50.0),
+            "the parent-owned calculateLayout result reaches child LayoutComponents even after their dirty set was consumed"
+        );
+    }
+
+    #[test]
     fn retained_runtime_layout_query_remeasures_wrapped_text_with_the_solve_constraint() {
         let bytes = cpp_runtime_fixture("layout/layout_display.riv");
         let file = read_runtime_file(&bytes).expect("layout display fixture imports");
@@ -30916,6 +31132,51 @@ mod tests {
             (row.height - 117.0).abs() <= 0.0001,
             "row height was {}",
             row.height
+        );
+    }
+
+    #[test]
+    fn transferred_nested_hug_refreshes_from_mounted_list_generation() {
+        let bytes = cpp_runtime_fixture("global_variables_test.riv");
+        let file = read_runtime_file(&bytes).expect("global variables fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("global variables graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Main"))
+            .expect("fixture has the Main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("fixture has its default state machine");
+        assert!(machine.bind_default_view_model_context_on_artboard(&mut instance));
+
+        instance.advance_state_machine_instance(&mut machine, 0.0);
+        instance
+            .advance_frame_components_with_state_machine_report(0.0, &mut machine)
+            .expect("sample zero component advance");
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(&mut machine),
+            )
+            .expect("sample zero settles");
+        assert!((instance.layout_bounds(19).unwrap().width - 279.0879).abs() < 0.001);
+
+        instance.advance_state_machine_instance(&mut machine, 0.5);
+        instance
+            .advance_frame_components_with_state_machine_report(0.5, &mut machine)
+            .expect("sample half component advance");
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(&mut machine),
+            )
+            .expect("sample half settles");
+        let width = instance.layout_bounds(19).unwrap().width;
+        assert!(
+            (width - 263.0879).abs() < 0.001,
+            "a mounted-list descendant generation must invalidate the transferred nested Hug width before the parent solve; got {width}"
         );
     }
 

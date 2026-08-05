@@ -1086,6 +1086,9 @@ impl ArtboardInstance {
                 cloned_nested
                     .transferred_hug_size
                     .set(source_nested.transferred_hug_size.get());
+                cloned_nested
+                    .transferred_hug_layout_generation
+                    .set(source_nested.transferred_hug_layout_generation.get());
                 cloned_nested.initial_layout_paint_frame.replace(None);
                 cloned_nested
                     .child
@@ -6093,7 +6096,20 @@ impl ArtboardInstance {
             return false;
         };
         if advance.size_changed {
+            self.mark_runtime_layout_controlled_paths_dirty(entry.local_id);
+        }
+        if advance.path_changed {
             self.add_dirt(entry.local_id, ComponentDirt::PATH, false);
+            let has_layout_draw_owner = self
+                .runtime_drawables
+                .mark_layout_resource_dirty_for_local(entry.local_id);
+            if has_layout_draw_owner && let Some(component) = self.component(entry.local_id) {
+                // The retained RawPath is rebuilt lazily, but its renderer
+                // counterpart is keyed by the concrete component revision.
+                // Publish the completion boundary even if Path dirt was
+                // already accumulated on this component.
+                component.bump_path_revision();
+            }
         }
         if advance.size_changed || (advance.layout_changed && !advance.keep_going) {
             self.propagate_scripted_layout_size(entry.local_id);
@@ -6104,8 +6120,6 @@ impl ArtboardInstance {
             // (`src/layout_component.cpp:1329-1401`).
             self.add_dirt(entry.local_id, ComponentDirt::WORLD_TRANSFORM, true);
             self.layout_revision = self.layout_revision.wrapping_add(1);
-            self.runtime_drawables
-                .mark_layout_resource_dirty_for_local(entry.local_id);
         }
         if advance.keep_going {
             // Pinned LayoutComponent::applyInterpolation dirties the exact
@@ -6229,6 +6243,19 @@ impl ArtboardInstance {
             let Some(mut nested) = self.nested_artboards.remove(&host_local) else {
                 return Ok(false);
             };
+            let child_layout_generation = nested.child.runtime_transferred_layout_generation();
+            let transferred_child_layout_changed = nested.layout_data_transferred
+                && nested.transferred_hug_layout_generation.get() != child_layout_generation;
+            if transferred_child_layout_changed {
+                let (retained_hug_size, _) =
+                    nested.child.transferred_hug_size_after_child_layout_change(
+                        nested.transferred_hug_size.get(),
+                    );
+                nested.transferred_hug_size.set(retained_hug_size);
+                nested
+                    .transferred_hug_layout_generation
+                    .set(child_layout_generation);
+            }
             self.detach_active_nested_state_machines(&mut nested);
             let result = match nested.begin_advance(elapsed_seconds) {
                 Err(changed) => Ok(changed),
@@ -6282,6 +6309,13 @@ impl ArtboardInstance {
             };
             self.restore_active_nested_state_machines(&mut nested);
             self.nested_artboards.insert(host_local, nested);
+            if transferred_child_layout_changed {
+                // The child can publish a mounted-list descendant generation
+                // before its nested owner advances. C++'s shared Yoga node is
+                // already dirty in the parent tree; enroll that exact host in
+                // Rust's parent-owned solve and discard only stale Hug axes.
+                crate::layout_node_provider::mark_layout_node_dirty(self, host_local);
+            }
             match result {
                 Ok(changed) => (changed, None),
                 Err(error) => (false, Some(error)),
@@ -6521,6 +6555,22 @@ impl ArtboardInstance {
         self.enqueue_artboard_parametric_layout_control_sources();
         for local_id in resized_layout_components {
             self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+        }
+    }
+
+    pub(crate) fn retain_host_owned_layout_constraint_bounds(&mut self) {
+        let Some(layout_bounds) = self.layout_constraint_bounds.clone() else {
+            return;
+        };
+        for (&local_id, &bounds) in layout_bounds.iter() {
+            if local_id == 0 && self.layout_node_owned_by_host {
+                continue;
+            }
+            self.retain_runtime_layout_component_bounds(
+                local_id,
+                bounds,
+                Some(layout_bounds.as_ref()),
+            );
         }
     }
 
@@ -8919,7 +8969,7 @@ impl ArtboardInstance {
             .and_then(|style| self.objects.component_local_id(style))
     }
 
-    fn transferred_hug_size_after_child_layout_change(
+    pub(crate) fn transferred_hug_size_after_child_layout_change(
         &self,
         transferred: (Option<f32>, Option<f32>),
     ) -> ((Option<f32>, Option<f32>), bool) {
@@ -10068,6 +10118,7 @@ fn build_runtime_nested_artboard_instance(
         render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
         initial_layout_paint_frame: RefCell::new(None),
         transferred_hug_size: Cell::new((None, None)),
+        transferred_hug_layout_generation: Cell::new(0),
         layout_data_transferred: false,
         layout_data_transfer_key: None,
         data_bind_path_ids,

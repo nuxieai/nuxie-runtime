@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-product-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -21,6 +21,7 @@ SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
+PURE_RUNTIME_BOUNDARY_TOOL ?= $(CURDIR)/tools/pure-runtime-boundary/check.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
 PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
 PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
@@ -151,6 +152,29 @@ fmt-check:
 check:
 	cargo check --workspace
 
+# Independently selectable package cuts for the product-surface extraction.
+# The platform targets compile their real target-gated interfaces rather than
+# succeeding through an empty host cfg. `crate-seams-full-check` remains the
+# ordinary whole-workspace verdict.
+crate-seams-baseline-check:
+	cargo check -p nuxie-runtime --no-default-features --lib
+
+crate-seams-product-check:
+	@tools/report-all.sh "crate seams (product)" \
+		"shared product host" "cargo check -p nuxie-product --all-targets" \
+		"editor authoring" "cargo check -p nuxie-authoring --all-targets"
+
+crate-seams-browser-check:
+	RUSTC="$$(rustup which --toolchain stable rustc)" \
+		"$$(rustup which --toolchain stable cargo)" check \
+		-p nuxie-browser-adapter --target wasm32-unknown-unknown --all-targets
+
+crate-seams-apple-check:
+	cargo check -p nuxie-apple-adapter --all-targets
+
+crate-seams-full-check:
+	cargo check --workspace
+
 test: fixtures
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test --workspace
 
@@ -162,7 +186,7 @@ test: fixtures
 # fixed. That masked two separate live failures in #272 alone. The `-check`
 # targets now stand alone, and the `-gate` targets run the tests and the check
 # in one pass through tools/report-all.sh, which reports every failure.
-.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate
+.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 port-manifest-generate:
 	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
 
@@ -187,6 +211,17 @@ rust-attribution-gate:
 	@tools/report-all.sh "rust-attribution" \
 		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
 		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
+
+pure-runtime-boundary-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/pure-runtime-boundary -p 'test_*.py' -v
+
+pure-runtime-boundary-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(PURE_RUNTIME_BOUNDARY_TOOL)" --repo-root "$(CURDIR)"
+
+pure-runtime-boundary-gate:
+	@tools/report-all.sh "pure-runtime-boundary" \
+		"pure-runtime boundary tool unit tests" "$(MAKE) --no-print-directory pure-runtime-boundary-test" \
+		"workspace dependency and source debt check" "$(MAKE) --no-print-directory pure-runtime-boundary-check"
 
 b6-audit-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py
@@ -295,12 +330,14 @@ feature-compile-gate-portable:
 		"renderer-replay --features perf-diagnostics" "cargo check -p renderer-replay --features perf-diagnostics --bins" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
-		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib"
+		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
+		"product and authoring seams" "$(MAKE) --no-print-directory crate-seams-product-check"
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
 		"nux-capi --features apple-renderer,size-report-roots" "cargo check -p nux-capi --features apple-renderer,size-report-roots --lib" \
-		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets"
+		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
+		"Apple adapter seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
 	@tools/report-all.sh "feature-compile-gate" \

@@ -34,11 +34,13 @@ pub unsafe fn luau_f_bufferwritelong(
 
         let len = (*bufvalue!(arg0)).len as usize;
         if checkoutofbounds(offset, len, core::mem::size_of::<i64>()) {
-            let val: i64 = lvalue!(args.wrapping_add(1));
-            let dst = (*bufvalue!(arg0)).data.as_mut_ptr().add(offset as usize) as *mut i64;
-            core::ptr::write_unaligned(dst, val);
-            return 0;
+            return -1;
         }
+
+        let val: i64 = lvalue!(args.wrapping_add(1));
+        let dst = (*bufvalue!(arg0)).data.as_mut_ptr().add(offset as usize) as *mut i64;
+        core::ptr::write_unaligned(dst, val);
+        return 0;
     }
 
     -1

@@ -92,7 +92,7 @@ are merged in.
 |---|---|---|---|---|
 | F1 | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` | 1,030+ | PARTIAL (P2F1/P2F2) | Symphonia WAV/MP3/FLAC source/reader decode, file-owned AudioAsset loading, Factory decode, the Rive-owned headless frame-clock/mixer/sound lifecycle and retained default engine, dense-ordinal AudioEvent playback, multiplied Artboard volume, recursive engine/volume propagation, and Artboard-scoped teardown are ported under D17. Lua audio and CPAL device output remain later packages. |
 | F2 | **Text input editing** — cursor motion, selection, keyboard routing (`raw_text_input.cpp` 992, `text_input.cpp` 777, `cursor.cpp` 359, selection/selected-text files) | ~2,400 | CLOSED | FL-E6 ports the retained buffer/journal, cursor and selection paths, key/committed-text routing, multiline source/display behavior, pointer multi-click/drag selection, focus request, and scroll-viewport edge advancement. The remaining non-TextInput gamepad/semantic listener work stays in F5. |
-| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | ABSENT | The model rive-ios/flutter bindings drive. FlowSession is the Nuxie analog but single-threaded; its product C boundary is owned by `nuxie-ios` (see A-tier). Decide: port, or declare FlowSession the supported architecture (D-row + docs). |
+| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | PARTIAL (P3F: 79/83) | The direct `CommandQueue`/`CommandServer` port now covers 79 pinned cases. Four S4-45 blob handle/message cases remain WATCH in `docs/command-queue-test-ledger.md`. FlowSession is a separate renderer-neutral product transaction protocol, not the command-port substitute or an iOS-owned baseline API. |
 | F4 | **Scroll physics** — `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists). |
 | F5 | **Keyboard/gamepad/semantic/text-input listener groups + input runtime** (`*_listener_group.cpp` 481, `gamepad_batch.cpp` 363, inputs/) | ~930 | ABSENT | Pointer listeners only. Blocks F2 interaction and any keyboard-driven content. |
 | F6 | **Semantics/accessibility** — `semantic_manager` 1,109, `semantic_data` 572, provider, inference registry | 1,926 | CLOSED (FTAIL) | The retained runtime and LT-1 full diff/action/focus side channel are implemented against `4ac7b327`. Nested focus, Simpsons, and data_binding_lists are exact. The latter now shapes its four initial mounted Text bounds through the same retained glyph path used for drawing (`text.cpp:534-615,1154-1233`; `semantic_data.cpp:273-293,501-532`). Component settlement journals generic owner WorldTransform/Path dirt once per semantic synchronization, replacing the former snapshot-only refresh; the dedicated journal test and exact three-sample data_binding_lists projection close the named SEMRES remainders. |
@@ -101,7 +101,7 @@ are merged in.
 | F9 | **Joystick runtime behavior** | 169 | PARTIAL (verify) | Only property keys found; confirm advance/apply behavior or add fixture proving it. |
 | F10 | **Behavioral-verify candidates** — concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Text` (659/666), `TransitionValueIdComparator` (601) | — | UNKNOWN | Cheapest wins in the register: author one fixture each; either it's generically handled (close row) or it diffs (new F-row). |
 | F11 | **Compressed-texture decoders** (astc/bc/ktx2/etc) | 735 | ABSENT | GPU texture path; relevance depends on whether editor exports these. |
-| F12 | **Async work pool** (346) + **profiler** (407) | 753 | PARTIAL | P1-m ports the profiler records, lifecycle, wire format, and runtime hooks; its capture backend is the declared D16 adaptation. The async work pool remains absent and matters only if F3 is ported. |
+| F12 | **Async work pool** (346) + **profiler** (407) | 753 | PARTIAL | P1-m ports the profiler records, lifecycle, wire format, and runtime hooks; its capture backend is the declared D16 adaptation. The async work pool remains absent; the current command-server port provides server-thread confinement without claiming that separate work-pool correspondence. |
 | F13 | Historical backlog ceilings (from the original port's status log): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live data-bound nested-host controls beyond generated defaults, richer static-text modifiers (shape/origin, gradient text effects) | — | LATENT | Currently exact for all corpus files; will surface as diffs when fixtures exist (see C-rows). |
 | F14 | `binary_writer`/`binary_data_reader`, `static_scene.cpp`, `hittest_command_path.cpp`, `intrinsically_sizeable.cpp` | ~350 | ABSENT (accepted) | Read-only runtime doesn't need writers; note and close. |
 | F15 | **Participant layout animation** — the C++ `ParticipantAnimation` lifecycle (`layout_participant.cpp:29-43,398-455,508-644`: `cascadeLayoutStyle` allocation, `advanceComponent`, `applyInterpolation` incl. smoothing/retarget). | ~300 | PARTIAL | UNIV-1603; found by B-6 post-audit row B6-0455 (2026-08-04), ported 2026-08-05: `concrete.participant_layout` reuses the LayoutComponent animation state in inherit-only mode; cascade reaches participants through transparent containers; the participant advances as its own AdvancingComponent; solve settles retarget through `retain_bounds`; parametric-path control size reads the animated slot. Upstream `layout_participant_test.cpp` "animates its slot" (:203), "re-targets in flight" (:256), and "disabling interpolation frees animation" are ported and bind to the implementation (neutralizing the advance entry or the cascade arming fails them). Animated **position** is now interpolated too (2026-08-05): `is_interpolating()`-gated overrides in both world-transform reads serve the retained animated x/y for layouts and participants on the parent-mapped path, differentially proven by silver `layout_grid_stack_grid_with_layouts_size_changing` flipping byte-exact (was `transform ty: expected 336.03, got 310`); the mid-flight animation family is covered by the silver corpus (layout_anim_* rows now diverge only in the redundant-rewind cadence form, the D12 retained-cache design). REMAINDER: (a) the artboard-origin fallback convention in the world-transform read stays un-overridden (retain/read conventions differ there; commented in code); (b) Text-host layout constraints read the solve, not the animated slot, during interpolation. |
@@ -121,12 +121,13 @@ in this repository.
 | A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the `nuxie-ios` FlowSession boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
 | A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |
-| A6 | **No thread-safe command-server model** — FlowSession is explicitly single-threaded. Either port F3 or document the threading contract embedders must own (decision row). | 2 |
+| A6 | **Command-server model ported; product adoption incomplete** — the 79/83 baseline port closes the old “no model” premise. The current iOS pin predates it, four blob cases remain WATCH, and Flow's synchronous rollback/ordering/wake/error contract is not yet proven equivalent. | 2 |
 | A7 | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Responsive hosts need this. | 2 |
 | A8 | Async decode callbacks; RTTI-style typed queries; semantic-tree protocol (pairs with F6). | 3 |
 
-Nuxie-only *additive* surfaces (not gaps, keep them): `scene::Scene` authoring
-API, text caret/hit/selection geometry richer than upstream public headers.
+Nuxie-only *additive* surfaces are not parity gaps. `scene::Scene` authoring and
+authored observation policy move to the editor owner; independently justified
+low-level text caret/hit/selection observations remain baseline APIs.
 
 ## C — Coverage holes (supported but never exercised)
 
@@ -217,10 +218,9 @@ A4/A5 (text runs + events in the portable surface), F2+F5 (text-input
 interaction — upstream is moving here, H1), F4 (scroll physics), F1/A2
 (audio, if any flow ships sound), C3 (production-flow corpus lane).
 
-**P2 — SDK completeness.** A6 decision (command-server port vs documented
-FlowSession threading contract), A7 (resize), remaining capi/VM coverage,
-F10/C1 cheap fixture sweeps, V6/V7 renderer-oracle hardening, V10 blocking
-perf gate, H2 size re-measure.
+**P2 — SDK completeness.** A6 integration/equivalence follow-through, A7
+(resize), remaining capi/VM coverage, F10/C1 cheap fixture sweeps, V6/V7
+renderer-oracle hardening, V10 blocking perf gate, H2 size re-measure.
 
 **P3 — long tail.** F6 semantics, F7 remaining Lua bindings (corpus-gated,
 as designed), F8 ORE, F11 compressed textures, F12, F13 ceilings as fixtures

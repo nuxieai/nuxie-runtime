@@ -13,7 +13,18 @@ ADDITIONS_HEADER = textwrap.dedent(
     """\
     schema = "nuxie-rust-additions/v1"
     schema_version = 1
-    category_values = ["scene-api", "flowsession-abi", "retained-render", "codegen", "test-infra"]
+    category_values = [
+      "baseline-adaptation",
+      "product-authoring",
+      "product-host",
+      "product-data",
+      "product-trust",
+      "platform-adapter",
+      "mixed-product-host",
+      "retained-render",
+      "codegen",
+      "test-infra",
+    ]
     """
 )
 
@@ -71,6 +82,28 @@ class RustAttributionCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("crates/nuxie-audio/src/lib.rs", result.stderr)
+
+    def test_product_and_adapter_crate_sources_are_in_scope(self) -> None:
+        expected = (
+            "crates/nuxie-product/src/lib.rs",
+            "crates/nuxie-authoring/src/lib.rs",
+            "crates/nuxie-browser-adapter/src/lib.rs",
+            "crates/nuxie-apple-adapter/src/lib.rs",
+        )
+        for relative in expected:
+            source = self.root / relative
+            source.parent.mkdir(parents=True)
+            source.write_text("// product seam\n")
+        self.manifest.write_text(
+            '[[file]]\nrust_module = "crates/nuxie-runtime/src/lib.rs"\n'
+        )
+        self.additions.write_text(ADDITIONS_HEADER)
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        for relative in expected:
+            self.assertIn(relative, result.stderr)
 
     def test_manifest_rust_module_list_classifies_source(self) -> None:
         self.manifest.write_text(
@@ -165,7 +198,7 @@ class RustAttributionCliTest(unittest.TestCase):
                 """
                 [[addition]]
                 path = "crates/nuxie/src/missing.rs"
-                category = "scene-api"
+                category = "product-authoring"
                 """
             ).lstrip()
         )

@@ -519,3 +519,5 @@ fn setting_file_models_refreshes_data_on_an_already_initialized_vm() {
         Value::Function(_)
     ));
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

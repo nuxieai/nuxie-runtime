@@ -3,6 +3,8 @@
 /fixtures/**/*.riv
 /fixtures/command_queue/
 !/fixtures/sync/data_bind_blob_test.riv
+!/fixtures/editor/
+!/fixtures/editor/editor_scripted_vector_v7.riv
 !/fixtures/p2d/
 !/fixtures/p2d/scripted_interpolator.riv
 !/fixtures/fl-e8/

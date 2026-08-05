@@ -58,3 +58,5 @@ fn triangle_indices_are_bounded_to_the_pinned_u16_surface() {
         .to_string();
     assert!(error.contains("index 65536 exceeds 65535"), "{error}");
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

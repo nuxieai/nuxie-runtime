@@ -186,3 +186,5 @@ fn optional_layout_callback_is_resolved_once() {
     );
     assert_eq!(table.get::<i64>("lookups").unwrap(), 1);
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

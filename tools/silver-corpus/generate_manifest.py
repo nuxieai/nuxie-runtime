@@ -198,10 +198,15 @@ EXACT = (
     "artboard_list_map_rules",
     "artboard_width_test",
     "bidirectional_precedence-source_first",
+    "bidirectional_precedence-target_first",
+    "bidirectional_stateful_property",
+    "clipping_and_draw_order",
     "component_based_conditions",
     "component_based_conditions-Artboard2",
     "component_list_follow_path_distance",
     "component_list_follow_path",
+    "component_stateful_vm_instance",
+    "component_stateful_vm_instance_2",
     "data_bind_font_test",
     "component_stateful",
     "custom_property_trigger_bind",
@@ -225,6 +230,8 @@ EXACT = (
     "hittest_ab1_parent",
     "hittest_collapsed_layouts",
     "hittest_nested",
+    "image_fit_alignment_2",
+    "layout_grid_stack_grid_with_layouts_size_changing",
     "image_fit_alignment_3",
     "image_fit_alignment_updated_test",
     "list_items",
@@ -246,6 +253,7 @@ EXACT = (
     "spotify_kids_app_icon",
     "stacked_path_effects",
     "state_transition_fire_trigger",
+    "stateful_keyed_trigger",
     "target_event",
     "text_follow_path_shape_length",
     "text_stroke_test",
@@ -258,14 +266,6 @@ EXACT = (
     "vertical_align_ellipsis",
     "viewmodel_list_trigger",
     "viewmodel_based_condition",
-    "bidirectional_precedence-target_first",
-    "bidirectional_stateful_property",
-    "clipping_and_draw_order",
-    "component_stateful_vm_instance",
-    "component_stateful_vm_instance_2",
-    "image_fit_alignment_2",
-    "layout_grid_stack_grid_with_layouts_size_changing",
-    "stateful_keyed_trigger",
 )
 
 
@@ -1827,6 +1827,8 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
+focusable_element|frame 1, op 144 (color): expected color, got save
+global_viewmodels_test-auto_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
 component_list_grouped|frame 6, op 413 (transform), field tx: expected -90, got 0
@@ -1886,7 +1888,6 @@ data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got colo
 drag_event|frame 23, op 602 (save): expected save, got color
 focus_traversal|frame 0, op 95 (color): expected color, got save
 fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
-global_viewmodels_test-auto_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
 hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
@@ -1928,7 +1929,6 @@ unbound_stateful_component|frame 0, op 10 (save): expected save, got color
 virtualize_blendmode|frame 0, op 33 (color): expected color, got save
 virtualized_artboard_databound_children|frame 5, op 365 (makeRenderPaint): expected makeRenderPaint, got save
 word_joiner_test|frame 2, op 262 (transform), field ty: expected -39.996094, got -15.796875
-focusable_element|frame 1, op 144 (color): expected color, got save
 """.strip().splitlines()
 )
 

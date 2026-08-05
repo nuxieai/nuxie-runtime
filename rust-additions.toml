@@ -1,10 +1,24 @@
 schema = "nuxie-rust-additions/v1"
 schema_version = 1
-category_values = ["scene-api", "flowsession-abi", "retained-render", "codegen", "test-infra"]
+# Ownership/provenance categories, not historical landing-lane names. A file
+# that mixes baseline and product behavior remains explicitly mixed until the
+# extraction moves the product portion above the runtime seam.
+category_values = [
+  "baseline-adaptation",
+  "product-authoring",
+  "product-host",
+  "product-data",
+  "product-trust",
+  "platform-adapter",
+  "mixed-product-host",
+  "retained-render",
+  "codegen",
+  "test-infra",
+]
 
 [[addition]]
 path = "crates/nuxie-audio/src/lib.rs"
-category = "scene-api"
+category = "baseline-adaptation"
 
 [[addition]]
 path = "crates/nuxie-binary/src/assets/mod.rs"
@@ -36,7 +50,7 @@ category = "codegen"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/focus.rs"
-category = "scene-api"
+category = "baseline-adaptation"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/input/mod.rs"
@@ -52,7 +66,7 @@ category = "codegen"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/project_data_converter.rs"
-category = "scene-api"
+category = "product-data"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/properties.rs"
@@ -92,32 +106,48 @@ category = "codegen"
 
 [[addition]]
 path = "crates/nuxie-scripting/src/envelope.rs"
-category = "flowsession-abi"
+category = "baseline-adaptation"
 
 [[addition]]
 path = "crates/nuxie-scripting/src/lib.rs"
-category = "flowsession-abi"
+category = "mixed-product-host"
 
 [[addition]]
 path = "crates/nuxie-scripting/src/vm/bytecode.rs"
-category = "flowsession-abi"
+category = "baseline-adaptation"
 
 [[addition]]
 path = "crates/nuxie-scripting/src/vm/host_commands.rs"
-category = "flowsession-abi"
+category = "product-host"
 
 [[addition]]
 path = "crates/nuxie-scripting/src/vm/resource_limits.rs"
-category = "flowsession-abi"
+category = "mixed-product-host"
 
 [[addition]]
 path = "crates/nuxie/src/flow_session.rs"
-category = "flowsession-abi"
+category = "product-host"
 
 [[addition]]
 path = "crates/nuxie/src/scene.rs"
-category = "scene-api"
+category = "product-authoring"
 
 [[addition]]
 path = "crates/nuxie/src/script_import.rs"
-category = "flowsession-abi"
+category = "product-trust"
+
+[[addition]]
+path = "crates/nuxie-product/src/lib.rs"
+category = "product-host"
+
+[[addition]]
+path = "crates/nuxie-authoring/src/lib.rs"
+category = "product-authoring"
+
+[[addition]]
+path = "crates/nuxie-browser-adapter/src/lib.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-apple-adapter/src/lib.rs"
+category = "platform-adapter"

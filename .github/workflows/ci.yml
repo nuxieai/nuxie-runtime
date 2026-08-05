@@ -10,6 +10,19 @@ on:
 permissions:
   contents: read
 
+# Hosted macOS capacity is far below the demand of every push and PR sync
+# queueing ~6 macOS jobs each. GitHub silently cancels any job still queued
+# after 24 hours (conclusion flips to `cancelled` with no log), which is how
+# the trusted golden-compare gate stopped reporting on main -- the 9684cdf7
+# divergence landed unseen exactly this way. Collapse superseded runs instead
+# of queueing them: on branches and PRs a newer sync cancels the in-flight
+# run; on main an in-flight run always finishes (its per-commit gate evidence
+# is load-bearing) and a newer push only replaces the one *pending* run,
+# which then reports an explicit `cancelled` rather than expiring silently.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   # Current sync-pin runtime/golden/perf candidate. The renderer-golden job
   # overrides this with the historical renderer-port oracle revision that
@@ -25,15 +38,18 @@ env:
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
-  # This workflow definition is part of the pull request, so keep every local
-  # reusable-workflow job on an ephemeral GitHub-hosted runner. Protected refs
-  # may invoke the reusable workflow separately when self-hosted execution is
-  # required.
+  # On pull requests this workflow definition is part of the proposed change,
+  # so every local reusable-workflow job stays on an ephemeral GitHub-hosted
+  # runner (and the nuxie-macos runner group would refuse the non-main ref
+  # anyway). Pushes to main and dispatches on main run the reusable workflow
+  # at refs/heads/main, which the nuxie-macos runner group admits, so they
+  # use the self-hosted pool and stay out of the saturated hosted macOS
+  # queue.
   trusted-macos-ci:
     name: Trusted macOS
     uses: ./.github/workflows/_trusted-macos.yml
     with:
-      force_hosted: true
+      force_hosted: ${{ github.ref != 'refs/heads/main' }}
 
   port-manifest:
     name: Upstream C++ port manifest
@@ -71,13 +87,26 @@ jobs:
         if: ${{ !cancelled() }}
         run: make rust-attribution-gate
 
-  # The hosted reusable workflow above owns the golden-compare gate but does not
-  # export its raw summaries. Run the same floor separately so the scorecard
-  # consumes real per-commit output and exit codes, never an inferred green
-  # status.
+      # The boundary test and live workspace check are independent verdicts. This
+      # runs on Ubuntu because it parses every declared dependency table,
+      # including Apple target and optional feature tables, without compiling.
+      - name: Verify pure-runtime dependency boundary
+        if: ${{ !cancelled() }}
+        run: make pure-runtime-boundary-gate
+
+  # The reusable trusted workflow owns the oracle floor (golden compare,
+  # scripted golden, workspace tests, C ABI smoke) and records its own
+  # scorecard evidence, so this job no longer re-runs that floor on a second
+  # hosted runner. It carries only the gates no other job covers: the
+  # Apple-target feature compile and the SDK size budget.
   parity-runtime-evidence:
-    name: Parity runtime floor evidence
+    name: Apple compile and size evidence
     runs-on: macos-14
+    # macOS timeouts on this and the jobs below are hang guards only, set at
+    # 2-3x the observed worst-case duration. A wedged job that holds one of
+    # the few hosted macOS slots for the 6-hour default pushes the shared
+    # queue toward GitHub's silent 24-hour expiry cancellation.
+    timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -90,19 +119,16 @@ jobs:
         with:
           path: rive-rust
 
-      - name: Checkout reference rive-runtime
-        uses: actions/checkout@v4
-        with:
-          repository: rive-app/rive-runtime
-          ref: ${{ env.RIVE_RUNTIME_REF }}
-          path: rive-runtime
-
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
 
-      # Apple-target feature compile coverage, deliberately ahead of the
-      # reference-runtime build so it costs nothing extra and reports on its
-      # own. nux-capi's size-report-roots harness compiles ONLY here and in
+      # The apple-tier check builds test targets that include_bytes! the
+      # pinned assets.
+      - name: Fetch pinned test assets
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make fixtures
+
+      # nux-capi's size-report-roots harness compiles ONLY here and in
       # tools/size-report.sh, whose inventory check runs before its fat-LTO
       # build -- so before this gate existed, inventory drift kept the
       # harness's compile errors permanently unreached. See
@@ -115,59 +141,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Build reference Rive runtime
-        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
-        run: |
-          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
-          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
-
-      - name: Fetch pinned test assets
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make fixtures
-
-      - name: Record runtime golden ratchet
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate golden-compare \
-            --output target/parity-scorecard/evidence/golden-compare.json \
-            -- make golden-compare
-
-      - name: Record forced-scripted golden ratchet
-        if: always()
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate scripted-golden-compare \
-            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
-            -- make scripted-golden-compare
-
-      # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
-      # an audit drift is a distinct failure and must not stop the workspace
-      # test floor below from running and reporting.
-      - name: Verify B-6 audit
-        if: always()
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make b6-audit-check
-
-      - name: Record workspace test floor
-        if: always()
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate cargo-test-workspace \
-            --output target/parity-scorecard/evidence/cargo-test-workspace.json \
-            -- make cpp-oracle-workspace-tests
-
-      - name: Record C API smoke floor
-        if: always()
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate capi-smoke \
-            --output target/parity-scorecard/evidence/capi-smoke.json \
-            -- make capi-smoke
 
       - name: Record SDK size budget (#B-3, 9 MiB both variants)
         if: always()
@@ -204,6 +177,7 @@ jobs:
   browser-renderer:
     name: Browser WebGPU
     runs-on: macos-14
+    timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -227,6 +201,9 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
+      - name: Compile the browser adapter seam
+        run: make crate-seams-browser-check
+
       - name: Record WebGPU-only browser support gate
         env:
           BROWSER_RENDERER_BROWSER: chrome
@@ -248,6 +225,9 @@ jobs:
   renderer-golden:
     name: Renderer pixel golden
     runs-on: macos-14
+    # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
+    # bootstrap builds from depot_tools and needs the extra headroom.
+    timeout-minutes: 300
     env:
       RUSTUP_TOOLCHAIN: stable
       # Do not relabel the checked-in renderer-port Dawn references. Advancing this
@@ -477,6 +457,7 @@ jobs:
   perf-gate:
     name: Hot-loop performance gate
     runs-on: macos-14
+    timeout-minutes: 90
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -522,6 +503,8 @@ jobs:
     name: Five-tier parity scorecard
     if: ${{ always() }}
     needs:
+      # trusted-macos-ci uploads the oracle floor and C ABI evidence.
+      - trusted-macos-ci
       - parity-runtime-evidence
       - browser-renderer
       - renderer-golden

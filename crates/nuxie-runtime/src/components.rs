@@ -1198,11 +1198,7 @@ impl RuntimeLayoutComponentState {
     }
 
     pub(crate) fn target_bounds(&self) -> (f32, f32, f32, f32) {
-        let layout = if self.animates() {
-            self.current_animation_data().to
-        } else {
-            self.layout.get()
-        };
+        let layout = self.solved_layout.get().unwrap_or_else(|| self.layout.get());
         (layout.left, layout.top, layout.width, layout.height)
     }
 
@@ -2341,6 +2337,21 @@ mod advancing_owner_tests {
 
         assert_eq!(layout.solved_bounds(), Some((100.0, 50.0, 30.0, 40.0)));
         assert_eq!(layout.constraint_bounds(), (0.0, 0.0, 10.0, 20.0));
+    }
+
+    #[test]
+    fn layout_target_remains_the_last_solve_when_animation_style_changes() {
+        let layout = RuntimeConcreteComponentState::for_type("LayoutComponent")
+            .layout
+            .expect("layout state");
+        layout.retain_bounds(0.0, 0.0, 10.0, 20.0);
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(100.0, 50.0, 30.0, 40.0);
+
+        layout.set_animation_style(0, 0, 0.0, None);
+
+        assert_eq!(layout.target_bounds(), (100.0, 50.0, 30.0, 40.0));
+        assert_eq!(layout.current_bounds(), (0.0, 0.0, 10.0, 20.0));
     }
 
     #[test]

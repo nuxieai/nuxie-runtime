@@ -459,7 +459,52 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
-    for slot in 94..243 {
+    let integer = [
+        (94, crate::functions::luau_f_integercreate::luau_f_integercreate as *const () as usize),
+        (95, crate::functions::luau_f_integertonumber::luau_f_integertonumber as *const () as usize),
+        (96, crate::functions::luau_f_integerneg::luau_f_integerneg as *const () as usize),
+        (97, crate::functions::luau_f_integeradd::luau_f_integeradd as *const () as usize),
+        (98, crate::functions::luau_f_integersub::luau_f_integersub as *const () as usize),
+        (99, crate::functions::luau_f_integermul::luau_f_integermul as *const () as usize),
+        (100, crate::functions::luau_f_integerdiv::luau_f_integerdiv as *const () as usize),
+        (101, crate::functions::luau_f_integermin::luau_f_integermin as *const () as usize),
+        (102, crate::functions::luau_f_integermax::luau_f_integermax as *const () as usize),
+        (103, crate::functions::luau_f_integerrem::luau_f_integerrem as *const () as usize),
+        (104, crate::functions::luau_f_integeridiv::luau_f_integeridiv as *const () as usize),
+        (105, crate::functions::luau_f_integerudiv::luau_f_integerudiv as *const () as usize),
+        (106, crate::functions::luau_f_integerurem::luau_f_integerurem as *const () as usize),
+        (107, crate::functions::luau_f_integermod::luau_f_integermod as *const () as usize),
+        (108, crate::functions::luau_f_integerclamp::luau_f_integerclamp as *const () as usize),
+        (109, crate::functions::luau_f_integerband::luau_f_integerband as *const () as usize),
+        (110, crate::functions::luau_f_integerbor::luau_f_integerbor as *const () as usize),
+        (111, crate::functions::luau_f_integerbnot::luau_f_integerbnot as *const () as usize),
+        (112, crate::functions::luau_f_integerbxor::luau_f_integerbxor as *const () as usize),
+        (113, crate::functions::luau_f_integerlt::luau_f_integerlt as *const () as usize),
+        (114, crate::functions::luau_f_integerle::luau_f_integerle as *const () as usize),
+        (115, crate::functions::luau_f_integerult::luau_f_integerult as *const () as usize),
+        (116, crate::functions::luau_f_integerule::luau_f_integerule as *const () as usize),
+        (117, crate::functions::luau_f_integergt::luau_f_integergt as *const () as usize),
+        (118, crate::functions::luau_f_integerge::luau_f_integerge as *const () as usize),
+        (119, crate::functions::luau_f_integerugt::luau_f_integerugt as *const () as usize),
+        (120, crate::functions::luau_f_integeruge::luau_f_integeruge as *const () as usize),
+        (121, crate::functions::luau_f_integerlshift::luau_f_integerlshift as *const () as usize),
+        (122, crate::functions::luau_f_integerrshift::luau_f_integerrshift as *const () as usize),
+        (123, crate::functions::luau_f_integerarshift::luau_f_integerarshift as *const () as usize),
+        (124, crate::functions::luau_f_integerlrotate::luau_f_integerlrotate as *const () as usize),
+        (125, crate::functions::luau_f_integerrrotate::luau_f_integerrrotate as *const () as usize),
+        (126, crate::functions::luau_f_integerextract::luau_f_integerextract as *const () as usize),
+        (127, crate::functions::luau_f_integerbtest::luau_f_integerbtest as *const () as usize),
+        (128, crate::functions::luau_f_integercountrz::luau_f_integercountrz as *const () as usize),
+        (129, crate::functions::luau_f_integercountlz::luau_f_integercountlz as *const () as usize),
+        (130, crate::functions::luau_f_integerbswap::luau_f_integerbswap as *const () as usize),
+        (131, crate::functions::luau_f_bufferreadlong::luauF_bufferreadlong as *const () as usize),
+        (132, crate::functions::luau_f_bufferwritelong::luau_f_bufferwritelong as *const () as usize),
+    ];
+    for (slot, expected) in integer {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in 133..243 {
         assert_eq!(address(luauF_table[slot]), missing, "slot {slot}");
     }
     assert_eq!(

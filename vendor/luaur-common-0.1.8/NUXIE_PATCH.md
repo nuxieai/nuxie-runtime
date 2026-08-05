@@ -72,3 +72,9 @@ Provenance:
 - Ported rive_0_732 fork patch set (decb2d05..86eb0096).
 - Touched areas: the pinned bytecode-v7 target override and the exact 243,
   245-255 Rive builtin ABI block.
+
+## Fast-call dispatch enablement
+
+- Preserved the pinned engine's raw-default-OFF profile for
+  `LuauIntegerFastcalls` and `LuauIntegerBufferFastcalls` when test helpers
+  enable all other flags.

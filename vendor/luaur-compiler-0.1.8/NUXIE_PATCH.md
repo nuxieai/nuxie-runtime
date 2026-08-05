@@ -47,3 +47,8 @@
 - Ported rive_0_732 fork patch set (decb2d05..86eb0096).
 - Touched areas: Rive `math.fround`/`Vector` builtin recognition, exact
   arity/safety metadata, and numeric/vector result type mapping.
+
+## Fast-call dispatch enablement
+
+- Kept integer and integer-buffer builtin recognition dark unless both pinned
+  runtime flags are enabled, matching the oracle's raw-default-OFF table.

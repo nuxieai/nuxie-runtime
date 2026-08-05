@@ -204,3 +204,160 @@ fn metal_queue(
     unsafe { Retained::retain(pointer) }
         .ok_or_else(|| RendererError::Device("Metal command queue pointer is null".into()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::RenderMode;
+
+    #[test]
+    fn present_pipeline_blits_rgba_frames_into_bgra_targets_without_cpu_staging() {
+        let factory = WgpuFactory::new_with_mode(2, 2, RenderMode::Msaa).unwrap();
+        let target = factory
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-test-bgra-present-target"),
+                size: wgpu::Extent3d {
+                    width: 2,
+                    height: 2,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let presenter = PresentPipeline::new(
+            &factory.context.device,
+            wgpu::TextureFormat::Bgra8Unorm,
+            PresentTargetAlpha::Straight,
+        );
+
+        factory
+            .begin_frame(0xff11_2233)
+            .finish_to_texture_view(&view, &presenter)
+            .unwrap();
+
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-test-bgra-present-readback"),
+                size: wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64 * 2,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-test-bgra-present-copy"),
+                });
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                    rows_per_image: Some(2),
+                },
+            },
+            target.size(),
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+
+        let slice = readback.slice(..);
+        pollster::block_on(super::super::map_buffer(&factory.context, &slice)).unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        assert_eq!(&mapped[..4], &[0x33, 0x22, 0x11, 0xff]);
+    }
+
+    fn half_alpha_red_presented_pixel(target_alpha: PresentTargetAlpha) -> [u8; 4] {
+        let factory = WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa).unwrap();
+        let target = factory
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-test-transparent-bgra-present-target"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let presenter = PresentPipeline::new(
+            &factory.context.device,
+            wgpu::TextureFormat::Bgra8Unorm,
+            target_alpha,
+        );
+
+        factory
+            .begin_frame(0x80ff_0000)
+            .finish_to_texture_view(&view, &presenter)
+            .unwrap();
+
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-test-transparent-bgra-present-readback"),
+                size: wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-test-transparent-bgra-present-copy"),
+                });
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                    rows_per_image: Some(1),
+                },
+            },
+            target.size(),
+        );
+        factory.context.queue.submit(Some(encoder.finish()));
+
+        let slice = readback.slice(..);
+        pollster::block_on(super::super::map_buffer(&factory.context, &slice)).unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        mapped[..4].try_into().unwrap()
+    }
+
+    #[test]
+    fn present_pipeline_converts_premultiplied_frames_to_straight_surface_alpha() {
+        assert_eq!(
+            half_alpha_red_presented_pixel(PresentTargetAlpha::Straight),
+            [0x00, 0x00, 0xff, 0x80],
+        );
+    }
+
+    #[test]
+    fn present_pipeline_preserves_premultiplied_frames_for_browser_surface_alpha() {
+        assert_eq!(
+            half_alpha_red_presented_pixel(PresentTargetAlpha::Premultiplied),
+            [0x00, 0x00, 0x80, 0x80],
+        );
+    }
+}

@@ -33,12 +33,13 @@ scripting ON at 9,118,104 B (8.70 MiB) — ON breached, the gate reopened the
 same day, and the user approved the 9 MiB replacement (≈3.4% headroom over
 scripting ON).
 
-## Current measurement
+## Baseline evidence snapshot
 
-Measured 2026-07-20 at source revision `d8091cd5`, including the complete
-42-entry core-renderer and Darwin-presentation consumer harness. The committed
-evidence snapshot records the exact measurement revision, artifact digests,
-toolchain, public-root inventory, and symbol-size breakdown in
+Measured 2026-07-20 at source revision `d8091cd5`, using the then-current
+42-entry core-renderer and Darwin-presentation consumer harness. The active
+harness now audits 52 roots across the portable renderer and Apple adapter.
+The committed baseline snapshot records its exact measurement revision,
+artifact digests, toolchain, public-root inventory, and symbol-size breakdown in
 [`docs/evidence/size-b3-2026-07-20.md`](evidence/size-b3-2026-07-20.md). Two
 consecutive runs of `make size-report` produced the same output and
 byte-identical artifacts.

@@ -219,6 +219,7 @@ EXACT = (
     "fill_trim_path",
     "focus_test",
     "focus_traversal",
+    "focusable_element",
     "follow_path_animate_shape",
     "follow_path_animate_solo",
     "follow_path_animate_target",
@@ -1826,7 +1827,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-focusable_element|frame 1, op 144 (color): expected color, got save
 global_viewmodels_test-auto_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
@@ -1835,7 +1835,7 @@ component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color
 data_binding_artboards_test_recursive|frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame
 deterministic_mode|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
 draw_index_list|frame 0, op 35 (color): expected color, got makeRenderPaint
-focus_collapsing|frame 1, op 98 (color), field paint_id: expected 4, got 11
+focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
 formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
 formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
 formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384

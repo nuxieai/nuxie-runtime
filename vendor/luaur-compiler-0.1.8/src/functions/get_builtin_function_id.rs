@@ -276,11 +276,13 @@ pub fn get_builtin_function_id(builtin: &Builtin, options: &CompileOptions) -> i
             return LBF_BUFFER_WRITEF64 as i32;
         }
         if FFlag::LuauIntegerFastcalls.get()
+            && FFlag::LuauIntegerBufferFastcalls.get()
             && builtin.method.operator_eq_c_char(c"readinteger".as_ptr())
         {
             return LBF_BUFFER_READINTEGER as i32;
         }
         if FFlag::LuauIntegerFastcalls.get()
+            && FFlag::LuauIntegerBufferFastcalls.get()
             && builtin.method.operator_eq_c_char(c"writeinteger".as_ptr())
         {
             return LBF_BUFFER_WRITEINTEGER as i32;

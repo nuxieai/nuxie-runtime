@@ -38,16 +38,7 @@ pub unsafe fn luau_f_setmetatable(
         let is_white = ((*o_gco).gch.marked & 3) != 0;
 
         if is_black && is_white {
-            // The dependency's stub signature is currently parameterless, but we must emit the correct call site.
-            // We cast the function pointer to the correct signature to allow the code to compile against the real logic.
-            type LuaCBarrierfFn = unsafe fn(
-                *mut crate::records::lua_state::lua_State,
-                *mut crate::records::gc_object::GCObject,
-                *mut crate::records::gc_object::GCObject,
-            );
-            let lua_c_barrierf_ptr =
-                lua_c_barrierf as *const core::ffi::c_void as *const LuaCBarrierfFn;
-            (*lua_c_barrierf_ptr)(L, p_gco, o_gco);
+            lua_c_barrierf(L, p_gco, o_gco);
         }
 
         sethvalue!(L, res, t);

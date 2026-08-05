@@ -24,7 +24,7 @@ pub unsafe fn luauF_byte(
             if ttisnumber!(args.add(1)) {
                 nvalue!(args.add(1)) as i32
             } else {
-                i
+                0
             }
         } else {
             i

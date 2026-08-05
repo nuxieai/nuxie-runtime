@@ -16,9 +16,12 @@ pub unsafe fn luauF_modf(
 ) -> core::ffi::c_int {
     if nparams >= 1 && nresults <= 2 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
-        let mut ip: f64 = 0.0;
-        let fp = a1.fract(); // C++ modf(a1, &ip) => fractional part is returned, integer part via out param
-        ip = a1 - fp;
+        let ip = a1.trunc();
+        let fp = if a1 == ip {
+            0.0f64.copysign(a1)
+        } else {
+            a1 - ip
+        };
 
         setnvalue!(res, ip);
         setnvalue!(res.add(1), fp);

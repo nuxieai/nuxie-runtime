@@ -27,10 +27,22 @@ pub unsafe fn luau_f_frexp(
 }
 
 fn frexp(value: f64) -> (f64, c_int) {
-    if value == 0.0 || !value.is_finite() {
+    let mut bits = value.to_bits();
+    let biased_exponent = ((bits >> 52) & 0x7ff) as c_int;
+
+    if biased_exponent == 0 {
+        if value != 0.0 {
+            let (fraction, exponent) = frexp(value * f64::from_bits(0x43f0000000000000));
+            return (fraction, exponent - 64);
+        }
+        return (value, 0);
+    }
+    if biased_exponent == 0x7ff {
         return (value, 0);
     }
 
-    let e = value.abs().log2().floor() as c_int + 1;
-    (value / 2f64.powi(e), e)
+    let exponent = biased_exponent - 0x3fe;
+    bits &= 0x800f_ffff_ffff_ffff;
+    bits |= 0x3fe0_0000_0000_0000;
+    (f64::from_bits(bits), exponent)
 }

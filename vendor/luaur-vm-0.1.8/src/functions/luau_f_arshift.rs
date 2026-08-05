@@ -30,7 +30,7 @@ pub unsafe fn luau_f_arshift(
             // note: technically right shift of negative values is UB, but this behavior is getting defined in C++20 and all compilers do the right
             // (shift) thing.
             // In Rust, arithmetic right shift is performed on signed integers.
-            let r = (u as i32) >> s;
+            let r = ((u as i32) >> s) as u32;
 
             setnvalue!(res, r as f64);
             return 1;

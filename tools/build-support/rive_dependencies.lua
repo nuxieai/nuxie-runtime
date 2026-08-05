@@ -1,30 +1,42 @@
--- Resolves the pinned rive-runtime's third-party dependency directories for
--- the C++ tools in this repo.
+-- Resolve C++ dependencies to the exact revisions the pinned librive was built
+-- from, for the tools that link that archive (tools/golden-runner,
+-- tools/cpp-probe). Those tools are the oracle for C++ differential testing, so
+-- compiling them against a different revision than the archive they link is an
+-- ABI/behavior mismatch hidden inside the thing that decides what "correct"
+-- means.
 --
--- Upstream moved off the hashed `dependencies/<host>/cache/<hash>/<name>-<tag>`
--- tree and onto `dependency.github('<org>/<project>', '<tag>')`, which clones
--- into `<DEPENDENCIES>/<org>_<project>_<tag>` (see the pin's
--- build/dependency.lua). Tools that still glob the legacy cache compile against
--- whatever revision that tree happens to hold, and a fresh clone has no such
--- tree at all -- the glob then yields nil and the include dir is dropped
--- silently.
+-- yoga is the sharpest case: rive/layout/layout_data.hpp holds a YGNode and a
+-- YGStyle by value and is reachable from rive/shapes/shape.hpp, so a yoga skew
+-- changes the size and field offsets of every rive object embedding LayoutData.
+-- Measured at pin 4ac7b327, rive_changes_v2_0_1_2_grid is wider than its
+-- non-grid sibling -- sizeof(YGStyle) 204 -> 224, sizeof(YGNode) 632 -> 704.
 --
--- For yoga that is an ABI difference rather than a header-path difference:
--- `rive/layout/layout_data.hpp` stores `YGNode` and `YGStyle` by value and is
--- reachable from `rive/shapes/shape.hpp`, so a tool built against the wrong
--- yoga disagrees with the librive it links about `sizeof(LayoutData)`.
+-- Upstream fetches dependencies through build/dependency.lua's
+-- `dependency.github(project, tag)`, which clones to <root>/<project>_<tag>
+-- with '/' replaced by '_', where <root> is $DEPENDENCIES when set and
+-- <runtime>/dependencies otherwise.
 --
--- This module reads the tag out of the pinned runtime's own premake file, so a
--- tool's include path tracks the pin. The legacy cache is kept only as a
--- fallback for checkouts that predate the migration, and an unresolvable
--- dependency is a hard error instead of a silently dropped include dir.
+-- Globbing that root cannot express "the revision the pin builds": several
+-- projects have more than one tag checked out side by side --
+-- rive-app_yoga_rive_changes_v2_0_1_2 next to ..._v2_0_1_2_grid, three
+-- luigi-rosso_luau_* revisions -- and `os.matchdirs` hands back whichever sorts
+-- first, which is the wrong one in both cases. Read the tag out of the
+-- runtime's own premake files instead and build the exact path, so resolution
+-- follows the pin when it rolls.
 
 local m = {}
 
-local function first_dir(pattern)
-    if pattern == nil then
+local function read_file(file_path)
+    local handle = io.open(file_path, 'r')
+    if handle == nil then
         return nil
     end
+    local contents = handle:read('*a')
+    handle:close()
+    return contents
+end
+
+local function first_dir(pattern)
     local matches = os.matchdirs(pattern)
     if #matches > 0 then
         return matches[1]
@@ -32,98 +44,80 @@ local function first_dir(pattern)
     return nil
 end
 
--- Returns the `dependency.github(spec, tag)` pair declared in `premake_path`
--- for `project`. `project` may be the full `<org>/<repo>` spec or just the
--- repo name.
-local function read_github_dependency(premake_path, project)
-    local handle = io.open(premake_path, 'r')
-    if handle == nil then
-        return nil, nil, "cannot read '" .. premake_path .. "'"
+-- The tag the pinned runtime's own premake asks `dependency.github` for.
+local function pinned_tag(rive_runtime, premake_file, project)
+    local contents = read_file(rive_runtime .. '/' .. premake_file)
+    if contents == nil then
+        return nil
     end
-    local contents = handle:read('*a')
-    handle:close()
-
-    local wanted = project:lower()
-    for spec, tag in contents:gmatch(
-        "dependency%.github%s*%(%s*['\"]([^'\"]+)['\"]%s*,%s*['\"]([^'\"]+)['\"]%s*%)"
-    ) do
-        local repo = spec:match('([^/]+)$')
-        if spec:lower() == wanted or repo:lower() == wanted then
-            return spec, tag, nil
-        end
-    end
-
-    return nil,
-        nil,
-        "no dependency.github('.../" .. project .. "', <tag>) in '" .. premake_path .. "'"
+    return contents:match(
+        "dependency%.github%(%s*'" .. project:gsub('%W', '%%%0') .. "'%s*,%s*'([^']+)'"
+    )
 end
 
--- resolver(tool, rive_runtime, dep_root)
---
---   tool         name used in error messages
---   rive_runtime path to the pinned rive-runtime checkout
---   dep_root     where dependency.github clones land; defaults to the
---                DEPENDENCIES override honored by the pin's build/dependency.lua,
---                then to <rive_runtime>/dependencies
---
--- The returned object exposes:
---
---   dir(project, premake_file, legacy_pattern[, subdir])
---
---   project        dependency repo name (or full '<org>/<repo>' spec)
---   premake_file   file under <rive_runtime>/dependencies declaring it
---   legacy_pattern os.matchdirs glob into the pre-migration cache tree, or nil;
---                  must already include `subdir`, since that tree nests
---                  differently
---   subdir         path under the cloned repo to place on the include path
---                  (e.g. 'src' for harfbuzz, 'Headers' for SheenBidi)
+-- `tool` names the caller in error messages. `dep_root` is the dependency root
+-- the caller resolves against; pass $DEPENDENCIES when the caller honors it,
+-- nil for the upstream default. Tags are always read from `rive_runtime`, since
+-- the revision is a property of the pin rather than of where it was cloned.
 function m.resolver(tool, rive_runtime, dep_root)
-    assert(rive_runtime, tool .. ': rive_runtime is required')
-    dep_root = dep_root or os.getenv('DEPENDENCIES') or (rive_runtime .. '/dependencies')
+    local root = dep_root or (rive_runtime .. '/dependencies')
+    -- The pre-migration dependencies/<host>/cache/<hash>/<name>-<tag> tree
+    -- survives only in checkouts old enough to predate `dependency.github`
+    -- cloning to <root>/<project>_<tag>, and it holds the tags current at that
+    -- time (harfbuzz 10.1.0 against the pin's 13.1.1, yoga rive_changes_v2_0_1
+    -- against rive_changes_v2_0_1_2_grid). It is a last resort for when the tag
+    -- cannot be read at all, never a stand-in for a known tag.
+    local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
 
-    local resolver = {}
+    local self = { dep_root = root, dep_cache = dep_cache }
 
-    function resolver.dir(project, premake_file, legacy_pattern, subdir)
-        local premake_path = rive_runtime .. '/dependencies/' .. premake_file
-        local spec, tag, read_err = read_github_dependency(premake_path, project)
-
-        local pinned
-        if spec ~= nil then
-            -- Mirrors dependency.github's dirname: '<org>/<repo>_<tag>' with
-            -- separators flattened.
-            local dirname = (spec .. '_' .. tag):gsub('/', '_')
-            pinned = dep_root .. '/' .. dirname
-            if subdir then
-                pinned = pinned .. '/' .. subdir
+    -- Directory holding `project` at the revision `premake_file` pins it to.
+    -- `legacy_pattern` is an optional suffix glob under the legacy cache tree.
+    function self.dir(project, premake_file, legacy_pattern)
+        local tag = pinned_tag(rive_runtime, premake_file, project)
+        if tag ~= nil then
+            local dirname = (project .. '_' .. tag):gsub('/', '_')
+            local dir = root .. '/' .. dirname
+            if os.isdir(dir) then
+                return dir
             end
-            if os.isdir(pinned) then
-                return pinned
-            end
-        end
-
-        local legacy = first_dir(legacy_pattern)
-        if legacy then
-            print(
-                ('%s: %s not found at pinned tag (%s); falling back to legacy cache %s')
-                    :format(tool, project, tag or '<unknown>', legacy)
+            error(
+                tool
+                    .. ': the pinned runtime builds '
+                    .. project
+                    .. ' at '
+                    .. tag
+                    .. ', but '
+                    .. dir
+                    .. ' does not exist. Build librive first so the dependency is'
+                    .. ' fetched; the legacy '
+                    .. dep_cache
+                    .. ' tree holds a different revision and is not a substitute.'
             )
+        end
+        local legacy = legacy_pattern and first_dir(dep_cache .. legacy_pattern)
+        if legacy ~= nil then
             return legacy
         end
-
-        local detail
-        if spec == nil then
-            detail = read_err
-        else
-            detail = "expected '" .. pinned .. "' (tag " .. tag .. ')'
-        end
+        -- A silent nil drops the include directory, which resurfaces either as
+        -- a "file not found" from deep inside a rive header or -- worse -- as a
+        -- tool that compiles clean against headers librive was never built with.
         error(
-            ('%s: cannot resolve dependency %s from %s -- %s. Generate the pinned runtime once (premake5 gmake2 --file=premake5_v2.lua) so dependency.github clones it, or set DEPENDENCIES to a tree that has it.')
-                :format(tool, project, rive_runtime, detail),
-            0
+            tool
+                .. ': cannot determine the '
+                .. project
+                .. ' revision the pinned librive was built with; no'
+                .. " dependency.github('"
+                .. project
+                .. "', ...) in "
+                .. rive_runtime
+                .. '/'
+                .. premake_file
+                .. (legacy_pattern and ', and nothing matching ' .. dep_cache .. legacy_pattern or '')
         )
     end
 
-    return resolver
+    return self
 end
 
 return m

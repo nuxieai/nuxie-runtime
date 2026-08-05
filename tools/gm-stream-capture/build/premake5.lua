@@ -2,12 +2,17 @@ workspace('rive_rust_gm_stream_capture')
 configurations({ 'debug', 'release' })
 
 local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-runtime'
-local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
+-- Upstream's build/dependency.lua clones into $DEPENDENCIES when it is set and
+-- <runtime>/dependencies otherwise; resolve against the same root librive did.
 local dep_root = os.getenv('DEPENDENCIES') or (rive_runtime .. '/dependencies')
 
-local rive_dependencies =
-    dofile(path.getabsolute(_SCRIPT_DIR .. '/../../build-support/rive_dependencies.lua'))
-local deps = rive_dependencies.resolver('gm-stream-capture', rive_runtime, dep_root)
+-- Shared with tools/golden-runner and tools/cpp-probe: resolve each dependency
+-- to the revision the pinned runtime's own premake asks `dependency.github`
+-- for, rather than globbing the legacy dependencies/<host>/cache tree (stale
+-- revisions on old checkouts, absent on fresh clones).
+local dependencies = dofile(
+    path.getabsolute(_SCRIPT_DIR .. '/../../build-support/rive_dependencies.lua')
+).resolver('gm-stream-capture', rive_runtime, dep_root)
 
 -- Set by build.sh to the provenance-bound librive built at the pin
 -- (tools/build-support/pinned-librive.sh). Without it the link would fall
@@ -24,28 +29,34 @@ local include_dirs = {
     rive_runtime .. '/tests/gm',
     rive_runtime .. '/tests/include',
     rive_runtime .. '/tests/unit_tests',
-    -- librive is compiled with rive_{harfbuzz,yoga}_renames.h force-included
-    -- from the dependencies root; the capture tool compiles against the same
-    -- config, so that root must be searchable here too.
-    rive_runtime .. '/dependencies',
 }
+-- librive is compiled with rive_{harfbuzz,yoga}_renames.h force-included from
+-- its dependencies root; the capture tool compiles against the same config, so
+-- that root must be searchable here too. Those generated headers live in the
+-- runtime's own tree even when $DEPENDENCIES relocates the fetched clones, so
+-- search both when they differ.
+table.insert(include_dirs, dep_root)
+if dep_root ~= rive_runtime .. '/dependencies' then
+    table.insert(include_dirs, rive_runtime .. '/dependencies')
+end
 
 local gm_files = {}
 for file in io.lines('gm-files.txt') do
     table.insert(gm_files, file)
 end
 
--- Resolved from the pin's own dependency declarations rather than globbed out
--- of the legacy cache: yoga's revision is an ABI decision here, because
+-- yoga's revision is an ABI decision here, not just a header path:
 -- rive/layout/layout_data.hpp holds YGNode/YGStyle by value and is reachable
 -- from rive/shapes/shape.hpp.
-for _, dir in ipairs({
-    deps.dir('harfbuzz', 'premake5_harfbuzz_v2.lua', dep_cache .. '/*/harfbuzz-*/src', 'src'),
-    deps.dir('SheenBidi', 'premake5_sheenbidi_v2.lua', dep_cache .. '/*/SheenBidi-*/Headers', 'Headers'),
-    deps.dir('yoga', 'premake5_yoga_v2.lua', dep_cache .. '/*/yoga-*'),
-}) do
-    table.insert(include_dirs, dir)
-end
+local harfbuzz =
+    dependencies.dir('rive-app/harfbuzz', 'dependencies/premake5_harfbuzz_v2.lua', '/*/harfbuzz-*')
+local sheenbidi =
+    dependencies.dir('Tehreer/SheenBidi', 'dependencies/premake5_sheenbidi_v2.lua', '/*/SheenBidi-*')
+local yoga = dependencies.dir('rive-app/yoga', 'dependencies/premake5_yoga_v2.lua', '/*/yoga-*')
+
+table.insert(include_dirs, harfbuzz .. '/src')
+table.insert(include_dirs, sheenbidi .. '/Headers')
+table.insert(include_dirs, yoga)
 
 project('gm_stream_capture')
 kind('ConsoleApp')

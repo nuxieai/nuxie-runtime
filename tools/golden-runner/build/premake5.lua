@@ -2,8 +2,9 @@ workspace('rive_rust_golden_runner')
 configurations({ 'debug', 'release' })
 
 local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-runtime'
-local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
-local shared_dependencies = os.getenv('DEPENDENCIES')
+-- Upstream's build/dependency.lua clones into $DEPENDENCIES when it is set and
+-- <runtime>/dependencies otherwise; resolve against the same root librive did.
+local dep_root = os.getenv('DEPENDENCIES') or (rive_runtime .. '/dependencies')
 local with_scripting = os.getenv('RIVE_GOLDEN_WITH_SCRIPTING') == '1'
 local runtime_libdir = os.getenv('RIVE_GOLDEN_RUNTIME_LIBDIR') or
     (rive_runtime .. '/out/%{cfg.buildcfg}')
@@ -11,13 +12,14 @@ local decoders_libdir = os.getenv('RIVE_GOLDEN_DECODERS_LIBDIR')
 local obj_suffix = with_scripting and '/scripting' or ''
 local runner_name = os.getenv('RIVE_GOLDEN_RUNNER_NAME') or 'rive_golden_runner'
 
-local function first_dir(pattern)
-    local matches = os.matchdirs(pattern)
-    if #matches > 0 then
-        return matches[1]
-    end
-    return nil
-end
+-- Shared with tools/cpp-probe: resolve each dependency to the revision the
+-- pinned runtime's own premake asks `dependency.github` for, rather than
+-- globbing <root>/<project>_* and taking whatever `os.matchdirs` sorts first.
+-- The glob picked rive-app_yoga_rive_changes_v2_0_1_2 over the pin's
+-- ..._v2_0_1_2_grid and luau rive_0_36 over the pin's rive_0_732.
+local dependencies = dofile(
+    path.getabsolute(_SCRIPT_DIR .. '/../../build-support/rive_dependencies.lua')
+).resolver('golden-runner', rive_runtime, dep_root)
 
 local include_dirs = {
     '..',
@@ -27,54 +29,51 @@ local include_dirs = {
     '/usr/local/include',
     '/usr/include',
 }
-if shared_dependencies then
-    table.insert(include_dirs, shared_dependencies)
-end
 -- The pinned runtime's build config force-includes rive_yoga_renames.h
 -- (and siblings) from its dependencies root; the runner compiles against
--- the same config, so that root must be searchable here too.
-table.insert(include_dirs, rive_runtime .. '/dependencies')
+-- the same config, so that root must be searchable here too. Those generated
+-- headers live in the runtime's own tree even when $DEPENDENCIES relocates the
+-- fetched clones, so search both when they differ.
+table.insert(include_dirs, dep_root)
+if dep_root ~= rive_runtime .. '/dependencies' then
+    table.insert(include_dirs, rive_runtime .. '/dependencies')
+end
 
-local harfbuzz = (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_harfbuzz_*/src')) or
-    first_dir(rive_runtime .. '/dependencies/rive-app_harfbuzz_*/src') or
-    first_dir(dep_cache .. '/*/harfbuzz-*/src')
-local sheenbidi = (shared_dependencies and first_dir(shared_dependencies .. '/Tehreer_SheenBidi_*/Headers')) or
-    first_dir(rive_runtime .. '/dependencies/Tehreer_SheenBidi_*/Headers') or
-    first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
-local yoga = os.getenv('RIVE_GOLDEN_YOGA_DIR') or
-    (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_yoga_*')) or
-    first_dir(rive_runtime .. '/dependencies/rive-app_yoga_*') or
-    first_dir(dep_cache .. '/*/yoga-*')
-local miniaudio = (shared_dependencies and first_dir(shared_dependencies .. '/rive-app_miniaudio_*')) or
-    first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*') or
-    first_dir(dep_cache .. '/*/miniaudio-*')
-local luau = os.getenv('RIVE_GOLDEN_LUAU_DIR') or
-    (shared_dependencies and first_dir(shared_dependencies .. '/luigi-rosso_luau_*')) or
-    first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
-local libhydrogen = (shared_dependencies and first_dir(shared_dependencies .. '/luigi-rosso_libhydrogen_*')) or
-    first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
+local harfbuzz =
+    dependencies.dir('rive-app/harfbuzz', 'dependencies/premake5_harfbuzz_v2.lua', '/*/harfbuzz-*')
+local sheenbidi =
+    dependencies.dir('Tehreer/SheenBidi', 'dependencies/premake5_sheenbidi_v2.lua', '/*/SheenBidi-*')
+-- Required, not decorative: rive/layout/layout_data.hpp holds a YGNode and a
+-- YGStyle by value, so every runner translation unit that reaches shape.hpp
+-- takes its layout sizes and offsets from these headers. RIVE_GOLDEN_YOGA_DIR
+-- stays available for deliberately building the runner against a different
+-- yoga revision than the pin, which is how a yoga skew gets ruled in or out.
+local yoga = os.getenv('RIVE_GOLDEN_YOGA_DIR')
+    or dependencies.dir('rive-app/yoga', 'dependencies/premake5_yoga_v2.lua', '/*/yoga-*')
 
-if harfbuzz then
-    table.insert(include_dirs, harfbuzz)
-end
-if sheenbidi then
-    table.insert(include_dirs, sheenbidi)
-end
-if yoga then
-    table.insert(include_dirs, yoga)
-end
-if miniaudio then
-    table.insert(include_dirs, miniaudio)
-end
+table.insert(include_dirs, harfbuzz .. '/src')
+table.insert(include_dirs, sheenbidi .. '/Headers')
+table.insert(include_dirs, yoga)
 if with_scripting then
+    -- The runner links luau_vm out of librive, so a revision skew here means
+    -- headers describing one Luau's VM in front of another Luau's objects.
+    local luau = os.getenv('RIVE_GOLDEN_LUAU_DIR')
+        or dependencies.dir('luigi-rosso/luau', 'scripting/premake5.lua')
+    local libhydrogen = dependencies.dir('luigi-rosso/libhydrogen', 'scripting/premake5.lua')
+    -- build.sh builds scripted librive with --with_rive_audio=external and
+    -- links miniaudio, so the dependency is fetched in this mode. An ordinary
+    -- build never asks for audio, and a clean checkout has no miniaudio clone
+    -- to resolve -- requiring it there would fail a build that does not use it.
+    local miniaudio = dependencies.dir(
+        'rive-app/miniaudio',
+        'dependencies/premake5_miniaudio_v2.lua',
+        '/*/miniaudio-*'
+    )
+    table.insert(include_dirs, miniaudio)
     table.insert(include_dirs, rive_runtime .. '/scripting')
     table.insert(include_dirs, rive_runtime .. '/decoders/include')
-    if luau then
-        table.insert(include_dirs, luau .. '/VM/include')
-    end
-    if libhydrogen then
-        table.insert(include_dirs, libhydrogen)
-    end
+    table.insert(include_dirs, luau .. '/VM/include')
+    table.insert(include_dirs, libhydrogen)
 end
 
 local runner_defines = {
@@ -98,7 +97,7 @@ end
 local lib_dirs = {
     runtime_libdir,
     rive_runtime .. '/build/%{cfg.system}/bin/%{cfg.buildcfg}',
-    dep_cache .. '/bin/%{cfg.buildcfg}',
+    dependencies.dep_cache .. '/bin/%{cfg.buildcfg}',
     '/usr/local/lib',
     '/usr/lib',
 }

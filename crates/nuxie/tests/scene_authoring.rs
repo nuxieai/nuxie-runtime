@@ -11998,6 +11998,52 @@ fn removed_slots_reject_sibling_crossing_without_poisoning_the_transaction() -> 
 }
 
 #[test]
+fn removed_slots_reject_footprints_that_overrun_a_shortened_stream() -> Result<()> {
+    let mut fixture = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+    let middle = fixture.middle;
+    let (_, _) = fixture.scene.edit(|tx| {
+        // A token's slots are absolute pre-removal record indices, so a
+        // transaction that removes a second subtree shortens the stream out
+        // from under the first token: by adoption time the late slots name
+        // positions past the end. That is ordinary staleness, not an internal
+        // invariant violation, and the caller must be able to fall back.
+        let removed = tx.remove(fixture.following)?;
+        tx.remove(fixture.leading)?;
+
+        let replacement = removed_slot_layout(tx, Parent::Object(fixture.root), "Following unit")?;
+        author_removed_slot_unit_visuals(
+            tx,
+            replacement,
+            "Following unit",
+            0xff00_00ff,
+            RemovedSlotUnitShape::Base,
+        )?;
+
+        let rejected = tx
+            .place_record_block_in_removed_slots(replacement, &removed)
+            .expect_err("the second removal shortens the stream past the token's late slots");
+        assert_eq!(rejected.diagnostic().reason, EditReason::StaleRecordSlots);
+        assert_eq!(
+            rejected.diagnostic().involved_ids,
+            vec![
+                EditId::Object(replacement),
+                EditId::Object(fixture.following)
+            ]
+        );
+
+        tx.set(middle, props::WORLD_OPACITY, 0.5)?;
+        Ok(())
+    })?;
+
+    let instance = fixture.scene.instantiate(fixture.artboard)?;
+    let opacity = fixture
+        .scene
+        .cursor(instance, middle, props::WORLD_OPACITY)?;
+    assert_eq!(fixture.scene.frame().get(opacity)?, 0.5);
+    Ok(())
+}
+
+#[test]
 fn restoring_an_existing_identity_aborts_the_entire_edit_with_a_collision_diagnostic() -> Result<()>
 {
     let mut scene = Scene::new();

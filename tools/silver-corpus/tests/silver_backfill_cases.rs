@@ -108,7 +108,7 @@ fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
 }
 
 #[test]
-#[ignore = "Post-FL-D runner gap: Execution::run constructs raw nuxie_runtime ArtboardInstance/StateMachineInstance values and never creates a nuxie_scripting ScriptingVm or attaches the fixture's ScriptAsset occurrence, so ScriptedListenerAction::performAction remains inert"]
+#[ignore = "coverage finding: docs/upstream-test-findings.md#finding-silver-scripted-listener-harness-gap — Execution::run constructs raw nuxie_runtime ArtboardInstance/StateMachineInstance values and never creates a nuxie_scripting ScriptingVm or attaches the fixture's ScriptAsset occurrences, so ScriptedListenerAction::performAction remains inert"]
 fn upstream_fl_bc_multi_listener_scripted_action_assertion() {
     let Some(runtime) = runtime_root("upstream FL-B/FL-C multi-listener scripted assertion") else {
         return;

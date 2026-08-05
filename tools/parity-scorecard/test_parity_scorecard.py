@@ -532,7 +532,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("cargo-test-workspace GREEN", completed.stdout)
         self.assertIn("capi-smoke GREEN", completed.stdout)
         self.assertIn(
-            "r4-timing-gate per-commit scorecard evidence not built",
+            "renderer-timing-gate per-commit scorecard evidence not built",
             completed.stdout,
         )
         self.assertIn(

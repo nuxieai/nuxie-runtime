@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 env:
-  # Phase S runtime/golden/perf candidate. The renderer-golden job overrides
-  # this with the historical Phase R oracle revision that produced its checked-
-  # in reference artifacts.
+  # Current sync-pin runtime/golden/perf candidate. The renderer-golden job
+  # overrides this with the historical renderer-port oracle revision that
+  # produced its checked-in reference artifacts.
   RIVE_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
   # Read-only inventory reference for port-manifest completeness. MUST equal
   # `upstream_ref` in port-manifest.toml -- the check compares them and fails
@@ -71,7 +71,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: make rust-attribution-gate
 
-  # The hosted reusable workflow above owns the existing V2 gate but does not
+  # The hosted reusable workflow above owns the golden-compare gate but does not
   # export its raw summaries. Run the same floor separately so the scorecard
   # consumes real per-commit output and exit codes, never an inferred green
   # status.
@@ -246,18 +246,18 @@ jobs:
           retention-days: 7
 
   renderer-golden:
-    name: Phase R pixel golden
+    name: Renderer pixel golden
     runs-on: macos-14
     env:
       RUSTUP_TOOLCHAIN: stable
-      # Do not relabel the checked-in Phase R Dawn references. Advancing this
+      # Do not relabel the checked-in renderer-port Dawn references. Advancing this
       # oracle requires a separate deterministic regeneration and review.
       RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
-      # Shader provenance advanced independently during the Phase S sync.
+      # Shader provenance advanced independently during a later sync cycle.
       # Keep it separate from the historical pixel oracle above.
       RIVE_SHADER_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
       # Same-adapter replay follows the current product runtime. It has a
-      # separate build and cache from the immutable Phase R oracle.
+      # separate build and cache from the immutable renderer-port pixel oracle.
       RIVE_SAME_RUNNER_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
     defaults:
       run:
@@ -622,8 +622,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Panic-freedom clippy gate for the SDK runtime crates (v2-status item 20
-  # #6). Self-contained: library targets only, no reference runtime needed.
+  # Panic-freedom clippy gate for the SDK runtime crates.
+  # Self-contained: library targets only, no reference runtime needed.
   # Denies clippy::unwrap_used / indexing_slicing / arithmetic_side_effects on
   # the crates that are already clean and reports own-src warning counts for
   # the rest; see the lint-gate target in the Makefile.

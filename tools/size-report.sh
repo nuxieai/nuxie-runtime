@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# SDK binary-size report for the post-Phase-R renderer link closure.
+# SDK binary-size report for the renderer-included Darwin link closure.
 #
 # Cargo's ordinary `nux-capi` cdylib is callback-renderer-only. Enabling its
 # `apple-renderer` feature compiles nuxie-renderer and wgpu, but fat LTO removes
 # almost all of that backend because no C ABI export references WgpuFactory.
-# Measuring that cdylib would therefore repeat the stale pre-Phase-R metric.
+# Measuring that cdylib would therefore repeat the stale renderer-excluded metric.
 #
 # This report builds the nux-capi staticlib, then performs the final Darwin
 # link explicitly. It retains every public nux-capi C ABI export plus the

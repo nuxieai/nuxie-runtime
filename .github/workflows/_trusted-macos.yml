@@ -68,7 +68,16 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make scripted-golden-compare
 
+      # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
+      # an audit drift is a distinct failure and must not stop the workspace
+      # tests below from running and reporting.
+      - name: Verify B-6 audit
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make b6-audit-check
+
       - name: Run Rust workspace tests with the pinned C++ oracle
+        if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}/rive-rust
         run: make cpp-oracle-workspace-tests
 

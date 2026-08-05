@@ -246,6 +246,7 @@ pub enum EditReason {
     ChildIndexOutOfRange,
     ChildSetMismatch,
     RecordSlotCrossesSiblings,
+    StaleRecordSlots,
     InvalidParent {
         parent: Option<NodeKind>,
         child: NodeKind,
@@ -3951,6 +3952,26 @@ impl Hierarchy<'_> {
             .map(|record| record.original_index)
             .collect::<Vec<_>>();
         slots.sort_unstable();
+        let mut slot_run_count = 0usize;
+        let mut slot_run_first_block_ids = Vec::new();
+        let mut previous_slot = None;
+        for (slot_index, slot) in slots.iter().copied().enumerate() {
+            let starts_run =
+                previous_slot.and_then(|previous: usize| previous.checked_add(1)) != Some(slot);
+            if starts_run {
+                slot_run_count = slot_run_count.saturating_add(1);
+                if let Some(id) = block_order.get(slot_index) {
+                    slot_run_first_block_ids.push(*id);
+                }
+            }
+            previous_slot = Some(slot);
+        }
+        if slot_run_count != removed.slot_run_anchors.len() {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(removed.root)],
+                EditReason::InternalInvariant,
+            ));
+        }
         let candidate_ids = place_values_in_removed_slots(remaining_ids, block_order, &slots)
             .ok_or_else(|| {
                 self.abort(
@@ -3958,6 +3979,8 @@ impl Hierarchy<'_> {
                     EditReason::InternalInvariant,
                 )
             })?;
+        // Sibling order is the structural invariant; check it first so a
+        // cross-object misuse reports the crossing rather than staleness.
         let next_siblings = candidate_ids
             .iter()
             .filter_map(|id| sibling_ids.contains(id).then_some(*id))
@@ -3967,6 +3990,35 @@ impl Hierarchy<'_> {
                 vec![EditId::Object(object), EditId::Object(removed.root)],
                 EditReason::RecordSlotCrossesSiblings,
             ));
+        }
+        for (block_id, anchor) in slot_run_first_block_ids
+            .iter()
+            .zip(&removed.slot_run_anchors)
+        {
+            let block_position = candidate_ids
+                .iter()
+                .position(|candidate| candidate == block_id)
+                .ok_or_else(|| {
+                    self.abort(
+                        vec![EditId::Object(object), EditId::Object(removed.root)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let anchor_matches = match anchor {
+                Some(anchor) => {
+                    block_position
+                        .checked_sub(1)
+                        .and_then(|position| candidate_ids.get(position))
+                        == Some(anchor)
+                }
+                None => block_position == 0,
+            };
+            if !anchor_matches {
+                return Err(self.abort(
+                    vec![EditId::Object(object), EditId::Object(removed.root)],
+                    EditReason::StaleRecordSlots,
+                ));
+            }
         }
 
         let artboard = self
@@ -4207,17 +4259,26 @@ impl Hierarchy<'_> {
         let mut records = Vec::with_capacity(subtree_ids.len());
         let mut remaining =
             Vec::with_capacity(artboard.records.len().saturating_sub(subtree_ids.len()));
+        let mut slot_run_anchors = Vec::new();
+        let mut previous_was_removed = false;
+        let mut nearest_preceding_retained = None;
         for (original_index, definition) in std::mem::take(&mut artboard.records)
             .into_iter()
             .enumerate()
         {
             if subtree_ids.contains(&definition.id) {
+                if !previous_was_removed {
+                    slot_run_anchors.push(nearest_preceding_retained);
+                }
                 records.push(RemovedRecord {
                     original_index,
                     definition,
                 });
+                previous_was_removed = true;
             } else {
+                nearest_preceding_retained = Some(definition.id);
                 remaining.push(definition);
+                previous_was_removed = false;
             }
         }
         debug_assert!(!records.is_empty());
@@ -4226,6 +4287,7 @@ impl Hierarchy<'_> {
             artboard: artboard.id,
             root: object,
             records,
+            slot_run_anchors,
         })
     }
 
@@ -4237,6 +4299,7 @@ impl Hierarchy<'_> {
             artboard: artboard_id,
             root,
             records,
+            slot_run_anchors: _,
         } = removed;
         if records.is_empty() || !records.iter().any(|record| record.definition.id == root) {
             return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
@@ -5421,6 +5484,7 @@ pub struct RemovedSubtree {
     artboard: ArtboardId,
     root: ObjectId,
     records: Vec<RemovedRecord>,
+    slot_run_anchors: Vec<Option<ObjectId>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -10410,10 +10474,14 @@ impl SceneTx<'_> {
     /// [`EditReason::RecordSlotCrossesSiblings`]. The replacement must be a
     /// visual object on the same artboard from which the token was removed.
     ///
-    /// The token's indices are positions in the pre-removal record stream.
-    /// After the required replacement creation and native sibling reorder,
-    /// adopt the footprint before unrelated edits in the transaction that can
-    /// shift record indices.
+    /// The token's indices are positions in the pre-removal record stream. For
+    /// each maximal contiguous slot run, the token retains the nearest
+    /// preceding record outside the removed subtree, or the stream head. Each
+    /// run's first replacement record must still immediately follow that
+    /// anchor (or remain at the stream head); otherwise placement aborts with
+    /// [`EditReason::StaleRecordSlots`]. Tail-side edits that preserve these
+    /// preceding anchors are permitted, while prefix-shifting edits and
+    /// out-of-order adoption of multiple tokens are rejected.
     pub fn place_record_block_in_removed_slots(
         &mut self,
         object: ObjectId,

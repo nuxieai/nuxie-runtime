@@ -11661,6 +11661,7 @@ struct RemovedSlotFixture {
     artboard: ArtboardId,
     root: ObjectId,
     leading: ObjectId,
+    leading_visual: ObjectId,
     middle: ObjectId,
     following: ObjectId,
 }
@@ -11696,7 +11697,7 @@ fn author_removed_slot_unit_visuals(
     name: &str,
     color: ColorInt,
     shape: RemovedSlotUnitShape,
-) -> std::result::Result<(), EditAbort> {
+) -> std::result::Result<ObjectId, EditAbort> {
     let visual = tx.create(
         Parent::Object(owner),
         NodeSpec::Shape(ShapeSpec {
@@ -11738,7 +11739,7 @@ fn author_removed_slot_unit_visuals(
             )),
         )?;
     }
-    Ok(())
+    Ok(visual)
 }
 
 fn author_removed_slot_fixture(
@@ -11746,7 +11747,7 @@ fn author_removed_slot_fixture(
     middle_shape: RemovedSlotUnitShape,
 ) -> Result<RemovedSlotFixture> {
     let mut scene = Scene::new();
-    let ((artboard, root, leading, middle, following), _) = scene.edit(|tx| {
+    let ((artboard, root, leading, leading_visual, middle, following), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
             layout_style: None,
             name: "Removed-slot screen".into(),
@@ -11763,7 +11764,7 @@ fn author_removed_slot_fixture(
 
         // Phase two gives each unit a late visual run, making each complete
         // unit footprint non-contiguous and interleaved with its siblings.
-        author_removed_slot_unit_visuals(
+        let leading_visual = author_removed_slot_unit_visuals(
             tx,
             leading,
             "Leading unit",
@@ -11844,13 +11845,14 @@ fn author_removed_slot_fixture(
             },
         )?;
         tx.reparent(trailing.object_id(), Parent::Object(root), ChildIndex::Last)?;
-        Ok((artboard, root, leading, middle, following))
+        Ok((artboard, root, leading, leading_visual, middle, following))
     })?;
     Ok(RemovedSlotFixture {
         scene,
         artboard,
         root,
         leading,
+        leading_visual,
         middle,
         following,
     })
@@ -11922,6 +11924,49 @@ fn removed_slots_accept_larger_and_smaller_replacement_blocks() -> Result<()> {
             "larger blocks append extras after the last filled slot and smaller blocks close unused trailing slots"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn removed_slots_reject_stale_tokens_after_prefix_shifts() -> Result<()> {
+    let mut fixture = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+    let following = fixture.following;
+    let (_, _) = fixture.scene.edit(|tx| {
+        let removed = tx.remove(fixture.middle)?;
+        // Removing the leading unit's late visual run shifts record indices
+        // below the captured slots without touching sibling order, so the
+        // placement is structurally admissible yet anchored on records that
+        // no longer exist.
+        tx.remove(fixture.leading_visual)?;
+
+        let replacement = removed_slot_layout(tx, Parent::Object(fixture.root), "Middle unit")?;
+        author_removed_slot_unit_visuals(
+            tx,
+            replacement,
+            "Middle unit",
+            0xffff_aa00,
+            RemovedSlotUnitShape::Base,
+        )?;
+        tx.reorder(replacement, ChildIndex::At(1))?;
+
+        let rejected = tx
+            .place_record_block_in_removed_slots(replacement, &removed)
+            .expect_err("the prefix shift invalidates the retained record-slot anchors");
+        assert_eq!(rejected.diagnostic().reason, EditReason::StaleRecordSlots);
+        assert_eq!(
+            rejected.diagnostic().involved_ids,
+            vec![EditId::Object(replacement), EditId::Object(fixture.middle)]
+        );
+
+        tx.set(following, props::WORLD_OPACITY, 0.5)?;
+        Ok(())
+    })?;
+
+    let instance = fixture.scene.instantiate(fixture.artboard)?;
+    let opacity = fixture
+        .scene
+        .cursor(instance, following, props::WORLD_OPACITY)?;
+    assert_eq!(fixture.scene.frame().get(opacity)?, 0.5);
     Ok(())
 }
 

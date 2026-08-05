@@ -35,3 +35,9 @@
 - Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
 - Touched areas: module-wide class declaration tracking, class-name lvalue
   diagnostics, and class-local AST allocation for compiler hoisting.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: class superclass expressions, `extends` parsing/printing,
+  CST-attribute flag retirement, and indentation-independent table recovery.

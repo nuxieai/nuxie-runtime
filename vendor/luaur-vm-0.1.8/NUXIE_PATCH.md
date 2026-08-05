@@ -48,3 +48,9 @@ Provenance:
 - Touched areas: optional GC-backed double vectors, fixed-object allocation,
   vector bytecode/runtime callers, embedder GC and weak-reference APIs,
   backedge GC checks, public debug/memory APIs, and xpcall continuation depth.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: class inheritance and `NEWCLASS`, v13/v100 loading, managed
+  C-closure debug names, `lua_usesexport`, and custom-pcall flag retirement.

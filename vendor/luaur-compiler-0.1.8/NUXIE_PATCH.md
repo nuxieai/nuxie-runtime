@@ -35,3 +35,9 @@
 - Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
 - Touched areas: precision-selectable vector constants and folding, hoisted
   class locals across parsing/value tracking/codegen, and dark IIFE inlining.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: superclass-aware `NEWCLASS` emission, shaped export tables,
+  export-aware value tracking, delayed function exports, and proto marking.

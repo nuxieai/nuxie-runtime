@@ -40,3 +40,9 @@ introduces a caller ("crash vs silently-unfolded" becomes observable then).
 - Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
 - Touched areas: float/double vector constant tags and graph round-tripping,
   centralized def-use-safe `BcFunction` rewrites, and SCCP IEEE division.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: bytecode-v13 double-vector emission, v100 class shapes and
+  `NEWCLASS` graph support, dead-PC sentinels, and sealed feedback migration.

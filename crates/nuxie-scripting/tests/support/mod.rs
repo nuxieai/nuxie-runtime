@@ -1,9 +1,36 @@
 #![allow(dead_code)]
 
-use luaur_rt::{Error, FromLuaMulti, Function, Result, Table, Value};
+use luaur_rt::{Error, FromLuaMulti, Function, Result, Value};
 use nuxie_scripting::vm::ScriptVm;
 
-const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
+fn compile_source(source: &str) -> Result<Vec<u8>> {
+    use luaur_compiler::functions::luau_compile::luau_compile;
+
+    luaur_common::set_all_flags(true);
+    let mut output_size = 0;
+    let output = luau_compile(
+        source.as_ptr().cast(),
+        source.len(),
+        std::ptr::null_mut(),
+        &mut output_size,
+    );
+    if output.is_null() || output_size == 0 {
+        return Err(Error::runtime("pinned Luau compiler returned no bytecode"));
+    }
+    // SAFETY: luau_compile returns a malloc allocation of output_size bytes.
+    let bytecode = unsafe { std::slice::from_raw_parts(output.cast::<u8>(), output_size) }.to_vec();
+    unsafe extern "C" {
+        fn free(pointer: *mut std::ffi::c_void);
+    }
+    // SAFETY: output is the allocation returned by luau_compile above.
+    unsafe { free(output.cast()) };
+    if bytecode.first() == Some(&0) {
+        return Err(Error::runtime(
+            String::from_utf8_lossy(&bytecode[1..]).into_owned(),
+        ));
+    }
+    Ok(bytecode)
+}
 
 /// Source helpers used only by baseline conformance tests.
 ///
@@ -18,40 +45,18 @@ pub trait ScriptVmSourceTestExt {
 
 impl ScriptVmSourceTestExt for ScriptVm {
     fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
-        self.lua().load(source).eval()
+        self.run_bytecode("test-source", &compile_source(source)?)
     }
 
     fn load(&self, name: &str, source: &str) -> Result<Function> {
-        self.lua().load(source).set_name(name).into_function()
+        self.load_bytecode(name, &compile_source(source)?)
     }
 
     fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {
-        self.install_rive_globals()?;
-        let cache = self.lua().named_registry_value::<Table>(MODULE_CACHE_KEY)?;
-        if let value @ (Value::Table(_) | Value::Function(_)) = cache.raw_get::<Value>(name)? {
-            return Ok(value);
-        }
-
-        let chunk = self.load(name, source)?;
-        let environment = self.lua().create_table();
-        let metatable = self.lua().create_table();
-        metatable.raw_set("__index", self.lua().globals())?;
-        metatable.set_readonly(true);
-        environment.set_metatable(Some(metatable))?;
-        if !chunk.set_environment(environment)? {
-            return Err(Error::runtime(format!(
-                "module '{name}' could not install its sandbox environment"
-            )));
-        }
-        let result: Value = chunk.call(())?;
-        match &result {
-            Value::Table(_) | Value::Function(_) => cache.raw_set(name, result.clone())?,
-            other => {
-                return Err(Error::runtime(format!(
-                    "module '{name}' must return a table or function, got {other:?}"
-                )));
-            }
-        }
-        Ok(result)
+        let bytecode = compile_source(source)?;
+        let mut payload = Vec::with_capacity(bytecode.len() + 1);
+        payload.push(0);
+        payload.extend_from_slice(&bytecode);
+        self.register_module(name, &payload)
     }
 }

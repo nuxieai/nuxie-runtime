@@ -27290,6 +27290,138 @@ mod tests {
         Ok(())
     }
 
+    /// UNIV-1408: layout content-sizing overwrites an authored parametric
+    /// rectangle with the layout's solved bounds. Pinned C++ does the same
+    /// (`layout_component.cpp propagateSizeToChildren` ->
+    /// `shape.cpp Shape::controlSize` -> `parametric_path.cpp controlSize`),
+    /// so the product's inset border-centerline rectangle cannot survive a
+    /// `LayoutComponent` parent in either runtime.
+    #[test]
+    fn layout_border_rectangle_control_size_matches_cpp_after_exact_riv_round_trip() -> Result<()> {
+        const BORDER_COLOR: u32 = 0xff0f_172a;
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                layout_style: None,
+                name: "UNIV-1408 layout border".into(),
+                width: 96.0,
+                height: 64.0,
+            })?;
+            let layout = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::LayoutComponent(LayoutComponentSpec {
+                    name: "Border View".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    clip: false,
+                    width: 96.0,
+                    height: 64.0,
+                    fractional_width: 1.0,
+                    fractional_height: 1.0,
+                    style: LayoutComponentStyleSpec::default(),
+                }),
+            )?;
+            let shape = tx.create(
+                Parent::Object(layout),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Border Shape".into(),
+                    x: 48.0,
+                    y: 32.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Border centerline", 92.0, 60.0)),
+            )?;
+            let stroke = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Stroke(StrokeSpec {
+                    name: "Border Stroke".into(),
+                    thickness: 4.0,
+                    cap: SceneStrokeCap::Butt,
+                    join: SceneStrokeJoin::Miter,
+                    transform_affects_stroke: true,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(stroke),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Border Color".into(),
+                    color: BORDER_COLOR,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let mut rust = OwnedArtboardInstance::instantiate(file, 0)?;
+        let rust_stream = parse_single_frame(&owned_draw_stream(&mut rust)?)?;
+        let stroke_geometry = |stream: &RenderStream| -> Result<(f32, f32, f32)> {
+            for command in stream.frames.iter().flat_map(|frame| &frame.commands) {
+                if let Command::DrawPath { path, paint } = command
+                    && paint.color == BORDER_COLOR
+                {
+                    let bounds = path
+                        .raw_path
+                        .precise_bounds()
+                        .context("border stroke bounds")?;
+                    return Ok((
+                        bounds.max_x - bounds.min_x,
+                        bounds.max_y - bounds.min_y,
+                        paint.thickness,
+                    ));
+                }
+            }
+            anyhow::bail!("stream has no border stroke draw")
+        };
+        let rust_geometry = stroke_geometry(&rust_stream)?;
+        assert_eq!(
+            rust_geometry,
+            (96.0, 64.0, 4.0),
+            "layout content-sizing must overwrite the authored 92x60 centerline rectangle"
+        );
+
+        let Some(cpp_runner) = std::env::var_os("RIVE_GOLDEN_RUNNER") else {
+            eprintln!(
+                "skipping C++ layout-border controlSize oracle; set RIVE_GOLDEN_RUNNER to the pinned golden runner"
+            );
+            return Ok(());
+        };
+        let fixture_path = std::env::temp_dir().join(format!(
+            "nuxie-univ-1408-layout-border-control-size-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture_path, &bytes)?;
+        let output = std::process::Command::new(cpp_runner)
+            .args(["--file"])
+            .arg(&fixture_path)
+            .args(["--artboard", "UNIV-1408 layout border", "--samples", "0"])
+            .output()
+            .context("run pinned C++ layout-border controlSize oracle")?;
+        let _ = std::fs::remove_file(&fixture_path);
+        assert!(
+            output.status.success(),
+            "pinned C++ rejected the exact authored fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let cpp_stream = RenderStream::parse(&String::from_utf8(output.stdout)?)?;
+        assert_eq!(
+            stroke_geometry(&cpp_stream)?,
+            rust_geometry,
+            "pinned C++ must content-size the border rectangle identically"
+        );
+        Ok(())
+    }
+
     struct AuthoredTextOracleSpec<'a> {
         artboard_name: &'a str,
         frame_size: (f32, f32),

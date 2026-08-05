@@ -280,11 +280,18 @@ the layout's solved bounds:
   roll; what changed is the mounted structure/bounds coverage on the
   product side.
 
-Verdict: the runtime is C++-parity-correct; the border fix belongs in the
-product mount/lowering (the border Shape must not be content-sized — e.g.
-a layout-transparent wrapper — or must author geometry that survives
-`controlSize`). A runtime-side skip would be a deliberate divergence from
-the pin and is not justified.
+The parity claim is machine-checked, not only source-cited:
+`layout_border_rectangle_control_size_matches_cpp_after_exact_riv_round_trip`
+(in `crates/nuxie/src/scene.rs`) exports this exact scene to a `.riv`,
+draws it through the pinned C++ golden runner, and asserts C++ records the
+same content-sized `96x64 x 4` stroke geometry as Rust.
+
+Verdict (border family only): the runtime is C++-parity-correct — proven
+at both the pre-roll (`ae81ae0a`) and current (`6f6191e4`) refs; the
+border fix belongs in the product mount/lowering (the border Shape must
+not be content-sized — e.g. a layout-transparent wrapper — or must author
+geometry that survives `controlSize`). A runtime-side skip would be a
+deliberate divergence from the pin and is not justified.
 
 ## Final localization (2026-08-04): the geometry/paint-split family
 
@@ -301,8 +308,18 @@ in the recorded stream while sibling text draws are correct:
 - `paywall-product-radio-badge`: badge fill top y = 24.98 versus inspected
   y = 11 — the reported ~14 px fill/label split.
 
-So this family is also upstream of rasterization: the structural
-translate value rules driving background Shapes in the mounted scene
-resolve different positions than the (correct) solved layout used by text
-and by geometry inspection. The probe makes the remaining bisect
-mechanical.
+So this family is upstream of rasterization: the structural translate
+value rules driving background Shapes in the mounted scene resolve
+different positions than the (correct) solved layout used by text and by
+geometry inspection.
+
+**Status: BISECT PENDING.** "Upstream of rasterization" localizes the
+defect to the recorded stream; it does NOT attribute it. The remaining
+bisect — product-authored structural-translate rules (nuxie-dev scene
+projection) versus runtime transform composition/binding evaluation for
+Shape children of mounted layouts — has not been performed. No parity
+claim is made for the runtime on this family. The
+`univ_1408_border_basic_real_stream_probe` test on nuxie-dev branch
+`levi/univ-1408-stream-probe` reproduces the wrong transforms natively
+from the captured failing snapshots and is the instrument for that
+bisect.

@@ -1927,6 +1927,7 @@ dependencies = [
  "nuxie-graph",
  "nuxie-render-api",
  "nuxie-runtime",
+ "nuxie-scripting",
  "serde",
  "toml",
 ]

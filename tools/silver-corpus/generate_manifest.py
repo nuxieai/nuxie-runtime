@@ -157,9 +157,6 @@ FORCED_BLOCKERS = {
     "global_variables_test": "runtime-frame-loop-nontermination-with-global-view-models",
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
-    "multi_listeners": (
-        "runtime-script-asset-vm-instantiation-and-occurrence-attachment"
-    ),
     "bindable_artboard_nesty": "external-bindable-artboard-with-bound-view-model-injection",
     "data_binding_artboards_default_test": "external-bindable-artboard-registration",
     "data_binding_artboards_test": "external-bindable-artboard-registration",
@@ -230,6 +227,7 @@ EXACT = (
     "hittest_ab1",
     "hittest_ab1_grand_parent",
     "hittest_ab1_parent",
+    "hide_test",
     "hittest_collapsed_layouts",
     "hittest_nested",
     "image_fit_alignment_2",
@@ -239,6 +237,7 @@ EXACT = (
     "list_items",
     "list_to_length_test",
     "list_to_path",
+    "multi_listeners",
     "multitouch",
     "multitouch_enter",
     "n_slice_triangle",
@@ -1889,7 +1888,6 @@ drag_event|frame 23, op 602 (save): expected save, got color
 focus_traversal|frame 0, op 95 (color): expected color, got save
 fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
 group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
-hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save
 hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
@@ -1904,7 +1902,6 @@ layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71)
 layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
 layout_fixed_fill|frame 1, op 56 (rewind): expected rewind, got drawPath
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
-multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
 multitouch_enter-MultiScroll|frame 0, op 95 (transform), field xy: expected -0.0 (0x80000000), got 0
 nested_artboard_quantize_and_speed|frame 0, op 75 (transform), field xx: expected 0.95105654, got 1
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind

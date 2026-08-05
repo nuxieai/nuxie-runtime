@@ -6,40 +6,40 @@ root="$(cd "$(dirname "$0")/.." && pwd -P)"
 original_cwd="$(pwd -P)"
 sequence=(A B B A)
 dry_run=0
-output_dir="${R4_TIMING_GATE_OUT_DIR:-}"
-renderer_perf="${R4_TIMING_GATE_RENDERER_PERF:-}"
-comparator="${R4_TIMING_GATE_COMPARATOR:-}"
-manifest="${R4_TIMING_GATE_MANIFEST:-}"
-baseline_runner="${R4_TIMING_GATE_BASELINE_RUNNER:-}"
-a_runner="${R4_TIMING_GATE_A_RUNNER:-}"
-b_runner="${R4_TIMING_GATE_B_RUNNER:-}"
-renderer_perf_max_ratio="${R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-1.0}"
-capture_max_ratio="${R4_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
-max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
-max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
-max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
-host_sampler="${R4_TIMING_GATE_HOST_SAMPLER:-}"
-baseline_source_id="${R4_TIMING_GATE_BASELINE_SOURCE_ID:-}"
-a_source_id="${R4_TIMING_GATE_A_SOURCE_ID:-}"
-b_source_id="${R4_TIMING_GATE_B_SOURCE_ID:-}"
+output_dir="${RENDERER_TIMING_GATE_OUT_DIR:-}"
+renderer_perf="${RENDERER_TIMING_GATE_RENDERER_PERF:-}"
+comparator="${RENDERER_TIMING_GATE_COMPARATOR:-}"
+manifest="${RENDERER_TIMING_GATE_MANIFEST:-}"
+baseline_runner="${RENDERER_TIMING_GATE_BASELINE_RUNNER:-}"
+a_runner="${RENDERER_TIMING_GATE_A_RUNNER:-}"
+b_runner="${RENDERER_TIMING_GATE_B_RUNNER:-}"
+renderer_perf_max_ratio="${RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO:-1.0}"
+capture_max_ratio="${RENDERER_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
+max_b_over_a="${RENDERER_TIMING_GATE_MAX_B_OVER_A:-1.0}"
+max_control_drift="${RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
+max_repeat_drift="${RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
+host_sampler="${RENDERER_TIMING_GATE_HOST_SAMPLER:-}"
+baseline_source_id="${RENDERER_TIMING_GATE_BASELINE_SOURCE_ID:-}"
+a_source_id="${RENDERER_TIMING_GATE_A_SOURCE_ID:-}"
+b_source_id="${RENDERER_TIMING_GATE_B_SOURCE_ID:-}"
 
 usage() {
     cat <<'EOF'
-usage: r4-timing-gate.sh [--dry-run] [--output-dir path]
+usage: renderer-timing-gate.sh [--dry-run] [--output-dir path]
 
 Runs the fixed `renderer-perf` executable A-B-B-A with the pinned runner paths
-R4_TIMING_GATE_BASELINE_RUNNER, R4_TIMING_GATE_A_RUNNER, and
-R4_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v3 report, then
-requires both post-tail B reports to meet R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO
+RENDERER_TIMING_GATE_BASELINE_RUNNER, RENDERER_TIMING_GATE_A_RUNNER, and
+RENDERER_TIMING_GATE_B_RUNNER. It validates each rive-renderer-perf-v3 report, then
+requires both post-tail B reports to meet RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO
 and requires B/A candidate timing plus symmetric C++ control drift to meet
-their configured limits. R4_TIMING_GATE_CAPTURE_MAX_RATIO is only a permissive
+their configured limits. RENDERER_TIMING_GATE_CAPTURE_MAX_RATIO is only a permissive
 collection ceiling so a slower pre-tail A report cannot abort the bracket.
 Every report, stdout/stderr log, host sample, hash, and comparison is retained
-in the output directory. R4_TIMING_GATE_BASELINE_SOURCE_ID,
-R4_TIMING_GATE_A_SOURCE_ID, and R4_TIMING_GATE_B_SOURCE_ID must identify the
+in the output directory. RENDERER_TIMING_GATE_BASELINE_SOURCE_ID,
+RENDERER_TIMING_GATE_A_SOURCE_ID, and RENDERER_TIMING_GATE_B_SOURCE_ID must identify the
 three corresponding immutable runner sources.
 
-R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
+RENDERER_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
 raw output is retained. Sampling occurs before and after each leg as
 non-gating telemetry. Paired C++ controls inside every report plus control and
@@ -89,14 +89,14 @@ canonical_new_directory() {
 }
 
 if [[ -z "$output_dir" ]]; then
-    output_dir="$root/target/r4-timing-gate/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    output_dir="$root/target/renderer-timing-gate/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 fi
 output_dir="$(canonical_new_directory "$output_dir")" || exit 2
 
 if [[ "$dry_run" == 1 ]]; then
-    printf 'r4-timing-gate dry-run sequence=%s-%s-%s-%s\n' "${sequence[@]}"
-    printf 'r4-timing-gate dry-run output_dir=%s\n' "$output_dir"
-    printf 'r4-timing-gate dry-run baseline=%s A=%s B=%s\n' "$baseline_runner" "$a_runner" "$b_runner"
+    printf 'renderer-timing-gate dry-run sequence=%s-%s-%s-%s\n' "${sequence[@]}"
+    printf 'renderer-timing-gate dry-run output_dir=%s\n' "$output_dir"
+    printf 'renderer-timing-gate dry-run baseline=%s A=%s B=%s\n' "$baseline_runner" "$a_runner" "$b_runner"
     exit 0
 fi
 
@@ -126,7 +126,7 @@ import sys
 comparison = pathlib.Path(os.environ["GATE_DECISION_COMPARISON"])
 idle_spread = os.environ["GATE_DECISION_IDLE_SPREAD"]
 decision = {
-    "schema": "rive-r4-timing-gate-decision-v1",
+    "schema": "rive-renderer-timing-gate-decision-v1",
     "status": os.environ["GATE_DECISION_STATUS"],
     "phase": os.environ["GATE_DECISION_PHASE"],
     "reason": os.environ["GATE_DECISION_REASON"] or None,
@@ -188,29 +188,29 @@ printf 'label\tphase\tidle_percent\traw_file\n' >"$output_dir/host-idle.tsv"
 fail() {
     phase="$1"
     failure_reason="$2"
-    echo "r4-timing-gate $phase: $failure_reason" >&2
+    echo "renderer-timing-gate $phase: $failure_reason" >&2
     exit "${3:-1}"
 }
 
 phase="validate-configuration"
 for setting in \
-    R4_TIMING_GATE_RENDERER_PERF="$renderer_perf" \
-    R4_TIMING_GATE_COMPARATOR="$comparator" \
-    R4_TIMING_GATE_MANIFEST="$manifest" \
-    R4_TIMING_GATE_BASELINE_RUNNER="$baseline_runner" \
-    R4_TIMING_GATE_A_RUNNER="$a_runner" \
-    R4_TIMING_GATE_B_RUNNER="$b_runner" \
-    R4_TIMING_GATE_BASELINE_SOURCE_ID="$baseline_source_id" \
-    R4_TIMING_GATE_A_SOURCE_ID="$a_source_id" \
-    R4_TIMING_GATE_B_SOURCE_ID="$b_source_id"; do
+    RENDERER_TIMING_GATE_RENDERER_PERF="$renderer_perf" \
+    RENDERER_TIMING_GATE_COMPARATOR="$comparator" \
+    RENDERER_TIMING_GATE_MANIFEST="$manifest" \
+    RENDERER_TIMING_GATE_BASELINE_RUNNER="$baseline_runner" \
+    RENDERER_TIMING_GATE_A_RUNNER="$a_runner" \
+    RENDERER_TIMING_GATE_B_RUNNER="$b_runner" \
+    RENDERER_TIMING_GATE_BASELINE_SOURCE_ID="$baseline_source_id" \
+    RENDERER_TIMING_GATE_A_SOURCE_ID="$a_source_id" \
+    RENDERER_TIMING_GATE_B_SOURCE_ID="$b_source_id"; do
     [[ -n "${setting#*=}" ]] || fail "validate-configuration" "${setting%%=*} is required" 2
 done
 for numeric in \
-    R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO="$renderer_perf_max_ratio" \
-    R4_TIMING_GATE_CAPTURE_MAX_RATIO="$capture_max_ratio" \
-    R4_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
-    R4_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
-    R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift"; do
+    RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO="$renderer_perf_max_ratio" \
+    RENDERER_TIMING_GATE_CAPTURE_MAX_RATIO="$capture_max_ratio" \
+    RENDERER_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
+    RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
+    RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift"; do
     is_positive_number "${numeric#*=}" \
         || fail "validate-configuration" "${numeric%%=*} must be a positive number" 2
 done
@@ -379,4 +379,4 @@ if ! "$comparator" --a-first "$output_dir/01-A.renderer-perf.json" \
 fi
 
 gate_status="pass"
-printf 'r4-timing-gate status=pass artifacts=%s idle_spread_percent=%s\n' "$output_dir" "$idle_spread"
+printf 'renderer-timing-gate status=pass artifacts=%s idle_spread_percent=%s\n' "$output_dir" "$idle_spread"

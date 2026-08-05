@@ -3017,7 +3017,7 @@ note = "F9 closure via FL-E4: the direct file owner retains clone-local componen
 [[file]]
 upstream = "src/layout.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/layout.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0247"
@@ -3029,7 +3029,7 @@ note = "W120 faithful candidate: pinned Alignment owns exactly nine named consta
 [[file]]
 upstream = "src/layout/artboard_component_list_override.cpp"
 status = "divergent-by-decision"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/layout/artboard_component_list_override.rs; crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0248"
@@ -3181,7 +3181,7 @@ note = "Direct patch-index map assignment preserves duplicate replacement."
 [[file]]
 upstream = "src/layout_component.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/layout_component.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0258"
@@ -3660,7 +3660,7 @@ note = "Justified exception: RuntimePathMeasure shares TrimContour storage and B
 [[file]]
 upstream = "src/math/random.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/math/random.rs; crates/nuxie-runtime/src/math/random/native.rs; crates/nuxie-runtime/src/math/random/wasm.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0298"
@@ -4142,7 +4142,7 @@ note = "Direct Image layout-scale mode plus live owner-local RenderImage/Mesh di
 [[file]]
 upstream = "src/shapes/list_path.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/shapes/list_path.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0339"
@@ -4586,7 +4586,7 @@ note = "P1-n faithful closure at d788e8ec under AF-7: simple_array.cpp:1-18 defi
 [[file]]
 upstream = "src/solo.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/solo.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0376"
@@ -4622,7 +4622,7 @@ note = "F2 closure via FL-E6 ports retained cursor endpoints, ordering, collapse
 [[file]]
 upstream = "src/text/font_hb.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/font_hb.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0379"
@@ -4634,7 +4634,7 @@ note = "W120 faithful candidate under the PORTING section 5 HarfRust/Skrifa subs
 [[file]]
 upstream = "src/text/fully_shaped_text.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/fully_shaped_text.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0380"
@@ -4646,7 +4646,7 @@ note = "W120 faithful candidate: pinned shaping retains paragraph, line, lookup,
 [[file]]
 upstream = "src/text/glyph_lookup.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/glyph_lookup.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0381"
@@ -4658,7 +4658,7 @@ note = "W120 faithful candidate: pinned glyph-to-character count/start/boundary/
 [[file]]
 upstream = "src/text/line_breaker.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/line_breaker.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0382"
@@ -4670,7 +4670,7 @@ note = "W120 faithful candidate: pinned max-width, metrics/spacing, and break-li
 [[file]]
 upstream = "src/text/raw_text.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie/src/raw_text.rs; crates/nuxie-runtime/src/text/raw_text.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0383"
@@ -4694,7 +4694,7 @@ note = "F2 closure via FL-E6 ports the retained edit buffer, cursor and selectio
 [[file]]
 upstream = "src/text/text.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0385"
@@ -4706,7 +4706,7 @@ note = "W120 faithful candidate: pinned Text measurement/render-style constructi
 [[file]]
 upstream = "src/text/text_engine.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_engine.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0386"
@@ -4718,7 +4718,7 @@ note = "W120 faithful candidate: pinned OrderedLine ordering, code-point contain
 [[file]]
 upstream = "src/text/text_follow_path_modifier.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_follow_path_modifier.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0387"
@@ -4814,7 +4814,7 @@ note = "MR-3 justification: FL-E6 moves the closed Text/TextInput interface disp
 [[file]]
 upstream = "src/text/text_modifier.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_modifier.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0395"
@@ -4826,7 +4826,7 @@ note = "FL-E8 WP1 faithful candidate: authored-order generic modifier registrati
 [[file]]
 upstream = "src/text/text_modifier_group.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_modifier_group.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0396"
@@ -4838,7 +4838,7 @@ note = "W120 faithful candidate for the supported static-text contract: pinned p
 [[file]]
 upstream = "src/text/text_modifier_range.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_modifier_range.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0397"
@@ -4862,7 +4862,7 @@ note = "F2 closure via FL-E6 ports rectangle union, contour orientation, per-cor
 [[file]]
 upstream = "src/text/text_style.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_style.rs; crates/nuxie-runtime/src/text.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/text/text_style.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0399"
@@ -4874,7 +4874,7 @@ note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_style.r
 [[file]]
 upstream = "src/text/text_style_axis.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_style_axis.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0400"
@@ -4886,7 +4886,7 @@ note = "W120 faithful candidate: pinned parent registration plus tag/axis-value 
 [[file]]
 upstream = "src/text/text_style_feature.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_style_feature.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0401"
@@ -4910,7 +4910,7 @@ note = "FL-E5 direct owner callback plus retained draw coordinator cover inherit
 [[file]]
 upstream = "src/text/text_target_modifier.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_target_modifier.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0403"
@@ -4934,7 +4934,7 @@ note = "FL-E5 direct callbacks and text coordinator preserve parent/run registra
 [[file]]
 upstream = "src/text/text_variation_helper.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_variation_helper.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/text/text_variation_helper.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0405"
@@ -4946,7 +4946,7 @@ note = "W120 faithful candidate: pinned dependency construction and helper updat
 [[file]]
 upstream = "src/text/text_variation_modifier.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/text_variation_modifier.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0406"
@@ -4958,7 +4958,7 @@ note = "C1/F13 closure via FL-E8 WP1: crates/nuxie-runtime/src/text/text_variati
 [[file]]
 upstream = "src/text/utf.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/text/utf.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0407"

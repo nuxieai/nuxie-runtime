@@ -13,7 +13,7 @@ struct TempDir {
 impl TempDir {
     fn new(name: &str) -> Self {
         let unique = format!(
-            "rive-r4-timing-gate-{name}-{}-{}",
+            "rive-renderer-timing-gate-{name}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -189,39 +189,39 @@ fn run_gate(gate: Gate<'_>) -> Output {
 }
 
 fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../r4-timing-gate.sh");
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../renderer-timing-gate.sh");
     Command::new(script)
         .current_dir(gate.directory)
         .args(["--output-dir", "artifacts"])
         .env(
-            "R4_TIMING_GATE_RENDERER_PERF",
+            "RENDERER_TIMING_GATE_RENDERER_PERF",
             env!("CARGO_BIN_EXE_renderer-perf"),
         )
         .env(
-            "R4_TIMING_GATE_COMPARATOR",
-            env!("CARGO_BIN_EXE_r4-timing-compare"),
+            "RENDERER_TIMING_GATE_COMPARATOR",
+            env!("CARGO_BIN_EXE_renderer-timing-compare"),
         )
         .env(
-            "R4_TIMING_GATE_MANIFEST",
+            "RENDERER_TIMING_GATE_MANIFEST",
             Path::new(env!("CARGO_MANIFEST_DIR")).join("renderer-scenes.toml"),
         )
-        .env("R4_TIMING_GATE_BASELINE_RUNNER", gate.baseline)
-        .env("R4_TIMING_GATE_A_RUNNER", gate.a)
-        .env("R4_TIMING_GATE_B_RUNNER", gate.b)
+        .env("RENDERER_TIMING_GATE_BASELINE_RUNNER", gate.baseline)
+        .env("RENDERER_TIMING_GATE_A_RUNNER", gate.a)
+        .env("RENDERER_TIMING_GATE_B_RUNNER", gate.b)
         .env(
-            "R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO",
+            "RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO",
             gate.max_renderer_ratio,
         )
-        .env("R4_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
-        .env("R4_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
-        .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
-        .env("R4_TIMING_GATE_HOST_SAMPLER", sampler)
+        .env("RENDERER_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
+        .env("RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
+        .env("RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
+        .env("RENDERER_TIMING_GATE_HOST_SAMPLER", sampler)
         .env(
-            "R4_TIMING_GATE_BASELINE_SOURCE_ID",
+            "RENDERER_TIMING_GATE_BASELINE_SOURCE_ID",
             "r4-test-baseline-source",
         )
-        .env("R4_TIMING_GATE_A_SOURCE_ID", "r4-test-a-source")
-        .env("R4_TIMING_GATE_B_SOURCE_ID", "r4-test-b-source")
+        .env("RENDERER_TIMING_GATE_A_SOURCE_ID", "renderer-test-a-source")
+        .env("RENDERER_TIMING_GATE_B_SOURCE_ID", "renderer-test-b-source")
         .output()
         .unwrap()
 }
@@ -248,7 +248,7 @@ fn decision(directory: &Path) -> serde_json::Value {
 }
 
 fn run_comparator(directory: &Path, a_first: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_r4-timing-compare"))
+    Command::new(env!("CARGO_BIN_EXE_renderer-timing-compare"))
         .args([
             "--a-first",
             a_first.to_str().unwrap(),
@@ -289,7 +289,7 @@ fn assert_finalized_failure(directory: &Path) {
     assert!(metadata.contains("artifact_dir="), "{metadata}");
     assert!(metadata.contains("decision_path="), "{metadata}");
     let decision = decision(directory);
-    assert_eq!(decision["schema"], "rive-r4-timing-gate-decision-v1");
+    assert_eq!(decision["schema"], "rive-renderer-timing-gate-decision-v1");
     assert_eq!(decision["status"], "fail");
     assert!(!decision["reason"].is_null());
 }
@@ -351,11 +351,11 @@ fn r4_gate_accepts_faster_b_and_samples_only_outside_timed_legs() {
     .unwrap();
     assert_eq!(
         a_provenance["provenance"]["candidate_source_id"],
-        "r4-test-a-source"
+        "renderer-test-a-source"
     );
     assert_eq!(
         b_provenance["provenance"]["candidate_source_id"],
-        "r4-test-b-source"
+        "renderer-test-b-source"
     );
 
     let a_report = directory.path.join("artifacts/01-A.renderer-perf.json");
@@ -408,7 +408,7 @@ fn r4_gate_captures_a_above_the_final_ratio_when_b_passes() {
     let comparison =
         std::fs::read_to_string(directory.path.join("artifacts/comparison.json")).unwrap();
     let comparison: serde_json::Value = serde_json::from_str(&comparison).unwrap();
-    assert_eq!(comparison["schema"], "rive-r4-timing-comparison-v3");
+    assert_eq!(comparison["schema"], "rive-renderer-timing-comparison-v3");
     assert_eq!(comparison["worst_b_scene"]["candidate_over_cpp"], 1.5);
     assert_eq!(comparison["overall_pass"], true);
 }

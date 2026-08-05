@@ -1423,7 +1423,7 @@ def validate_fl_e8_wp1_artifacts(repo_root: pathlib.Path, errors: list[str]) -> 
     for fixture_name in ("text-style-feature", "text-variation-modifier"):
         if fixture_name not in codegen:
             errors.append(f"FL-E8 WP1 fixture emitter is missing: {fixture_name}")
-    fixture_test = repo_root / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+    fixture_test = repo_root / "tools/nuxie-codegen/tests/codegen_fixtures.rs"
     if not fixture_test.is_file():
         errors.append("FL-E8 WP1 deterministic fixture-emission integration test is missing")
 
@@ -1450,7 +1450,7 @@ def validate_fl_e8_wp2_artifacts(repo_root: pathlib.Path, errors: list[str]) -> 
         errors.append("FL-E8 WP2 old explicit ListPath rejection branch remains")
 
     rust_probe_path = repo_root / "crates/nuxie-runtime/tests/cpp_probe.rs"
-    silver_probe_path = repo_root / "tools/silver-corpus/tests/fl_e8_list_path.rs"
+    silver_probe_path = repo_root / "tools/silver-corpus/tests/list_path_case.rs"
     rust_probes = "\n".join(
         path.read_text(encoding="utf-8") if path.is_file() else ""
         for path in (rust_probe_path, silver_probe_path)
@@ -1580,8 +1580,11 @@ def check(
     except OSError as error:
         raise CheckFailure(f"cannot read porting rules {porting_path}: {error}") from error
 
-    active_family = ledger.get("active_owner_family", {})
-    if not isinstance(active_family, dict):
+    active_family = ledger.get("active_owner_family")
+    if active_family is None:
+        # No owner family in flight: the ledger is between waves (or closed).
+        pass
+    elif not isinstance(active_family, dict):
         errors.append("active_owner_family must be a TOML table")
     else:
         family_id = str(active_family.get("id", ""))

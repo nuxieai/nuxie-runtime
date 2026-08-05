@@ -1,6 +1,6 @@
 #!/bin/sh
 # Timing measurements are only meaningful on a quiet machine. Concurrent
-# codex lanes and sibling landing batteries have produced 6-8x inflated
+# local agent workloads and sibling landing batteries have produced 6-8x inflated
 # ratios and false-red gates (observed 2026-08-04: script_create_text_runs
 # measured 475x under contention vs 332x quiet). Wait, bounded, for the
 # load to drop before benchmarking; if it never does, proceed with a loud

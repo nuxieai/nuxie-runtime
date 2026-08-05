@@ -29,7 +29,7 @@ const EXPECTED_SCENE_IDS: [&str; 16] = [
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("r4-timing-compare error: {error}");
+        eprintln!("renderer-timing-compare error: {error}");
         std::process::exit(1);
     }
 }
@@ -659,7 +659,7 @@ impl Comparison {
         };
         let overall_pass = checks.all_passed();
         Ok(Self {
-            schema: "rive-r4-timing-comparison-v3",
+            schema: "rive-renderer-timing-comparison-v3",
             estimator: ESTIMATOR,
             pair_order: PAIR_ORDER,
             candidate_ns,
@@ -812,7 +812,7 @@ fn parse_number(value: String) -> Result<f64, String> {
 }
 
 fn usage() -> &'static str {
-    "usage: r4-timing-compare --a-first report --b-first report --b-second report --a-second report --max-renderer-ratio N --max-b-over-a N --max-control-drift N --max-repeat-drift N [--output path]"
+    "usage: renderer-timing-compare --a-first report --b-first report --b-second report --a-second report --max-renderer-ratio N --max-b-over-a N --max-control-drift N --max-repeat-drift N [--output path]"
 }
 
 #[cfg(test)]

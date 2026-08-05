@@ -20,6 +20,8 @@ state.
 ## Port details
 
 - `dirty_layout` is a `BTreeSet<usize>` and synchronizes only its exact members.
+- Reentrant layout dirt is rejected while that exact-member style cleaning
+  pass is active, matching `m_isCleaningDirtyLayouts`.
 - Empty style synchronization is a no-op; layout calculation follows only a
   relevant synchronized style change.
 - Each layout component retains its solved `Layout`, while the artboard retains
@@ -55,9 +57,16 @@ diverges=10 unsupported-feature=0 not-yet=5
 ```
 
 Focused regression coverage includes empty and member-only synchronization,
-retained solve comparison, animated completion and live-frame path dirtiness,
-host-owned descendant publication, recursive mounted-list hug generation, and
-the recovered `TextInput` clone state test.
+cleaning-pass mutation rejection, retained solve comparison, animated
+completion and live-frame path dirtiness, host-owned descendant publication,
+recursive mounted-list hug generation, and the recovered `TextInput` clone
+state test.
+
+The final two-axis review found and corrected a stale PathComposer lifecycle
+citation and the missing explicit cleaning-pass mutation guard. It also noted
+that `0fc3fe67` was broader than the requested thin-increment shape. Repairing
+that historical process deviation would require rewriting already banked
+history, so it is reported here rather than rewritten.
 
 Final gates:
 

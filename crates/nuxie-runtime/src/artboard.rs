@@ -511,6 +511,9 @@ pub struct ArtboardInstance {
     /// whose retained style/node state must be synchronized before the next
     /// layout calculation. Ordinary Components dirt does not enter this set.
     dirty_layout: BTreeSet<usize>,
+    /// C++ `Artboard::m_isCleaningDirtyLayouts`: style synchronization may
+    /// consume the precise set, but cannot mutate it reentrantly.
+    is_cleaning_dirty_layouts: bool,
     #[cfg(test)]
     layout_calculation_count: usize,
     text_shape_revision: u64,
@@ -674,6 +677,7 @@ impl Clone for ArtboardInstance {
             path_epoch: 1,
             layout_revision: self.layout_revision,
             dirty_layout: BTreeSet::new(),
+            is_cleaning_dirty_layouts: false,
             #[cfg(test)]
             layout_calculation_count: 0,
             text_shape_revision: self.text_shape_revision,
@@ -2503,6 +2507,7 @@ impl ArtboardInstance {
             path_epoch: 1,
             layout_revision: 1,
             dirty_layout: BTreeSet::new(),
+            is_cleaning_dirty_layouts: false,
             #[cfg(test)]
             layout_calculation_count: 0,
             text_shape_revision: 1,
@@ -6583,6 +6588,9 @@ impl ArtboardInstance {
     /// is only a derived fence for the retained layout solve; unrelated paint
     /// preparation is not dirtied.
     pub(crate) fn mark_layout_node_changed(&mut self, local_id: usize) -> bool {
+        if self.is_cleaning_dirty_layouts {
+            return false;
+        }
         let Some(layout) = self
             .component(local_id)
             .and_then(|component| component.concrete.layout.as_ref())
@@ -7908,6 +7916,7 @@ impl ArtboardInstance {
             return false;
         }
 
+        self.is_cleaning_dirty_layouts = true;
         for local_id in &dirty_layout {
             if let Some(layout) = self
                 .component(*local_id)
@@ -7916,6 +7925,7 @@ impl ArtboardInstance {
                 layout.sync_style();
             }
         }
+        self.is_cleaning_dirty_layouts = false;
 
         // Taffy reads authored style directly in Rust, so consuming the exact
         // members above is the style-sync phase. A host-owned root consumes

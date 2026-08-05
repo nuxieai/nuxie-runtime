@@ -782,6 +782,7 @@
             path_epoch: 1,
             layout_revision: 1,
             dirty_layout: BTreeSet::new(),
+            is_cleaning_dirty_layouts: false,
             layout_calculation_count: 0,
             text_shape_revision: 1,
             text_affecting_locals,
@@ -5166,6 +5167,33 @@
         assert_eq!(instance.dirty_layout, BTreeSet::from([1]));
         instance.update_components();
         assert_eq!(instance.layout_calculation_count, 2);
+    }
+
+    #[test]
+    fn layout_dirt_is_rejected_during_the_style_cleaning_pass() {
+        let layout = synthetic_component_for_type(0, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![layout], vec![0]);
+        instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout component")
+            .sync_style();
+        instance.dirty_layout.clear();
+        let layout_revision = instance.layout_revision;
+
+        instance.is_cleaning_dirty_layouts = true;
+        assert!(!instance.mark_layout_node_changed(0));
+        instance.is_cleaning_dirty_layouts = false;
+
+        assert!(instance.dirty_layout.is_empty());
+        assert_eq!(instance.layout_revision, layout_revision);
+        assert!(
+            !instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("layout component")
+                .layout_node_is_dirty()
+        );
     }
 
     #[test]

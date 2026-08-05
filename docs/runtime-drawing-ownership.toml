@@ -169,7 +169,7 @@ legacy_ratchets = []
 note = "The C++ synthetic PathComposer is an explicit Rust dependency/update target and settles all three Shape paths before ShapePaint effects."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/shape.cpp:20", "rust:crates/nuxie-runtime/src/artboard.rs:992-1007"]
-update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/draw.rs:6631-6685"]
+update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/shapes/path_composer.rs:21-82"]
 draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:15064-15117"]
 clone_drop = ["cpp:include/rive/shapes/shape.hpp:18-24", "rust:crates/nuxie-runtime/src/draw.rs:6954-6967"]
 

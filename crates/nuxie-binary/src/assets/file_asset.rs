@@ -2,25 +2,16 @@ use crate::*;
 
 impl RuntimeFile {
     pub fn file_assets(&self) -> Vec<&RuntimeObject> {
-        self.cpp_file_assets().collect()
+        self.file_asset_object_ids
+            .iter()
+            .filter_map(|object_id| self.object(*object_id))
+            .collect()
     }
 
     pub fn file_asset(&self, index: usize) -> Option<&RuntimeObject> {
-        self.cpp_file_assets().nth(index)
-    }
-
-    fn cpp_file_assets(&self) -> impl Iterator<Item = &RuntimeObject> {
-        self.objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                cpp_file_assets_contains(object).then_some(object)
-            })
+        self.file_asset_object_ids
+            .get(index)
+            .and_then(|object_id| self.object(*object_id))
     }
 }
 

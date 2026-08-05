@@ -3972,11 +3972,22 @@ impl Hierarchy<'_> {
                 EditReason::InternalInvariant,
             ));
         }
+        // This dry run on identities is the whole pre-mutation validation for
+        // placeability: nothing below it can fail on a footprint the real
+        // splice would reject. A footprint that no longer fits the stream is
+        // ordinary staleness — the token's slots are absolute pre-removal
+        // indices, so a second removal in the same transaction shortens the
+        // stream past a later token's late slots. Reserve `InternalInvariant`
+        // for the branches the caller's preconditions make impossible, so a
+        // consumer can treat it as corruption and refuse to swallow it.
         let candidate_ids = place_values_in_removed_slots(remaining_ids, block_order, &slots)
-            .ok_or_else(|| {
+            .map_err(|error| {
                 self.abort(
                     vec![EditId::Object(object), EditId::Object(removed.root)],
-                    EditReason::InternalInvariant,
+                    match error {
+                        RemovedSlotPlacementError::Stale => EditReason::StaleRecordSlots,
+                        RemovedSlotPlacementError::Empty => EditReason::InternalInvariant,
+                    },
                 )
             })?;
         // Sibling order is the structural invariant; check it first so a
@@ -4044,6 +4055,15 @@ impl Hierarchy<'_> {
         }
         artboard.records = place_values_in_removed_slots(remaining, block, &slots)
             .expect("preflighted removed record slots accept the same complete block");
+        debug_assert!(
+            artboard
+                .records
+                .iter()
+                .map(|record| record.id)
+                .eq(candidate_ids),
+            "the identity dry run above must predict the record splice exactly; \
+             the validation it carries is worthless otherwise"
+        );
         Ok(artboard_id)
     }
 
@@ -5438,33 +5458,50 @@ fn attach_preflighted_subtree(
     target.splice(insertion_index..insertion_index, subtree);
 }
 
+/// Why a removed subtree's record footprint could not take a block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemovedSlotPlacementError {
+    /// A slot names a position past the end of the current record stream. The
+    /// token's indices are absolute pre-removal positions, so any transaction
+    /// that removes a second subtree can legitimately shorten the stream out
+    /// from under a token that has not been adopted yet. Expected, recoverable.
+    Stale,
+    /// The block or the footprint was empty. The caller's own preconditions
+    /// (a visual object's subtree always contains its own record, a token
+    /// always retains the removed root's record) make this unreachable.
+    Empty,
+}
+
 fn place_values_in_removed_slots<T>(
     mut remaining: Vec<T>,
     block: Vec<T>,
     slots: &[usize],
-) -> Option<Vec<T>> {
+) -> std::result::Result<Vec<T>, RemovedSlotPlacementError> {
     if block.is_empty() || slots.is_empty() {
-        return None;
+        return Err(RemovedSlotPlacementError::Empty);
     }
     let filled_slot_count = block.len().min(slots.len());
     let mut block = block.into_iter();
     for slot in slots.iter().copied().take(filled_slot_count) {
         if slot > remaining.len() {
-            return None;
+            return Err(RemovedSlotPlacementError::Stale);
         }
-        remaining.insert(slot, block.next()?);
+        let value = block.next().ok_or(RemovedSlotPlacementError::Empty)?;
+        remaining.insert(slot, value);
     }
     let extras = block.collect::<Vec<_>>();
     if !extras.is_empty() {
-        let insertion_index = slots
-            .get(filled_slot_count.checked_sub(1)?)?
-            .checked_add(1)?;
+        let insertion_index = filled_slot_count
+            .checked_sub(1)
+            .and_then(|last| slots.get(last))
+            .and_then(|slot| slot.checked_add(1))
+            .ok_or(RemovedSlotPlacementError::Empty)?;
         if insertion_index > remaining.len() {
-            return None;
+            return Err(RemovedSlotPlacementError::Stale);
         }
         remaining.splice(insertion_index..insertion_index, extras);
     }
-    Some(remaining)
+    Ok(remaining)
 }
 
 #[derive(Debug, Clone)]
@@ -10482,6 +10519,13 @@ impl SceneTx<'_> {
     /// [`EditReason::StaleRecordSlots`]. Tail-side edits that preserve these
     /// preceding anchors are permitted, while prefix-shifting edits and
     /// out-of-order adoption of multiple tokens are rejected.
+    ///
+    /// The same reason covers a footprint that no longer fits the stream at
+    /// all: because the indices are absolute, a transaction that removes more
+    /// than one subtree can shorten the stream past a later token's slots
+    /// while its anchors still verify. Both rejections are ordinary and
+    /// recoverable — nothing is mutated, the transaction stays usable, and a
+    /// caller can fall back to an anchored placement.
     pub fn place_record_block_in_removed_slots(
         &mut self,
         object: ObjectId,

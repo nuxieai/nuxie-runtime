@@ -421,8 +421,27 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
+    let buffer = [
+        (65, crate::functions::luau_f_readinteger::luauF_readinteger::<i8> as *const () as usize),
+        (66, crate::functions::luau_f_readinteger::luauF_readinteger::<u8> as *const () as usize),
+        (67, crate::functions::luau_f_writeinteger::luauF_writeinteger::<u8> as *const () as usize),
+        (68, crate::functions::luau_f_readinteger::luauF_readinteger::<i16> as *const () as usize),
+        (69, crate::functions::luau_f_readinteger::luauF_readinteger::<u16> as *const () as usize),
+        (70, crate::functions::luau_f_writeinteger::luauF_writeinteger::<u16> as *const () as usize),
+        (71, crate::functions::luau_f_readinteger::luauF_readinteger::<i32> as *const () as usize),
+        (72, crate::functions::luau_f_readinteger::luauF_readinteger::<u32> as *const () as usize),
+        (73, crate::functions::luau_f_writeinteger::luauF_writeinteger::<u32> as *const () as usize),
+        (74, crate::functions::luau_f_readfp::luau_f_readfp::<f32> as *const () as usize),
+        (75, crate::functions::luau_f_writefp::luau_f_writefp::<f32> as *const () as usize),
+        (76, crate::functions::luau_f_readfp::luau_f_readfp::<f64> as *const () as usize),
+        (77, crate::functions::luau_f_writefp::luau_f_writefp::<f64> as *const () as usize),
+    ];
+    for (slot, expected) in buffer {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
     for slot in (54..55)
-        .chain(65..89)
+        .chain(78..89)
         .chain([90])
         .chain(94..243)
     {

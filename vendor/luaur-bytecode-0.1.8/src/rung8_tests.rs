@@ -6,20 +6,37 @@ use std::sync::Mutex;
 static FFLAG_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
-fn vector_double_bytecode_version_is_dark_by_default() {
+fn bytecode_version_ladder_preserves_tip_precedence_and_default_target() {
     let _guard = FFLAG_LOCK.lock().unwrap();
-    let old = luaur_common::FFlag::LuauCompileEmitVectorDouble.get();
     let old_classes = luaur_common::FFlag::DebugLuauUserDefinedClasses.get();
-    luaur_common::FFlag::DebugLuauUserDefinedClasses.set(false);
+    let old_vector_double = luaur_common::FFlag::LuauCompileEmitVectorDouble.get();
+    let old_cost_model = luaur_common::FFlag::LuauBytecodeCostModel.get();
+    let old_call_feedback = luaur_common::FFlag::LuauEmitCallFeedback.get();
 
+    luaur_common::FFlag::DebugLuauUserDefinedClasses.set(false);
     luaur_common::FFlag::LuauCompileEmitVectorDouble.set(false);
+    luaur_common::FFlag::LuauBytecodeCostModel.set(false);
+    luaur_common::FFlag::LuauEmitCallFeedback.set(false);
     assert_eq!(BytecodeBuilder::new(None).get_version(), 7);
+
+    luaur_common::FFlag::LuauEmitCallFeedback.set(true);
+    assert_eq!(BytecodeBuilder::new(None).get_version(), 11);
+
+    luaur_common::FFlag::LuauBytecodeCostModel.set(true);
+    assert_eq!(BytecodeBuilder::new(None).get_version(), 12);
 
     luaur_common::FFlag::LuauCompileEmitVectorDouble.set(true);
     assert_eq!(BytecodeBuilder::new(None).get_version(), 13);
 
-    luaur_common::FFlag::LuauCompileEmitVectorDouble.set(old);
+    luaur_common::FFlag::DebugLuauUserDefinedClasses.set(true);
+    assert_eq!(BytecodeBuilder::new(None).get_version(), 100);
+
+    // The C tip has no version-10 selection branch; its ladder is
+    // classes/13/12/11 followed by the pinned target 7.
     luaur_common::FFlag::DebugLuauUserDefinedClasses.set(old_classes);
+    luaur_common::FFlag::LuauCompileEmitVectorDouble.set(old_vector_double);
+    luaur_common::FFlag::LuauBytecodeCostModel.set(old_cost_model);
+    luaur_common::FFlag::LuauEmitCallFeedback.set(old_call_feedback);
 }
 
 #[test]

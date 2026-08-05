@@ -1,4 +1,4 @@
-# Source checkouts pulled by rive-runtime d788e8ec while generating the
+# Source checkouts pulled by rive-runtime 4ac7b327 while generating the
 # current-runtime Dawn replay. Branch-named upstream dependencies are resolved
 # to immutable commits here so a moved branch fails closed instead of changing
 # the oracle under an existing cache identity.
@@ -10,5 +10,5 @@ madler_zlib_v1.3.1 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
 rive-app_harfbuzz_rive_13.1.1 08d34675f64b1ac4880f4f10c9fd474a56dd4399
 rive-app_libjpeg_v9f 2f995b502f6ea31cb130d93b5661bf468c114e19
 rive-app_miniaudio_rive_changes_5 3a8b070f80e203a35ec763c5118da20805a90d5a
-rive-app_yoga_rive_changes_v2_0_1_2 b827168e5e66c56b3117660a12607fe4f54ea33c
+rive-app_yoga_rive_changes_v2_0_1_2_grid bd261943260d957df73189a3d6f4dab4cd55947c
 webmproject_libwebp_v1.4.0 845d5476a866141ba35ac133f856fa62f0b7445f

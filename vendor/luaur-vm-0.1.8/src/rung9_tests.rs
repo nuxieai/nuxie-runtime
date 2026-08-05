@@ -177,6 +177,14 @@ fn rive_error_prefixes_use_double_colon_fallbacks() {
             core::slice::from_raw_parts(error_text.cast::<u8>(), length),
             b":: boom"
         );
+
+        let non_utf8_message = [b'x', 0xff, 0];
+        crate::functions::pusherror::pusherror(state, non_utf8_message.as_ptr().cast());
+        let error_text = crate::functions::lua_tolstring::lua_tolstring(state, -1, &mut length);
+        assert_eq!(
+            core::slice::from_raw_parts(error_text.cast::<u8>(), length),
+            b":: x\xff"
+        );
         crate::functions::lua_close::lua_close(state);
     }
 }

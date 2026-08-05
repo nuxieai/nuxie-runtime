@@ -11,4 +11,5 @@ pub enum BcVmConstKind {
     Table,
     Closure,
     Integer,
+    ClassShape,
 }

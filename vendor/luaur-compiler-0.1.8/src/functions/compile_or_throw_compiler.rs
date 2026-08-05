@@ -7,7 +7,7 @@ use crate::functions::fold_constants::fold_constants;
 use crate::functions::get_global_state::get_global_state;
 use crate::functions::predict_table_shapes::predict_table_shapes;
 use crate::functions::set_compile_options_for_native_compilation::set_compile_options_for_native_compilation;
-use crate::functions::track_values::track_values;
+use crate::functions::track_values::{track_values, track_values_deprecated};
 use crate::records::compile_error::CompileError;
 use crate::records::compile_options::CompileOptions;
 use crate::records::compiler::Compiler;
@@ -74,12 +74,23 @@ pub fn compile_or_throw_bytecode_builder_parse_result_ast_name_table_compile_opt
     let mut compiler = Compiler::compiler(bytecode, &options, names);
 
     assign_mutable(&mut compiler.globals, names, options.mutable_globals);
-    track_values(
-        &mut compiler.globals,
-        &mut compiler.variables,
-        &mut compiler.class_locals,
-        root_node,
-    );
+    if luaur_common::FFlag::LuauOptimizeExportTable.get() {
+        track_values(
+            &mut compiler.globals,
+            &mut compiler.variables,
+            &mut compiler.class_locals,
+            &mut compiler.exports.exported_functions,
+            &mut compiler.exports.exported_variables,
+            root_node,
+        );
+    } else {
+        track_values_deprecated(
+            &mut compiler.globals,
+            &mut compiler.variables,
+            &mut compiler.class_locals,
+            root_node,
+        );
+    }
 
     if options.optimization_level >= 1
         && (!names.get(c"getfenv".as_ptr()).value.is_null()

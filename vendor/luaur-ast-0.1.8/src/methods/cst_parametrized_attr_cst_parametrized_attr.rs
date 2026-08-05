@@ -10,7 +10,6 @@ impl CstParametrizedAttr {
         close_paren_position: Position,
         args_comma_positions: AstArray<Position>,
     ) -> Self {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         Self {
             base: CstNode {
                 class_index: <Self as CstNodeClass>::CLASS_INDEX,

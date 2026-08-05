@@ -13,6 +13,7 @@ pub mod constant_visitor;
 pub mod cost;
 pub mod cost_visitor;
 pub mod expr_constant_change;
+pub mod exports;
 pub mod fenv_visitor;
 pub mod function;
 pub mod function_visitor;

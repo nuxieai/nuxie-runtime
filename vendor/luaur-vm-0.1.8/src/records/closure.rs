@@ -3,7 +3,8 @@
 pub struct CClosure {
     pub f: crate::type_aliases::lua_c_function::lua_CFunction,
     pub cont: crate::type_aliases::lua_continuation::lua_Continuation,
-    pub debugname: *const core::ffi::c_char,
+    pub debugname_DEPRECATED: *const core::ffi::c_char,
+    pub debugname: *mut crate::records::t_string::TString,
     pub upvals: [crate::type_aliases::t_value::TValue; 1],
 }
 

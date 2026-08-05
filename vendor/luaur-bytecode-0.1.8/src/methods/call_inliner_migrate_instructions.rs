@@ -97,7 +97,9 @@ impl<'a> CallInliner<'a> {
                     crate::records::bc_function::VmConst,
                 >::from(caller_ptr, inst_ref);
                 let fb_slot = fb_call.fb_slot();
-                fb_call.set_fb_slot((fb_slot as u32).wrapping_add(self.caller_fb_vec_size));
+                if fb_slot != -1 {
+                    fb_call.set_fb_slot((fb_slot as u32).wrapping_add(self.caller_fb_vec_size));
+                }
             }
         }
     }

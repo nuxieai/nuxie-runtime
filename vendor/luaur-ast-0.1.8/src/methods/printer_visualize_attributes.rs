@@ -9,7 +9,6 @@ impl<'a> Printer<'a> {
         attributes: &AstArray<*mut AstAttr>,
         attr_lists: *const AstArray<*mut CstAttrList>,
     ) {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
 
         if attr_lists.is_null() {
             for attribute in attributes.iter() {

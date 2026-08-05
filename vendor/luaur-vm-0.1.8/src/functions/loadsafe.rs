@@ -59,7 +59,8 @@ use luaur_common::enums::luau_bytecode_tag::{
     LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL, LBC_CONSTANT_NUMBER, LBC_CONSTANT_STRING,
     LBC_CONSTANT_TABLE, LBC_CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_VECTOR,
     LBC_CONSTANT_VECTORD,
-    LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_MAX, LBC_VERSION_MIN,
+    LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_CLASSES, LBC_VERSION_MAX,
+    LBC_VERSION_MIN,
 };
 use luaur_common::enums::luau_bytecode_type::{
     LBC_TYPE_FUNCTION, LBC_TYPE_TAGGED_USERDATA_BASE, LBC_TYPE_TAGGED_USERDATA_END,
@@ -113,7 +114,9 @@ pub unsafe fn loadsafe(
         return 1;
     }
 
-    if version < LBC_VERSION_MIN.0 as u8 || version > LBC_VERSION_MAX.0 as u8 {
+    if (version < LBC_VERSION_MIN.0 as u8 || version > LBC_VERSION_MAX.0 as u8)
+        && version != LBC_VERSION_CLASSES.0 as u8
+    {
         let mut chunkbuf = [0 as c_char; LUA_IDSIZE as usize];
         let chunkid = lua_o_chunkid(
             chunkbuf.as_mut_ptr(),

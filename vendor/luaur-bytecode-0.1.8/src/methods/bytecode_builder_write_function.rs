@@ -107,12 +107,20 @@ impl BytecodeBuilder {
                     write_float(ss, vec[3]);
                 }
                 Type::Type_Vectord => {
-                    write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8);
                     let vec = unsafe { c.value.valueVectord };
-                    write_double(ss, vec[0]);
-                    write_double(ss, vec[1]);
-                    write_double(ss, vec[2]);
-                    write_double(ss, vec[3]);
+                    if FFlag::LuauCompileEmitVectorDouble.get() {
+                        write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8);
+                        write_double(ss, vec[0]);
+                        write_double(ss, vec[1]);
+                        write_double(ss, vec[2]);
+                        write_double(ss, vec[3]);
+                    } else {
+                        write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_VECTOR.0 as u8);
+                        write_float(ss, vec[0] as f32);
+                        write_float(ss, vec[1] as f32);
+                        write_float(ss, vec[2] as f32);
+                        write_float(ss, vec[3] as f32);
+                    }
                 }
                 Type::Type_String => {
                     write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_STRING.0 as u8);
@@ -212,12 +220,18 @@ impl BytecodeBuilder {
                 write_byte(ss, LuauFeedbackType::LFT_CALLTARGET as u8);
                 write_var_int(ss, pc as u64);
             }
+        } else if FFlag::LuauBytecodeCostModel.get()
+            || FFlag::LuauCompileEmitVectorDouble.get()
+            || FFlag::DebugLuauUserDefinedClasses.get()
+        {
+            write_var_int(ss, 0);
         }
 
-        if FFlag::LuauBytecodeCostModel.get() && (flags & 8) != 0 {
-            if !FFlag::LuauEmitCallFeedback.get() {
-                write_var_int(ss, 0);
-            }
+        if (FFlag::LuauBytecodeCostModel.get()
+            || FFlag::LuauCompileEmitVectorDouble.get()
+            || FFlag::DebugLuauUserDefinedClasses.get())
+            && (flags & 8) != 0
+        {
             write_var_int(ss, cost);
         }
     }

@@ -28,8 +28,16 @@ pub(crate) unsafe fn dumpclosure(f: *mut c_void, cl: *mut Closure) {
 
     if (*cl).isC != 0 {
         let c = &(*cl).inner.c;
-        if !c.debugname.is_null() {
-            fprintf(f, c",\"name\":\"%s\"".as_ptr(), c.debugname);
+        if luaur_common::FFlag::LuauManagedDebugNames.get() {
+            if !c.debugname.is_null() {
+                fprintf(f, c",\"name\":\"%s\"".as_ptr(), getstr(c.debugname));
+            }
+        } else if !c.debugname_DEPRECATED.is_null() {
+            fprintf(
+                f,
+                c",\"name\":\"%s\"".as_ptr(),
+                c.debugname_DEPRECATED,
+            );
         }
         if (*cl).nupvalues != 0 {
             fprintf(f, c",\"upvalues\":[".as_ptr());

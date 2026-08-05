@@ -8,7 +8,6 @@ impl CstAttrList {
         close_bracket_position: Position,
         comma_positions: AstArray<Position>,
     ) -> Self {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         Self {
             at_bracket_position,
             close_bracket_position,

@@ -35,6 +35,9 @@ impl PartialEq for BcVmConst {
                 BcVmConstKind::Table => self.value.valueTable == rhs.value.valueTable,
                 BcVmConstKind::Closure => self.value.valueClosure == rhs.value.valueClosure,
                 BcVmConstKind::Integer => self.value.valueInteger == rhs.value.valueInteger,
+                BcVmConstKind::ClassShape => {
+                    self.value.valueClassShape == rhs.value.valueClassShape
+                }
             }
         }
     }
@@ -52,6 +55,7 @@ pub union BcVmConstValue {
     pub valueTable: u32,
     pub valueClosure: u32,
     pub valueInteger: i64,
+    pub valueClassShape: u32,
 }
 
 impl core::fmt::Debug for BcVmConstValue {

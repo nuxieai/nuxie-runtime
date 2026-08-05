@@ -60,3 +60,9 @@ Provenance:
 - Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
 - Touched areas: bytecode vector-double tagging, dark rung flag registration,
   and the clipped `DenseHash2` hash-shift assertion.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: `NEWCLASS`/v13/v100/proto-flag definitions, rung flag
+  retirements and dark registrations, and `VecDeque` emplacement helpers.

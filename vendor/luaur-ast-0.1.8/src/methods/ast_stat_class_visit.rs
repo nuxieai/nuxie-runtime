@@ -10,6 +10,12 @@ impl AstVisitable for AstStatClass {
         luaur_common::LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
 
         if visitor.visit_stat_class(self as *const Self as *mut core::ffi::c_void) {
+            if !self.super_.is_null() {
+                unsafe {
+                    ast_expr_visit(self.super_, visitor);
+                }
+            }
+
             for member in self.members.iter() {
                 match member {
                     Variant2::V0(prop) => {

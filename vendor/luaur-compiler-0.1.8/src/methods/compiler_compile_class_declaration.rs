@@ -14,13 +14,41 @@ impl Compiler {
         let dest = dest_reg as u8;
         if luaur_common::FFlag::LuauExportValueSyntax.get() && unsafe { (*decl).exported } {
             self.ensure_export_table(decl as *mut _);
-            *self.exported_classes.get_or_insert(unsafe { (*decl).name }) = dest;
+            *self
+                .exports
+                .exported_classes
+                .get_or_insert(unsafe { (*decl).name }) = dest;
         }
         // C++ `RegScope _(this)` after pushLocal: reclaims the transient `temp` register on
         // scope exit so it doesn't leak past the declaration (the port had dropped this).
         let _rs = self.reg_scope_compiler();
         unsafe {
-            (*self.bytecode).emit_ad(LuauOpcode::LOP_LOADKX, dest, 0);
+            if !(*decl).super_.is_null() {
+                let super_reg = self.get_expr_local_reg((*decl).super_);
+                let super_dest = self.alloc_reg(
+                    decl as *mut _,
+                    if super_reg < 0 { 1 } else { 0 },
+                );
+
+                if super_reg >= 0 {
+                    (*self.bytecode).emit_abc(
+                        LuauOpcode::LOP_NEWCLASS,
+                        dest,
+                        super_reg as u8,
+                        0,
+                    );
+                } else {
+                    self.compile_expr((*decl).super_, super_dest, false);
+                    (*self.bytecode).emit_abc(
+                        LuauOpcode::LOP_NEWCLASS,
+                        dest,
+                        super_dest,
+                        0,
+                    );
+                }
+            } else {
+                (*self.bytecode).emit_abc(LuauOpcode::LOP_NEWCLASS, dest, u8::MAX, 0);
+            }
             let aux_offset = (*self.bytecode).emit_label();
             (*self.bytecode).emit_aux(0xDEADBEEF);
             // C++ builds `shape.className`/`propertyNames`/`methodNames` directly; the port

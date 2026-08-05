@@ -11,7 +11,16 @@ pub unsafe fn currfuncname(L: *mut lua_State_alias) -> *const core::ffi::c_char 
     };
 
     let debugname = if !cl.is_null() && (*cl).isC != 0 {
-        (&(*cl).inner.c).debugname
+        let c = &(*cl).inner.c;
+        if luaur_common::FFlag::LuauManagedDebugNames.get() {
+            if c.debugname.is_null() {
+                core::ptr::null()
+            } else {
+                getstr(c.debugname)
+            }
+        } else {
+            c.debugname_DEPRECATED
+        }
     } else {
         core::ptr::null()
     };

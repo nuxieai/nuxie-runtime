@@ -26,9 +26,6 @@ impl Parser {
         is_const: bool,
         cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> *mut AstStat {
-        luaur_common::LUAU_ASSERT!(
-            cst_attr_lists.is_null() || luaur_common::FFlag::LuauCstAttr.get()
-        );
         if !is_const {
             self.next_lexeme();
         }
@@ -82,7 +79,7 @@ impl Parser {
 
             if self.options.store_cst_data {
                 let cst_node = unsafe {
-                    if luaur_common::FFlag::LuauCstAttr.get() && !cst_attr_lists.is_null() {
+                    if !cst_attr_lists.is_null() {
                         (*self.allocator).alloc(CstStatLocalFunction::new_with_attr_lists(
                             self.copy_temp_vector_t(&*cst_attr_lists),
                             keyword_position,

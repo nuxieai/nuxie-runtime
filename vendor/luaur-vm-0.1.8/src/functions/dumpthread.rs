@@ -98,8 +98,14 @@ pub(crate) unsafe fn dumpthread(f: *mut c_void, th: *mut lua_State) {
                         fprintf(
                             f,
                             c"\"frame:%s\"".as_ptr(),
-                            if !(*c).debugname.is_null() {
-                                (*c).debugname
+                            if luaur_common::FFlag::LuauManagedDebugNames.get() {
+                                if !(*c).debugname.is_null() {
+                                    getstr((*c).debugname)
+                                } else {
+                                    c"[C]".as_ptr()
+                                }
+                            } else if !(*c).debugname_DEPRECATED.is_null() {
+                                (*c).debugname_DEPRECATED
                             } else {
                                 c"[C]".as_ptr()
                             },

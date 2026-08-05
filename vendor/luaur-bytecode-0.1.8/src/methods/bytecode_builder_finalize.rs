@@ -12,7 +12,8 @@ use crate::functions::write_var_int::write_var_int;
 use crate::records::bytecode_builder::BytecodeBuilder;
 use crate::records::string_ref::StringRef;
 use luaur_common::enums::luau_bytecode_tag::{
-    LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_MAX, LBC_VERSION_MIN,
+    LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_CLASSES, LBC_VERSION_MAX,
+    LBC_VERSION_MIN,
 };
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
@@ -50,7 +51,10 @@ impl BytecodeBuilder {
         bytecode.reserve(capacity);
 
         let version = self.get_version();
-        LUAU_ASSERT!(version >= LBC_VERSION_MIN.0 as u8 && version <= LBC_VERSION_MAX.0 as u8);
+        LUAU_ASSERT!(
+            (version >= LBC_VERSION_MIN.0 as u8 && version <= LBC_VERSION_MAX.0 as u8)
+                || version == LBC_VERSION_CLASSES.0 as u8
+        );
 
         unsafe {
             bytecode.as_mut_vec().push(version);
@@ -79,7 +83,10 @@ impl BytecodeBuilder {
         write_var_int(&mut bytecode, self.functions.len() as u64);
 
         for func in &self.functions {
-            if luaur_common::FFlag::LuauBytecodeCostModel.get() {
+            if luaur_common::FFlag::LuauBytecodeCostModel.get()
+                || luaur_common::FFlag::LuauCompileEmitVectorDouble.get()
+                || luaur_common::FFlag::DebugLuauUserDefinedClasses.get()
+            {
                 write_var_int(&mut bytecode, func.data.len() as u64);
             }
             unsafe {

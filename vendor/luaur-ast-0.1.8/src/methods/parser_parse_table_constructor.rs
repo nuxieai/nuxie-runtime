@@ -9,7 +9,6 @@ impl Parser {
         use crate::records::match_lexeme::MatchLexeme;
         use crate::records::position::Position;
         use crate::records::temp_vector::TempVector;
-        use luaur_common::FFlag;
 
         let mut items = TempVector::new(&mut self.scratch_item);
         let mut cst_items = TempVector::new(&mut self.scratch_cst_item);
@@ -19,13 +18,7 @@ impl Parser {
         let match_brace = MatchLexeme::new(self.lexer.current());
         self.expect_and_consume_char('{', "table literal");
 
-        let mut last_element_indent_deprecated = 0u32;
-
         while self.lexer.current().r#type != Type(b'}' as i32) {
-            if !FFlag::LuauTableEntriesDontNeedToMatchIndent.get() {
-                last_element_indent_deprecated = self.lexer.current().location.begin.column;
-            }
-
             if self.lexer.current().r#type == Type(b'[' as i32) {
                 let indexer_open_position = self.lexer.current().location.begin;
                 let match_location_bracket = MatchLexeme::new(self.lexer.current());
@@ -192,8 +185,6 @@ impl Parser {
             if current_type == Type(b',' as i32) || current_type == Type(b';' as i32) {
                 self.next_lexeme();
             } else if (current_type == Type(b'[' as i32) || current_type == Type::Name)
-                && (FFlag::LuauTableEntriesDontNeedToMatchIndent.get()
-                    || self.lexer.current().location.begin.column == last_element_indent_deprecated)
             {
                 self.report(
                     self.lexer.current().location,

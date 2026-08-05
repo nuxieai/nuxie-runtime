@@ -27,13 +27,6 @@ impl Compiler {
                     return false;
                 }
 
-                let local = &*local_ptr;
-
-                if local.is_exported {
-                    // exported locals must be written to the export table
-                    return false;
-                }
-
                 let v_opt = self.variables.find(&local_ptr);
 
                 let v_ptr = match v_opt {
@@ -43,6 +36,16 @@ impl Compiler {
 
                 let v: &Variable = &*v_ptr;
                 if !v.constant {
+                    return false;
+                }
+
+                let local = &*local_ptr;
+                if luaur_common::FFlag::LuauExportValueSyntax.get()
+                    && local.is_exported
+                    && (!luaur_common::FFlag::LuauOptimizeExportTable.get()
+                        || self.exports.exported_table_cid == -1)
+                {
+                    // exported locals must be written to the export table
                     return false;
                 }
             }

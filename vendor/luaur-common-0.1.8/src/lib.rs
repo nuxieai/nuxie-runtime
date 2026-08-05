@@ -81,8 +81,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCostModel.set(false);
-    FFlag::LuauCstAttr.set(false);
-    FFlag::LuauCustomYieldablePcalls.set(false);
+    FFlag::LuauCompileEmitVectorDouble.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
@@ -116,6 +115,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
     FFlag::LuauNoDuplicateBinaryPrefix.set(false);
     FFlag::LuauOccursCheckForAllBindings.set(value);
+    FFlag::LuauOptimizeExportTable.set(false);
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
     FFlag::LuauPropertyModifierMismatchErrors.set(value);
@@ -125,12 +125,12 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauRemoveConstraintSolverEmplace.set(value);
     FFlag::LuauReplacerIsSolverAgnostic.set(value);
     FFlag::LuauRequireResolveAliasNullCheck.set(value);
+    FFlag::LuauRbsConfigAliasResolution.set(false);
     FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
     FFlag::LuauSolverV2.set(value);
     FFlag::LuauStoreConstKeywordBegin.set(false);
     FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
     FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
-    FFlag::LuauTableEntriesDontNeedToMatchIndent.set(value);
     FFlag::LuauTrackPrefixLocal.set(false);
     FFlag::LuauTableFreezeCheckIsSubtype.set(value);
     FFlag::LuauTidyTypePrototyping.set(value);
@@ -148,6 +148,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
     FFlag::LuauXpcallFixMessageYieldPath.set(false);
+    FFlag::LuauManagedDebugNames.set(false);
     DFFlag::LuauGcMarkUdataAccess.set(false);
     DFFlag::LuauGcTableStepFix.set(false);
     DFFlag::LuauSelfIsSelfAndAlwaysSelf.set(false);
@@ -247,6 +248,7 @@ pub mod FFlag {
     crate::LUAU_FLAGVERSION!(LuauBackedgeHeapCheck, 2);
     // Bytecode/src/BytecodeBuilder.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeCostModel);
+    crate::LUAU_FLAGVERSION!(LuauBytecodeCostModel, 2);
     // Inliner/src/JitInliner.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeFold);
     // VM/src/lvmexecute.cpp
@@ -295,8 +297,9 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSync);
     // CodeGen/src/OptimizeDeadStore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSyncFix);
-    // Ast/src/Cst.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileEmitVectorDouble);
+    crate::LUAU_FLAGVERSION!(LuauCompileEmitVectorDouble, 2);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
     // Compiler/src/Compiler.cpp
@@ -307,8 +310,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
     // Bytecode/src/BytecodeGraph.cpp; VM/src/lvmload.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCostModel);
-    // VM/src/laux.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
     crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 3);
@@ -322,7 +323,7 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueSyntax);
-    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 3);
+    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 4);
     // Analysis/src/Frontend.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueTypecheck);
     // Analysis/src/Normalize.cpp
@@ -353,6 +354,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauLValueCompoundAssignmentVisitLhs);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauLimitUnificationRecursion);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauManagedDebugNames);
     // VM/src/lbuiltins.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauMathRoundNegZero);
     // VM/src/lgc.cpp
@@ -366,6 +369,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauNoDuplicateBinaryPrefix);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauOccursCheckForAllBindings);
+    // Compiler/src/Compiler.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauOptimizeExportTable);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauPropagateFreeTypesIntoUnionAndIntersectionBounds);
     // Analysis/src/ConstraintGenerator.cpp
@@ -384,6 +389,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauReplacerIsSolverAgnostic);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauRequireResolveAliasNullCheck);
+    // Config/src/LuauConfig.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauRbsConfigAliasResolution);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSilenceDynamicFormatStringErrors);
     // Ast/src/Parser.cpp
@@ -394,8 +401,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauStoreConstKeywordBegin);
     // Analysis/src/Subtyping.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingTablesHasBetterErrorSuppression);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauTableEntriesDontNeedToMatchIndent);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTrackPrefixLocal);
     // Analysis/src/BuiltinDefinitions.cpp

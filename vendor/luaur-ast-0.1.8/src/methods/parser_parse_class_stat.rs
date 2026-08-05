@@ -66,6 +66,17 @@ impl Parser {
             ))
         };
 
+        let mut super_ = core::ptr::null_mut();
+        if self.lexer.current().r#type == Type::Name
+            && unsafe {
+                AstName::ast_name_c_char(self.lexer.current().data.name)
+                    .operator_eq_c_char(c"extends".as_ptr())
+            }
+        {
+            self.next_lexeme();
+            super_ = self.parse_class_ref_expr();
+        }
+
         let mut declarations = TempVector::new(&mut self.scratch_class_declarations);
 
         let mut class_member_namespace: DenseHashSet<AstName> =
@@ -244,6 +255,7 @@ impl Parser {
             (*self.allocator).alloc(AstStatClass::new(
                 location,
                 name_local,
+                super_,
                 copied_declarations,
                 exported,
             ))

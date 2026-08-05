@@ -178,7 +178,7 @@ Sync cycle.
 1. `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 2. Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
 3. **Taffy, not Yoga** — edge-case layouts verify `tolerant`; fence: never pin Taffy behavior-by-behavior. This is the FLR-20 **layout-engine** ceiling.
-4. luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered); Luau engine-version skew is a standing WATCH (`deferred-2026-07-19-luau-engine`).
+4. luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered). Luau engine-version skew is **CLOSED 2026-08-05**: the engine is now an in-house fork ported rung-by-rung to the pinned C++ engine's `rive_0_732` tip (docs/luau-fork.md; `deferred-2026-07-19-luau-engine` exit criterion was fork parity, not an upstream luaur release). The vendored crate version stays `0.1.8` because the `[patch]` must satisfy the `=0.1.8` pins; fork state is identified by docs/luau-fork.md plus per-crate `NUXIE_PATCH.md`.
 5. Rust image decoders vs platform decoders — JPEG color-profile rows resolvable only by CoreGraphics; dimension+tolerant-pixel verification, never payload hashes.
 6. Renderer fuzz-accepted findings R3-FZ-03/04/05 (area-capped, neither rasterization canonical).
 7. GPU integer semantics (unsigned-cast fixed-point limits; checked-sub vs deliberate wrap in row-wrap rebuild).

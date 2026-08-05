@@ -8,8 +8,8 @@ expected_entries = 252
 expected_runtime = 208
 expected_scripted = 41
 max_provenance_unknown = 3
-min_cpp_rust_exact = 77
-cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_width_test", "bidirectional_precedence-source_first", "collapse_data_binds-test_3", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_follow_path", "component_list_follow_path_distance", "component_stateful", "computed_root_transform-nested_artboard", "custom_property_enum", "custom_property_trigger_bind", "data_bind_font_test", "data_bind_solo-values-to-solos", "data_converter_to_number", "databind_artboard", "databind_solo_to_enum", "event_trigger_event", "fill_trim_path", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "global_viewmodels_test-auto_instance", "group_effect-main-missing-targets", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "image_fit_alignment_3", "image_fit_alignment_updated_test", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multitouch", "multitouch_enter", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_events", "nested_hug", "nested_needs_advance", "pause_nested_artboard", "recursive_data_bind", "relative_data_bind_path", "relative_data_binding", "saturation", "sorted_listeners", "spotify_kids_app_icon", "stacked_path_effects", "state_transition_fire_trigger", "target_event", "text_follow_path_shape_length", "text_listener_simpler", "text_stroke_test", "transition_actions", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "zero_width_space_line_break"]
+min_cpp_rust_exact = 82
+cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_width_test", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clipping_and_draw_order", "collapse_data_binds-test_3", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_follow_path", "component_list_follow_path_distance", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-nested_artboard", "custom_property_enum", "custom_property_trigger_bind", "data_bind_font_test", "data_bind_solo-values-to-solos", "data_converter_to_number", "databind_artboard", "databind_solo_to_enum", "event_trigger_event", "fill_trim_path", "focus_test", "focus_traversal", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "group_effect-main-missing-targets", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multitouch", "multitouch_enter", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_events", "nested_hug", "nested_needs_advance", "pause_nested_artboard", "recursive_data_bind", "relative_data_bind_path", "relative_data_binding", "saturation", "sorted_listeners", "spotify_kids_app_icon", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "target_event", "text_follow_path_shape_length", "text_listener_simpler", "text_stroke_test", "transition_actions", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "zero_width_space_line_break"]
 
 [[case]]
 id = "advance_blend_mode-inputs"
@@ -312,12 +312,12 @@ view_model = "cpp-test-defined"
 sample_times = [0, 0.016]
 actions = [{ kind = "create-default-view-model" }, { kind = "set-view-model-number", property = "x", value = 100.0 }, { kind = "set-view-model-number", property = "y", value = 100.0 }, { kind = "bind-prepared-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Bidirectional data binding with target to source precedence"
 producer_line = 2005
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (transform), field tx: expected 252.5, got 100."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "bidirectional_stateful_property"
@@ -334,12 +334,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "pointer-up", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "pointer-up", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 50.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 50.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Bidirectional stateful property binding"
 producer_line = 134
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 180 (transform), field tx: expected 150, got 100."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "bindable_artboard_nesty"
@@ -422,12 +422,12 @@ view_model = "cpp-test-defined"
 sample_times = [0, 0.16]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Apply clipping to elements that are moved outside their hierarchy"
 producer_line = 136
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 161 (transform), field tx: expected 0, got 1121."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "collapsable_data_binding"
@@ -603,7 +603,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
 producer_line = 1037
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 315 (transform), field xy: expected -0.0 (0x80000000), got 0."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 448 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "component_list_follow_path"
@@ -669,7 +669,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Non Layout List Artboard Position"
 producer_line = 768
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 13, op 746 (color): expected color, got save."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 6, op 413 (transform), field tx: expected -90, got 0."
 
 [[case]]
 id = "component_list_hit_order"
@@ -752,12 +752,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "set-view-model-number", property = "h", value = 200.0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "set-view-model-number", property = "h", value = 50.0 }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component ViewModelInstance"
 producer_line = 71
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 109 (addRawPath), field point: expected (0, -100), got (0, -50)."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "component_stateful_vm_instance_2"
@@ -774,12 +774,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "set-view-model-string", property = "label", value = "Override" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component ViewModelInstance multi"
 producer_line = 117
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 96 (transform), field xx: expected 0.97985506, got 0.994951."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "computed_root_transform-list"
@@ -845,7 +845,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
 provenance_test = "Computed root values"
 producer_line = 39
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 191 (addRawPath), field point: expected (301.00003, -0.0 (0x80000000)), got (301, -0.0 (0x80000000))."
 
 [[case]]
 id = "custom_property_enum"
@@ -1439,7 +1439,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
 producer_line = 1755
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 192 (color), field paint_id: expected 6, got 11."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 98 (color), field paint_id: expected 4, got 11."
 
 [[case]]
 id = "focus_test"
@@ -1500,12 +1500,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "focus-next" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "exact"
+status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
 producer_line = 2132
-note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 144 (color): expected color, got save."
 
 [[case]]
 id = "follow_path_animate_shape"
@@ -1742,12 +1742,12 @@ view_model = "cpp-test-defined"
 sample_times = [0, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "exact"
+status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Test global view models with automatic instancing"
 producer_line = 81
-note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (color), field paint_id: expected 5, got 6."
 
 [[case]]
 id = "global_viewmodels_test-set_instance"
@@ -1769,7 +1769,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Test global view models with instance explicitly specified"
 producer_line = 141
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 163 (frame): expected frame, got color."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (color), field paint_id: expected 5, got 6."
 
 [[case]]
 id = "group_effect"
@@ -2138,12 +2138,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with databound images 2"
 producer_line = 396
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 95 (setVertexBufferData): expected setVertexBufferData, got save."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "image_fit_alignment_3"
@@ -2385,7 +2385,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation time databound"
 producer_line = 552
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 146 (addRawPath), field point: expected (450, 0), got (250, 0)."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 145 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_anim_component_list"
@@ -2407,7 +2407,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation artboard component list"
 producer_line = 615
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 89 (addRawPath), field point: expected (500, 0), got (495.2, 0)."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 88 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_anim_nested"
@@ -2429,7 +2429,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation nested artboards"
 producer_line = 581
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 85 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_aspect_ratio"
@@ -2495,7 +2495,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout fixed/fill scale type round trip preserves units"
 producer_line = 686
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 57 (addRawPath), field point: expected (300, 0), got (150, 0)."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 56 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_grid_stack_grid_with_layout_participants"
@@ -4519,7 +4519,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "multiple scrolling artboards"
 producer_line = 100
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 56 (transform), field xy: expected -0.0 (0x80000000), got 0."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 53 (transform), field xy: expected -0.0 (0x80000000), got 0."
 
 [[case]]
 id = "scroll_threshold-all-scroll"
@@ -4778,12 +4778,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component Keyed Triggers"
 producer_line = 953
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 30 (color): expected color, got save."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "stateful_list_props"
@@ -4959,7 +4959,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_modifier_test.cpp"
 provenance_test = "text opacity falloff with feathered and plain fills"
 producer_line = 99
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 29 (feather): expected feather, got save."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 29 (feather), field paint_id: expected 12, got 8."
 
 [[case]]
 id = "text_follow_path_shape_length"
@@ -5069,7 +5069,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Vertical Trim"
 producer_line = 771
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 219 (transform), field ty: expected 177.93579, got 182.76001."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 220 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "time_based_interpolation"
@@ -5289,7 +5289,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Stateful component is bound before binding the view model instance"
 producer_line = 75
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 9 (color), field value: expected 4278255360, got 4278190080."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 10 (save): expected save, got color."
 
 [[case]]
 id = "vertical_align_ellipsis"

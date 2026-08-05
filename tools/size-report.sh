@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SDK binary-size report for the renderer-included Darwin link closure.
 #
-# Cargo's ordinary `nux-capi` cdylib is callback-renderer-only. Enabling its
-# `apple-renderer` feature compiles nuxie-renderer and wgpu, but fat LTO removes
-# almost all of that backend because no C ABI export references WgpuFactory.
-# Measuring that cdylib would therefore repeat the stale renderer-excluded metric.
+# Cargo's ordinary `nux-capi` cdylib is callback-renderer-only. Enabling the
+# `nuxie/renderer` dependency feature compiles nuxie-renderer and wgpu, but fat
+# LTO removes almost all of that backend because no C ABI export references
+# WgpuFactory. Measuring that cdylib would therefore repeat the stale
+# renderer-excluded metric.
 #
 # This report builds the nux-capi staticlib, then performs the final Darwin
 # link explicitly. It retains every public nux-capi C ABI export plus the
@@ -83,10 +84,13 @@ mkdir -p "$REPORT_DIR"
 
 ROOT_INVENTORY="tools/size-report-renderer-roots.txt"
 RENDERER_SOURCE="crates/nuxie-renderer/src/lib.rs"
-RENDERER_SURFACE_SOURCE="crates/nuxie-renderer/src/surface.rs"
-ROOT_HARNESS="crates/nux-capi/src/size_report_roots.rs"
+RENDERER_METAL_SOURCE="crates/nuxie-renderer/src/metal.rs"
+APPLE_ADAPTER_SOURCE="crates/nuxie-apple-adapter/src/apple.rs"
+APPLE_ADMISSION_SOURCE="crates/nuxie-apple-adapter/src/lib.rs"
+ROOT_HARNESS="crates/nuxie-apple-adapter/src/size_report_roots.rs"
 SOURCE_ROOTS="${REPORT_DIR}/renderer-public-api-from-source.txt"
 HARNESS_ROOTS="${REPORT_DIR}/renderer-public-api-from-harness.txt"
+INVENTORY_ROOTS="${REPORT_DIR}/renderer-public-api-inventory.txt"
 ACTUAL_REVISION="$(git rev-parse --verify HEAD)"
 MEASUREMENT_REVISION="${NUX_RUNTIME_SOURCE_REVISION:-$ACTUAL_REVISION}"
 if [[ "$MEASUREMENT_REVISION" != "$ACTUAL_REVISION" ]]; then
@@ -128,23 +132,33 @@ verify_renderer_root_inventory() {
       | sed -En 's/^    ((async|const|unsafe)[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/trait Factory::\3/p'
     extract_impl_block 'impl Renderer for WgpuFrame {' "$RENDERER_SOURCE" \
       | sed -En 's/^    ((async|const|unsafe)[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/trait Renderer::\3/p'
-    extract_impl_block 'impl ApplePresentationCompletion {' "$RENDERER_SURFACE_SOURCE" \
+    extract_impl_block 'impl WgpuFactory {' "$RENDERER_METAL_SOURCE" \
+      | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent WgpuFactory::\2/p'
+    extract_impl_block 'impl WgpuMetalPresenter {' "$RENDERER_METAL_SOURCE" \
+      | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent WgpuMetalPresenter::\2/p'
+    extract_impl_block 'impl AppleImageAdmission {' "$APPLE_ADMISSION_SOURCE" \
+      | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent AppleImageAdmission::\2/p'
+    extract_impl_block 'impl ApplePresentationCompletion {' "$APPLE_ADAPTER_SOURCE" \
       | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent ApplePresentationCompletion::\2/p'
-    extract_impl_block 'impl AppleSurface {' "$RENDERER_SURFACE_SOURCE" \
+    extract_impl_block 'impl AppleSurface {' "$APPLE_ADAPTER_SOURCE" \
       | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent AppleSurface::\2/p'
   } >"$SOURCE_ROOTS"
 
   sed -nE 's/^[[:space:]]*[0-9_]+ => root!\("([^"]+)".*/\1/p' \
     "$ROOT_HARNESS" >"$HARNESS_ROOTS"
 
-  if ! cmp -s "$ROOT_INVENTORY" "$SOURCE_ROOTS"; then
+  sort -u "$SOURCE_ROOTS" -o "$SOURCE_ROOTS"
+  sort -u "$HARNESS_ROOTS" -o "$HARNESS_ROOTS"
+  sort -u "$ROOT_INVENTORY" >"$INVENTORY_ROOTS"
+
+  if ! cmp -s "$INVENTORY_ROOTS" "$SOURCE_ROOTS"; then
     echo "renderer public API drifted from the audited size-report inventory" >&2
-    diff -u "$ROOT_INVENTORY" "$SOURCE_ROOTS" >&2 || true
+    diff -u "$INVENTORY_ROOTS" "$SOURCE_ROOTS" >&2 || true
     return 1
   fi
-  if ! cmp -s "$ROOT_INVENTORY" "$HARNESS_ROOTS"; then
+  if ! cmp -s "$INVENTORY_ROOTS" "$HARNESS_ROOTS"; then
     echo "renderer size-report consumer does not cover the audited inventory" >&2
-    diff -u "$ROOT_INVENTORY" "$HARNESS_ROOTS" >&2 || true
+    diff -u "$INVENTORY_ROOTS" "$HARNESS_ROOTS" >&2 || true
     return 1
   fi
   if ! grep -Fq "match selector % ${PUBLIC_ROOT_COUNT} {" "$ROOT_HARNESS"; then
@@ -224,6 +238,7 @@ build_full_link() { # profile variant features
   local profile_dir="$profile"
   local variant_dir="${REPORT_DIR}/${profile}-${variant}"
   local archive="${TARGET_DIR}/${profile_dir}/libnux_capi.a"
+  local apple_archive="${TARGET_DIR}/${profile_dir}/libnuxie_apple_adapter.a"
   local cargo_dylib="${TARGET_DIR}/${profile_dir}/libnux_capi.dylib"
   local output="${variant_dir}/libnux_capi_full.dylib"
   local unstripped="${variant_dir}/libnux_capi_full.unstripped.dylib"
@@ -250,14 +265,23 @@ build_full_link() { # profile variant features
     sed -n '1,240p' "$build_log" >&2
     return 1
   fi
-
-  if [[ ! -f "$archive" || ! -f "$cargo_dylib" ]]; then
-    echo "cargo did not produce the expected nux-capi artifacts for ${profile}" >&2
+  if ! "$CARGO_BIN" build --locked -p nuxie-apple-adapter --no-default-features \
+      --features size-report-roots "${cargo_profile_args[@]}" >>"$build_log" 2>&1; then
+    sed -n '1,240p' "$build_log" >&2
     return 1
   fi
 
-  "$CARGO_BIN" tree --locked -p nux-capi --no-default-features \
-    --features "$features" --edges normal --prefix none >"$dependency_tree"
+  if [[ ! -f "$archive" || ! -f "$apple_archive" || ! -f "$cargo_dylib" ]]; then
+    echo "cargo did not produce the expected C ABI and Apple-adapter artifacts for ${profile}" >&2
+    return 1
+  fi
+
+  {
+    "$CARGO_BIN" tree --locked -p nux-capi --no-default-features \
+      --features "$features" --edges normal --prefix none
+    "$CARGO_BIN" tree --locked -p nuxie-apple-adapter --no-default-features \
+      --features size-report-roots --edges normal --prefix none
+  } >"$dependency_tree"
   if ! grep -Eq '^nuxie-renderer v' "$dependency_tree"; then
     echo "renderer dependency is absent from ${variant} feature graph" >&2
     return 1
@@ -277,7 +301,7 @@ build_full_link() { # profile variant features
   fi
 
   nm -gjU "$cargo_dylib" | grep '^_nux_' | sort -u >"$exports"
-  "$ARCHIVE_NM" -gjU "$archive" 2>/dev/null \
+  "$ARCHIVE_NM" -gjU "$apple_archive" 2>/dev/null \
     | grep -E '_+nuxie_size_report_renderer_roots$' \
     | sort -u >"$renderer_root_symbol_file"
 
@@ -298,6 +322,7 @@ build_full_link() { # profile variant features
   "$CC_BIN" -dynamiclib -arch "$HOST_ARCH" -o "$unstripped" \
     -Wl,-dead_strip -Wl,-dead_strip_dylibs \
     -Wl,-force_load,"$archive" \
+    "$apple_archive" \
     -Wl,-exported_symbols_list,"$exports" \
     -Wl,-install_name,@rpath/libnux_capi_full.dylib \
     "${renderer_link_args[@]}" \
@@ -353,12 +378,12 @@ echo " link: dead_strip + dead_strip_dylibs; post-link strip -S -x"
 echo "=================================================================="
 echo
 
-build_full_link release-size renderer-on-scripting-off size-report-roots
+build_full_link release-size renderer-on-scripting-off nuxie/renderer
 SIZE_OFF="$LAST_SIZE"
 OFF_PATH="$LAST_PATH"
 OFF_ROOTS="$LAST_RENDERER_ROOTS"
 
-build_full_link release-size renderer-on-scripting-on size-report-roots,nuxie/scripting
+build_full_link release-size renderer-on-scripting-on nuxie/renderer,nuxie/scripting
 SIZE_ON="$LAST_SIZE"
 ON_PATH="$LAST_PATH"
 ON_ROOTS="$LAST_RENDERER_ROOTS"
@@ -367,7 +392,7 @@ ON_ROOTS="$LAST_RENDERER_ROOTS"
 # release-size artifact. The measured closure above is already copied aside.
 RESTORE_LOG="${REPORT_DIR}/restore-release-size-off.log"
 if ! "$CARGO_BIN" build --locked -p nux-capi --no-default-features \
-    --features apple-renderer --profile release-size >"$RESTORE_LOG" 2>&1; then
+    --features nuxie/renderer --profile release-size >"$RESTORE_LOG" 2>&1; then
   sed -n '1,240p' "$RESTORE_LOG" >&2
   exit 1
 fi
@@ -375,7 +400,7 @@ fi
 BASE_OFF=""
 BASE_PATH=""
 if [[ "$WANT_BASELINE" == "1" ]]; then
-  build_full_link release renderer-on-scripting-off size-report-roots
+  build_full_link release renderer-on-scripting-off nuxie/renderer
   BASE_OFF="$LAST_SIZE"
   BASE_PATH="$LAST_PATH"
 fi

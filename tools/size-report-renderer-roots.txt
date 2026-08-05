@@ -1,4 +1,4 @@
-inherent WgpuFactory::validate_image_bytes
+inherent AppleImageAdmission::validate_image_bytes
 inherent WgpuFactory::new
 inherent WgpuFactory::new_with_mode
 inherent WgpuFactory::new_async
@@ -43,3 +43,10 @@ inherent AppleSurface::reattach
 inherent AppleSurface::copy_metal_device
 inherent AppleSurface::preflight_present
 inherent AppleSurface::present
+inherent WgpuFrame::metrics
+inherent WgpuFactory::create_metal_presenter
+inherent WgpuMetalPresenter::copy_device
+inherent WgpuMetalPresenter::copy_command_queue
+inherent WgpuMetalPresenter::device_health
+inherent WgpuMetalPresenter::record_external_failure
+inherent WgpuMetalPresenter::render_to_texture

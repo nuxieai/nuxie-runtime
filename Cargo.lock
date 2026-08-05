@@ -1183,7 +1183,15 @@ dependencies = [
 name = "nuxie-apple-adapter"
 version = "0.1.0"
 dependencies = [
+ "block2",
+ "nuxie-image-codec",
+ "nuxie-render-api",
  "nuxie-renderer",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
+ "png",
 ]
 
 [[package]]
@@ -1285,7 +1293,6 @@ dependencies = [
 name = "nuxie-renderer"
 version = "0.1.0"
 dependencies = [
- "block2",
  "bytemuck",
  "futures-channel",
  "image-webp",
@@ -1296,9 +1303,7 @@ dependencies = [
  "nuxie-render-api",
  "nuxie-render-stream",
  "objc2",
- "objc2-core-foundation",
  "objc2-metal",
- "objc2-quartz-core",
  "png",
  "pollster",
  "raw-window-handle",

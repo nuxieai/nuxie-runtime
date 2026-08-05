@@ -100,3 +100,31 @@ fn rive_builtin_layout_and_arities_are_exact() {
         assert_eq!(info.flags, BuiltinInfo::Flag_NoneSafe);
     }
 }
+
+#[test]
+fn integer_buffer_fastcalls_require_both_dark_flags() {
+    let options = CompileOptions::default();
+
+    luaur_common::FFlag::LuauIntegerFastcalls.push_test_override(true);
+    luaur_common::FFlag::LuauIntegerBufferFastcalls.push_test_override(false);
+    let read_with_buffer_flag_off =
+        get_builtin_function_id(&builtin(c"buffer", c"readinteger"), &options);
+    let write_with_buffer_flag_off =
+        get_builtin_function_id(&builtin(c"buffer", c"writeinteger"), &options);
+    luaur_common::FFlag::LuauIntegerBufferFastcalls.pop_test_override();
+    luaur_common::FFlag::LuauIntegerFastcalls.pop_test_override();
+
+    luaur_common::FFlag::LuauIntegerFastcalls.push_test_override(true);
+    luaur_common::FFlag::LuauIntegerBufferFastcalls.push_test_override(true);
+    let read_with_both_on =
+        get_builtin_function_id(&builtin(c"buffer", c"readinteger"), &options);
+    let write_with_both_on =
+        get_builtin_function_id(&builtin(c"buffer", c"writeinteger"), &options);
+    luaur_common::FFlag::LuauIntegerBufferFastcalls.pop_test_override();
+    luaur_common::FFlag::LuauIntegerFastcalls.pop_test_override();
+
+    assert_eq!(read_with_buffer_flag_off, -1);
+    assert_eq!(write_with_buffer_flag_off, -1);
+    assert_eq!(read_with_both_on, LBF_BUFFER_READINTEGER as i32);
+    assert_eq!(write_with_both_on, LBF_BUFFER_WRITEINTEGER as i32);
+}

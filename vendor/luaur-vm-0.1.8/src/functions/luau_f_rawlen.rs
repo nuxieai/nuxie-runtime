@@ -19,19 +19,10 @@ pub unsafe fn luau_f_rawlen(
 ) -> core::ffi::c_int {
     if nparams >= 1 && nresults <= 1 {
         if ttistable!(arg0) {
-            // hvalue! returns a *mut LuaTable
             let h = hvalue!(arg0);
-            // The previous attempt failed because the stub for lua_h_getn was empty.
-            // In Luau VM, luaH_getn (lua_h_getn) takes a *mut LuaTable and returns int.
-            // We must cast the function to the correct signature if the stub is incorrect,
-            // but since we are translating the function body, we use the logical C++ signature.
-            let h_getn: unsafe extern "C" fn(
-                *mut crate::records::lua_table::LuaTable,
-            ) -> core::ffi::c_int = core::mem::transmute(lua_h_getn as *const core::ffi::c_void);
-            setnvalue!(res, h_getn(h) as f64);
+            setnvalue!(res, lua_h_getn(h) as f64);
             return 1;
         } else if ttisstring!(arg0) {
-            // tsvalue! returns a *const TString
             let ts = tsvalue!(arg0);
             setnvalue!(res, (*ts).len as f64);
             return 1;

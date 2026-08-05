@@ -19,7 +19,7 @@ pub unsafe fn luau_f_ceil_sse_41(
 ) -> core::ffi::c_int {
     if LUAU_TARGET_SSE41 && nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
-        const MM_FROUND_TO_POS_INF: i32 = 3;
+        const MM_FROUND_TO_POS_INF: i32 = 2;
         setnvalue!(res, roundsd_sse41::<MM_FROUND_TO_POS_INF>(a1));
         1
     } else {

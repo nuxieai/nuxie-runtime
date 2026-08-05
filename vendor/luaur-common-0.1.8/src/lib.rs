@@ -101,8 +101,8 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauInstantiateFunctionTypeBeforePush.set(value);
     FFlag::LuauInstantiateInSubtyping.set(value);
     FFlag::LuauInstantiationUsesPolarity.set(value);
-    FFlag::LuauIntegerBufferFastcalls.set(value);
-    FFlag::LuauIntegerFastcalls.set(value);
+    FFlag::LuauIntegerBufferFastcalls.set(false);
+    FFlag::LuauIntegerFastcalls.set(false);
     FFlag::LuauIntegerLibrary.set(value);
     FFlag::LuauIntegerType2.set(value);
     FFlag::LuauIterativeInstantiationQueuer.set(value);

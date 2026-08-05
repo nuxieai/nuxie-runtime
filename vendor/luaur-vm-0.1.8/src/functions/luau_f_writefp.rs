@@ -10,6 +10,22 @@ use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 use luaur_common::macros::luau_big_endian::LUAU_BIG_ENDIAN;
 
+pub trait FastcallFloat: Copy {
+    fn from_lua_number(value: f64) -> Self;
+}
+
+impl FastcallFloat for f32 {
+    fn from_lua_number(value: f64) -> Self {
+        value as f32
+    }
+}
+
+impl FastcallFloat for f64 {
+    fn from_lua_number(value: f64) -> Self {
+        value
+    }
+}
+
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_writefp<T>(
     _L: *mut lua_State,
@@ -20,7 +36,7 @@ pub unsafe fn luau_f_writefp<T>(
     nparams: core::ffi::c_int,
 ) -> core::ffi::c_int
 where
-    T: Copy + From<f64>,
+    T: FastcallFloat,
 {
     if !LUAU_BIG_ENDIAN {
         if nparams >= 3
@@ -37,7 +53,7 @@ where
                 return -1;
             }
 
-            let val: T = T::from(nvalue!(args.add(1)));
+            let val = T::from_lua_number(nvalue!(args.add(1)));
 
             let dest = ((*buf).data.as_ptr() as *mut u8).add(offset as usize);
             core::ptr::write_unaligned(dest as *mut T, val);

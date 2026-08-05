@@ -25,14 +25,7 @@ pub unsafe fn luau_f_tunpack(
         let mut n: core::ffi::c_int = -1;
 
         if nparams == 1 {
-            // The previous attempt failed because the stub for lua_h_getn was empty.
-            // In Luau VM, luaH_getn(t) returns the size of the array part/boundary.
-            // We must cast the call to the expected signature or use the real function.
-            let lua_h_getn_ptr = lua_h_getn as *const core::ffi::c_void;
-            let lua_h_getn_real: unsafe extern "C" fn(
-                *mut crate::records::lua_table::LuaTable,
-            ) -> core::ffi::c_int = core::mem::transmute(lua_h_getn_ptr);
-            n = lua_h_getn_real(t);
+            n = lua_h_getn(t);
         } else if nparams == 3
             && ttisnumber!(args)
             && ttisnumber!(args.add(1))

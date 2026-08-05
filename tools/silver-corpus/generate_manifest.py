@@ -264,6 +264,7 @@ EXACT = (
     "component_stateful_vm_instance",
     "component_stateful_vm_instance_2",
     "image_fit_alignment_2",
+    "layout_grid_stack_grid_with_layouts_size_changing",
     "stateful_keyed_trigger",
 )
 
@@ -1856,7 +1857,6 @@ list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x800
 layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
 layout_text_match|frame 0, op 61 (save): expected save, got frame
 layout_grid_stack_grid_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
-layout_grid_stack_grid_with_layouts_size_changing|frame 1, op 227 (transform), field ty: expected 336.03223, got 310
 layout_grid_stack_grid_with_layouts_size_span_changing|frame 32, op 1592 (rewind): expected rewind, got drawPath
 layout_grid_stack_grid_with_layouts_span|frame 34, op 1116 (rewind): expected rewind, got drawPath
 layout_grid_stack_stack_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath

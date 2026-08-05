@@ -1224,6 +1224,16 @@ impl RuntimeLayoutComponentState {
         (layout.left, layout.top, layout.width, layout.height)
     }
 
+    /// True while the retained animated rect has not yet reached its solved
+    /// target — the window where C++ renders from `m_layout` rather than the
+    /// newest Yoga result (`layout_component.cpp:1329-1401`;
+    /// `layout_participant.cpp:564-644`). Gating reads on this (rather than
+    /// on `animates()` alone) keeps every settled frame byte-identical to the
+    /// map-derived value.
+    pub(crate) fn is_interpolating(&self) -> bool {
+        self.animates() && self.layout.get() != self.current_animation_data().to
+    }
+
     pub(crate) fn target_bounds(&self) -> (f32, f32, f32, f32) {
         let layout = self
             .solved_layout

@@ -781,6 +781,9 @@
             prepared_epoch: 1,
             path_epoch: 1,
             layout_revision: 1,
+            dirty_layout: BTreeSet::new(),
+            is_cleaning_dirty_layouts: false,
+            layout_calculation_count: 0,
             text_shape_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
@@ -806,6 +809,8 @@
             render_cache_revision: 0,
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
+            transferred_hug_size: Cell::new((None, None)),
+            transferred_hug_layout_generation: Cell::new(0),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
             data_bind_path_ids: None,
@@ -2148,6 +2153,8 @@
             render_cache_revision: 0,
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
+            transferred_hug_size: Cell::new((None, None)),
+            transferred_hug_layout_generation: Cell::new(0),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
             data_bind_path_ids: None,
@@ -2601,6 +2608,8 @@
                 initial_layout_paint_frame: RefCell::new(Some(
                     RuntimeInitialNestedLayoutPaintFrame::default(),
                 )),
+                transferred_hug_size: Cell::new((None, None)),
+                transferred_hug_layout_generation: Cell::new(0),
                 layout_data_transferred: true,
                 layout_data_transfer_key: Some(RuntimeNestedLayoutDataTransferKey {
                     parent_layout: RuntimeNestedLayoutBoundsCacheKey {
@@ -2857,6 +2866,8 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
+                transferred_hug_layout_generation: Cell::new(0),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -2914,6 +2925,8 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
+                transferred_hug_layout_generation: Cell::new(0),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -5120,6 +5133,101 @@
     }
 
     #[test]
+    fn update_components_calculates_layout_only_for_precise_dirty_layout_members() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![root, layout], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        for local_id in 0..2 {
+            instance.clear_component_dirt(local_id);
+        }
+        instance.dirty_layout.clear();
+
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 0);
+
+        assert!(instance.mark_layout_node_changed(1));
+        assert_eq!(instance.dirty_layout, BTreeSet::from([1]));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 1);
+        assert!(instance.dirty_layout.is_empty());
+        assert!(
+            !instance
+                .component(1)
+                .unwrap()
+                .concrete
+                .layout
+                .as_ref()
+                .unwrap()
+                .layout_node_is_dirty()
+        );
+
+        assert!(instance.add_dirt(1, ComponentDirt::LAYOUT_STYLE, false));
+        assert_eq!(instance.dirty_layout, BTreeSet::from([1]));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 2);
+    }
+
+    #[test]
+    fn layout_dirt_is_rejected_during_the_style_cleaning_pass() {
+        let layout = synthetic_component_for_type(0, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![layout], vec![0]);
+        instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout component")
+            .sync_style();
+        instance.dirty_layout.clear();
+        let layout_revision = instance.layout_revision;
+
+        instance.is_cleaning_dirty_layouts = true;
+        assert!(!instance.mark_layout_node_changed(0));
+        instance.is_cleaning_dirty_layouts = false;
+
+        assert!(instance.dirty_layout.is_empty());
+        assert_eq!(instance.layout_revision, layout_revision);
+        assert!(
+            !instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("layout component")
+                .layout_node_is_dirty()
+        );
+    }
+
+    #[test]
+    fn host_owned_layout_syncs_dirty_members_without_a_detached_solve() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+        instance.clear_component_dirt(0);
+        instance.dirty_layout.clear();
+        instance.layout_node_owned_by_host = true;
+        instance.layout_constraint_bounds = Some(Arc::new(BTreeMap::from([(
+            0,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 50.0,
+            },
+        )])));
+
+        assert!(instance.mark_layout_node_changed(0));
+        instance.update_components();
+
+        assert_eq!(instance.layout_calculation_count, 0);
+        assert!(instance.dirty_layout.is_empty());
+        assert!(
+            !instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("root layout")
+                .layout_node_is_dirty()
+        );
+    }
+
+    #[test]
     fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
         let mut layout = synthetic_component(0, 0);
         layout.type_name = "LayoutComponent";
@@ -5469,7 +5577,7 @@
 
     #[test]
     fn layout_revision_tracks_layout_dirt_separately_from_draw_cache_epoch() {
-        let component = synthetic_component(0, 0);
+        let component = synthetic_component_for_type(0, "LayoutComponent");
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
         let initial_layout_revision = instance.layout_revision();
@@ -6001,9 +6109,9 @@
 
     #[test]
     fn nested_layout_bounds_cache_tracks_layout_revision() {
-        let mut host = synthetic_component(0, 0);
-        host.type_name = "NestedArtboardLayout";
-        let mut instance = synthetic_instance(vec![host], vec![0]);
+        let host = synthetic_component_for_type(0, "NestedArtboardLayout");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![host, layout], vec![0, 1]);
         instance.nested_artboards.insert(
             0,
             RuntimeNestedArtboardInstance {
@@ -6016,6 +6124,8 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
+                transferred_hug_layout_generation: Cell::new(0),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -6054,7 +6164,7 @@
         );
         assert!(Arc::ptr_eq(&first_bounds, &after_paint.bounds));
 
-        assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
+        assert!(instance.add_dirt(1, ComponentDirt::LAYOUT_STYLE, false));
         let after_layout = instance.runtime_nested_artboard_layout_bounds_frame();
         assert_eq!(
             instance
@@ -6106,6 +6216,46 @@
 
         assert!(instance.set_color_property(2, color, 0xff00ff00));
         assert_eq!(instance.layout_revision(), layout_revision);
+    }
+
+    #[test]
+    fn child_layout_dirt_invalidates_only_transferred_hug_axes() {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            PathBuf::from(root).join("tests/unit_tests/assets/db_health_tracker.riv"),
+        )
+        .expect("read pinned database-health fixture");
+        let file = read_runtime_file(&bytes).expect("database-health fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("database-health graphs build");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Module Weight"))
+            .expect("fixture has the fixed-size weight module");
+        let mut child = ArtboardInstance::from_graph(&file, graph).expect("child instance builds");
+        let transferred = (Some(10_174.0), Some(739.0));
+
+        assert_eq!(
+            child.transferred_hug_size_after_child_layout_change(transferred),
+            (transferred, false),
+            "fixed root axes keep their parent-owned measurements"
+        );
+
+        let root_style = child
+            .layout_component_style_local(0)
+            .expect("root owns a layout style");
+        let height_scale = property_key_for_name(
+            "LayoutComponentStyle",
+            "layoutHeightScaleType",
+        )
+        .expect("height scale key");
+        assert!(child.set_uint_property(root_style, height_scale, 2));
+        assert_eq!(
+            child.transferred_hug_size_after_child_layout_change(transferred),
+            ((Some(10_174.0), None), true),
+            "a hug root axis is remeasured by its parent"
+        );
     }
 
     #[test]

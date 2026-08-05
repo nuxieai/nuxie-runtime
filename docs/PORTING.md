@@ -1,12 +1,13 @@
 # PORTING.md — The C++→Rust Idiom Codex
 
-This is the translation manual for porting the Rive C++ runtime (reference at
-`/Users/levi/dev/oss/rive-runtime`) into this Rust workspace. It is the
-authoritative distillation of the patterns worked out across M0–M8 and recorded
-in `docs/v2-status.md`, `docs/v2-log-archive.md`, and `docs/porting-map-v2.md`.
+This is the translation manual for porting the Rive C++ runtime (the pinned
+checkout at `RIVE_RUNTIME_DIR`, conventionally `~/dev/oss/rive-runtime`) into
+this Rust workspace. It is the authoritative distillation of the patterns
+worked out during the original C++→Rust port (the working logs live in git
+history: `docs/v2-status.md`, `docs/v2-log-archive.md`, `docs/porting-map-v2.md`).
 
-**Who this is for.** (a) Phase R agents about to mechanically translate the
-~26k-line C++ renderer algorithm layer, and (b) new contributors. It teaches the
+**Who this is for.** (a) Agents porting approved upstream changes during an
+Upstream Sync cycle (`docs/upstream-sync-map.md`), and (b) new contributors. It teaches the
 *idioms* — how a C++ construct becomes a Rust one here — so you translate the
 same way the existing code did, and so your invalidation, float math, and error
 handling stay byte-compatible with the C++ oracle.
@@ -17,7 +18,7 @@ below exists to keep that stream exact. When in doubt, do what the C++ source
 does at the same site — *including its evaluation order and its guards* — not
 what is idiomatic Rust.
 
-**Ground rules that shape every idiom (from `docs/porting-map-v2.md`):**
+**Ground rules that shape every idiom:**
 
 - Port *code, not benchmark symptoms*: select one dependency-complete C++ owner
   family, read that whole family before editing, and keep one direct Rust file
@@ -25,9 +26,8 @@ what is idiomatic Rust.
   ownership, ordering, cloning, lifecycle, floating-point, or dispatch row is
   still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
   but never substitutes for closure evidence for the family.
-- During Phase R's mechanical renderer translation, `nuxie-schema` and
-  `nuxie-binary` are frozen — do not touch them. An Upstream Sync cycle
-  may regenerate schema artifacts and update the binary decoder when the
+- `nuxie-schema` and `nuxie-binary` change only through an Upstream Sync
+  cycle, which may regenerate schema artifacts and update the binary decoder when the
   upstream object model changes; those edits require the sync-map inventory,
   generated-artifact checks, and both normal and forced-scripted goldens.
 - Never add skip/cache logic, widen a tolerance, or restructure float math for
@@ -361,11 +361,10 @@ setters, so all invalidation flows through the single fence.
 
 ### 2.5 Cautionary case studies — the five drift bugs
 
-The M8 adversarial audit (`docs/v2-status.md` items 21–25) found five bugs. **All
+The final adversarial audit of the original port found five bugs. **All
 five are the same mistake:** an epoch/invalidation that diverges from the audited
 C++ gate — the exact failure this section exists to prevent. Study them; do not
-reintroduce their shape. (Check the status log for current fix state before
-assuming any is resolved.)
+reintroduce their shape.
 
 1. **Shallow collapse propagation** (item 21). A commit trusted each component's
    *local* collapsed flag but Rust collapse propagation was not full-subtree on
@@ -412,8 +411,8 @@ runtime must not assume more than the importer guaranteed.
 
 C++ threads `nullptr` through pointer flows and checks late. Port those to
 `Option` and *keep the guard where C++ has it* — never `unwrap()`/`expect()` on
-anything reachable from an imported file or a hostile C-ABI value. The M8
-semantic sweep (`docs/v2-status.md` item 20) confirmed the codebase is unusually
+anything reachable from an imported file or a hostile C-ABI value. A full
+semantic sweep during the original port confirmed the codebase is unusually
 defensive here: the binary reader is fully `.get()`-based, and every suspect
 `len()-N` / modulo site sits behind a faithful C++ guard port. Preserve that when
 you add code.
@@ -443,7 +442,7 @@ divergence*. The only constructible true divergence found:
 let direction = (seconds / duration) as i32 % 2;   // duration==0 → inf as i32 saturates
 ```
 
-Recorded policy (`docs/v2-status.md` item 20 #10): document the float→int
+Recorded policy: document the float→int
 saturating-cast policy and add NaN/inf fixtures so the divergence surfaces
 deliberately. When you port a float→int cast, know that Rust will not reproduce
 C++ UB — usually a feature, occasionally a divergence to guard (e.g. add a
@@ -470,7 +469,7 @@ Two profiles, one landed and one planned:
   code must still avoid reachable panics, and FFI entry points must not allow
   unwinds to escape.
 - **Tests/fuzz (planned, not yet a committed profile):** a hardened profile with
-  `overflow-checks = true` (`docs/v2-status.md` item 20 #7). **TODO:** confirm
+  `overflow-checks = true`. **TODO:** confirm
   whether this profile has landed before relying on it.
 
 At the parser/hostile-input boundary, use explicit `checked_*` and reject on
@@ -569,7 +568,7 @@ that same `multiply`; transform-shape heuristics can mask a missing contraction
 in `invert`, but do not reflect any C++ branch. `transform_point` uses plain
 `*`/`+` while `map_point` fuses, matching their distinct C++ call sites.
 
-**Perf caveat (`docs/v2-log-archive.md` item 18):** closing the FMA gap globally
+**Perf caveat:** closing the FMA gap globally
 (bulk `mul_add`) changes float results and can flip exact files. Treat any new
 `mul_add` as a per-site change requiring golden re-verification — never a bulk
 pass.
@@ -591,8 +590,8 @@ let path_style = if style_font.axes().is_empty() {
 ```
 
 Residual outline float drift is covered by `tolerant` verification, but **glyph
-contour *ordering* stays strict even under tolerant mode**
-(`docs/v2-status.md:3535`) — ordering is ported behavior, not delegated-engine
+contour *ordering* stays strict even under tolerant mode** —
+ordering is ported behavior, not delegated-engine
 drift. Zero-size glyph contours collapse to move/close pairs to match C++
 `RawPath` (`text.rs:3851`).
 
@@ -712,22 +711,18 @@ both runtimes) finds the weird interleavings automatically.
 
 ### 6.3 The tripwire / fence culture
 
-The failure mode is *you* — V1 spent 94% of its map pinning data-binding edge
-cases while nothing rendered. Stop and return to the milestone queue if any fire
-(`.claude/commands/goal.md`): three commits on one C++ behavior family with no
+The failure mode is *you* — the first porting attempt spent 94% of its map
+pinning data-binding edge cases while nothing rendered. Stop and return to the
+work queue if any of these tripwires fire: three commits on one C++ behavior family with no
 corpus file changing status; writing a doc that enumerates C++ cases or a test
 for behavior no corpus file exercises; a commit message that cannot name a
 milestone tag; extending the frozen contract suite; or `exact-segments`
 unmoved in ~10 commits. Perfectionism about one behavior is scope failure, not
 rigor — shipped-and-diffed beats proven-in-isolation.
 
-The full command reference (session loop, porting method, perf rules, thread
-protocol) is `.claude/commands/goal.md` — this section summarizes it, it does not
-replace it.
-
 ---
 
-## Appendix: Quick Reference for a Phase R Translator
+## Appendix: Quick Reference for Translators
 
 - Owning a new object → arena `Vec` + `local_id`, never `Rc`. (§1.1–1.2)
 - Pointer field → `Option<usize>`/`Vec<usize>` index; `nullptr` → `Option`. (§1.2, §3.1)
@@ -849,12 +844,11 @@ rules exist so a reviewer can cite the violated rule behind every finding.
 
 ---
 
-## §9 Renderer-Feed Translation Rules (RD-1)
+## §9 Renderer-Feed Translation Rules
 
-These rules bind the Phase RD move from scene-level prepared replay to the
-pinned C++ runtime's live traversal. They apply to the lane map in
-`docs/rd1-renderer-feed-map.md`; renderer pixels, ordinary goldens, and scripted
-goldens referee every merge.
+These rules governed the move from scene-level prepared replay to the pinned
+C++ runtime's live traversal, and still bind any work on the renderer feed.
+Renderer pixels, ordinary goldens, and scripted goldens referee every merge.
 
 - **RF-1 Traverse retained object topology live.** C++ constructs and relinks
   `Artboard::m_FirstDrawable`/`Drawable::{prev,next}` under draw-order dirt, then
@@ -923,7 +917,7 @@ goldens referee every merge.
   RD-C1/RD-C2 must first remove the temporary command-materialization seam and
   report the second measured checkpoint; RD-C7 owns scene-cache deletion.
 
-### RD-1b2 dual-translation stress-test decisions
+### Case study: dual-translation stress test (2026-07-22)
 
 On 2026-07-22, two independent disposable translations of
 `src/drawable.cpp`, `src/shapes/shape.cpp`, and

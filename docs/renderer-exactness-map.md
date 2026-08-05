@@ -1,7 +1,7 @@
 # Renderer Exactness Follow-up
 
 This document is the operating contract for closing the renderer corpus after
-Phase R. It separates release correctness from a useful, stricter health
+the renderer port. It separates release correctness from a useful, stricter health
 signal so that the work has a finite end condition.
 
 ## Metrics
@@ -22,7 +22,7 @@ The current d788 live-oracle result on Apple M5 Max is:
 - Contract: `exact=1,468`, `diverges=0`, `gated=0`, `total=1,468`.
 - Byte identity: `1,370/1,468` active rows.
 
-The immutable Phase R 7c closeout remains `exact=1,468`,
+The immutable renderer-port closure oracle remains `exact=1,468`,
 `byte-exact=1,360`, `diverges=0`, `gated=0`, `total=1,468`. These results name
 different C++ runtime oracles and must not be collapsed or relabeled. The
 current-runtime Apple Paravirtual rerun is pending.
@@ -69,7 +69,7 @@ The live bootstrap verifies the runtime, Dawn, and dependency revisions before
 building. CI caches only the resulting FFI-only live replay under its
 exact-input cache key; it always rebuilds the Rust candidate from HEAD. The
 historical `renderer-dawn-reference-*` targets remain reserved for the
-immutable Phase R 7c oracle and are not consumed by
+immutable renderer-port closure oracle and are not consumed by
 `renderer-golden-same-runner`.
 
 This mode still applies each manifest row's existing channel and pixel budgets;

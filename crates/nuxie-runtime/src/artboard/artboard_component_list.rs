@@ -155,7 +155,7 @@ impl ArtboardInstance {
                 if let Some(list) = self.component_list_state(list_local_id) {
                     *list.order_cache.borrow_mut() = Default::default();
                 }
-                self.mark_layout_changed();
+                crate::layout_node_provider::mark_layout_node_dirty(self, list_local_id);
                 self.mark_prepared_changed();
             }
             return logical_changed;
@@ -250,7 +250,7 @@ impl ArtboardInstance {
         let changed = !existing_matches || logical_changed || item_context_changed;
         if changed {
             self.mark_nested_structure_changed();
-            self.mark_layout_changed();
+            crate::layout_node_provider::mark_layout_node_dirty(self, list_local_id);
             self.mark_prepared_changed();
         }
         changed
@@ -514,10 +514,11 @@ impl ArtboardInstance {
                     .copied()
                     .find(|constraint| self.component_at(*constraint).concrete.scroll.is_some())
             });
+            let mut layout_size_changed = false;
             if let Some(list) = self.component_list_state_mut(list_local) {
                 for (logical_index, size) in measured_sizes {
                     if let Some(logical) = list.logical_items.get_mut(logical_index) {
-                        changed |= logical.size != size;
+                        layout_size_changed |= logical.size != size;
                         logical.size = size;
                     }
                 }
@@ -534,8 +535,12 @@ impl ArtboardInstance {
                         height += item.size.1 + real_gap;
                     }
                 }
-                changed |= list.layout_size != (width, height);
+                layout_size_changed |= list.layout_size != (width, height);
                 list.layout_size = (width, height);
+            }
+            if layout_size_changed {
+                changed = true;
+                crate::layout_node_provider::mark_layout_node_dirty(self, list_local);
             }
             if let Some(constraint) = scroll_constraint {
                 changed |=
@@ -678,7 +683,7 @@ impl ArtboardInstance {
             keep_going |= row_changed;
         }
         if source_changed {
-            self.mark_component_list_source_changed();
+            self.mark_component_list_source_changed(list_local);
         }
         if child_dirty {
             self.add_dirt(list_local, ComponentDirt::COMPONENTS, false);

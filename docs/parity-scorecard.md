@@ -40,7 +40,7 @@ Rows: 14
 - D1 — `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 - D2 — Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
 - D3 — **Taffy, not Yoga** — edge-case layouts verify `tolerant`; fence: never pin Taffy behavior-by-behavior.
-- D4 — luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered).
+- D4 — luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered). Luau engine-version skew CLOSED 2026-08-05 by the in-house fork ported to the pinned engine's `rive_0_732` tip (docs/luau-fork.md).
 - D5 — Rust image decoders vs platform decoders — JPEG color-profile rows resolvable only by CoreGraphics; dimension+tolerant-pixel verification, never payload hashes.
 - D6 — Renderer fuzz-accepted findings R3-FZ-03/04/05 (area-capped, neither rasterization canonical).
 - D7 — GPU integer semantics (unsigned-cast fixed-point limits; checked-sub vs deliberate wrap in row-wrap rebuild).

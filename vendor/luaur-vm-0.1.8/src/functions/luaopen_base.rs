@@ -9,12 +9,10 @@ use crate::functions::lua_b_getfenv::lua_b_getfenv;
 use crate::functions::lua_b_getmetatable::lua_b_getmetatable;
 use crate::functions::lua_b_inext::lua_b_inext;
 use crate::functions::lua_b_ipairs::lua_b_ipairs;
-use crate::functions::lua_b_newproxy::lua_b_newproxy;
 use crate::functions::lua_b_next::lua_b_next;
 use crate::functions::lua_b_pairs::lua_b_pairs;
 use crate::functions::lua_b_pcallcont::lua_b_pcallcont;
 use crate::functions::lua_b_pcally::lua_b_pcally;
-use crate::functions::lua_b_print::lua_b_print;
 use crate::functions::lua_b_rawequal::lua_b_rawequal;
 use crate::functions::lua_b_rawget::lua_b_rawget;
 use crate::functions::lua_b_rawlen::lua_b_rawlen;
@@ -38,7 +36,7 @@ use crate::macros::lua_setglobal::lua_setglobal;
 use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 
-struct BaseFuncs([LuaLReg; 20]);
+struct BaseFuncs([LuaLReg; 18]);
 unsafe impl Sync for BaseFuncs {}
 
 static BASE_FUNCS: BaseFuncs = BaseFuncs([
@@ -65,14 +63,6 @@ static BASE_FUNCS: BaseFuncs = BaseFuncs([
     LuaLReg {
         name: c"next".as_ptr(),
         func: Some(lua_b_next),
-    },
-    LuaLReg {
-        name: c"newproxy".as_ptr(),
-        func: Some(lua_b_newproxy),
-    },
-    LuaLReg {
-        name: c"print".as_ptr(),
-        func: Some(lua_b_print),
     },
     LuaLReg {
         name: c"rawequal".as_ptr(),

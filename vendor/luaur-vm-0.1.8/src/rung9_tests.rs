@@ -120,3 +120,63 @@ fn math_fround_fallback_matches_fastcall_round_trip() {
         crate::functions::lua_close::lua_close(state);
     }
 }
+
+#[test]
+fn lua_pushvector2_preserves_the_stack_slots_stale_z_component() {
+    unsafe {
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+        let slot = (*state).top;
+        setvvalue!(state, slot, 9.0, 8.0, 7.0, 0.0);
+
+        crate::functions::lua_pushvector2::lua_pushvector2(state, 1.25, -2.5);
+
+        assert_eq!((*state).top, slot.add(1));
+        let value = vvalue!(slot);
+        assert_eq!([value[0], value[1], value[2]], [1.25, -2.5, 7.0]);
+        crate::functions::lua_close::lua_close(state);
+    }
+}
+
+#[test]
+fn rive_base_library_omits_print_and_newproxy() {
+    unsafe {
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+        crate::functions::luaopen_base::luaopen_base(state);
+
+        assert_eq!(
+            crate::macros::lua_getglobal::lua_getglobal(state, c"print".as_ptr()),
+            crate::enums::lua_type::lua_Type::LUA_TNIL as i32
+        );
+        assert_eq!(
+            crate::macros::lua_getglobal::lua_getglobal(state, c"newproxy".as_ptr()),
+            crate::enums::lua_type::lua_Type::LUA_TNIL as i32
+        );
+        crate::functions::lua_close::lua_close(state);
+    }
+}
+
+#[test]
+fn rive_error_prefixes_use_double_colon_fallbacks() {
+    unsafe {
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+
+        crate::functions::lua_l_where::lua_l_where(state, 1);
+        let mut length = 0;
+        let where_text = crate::functions::lua_tolstring::lua_tolstring(state, -1, &mut length);
+        assert_eq!(
+            core::slice::from_raw_parts(where_text.cast::<u8>(), length),
+            b":: "
+        );
+
+        crate::functions::pusherror::pusherror(state, c"boom".as_ptr());
+        let error_text = crate::functions::lua_tolstring::lua_tolstring(state, -1, &mut length);
+        assert_eq!(
+            core::slice::from_raw_parts(error_text.cast::<u8>(), length),
+            b":: boom"
+        );
+        crate::functions::lua_close::lua_close(state);
+    }
+}

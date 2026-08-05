@@ -32,6 +32,7 @@ impl Compiler {
             function_types: DenseHashMap::new(core::ptr::null_mut()),
             local_types: DenseHashMap::new(core::ptr::null_mut()),
             expr_types: DenseHashMap::new(core::ptr::null_mut()),
+            class_locals: DenseHashMap::new(AstName::default()),
             inline_builtins: DenseHashMap::new(core::ptr::null_mut()),
             inline_builtins_backup: DenseHashMap::new(core::ptr::null_mut()),
             expr_changes: Vec::new(),

@@ -109,6 +109,7 @@ use crate::macros::ttype::ttype;
 use crate::macros::upvalue::upvalue;
 use crate::macros::uvalue::uvalue;
 use crate::macros::vm_assert_pc::VM_ASSERT_PC;
+use crate::macros::vm_check_gc::VM_CHECK_GC;
 use crate::macros::vm_interrupt::VM_INTERRUPT;
 use crate::macros::vm_kv::VM_KV;
 use crate::macros::vm_patch_aux::VM_PATCH_AUX;
@@ -128,6 +129,7 @@ use crate::records::up_val::UpVal;
 use crate::type_aliases::instruction::Instruction;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
+use crate::type_aliases::lua_vector_type::LuaVectorType;
 use crate::type_aliases::tms::TMS;
 use luaur_common::enums::luau_capture_type::LuauCaptureType;
 use luaur_common::enums::luau_opcode::LuauOpcode;
@@ -507,6 +509,18 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     (LUAU_INSN_C!(insn) as i32) & (*dispatch_t).nodemask8 as i32;
                                 let n = (*dispatch_t).node.add(slot as usize);
 
+                                #[cfg(feature = "lua_vector_double")]
+                                let mut direct_field_result =
+                                    crate::records::direct_field_result::DirectFieldResult {
+                                        l: L,
+                                        slot: ra,
+                                    };
+                                #[cfg(feature = "lua_vector_double")]
+                                let result_arg = core::ptr::addr_of_mut!(direct_field_result)
+                                    as *mut core::ffi::c_void;
+                                #[cfg(not(feature = "lua_vector_double"))]
+                                let result_arg = ra as *mut core::ffi::c_void;
+
                                 if ttisstring!(gkey!(n) as *const TValue)
                                     && tsvalue!(gkey!(n) as *const TValue)
                                         == tsvalue!(kv as *const TValue)
@@ -519,7 +533,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let u = uvalue!(rb as *const TValue);
                                     f(
                                         u.data.as_ptr() as *mut core::ffi::c_void,
-                                        ra as *mut core::ffi::c_void,
+                                        result_arg,
                                     );
                                     continue 'dispatch;
                                 }
@@ -539,7 +553,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     let u = uvalue!(rb as *const TValue);
                                     f(
                                         u.data.as_ptr() as *mut core::ffi::c_void,
-                                        ra as *mut core::ffi::c_void,
+                                        result_arg,
                                     );
                                     continue 'dispatch;
                                 }
@@ -581,10 +595,10 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             // fast-path: quick case-insensitive comparison with "X"/"Y"/"Z"
                             let name = getstr(tsvalue!(kv as *const TValue));
                             let ic = ((*name.add(0)) as u8 | b' ') as i32 - b'x' as i32;
-                            // (LUA_VECTOR_SIZE == 3 in this port; the C++ `== 4` branch
-                            // maps 'w' -> 3 and is omitted)
-
-                            if (ic as u32) < 3 && *name.add(1) == 0 {
+                            if (ic as u32)
+                                < crate::macros::lua_vector_size::LUA_VECTOR_SIZE as u32
+                                && *name.add(1) == 0
+                            {
                                 let v = vvalue!(rb as *const TValue).as_ptr(); // silences ubsan when indexing v[]
                                 setnvalue!(ra, *v.add(ic as usize) as f64);
                                 continue 'dispatch;
@@ -2048,7 +2062,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) + *vc.add(0),
                             *vb.add(1) + *vc.add(1),
@@ -2114,7 +2128,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) - *vc.add(0),
                             *vb.add(1) - *vc.add(1),
@@ -2178,8 +2192,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(rc as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(rc as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) * vc,
                             *vb.add(1) * vc,
@@ -2190,7 +2204,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) * *vc.add(0),
                             *vb.add(1) * *vc.add(1),
@@ -2199,9 +2213,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         );
                         continue 'dispatch;
                     } else if ttisnumber!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
-                        let vb = nvalue!(rb as *const TValue) as f32;
+                        let vb = nvalue!(rb as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             vb * *vc.add(0),
                             vb * *vc.add(1),
@@ -2270,8 +2284,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(rc as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(rc as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) / vc,
                             *vb.add(1) / vc,
@@ -2282,7 +2296,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) / *vc.add(0),
                             *vb.add(1) / *vc.add(1),
@@ -2291,9 +2305,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         );
                         continue 'dispatch;
                     } else if ttisnumber!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
-                        let vb = nvalue!(rb as *const TValue) as f32;
+                        let vb = nvalue!(rb as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             vb / *vc.add(0),
                             vb / *vc.add(1),
@@ -2365,13 +2379,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(rc as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(rc as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
-                            luai_numidiv(*vb.add(0) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(1) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(2) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(3) as f64, vc as f64) as f32
+                            luai_numidiv(*vb.add(0) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(1) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(2) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(3) as f64, vc as f64) as LuaVectorType
                         );
                         continue 'dispatch;
                     } else {
@@ -2550,8 +2564,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(kv as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(kv as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) * vc,
                             *vb.add(1) * vc,
@@ -2615,8 +2629,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(kv as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(kv as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
                             *vb.add(0) / vc,
                             *vb.add(1) / vc,
@@ -2683,13 +2697,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        let vc = nvalue!(kv as *const TValue) as f32;
-                        setvvalue!(
+                        let vc = nvalue!(kv as *const TValue) as LuaVectorType;
+                        setvvalue!(L,
                             ra,
-                            luai_numidiv(*vb.add(0) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(1) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(2) as f64, vc as f64) as f32,
-                            luai_numidiv(*vb.add(3) as f64, vc as f64) as f32
+                            luai_numidiv(*vb.add(0) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(1) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(2) as f64, vc as f64) as LuaVectorType,
+                            luai_numidiv(*vb.add(3) as f64, vc as f64) as LuaVectorType
                         );
                         continue 'dispatch;
                     } else {
@@ -2920,7 +2934,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         continue 'dispatch;
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
-                        setvvalue!(ra, -*vb.add(0), -*vb.add(1), -*vb.add(2), -*vb.add(3));
+                        setvvalue!(L, ra, -*vb.add(0), -*vb.add(1), -*vb.add(2), -*vb.add(3));
                         continue 'dispatch;
                     } else {
                         // fast-path for userdata with C functions
@@ -3116,6 +3130,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 LuauOpcode::LOP_FORNLOOP => {
                     // lvmexecute.cpp:2573
                     VM_INTERRUPT!(L, pc, base);
+                    if FFlag::LuauBackedgeHeapCheck.get() {
+                        VM_CHECK_GC!(L, pc, base);
+                    }
                     let insn = *pc;
                     pc = pc.add(1);
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
@@ -3293,6 +3310,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 LuauOpcode::LOP_FORGLOOP => {
                     // lvmexecute.cpp:2807
                     VM_INTERRUPT!(L, pc, base);
+                    if FFlag::LuauBackedgeHeapCheck.get() {
+                        VM_CHECK_GC!(L, pc, base);
+                    }
                     let insn = *pc;
                     pc = pc.add(1);
                     let mut ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
@@ -3679,6 +3699,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 LuauOpcode::LOP_JUMPBACK => {
                     // lvmexecute.cpp:2988
                     VM_INTERRUPT!(L, pc, base);
+                    if FFlag::LuauBackedgeHeapCheck.get() {
+                        VM_CHECK_GC!(L, pc, base);
+                    }
                     let insn = *pc;
                     pc = pc.add(1);
 
@@ -3703,6 +3726,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 LuauOpcode::LOP_JUMPX => {
                     // lvmexecute.cpp:3009
                     VM_INTERRUPT!(L, pc, base);
+                    if FFlag::LuauBackedgeHeapCheck.get() {
+                        VM_CHECK_GC!(L, pc, base);
+                    }
                     let insn = *pc;
                     pc = pc.add(1);
 
@@ -3832,9 +3858,9 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         );
                         continue 'dispatch;
                     } else if ttisvector!(rc as *const TValue) {
-                        let nb = nvalue!(kv as *const TValue) as f32;
+                        let nb = nvalue!(kv as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(
+                        setvvalue!(L,
                             ra,
                             nb / *vc.add(0),
                             nb / *vc.add(1),

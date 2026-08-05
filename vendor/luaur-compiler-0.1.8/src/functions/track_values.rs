@@ -17,9 +17,10 @@ use luaur_common::records::dense_hash_map::DenseHashMap;
 pub fn track_values(
     globals: &mut DenseHashMap<AstName, Global>,
     variables: &mut DenseHashMap<*mut AstLocal, Variable>,
+    class_locals: &mut DenseHashMap<AstName, *mut AstLocal>,
     root: *mut AstNode,
 ) {
-    let mut visitor = ValueVisitor::value_visitor(globals, variables);
+    let mut visitor = ValueVisitor::value_visitor(globals, variables, class_locals);
 
     unsafe {
         luaur_ast::visit::dispatch_node(root, &mut visitor);
@@ -27,4 +28,5 @@ pub fn track_values(
 
     *globals = visitor.globals;
     *variables = visitor.variables;
+    *class_locals = visitor.class_locals;
 }

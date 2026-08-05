@@ -380,9 +380,13 @@ pub(crate) fn push_value(lua: &Lua, value: &Value) -> Result<()> {
             Value::Buffer(b) => b.push_to_stack(),
             // luaur is a 3-wide vector build; the 4th component is ignored by
             // the VM. Push x/y/z (w = 0).
-            Value::Vector(v) => {
-                lua_pushvector_lua_state_f32_f32_f32_f32(state, v.x(), v.y(), v.z(), 0.0)
-            }
+            Value::Vector(v) => lua_pushvector_lua_state_f32_f32_f32_f32(
+                state,
+                v.x() as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
+                v.y() as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
+                v.z() as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
+                0.0 as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
+            ),
             // An error value pushes as its message string (so Lua code that
             // receives it can `tostring(err)` it). This matches how a Rust
             // callback's `Err` surfaces to Lua as a string error object.
@@ -444,7 +448,11 @@ pub(crate) fn value_from_stack(lua: &Lua, idx: c_int) -> Result<Value> {
                     Value::Nil
                 } else {
                     let comps = core::slice::from_raw_parts(p, crate::vector::Vector::SIZE);
-                    Value::Vector(crate::vector::Vector::new(comps[0], comps[1], comps[2]))
+                    Value::Vector(crate::vector::Vector::new(
+                        comps[0] as f32,
+                        comps[1] as f32,
+                        comps[2] as f32,
+                    ))
                 }
             }
             x if x == ttype::BUFFER => {

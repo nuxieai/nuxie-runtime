@@ -98,13 +98,21 @@ impl BytecodeBuilder {
                         write_var_int(ss, value as u64);
                     }
                 }
-                Type::Type_Vector => {
+                Type::Type_Vectorf => {
                     write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_VECTOR.0 as u8);
-                    let vec = unsafe { c.value.valueVector };
+                    let vec = unsafe { c.value.valueVectorf };
                     write_float(ss, vec[0]);
                     write_float(ss, vec[1]);
                     write_float(ss, vec[2]);
                     write_float(ss, vec[3]);
+                }
+                Type::Type_Vectord => {
+                    write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8);
+                    let vec = unsafe { c.value.valueVectord };
+                    write_double(ss, vec[0]);
+                    write_double(ss, vec[1]);
+                    write_double(ss, vec[2]);
+                    write_double(ss, vec[3]);
                 }
                 Type::Type_String => {
                     write_byte(ss, LuauBytecodeTag::LBC_CONSTANT_STRING.0 as u8);

@@ -3778,6 +3778,7 @@ fn rust_models_cpp_base_data_converter_passthrough_dispatch() {
             skipped_properties: Vec::new(),
         })],
         import_statuses: vec![RuntimeImportStatus::Imported],
+        file_asset_object_ids: Vec::new(),
     };
     let input = RuntimeDataValue::String(b"base");
 
@@ -3887,6 +3888,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
         ],
+        file_asset_object_ids: Vec::new(),
     };
 
     assert_eq!(
@@ -4029,6 +4031,7 @@ fn rust_models_cpp_data_bind_sort_order_swap_partition() {
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
         ],
+        file_asset_object_ids: Vec::new(),
     };
 
     assert_eq!(

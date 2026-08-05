@@ -1,4 +1,6 @@
 pub mod allocator_alloc;
+pub mod parser_get_matching_class;
+pub mod parser_is_expr_l_value;
 pub mod allocator_allocate;
 pub mod allocator_allocator_allocator;
 pub mod allocator_allocator_allocator_alt_b;

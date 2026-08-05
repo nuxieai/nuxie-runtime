@@ -10,7 +10,7 @@ pub unsafe fn vector_min(L: *mut lua_State) -> core::ffi::c_int {
     let n = lua_gettop(L);
     let v = lua_l_checkvector(L, 1);
 
-    let mut result = [0.0f32; 4];
+    let mut result = [0.0 as crate::type_aliases::lua_vector_type::LuaVectorType; 4];
     if LUA_VECTOR_SIZE == 4 {
         result[0] = *v.offset(0);
         result[1] = *v.offset(1);

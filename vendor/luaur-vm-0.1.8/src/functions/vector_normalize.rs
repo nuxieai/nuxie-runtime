@@ -14,7 +14,7 @@ pub unsafe fn vector_normalize(L: *mut lua_State) -> core::ffi::c_int {
         let v2 = *v.offset(2);
         let v3 = *v.offset(3);
 
-        let inv_sqrt = 1.0f32 / (v0 * v0 + v1 * v1 + v2 * v2 + v3 * v3).sqrt();
+        let inv_sqrt = 1.0 as crate::type_aliases::lua_vector_type::LuaVectorType / (v0 * v0 + v1 * v1 + v2 * v2 + v3 * v3).sqrt();
         lua_pushvector_lua_state_f32_f32_f32_f32(
             L,
             v0 * inv_sqrt,
@@ -27,7 +27,7 @@ pub unsafe fn vector_normalize(L: *mut lua_State) -> core::ffi::c_int {
         let v1 = *v.offset(1);
         let v2 = *v.offset(2);
 
-        let inv_sqrt = 1.0f32 / (v0 * v0 + v1 * v1 + v2 * v2).sqrt();
+        let inv_sqrt = 1.0 as crate::type_aliases::lua_vector_type::LuaVectorType / (v0 * v0 + v1 * v1 + v2 * v2).sqrt();
         lua_pushvector_lua_state_f32_f32_f32(L, v0 * inv_sqrt, v1 * inv_sqrt, v2 * inv_sqrt);
     }
 

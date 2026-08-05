@@ -39,7 +39,11 @@ pub struct global_State {
     pub udatagc: [Option<
         unsafe extern "C" fn(*mut crate::records::lua_state::LuaState, *mut core::ffi::c_void),
     >; 128],
+    pub udatamark: [crate::type_aliases::lua_userdata_mark::lua_UserdataMark; 128],
     pub udatamt: [*mut crate::records::lua_table::LuaTable; 128],
+    pub weakregistry: crate::records::lua_t_value::TValue,
+    pub weakregistryfree: core::ffi::c_int,
+    pub embeddergc: crate::type_aliases::lua_embedder_gc::lua_EmbedderGc,
     pub lightuserdataname: [*mut crate::records::t_string::TString; 128],
     pub udatadirectfields: [*mut crate::records::lua_table::LuaTable; 130], // UTAG_INTERNAL_LIMIT
     pub gcstats: crate::records::gc_stats::GCStats,

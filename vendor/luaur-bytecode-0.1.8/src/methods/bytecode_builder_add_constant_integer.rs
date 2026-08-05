@@ -16,7 +16,9 @@ impl BytecodeBuilder {
         let mut k = ConstantKey {
             r#type: Type::Type_Integer,
             value: 0,
-            extra: 0,
+            extra1: 0,
+            extra2: 0,
+            extra3: 0,
         };
 
         // static_assert(sizeof(k.value) == sizeof(value), "Expecting integer to be 64-bit");

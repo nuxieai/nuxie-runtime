@@ -56,13 +56,13 @@ impl Compiler {
                 }
                 self.emit_load_k(target, cid);
             }
-            Type::Type_Vector => {
-                let x = unsafe { cv.data.value_vector[0] };
-                let y = unsafe { cv.data.value_vector[1] };
-                let z = unsafe { cv.data.value_vector[2] };
-                let w = unsafe { cv.data.value_vector[3] };
+            Type::Type_Vectorf => {
+                let x = unsafe { cv.data.value_vectorf[0] };
+                let y = unsafe { cv.data.value_vectorf[1] };
+                let z = unsafe { cv.data.value_vectorf[2] };
+                let w = unsafe { cv.data.value_vectorf[3] };
 
-                let cid = unsafe { (*self.bytecode).add_constant_vector(x, y, z, w) };
+                let cid = unsafe { (*self.bytecode).add_constant_vectorf(x, y, z, w) };
                 if cid < 0 {
                     let location = unsafe { (*node).base.location };
                     CompileError::raise(
@@ -70,6 +70,23 @@ impl Compiler {
                         format_args!("Exceeded constant limit; simplify the code to compile"),
                     );
                 }
+                self.emit_load_k(target, cid);
+            }
+            Type::Type_Vectord => {
+                let x = unsafe { cv.data.value_vectord[0] };
+                let y = unsafe { cv.data.value_vectord[1] };
+                let z = unsafe { cv.data.value_vectord[2] };
+                let w = unsafe { cv.data.value_vectord[3] };
+
+                let cid = unsafe { (*self.bytecode).add_constant_vectord(x, y, z, w) };
+                if cid < 0 {
+                    let location = unsafe { (*node).base.location };
+                    CompileError::raise(
+                        &location,
+                        format_args!("Exceeded constant limit; simplify the code to compile"),
+                    );
+                }
+
                 self.emit_load_k(target, cid);
             }
             Type::Type_String => {

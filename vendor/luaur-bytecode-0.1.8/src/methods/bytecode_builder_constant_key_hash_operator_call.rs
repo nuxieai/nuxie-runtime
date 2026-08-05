@@ -1,13 +1,13 @@
+use crate::enums::r#type::Type;
 use crate::records::constant_key::ConstantKey;
 use crate::records::constant_key_hash::ConstantKeyHash;
 
 #[allow(non_snake_case)]
 impl ConstantKeyHash {
     pub fn call(&self, key: &ConstantKey) -> usize {
-        // Constant::Type_Vector is 4 based on Luau bytecode specification
-        if key.r#type as u8 == 4 {
+        if key.r#type == Type::Type_Vectorf {
             let mut i = [0u32; 4];
-            // Safety: ConstantKey.value and ConstantKey.extra are both u64, totaling 16 bytes.
+            // Safety: ConstantKey.value and ConstantKey.extra1 are contiguous u64 fields.
             // [u32; 4] is also 16 bytes.
             unsafe {
                 let src_ptr = &key.value as *const u64 as *const u8;
@@ -25,6 +25,20 @@ impl ConstantKeyHash {
                 ^ (i[1].wrapping_mul(19349663))
                 ^ (i[2].wrapping_mul(83492791))
                 ^ (i[3].wrapping_mul(39916801));
+
+            h as usize
+        } else if key.r#type == Type::Type_Vectord {
+            let mut i = [key.value, key.extra1, key.extra2, key.extra3];
+
+            i[0] ^= i[0] >> 32;
+            i[1] ^= i[1] >> 32;
+            i[2] ^= i[2] >> 32;
+            i[3] ^= i[3] >> 32;
+
+            let h = (i[0].wrapping_mul(73856093) as u32)
+                ^ (i[1].wrapping_mul(19349663) as u32)
+                ^ (i[2].wrapping_mul(83492791) as u32)
+                ^ (i[3].wrapping_mul(39916801) as u32);
 
             h as usize
         } else {

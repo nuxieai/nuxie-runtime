@@ -18,11 +18,17 @@ impl PartialEq for BcVmConst {
                 BcVmConstKind::Nil => true,
                 BcVmConstKind::Boolean => self.value.valueBoolean == rhs.value.valueBoolean,
                 BcVmConstKind::Number => self.value.valueNumber == rhs.value.valueNumber,
-                BcVmConstKind::Vector => {
-                    self.value.valueVector[0] == rhs.value.valueVector[0]
-                        && self.value.valueVector[1] == rhs.value.valueVector[1]
-                        && self.value.valueVector[2] == rhs.value.valueVector[2]
-                        && self.value.valueVector[3] == rhs.value.valueVector[3]
+                BcVmConstKind::Vectorf => {
+                    self.value.valueVectorf[0] == rhs.value.valueVectorf[0]
+                        && self.value.valueVectorf[1] == rhs.value.valueVectorf[1]
+                        && self.value.valueVectorf[2] == rhs.value.valueVectorf[2]
+                        && self.value.valueVectorf[3] == rhs.value.valueVectorf[3]
+                }
+                BcVmConstKind::Vectord => {
+                    self.value.valueVectord[0] == rhs.value.valueVectord[0]
+                        && self.value.valueVectord[1] == rhs.value.valueVectord[1]
+                        && self.value.valueVectord[2] == rhs.value.valueVectord[2]
+                        && self.value.valueVectord[3] == rhs.value.valueVectord[3]
                 }
                 BcVmConstKind::String => self.value.valueString == rhs.value.valueString,
                 BcVmConstKind::Import => self.value.valueImport == rhs.value.valueImport,
@@ -39,7 +45,8 @@ impl PartialEq for BcVmConst {
 pub union BcVmConstValue {
     pub valueBoolean: bool,
     pub valueNumber: f64,
-    pub valueVector: [f32; 4],
+    pub valueVectorf: [f32; 4],
+    pub valueVectord: [f64; 4],
     pub valueString: &'static str,
     pub valueImport: u32,
     pub valueTable: u32,

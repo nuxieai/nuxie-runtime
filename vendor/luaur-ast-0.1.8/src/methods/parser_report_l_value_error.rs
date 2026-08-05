@@ -25,6 +25,25 @@ impl Parser {
             }
         }
 
+        if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
+            let class_stat = self.get_matching_class(expr);
+            if !class_stat.is_null() {
+                let name = unsafe { (*(*class_stat).name).name.value };
+                let line = unsafe { (*class_stat).base.base.location.begin.line + 1 };
+                let location = unsafe { (*expr).base.location };
+                let expressions = self.copy_initializer_list_t(&[expr]);
+                return self.report_expr_error(
+                    location,
+                    expressions,
+                    format_args!(
+                        "'{}' refers to a class and cannot be used as a variable name (defined on line {})",
+                        unsafe { core::ffi::CStr::from_ptr(name).to_string_lossy() },
+                        line
+                    ),
+                );
+            }
+        }
+
         let location = unsafe { (*expr).base.location };
         let expressions = self.copy_initializer_list_t(&[expr]);
         self.report_expr_error(

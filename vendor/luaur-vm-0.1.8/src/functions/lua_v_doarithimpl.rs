@@ -21,6 +21,7 @@ use crate::records::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
+use crate::type_aliases::lua_vector_type::LuaVectorType;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
@@ -50,7 +51,7 @@ pub unsafe fn lua_v_doarithimpl(
     if !vb.is_null() && !vc.is_null() {
         match op {
             TMS::TM_ADD => {
-                setvvalue!(
+                setvvalue!(L,
                     ra,
                     *vb.add(0) + *vc.add(0),
                     *vb.add(1) + *vc.add(1),
@@ -60,7 +61,7 @@ pub unsafe fn lua_v_doarithimpl(
                 return;
             }
             TMS::TM_SUB => {
-                setvvalue!(
+                setvvalue!(L,
                     ra,
                     *vb.add(0) - *vc.add(0),
                     *vb.add(1) - *vc.add(1),
@@ -70,7 +71,7 @@ pub unsafe fn lua_v_doarithimpl(
                 return;
             }
             TMS::TM_MUL => {
-                setvvalue!(
+                setvvalue!(L,
                     ra,
                     *vb.add(0) * *vc.add(0),
                     *vb.add(1) * *vc.add(1),
@@ -80,7 +81,7 @@ pub unsafe fn lua_v_doarithimpl(
                 return;
             }
             TMS::TM_DIV => {
-                setvvalue!(
+                setvvalue!(L,
                     ra,
                     *vb.add(0) / *vc.add(0),
                     *vb.add(1) / *vc.add(1),
@@ -90,17 +91,17 @@ pub unsafe fn lua_v_doarithimpl(
                 return;
             }
             TMS::TM_IDIV => {
-                setvvalue!(
+                setvvalue!(L,
                     ra,
-                    luai_numidiv(*vb.add(0) as f64, *vc.add(0) as f64) as f32,
-                    luai_numidiv(*vb.add(1) as f64, *vc.add(1) as f64) as f32,
-                    luai_numidiv(*vb.add(2) as f64, *vc.add(2) as f64) as f32,
-                    luai_numidiv(*vb.add(3) as f64, *vc.add(3) as f64) as f32
+                    luai_numidiv(*vb.add(0) as f64, *vc.add(0) as f64) as LuaVectorType,
+                    luai_numidiv(*vb.add(1) as f64, *vc.add(1) as f64) as LuaVectorType,
+                    luai_numidiv(*vb.add(2) as f64, *vc.add(2) as f64) as LuaVectorType,
+                    luai_numidiv(*vb.add(3) as f64, *vc.add(3) as f64) as LuaVectorType
                 );
                 return;
             }
             TMS::TM_UNM => {
-                setvvalue!(ra, -*vb.add(0), -*vb.add(1), -*vb.add(2), -*vb.add(3));
+                setvvalue!(L, ra, -*vb.add(0), -*vb.add(1), -*vb.add(2), -*vb.add(3));
                 return;
             }
             _ => {}
@@ -112,10 +113,10 @@ pub unsafe fn lua_v_doarithimpl(
             lua_v_tonumber(rc, &mut tempc)
         };
         if !c_ptr.is_null() {
-            let nc = cast_to!(f32, nvalue!(c_ptr));
+            let nc = cast_to!(LuaVectorType, nvalue!(c_ptr));
             match op {
                 TMS::TM_MUL => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
                         *vb.add(0) * nc,
                         *vb.add(1) * nc,
@@ -125,7 +126,7 @@ pub unsafe fn lua_v_doarithimpl(
                     return;
                 }
                 TMS::TM_DIV => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
                         *vb.add(0) / nc,
                         *vb.add(1) / nc,
@@ -135,12 +136,12 @@ pub unsafe fn lua_v_doarithimpl(
                     return;
                 }
                 TMS::TM_IDIV => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
-                        luai_numidiv(*vb.add(0) as f64, nc as f64) as f32,
-                        luai_numidiv(*vb.add(1) as f64, nc as f64) as f32,
-                        luai_numidiv(*vb.add(2) as f64, nc as f64) as f32,
-                        luai_numidiv(*vb.add(3) as f64, nc as f64) as f32
+                        luai_numidiv(*vb.add(0) as f64, nc as f64) as LuaVectorType,
+                        luai_numidiv(*vb.add(1) as f64, nc as f64) as LuaVectorType,
+                        luai_numidiv(*vb.add(2) as f64, nc as f64) as LuaVectorType,
+                        luai_numidiv(*vb.add(3) as f64, nc as f64) as LuaVectorType
                     );
                     return;
                 }
@@ -154,10 +155,10 @@ pub unsafe fn lua_v_doarithimpl(
             lua_v_tonumber(rb, &mut tempb)
         };
         if !b_ptr.is_null() {
-            let nb = cast_to!(f32, nvalue!(b_ptr));
+            let nb = cast_to!(LuaVectorType, nvalue!(b_ptr));
             match op {
                 TMS::TM_MUL => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
                         nb * *vc.add(0),
                         nb * *vc.add(1),
@@ -167,7 +168,7 @@ pub unsafe fn lua_v_doarithimpl(
                     return;
                 }
                 TMS::TM_DIV => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
                         nb / *vc.add(0),
                         nb / *vc.add(1),
@@ -177,12 +178,12 @@ pub unsafe fn lua_v_doarithimpl(
                     return;
                 }
                 TMS::TM_IDIV => {
-                    setvvalue!(
+                    setvvalue!(L,
                         ra,
-                        luai_numidiv(nb as f64, *vc.add(0) as f64) as f32,
-                        luai_numidiv(nb as f64, *vc.add(1) as f64) as f32,
-                        luai_numidiv(nb as f64, *vc.add(2) as f64) as f32,
-                        luai_numidiv(nb as f64, *vc.add(3) as f64) as f32
+                        luai_numidiv(nb as f64, *vc.add(0) as f64) as LuaVectorType,
+                        luai_numidiv(nb as f64, *vc.add(1) as f64) as LuaVectorType,
+                        luai_numidiv(nb as f64, *vc.add(2) as f64) as LuaVectorType,
+                        luai_numidiv(nb as f64, *vc.add(3) as f64) as LuaVectorType
                     );
                     return;
                 }

@@ -39,7 +39,11 @@ impl Compiler {
                 import1 = expr;
             }
 
-            if !import_root.is_null() && self.can_import_chain(import_root) {
+            if !import_root.is_null()
+                && self.can_import_chain(import_root)
+                && !(luaur_common::FFlag::DebugLuauUserDefinedClasses.get()
+                    && self.class_locals.contains(&(*import_root).name))
+            {
                 let id0 = (*self.bytecode).add_constant_string(sref_ast_name((*import_root).name));
                 let id1 = (*self.bytecode).add_constant_string(sref_ast_name((*import1).index));
                 let id2 = if !import2.is_null() {

@@ -39,7 +39,6 @@ use crate::type_aliases::ast_argument_name::AstArgumentName;
 use crate::type_aliases::ast_class_member::AstClassMember;
 use crate::type_aliases::cst_node_map::CstNodeMap;
 use luaur_common::records::dense_hash_map::DenseHashMap;
-use luaur_common::records::dense_hash_set::DenseHashSet;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
@@ -60,7 +59,7 @@ pub struct Parser {
     pub(crate) type_function_depth: usize,
     pub(crate) local_map: DenseHashMap<AstName, *mut AstLocal>,
     pub(crate) local_stack: Vec<*mut AstLocal>,
-    pub(crate) classes_within_module: DenseHashSet<AstName>,
+    pub(crate) classes_within_module: DenseHashMap<AstName, *mut crate::records::ast_stat_class::AstStatClass>,
     pub(crate) parse_errors: Vec<ParseError>,
     pub(crate) match_recovery_stop_on_token: Vec<u32>,
     pub(crate) declared_export_bindings: DenseHashMap<AstName, Location>,

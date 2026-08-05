@@ -8,7 +8,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_vectormax(
-    _L: *mut lua_State,
+    L: *mut lua_State,
     res: StkId,
     arg0: *mut TValue,
     nresults: core::ffi::c_int,
@@ -19,7 +19,7 @@ pub unsafe fn luau_f_vectormax(
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
 
-        let mut result = [0.0f32; 4];
+        let mut result = [0.0 as crate::type_aliases::lua_vector_type::LuaVectorType; 4];
 
         result[0] = if (*b.offset(0)) > (*a.offset(0)) {
             (*b.offset(0))
@@ -44,7 +44,7 @@ pub unsafe fn luau_f_vectormax(
                 (*a.offset(3))
             }
         } else {
-            0.0f32
+            0.0 as crate::type_aliases::lua_vector_type::LuaVectorType
         };
 
         for i in 3..=nparams {
@@ -78,7 +78,7 @@ pub unsafe fn luau_f_vectormax(
             }
         }
 
-        setvvalue!(res, result[0], result[1], result[2], result[3]);
+        setvvalue!(L, res, result[0], result[1], result[2], result[3]);
         return 1;
     }
 

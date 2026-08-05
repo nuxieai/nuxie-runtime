@@ -1,5 +1,5 @@
 #[inline]
-pub fn luai_vecisnan(a: *const f32) -> bool {
+pub fn luai_vecisnan(a: *const crate::type_aliases::lua_vector_type::LuaVectorType) -> bool {
     if crate::macros::lua_vector_size::LUA_VECTOR_SIZE == 4 {
         unsafe {
             let v0 = *a;

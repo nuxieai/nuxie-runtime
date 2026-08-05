@@ -9,7 +9,7 @@ impl<'func, 'ops> Sccp<'func, 'ops> {
         }
         let inst = &self.func().instructions[op.index as usize];
         if self.is_pure_producer(inst.op) && inst.uses.is_empty() {
-            self.erase_op(op);
+            self.func_mut().erase_op(op);
         }
     }
 }

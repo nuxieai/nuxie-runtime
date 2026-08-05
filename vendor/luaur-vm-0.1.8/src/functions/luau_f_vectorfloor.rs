@@ -9,7 +9,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_vectorfloor(
-    _L: *mut lua_State,
+    L: *mut lua_State,
     res: StkId,
     arg0: *mut TValue,
     nresults: core::ffi::c_int,
@@ -20,7 +20,7 @@ pub unsafe fn luau_f_vectorfloor(
         let v = vvalue!(arg0).as_ptr();
 
         if LUA_VECTOR_SIZE == 4 {
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 (*v.offset(0)).floor(),
                 (*v.offset(1)).floor(),
@@ -28,12 +28,12 @@ pub unsafe fn luau_f_vectorfloor(
                 (*v.offset(3)).floor()
             );
         } else {
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 (*v.offset(0)).floor(),
                 (*v.offset(1)).floor(),
                 (*v.offset(2)).floor(),
-                0.0f32
+                0.0 as crate::type_aliases::lua_vector_type::LuaVectorType
             );
         }
 

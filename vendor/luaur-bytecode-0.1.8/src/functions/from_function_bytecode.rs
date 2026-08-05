@@ -41,6 +41,8 @@ const LBC_CONSTANT_TABLE_WITH_CONSTANTS: u8 =
     LuauBytecodeTag::LBC_CONSTANT_TABLE_WITH_CONSTANTS.0 as u8;
 #[allow(non_upper_case_globals)]
 const LBC_CONSTANT_INTEGER: u8 = LuauBytecodeTag::LBC_CONSTANT_INTEGER.0 as u8;
+#[allow(non_upper_case_globals)]
+const LBC_CONSTANT_VECTORD: u8 = LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8;
 
 pub fn from_function_bytecode(
     bytecode: String,
@@ -116,15 +118,24 @@ pub fn from_function_bytecode(
                 }
             }
             LBC_CONSTANT_VECTOR => {
-                fn_.constants[i].kind = BcVmConstKind::Vector;
+                fn_.constants[i].kind = BcVmConstKind::Vectorf;
                 unsafe {
-                    fn_.constants[i].value.valueVector = [
+                    fn_.constants[i].value.valueVectorf = [
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                     ];
                 }
+            }
+            LBC_CONSTANT_VECTORD => {
+                fn_.constants[i].kind = BcVmConstKind::Vectord;
+                fn_.constants[i].value.valueVectord = [
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                ];
             }
             LBC_CONSTANT_STRING => {
                 fn_.constants[i].kind = BcVmConstKind::String;

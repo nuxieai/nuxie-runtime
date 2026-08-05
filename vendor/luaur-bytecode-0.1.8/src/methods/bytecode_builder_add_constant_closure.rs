@@ -13,7 +13,9 @@ impl BytecodeBuilder {
         let k = ConstantKey {
             r#type: crate::enums::r#type::Type::Type_Closure,
             value: fid as u64,
-            extra: 0,
+            extra1: 0,
+            extra2: 0,
+            extra3: 0,
         };
 
         self.add_constant(k, c)

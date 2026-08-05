@@ -9,17 +9,17 @@ pub enum lua_Type {
     LUA_TLIGHTUSERDATA = 2,
     LUA_TNUMBER = 3,
     LUA_TINTEGER = 4,
-    LUA_TVECTOR = 5,
+    LUA_TVECTOR = if cfg!(feature = "lua_vector_double") { 13 } else { 5 },
 
-    LUA_TSTRING = 6,
+    LUA_TSTRING = if cfg!(feature = "lua_vector_double") { 5 } else { 6 },
 
-    LUA_TTABLE = 7,
-    LUA_TFUNCTION = 8,
-    LUA_TUSERDATA = 9,
-    LUA_TTHREAD = 10,
-    LUA_TBUFFER = 11,
-    LUA_TCLASS = 12,
-    LUA_TOBJECT = 13,
+    LUA_TTABLE = if cfg!(feature = "lua_vector_double") { 6 } else { 7 },
+    LUA_TFUNCTION = if cfg!(feature = "lua_vector_double") { 7 } else { 8 },
+    LUA_TUSERDATA = if cfg!(feature = "lua_vector_double") { 8 } else { 9 },
+    LUA_TTHREAD = if cfg!(feature = "lua_vector_double") { 9 } else { 10 },
+    LUA_TBUFFER = if cfg!(feature = "lua_vector_double") { 10 } else { 11 },
+    LUA_TCLASS = if cfg!(feature = "lua_vector_double") { 11 } else { 12 },
+    LUA_TOBJECT = if cfg!(feature = "lua_vector_double") { 12 } else { 13 },
 
     LUA_TDEADKEY = 14,
 

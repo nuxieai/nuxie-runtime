@@ -12,6 +12,7 @@ pub enum lua_GCOp {
     LUA_GCSETGOAL = 7,
     LUA_GCSETSTEPMUL = 8,
     LUA_GCSETSTEPSIZE = 9,
+    LUA_GCISPAUSED = 10,
 }
 
 #[allow(non_upper_case_globals)]
@@ -26,4 +27,5 @@ impl lua_GCOp {
     pub const LUA_GCSETGOAL: Self = Self::LUA_GCSETGOAL;
     pub const LUA_GCSETSTEPMUL: Self = Self::LUA_GCSETSTEPMUL;
     pub const LUA_GCSETSTEPSIZE: Self = Self::LUA_GCSETSTEPSIZE;
+    pub const LUA_GCISPAUSED: Self = Self::LUA_GCISPAUSED;
 }

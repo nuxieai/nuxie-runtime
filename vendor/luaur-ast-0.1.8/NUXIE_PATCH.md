@@ -29,3 +29,9 @@
 - Ported official Luau 0.729 delta (upstream ddcea05e..6e9b580e).
 - Touched areas: qualified-type prefix-local tracking and duplicate binary
   prefix validation, both registered dark behind their new flags.
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: module-wide class declaration tracking, class-name lvalue
+  diagnostics, and class-local AST allocation for compiler hoisting.

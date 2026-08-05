@@ -1,10 +1,10 @@
+use crate::enums::table_constant_kind::TableConstantKind;
 use crate::records::constant::Constant;
 use crate::records::constant_visitor::ConstantVisitor;
 use crate::records::variable::Variable;
 use crate::type_aliases::expr_constant_change_log::ExprConstantChangeLog;
 use crate::type_aliases::library_member_constant_callback::LibraryMemberConstantCallback;
 use crate::type_aliases::local_constant_change_log::LocalConstantChangeLog;
-use crate::enums::table_constant_kind::TableConstantKind;
 use luaur_ast::records::ast_expr::AstExpr;
 use luaur_ast::records::ast_expr_call::AstExprCall;
 use luaur_ast::records::ast_local::AstLocal;
@@ -18,6 +18,7 @@ impl<'a> ConstantVisitor<'a> {
         locals: &'a mut DenseHashMap<*mut AstLocal, Constant>,
         builtins: *const DenseHashMap<*mut AstExprCall, i32>,
         fold_library_k: bool,
+        vector_double_precision: bool,
         library_member_constant_cb: LibraryMemberConstantCallback,
         string_table: &'a mut AstNameTable,
         constant_table_locals: &'a DenseHashMap<*mut AstLocal, TableConstantKind>,
@@ -31,6 +32,7 @@ impl<'a> ConstantVisitor<'a> {
             locals,
             builtins,
             fold_library_k,
+            vector_double_precision,
             library_member_constant_cb,
             string_table,
             constant_tables: alloc::vec::Vec::new(),

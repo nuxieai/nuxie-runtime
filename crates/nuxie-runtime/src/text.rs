@@ -5611,7 +5611,7 @@ mod tests {
     }
 
     #[test]
-    fn quadratic_outline_conversion_uses_cpp_non_fused_glyph_mapping() {
+    fn quadratic_outline_conversion_uses_cpp_fused_glyph_mapping() {
         let mut pen = TextOutlinePen::new(
             0.1,
             0.0,
@@ -5639,13 +5639,14 @@ mod tests {
             mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
             mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
         );
-        assert_eq!(
+        assert_ne!(
             (expected.0.to_bits(), expected.1.to_bits()),
             (
                 mapped_then_lerped.0.to_bits(),
                 mapped_then_lerped.1.to_bits()
             ),
-            "the pinned C++ multiply-then-add mapping preserves this affine equality"
+            "the pinned C++ FMA-contracted Mat2D::mapPoints mapping breaks this \
+             affine equality, so conversion order must be observable"
         );
 
         pen.move_to(start.0, start.1);

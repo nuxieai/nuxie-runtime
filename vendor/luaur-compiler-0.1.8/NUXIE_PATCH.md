@@ -41,3 +41,9 @@
 - Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
 - Touched areas: superclass-aware `NEWCLASS` emission, shaped export tables,
   export-aware value tracking, delayed function exports, and proto marking.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: Rive `math.fround`/`Vector` builtin recognition, exact
+  arity/safety metadata, and numeric/vector result type mapping.

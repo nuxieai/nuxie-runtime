@@ -14,7 +14,9 @@ impl LuauBytecodeTag {
     /// Bytecode version; runtime supports [MIN, MAX], compiler emits TARGET by default but may emit a higher version when flags are enabled
     pub const LBC_VERSION_MIN: Self = Self(3);
     pub const LBC_VERSION_MAX: Self = Self(13);
-    pub const LBC_VERSION_TARGET: Self = Self(9);
+    // Rive holds TARGET at 7 until pre rive_0_36 runtimes sunset, v8/v9 add no
+    // stream constructs while LuauIntegerType2 stays off so v7 blobs are valid.
+    pub const LBC_VERSION_TARGET: Self = Self(7);
     pub const LBC_VERSION_CLASSES: Self = Self(100);
 
     /// Type encoding version

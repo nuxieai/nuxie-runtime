@@ -48,6 +48,7 @@ pub struct Parser {
     pub(crate) allocator: *mut Allocator,
     pub(crate) comment_locations: Vec<Comment>,
     pub(crate) hotcomments: Vec<HotComment>,
+    pub(crate) lexemes: Vec<Lexeme>,
     pub(crate) hotcomment_header: bool,
     pub(crate) recursion_counter: u32,
     pub(crate) name_self: AstName,

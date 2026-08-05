@@ -1,6 +1,7 @@
 use crate::records::ast_stat_block::AstStatBlock;
 use crate::records::comment::Comment;
 use crate::records::hot_comment::HotComment;
+use crate::records::lexeme::Lexeme;
 use crate::records::parse_error::ParseError;
 use crate::type_aliases::cst_node_map::CstNodeMap;
 use alloc::vec::Vec;
@@ -13,6 +14,7 @@ pub struct ParseResult {
     pub errors: Vec<ParseError>,
     pub comment_locations: Vec<Comment>,
     pub cst_node_map: CstNodeMap,
+    pub lexemes: Vec<Lexeme>,
 }
 
 impl Default for ParseResult {
@@ -24,6 +26,7 @@ impl Default for ParseResult {
             errors: Vec::new(),
             comment_locations: Vec::new(),
             cst_node_map: CstNodeMap::new(core::ptr::null_mut()),
+            lexemes: Vec::new(),
         }
     }
 }

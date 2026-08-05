@@ -9,4 +9,6 @@ pub mod records;
 mod rung7_tests;
 #[cfg(test)]
 mod rung8_tests;
+#[cfg(test)]
+mod rung9_tests;
 pub mod type_aliases;

@@ -66,3 +66,9 @@ Provenance:
 - Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
 - Touched areas: `NEWCLASS`/v13/v100/proto-flag definitions, rung flag
   retirements and dark registrations, and `VecDeque` emplacement helpers.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: the pinned bytecode-v7 target override and the exact 243,
+  245-255 Rive builtin ABI block.

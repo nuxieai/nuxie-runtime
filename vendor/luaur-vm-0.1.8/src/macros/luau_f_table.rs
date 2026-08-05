@@ -6,6 +6,7 @@ const fn make_fastcall_table() -> [luau_FastFunction; 256] {
     let mut table: [luau_FastFunction; 256] =
         [Some(crate::functions::luau_f_missing::luau_f_missing); 256];
     table[0] = None;
+    table[1] = Some(crate::functions::luau_f_assert::luau_f_assert);
     table[2] = Some(crate::functions::luau_f_abs::luau_f_abs);
     table[3] = Some(crate::functions::luau_f_acos::luau_f_acos);
     table[4] = Some(crate::functions::luau_f_asin::luau_f_asin);
@@ -44,12 +45,22 @@ const fn make_fastcall_table() -> [luau_FastFunction; 256] {
     table[37] = Some(crate::functions::luau_f_replace::luau_f_replace);
     table[38] = Some(crate::functions::luau_f_rrotate::luau_f_rrotate);
     table[39] = Some(crate::functions::luau_f_rshift::luau_f_rshift);
+    table[40] = Some(crate::functions::luau_f_type::luau_f_type);
+    table[41] = Some(crate::functions::luau_f_byte::luauF_byte);
+    table[42] = Some(crate::functions::luau_f_char::luau_f_char);
+    table[43] = Some(crate::functions::luau_f_len::luau_f_len);
+    table[44] = Some(crate::functions::luau_f_typeof::luau_f_typeof);
+    table[45] = Some(crate::functions::luau_f_sub::luau_f_sub);
     table[46] = Some(crate::functions::luau_f_clamp::luau_f_clamp);
     table[47] = Some(crate::functions::luau_f_sign::luau_f_sign);
     table[48] = Some(crate::functions::luau_f_round::luau_f_round);
     table[55] = Some(crate::functions::luau_f_countlz::luau_f_countlz);
     table[56] = Some(crate::functions::luau_f_countrz::luau_f_countrz);
+    table[57] = Some(crate::functions::luau_f_select::luau_f_select);
+    table[58] = Some(crate::functions::luau_f_rawlen::luau_f_rawlen);
     table[59] = Some(crate::functions::luau_f_extractk::luau_f_extractk);
+    table[62] = Some(crate::functions::luau_f_tonumber::luau_f_tonumber);
+    table[63] = Some(crate::functions::luau_f_tostring::luau_f_tostring);
     table[64] = Some(crate::functions::luau_f_byteswap::luau_f_byteswap);
     table[89] = Some(crate::functions::luau_f_lerp::luau_f_lerp);
     table[91] = Some(crate::functions::luau_f_isnan::luau_f_isnan);

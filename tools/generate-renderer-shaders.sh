@@ -6,14 +6,12 @@ rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 source_shader_dir="$rive_runtime/renderer/src/shaders"
 output_dir="${RENDERER_SHADER_OUTPUT_DIR:-$root/crates/nuxie-renderer/src/generated}"
 requested_upstream_out="${RENDERER_SHADER_UPSTREAM_OUT:-}"
-shader_overlay="$root/tools/rive-runtime-patches/395defdb-alpha-zero-dither.patch"
 export PATH="$HOME/.cargo/bin:$PATH"
 # Upstream's WGSL header minifier assigns short identifiers while iterating
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
 expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_overlay_digest="9a6e72367d2e30f0c7572c28f3babf8600a80f3a7ecef80f376efac72a409b89"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -29,11 +27,6 @@ done
 runtime_revision="$(git -C "$rive_runtime" rev-parse HEAD)"
 if [[ "$runtime_revision" != "$expected_runtime_revision" ]]; then
     echo "wrong rive-runtime revision: expected $expected_runtime_revision, got $runtime_revision" >&2
-    exit 1
-fi
-overlay_digest="$(shasum -a 256 "$shader_overlay" | awk '{print $1}')"
-if [[ "$overlay_digest" != "$expected_overlay_digest" ]]; then
-    echo "wrong shader overlay digest: expected $expected_overlay_digest, got $overlay_digest" >&2
     exit 1
 fi
 if ! git -C "$rive_runtime" diff --quiet HEAD -- renderer/src/shaders; then
@@ -62,14 +55,15 @@ if [[ -n "$untracked_local_sources" ]]; then
     exit 1
 fi
 
-# The runtime revision is a cycle pin and must not move for an independently
-# authorized shader port. Apply the exact shader-only diff from 395defdb to an
-# isolated copy of the pinned inputs instead.
+# 395defdb (alpha-zero dither suppression) was carried here as an overlay while
+# the pin predated it. The pin now sits at 4ac7b327, which already contains that
+# commit, so the inputs are taken from the pinned tree unmodified. Work from an
+# isolated copy anyway: generation writes into the tree and must not dirty the
+# reference checkout.
 shader_work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shader-inputs.XXXXXX")"
 trap 'rm -rf "$shader_work"' EXIT
 mkdir -p "$shader_work/renderer/src"
 cp -R "$source_shader_dir" "$shader_work/renderer/src/shaders"
-git -C "$shader_work" apply "$shader_overlay"
 shader_dir="$shader_work/renderer/src/shaders"
 upstream_out="${requested_upstream_out:-$shader_dir/out/generated}"
 

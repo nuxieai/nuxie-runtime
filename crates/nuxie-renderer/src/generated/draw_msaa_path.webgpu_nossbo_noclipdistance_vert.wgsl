@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -36,8 +36,8 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
-@id(2) override Yg: bool = true;
+@id(0) override Yg: bool = true;
+@id(2) override ah: bool = true;
 
 @group(0) @binding(7)
 var LC: texture_2d<u32>;
@@ -370,7 +370,7 @@ fn main_1() {
     let _e450 = local_1;
     let _e455 = textureLoad(AD, vec2<i32>(bitcast<i32>((_e446 & 127u)), bitcast<i32>((_e450 >> bitcast<u32>(7i)))), 0i);
     let _e457 = (_e455.x & 15u);
-    if Wg {
+    if Yg {
         let _e458 = (_e457 == 0u);
         if _e458 {
             phi_2352_ = _e455.y;
@@ -393,12 +393,12 @@ fn main_1() {
         let _e475 = phi_2354_;
         U1_[0u] = _e475;
     }
-    if Yg {
+    if ah {
         e2_ = f32(((_e455.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e457 == 1u) {
         let _e483 = unpack4x8unorm(_e455.y);
-        if Yg {
+        if ah {
             phi_2356_ = _e483;
         } else {
             let _e486 = (_e483.xyz * _e483.w);
@@ -409,7 +409,7 @@ fn main_1() {
         let _e506 = phi_2356_;
         f1_ = _e506;
     } else {
-        if (Wg && (_e457 == 0u)) {
+        if (Yg && (_e457 == 0u)) {
             let _e510 = (_e455.x >> bitcast<u32>(16i));
             let _e512 = n.Z5_;
             if (_e510 == 0u) {
@@ -448,8 +448,8 @@ fn main_1() {
         }
     }
     if _e444 {
-        let _e567 = n.df;
-        let _e569 = n.ef;
+        let _e567 = n.ff;
+        let _e569 = n.gf;
         let _e577 = vec4<f32>(((_e442.x * _e567) - 1f), ((_e442.y * _e569) - sign(_e569)), 0f, 1f);
         phi_2369_ = vec4<f32>(_e577.x, _e577.y, (1f - (f32(_e440) * 0.000061035156f)), _e577.w);
     } else {

@@ -94,6 +94,17 @@ def workspace_members(repo_root: Path) -> dict[str, Path]:
     live inside the repository: workspace members plus vendored/path
     dependencies (vendor/). Anything compiled from in-repo files can carry
     the poisoned-mtime state, so all of it participates in the digest."""
+    # `--offline` keeps resolution pinned to Cargo.lock, but it also refuses to
+    # reach the registry -- so a dependency added since the runner's cargo home
+    # was last warmed makes metadata fail outright. Populate the cache from the
+    # lockfile first (a no-op when it is already warm); `--locked` keeps this
+    # from resolving anything the lockfile does not already name. Best-effort:
+    # a workspace with no lockfile or no network still gets the sharper error
+    # from the offline metadata call below.
+    try:
+        run(["cargo", "fetch", "--locked"], cwd=repo_root, capture=True)
+    except ProvenanceError:
+        pass
     stdout = run(
         ["cargo", "metadata", "--format-version", "1", "--offline"],
         cwd=repo_root,

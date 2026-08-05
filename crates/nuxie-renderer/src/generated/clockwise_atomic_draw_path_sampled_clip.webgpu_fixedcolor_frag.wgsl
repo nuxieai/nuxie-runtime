@@ -1,39 +1,39 @@
-struct ee {
+struct ge {
     c2_: array<u32>,
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
-struct ee_1 {
+struct ge_1 {
     c2_: array<atomic<u32>>,
 }
 
-@id(7) override dh: bool = true;
-@id(3) override Zg: bool = true;
-@id(1) override Xg: bool = true;
-@id(0) override Wg: bool = true;
+@id(7) override fh: bool = true;
+@id(3) override bh: bool = true;
+@id(1) override Zg: bool = true;
+@id(0) override Yg: bool = true;
 
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
@@ -42,13 +42,13 @@ var aa: sampler;
 @group(0) @binding(8)
 var KD: texture_2d<f32>;
 @group(3) @binding(8)
-var Kb: sampler;
+var Mb: sampler;
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
 @group(1) @binding(13)
 var S5_: sampler;
 @group(0) @binding(6)
-var<storage, read_write> P0_: ee_1;
+var<storage, read_write> P0_: ge_1;
 @group(0) @binding(0)
 var<uniform> n: CC;
 var<private> f1_1: vec4<f32>;
@@ -120,7 +120,7 @@ fn main_1() {
                 phi_1967_ = ((0.001953125f * _e92) + _e93);
             }
             let _e100 = phi_1967_;
-            let _e103 = textureSampleLevel(KD, Kb, vec2<f32>(_e100, -(_e65.w)), 0f);
+            let _e103 = textureSampleLevel(KD, Mb, vec2<f32>(_e100, -(_e65.w)), 0f);
             phi_1969_ = vec4<f32>(_e103.x, _e103.y, _e103.z, _e103.w);
         } else {
             let _e71 = textureSampleLevel(IC, S5_, _e65.xy, (-2f - _e65.w));
@@ -145,8 +145,8 @@ fn main_1() {
             if _e123 {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_1462_ = Zg;
-                        if Zg {
+                        phi_1462_ = bh;
+                        if bh {
                             phi_1462_ = (_e120.x < -1.5f);
                         }
                         let _e191 = phi_1462_;
@@ -167,8 +167,8 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_1280_ = Zg;
-                        if Zg {
+                        phi_1280_ = bh;
+                        if bh {
                             phi_1280_ = (_e120.y < -1.5f);
                         }
                         let _e127 = phi_1280_;
@@ -216,14 +216,14 @@ fn main_1() {
     let _e215 = vec2<u32>(floor(_e209));
     let _e242 = (_e214 + (((((_e215.y >> bitcast<u32>(5u)) * (_e212 << bitcast<u32>(5u))) + ((_e215.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e215.x & 28u) << bitcast<u32>(5u)) + ((_e215.y & 28u) << bitcast<u32>(2i)))) + (((_e215.y & 3u) << bitcast<u32>(2i)) + (_e215.x & 3u))));
     phi_1990_ = 1f;
-    if Xg {
+    if Zg {
         let _e243 = L0_1;
         let _e246 = min(_e243.xy, _e243.zw);
         phi_1990_ = min(min(_e246.x, _e246.y), 1f);
     }
     let _e252 = phi_1990_;
-    phi_964_ = Wg;
-    if Wg {
+    phi_964_ = Yg;
+    if Yg {
         let _e254 = U1_1[0u];
         phi_964_ = (_e254 != 0f);
     }
@@ -337,11 +337,11 @@ fn main_1() {
     }
     let _e391 = phi_2042_;
     phi_2044_ = f32();
-    if dh {
+    if fh {
         let _e392 = gl_FragCoord_1;
         let _e394 = n.z3_;
         let _e396 = n.A3_;
-        if dh {
+        if fh {
             phi_2040_ = ((fract((52.982918f * fract(((0.06711056f * _e392.x) + (0.00583715f * _e392.y))))) * _e394) + _e396);
         } else {
             phi_2040_ = 0f;
@@ -355,7 +355,7 @@ fn main_1() {
     let _e425 = vec4<f32>(_e419.x, _e413.y, _e419.z, _e419.w);
     let _e431 = vec4<f32>(_e425.x, _e425.y, _e413.z, _e425.w);
     let _e432 = _e431.xyz;
-    if (dh && (_e391.w != 0f)) {
+    if (fh && (_e391.w != 0f)) {
         phi_2071_ = (vec3(_e410) + _e432);
     } else {
         phi_2071_ = _e432;

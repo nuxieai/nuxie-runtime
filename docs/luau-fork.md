@@ -151,7 +151,7 @@ ratchet floor at every rung):
 | 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | landed 2026-08-04: bytecode v12 unit (dark emission + unconditional loader), Proto::cost, SCCP + DenseHash2 foundation, resume-ccalls hardwiring, direct-field GC remarking; audit REJECT adjudicated to documented divergence 7 (&str error layer) |
 | 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | landed 2026-08-04: unsigned-class cluster, bytecode target 9, mutation-tracker unification, SCCP evaluator/driver; dark flags `LuauMathRoundNegZero`, `LuauGcMarkUdataAccess`; dormant arithToK MOD/POW divergence recorded in luaur-bytecode NUXIE_PATCH.md for re-audit |
 | 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | landed 2026-08-04: double-vector representation foundation (VECTORD tag, vectorPrecision, allocator/lvector, caller sweep), class hoisting, dark `LuauCompileIifeInline`/`LuauBytecodeFold`/`LuauXpcallFixMessageYieldPath`/`LuauBackedgeHeapCheck`, memorydump/allocationrate wrappers |
-| 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | inventoried |
+| 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | landed 2026-08-04: class inheritance (LOP_NEWCLASS/super/luaR_inheritclass), custom-pcall retirement (rung-1 unit now unconditional), CstAttr retirement, dark v13 double-vector constants / export-table optimization / managed debug names; audit-driven fix: class-shape decode mirrors C's resize+append doubled layout |
 | 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | inventoried |
 
 Rung 9 is the rive patch set: vector fast functions on 3 components,

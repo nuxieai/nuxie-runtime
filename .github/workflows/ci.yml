@@ -58,11 +58,18 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Each -gate target runs the tool's unit tests AND the check it performs,
+      # reporting both verdicts. They used to be one target where the tests
+      # were a prerequisite, so a red suite meant the check never ran and any
+      # real drift underneath stayed hidden.
       - name: Verify upstream C++ port manifest
-        run: make port-manifest-check
+        run: make port-manifest-gate
 
+      # if: always() so a port-manifest failure above cannot hide an
+      # attribution failure here -- they are independent verdicts.
       - name: Verify Rust attribution coverage
-        run: make rust-attribution-check
+        if: ${{ !cancelled() }}
+        run: make rust-attribution-gate
 
   # The hosted reusable workflow above owns the existing V2 gate but does not
   # export its raw summaries. Run the same floor separately so the scorecard
@@ -92,6 +99,17 @@ jobs:
 
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
+
+      # Apple-target feature compile coverage, deliberately ahead of the
+      # reference-runtime build so it costs nothing extra and reports on its
+      # own. nux-capi's size-report-roots harness compiles ONLY here and in
+      # tools/size-report.sh, whose inventory check runs before its fat-LTO
+      # build -- so before this gate existed, inventory drift kept the
+      # harness's compile errors permanently unreached. See
+      # feature-compile-gate in the Makefile.
+      - name: Compile Apple-only feature-gated code
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make feature-compile-gate-apple
 
       - name: Install Python
         uses: actions/setup-python@v5
@@ -124,6 +142,14 @@ jobs:
             --gate scripted-golden-compare \
             --output target/parity-scorecard/evidence/scripted-golden-compare.json \
             -- make scripted-golden-compare
+
+      # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
+      # an audit drift is a distinct failure and must not stop the workspace
+      # test floor below from running and reporting.
+      - name: Verify B-6 audit
+        if: always()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make b6-audit-check
 
       - name: Record workspace test floor
         if: always()
@@ -608,5 +634,18 @@ jobs:
       - name: Install Rust stable + clippy
         run: rustup toolchain install stable --profile minimal --component clippy --no-self-update
 
+      # The feature compile gate type-checks a few test targets, which
+      # include_bytes! the pinned assets.
+      - name: Fetch pinned test assets
+        run: make fixtures
+
       - name: Run the clippy lint gate
         run: make lint-gate
+
+      # Cheap compile coverage for first-party Cargo features that no other CI
+      # job builds; without it a #[cfg(feature = ...)] module can rot with no
+      # gate ever noticing. if: always() so a clippy failure above cannot hide
+      # a compile failure here. See feature-compile-gate in the Makefile.
+      - name: Compile feature-gated code with no other CI path
+        if: ${{ !cancelled() }}
+        run: make feature-compile-gate-portable

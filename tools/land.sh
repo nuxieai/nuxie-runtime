@@ -24,7 +24,12 @@ echo "land.sh: gate cache $cache"
 # Sources must be fresh before anything builds; cheap, always run.
 make rust-sources-fresh || exit 1
 
-gates=(cpp-probe runtime-frame-loop-port-check rust-attribution-check
+# The -gate variants run each tool's unit tests AND the check it performs,
+# reporting both. They replace the plain -check targets, which used to depend
+# on their unit tests: a red suite stopped the check from running at all, so a
+# real drift underneath stayed hidden until the tests were fixed.
+gates=(cpp-probe runtime-frame-loop-port-gate rust-attribution-gate
+       feature-compile-gate
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
        scripted-golden-compare silver-corpus-test)
 timing_gates=(perf-gate)

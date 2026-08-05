@@ -94,6 +94,42 @@ jobs:
         if: ${{ !cancelled() }}
         run: make pure-runtime-boundary-gate
 
+  # Pure-Python ledger checks over checked-in correspondence manifests. These
+  # rotted while nothing ran them (see docs/README.md migration cleanup); this
+  # job is what keeps them green. Each -gate target runs the tool's unit tests
+  # AND its check as independent verdicts.
+  port-ledgers:
+    name: Runtime port ledger gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Runtime drawing port gate
+        run: make runtime-drawing-port-gate
+
+      # if: !cancelled() so a drawing-ledger failure cannot hide frame-loop
+      # drift -- they are independent verdicts over separate ledgers.
+      - name: Runtime frame loop port gate
+        if: ${{ !cancelled() }}
+        run: make runtime-frame-loop-port-gate
+
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own
   # scorecard evidence, so this job no longer re-runs that floor on a second

@@ -4,6 +4,7 @@ use crate::functions::read_string::read_string;
 use crate::records::bc_function::BcFunction;
 use crate::records::bc_vm_const::BcVmConst;
 use crate::records::bytecode_graph_parser::BytecodeGraphParser;
+use crate::records::class_shape::ClassShape;
 use crate::records::debug_local_bytecode_graph::DebugLocal;
 use crate::records::table_shape::TableShape;
 use crate::records::typed_local_bytecode_graph::TypedLocal;
@@ -41,6 +42,10 @@ const LBC_CONSTANT_TABLE_WITH_CONSTANTS: u8 =
     LuauBytecodeTag::LBC_CONSTANT_TABLE_WITH_CONSTANTS.0 as u8;
 #[allow(non_upper_case_globals)]
 const LBC_CONSTANT_INTEGER: u8 = LuauBytecodeTag::LBC_CONSTANT_INTEGER.0 as u8;
+#[allow(non_upper_case_globals)]
+const LBC_CONSTANT_VECTORD: u8 = LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8;
+#[allow(non_upper_case_globals)]
+const LBC_CONSTANT_CLASS_SHAPE: u8 = LuauBytecodeTag::LBC_CONSTANT_CLASS_SHAPE.0 as u8;
 
 pub fn from_function_bytecode(
     bytecode: String,
@@ -116,15 +121,24 @@ pub fn from_function_bytecode(
                 }
             }
             LBC_CONSTANT_VECTOR => {
-                fn_.constants[i].kind = BcVmConstKind::Vector;
+                fn_.constants[i].kind = BcVmConstKind::Vectorf;
                 unsafe {
-                    fn_.constants[i].value.valueVector = [
+                    fn_.constants[i].value.valueVectorf = [
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                         read::<f32>(&data, &mut offset),
                     ];
                 }
+            }
+            LBC_CONSTANT_VECTORD => {
+                fn_.constants[i].kind = BcVmConstKind::Vectord;
+                fn_.constants[i].value.valueVectord = [
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                    read::<f64>(&data, &mut offset),
+                ];
             }
             LBC_CONSTANT_STRING => {
                 fn_.constants[i].kind = BcVmConstKind::String;
@@ -172,6 +186,39 @@ pub fn from_function_bytecode(
                 } else {
                     magnitude as i64
                 };
+            }
+            LBC_CONSTANT_CLASS_SHAPE => {
+                LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+
+                fn_.constants[i].kind = BcVmConstKind::ClassShape;
+                fn_.constants[i].value.valueClassShape = fn_.class_shapes.len() as u32;
+
+                let class_name = read_var_int(&data, &mut offset) as i32;
+                let num_props = read_var_int(&data, &mut offset) as usize;
+                let num_methods = read_var_int(&data, &mut offset) as usize;
+                let mut shape = ClassShape {
+                    className: class_name,
+                    propertyNames: Vec::new(),
+                    methodNames: Vec::new(),
+                };
+
+                // decb2d05 Bytecode/src/BytecodeGraph.cpp:182-189 resizes and then
+                // appends; preserve the doubled layout intentionally for pinned-C fidelity.
+                shape.propertyNames.resize(num_props, 0);
+                shape.methodNames.resize(num_methods, 0);
+
+                for _ in 0..num_props {
+                    shape
+                        .propertyNames
+                        .push(read_var_int(&data, &mut offset) as i32);
+                }
+                for _ in 0..num_methods {
+                    shape
+                        .methodNames
+                        .push(read_var_int(&data, &mut offset) as i32);
+                }
+
+                fn_.class_shapes.push(shape);
             }
             _ => {
                 LUAU_ASSERT!(false, "Unknown constant type!");

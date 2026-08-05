@@ -54,3 +54,21 @@ Provenance:
 - Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
 - Touched areas: bytecode-v9 target selection, retired compiler gates, new
   dark math/GC flags, and occupied-bucket lifetime support in `DenseHash2`.
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: bytecode vector-double tagging, dark rung flag registration,
+  and the clipped `DenseHash2` hash-shift assertion.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: `NEWCLASS`/v13/v100/proto-flag definitions, rung flag
+  retirements and dark registrations, and `VecDeque` emplacement helpers.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: the pinned bytecode-v7 target override and the exact 243,
+  245-255 Rive builtin ABI block.

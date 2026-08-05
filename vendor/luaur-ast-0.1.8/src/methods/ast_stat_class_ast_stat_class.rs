@@ -1,5 +1,6 @@
 use crate::records::ast_array::AstArray;
 use crate::records::ast_local::AstLocal;
+use crate::records::ast_expr::AstExpr;
 use crate::records::ast_node::AstNode;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_class::AstStatClass;
@@ -12,6 +13,7 @@ impl AstStatClass {
     pub fn new(
         location: Location,
         name: *mut AstLocal,
+        super_: *mut AstExpr,
         members: AstArray<AstClassMember>,
         exported: bool,
     ) -> Self {
@@ -25,6 +27,7 @@ impl AstStatClass {
                 has_semicolon: false,
             },
             name,
+            super_,
             members,
             exported,
         }
@@ -35,8 +38,9 @@ impl AstStatClass {
 pub extern "C" fn ast_stat_class_ast_stat_class(
     location: Location,
     name: *mut AstLocal,
+    super_: *mut AstExpr,
     members: AstArray<AstClassMember>,
     exported: bool,
 ) -> AstStatClass {
-    AstStatClass::new(location, name, members, exported)
+    AstStatClass::new(location, name, super_, members, exported)
 }

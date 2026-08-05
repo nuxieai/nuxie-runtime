@@ -11,9 +11,6 @@ impl Parser {
         &mut self,
         cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> AstArray<*mut AstAttr> {
-        luaur_common::LUAU_ASSERT!(
-            cst_attr_lists.is_null() || luaur_common::FFlag::LuauCstAttr.get()
-        );
         let r#type = self.lexer.current().r#type;
 
         luaur_common::macros::luau_assert::LUAU_ASSERT!(
@@ -25,14 +22,10 @@ impl Parser {
         while self.lexer.current().r#type == Type::Attribute
             || self.lexer.current().r#type == Type::AttributeOpen
         {
-            if luaur_common::FFlag::LuauCstAttr.get() {
-                if self.lexer.current().r#type == Type::Attribute {
-                    self.parse_attribute(&mut attributes);
-                } else {
-                    self.parse_attr_list(&mut attributes, cst_attr_lists);
-                }
+            if self.lexer.current().r#type == Type::Attribute {
+                self.parse_attribute(&mut attributes);
             } else {
-                self.parse_attribute_deprecated(&mut attributes);
+                self.parse_attr_list(&mut attributes, cst_attr_lists);
             }
         }
 

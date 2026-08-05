@@ -246,6 +246,7 @@ pub enum EditReason {
     ChildIndexOutOfRange,
     ChildSetMismatch,
     RecordSlotCrossesSiblings,
+    StaleRecordSlots,
     InvalidParent {
         parent: Option<NodeKind>,
         child: NodeKind,
@@ -3878,6 +3879,194 @@ impl Hierarchy<'_> {
         Ok(artboard_id)
     }
 
+    fn place_record_block_in_removed_slots(
+        &mut self,
+        object: ObjectId,
+        removed: &RemovedSubtree,
+    ) -> std::result::Result<ArtboardId, EditAbort> {
+        let indexed = self
+            .indexed_object(object)
+            .ok_or_else(|| self.abort(vec![EditId::Object(object)], EditReason::UnknownObject))?;
+        if indexed.visual_kind().is_none() {
+            return Err(self.abort(vec![EditId::Object(object)], EditReason::NonVisualObject));
+        }
+        let (artboard_id, artboard_index) = (indexed.artboard, indexed.artboard_index);
+        if removed.artboard != artboard_id {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(removed.root)],
+                EditReason::CrossArtboardReference {
+                    source: artboard_id,
+                    target: removed.artboard,
+                },
+            ));
+        }
+        let block_ids = self.subtree_ids(object);
+        let parent = self
+            .definitions
+            .artboards
+            .get(artboard_index)
+            .and_then(|artboard| artboard.records.get(indexed.record_index))
+            .and_then(|record| record.spec.visual().map(|(parent, _)| parent))
+            .ok_or_else(|| {
+                self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
+            })?;
+        let artboard = self
+            .definitions
+            .artboards
+            .get(artboard_index)
+            .ok_or_else(|| {
+                self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant)
+            })?;
+        let sibling_ids = artboard
+            .records
+            .iter()
+            .filter_map(|record| match &record.spec {
+                RecordSpec::Visual {
+                    parent: record_parent,
+                    ..
+                } if *record_parent == parent => Some(record.id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        let previous_siblings = artboard
+            .records
+            .iter()
+            .filter_map(|record| sibling_ids.contains(&record.id).then_some(record.id))
+            .collect::<Vec<_>>();
+        let mut remaining_ids =
+            Vec::with_capacity(artboard.records.len().saturating_sub(block_ids.len()));
+        let mut block_order = Vec::with_capacity(block_ids.len());
+        for record in &artboard.records {
+            if block_ids.contains(&record.id) {
+                block_order.push(record.id);
+            } else {
+                remaining_ids.push(record.id);
+            }
+        }
+        if block_order.len() != block_ids.len() {
+            return Err(self.abort(vec![EditId::Object(object)], EditReason::InternalInvariant));
+        }
+        let mut slots = removed
+            .records
+            .iter()
+            .map(|record| record.original_index)
+            .collect::<Vec<_>>();
+        slots.sort_unstable();
+        let mut slot_run_count = 0usize;
+        let mut slot_run_first_block_ids = Vec::new();
+        let mut previous_slot = None;
+        for (slot_index, slot) in slots.iter().copied().enumerate() {
+            let starts_run =
+                previous_slot.and_then(|previous: usize| previous.checked_add(1)) != Some(slot);
+            if starts_run {
+                slot_run_count = slot_run_count.saturating_add(1);
+                if let Some(id) = block_order.get(slot_index) {
+                    slot_run_first_block_ids.push(*id);
+                }
+            }
+            previous_slot = Some(slot);
+        }
+        if slot_run_count != removed.slot_run_anchors.len() {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(removed.root)],
+                EditReason::InternalInvariant,
+            ));
+        }
+        // This dry run on identities is the whole pre-mutation validation for
+        // placeability: nothing below it can fail on a footprint the real
+        // splice would reject. A footprint that no longer fits the stream is
+        // ordinary staleness — the token's slots are absolute pre-removal
+        // indices, so a second removal in the same transaction shortens the
+        // stream past a later token's late slots. Reserve `InternalInvariant`
+        // for the branches the caller's preconditions make impossible, so a
+        // consumer can treat it as corruption and refuse to swallow it.
+        let candidate_ids = place_values_in_removed_slots(remaining_ids, block_order, &slots)
+            .map_err(|error| {
+                self.abort(
+                    vec![EditId::Object(object), EditId::Object(removed.root)],
+                    match error {
+                        RemovedSlotPlacementError::Stale => EditReason::StaleRecordSlots,
+                        RemovedSlotPlacementError::Empty => EditReason::InternalInvariant,
+                    },
+                )
+            })?;
+        // Sibling order is the structural invariant; check it first so a
+        // cross-object misuse reports the crossing rather than staleness.
+        let next_siblings = candidate_ids
+            .iter()
+            .filter_map(|id| sibling_ids.contains(id).then_some(*id))
+            .collect::<Vec<_>>();
+        if next_siblings != previous_siblings {
+            return Err(self.abort(
+                vec![EditId::Object(object), EditId::Object(removed.root)],
+                EditReason::RecordSlotCrossesSiblings,
+            ));
+        }
+        for (block_id, anchor) in slot_run_first_block_ids
+            .iter()
+            .zip(&removed.slot_run_anchors)
+        {
+            let block_position = candidate_ids
+                .iter()
+                .position(|candidate| candidate == block_id)
+                .ok_or_else(|| {
+                    self.abort(
+                        vec![EditId::Object(object), EditId::Object(removed.root)],
+                        EditReason::InternalInvariant,
+                    )
+                })?;
+            let anchor_matches = match anchor {
+                Some(anchor) => {
+                    block_position
+                        .checked_sub(1)
+                        .and_then(|position| candidate_ids.get(position))
+                        == Some(anchor)
+                }
+                None => block_position == 0,
+            };
+            if !anchor_matches {
+                return Err(self.abort(
+                    vec![EditId::Object(object), EditId::Object(removed.root)],
+                    EditReason::StaleRecordSlots,
+                ));
+            }
+        }
+
+        let artboard = self
+            .definitions
+            .artboards
+            .get_mut(artboard_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    self.operation_index,
+                    vec![EditId::Object(object)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        let records = std::mem::take(&mut artboard.records);
+        let mut remaining = Vec::with_capacity(records.len().saturating_sub(block_ids.len()));
+        let mut block = Vec::with_capacity(block_ids.len());
+        for record in records {
+            if block_ids.contains(&record.id) {
+                block.push(record);
+            } else {
+                remaining.push(record);
+            }
+        }
+        artboard.records = place_values_in_removed_slots(remaining, block, &slots)
+            .expect("preflighted removed record slots accept the same complete block");
+        debug_assert!(
+            artboard
+                .records
+                .iter()
+                .map(|record| record.id)
+                .eq(candidate_ids),
+            "the identity dry run above must predict the record splice exactly; \
+             the validation it carries is worthless otherwise"
+        );
+        Ok(artboard_id)
+    }
+
     fn reparent(
         &mut self,
         object: ObjectId,
@@ -4090,17 +4279,26 @@ impl Hierarchy<'_> {
         let mut records = Vec::with_capacity(subtree_ids.len());
         let mut remaining =
             Vec::with_capacity(artboard.records.len().saturating_sub(subtree_ids.len()));
+        let mut slot_run_anchors = Vec::new();
+        let mut previous_was_removed = false;
+        let mut nearest_preceding_retained = None;
         for (original_index, definition) in std::mem::take(&mut artboard.records)
             .into_iter()
             .enumerate()
         {
             if subtree_ids.contains(&definition.id) {
+                if !previous_was_removed {
+                    slot_run_anchors.push(nearest_preceding_retained);
+                }
                 records.push(RemovedRecord {
                     original_index,
                     definition,
                 });
+                previous_was_removed = true;
             } else {
+                nearest_preceding_retained = Some(definition.id);
                 remaining.push(definition);
+                previous_was_removed = false;
             }
         }
         debug_assert!(!records.is_empty());
@@ -4109,6 +4307,7 @@ impl Hierarchy<'_> {
             artboard: artboard.id,
             root: object,
             records,
+            slot_run_anchors,
         })
     }
 
@@ -4120,6 +4319,7 @@ impl Hierarchy<'_> {
             artboard: artboard_id,
             root,
             records,
+            slot_run_anchors: _,
         } = removed;
         if records.is_empty() || !records.iter().any(|record| record.definition.id == root) {
             return Err(self.abort(vec![EditId::Object(root)], EditReason::InternalInvariant));
@@ -5258,6 +5458,52 @@ fn attach_preflighted_subtree(
     target.splice(insertion_index..insertion_index, subtree);
 }
 
+/// Why a removed subtree's record footprint could not take a block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemovedSlotPlacementError {
+    /// A slot names a position past the end of the current record stream. The
+    /// token's indices are absolute pre-removal positions, so any transaction
+    /// that removes a second subtree can legitimately shorten the stream out
+    /// from under a token that has not been adopted yet. Expected, recoverable.
+    Stale,
+    /// The block or the footprint was empty. The caller's own preconditions
+    /// (a visual object's subtree always contains its own record, a token
+    /// always retains the removed root's record) make this unreachable.
+    Empty,
+}
+
+fn place_values_in_removed_slots<T>(
+    mut remaining: Vec<T>,
+    block: Vec<T>,
+    slots: &[usize],
+) -> std::result::Result<Vec<T>, RemovedSlotPlacementError> {
+    if block.is_empty() || slots.is_empty() {
+        return Err(RemovedSlotPlacementError::Empty);
+    }
+    let filled_slot_count = block.len().min(slots.len());
+    let mut block = block.into_iter();
+    for slot in slots.iter().copied().take(filled_slot_count) {
+        if slot > remaining.len() {
+            return Err(RemovedSlotPlacementError::Stale);
+        }
+        let value = block.next().ok_or(RemovedSlotPlacementError::Empty)?;
+        remaining.insert(slot, value);
+    }
+    let extras = block.collect::<Vec<_>>();
+    if !extras.is_empty() {
+        let insertion_index = filled_slot_count
+            .checked_sub(1)
+            .and_then(|last| slots.get(last))
+            .and_then(|slot| slot.checked_add(1))
+            .ok_or(RemovedSlotPlacementError::Empty)?;
+        if insertion_index > remaining.len() {
+            return Err(RemovedSlotPlacementError::Stale);
+        }
+        remaining.splice(insertion_index..insertion_index, extras);
+    }
+    Ok(remaining)
+}
+
 #[derive(Debug, Clone)]
 struct RemovedRecord {
     original_index: usize,
@@ -5275,6 +5521,7 @@ pub struct RemovedSubtree {
     artboard: ArtboardId,
     root: ObjectId,
     records: Vec<RemovedRecord>,
+    slot_run_anchors: Vec<Option<ObjectId>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -10246,6 +10493,51 @@ impl SceneTx<'_> {
             operation_index,
         }
         .place_record_block(object, slot)?;
+        self.refresh_definition_index();
+        self.touched_artboards.insert(artboard_id, operation_index);
+        Ok(())
+    }
+
+    /// Place one replacement subtree's complete record block into a removed
+    /// subtree's original, possibly interleaved record footprint.
+    ///
+    /// Selective rematerialization is the motivating caller: after removing a
+    /// unit and recreating its replacement, the replacement's records retain
+    /// their current relative stream order while filling the token's sorted
+    /// original slots. Extra replacement records are inserted immediately
+    /// after the last filled slot; unused trailing slots close up. Native
+    /// child order is unchanged, and a placement that would change the
+    /// replacement root's current sibling order is rejected with
+    /// [`EditReason::RecordSlotCrossesSiblings`]. The replacement must be a
+    /// visual object on the same artboard from which the token was removed.
+    ///
+    /// The token's indices are positions in the pre-removal record stream. For
+    /// each maximal contiguous slot run, the token retains the nearest
+    /// preceding record outside the removed subtree, or the stream head. Each
+    /// run's first replacement record must still immediately follow that
+    /// anchor (or remain at the stream head); otherwise placement aborts with
+    /// [`EditReason::StaleRecordSlots`]. Tail-side edits that preserve these
+    /// preceding anchors are permitted, while prefix-shifting edits and
+    /// out-of-order adoption of multiple tokens are rejected.
+    ///
+    /// The same reason covers a footprint that no longer fits the stream at
+    /// all: because the indices are absolute, a transaction that removes more
+    /// than one subtree can shorten the stream past a later token's slots
+    /// while its anchors still verify. Both rejections are ordinary and
+    /// recoverable — nothing is mutated, the transaction stays usable, and a
+    /// caller can fall back to an anchored placement.
+    pub fn place_record_block_in_removed_slots(
+        &mut self,
+        object: ObjectId,
+        removed: &RemovedSubtree,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let artboard_id = Hierarchy {
+            definitions: self.definitions,
+            index: &self.definition_index,
+            operation_index,
+        }
+        .place_record_block_in_removed_slots(object, removed)?;
         self.refresh_definition_index();
         self.touched_artboards.insert(artboard_id, operation_index);
         Ok(())

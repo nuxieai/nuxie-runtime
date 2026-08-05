@@ -453,6 +453,14 @@ pub struct RuntimeFile {
     pub header: RuntimeHeader,
     pub objects: Vec<Option<RuntimeObject>>,
     pub import_statuses: Vec<RuntimeImportStatus>,
+    /// Dense C++ `Backboard::fileAssets` order resolved once at import.
+    ///
+    /// This is public only because `RuntimeFile` historically allowed public
+    /// struct construction. Runtime consumers should use [`Self::file_asset`]
+    /// and [`Self::file_assets`] rather than reading the imported object ids.
+    #[doc(hidden)]
+    #[serde(skip)]
+    pub file_asset_object_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -8068,12 +8076,31 @@ fn finalize_runtime_file_with_script_assets(
     let import_statuses = compute_import_statuses(&objects, script_assets_create_importers);
     validate_cpp_import_resolution(&objects, &import_statuses)?;
     apply_cpp_import_mutations(&mut objects, &import_statuses);
+    let file_asset_object_ids = imported_file_asset_object_ids(&objects, &import_statuses);
 
     Ok(RuntimeFile {
         header,
         objects,
         import_statuses,
+        file_asset_object_ids,
     })
+}
+
+fn imported_file_asset_object_ids(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+) -> Vec<usize> {
+    objects
+        .iter()
+        .enumerate()
+        .filter_map(|(index, object)| {
+            (import_statuses.get(index) == Some(&RuntimeImportStatus::Imported))
+                .then(|| object.as_ref())
+                .flatten()
+                .filter(|object| cpp_file_assets_contains(object))
+                .map(|_| index)
+        })
+        .collect()
 }
 
 fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {

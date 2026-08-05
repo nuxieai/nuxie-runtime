@@ -1,4 +1,4 @@
-fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
+fn split_static_text_lines(text: &str) -> Vec<StaticTextLine> {
     let mut lines = Vec::new();
     let mut line_start_byte = 0;
     let mut line_start_char = 0;
@@ -11,7 +11,7 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
         }
 
         lines.push(StaticTextLine {
-            text: &text[line_start_byte..byte_index],
+            text: text[line_start_byte..byte_index].to_owned(),
             char_start: line_start_char,
             line_index,
             soft_wrap_skipped_start: None,
@@ -38,7 +38,7 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
     // its own U+200B sentinel; that is a separate future geometry surface.
     if line_start_byte < text.len() || lines.is_empty() {
         lines.push(StaticTextLine {
-            text: &text[line_start_byte..],
+            text: text[line_start_byte..].to_owned(),
             char_start: line_start_char,
             line_index,
             soft_wrap_skipped_start: None,

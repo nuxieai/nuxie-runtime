@@ -4,7 +4,7 @@ use luaur_common::enums::luau_opcode::LuauOpcode;
 
 impl Compiler {
     pub fn get_export_table_reg(&mut self, node: *mut AstNode) -> u8 {
-        let local_ptr = &mut self.export_table_local as *mut _;
+        let local_ptr = &mut self.exports.export_table_local as *mut _;
         let reg = self.get_local_reg(local_ptr);
         if reg >= 0 {
             return reg as u8;

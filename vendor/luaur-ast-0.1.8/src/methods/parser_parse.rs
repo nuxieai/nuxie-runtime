@@ -45,6 +45,7 @@ impl Parser {
                     &mut p.cst_node_map,
                     DenseHashMap::new(core::ptr::null_mut()),
                 ),
+                lexemes: std::mem::take(&mut p.lexemes),
             }
         }));
 
@@ -64,6 +65,7 @@ impl Parser {
                             &mut p.cst_node_map,
                             DenseHashMap::new(core::ptr::null_mut()),
                         ),
+                        lexemes: Vec::new(),
                     }
                 } else {
                     std::panic::resume_unwind(payload);

@@ -13,8 +13,11 @@ pub struct LuauBytecodeTag(pub u32);
 impl LuauBytecodeTag {
     /// Bytecode version; runtime supports [MIN, MAX], compiler emits TARGET by default but may emit a higher version when flags are enabled
     pub const LBC_VERSION_MIN: Self = Self(3);
-    pub const LBC_VERSION_MAX: Self = Self(12);
-    pub const LBC_VERSION_TARGET: Self = Self(9);
+    pub const LBC_VERSION_MAX: Self = Self(13);
+    // Rive holds TARGET at 7 until pre rive_0_36 runtimes sunset, v8/v9 add no
+    // stream constructs while LuauIntegerType2 stays off so v7 blobs are valid.
+    pub const LBC_VERSION_TARGET: Self = Self(7);
+    pub const LBC_VERSION_CLASSES: Self = Self(100);
 
     /// Type encoding version
     pub const LBC_TYPE_VERSION_MIN: Self = Self(1);
@@ -33,14 +36,16 @@ impl LuauBytecodeTag {
     pub const LBC_CONSTANT_TABLE_WITH_CONSTANTS: Self = Self(8);
     pub const LBC_CONSTANT_INTEGER: Self = Self(9);
     pub const LBC_CONSTANT_CLASS_SHAPE: Self = Self(10);
+    pub const LBC_CONSTANT_VECTORD: Self = Self(11);
 
     /** WARNING: This must always be last. */
-    pub const LBC_CONSTANT__COUNT: Self = Self(11);
+    pub const LBC_CONSTANT__COUNT: Self = Self(12);
 }
 
 pub const LBC_VERSION_MIN: LuauBytecodeTag = LuauBytecodeTag::LBC_VERSION_MIN;
 pub const LBC_VERSION_MAX: LuauBytecodeTag = LuauBytecodeTag::LBC_VERSION_MAX;
 pub const LBC_VERSION_TARGET: LuauBytecodeTag = LuauBytecodeTag::LBC_VERSION_TARGET;
+pub const LBC_VERSION_CLASSES: LuauBytecodeTag = LuauBytecodeTag::LBC_VERSION_CLASSES;
 
 pub const LBC_TYPE_VERSION_MIN: LuauBytecodeTag = LuauBytecodeTag::LBC_TYPE_VERSION_MIN;
 pub const LBC_TYPE_VERSION_MAX: LuauBytecodeTag = LuauBytecodeTag::LBC_TYPE_VERSION_MAX;
@@ -58,5 +63,6 @@ pub const LBC_CONSTANT_TABLE_WITH_CONSTANTS: LuauBytecodeTag =
     LuauBytecodeTag::LBC_CONSTANT_TABLE_WITH_CONSTANTS;
 pub const LBC_CONSTANT_INTEGER: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_INTEGER;
 pub const LBC_CONSTANT_CLASS_SHAPE: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_CLASS_SHAPE;
+pub const LBC_CONSTANT_VECTORD: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_VECTORD;
 
 pub const LBC_CONSTANT__COUNT: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT__COUNT;

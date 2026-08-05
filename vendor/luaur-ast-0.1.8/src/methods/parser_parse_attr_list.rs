@@ -21,7 +21,6 @@ impl Parser {
         attributes: &mut TempVector<'_, *mut AstAttr>,
         cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         let open = *self.lexer.current();
         luaur_common::LUAU_ASSERT!(open.r#type == Type::AttributeOpen);
         self.next_lexeme();

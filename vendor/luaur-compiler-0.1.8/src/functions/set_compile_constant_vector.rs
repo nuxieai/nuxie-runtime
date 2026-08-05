@@ -6,10 +6,10 @@ pub fn set_compile_constant_vector(constant: CompileConstant, x: f32, y: f32, z:
     let target = constant as *mut Constant;
 
     unsafe {
-        (*target).r#type = Type::Type_Vector;
-        (*target).data.value_vector[0] = x;
-        (*target).data.value_vector[1] = y;
-        (*target).data.value_vector[2] = z;
-        (*target).data.value_vector[3] = w;
+        (*target).r#type = Type::Type_Vectorf;
+        (*target).data.value_vectorf[0] = x;
+        (*target).data.value_vectorf[1] = y;
+        (*target).data.value_vectorf[2] = z;
+        (*target).data.value_vectorf[3] = w;
     }
 }

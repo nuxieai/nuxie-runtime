@@ -116,7 +116,15 @@ impl Compiler {
             if !expr_local.is_null() {
                 if luaur_common::FFlag::LuauExportValueSyntax.get()
                     && (*(*expr_local).local).is_exported
-                    && !self.exported_classes.contains(&(*expr_local).local)
+                    && !self
+                        .exports
+                        .exported_classes
+                        .contains(&(*expr_local).local)
+                    && (!luaur_common::FFlag::LuauOptimizeExportTable.get()
+                        || !self
+                            .exports
+                            .exported_functions
+                            .contains(&(*expr_local).local))
                 {
                     let name = sref_ast_name((*(*expr_local).local).name);
                     let cid = (*self.bytecode).add_constant_string(name);
@@ -126,7 +134,7 @@ impl Compiler {
                             format_args!("Exceeded constant limit; simplify the code to compile"),
                         );
                     }
-                    let export_local = &mut self.export_table_local as *mut _;
+                    let export_local = &mut self.exports.export_table_local as *mut _;
                     let table_reg = self.get_local_reg(export_local);
                     if table_reg >= 0 {
                         (*self.bytecode).emit_abc(

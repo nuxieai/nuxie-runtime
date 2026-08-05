@@ -20469,7 +20469,7 @@ fn upstream_quantize_and_looping_timeline_event_fixtures() {
 }
 
 #[test]
-#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-mutable-animation-quantize"]
+#[ignore = "finding: docs/upstream-test-findings.md#finding-mutable-animation-quantize"]
 fn upstream_quantize_toggle_requires_missing_mutable_definition_api() {
     panic!(
         "upstream linear_animation_test.cpp:85-87 mutates LinearAnimation::quantize(false); \
@@ -21048,7 +21048,7 @@ fn upstream_gamepad_batch_buffer_contract_is_public() {
 }
 
 #[test]
-#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-silver-hit-test-fixtures"]
+#[ignore = "coverage finding: docs/upstream-test-findings.md#finding-silver-hit-test-fixtures"]
 fn upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions() {
     panic!(
         "the remaining hittest_test.cpp fixtures use pointer positions computed from live layout \
@@ -21057,7 +21057,7 @@ fn upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions() {
 }
 
 #[test]
-#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-state-machine-fixture-surface"]
+#[ignore = "coverage finding: docs/upstream-test-findings.md#finding-state-machine-fixture-surface"]
 fn upstream_state_machine_fixture_contracts_without_exact_runtime_equivalents() {
     panic!(
         "the listed state_machine_test.cpp fixtures require exact state/reset/view-model \
@@ -21066,7 +21066,7 @@ fn upstream_state_machine_fixture_contracts_without_exact_runtime_equivalents() 
 }
 
 #[test]
-#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-scripting-fixture-oracles"]
+#[ignore = "coverage finding: docs/upstream-test-findings.md#finding-scripting-fixture-oracles"]
 fn upstream_scripting_fixture_contracts_require_script_and_silver_oracles() {
     panic!(
         "the listed scripting fixtures require pinned script-console/view-model results and \
@@ -25524,11 +25524,14 @@ fn assert_fl_c5_self_chaining_event_stops_at_100_against_cpp() {
             &format!("{label} step {step}"),
         );
     }
+    // Since upstream 482b24a1, events applied during loop iterations beyond
+    // the first stay host-visible until the next applyEvents: 99 loop-applied
+    // batches plus batch 101 pending after exactly 100 callbacks.
     assert_eq!(
-        cpp_reports[1].reported_event_count, 1,
-        "pinned C++ leaves batch 101 pending after exactly 100 callbacks"
+        cpp_reports[1].reported_event_count, 100,
+        "pinned C++ keeps loop-applied batches host-visible plus batch 101 pending"
     );
-    assert_eq!(rust_reports[1].1.reported_event_count(), 1);
+    assert_eq!(rust_reports[1].1.reported_event_count(), 100);
 }
 
 #[test]
@@ -83872,15 +83875,16 @@ fn fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp() {
         "pinned C++ constructor phases must remain strictly ordered"
     );
 
-    let rust_path =
-        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_instance.rs");
+    let rust_path = repo_root().join(
+        "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
+    );
     let rust_source = std::fs::read_to_string(&rust_path)
         .unwrap_or_else(|error| panic!("read {}: {error}", rust_path.display()));
     let rust_constructor_start = rust_source
         .find("pub(crate) fn new(")
         .expect("Rust StateMachineInstance::new");
     let rust_constructor_end = rust_source[rust_constructor_start..]
-        .find("fn initialize_ordinary_data_bind_container")
+        .find("fn initialize_component_provided_groups")
         .map(|offset| rust_constructor_start + offset)
         .expect("Rust constructor end");
     let rust_constructor = &rust_source[rust_constructor_start..rust_constructor_end];

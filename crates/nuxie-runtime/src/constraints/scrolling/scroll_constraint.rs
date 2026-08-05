@@ -20,13 +20,8 @@ pub(in crate::constraints) fn apply(
     if component_index != content {
         return false;
     }
-    let computed_layout_bounds = artboard
-        .runtime_graph()
-        .and_then(|graph| artboard.runtime_taffy_layout_bounds(graph, artboard.runtime_file()));
-    let retained_layout_bounds = artboard.layout_constraint_bounds.clone();
-    let layout_bounds = retained_layout_bounds
-        .as_deref()
-        .or(computed_layout_bounds.as_ref());
+    let retained_layout_bounds = artboard.retained_layout_bounds_arc();
+    let layout_bounds = retained_layout_bounds.as_deref();
     artboard
         .objects
         .component_mut(constraint_handle)

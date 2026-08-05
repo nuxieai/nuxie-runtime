@@ -59,7 +59,7 @@ luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
 luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
-# Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).
+# Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
 # only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-schema,
 # nuxie, nux-capi) --
@@ -88,7 +88,7 @@ panic = "unwind"
 # Dedicated size-optimized profile for the SDK cdylib. Does NOT affect the
 # `release` profile the perf gate depends on. Build with `--profile
 # release-size` (see `make size-report` / docs/SIZE.md). Levers here are the
-# cheap wins from docs/v2-status.md item 26(d): size-first codegen (opt-level
+# cheap size wins: size-first codegen (opt-level
 # "z"), aggressive symbol stripping, and fat LTO carried over from release.
 # Override opt-level ad hoc with CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL=s|3.
 [profile.release-size]

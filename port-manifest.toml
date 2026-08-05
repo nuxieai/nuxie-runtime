@@ -1965,7 +1965,7 @@ note = "FTAIL closes the SEMRES remainder: data_binding_lists is exact across th
 upstream = "src/semantic/semantic_inference_registry.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/semantic_inference_registry.rs"
-note = "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds (SEMRES-report.md)."
+note = "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"

@@ -26,6 +26,12 @@ The canonical source patch changes only:
 - `src/metal/device.rs`
 - `src/metal/mod.rs`
 
+`Cargo.toml` is otherwise the stock normalized manifest, with one addition: an
+empty `[workspace]` table so cargo stops its workspace search at this package
+instead of walking up into an enclosing checkout. See
+`../wgpu-30.0.0/NUXIE_PATCH.md` for why. It is Cargo extraction metadata, so it
+is outside the source-patch hash below.
+
 Upstream identity and review material:
 
 - Package: crates.io `wgpu-hal` 30.0.0

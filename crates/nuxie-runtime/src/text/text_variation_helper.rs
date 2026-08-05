@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct StyledTextGlyph {
     glyph_id: u32,
     char_index: usize,
@@ -13,7 +13,7 @@ struct StyledTextGlyph {
 }
 fn shape_text_glyphs_for_style(
     font_bytes: &[u8],
-    style: &StaticTextStyle<'_>,
+    style: &StaticTextStyle,
     instance: &ArtboardInstance,
     text: &str,
 ) -> Result<Vec<TextGlyph>> {
@@ -27,7 +27,7 @@ fn shape_text_glyphs_for_style(
 }
 fn shape_text_glyphs_for_style_with_variations(
     font_bytes: &[u8],
-    style: &StaticTextStyle<'_>,
+    style: &StaticTextStyle,
     instance: &ArtboardInstance,
     text: &str,
     localized: &BTreeMap<u32, f32>,

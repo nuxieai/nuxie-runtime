@@ -33,7 +33,6 @@ pub unsafe fn lua_l_pcallyieldable(
     nresults: c_int,
     errfunc: c_int,
 ) -> c_int {
-    LUAU_ASSERT!(luaur_common::FFlag::LuauCustomYieldablePcalls.get());
     api_check!(L, iscfunction!((*(*L).ci).func));
     let cl = clvalue!((*(*L).ci).func);
     let c = core::ptr::addr_of!((*cl).inner.c).cast::<CClosure>();

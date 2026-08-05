@@ -31,7 +31,8 @@ pub fn getOpLength(op: LuauOpcode) -> i32 {
         | LuauOpcode::LOP_NAMECALLUDATA
         | LuauOpcode::LOP_NEWCLASSMEMBER
         | LuauOpcode::LOP_CALLFB
-        | LuauOpcode::LOP_CMPPROTO => 2,
+        | LuauOpcode::LOP_CMPPROTO
+        | LuauOpcode::LOP_NEWCLASS => 2,
 
         _ => 1,
     }

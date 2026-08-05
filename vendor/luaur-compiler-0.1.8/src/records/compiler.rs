@@ -3,11 +3,12 @@ use crate::enums::table_constant_kind::TableConstantKind;
 use crate::records::builtin_ast_types::BuiltinAstTypes;
 use crate::records::capture::Capture;
 use crate::records::constant::Constant;
+use crate::records::exports::Exports;
 use crate::records::function::Function;
 use crate::records::inline_frame::InlineFrame;
 use crate::records::local::Local;
-use crate::records::r#loop::Loop;
 use crate::records::loop_jump::LoopJump;
+use crate::records::r#loop::Loop;
 use crate::records::table_shape::TableShape;
 use crate::records::variable::Variable;
 use alloc::string::String;
@@ -40,13 +41,14 @@ pub struct Compiler {
     pub function_types: DenseHashMap<*mut AstExprFunction, String>,
     pub local_types: DenseHashMap<*mut AstLocal, LuauBytecodeType>,
     pub expr_types: DenseHashMap<*mut AstExpr, LuauBytecodeType>,
+    pub class_locals: DenseHashMap<AstName, *mut AstLocal>,
     pub inline_builtins: DenseHashMap<*mut AstExprCall, i32>,
     pub inline_builtins_backup: DenseHashMap<*mut AstExprCall, i32>,
     pub expr_changes: Vec<crate::records::expr_constant_change::ExprConstantChange>,
     pub local_changes: Vec<crate::records::local_constant_change::LocalConstantChange>,
     pub builtin_types: BuiltinAstTypes,
     pub names: *mut AstNameTable,
-    pub export_table_local: luaur_ast::records::ast_local::AstLocal,
+    pub exports: Exports,
     pub builtins_fold: *const DenseHashMap<*mut AstExprCall, i32>,
     pub builtins_fold_library_k: bool,
     pub reg_top: u32,
@@ -64,6 +66,4 @@ pub struct Compiler {
     pub loops: Vec<Loop>,
     pub inline_frames: Vec<InlineFrame>,
     pub captures: Vec<Capture>,
-    pub exported_locals: Vec<*mut AstLocal>,
-    pub exported_classes: DenseHashMap<*mut AstLocal, u8>,
 }

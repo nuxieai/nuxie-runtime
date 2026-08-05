@@ -9155,7 +9155,7 @@ impl ArtboardInstance {
         }
 
         let mut changed = false;
-        let mut child_layout_changed = false;
+        let mut dirty_mounted_layout_hosts = BTreeSet::new();
         let mut consumed_mounted_layout_hosts = BTreeSet::new();
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         for (host_local_id, mut updates) in updates {
@@ -9300,7 +9300,9 @@ impl ArtboardInstance {
                 // `artboard.cpp:1245-1253`).
                 nested.acknowledge_consumed_child_layout_revision();
             }
-            child_layout_changed |= mounted_layout_changed;
+            if mounted_layout_changed {
+                dirty_mounted_layout_hosts.insert(host_local_id);
+            }
         }
         if !consumed_mounted_layout_hosts.is_empty() {
             // The consumed child must participate in the next parent solve so
@@ -9316,14 +9318,23 @@ impl ArtboardInstance {
                 .collect();
         }
         self.acknowledge_consumed_mounted_layout_generation(&consumed_mounted_layout_hosts);
-        if child_layout_changed {
+        if !dirty_mounted_layout_hosts.is_empty() {
             // The mounted child can be a hug-sized provider in this artboard's
             // layout tree, so its live text/shape size participates in the
             // parent's layout cache key.
             if !self.layout_node_owned_by_host {
                 self.suppress_mounted_component_list_layout_updates = true;
             }
-            self.mark_layout_changed();
+            for host_local_id in dirty_mounted_layout_hosts {
+                if self
+                    .component(host_local_id)
+                    .is_some_and(|component| component.concrete.layout.is_some())
+                {
+                    self.mark_layout_node_changed(host_local_id);
+                } else {
+                    crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
+                }
+            }
         }
         changed
     }

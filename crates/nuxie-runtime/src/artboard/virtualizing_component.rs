@@ -55,7 +55,7 @@ impl ArtboardInstance {
         list.item_transforms.push(transform);
         *list.order_cache.borrow_mut() = Default::default();
         self.mark_nested_structure_changed();
-        self.mark_layout_changed();
+        crate::layout_node_provider::mark_layout_node_dirty(self, list_local_id);
         self.mark_prepared_changed();
         true
     }
@@ -85,7 +85,7 @@ impl ArtboardInstance {
         };
         self.component_list_resource_pools.put(list_local_id, item);
         self.mark_nested_structure_changed();
-        self.mark_layout_changed();
+        crate::layout_node_provider::mark_layout_node_dirty(self, list_local_id);
         self.mark_prepared_changed();
         true
     }

@@ -9,11 +9,11 @@ remediation decisions. An EXECUTOR session (cheaper model, e.g.
 Sonnet-class) performs the mechanical audit sweep described here. The
 executor produces evidence records; it never decides remediation.
 
-Authority documents, in order: docs/b6-structural-audit-spec.md (the
+Authority documents, in order: docs/b6-audit/SPEC.md (the
 validated five-axis brief, schema, validity rules), docs/PORTING.md §8
 (the architecture-fidelity rules findings must cite), port-manifest.toml
 (the 447-row queue), docs/rb1-compensation-inventory.md (worked example of
-a DIVERGENT family — style reference only, never evidence).
+a DIVERGENT family — style reference only, never evidence; in git history).
 
 ## Phase 0 — Cluster partition (executor, first commit)
 

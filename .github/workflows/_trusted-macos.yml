@@ -25,8 +25,8 @@ jobs:
   # the immutable event context inside that trusted workflow. A caller can set
   # force_hosted to broaden execution to GitHub-hosted macOS, but can never use
   # it to put a fork pull request on a persistent Nuxie runner.
-  v2-golden:
-    name: V2 golden compare
+  golden-compare:
+    name: Golden compare
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -68,7 +68,16 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make scripted-golden-compare
 
+      # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
+      # an audit drift is a distinct failure and must not stop the workspace
+      # tests below from running and reporting.
+      - name: Verify B-6 audit
+        if: ${{ !cancelled() }}
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make b6-audit-check
+
       - name: Run Rust workspace tests with the pinned C++ oracle
+        if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}/rive-rust
         run: make cpp-oracle-workspace-tests
 

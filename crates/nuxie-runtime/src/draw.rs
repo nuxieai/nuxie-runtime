@@ -52,13 +52,13 @@ use crate::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands;
 use crate::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned;
 use crate::text::{
     RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
-    RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
-    runtime_text_draw_data, runtime_text_input_shape_paint_commands,
-    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_clip_bounds,
-    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
-    static_text_layout_debug_report, static_text_layout_measure_bounds,
-    static_text_selection_rects, static_text_value, static_text_value_run_hit,
-    text_input_layout_measure_bounds,
+    RuntimeTextLayoutDebugReport, StaticShapedTextTopology, StaticTextClipBounds, StaticTextSlice,
+    build_static_text_constraint_bounds, build_static_text_constraint_bounds_from_slice,
+    runtime_text_draw_data_from_retained_topology, runtime_text_input_shape_paint_commands,
+    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_constraint_bounds,
+    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
+    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
+    static_text_value_run_hit, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -117,7 +117,7 @@ use slice_mesh::{RuntimeSliceMeshOwner, RuntimeSliceMeshUpdate, RuntimeSliceMesh
 // the recursion to simple paths over the (few) artboards -- unlike a plain depth
 // cap it can neither overflow the stack nor fan out exponentially, and it never
 // truncates legitimate deep nesting. It is a DELIBERATE terminate-where-C++-
-// would-otherwise-loop divergence (v2-status item 27), unreachable on valid
+// would-otherwise-loop divergence (register D-list), unreachable on valid
 // (acyclic) files, so golden output is unchanged.
 
 macro_rules! cached_runtime_property_key {
@@ -674,11 +674,7 @@ impl ArtboardInstance {
     }
 
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawableDispatch> {
-        // FL-E5 made the immutable runtime file an occurrence-retained input.
-        // Keep layout measurement on that retained engine state so Text can
-        // shape against the constraints Taffy passes during this solve.
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
-        self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
+        self.draw_commands_with_layout_bounds(graph, self.retained_layout_bounds())
     }
 
     /// Settle pending writes and return visible Shape and Text locals under
@@ -1873,6 +1869,9 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return;
         };
+        // This is the bootstrap that produces Text's first intrinsic bounds,
+        // which are themselves an input to layout. It is deliberately not a
+        // steady-frame fallback: the missing-bounds guard makes it one-shot.
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
         let Some(bounds) = build_static_text_constraint_bounds(
             runtime,
@@ -1889,6 +1888,7 @@ impl ArtboardInstance {
         {
             text.retain_bounds(bounds);
         }
+        crate::layout_node_provider::mark_layout_node_dirty(self, local_id);
     }
 
     pub fn text_caret(
@@ -5333,6 +5333,8 @@ impl ArtboardInstance {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: Some(source_path.raw_path),
@@ -5563,7 +5565,7 @@ impl ArtboardInstance {
                 let text_local =
                     crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
                 self.runtime_drawables
-                    .mark_text_resource_dirty_for_local(text_local);
+                    .mark_text_paint_dirty_for_local(text_local);
                 self.add_dirt(text_local, ComponentDirt::PAINT, false);
             }
         }
@@ -6277,12 +6279,8 @@ impl ArtboardInstance {
         // and clip from the retained background RawPath rebuilt by ordinary
         // layout/path dirt. Unlike the pre-caa91f21 path, this does not create
         // a virtual Rectangle/four-vertex object graph just to copy its path.
+        let bounds = self.runtime_layout_component_draw_bounds(layout_local, graph, layout_bounds);
         self.runtime_drawables.layout_draw_paths(layout_local, || {
-            let bounds = self.runtime_layout_component_bounds_with_bounds(
-                layout_local,
-                graph,
-                layout_bounds,
-            );
             let corners = self.runtime_layout_component_corners(layout_local);
             let background = Arc::new(runtime_layout_rect_raw_path(bounds, corners));
             let mut paint = runtime_path_commands_from_raw_path(background.as_ref());
@@ -6295,6 +6293,26 @@ impl ArtboardInstance {
                 clip: Arc::new(clip),
             }
         })
+    }
+
+    fn runtime_layout_component_draw_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> RuntimeLayoutBounds {
+        let mut bounds =
+            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
+        if let Some(layout) = self
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .filter(|layout| layout.animates())
+        {
+            let (_, _, width, height) = layout.current_bounds();
+            bounds.width = width;
+            bounds.height = height;
+        }
+        bounds
     }
 
     fn runtime_layout_component_clip_path_commands(
@@ -6706,6 +6724,12 @@ impl ArtboardInstance {
         TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
     }
 
+    pub(crate) fn runtime_transferred_layout_generation(&self) -> u64 {
+        let (mounted_component_list_layout_revision, _) =
+            runtime_mounted_component_list_revisions(self);
+        mounted_component_list_layout_revision.wrapping_mul(0x100000001b3) ^ self.layout_revision()
+    }
+
     pub(crate) fn retain_runtime_layout_component_bounds(
         &mut self,
         local_id: usize,
@@ -6770,8 +6794,6 @@ impl ArtboardInstance {
                 // transform invalidation (`layout_component.cpp:1167-1178`).
                 self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
                 self.layout_revision = self.layout_revision.wrapping_add(1);
-                self.runtime_drawables
-                    .mark_layout_resource_dirty_for_local(local_id);
             }
             if size_changed {
                 let layout_handle = self.component_handle(local_id);
@@ -6799,7 +6821,7 @@ impl ArtboardInstance {
                         text_input.raw.borrow_mut().mark_geometry_dirty();
                     }
                     self.runtime_drawables
-                        .mark_text_resource_dirty_for_local(text_local);
+                        .mark_text_shape_paths_retained_for_local(text_local);
                     self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
                 }
                 let has_layout_draw_owner = self
@@ -6859,7 +6881,7 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return BTreeMap::new();
         };
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
+        let layout_bounds = self.retained_layout_bounds();
         list_locals
             .into_iter()
             .map(|list_local| {
@@ -6871,13 +6893,13 @@ impl ArtboardInstance {
                     self.runtime_component_world_transform_with_bounds(
                         host_transform_local,
                         graph,
-                        layout_bounds.as_ref(),
+                        layout_bounds,
                     )
                 } else {
                     let base = self.runtime_component_world_transform_with_bounds(
                         list_local,
                         graph,
-                        layout_bounds.as_ref(),
+                        layout_bounds,
                     );
                     self.component_handle(list_local)
                         .map(|list| {
@@ -8717,9 +8739,27 @@ impl ArtboardInstance {
         layout_bounds: &BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<RuntimeLayoutBounds> {
         // Ported from C++ `src/layout_component.cpp::propagateSizeToChildren`
-        // and `src/shapes/parametric_path.cpp::controlSize`: solved layout
+        // and `src/shapes/parametric_path.cpp::controlSize`: the live layout
         // width/height are pushed through non-Node containers into parametric
-        // paths before those paths build render geometry.
+        // paths before those paths build render geometry. During animation
+        // this is `m_layout`, not the newer retained Yoga target.
+        let current_local = self.runtime_layout_control_owner_for_path(path_local)?;
+        let component = self.component(current_local)?;
+        let mut bounds = layout_bounds.get(&current_local).copied()?;
+        if let Some(layout) = component
+            .concrete
+            .layout
+            .as_ref()
+            .filter(|layout| layout.animates())
+        {
+            let (_, _, width, height) = layout.current_bounds();
+            bounds.width = width;
+            bounds.height = height;
+        }
+        Some(bounds)
+    }
+
+    fn runtime_layout_control_owner_for_path(&self, path_local: usize) -> Option<usize> {
         let mut current_local = self.component_parent_local(path_local)?;
         let mut visited = BTreeSet::new();
         loop {
@@ -8734,12 +8774,12 @@ impl ArtboardInstance {
                 .runtime_layout_participant_local(current_local)
                 .is_some()
             {
-                return layout_bounds.get(&current_local).copied();
+                return Some(current_local);
             }
             match component.type_name {
                 "LayoutComponent" => {
                     self.runtime_layout_component_style_local(current_local)?;
-                    return layout_bounds.get(&current_local).copied();
+                    return Some(current_local);
                 }
                 type_name if crate::shapes::deformer::supports_component(type_name) => return None,
                 "Artboard" | "Node" => return None,
@@ -8750,13 +8790,38 @@ impl ArtboardInstance {
         }
     }
 
+    pub(crate) fn mark_runtime_layout_controlled_paths_dirty(&mut self, layout_local: usize) {
+        let controlled_paths = self
+            .runtime_graph()
+            .map(|graph| {
+                graph
+                    .paths
+                    .iter()
+                    .filter(|path| path.parametric.is_some())
+                    .filter_map(|path| {
+                        (self.runtime_layout_control_owner_for_path(path.local_id)
+                            == Some(layout_local))
+                        .then_some(path.local_id)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for path_local in controlled_paths {
+            self.add_dirt(
+                path_local,
+                ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                false,
+            );
+        }
+    }
+
     pub(crate) fn runtime_parametric_path_layout_control_size(
         &self,
         path_local: usize,
-        graph: &ArtboardGraph,
+        _graph: &ArtboardGraph,
     ) -> Option<(f32, f32)> {
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file())?;
-        let control_size = self.runtime_layout_control_size_for_path(path_local, &layout_bounds)?;
+        let layout_bounds = self.retained_layout_bounds()?;
+        let control_size = self.runtime_layout_control_size_for_path(path_local, layout_bounds)?;
         Some((control_size.width, control_size.height))
     }
 
@@ -9214,7 +9279,18 @@ impl RuntimeShapePaintOwner {
             | RuntimeShapePaintState::RadialGradient { .. }),
         ) = state
         {
-            self.pending_gradient_states.borrow_mut().push(state);
+            let mut pending = self.pending_gradient_states.borrow_mut();
+            if self.initial_gradient_event_supplied.get()
+                && self.backend.value.borrow().context_id.is_none()
+            {
+                // A mounted-layout occurrence can receive its parent-owned
+                // solve after the isolated initial shader frame but before a
+                // RenderFactory is attached. C++ observes only the final
+                // post-frame dependency update at that boundary; replace the
+                // provisional detached-child event instead of replaying both.
+                pending.clear();
+            }
+            pending.push(state);
         }
     }
 }
@@ -9860,8 +9936,16 @@ impl RuntimeClippingShapeOwner {
 #[derive(Debug)]
 struct RuntimeTextDrawOwner {
     dirty: Cell<bool>,
+    pending_update_dirt: Cell<ComponentDirt>,
     render_styles_dirty: Cell<bool>,
     retain_paths_on_rebuild: Cell<bool>,
+    /// C++ `Text::{m_allRuns,m_textStylePaints,m_modifierGroups}`: immutable
+    /// imported topology retained by this concrete Text occurrence.
+    topology: RefCell<Option<Arc<StaticTextSlice>>>,
+    /// C++ `Text::{m_shape,m_lines}`. The outer Cell distinguishes a retained
+    /// empty shape from a shape that has not been built or was invalidated.
+    shaped_topology_valid: Cell<bool>,
+    shaped_topology: RefCell<Option<Arc<StaticShapedTextTopology>>>,
     retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
     backend: RefCell<RuntimeTextBackendResources>,
 }
@@ -9875,7 +9959,9 @@ impl Clone for RuntimeTextDrawOwner {
         // (`src/generated/text/text_base.cpp:6-10`,
         // `include/rive/generated/text/text_base.hpp:244-262`,
         // `src/text/text_style_paint.cpp:13-19,125-134`).
-        Self::default()
+        let cloned = Self::default();
+        *cloned.topology.borrow_mut() = self.topology.borrow().clone();
+        cloned
     }
 }
 
@@ -9883,8 +9969,12 @@ impl Default for RuntimeTextDrawOwner {
     fn default() -> Self {
         Self {
             dirty: Cell::new(true),
+            pending_update_dirt: Cell::new(ComponentDirt::PATH),
             render_styles_dirty: Cell::new(true),
             retain_paths_on_rebuild: Cell::new(false),
+            topology: RefCell::new(None),
+            shaped_topology_valid: Cell::new(false),
+            shaped_topology: RefCell::new(None),
             retained: RefCell::new(None),
             backend: RefCell::new(RuntimeTextBackendResources::default()),
         }
@@ -9892,16 +9982,43 @@ impl Default for RuntimeTextDrawOwner {
 }
 
 impl RuntimeTextDrawOwner {
+    fn topology_or_build(
+        &self,
+        build: impl FnOnce() -> Result<StaticTextSlice>,
+    ) -> Result<Arc<StaticTextSlice>> {
+        if self.topology.borrow().is_none() {
+            *self.topology.borrow_mut() = Some(Arc::new(build()?));
+        }
+        self.topology
+            .borrow()
+            .as_ref()
+            .cloned()
+            .context("Text occurrence did not retain its imported topology")
+    }
+
     fn is_dirty(&self) -> bool {
         self.dirty.get() || self.retained.borrow().is_none()
     }
 
     fn mark_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
     }
 
     fn mark_paths_retained_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        if !self.render_styles_dirty.get() {
+            self.retain_paths_on_rebuild.set(true);
+        }
+    }
+
+    fn mark_paint_paths_retained_dirty(&self) {
+        self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
         if !self.render_styles_dirty.get() {
             self.retain_paths_on_rebuild.set(true);
         }
@@ -9909,8 +10026,37 @@ impl RuntimeTextDrawOwner {
 
     fn mark_render_styles_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
         self.render_styles_dirty.set(true);
         self.retain_paths_on_rebuild.set(false);
+    }
+
+    fn mark_shape_dirty_unless_paths_retained(&self) {
+        self.shaped_topology_valid.set(false);
+        self.shaped_topology.borrow_mut().take();
+        self.mark_render_styles_dirty_unless_paths_retained();
+    }
+
+    fn mark_external_font_shape_dirty(&self) {
+        self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        self.shaped_topology_valid.set(false);
+        self.shaped_topology.borrow_mut().take();
+        self.render_styles_dirty.set(true);
+        self.retain_paths_on_rebuild.set(false);
+    }
+
+    fn shaped_topology_or_build(
+        &self,
+        build: impl FnOnce() -> Result<Option<StaticShapedTextTopology>>,
+    ) -> Result<Option<Arc<StaticShapedTextTopology>>> {
+        if !self.shaped_topology_valid.get() {
+            *self.shaped_topology.borrow_mut() = build()?.map(Arc::new);
+            self.shaped_topology_valid.set(true);
+        }
+        Ok(self.shaped_topology.borrow().clone())
     }
 
     fn mark_render_styles_dirty_unless_paths_retained(&self) {
@@ -9918,6 +10064,100 @@ impl RuntimeTextDrawOwner {
         if !self.retain_paths_on_rebuild.get() {
             self.render_styles_dirty.set(true);
         }
+    }
+
+    fn propagate_render_opacity(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        opacity_owner_local: usize,
+    ) -> bool {
+        let render_opacity = instance
+            .component(opacity_owner_local)
+            .map_or(1.0, |component| component.transform.render_opacity);
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        for command in Arc::make_mut(&mut frame.commands) {
+            let effective_opacity =
+                render_opacity * command.text_path_bucket_opacity.unwrap_or(1.0);
+            command.render_opacity = effective_opacity;
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
+            {
+                command.paint_state = runtime_shape_paint_state(instance, paint, effective_opacity);
+            }
+        }
+        true
+    }
+
+    fn propagate_world_transform(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        text_local: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> bool {
+        let text_world = instance.runtime_component_world_transform_with_bounds(
+            text_local,
+            graph,
+            layout_bounds,
+        );
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        let shape_world = text_world.multiply(frame.shape_local_transform);
+        let commands = Arc::make_mut(&mut frame.commands);
+        let mut world_geometry_changed = false;
+        for command in commands.iter_mut() {
+            let previous_shape_world = command.shape_world_override.unwrap_or(shape_world);
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
+            {
+                let path_kind = runtime_live_shape_paint_path_kind(instance, paint)
+                    .unwrap_or(command.path_kind);
+                command.paint_space_transform =
+                    runtime_shape_paint_space_transform(path_kind, shape_world);
+                if path_kind == RuntimeShapePaintPathKind::World {
+                    let delta = shape_world.multiply(previous_shape_world.invert_or_identity());
+                    transform_path_commands(&mut command.path_commands, delta);
+                    transform_path_commands(&mut command.effect_path_commands, delta);
+                    if let Some(feather) = command.feather_state.as_mut() {
+                        transform_path_commands(&mut feather.inner_path_commands, delta);
+                    }
+                    world_geometry_changed = true;
+                }
+            }
+            command.shape_world_override = Some(shape_world);
+        }
+        if world_geometry_changed {
+            frame.paths = Arc::new(runtime_text_owned_raw_paths(commands));
+        }
+        if let Some(color) = frame.color.as_mut() {
+            Arc::make_mut(color).shape_world = shape_world;
+        }
+        frame.clip_path = frame.clip_bounds.map(|bounds| {
+            Arc::new(runtime_raw_path_from_commands(
+                &runtime_text_clip_path_commands(bounds, text_world),
+            ))
+        });
+        true
     }
 
     fn retained_or_build(
@@ -9950,6 +10190,7 @@ impl RuntimeTextDrawOwner {
             }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
+            self.pending_update_dirt.set(ComponentDirt::NONE);
             self.render_styles_dirty.set(false);
             self.retain_paths_on_rebuild.set(false);
         }
@@ -10445,28 +10686,44 @@ impl RuntimeDrawableList {
                 // A font-resource replacement is C++ FontAsset::fontChanged
                 // -> TextShape dirt, so every affected Text executes
                 // buildRenderStyles and clears its opacity paths.
-                owner.mark_render_styles_dirty();
+                owner.mark_external_font_shape_dirty();
             }
         }
     }
 
-    pub(crate) fn dirty_text_locals(&self) -> Vec<usize> {
+    pub(crate) fn dirty_text_locals(&self) -> Vec<(usize, ComponentDirt)> {
         self.drawables
             .iter()
             .take(self.imported_count)
             .filter(|drawable| drawable.type_name == "Text")
             .filter_map(|drawable| {
-                drawable
-                    .text_draw_owner
-                    .as_ref()
-                    .is_some_and(RuntimeTextDrawOwner::is_dirty)
-                    .then_some(drawable.local_id)
-                    .flatten()
+                let owner = drawable.text_draw_owner.as_ref()?;
+                if !owner.is_dirty() {
+                    return None;
+                }
+                let pending = owner.pending_update_dirt.get();
+                Some((
+                    drawable.local_id?,
+                    if pending.is_empty() {
+                        ComponentDirt::PATH
+                    } else {
+                        pending
+                    },
+                ))
             })
             .collect()
     }
 
-    pub(crate) fn mark_text_resource_dirty_for_local(&self, local_id: usize) {
+    pub(crate) fn mark_text_paint_dirty_for_local(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.mark_paint_paths_retained_dirty();
+        }
+    }
+
+    pub(crate) fn mark_text_shape_paths_retained_for_local(&self, local_id: usize) {
         let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
             return;
         };
@@ -10967,11 +11224,7 @@ pub(crate) fn runtime_component_list_item_layout_size(
         return size;
     }
     item.child
-        .runtime_graph()
-        .and_then(|graph| {
-            item.child
-                .runtime_taffy_layout_bounds(graph, item.child.runtime_file())
-        })
+        .retained_layout_bounds()
         .and_then(|bounds| bounds.get(&0).copied())
         .map(|bounds| (bounds.width, bounds.height))
         .unwrap_or((item.child.width, item.child.height))
@@ -12028,6 +12281,13 @@ impl TaffyRuntimeLayoutEngine {
         style_local: Option<usize>,
         width_axis: bool,
     ) -> Option<AvailableSpace> {
+        if instance.layout_node_owned_by_host {
+            return Some(AvailableSpace::Definite(if width_axis {
+                instance.width
+            } else {
+                instance.height
+            }));
+        }
         if let Some(style_local) = style_local {
             const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
             if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG
@@ -12048,6 +12308,13 @@ impl TaffyRuntimeLayoutEngine {
         style_local: usize,
         width_axis: bool,
     ) -> Option<Dimension> {
+        if instance.layout_node_owned_by_host {
+            return Some(Dimension::length(if width_axis {
+                instance.width
+            } else {
+                instance.height
+            }));
+        }
         const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
         if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG {
             return Some(Dimension::auto());
@@ -12094,6 +12361,18 @@ impl TaffyRuntimeLayoutEngine {
         } else {
             width_scale
         };
+        if matches!(width_scale, 0 | 2) {
+            style.min_size.width = style.size.width;
+        }
+        if matches!(height_scale, 0 | 2) {
+            style.min_size.height = style.size.height;
+        }
+        if width_scale == 2 {
+            style.max_size.width = style.size.width;
+        }
+        if height_scale == 2 {
+            style.max_size.height = style.size.height;
+        }
         match main_scale {
             0 => {
                 style.flex_grow = 0.0;
@@ -12145,9 +12424,11 @@ impl TaffyRuntimeLayoutEngine {
                 let units = self.nested_artboard_layout_axis_units(instance, local, width_axis);
                 if value < 0.0 {
                     Some(
-                        self.nested_artboard_layout_axis_intrinsic_dimension(
+                        self.nested_artboard_layout_axis_retained_or_hug_size(
                             instance, local, width_axis,
                         )
+                        .filter(|value| value.is_finite() && *value >= 0.0)
+                        .map(Dimension::length)
                         .unwrap_or_else(Dimension::auto),
                     )
                 } else {
@@ -12156,9 +12437,66 @@ impl TaffyRuntimeLayoutEngine {
             }
             1 => Some(Dimension::auto()),
             2 => self
-                .nested_artboard_layout_axis_intrinsic_dimension(instance, local, width_axis)
+                .nested_artboard_layout_axis_retained_or_hug_size(instance, local, width_axis)
+                .filter(|value| value.is_finite() && *value >= 0.0)
+                .map(Dimension::length)
                 .or_else(|| Some(Dimension::auto())),
             _ => None,
+        }
+    }
+
+    fn nested_artboard_layout_axis_retained_or_hug_size(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        width_axis: bool,
+    ) -> Option<f32> {
+        let nested = instance.nested_artboards.get(&local)?;
+        if nested.layout_data_transferred {
+            let child_layout_generation = nested.child.runtime_transferred_layout_generation();
+            if nested.transferred_hug_layout_generation.get() != child_layout_generation {
+                let (retained_hug_size, _) =
+                    nested.child.transferred_hug_size_after_child_layout_change(
+                        nested.transferred_hug_size.get(),
+                    );
+                nested.transferred_hug_size.set(retained_hug_size);
+                nested
+                    .transferred_hug_layout_generation
+                    .set(child_layout_generation);
+            }
+            // `takeLayoutData()` has transferred this root node into the
+            // parent. Its assigned Artboard dimensions are the retained Yoga
+            // node size; the child's local root bounds can additionally carry
+            // padding and must not replace that parent-owned measurement.
+            let transferred = nested.transferred_hug_size.get();
+            let retained = if width_axis {
+                transferred.0
+            } else {
+                transferred.1
+            };
+            if self.nested_artboard_layout_axis_scale(instance, local, width_axis) == 2 {
+                retained.or_else(|| {
+                    self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
+                })
+            } else {
+                retained.or_else(|| {
+                    self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                })
+            }
+        } else {
+            let value = self
+                .nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                .or_else(|| self.nested_artboard_layout_axis_hug_size(instance, local, width_axis));
+            if let Some(value) = value.filter(|value| value.is_finite() && *value >= 0.0) {
+                let (mut width, mut height) = nested.transferred_hug_size.get();
+                if width_axis {
+                    width = Some(value);
+                } else {
+                    height = Some(value);
+                }
+                nested.transferred_hug_size.set((width, height));
+            }
+            value
         }
     }
 
@@ -12200,23 +12538,30 @@ impl TaffyRuntimeLayoutEngine {
             let (_, _, width, height) = layout.current_bounds();
             return Some(if width_axis { width } else { height });
         }
-        let layout_size = nested
-            .child
-            .runtime_file()
-            .zip(nested.child.runtime_graph())
-            .and_then(|(runtime, graph)| {
-                nested
-                    .child
-                    .runtime_taffy_layout_bounds(graph, Some(runtime))
-                    .and_then(|bounds| bounds.get(&0).copied())
-            })
-            .map(|bounds| {
-                if width_axis {
-                    bounds.width
-                } else {
-                    bounds.height
-                }
-            });
+        let layout_size = if nested.child.layout_node_owned_by_host {
+            nested
+                .child
+                .retained_layout_bounds()
+                .and_then(|bounds| bounds.get(&0).copied())
+        } else {
+            nested
+                .child
+                .runtime_file()
+                .zip(nested.child.runtime_graph())
+                .and_then(|(runtime, graph)| {
+                    nested
+                        .child
+                        .runtime_taffy_layout_bounds(graph, Some(runtime))
+                        .and_then(|bounds| bounds.get(&0).copied())
+                })
+        }
+        .map(|bounds| {
+            if width_axis {
+                bounds.width
+            } else {
+                bounds.height
+            }
+        });
 
         layout_size.or_else(|| {
             Some(if width_axis {
@@ -12234,7 +12579,7 @@ impl TaffyRuntimeLayoutEngine {
         width_axis: bool,
     ) -> Option<f32> {
         let nested = instance.nested_artboards.get(&local)?;
-        nested
+        let value = nested
             .child
             .runtime_file()
             .zip(nested.child.runtime_graph())
@@ -12256,7 +12601,17 @@ impl TaffyRuntimeLayoutEngine {
                 } else {
                     bounds.height
                 }
-            })
+            });
+        if let Some(value) = value.filter(|value| value.is_finite() && *value >= 0.0) {
+            let (mut width, mut height) = nested.transferred_hug_size.get();
+            if width_axis {
+                width = Some(value);
+            } else {
+                height = Some(value);
+            }
+            nested.transferred_hug_size.set((width, height));
+        }
+        value
     }
 
     fn nested_artboard_layout_axis_scale(
@@ -13757,6 +14112,8 @@ pub struct RuntimeShapePaintCommand {
     pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
     pub(crate) text_path_bucket_slot: Option<usize>,
+    pub(crate) text_path_bucket_opacity: Option<f32>,
+    pub(crate) text_paint_ref: Option<(usize, usize)>,
     pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
     pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
     // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
@@ -14870,7 +15227,9 @@ struct RuntimeCachedTextShapePaints {
     replay: Arc<Vec<RuntimeTextReplay>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    clip_bounds: Option<StaticTextClipBounds>,
     color: Option<Arc<RuntimeRetainedColorGlyphs>>,
+    shape_local_transform: Mat2D,
     publishes_layout_dirty: bool,
 }
 
@@ -15428,18 +15787,14 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let bounds = if instance.layout_node_owned_by_host {
-                // `Artboard::takeLayoutData()` disables the mounted child's
-                // own layout solve. Draw reads the last parent-owned Yoga
-                // snapshot instead of recomputing the transferred subtree
-                // from live child data binds (`artboard.cpp:1245-1253,
-                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
-                instance.layout_constraint_bounds.as_deref().cloned()
-            } else {
-                TaffyRuntimeLayoutEngine
-                    .compute_layout(instance, graph, runtime)
-                    .map(|layout| layout.bounds)
-            };
+            // Rebuild only for a published layout generation. Component dirt
+            // alone no longer changes this key, so paint/transform-only frames
+            // reuse the retained cache without entering Taffy. The computed
+            // frame preserves bootstrap and mounted-topology behavior whose
+            // C++ Yoga node is shared across Rust's decomposed artboard graphs.
+            let bounds = instance
+                .runtime_taffy_layout_bounds(graph, runtime)
+                .or_else(|| instance.retained_layout_bounds().cloned());
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
                 bounds: Arc::new(bounds),
@@ -16817,6 +17172,8 @@ fn runtime_prepare_gradient_paint_command(
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -16955,25 +17312,59 @@ fn runtime_build_text_draw_frame(
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: false,
             });
         }
     }
-    let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
+    let topology = if drawable.type_name == "Text" {
+        Some(
+            drawable
+                .text_draw_owner
+                .as_ref()
+                .context("live Text is missing its retained owner")?
+                .topology_or_build(|| {
+                    StaticTextSlice::from_graph(runtime, graph, drawable_local)
+                })?,
+        )
+    } else {
+        None
+    };
+    let (mut commands, clip_bounds, color, shape_local_transform) = if drawable.type_name == "Text"
+    {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
-        let draw_data = runtime_text_draw_data(
+        let topology = topology
+            .as_deref()
+            .context("live Text did not retain its imported topology")?;
+        let owner = drawable
+            .text_draw_owner
+            .as_ref()
+            .context("live Text is missing its retained owner")?;
+        let text_world = instance.runtime_component_world_transform_with_bounds(
+            drawable_local,
+            graph,
+            layout_bounds,
+        );
+        let shaped_topology = owner.shaped_topology_or_build(|| {
+            topology.render_topology(runtime, instance, layout_constraint, text_world)
+        })?;
+        let draw_data = runtime_text_draw_data_from_retained_topology(
+            topology,
             runtime,
             instance,
             graph,
             drawable_local,
             layout_bounds,
             layout_constraint,
+            shaped_topology.as_deref(),
         )?;
+        let shape_local_transform = draw_data.local_transform;
         (
             draw_data.commands,
-            static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+            topology.clip_bounds(runtime, instance, layout_constraint)?,
             (!draw_data.color_glyphs.is_empty()).then(|| {
                 Arc::new(RuntimeRetainedColorGlyphs {
                     glyphs: draw_data.color_glyphs,
@@ -16981,6 +17372,7 @@ fn runtime_build_text_draw_frame(
                     shape_world: draw_data.shape_world,
                 })
             }),
+            shape_local_transform,
         )
     } else {
         (
@@ -16993,6 +17385,7 @@ fn runtime_build_text_draw_frame(
             )?,
             None,
             None,
+            Mat2D::IDENTITY,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
@@ -17014,7 +17407,10 @@ fn runtime_build_text_draw_frame(
             ))
         });
     if drawable.type_name == "Text"
-        && let Some(bounds) = build_static_text_constraint_bounds(
+        && let Some(bounds) = build_static_text_constraint_bounds_from_slice(
+            topology
+                .as_deref()
+                .expect("Text topology is retained before bounds publication"),
             runtime,
             graph,
             instance,
@@ -17032,7 +17428,9 @@ fn runtime_build_text_draw_frame(
         replay: Arc::new(replay),
         paths,
         clip_path,
+        clip_bounds,
         color,
+        shape_local_transform,
         publishes_layout_dirty: true,
     })
 }
@@ -17179,11 +17577,37 @@ impl ArtboardInstance {
             let Some(owner) = drawable.text_draw_owner.as_ref() else {
                 continue;
             };
-            if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
-                // A direct dependency Path/Paint propagation is a C++
-                // buildRenderStyles boundary. Layout propagation explicitly
-                // classifies its retained-frame refresh first because it
-                // shares the Path/TextShape bit without replacing paths.
+            let rebuild_dirt = dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT);
+            if rebuild_dirt.is_empty() && dirt.contains(ComponentDirt::RENDER_OPACITY) {
+                // C++ `Text::update(RenderOpacity)` only calls
+                // `TextStylePaint::propagateOpacity`; shaped paragraphs,
+                // lines, draw commands, and render paths remain retained.
+                // Refresh the command-side opacity used by Rust's pooled
+                // paints without reconstructing glyph topology or geometry.
+                owner.propagate_render_opacity(self, graph, target_local);
+            }
+            if rebuild_dirt.is_empty()
+                && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                && drawable.type_name == "Text"
+            {
+                // C++ updates m_shapeWorldTransform and m_clipPath after the
+                // shape/paint branch. Preserve shaped glyph topology and the
+                // retained backend objects while refreshing world-space
+                // command and clip data.
+                owner.propagate_world_transform(self, graph, target_local, layout_bounds);
+            }
+            if rebuild_dirt.is_empty()
+                && (!dirt.contains(ComponentDirt::WORLD_TRANSFORM) || drawable.type_name == "Text")
+            {
+                continue;
+            }
+            if dirt.contains(ComponentDirt::TEXT_SHAPE) {
+                // C++ Path dirt replaces `m_shape`/`m_lines`, then rebuilds
+                // render styles from the new shaped topology.
+                owner.mark_shape_dirty_unless_paths_retained();
+            } else if dirt.contains(ComponentDirt::PAINT) {
+                // C++ Paint dirt rebuilds positioning, modifiers, transforms,
+                // and style paths from retained `m_shape`/`m_lines`.
                 owner.mark_render_styles_dirty_unless_paths_retained();
             } else {
                 owner.mark_dirty();
@@ -17427,6 +17851,24 @@ fn runtime_draw_live_text_family(
                 continue;
             }
         };
+        // C++ `TextStylePaint::draw` gates each ShapePaint on
+        // `shouldDraw()` — `isVisible() && m_PaintMutator->isVisible()` —
+        // every draw, ahead of growing `m_paintPool`
+        // (`src/text/text_style_paint.cpp:53-58,69-77`,
+        // `include/rive/shapes/paint/shape_paint.hpp:71-74`). The
+        // `ShapePaint::isVisible()` half is Paint-dirty driven and stays
+        // baked into command construction; the mutator half depends on the
+        // live render opacity, so it must be re-tested here. Testing it at
+        // build time instead would let a Text shaped while its ancestor
+        // opacity is 0 retain an empty command set that a later
+        // RenderOpacity-only propagation can never repopulate.
+        //
+        // TextInput drawables keep their own construction-time predicate
+        // (`StaticTextSlice::text_input_paint_commands` already builds every
+        // command) and are not routed through `TextStylePaint::draw`.
+        if is_text && !runtime_shape_paint_state_is_effectively_visible(&paint.paint_state) {
+            continue;
+        }
         let global_id = paint.paint_global_id;
         let object = runtime
             .object(global_id as usize)
@@ -18865,7 +19307,7 @@ impl RuntimeAabb {
 
     fn from_artboard_with_layout(instance: &ArtboardInstance, graph: &ArtboardGraph) -> Self {
         instance
-            .runtime_taffy_layout_bounds(graph, instance.runtime_file())
+            .retained_layout_bounds()
             .and_then(|bounds| bounds.get(&0).copied())
             .or_else(|| instance.runtime_root_artboard_layout_bounds(graph))
             .map(|bounds| Self {
@@ -19030,16 +19472,16 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
     let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+    let width_changed = runtime_layout_component_property_key_for_name("width")
+        .is_some_and(|key| child.set_double_property(0, key, bounds.width));
+    let height_changed = runtime_layout_component_property_key_for_name("height")
+        .is_some_and(|key| child.set_double_property(0, key, bounds.height));
+    if assigned_size_changed
+        || width_changed
+        || height_changed
+        || !child.layout_constraint_bounds_enabled
+    {
         child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
-    if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
-        child.set_double_property(0, width_key, bounds.width);
-    }
-    if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
-        child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())
 }
@@ -19053,21 +19495,19 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // the child's own layout constraints, not merely a draw-time frame.
     let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
     let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
-        // The hosted root is still the child's LayoutComponent owner. Refresh
-        // its retained constraint frame before the same-pass child update so
-        // Artboard::updateRenderPath sees the newly assigned row size, as the
-        // pinned transferred Yoga node does (`artboard_component_list.cpp:
-        // 220-260`; `artboard.cpp:1138-1157`).
-        child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }
     if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
         changed |= child.set_double_property(0, height_key, bounds.height);
+    }
+    if changed {
+        // The hosted root is still the child's LayoutComponent owner. Apply
+        // the assigned root properties before the one retained constraint
+        // solve so descendants observe the new row size immediately
+        // (`artboard_component_list.cpp:220-260`;
+        // `artboard.cpp:1138-1157`).
+        child.refresh_layout_constraint_bounds();
     }
     changed
 }
@@ -20355,6 +20795,8 @@ fn runtime_shape_paint_command_with_effect_path(
         aliases_local_clockwise_path,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -26223,7 +26665,9 @@ mod tests {
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: true,
             })
         };
@@ -26251,7 +26695,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26333,6 +26779,15 @@ mod tests {
                 true,
             )
             .expect("initial retained text draws");
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let shaped_before = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("initial update retains shaped paragraphs and lines");
         let retained_owner = instance
             .runtime_shapes
             .text_style_paint_owner(style_paint.local_id)
@@ -26406,6 +26861,18 @@ mod tests {
             text_updates, 2,
             "TextStylePaint dirt must schedule exactly one retained-paint rebuild"
         );
+        let shaped_after = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Paint-only update keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(&shaped_before, &shaped_after),
+            "Paint-only dirt must rebuild styles from retained shape/line topology"
+        );
 
         factory.clear();
         instance
@@ -26429,6 +26896,199 @@ mod tests {
         assert!(
             !stream.contains("makeRenderPaint"),
             "TextStylePaint dirt must refill its retained RenderPaint: {stream}"
+        );
+
+        let shaped_before_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Text keeps shaped paragraphs and lines after Paint rebuild");
+        assert!(instance.set_color_property(color_local, color_key, 0xff66_7788));
+        instance.add_dirt(style_local, ComponentDirt::PAINT, false);
+        assert!(instance.update_pass());
+        let shaped_after_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("pre-update Paint dirt keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(
+                &shaped_before_pre_update_paint,
+                &shaped_after_pre_update_paint
+            ),
+            "pre-update ShapePaint dirt must not be promoted to TextShape dirt"
+        );
+
+        let frame_before_text_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .retained_frame()
+            .expect("Paint rebuild retains a render frame");
+        let origin_x_key =
+            property_key_for_name("Text", "originX").expect("Text.originX property key");
+        let origin_x = instance
+            .double_property(text_local, origin_x_key)
+            .unwrap_or(0.0);
+        assert!(instance.set_double_property(text_local, origin_x_key, origin_x + 0.125));
+        assert!(instance.update_pass());
+        let owner_after_text_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner");
+        let shaped_after_text_paint = owner_after_text_paint
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Text-origin Paint dirt keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(&shaped_after_pre_update_paint, &shaped_after_text_paint),
+            "Text-owned Paint dirt must reuse shape/line topology"
+        );
+        assert_ne!(
+            frame_before_text_paint.shape_local_transform,
+            owner_after_text_paint
+                .retained_frame()
+                .expect("Text-origin Paint dirt retains a render frame")
+                .shape_local_transform,
+            "Text-owned Paint dirt must recompute paint-phase positioning"
+        );
+    }
+
+    #[test]
+    fn text_render_opacity_propagates_without_rebuilding_retained_paths() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let retained_before = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .retained_frame()
+            .expect("initial update retains text");
+        let paths_before = Arc::clone(&retained_before.paths);
+        let path_commands_before = retained_before
+            .commands
+            .iter()
+            .map(|command| command.path_commands.clone())
+            .collect::<Vec<_>>();
+
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            0.25,
+        ));
+        assert!(instance.update_pass());
+
+        let owner = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner");
+        assert!(!owner.is_dirty());
+        let retained_after = owner
+            .retained_frame()
+            .expect("opacity propagation retains text");
+        assert!(Arc::ptr_eq(&paths_before, &retained_after.paths));
+        assert_eq!(
+            path_commands_before,
+            retained_after
+                .commands
+                .iter()
+                .map(|command| command.path_commands.clone())
+                .collect::<Vec<_>>()
+        );
+        for command in retained_after.commands.iter() {
+            assert_eq!(
+                command.render_opacity,
+                0.25 * command.text_path_bucket_opacity.unwrap_or(1.0)
+            );
+        }
+    }
+
+    /// C++ `Text::m_drawCommands` is opacity-independent: `TextStylePaint::draw`
+    /// re-tests `shapePaint->shouldDraw()` on every draw
+    /// (`src/text/text_style_paint.cpp:53-58`), so a Text shaped while its
+    /// render opacity is 0 keeps its commands and draws again once the opacity
+    /// returns. Rust retains the built frame and only propagates opacity on a
+    /// RenderOpacity-only dirt, so baking that predicate into command existence
+    /// would strand the Text with an empty command set forever.
+    #[test]
+    fn text_shaped_at_zero_render_opacity_recovers_when_opacity_returns() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            0.0,
+        ));
+        instance.update_pass();
+
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let retained_dark = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .retained_frame()
+            .expect("a fully transparent Text still retains its frame");
+        assert!(
+            !retained_dark.commands.is_empty(),
+            "shaping at zero render opacity must still build the text draw commands"
+        );
+        assert!(
+            retained_dark.commands.iter().all(|command| {
+                !runtime_shape_paint_state_is_effectively_visible(&command.paint_state)
+            }),
+            "every command is invisible at zero render opacity, so none of them draw"
+        );
+
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            1.0,
+        ));
+        assert!(instance.update_pass());
+
+        let retained_lit = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner")
+            .retained_frame()
+            .expect("opacity propagation retains text");
+        assert_eq!(
+            retained_dark.commands.len(),
+            retained_lit.commands.len(),
+            "the retained command set must not depend on render opacity"
+        );
+        assert!(
+            retained_lit.commands.iter().any(|command| {
+                runtime_shape_paint_state_is_effectively_visible(&command.paint_state)
+            }),
+            "restoring render opacity must make the retained glyph commands draw again"
         );
     }
 
@@ -26468,6 +27128,18 @@ mod tests {
             )
             .expect("initial retained text draws");
         let cold = cold_factory.canonical_recording().stream().to_string();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let (commands_before, paths_before) = {
+            let owner = instance.runtime_drawables.drawables[drawable_index]
+                .text_draw_owner
+                .as_ref()
+                .expect("Text has a retained owner");
+            let frame_before = owner.retained_frame().expect("initial update retains text");
+            (
+                Arc::as_ptr(&frame_before.commands),
+                Arc::as_ptr(&frame_before.paths),
+            )
+        };
 
         // A position-only layout move publishes recursive WORLD_TRANSFORM dirt
         // from the moved owner (`layout_component.cpp:1167-1178`). When that
@@ -26481,6 +27153,23 @@ mod tests {
         instance.update_pass();
         instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
         instance.update_pass();
+
+        let frame_after = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner")
+            .retained_frame()
+            .expect("world transform keeps retained text");
+        assert_eq!(
+            Arc::as_ptr(&frame_after.commands),
+            commands_before,
+            "world-transform dirt must not reconstruct shaped draw commands",
+        );
+        assert_eq!(
+            Arc::as_ptr(&frame_after.paths),
+            paths_before,
+            "world-transform dirt must retain local glyph paths",
+        );
 
         let mut fresh_factory = nuxie_render_api::RecordingFactory::new();
         let mut fresh_renderer = fresh_factory.make_renderer();
@@ -26734,7 +27423,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26785,6 +27476,8 @@ mod tests {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: None,
@@ -26792,7 +27485,9 @@ mod tests {
             replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner.mark_render_styles_dirty();
@@ -26821,7 +27516,9 @@ mod tests {
                     replay: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    clip_bounds: None,
                     color: None,
+                    shape_local_transform: Mat2D::IDENTITY,
                     publishes_layout_dirty: true,
                 })
             })
@@ -30156,6 +30853,11 @@ mod tests {
             .component_parent_local(rectangle_local)
             .and_then(|shape_local| instance.component_parent_local(shape_local))
             .expect("rectangle is controlled by a layout");
+        instance
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("fixture has retained layout state")
+            .set_animation_style(0, 0, 0.0, None);
 
         instance.enable_layout_constraint_bounds();
         instance.update_components();
@@ -30188,6 +30890,158 @@ mod tests {
             140.0,
             "LayoutComponent::propagateSize must rebuild the ParametricPath at its new control \
              size, got {points:?}"
+        );
+    }
+
+    #[test]
+    fn parametric_layout_control_uses_the_live_animated_frame() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let rectangle_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Rectangle")
+            .expect("fixture has a rectangle")
+            .local_id;
+        let layout_local = instance
+            .component_parent_local(rectangle_local)
+            .and_then(|shape_local| instance.component_parent_local(shape_local))
+            .expect("rectangle is controlled by a layout");
+        let layout = instance
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("fixture has retained layout state");
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(0.0, 0.0, 90.0, 60.0);
+        layout.retain_bounds(0.0, 0.0, 140.0, 100.0);
+        let solved_bounds = BTreeMap::from([(
+            layout_local,
+            RuntimeLayoutBounds {
+                x: 30.0,
+                y: 40.0,
+                width: 140.0,
+                height: 100.0,
+            },
+        )]);
+
+        assert_eq!(
+            instance.runtime_layout_control_size_for_path(rectangle_local, &solved_bounds),
+            Some(RuntimeLayoutBounds {
+                x: 30.0,
+                y: 40.0,
+                width: 90.0,
+                height: 60.0,
+            }),
+            "LayoutComponent::propagateSize reads the interpolating m_layout frame, not its newer Yoga target"
+        );
+        assert_eq!(
+            instance.runtime_layout_component_draw_bounds(
+                layout_local,
+                graph,
+                Some(&solved_bounds),
+            ),
+            RuntimeLayoutBounds {
+                x: 30.0,
+                y: 40.0,
+                width: 90.0,
+                height: 60.0,
+            },
+            "LayoutComponent::updateRenderPath keeps the solved artboard-space position while reading the live m_layout size"
+        );
+    }
+
+    #[test]
+    fn animated_layout_size_dirties_its_controlled_parametric_path() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let rectangle_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Rectangle")
+            .expect("fixture has a rectangle")
+            .local_id;
+        let layout_local = instance
+            .component_parent_local(rectangle_local)
+            .and_then(|shape_local| instance.component_parent_local(shape_local))
+            .expect("rectangle is controlled by a layout");
+        instance.component_mut(rectangle_local).unwrap().dirt = ComponentDirt::NONE;
+
+        instance.mark_runtime_layout_controlled_paths_dirty(layout_local);
+
+        assert!(
+            instance
+                .component(rectangle_local)
+                .expect("rectangle remains live")
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH),
+            "LayoutComponent::applyInterpolation propagates each live size change through ParametricPath::controlSize"
+        );
+    }
+
+    #[test]
+    fn host_owned_solve_publishes_descendants_but_not_the_transferred_root() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.layout_node_owned_by_host = true;
+        instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("root layout state")
+            .retain_bounds(0.0, 0.0, 200.0, 100.0);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("child layout state")
+            .retain_bounds(0.0, 0.0, 40.0, 50.0);
+        instance.layout_constraint_bounds = Some(Arc::new(BTreeMap::from([
+            (
+                0,
+                RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 300.0,
+                    height: 150.0,
+                },
+            ),
+            (
+                1,
+                RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 50.0,
+                },
+            ),
+        ])));
+
+        instance.retain_host_owned_layout_constraint_bounds();
+
+        assert_eq!(
+            instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("root remains live")
+                .current_bounds(),
+            (0.0, 0.0, 200.0, 100.0),
+            "the parent publishes the transferred root separately"
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("child remains live")
+                .current_bounds(),
+            (0.0, 0.0, 100.0, 50.0),
+            "the parent-owned calculateLayout result reaches child LayoutComponents even after their dirty set was consumed"
         );
     }
 
@@ -30348,6 +31202,85 @@ mod tests {
                 .expect("opted-in root providers resolve")
                 .contains(&26),
             "DrawableFlag::ParticipatesInLayout opts a nested list into its owning layout"
+        );
+    }
+
+    #[test]
+    fn transferred_nested_hug_keeps_the_parent_owned_root_size() {
+        let bytes = cpp_runtime_fixture("script_create_text_runs.riv");
+        let file = read_runtime_file(&bytes).expect("script text-run fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("script text-run graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("main"))
+            .expect("fixture has the main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
+
+        instance.update_pass();
+
+        let host = instance
+            .layout_bounds(12)
+            .expect("the first nested button receives parent-owned layout");
+        let row = instance
+            .layout_bounds(11)
+            .expect("the parent row receives retained nested hug sizing");
+        assert!(
+            (host.height - 77.0).abs() <= 0.0001,
+            "host height was {}",
+            host.height
+        );
+        assert!(
+            (row.height - 117.0).abs() <= 0.0001,
+            "row height was {}",
+            row.height
+        );
+    }
+
+    #[test]
+    fn transferred_nested_hug_refreshes_from_mounted_list_generation() {
+        let bytes = cpp_runtime_fixture("global_variables_test.riv");
+        let file = read_runtime_file(&bytes).expect("global variables fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("global variables graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Main"))
+            .expect("fixture has the Main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("fixture has its default state machine");
+        assert!(machine.bind_default_view_model_context_on_artboard(&mut instance));
+
+        instance.advance_state_machine_instance(&mut machine, 0.0);
+        instance
+            .advance_frame_components_with_state_machine_report(0.0, &mut machine)
+            .expect("sample zero component advance");
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(&mut machine),
+            )
+            .expect("sample zero settles");
+        assert!((instance.layout_bounds(19).unwrap().width - 279.0879).abs() < 0.001);
+
+        instance.advance_state_machine_instance(&mut machine, 0.5);
+        instance
+            .advance_frame_components_with_state_machine_report(0.5, &mut machine)
+            .expect("sample half component advance");
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(&mut machine),
+            )
+            .expect("sample half settles");
+        let width = instance.layout_bounds(19).unwrap().width;
+        assert!(
+            (width - 263.0879).abs() < 0.001,
+            "a mounted-list descendant generation must invalidate the transferred nested Hug width before the parent solve; got {width}"
         );
     }
 
@@ -33658,6 +34591,57 @@ mod tests {
             )
             .expect("second drain is a no-op");
         assert_eq!(stats.linear_gradients.borrow().len(), first_shader_count);
+    }
+
+    #[test]
+    fn mounted_layout_solve_replaces_the_provisional_post_frame_gradient() {
+        let bytes = synthetic_nested_layout_gradient_chain_riv();
+        let file = read_runtime_file(&bytes).expect("nested layout chain imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested layout chain graphs");
+        let graph = graphs.artboards.first().expect("parent graph");
+        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("nested layout chain instance");
+        let child = instance
+            .nested_artboards
+            .values()
+            .next()
+            .expect("mounted layout child")
+            .child
+            .as_ref();
+        let frame = child.capture_initial_nested_layout_paint_frame();
+        let frame_state = frame.gradients[0].paint_state.clone();
+        let provisional =
+            runtime_shape_paint_state_with_endpoints(frame_state.clone(), 0.0, 0.0, 20.0, 0.0);
+        let solved =
+            runtime_shape_paint_state_with_endpoints(frame_state.clone(), 0.0, 0.0, 80.0, 0.0);
+        let owner_ref = child
+            .runtime_shapes
+            .paint_owner_refs
+            .first()
+            .expect("child has one ShapePaint owner");
+        let owner = child
+            .runtime_shapes
+            .get(owner_ref.shape_local)
+            .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            .expect("ShapePaint owner resolves");
+        owner
+            .pending_gradient_states
+            .replace(vec![frame_state, provisional.clone()]);
+
+        child.transfer_owned_shape_gradient_events_to_initial_frame(&frame);
+        assert_eq!(
+            owner.pending_gradient_states.borrow().as_slice(),
+            std::slice::from_ref(&provisional),
+            "the pre-transfer host update is provisionally retained"
+        );
+
+        owner.paint_state.replace(Some(solved.clone()));
+        owner.record_gradient_update();
+        assert_eq!(
+            owner.pending_gradient_states.borrow().as_slice(),
+            std::slice::from_ref(&solved),
+            "the parent-owned solve is the sole post-frame shader event observed when the backend attaches"
+        );
     }
 
     #[test]

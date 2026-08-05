@@ -6,6 +6,14 @@ impl ValueVisitor {
         unsafe {
             let node_ref = &*node;
             self.variables.get_or_insert(node_ref.name as *mut _).init = node_ref.func as *mut _;
+
+            if luaur_common::FFlag::LuauOptimizeExportTable.get()
+                && !self.exported_functions.is_null()
+                && (*node_ref.name).is_exported
+            {
+                (*self.exported_functions).insert(node_ref.name);
+                (*self.exported_variables).push(node_ref.name);
+            }
         }
 
         true

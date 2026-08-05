@@ -15,11 +15,7 @@ impl Parser {
         let start_location = self.lexer.current().location;
         let mut cst_attr_lists =
             TempVector::<*mut CstAttrList>::new(&mut self.scratch_cst_attr_list);
-        let cst_attr_lists_ptr = if luaur_common::FFlag::LuauCstAttr.get() {
-            &mut cst_attr_lists
-        } else {
-            core::ptr::null_mut()
-        };
+        let cst_attr_lists_ptr = &mut cst_attr_lists as *mut _;
         let attributes = self.parse_attributes(cst_attr_lists_ptr);
         let current_type = self.lexer.current().r#type;
 
@@ -28,13 +24,11 @@ impl Parser {
                 self.parse_function_stat(&attributes, cst_attr_lists_ptr) as *mut AstStat
             }
             Type::ReservedLocal => {
-                let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
-                    self.get_attribute_start_location(&attributes, &cst_attr_lists, start_location)
-                } else if attributes.size > 0 {
-                    unsafe { (**attributes.data.add(0)).base.location }
-                } else {
-                    self.lexer.current().location
-                };
+                let attr_loc = self.get_attribute_start_location(
+                    &attributes,
+                    &cst_attr_lists,
+                    start_location,
+                );
 
                 self.parse_local(
                     attr_loc,
@@ -61,17 +55,11 @@ impl Parser {
                     let keyword_loc = current.location;
                     self.next_lexeme();
 
-                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
-                        self.get_attribute_start_location(
-                            &attributes,
-                            &cst_attr_lists,
-                            start_location,
-                        )
-                    } else if attributes.size > 0 {
-                        unsafe { (**attributes.data.add(0)).base.location }
-                    } else {
-                        keyword_loc
-                    };
+                    let attr_loc = self.get_attribute_start_location(
+                        &attributes,
+                        &cst_attr_lists,
+                        start_location,
+                    );
 
                     self.parse_export_value(
                         &attr_loc,
@@ -90,17 +78,11 @@ impl Parser {
                     let keyword_loc = current.location;
                     self.next_lexeme();
 
-                    let attr_loc = if luaur_common::FFlag::LuauCstAttr.get() {
-                        self.get_attribute_start_location(
-                            &attributes,
-                            &cst_attr_lists,
-                            start_location,
-                        )
-                    } else if attributes.size > 0 {
-                        unsafe { (**attributes.data.add(0)).base.location }
-                    } else {
-                        keyword_loc
-                    };
+                    let attr_loc = self.get_attribute_start_location(
+                        &attributes,
+                        &cst_attr_lists,
+                        start_location,
+                    );
 
                     self.parse_local(
                         attr_loc,

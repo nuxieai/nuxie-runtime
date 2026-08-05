@@ -9,7 +9,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_vector(
-    _l: *mut lua_State,
+    L: *mut lua_State,
     res: StkId,
     arg0: *mut TValue,
     nresults: core::ffi::c_int,
@@ -17,30 +17,30 @@ pub unsafe fn luau_f_vector(
     nparams: core::ffi::c_int,
 ) -> core::ffi::c_int {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
-        let x = nvalue!(arg0) as f32;
-        let y = nvalue!(args) as f32;
-        let z: f32 = if nparams >= 3 {
+        let x = nvalue!(arg0) as crate::type_aliases::lua_vector_type::LuaVectorType;
+        let y = nvalue!(args) as crate::type_aliases::lua_vector_type::LuaVectorType;
+        let z: crate::type_aliases::lua_vector_type::LuaVectorType = if nparams >= 3 {
             if !ttisnumber!(args.add(1)) {
                 return -1;
             }
-            nvalue!(args.add(1)) as f32
+            nvalue!(args.add(1)) as crate::type_aliases::lua_vector_type::LuaVectorType
         } else {
             0.0
         };
 
         if LUA_VECTOR_SIZE == 4 {
-            let w: f32 = if nparams >= 4 {
+            let w: crate::type_aliases::lua_vector_type::LuaVectorType = if nparams >= 4 {
                 if !ttisnumber!(args.add(2)) {
                     return -1;
                 }
-                nvalue!(args.add(2)) as f32
+                nvalue!(args.add(2)) as crate::type_aliases::lua_vector_type::LuaVectorType
             } else {
                 0.0
             };
 
-            setvvalue!(res, x, y, z, w);
+            setvvalue!(L, res, x, y, z, w);
         } else {
-            setvvalue!(res, x, y, z, 0.0);
+            setvvalue!(L, res, x, y, z, 0.0);
         }
 
         1

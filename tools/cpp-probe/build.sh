@@ -41,8 +41,16 @@ if [[ "$with_scripting" == "1" ]]; then
     runtime_mode="scripted"
     runtime_out="${RIVE_CPP_PROBE_RUNTIME_OUT:-$repo_target/cpp-probe-librive/scripted-$config}"
     decoders_out="${RIVE_CPP_PROBE_DECODERS_OUT:-$repo_target/cpp-probe-librive/scripted-$config-decoders}"
-    runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting)
-    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm)
+    # Scripted librive carries the pinned Lua audio engine, so it builds with
+    # --with_rive_audio=external and links miniaudio -- matching the scripted
+    # golden runner and the `scripted` expectation in runtime-provenance.sh.
+    runtime_premake_flags=(
+        --with_rive_text
+        --with_rive_layout
+        --with_rive_scripting
+        --with_rive_audio=external
+    )
+    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm miniaudio)
     export RIVE_CPP_PROBE_RUNNER_NAME="${RIVE_CPP_PROBE_RUNNER_NAME:-rive_cpp_probe_scripted}"
 else
     runtime_mode="audio"

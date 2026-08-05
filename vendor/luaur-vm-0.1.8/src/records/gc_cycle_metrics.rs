@@ -23,6 +23,7 @@ pub struct GCCycleMetrics {
     pub atomictimeupval: f64,
     pub atomictimeweak: f64,
     pub atomictimegray: f64,
+    pub atomictimeembedder: f64,
     pub atomictimeclear: f64,
 
     pub sweeptime: f64,

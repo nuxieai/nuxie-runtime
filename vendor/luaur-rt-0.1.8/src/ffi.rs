@@ -133,18 +133,20 @@ pub(crate) use luaur_vm::functions::lua_tointegerx::lua_tointegerx;
 /// [`lua_type`]; we keep our own constants to avoid leaking the VM enum.
 pub(crate) mod ttype {
     use super::c_int;
+    use luaur_vm::enums::lua_type::lua_Type;
+
     pub const NONE: c_int = -1;
-    pub const NIL: c_int = 0;
-    pub const BOOLEAN: c_int = 1;
-    pub const LIGHTUSERDATA: c_int = 2;
-    pub const VECTOR: c_int = 5;
-    pub const NUMBER: c_int = 3;
-    pub const STRING: c_int = 6;
-    pub const TABLE: c_int = 7;
-    pub const FUNCTION: c_int = 8;
-    pub const USERDATA: c_int = 9;
-    pub const THREAD: c_int = 10;
-    pub const BUFFER: c_int = 11;
+    pub const NIL: c_int = lua_Type::LUA_TNIL as c_int;
+    pub const BOOLEAN: c_int = lua_Type::LUA_TBOOLEAN as c_int;
+    pub const LIGHTUSERDATA: c_int = lua_Type::LUA_TLIGHTUSERDATA as c_int;
+    pub const VECTOR: c_int = lua_Type::LUA_TVECTOR as c_int;
+    pub const NUMBER: c_int = lua_Type::LUA_TNUMBER as c_int;
+    pub const STRING: c_int = lua_Type::LUA_TSTRING as c_int;
+    pub const TABLE: c_int = lua_Type::LUA_TTABLE as c_int;
+    pub const FUNCTION: c_int = lua_Type::LUA_TFUNCTION as c_int;
+    pub const USERDATA: c_int = lua_Type::LUA_TUSERDATA as c_int;
+    pub const THREAD: c_int = lua_Type::LUA_TTHREAD as c_int;
+    pub const BUFFER: c_int = lua_Type::LUA_TBUFFER as c_int;
 }
 
 /// Coroutine status codes returned by [`super::lua_costatus`] (mirrors luaur's

@@ -6,5 +6,9 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 #[export_name = "luaur_lua_userdatadirectfield_setnil"]
 pub unsafe fn lua_userdatadirectfield_setnil(result: *mut core::ffi::c_void) {
     LUAU_ASSERT!(luaur_common::FFlag::LuauDirectFieldGet.get());
-    setnilvalue!(result as *mut TValue);
+    #[cfg(feature = "lua_vector_double")]
+    let slot = (*(result as *mut crate::records::direct_field_result::DirectFieldResult)).slot;
+    #[cfg(not(feature = "lua_vector_double"))]
+    let slot = result as *mut TValue;
+    setnilvalue!(slot);
 }

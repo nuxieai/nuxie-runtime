@@ -3,7 +3,7 @@
 //! These tests port the non-rendering command-loop invariants from
 //! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`. The
 //! case-by-case correspondence, including the remaining S4-45 WATCH residue,
-//! is recorded in `docs/p3f-command-queue-test-ledger.md`.
+//! is recorded in `docs/command-queue-test-ledger.md`.
 
 use std::{
     any::Any,

@@ -1,4 +1,4 @@
-# Phase R pixel corpus. Paths are repository-relative.
+# Renderer pixel corpus. Paths are repository-relative.
 # Status advances from stub-fails -> exact as the Rust renderer converges.
 
 [[entry]]
@@ -879,8 +879,12 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_cusp-ms
 mode = "msaa"
 backend = "dawn-webgpu-metal"
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+# Reference predates upstream 395defdb (dither suppressed at alpha == 0),
+# ported in 09440677; the immutable 7c778d13 Dawn oracle still dithers
+# alpha-0 feather fringes. Bounded residual: <=10 channel delta on <=126
+# pixels. Restore 2/32 when the oracle advances past 395defdb.
+max_channel_delta = 12
+max_different_pixels = 160
 
 
 [[entry]]
@@ -903,8 +907,12 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_ellipse
 mode = "msaa"
 backend = "dawn-webgpu-metal"
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+# Reference predates upstream 395defdb (dither suppressed at alpha == 0),
+# ported in 09440677; the immutable 7c778d13 Dawn oracle still dithers
+# alpha-0 feather fringes. Bounded residual: <=10 channel delta on <=126
+# pixels. Restore 2/32 when the oracle advances past 395defdb.
+max_channel_delta = 12
+max_different_pixels = 160
 
 
 [[entry]]
@@ -927,8 +935,12 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_polysha
 mode = "msaa"
 backend = "dawn-webgpu-metal"
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+# Reference predates upstream 395defdb (dither suppressed at alpha == 0),
+# ported in 09440677; the immutable 7c778d13 Dawn oracle still dithers
+# alpha-0 feather fringes. Bounded residual: <=10 channel delta on <=126
+# pixels. Restore 2/32 when the oracle advances past 395defdb.
+max_channel_delta = 12
+max_different_pixels = 160
 
 
 [[entry]]
@@ -975,8 +987,12 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_shapes-
 mode = "msaa"
 backend = "dawn-webgpu-metal"
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+# Reference predates upstream 395defdb (dither suppressed at alpha == 0),
+# ported in 09440677; the immutable 7c778d13 Dawn oracle still dithers
+# alpha-0 feather fringes. Bounded residual: <=10 channel delta on <=126
+# pixels. Restore 2/32 when the oracle advances past 395defdb.
+max_channel_delta = 12
+max_different_pixels = 160
 
 
 [[entry]]
@@ -999,8 +1015,12 @@ reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-feather_strokes
 mode = "msaa"
 backend = "metal"
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+# Reference predates upstream 395defdb (dither suppressed at alpha == 0),
+# ported in 09440677; the immutable 7c778d13 Dawn oracle still dithers
+# alpha-0 feather fringes. Bounded residual: <=10 channel delta on <=126
+# pixels. Restore 2/32 when the oracle advances past 395defdb.
+max_channel_delta = 12
+max_different_pixels = 160
 
 
 [[entry]]

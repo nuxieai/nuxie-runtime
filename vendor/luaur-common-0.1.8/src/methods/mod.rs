@@ -164,6 +164,8 @@ pub mod vec_deque_capacity;
 pub mod vec_deque_clear;
 pub mod vec_deque_destroy_elements;
 pub mod vec_deque_empty;
+pub mod vec_deque_emplace_back;
+pub mod vec_deque_emplace_front;
 pub mod vec_deque_front_vec_deque;
 pub mod vec_deque_front_vec_deque_alt_b;
 pub mod vec_deque_get_allocator;

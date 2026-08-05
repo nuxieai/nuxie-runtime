@@ -7,7 +7,8 @@ use crate::functions::cstring_builtin_folding_alt_b::cstring_c_char_usize;
 use crate::functions::ctype::ctype;
 use crate::functions::ctypeof::ctypeof;
 use crate::functions::cvar::cvar;
-use crate::functions::cvector::cvector;
+use crate::functions::cvectord::cvectord;
+use crate::functions::cvectorf::cvectorf;
 use crate::records::constant::Constant;
 use luaur_ast::records::ast_name_table::AstNameTable;
 use luaur_common::enums::luau_builtin_function::LuauBuiltinFunction::{self, *};
@@ -23,6 +24,7 @@ pub fn fold_builtin(
     bfid: i32,
     args: *const Constant,
     count: usize,
+    vector_double_precision: bool,
 ) -> Constant {
     // `slice::from_raw_parts(null, 0)` is UB; builtins with no args pass a null
     // `args` pointer with count 0, so produce an empty slice in that case.
@@ -525,30 +527,29 @@ pub fn fold_builtin(
                 && args[0].r#type == Type::Type_Number
                 && args[1].r#type == Type::Type_Number
             {
-                if count == 2 {
-                    return cvector(
-                        unsafe { args[0].data.value_number },
-                        unsafe { args[1].data.value_number },
-                        0.0,
-                        0.0,
-                    );
+                let x = unsafe { args[0].data.value_number };
+                let y = unsafe { args[1].data.value_number };
+                let components = if count == 2 {
+                    Some((x, y, 0.0, 0.0))
                 } else if count == 3 && args[2].r#type == Type::Type_Number {
-                    return cvector(
-                        unsafe { args[0].data.value_number },
-                        unsafe { args[1].data.value_number },
-                        unsafe { args[2].data.value_number },
-                        0.0,
-                    );
+                    Some((x, y, unsafe { args[2].data.value_number }, 0.0))
                 } else if count == 4
                     && args[2].r#type == Type::Type_Number
                     && args[3].r#type == Type::Type_Number
                 {
-                    return cvector(
-                        unsafe { args[0].data.value_number },
-                        unsafe { args[1].data.value_number },
-                        unsafe { args[2].data.value_number },
-                        unsafe { args[3].data.value_number },
-                    );
+                    Some((x, y, unsafe { args[2].data.value_number }, unsafe {
+                        args[3].data.value_number
+                    }))
+                } else {
+                    None
+                };
+
+                if let Some((x, y, z, w)) = components {
+                    return if vector_double_precision {
+                        cvectord(x, y, z, w)
+                    } else {
+                        cvectorf(x as f32, y as f32, z as f32, w as f32)
+                    };
                 }
             }
         }

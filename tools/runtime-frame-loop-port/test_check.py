@@ -1032,7 +1032,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         codegen = self.repo / "tools/nuxie-codegen/src/main.rs"
         codegen.parent.mkdir(parents=True, exist_ok=True)
         codegen.write_text("text-style-feature text-variation-modifier")
-        fixture_test = self.repo / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+        fixture_test = self.repo / "tools/nuxie-codegen/tests/codegen_fixtures.rs"
         fixture_test.parent.mkdir(parents=True, exist_ok=True)
         fixture_test.write_text("deterministic")
         errors: list[str] = []
@@ -1062,7 +1062,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         probe = self.repo / "crates/nuxie-runtime/tests/cpp_probe.rs"
         probe.parent.mkdir(parents=True, exist_ok=True)
         probe.write_text("D-LP-INIT D-LP-EDGE")
-        silver_test = self.repo / "tools/silver-corpus/tests/fl_e8_list_path.rs"
+        silver_test = self.repo / "tools/silver-corpus/tests/list_path_case.rs"
         silver_test.parent.mkdir(parents=True, exist_ok=True)
         silver_test.write_text(
             "D-LP-XY D-LP-RD D-LP-DETACHED D-LP-POINT "
@@ -2354,11 +2354,11 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
         production_inventory_path = (
             PRODUCTION_ROOT
-            / "crates/nuxie-runtime/tests/public_api_fl_c5.rs"
+            / "crates/nuxie-runtime/tests/public_api_surface.rs"
         )
         production_inventory = production_inventory_path.read_text()
         relative_inventory = (
-            "crates/nuxie-runtime/tests/public_api_fl_c5.rs"
+            "crates/nuxie-runtime/tests/public_api_surface.rs"
         )
         for ratchet_id, missing_inventory in [
             (

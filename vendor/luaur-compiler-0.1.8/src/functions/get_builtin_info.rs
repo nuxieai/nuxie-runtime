@@ -441,6 +441,43 @@ pub(crate) fn get_builtin_info(bfid: i32) -> BuiltinInfo {
             flags: BuiltinInfo::Flag_NoneSafe,
         },
 
+        LuauBuiltinFunction::LBF_RIVE_FROUND => BuiltinInfo {
+            params: 1,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_DISTANCE
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR_DISTANCE_SQUARED => BuiltinInfo {
+            params: 2,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_ORIGIN => BuiltinInfo {
+            params: 0,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_LENGTH_SQUARED
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR_MAGNITUDE
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR_NORMALIZE => BuiltinInfo {
+            params: 1,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_DOT
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR2_CROSS => BuiltinInfo {
+            params: 2,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_LERP
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR_SCALE_AND_ADD
+        | LuauBuiltinFunction::LBF_RIVE_VECTOR_SCALE_AND_SUB => BuiltinInfo {
+            params: 3,
+            results: 1,
+            flags: BuiltinInfo::Flag_NoneSafe,
+        },
+
         _ => {
             LUAU_UNREACHABLE!();
         }

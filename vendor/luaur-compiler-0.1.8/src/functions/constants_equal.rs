@@ -16,12 +16,19 @@ pub fn constants_equal(la: &Constant, ra: &Constant) -> bool {
             ra.r#type == Type::Type_Number
                 && unsafe { la.data.value_number == ra.data.value_number }
         }
-        Type::Type_Vector => {
-            ra.r#type == Type::Type_Vector
-                && unsafe { la.data.value_vector[0] == ra.data.value_vector[0] }
-                && unsafe { la.data.value_vector[1] == ra.data.value_vector[1] }
-                && unsafe { la.data.value_vector[2] == ra.data.value_vector[2] }
-                && unsafe { la.data.value_vector[3] == ra.data.value_vector[3] }
+        Type::Type_Vectorf => {
+            ra.r#type == Type::Type_Vectorf
+                && unsafe { la.data.value_vectorf[0] == ra.data.value_vectorf[0] }
+                && unsafe { la.data.value_vectorf[1] == ra.data.value_vectorf[1] }
+                && unsafe { la.data.value_vectorf[2] == ra.data.value_vectorf[2] }
+                && unsafe { la.data.value_vectorf[3] == ra.data.value_vectorf[3] }
+        }
+        Type::Type_Vectord => {
+            ra.r#type == Type::Type_Vectord
+                && unsafe { la.data.value_vectord[0] == ra.data.value_vectord[0] }
+                && unsafe { la.data.value_vectord[1] == ra.data.value_vectord[1] }
+                && unsafe { la.data.value_vectord[2] == ra.data.value_vectord[2] }
+                && unsafe { la.data.value_vectord[3] == ra.data.value_vectord[3] }
         }
         Type::Type_String => {
             ra.r#type == Type::Type_String

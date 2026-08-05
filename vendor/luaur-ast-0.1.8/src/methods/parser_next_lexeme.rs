@@ -6,6 +6,7 @@ use crate::records::parser::Parser;
 impl Parser {
     pub fn next_lexeme(&mut self) {
         let mut r#type = self.lexer.next_with(false, true).r#type;
+        self.lexemes.push(*self.lexer.current());
 
         while r#type == Type::BrokenComment
             || r#type == Type::Comment
@@ -52,6 +53,7 @@ impl Parser {
             }
 
             r#type = self.lexer.next_with(false, false).r#type;
+            self.lexemes.push(*self.lexer.current());
         }
     }
 }

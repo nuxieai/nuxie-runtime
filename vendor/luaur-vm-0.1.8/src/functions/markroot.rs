@@ -25,6 +25,13 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
     // registry(L) — &L->global->registry
     markvalue!(g, core::ptr::addr_of_mut!((*g).registry));
 
+    if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        markvalue!(g, core::ptr::addr_of_mut!((*g).weakregistry));
+        if let Some(embeddergc) = (*g).embeddergc {
+            embeddergc((*g).mainthread, None);
+        }
+    }
+
     if luaur_common::FFlag::LuauUdataDirectAccess6.get() {
         if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
             markudatadirectaccess(g);

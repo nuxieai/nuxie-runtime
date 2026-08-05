@@ -539,3 +539,5 @@ check-cfg = [
     'cfg(feature, values("cargo-clippy"))',
     "cfg(web_sys_unstable_apis)",
 ]
+
+[workspace]

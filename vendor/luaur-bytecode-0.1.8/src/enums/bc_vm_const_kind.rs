@@ -4,10 +4,12 @@ pub enum BcVmConstKind {
     Nil,
     Boolean,
     Number,
-    Vector,
+    Vectorf,
+    Vectord,
     String,
     Import,
     Table,
     Closure,
     Integer,
+    ClassShape,
 }

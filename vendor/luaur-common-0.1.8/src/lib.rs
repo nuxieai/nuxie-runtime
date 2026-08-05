@@ -50,7 +50,9 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
     FFlag::LuauBidirectionalInferenceBetterUnionHandling.set(value);
     FFlag::LuauCallFeedback.set(value);
+    FFlag::LuauBackedgeHeapCheck.set(false);
     FFlag::LuauBytecodeCostModel.set(false);
+    FFlag::LuauBytecodeFold.set(false);
     FFlag::LuauCIProto.set(false);
     FFlag::LuauCheckFunctionStatementTypes.set(value);
     FFlag::LuauCloneTableFix.set(false);
@@ -75,11 +77,11 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauCodegenVmExitSync.set(value);
     FFlag::LuauCodegenVmExitSyncFix.set(value);
     FFlag::LuauCompileStringInterpTargetTop.set(value);
+    FFlag::LuauCompileIifeInline.set(false);
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCostModel.set(false);
-    FFlag::LuauCstAttr.set(false);
-    FFlag::LuauCustomYieldablePcalls.set(false);
+    FFlag::LuauCompileEmitVectorDouble.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
     FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
@@ -108,10 +110,12 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauLValueCompoundAssignmentVisitLhs.set(value);
     FFlag::LuauLimitUnificationRecursion.set(value);
     FFlag::LuauMathRoundNegZero.set(false);
+    FFlag::LuauGcTraceUdata.set(false);
     FFlag::LuauNativeCodeTargetCheck.set(value);
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
     FFlag::LuauNoDuplicateBinaryPrefix.set(false);
     FFlag::LuauOccursCheckForAllBindings.set(value);
+    FFlag::LuauOptimizeExportTable.set(false);
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
     FFlag::LuauPropertyModifierMismatchErrors.set(value);
@@ -121,12 +125,12 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauRemoveConstraintSolverEmplace.set(value);
     FFlag::LuauReplacerIsSolverAgnostic.set(value);
     FFlag::LuauRequireResolveAliasNullCheck.set(value);
+    FFlag::LuauRbsConfigAliasResolution.set(false);
     FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
     FFlag::LuauSolverV2.set(value);
     FFlag::LuauStoreConstKeywordBegin.set(false);
     FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
     FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
-    FFlag::LuauTableEntriesDontNeedToMatchIndent.set(value);
     FFlag::LuauTrackPrefixLocal.set(false);
     FFlag::LuauTableFreezeCheckIsSubtype.set(value);
     FFlag::LuauTidyTypePrototyping.set(value);
@@ -143,8 +147,11 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauVirtualBcBuilder.set(false);
     FFlag::LuauVisitCallTypeArgsInDfg.set(value);
     FFlag::LuauYieldIter2.set(value);
+    FFlag::LuauXpcallFixMessageYieldPath.set(false);
+    FFlag::LuauManagedDebugNames.set(false);
     DFFlag::LuauGcMarkUdataAccess.set(false);
     DFFlag::LuauGcTableStepFix.set(false);
+    DFFlag::LuauSelfIsSelfAndAlwaysSelf.set(false);
 }
 
 /// FastFlag namespace `FFlag::` — static (non-dynamic) bool flags. Definitions
@@ -236,8 +243,14 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauBidirectionalInferenceBetterUnionHandling);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCallFeedback);
+    // VM/src/lvmexecute.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauBackedgeHeapCheck);
+    crate::LUAU_FLAGVERSION!(LuauBackedgeHeapCheck, 2);
     // Bytecode/src/BytecodeBuilder.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeCostModel);
+    crate::LUAU_FLAGVERSION!(LuauBytecodeCostModel, 2);
+    // Inliner/src/JitInliner.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauBytecodeFold);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCIProto);
     // Analysis/src/TypeChecker2.cpp
@@ -284,18 +297,19 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSync);
     // CodeGen/src/OptimizeDeadStore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodegenVmExitSyncFix);
-    // Ast/src/Cst.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCstAttr);
+    // Bytecode/src/BytecodeBuilder.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileEmitVectorDouble);
+    crate::LUAU_FLAGVERSION!(LuauCompileEmitVectorDouble, 2);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
+    // Compiler/src/Compiler.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileIifeInline);
     // Analysis/src/BuiltinTypeFunctions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConcatDoesntAlwaysReturnString);
     // Analysis/src/Constraint.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
     // Bytecode/src/BytecodeGraph.cpp; VM/src/lvmload.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCostModel);
-    // VM/src/laux.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
     crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 3);
@@ -309,7 +323,7 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueSyntax);
-    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 3);
+    crate::LUAU_FLAGVERSION!(LuauExportValueSyntax, 4);
     // Analysis/src/Frontend.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExportValueTypecheck);
     // Analysis/src/Normalize.cpp
@@ -340,8 +354,13 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauLValueCompoundAssignmentVisitLhs);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauLimitUnificationRecursion);
+    // VM/src/lapi.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauManagedDebugNames);
     // VM/src/lbuiltins.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauMathRoundNegZero);
+    // VM/src/lgc.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauGcTraceUdata);
+    crate::LUAU_FLAGVERSION!(LuauGcTraceUdata, 2);
     // CodeGen/src/CodeGenUtils.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauNativeCodeTargetCheck);
     // Analysis/src/NonStrictTypeChecker.cpp
@@ -350,6 +369,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauNoDuplicateBinaryPrefix);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauOccursCheckForAllBindings);
+    // Compiler/src/Compiler.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauOptimizeExportTable);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauPropagateFreeTypesIntoUnionAndIntersectionBounds);
     // Analysis/src/ConstraintGenerator.cpp
@@ -368,6 +389,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauReplacerIsSolverAgnostic);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauRequireResolveAliasNullCheck);
+    // Config/src/LuauConfig.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauRbsConfigAliasResolution);
     // Analysis/src/BuiltinDefinitions.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSilenceDynamicFormatStringErrors);
     // Ast/src/Parser.cpp
@@ -378,8 +401,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauStoreConstKeywordBegin);
     // Analysis/src/Subtyping.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauSubtypingTablesHasBetterErrorSuppression);
-    // Ast/src/Parser.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauTableEntriesDontNeedToMatchIndent);
     // Ast/src/Parser.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTrackPrefixLocal);
     // Analysis/src/BuiltinDefinitions.cpp
@@ -412,6 +433,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauVisitCallTypeArgsInDfg);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauYieldIter2);
+    // VM/src/ldo.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauXpcallFixMessageYieldPath);
 }
 
 /// Static int FastFlags, mirroring `FFlag`. C++ collects every
@@ -526,6 +549,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauRequireAliasOverrideOrderFix, false);
+    // Require/src/RequireNavigator.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauSelfIsSelfAndAlwaysSelf, false);
 }
 
 /// Dynamic int flags (`DFInt::`), mirroring `FInt`.

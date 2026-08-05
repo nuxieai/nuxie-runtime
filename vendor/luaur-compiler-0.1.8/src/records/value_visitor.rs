@@ -2,6 +2,7 @@ use luaur_ast::records::ast_local::AstLocal;
 use luaur_ast::records::ast_name::AstName;
 
 use luaur_common::records::dense_hash_map::DenseHashMap;
+use luaur_common::records::dense_hash_set::DenseHashSet;
 
 use crate::enums::global::Global;
 use crate::records::variable::Variable;
@@ -16,6 +17,9 @@ use crate::records::variable::Variable;
 pub struct ValueVisitor {
     pub(crate) globals: DenseHashMap<AstName, Global>,
     pub(crate) variables: DenseHashMap<*mut AstLocal, Variable>,
+    pub(crate) class_locals: DenseHashMap<AstName, *mut AstLocal>,
+    pub(crate) exported_functions: *mut DenseHashSet<*mut AstLocal>,
+    pub(crate) exported_variables: *mut alloc::vec::Vec<*mut AstLocal>,
 }
 
 // Wire the generic `AstVisitor` dispatch (used by `var->visit(this)` /
@@ -47,6 +51,10 @@ impl luaur_ast::records::ast_visitor::AstVisitor for ValueVisitor {
         self.visit_ast_stat_function(
             node as *mut luaur_ast::records::ast_stat_function::AstStatFunction,
         )
+    }
+
+    fn visit_stat_class(&mut self, node: *mut core::ffi::c_void) -> bool {
+        self.visit_ast_stat_class(node as *mut luaur_ast::records::ast_stat_class::AstStatClass)
     }
 
     fn visit_expr_function(&mut self, node: *mut core::ffi::c_void) -> bool {

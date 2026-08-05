@@ -35,8 +35,8 @@ impl BytecodeBuilder {
                 result,
                 format_args!("{}", unsafe { data.value.valueInteger64 } as i64),
             ),
-            Type::Type_Vector => {
-                let v = unsafe { data.value.valueVector };
+            Type::Type_Vectorf => {
+                let v = unsafe { data.value.valueVectorf };
                 if v[3] == 0.0 {
                     formatAppend(
                         result,
@@ -58,6 +58,56 @@ impl BytecodeBuilder {
                             format_g(v[3] as f64, 9)
                         ),
                     );
+                }
+            }
+            Type::Type_Vectord => {
+                let v = unsafe { data.value.valueVectord };
+                if luaur_common::FFlag::LuauCompileEmitVectorDouble.get() {
+                    if v[3] == 0.0 {
+                        formatAppend(
+                            result,
+                            format_args!(
+                                "{}, {}, {}",
+                                format_g(v[0], 17),
+                                format_g(v[1], 17),
+                                format_g(v[2], 17)
+                            ),
+                        );
+                    } else {
+                        formatAppend(
+                            result,
+                            format_args!(
+                                "{}, {}, {}, {}",
+                                format_g(v[0], 17),
+                                format_g(v[1], 17),
+                                format_g(v[2], 17),
+                                format_g(v[3], 17)
+                            ),
+                        );
+                    }
+                } else {
+                    if v[3] as f32 == 0.0 {
+                        formatAppend(
+                            result,
+                            format_args!(
+                                "{}, {}, {}",
+                                format_g(v[0] as f32 as f64, 9),
+                                format_g(v[1] as f32 as f64, 9),
+                                format_g(v[2] as f32 as f64, 9)
+                            ),
+                        );
+                    } else {
+                        formatAppend(
+                            result,
+                            format_args!(
+                                "{}, {}, {}, {}",
+                                format_g(v[0] as f32 as f64, 9),
+                                format_g(v[1] as f32 as f64, 9),
+                                format_g(v[2] as f32 as f64, 9),
+                                format_g(v[3] as f32 as f64, 9)
+                            ),
+                        );
+                    }
                 }
             }
             Type::Type_String => {

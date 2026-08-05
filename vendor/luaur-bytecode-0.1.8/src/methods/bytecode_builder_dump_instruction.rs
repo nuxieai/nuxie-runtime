@@ -951,6 +951,20 @@ impl BytecodeBuilder {
                 );
                 2
             }
+            LuauOpcode::LOP_NEWCLASS => {
+                formatAppend(
+                    result,
+                    format_args!(
+                        "NEWCLASS R{} R{} K{} [",
+                        LUAU_INSN_A(insn),
+                        LUAU_INSN_B(insn),
+                        code[1]
+                    ),
+                );
+                self.dump_constant(result, code[1] as i32, false);
+                result.push_str("]\n");
+                2
+            }
             _ => {
                 LUAU_ASSERT!(false);
                 1

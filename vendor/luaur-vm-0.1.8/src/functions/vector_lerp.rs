@@ -10,7 +10,7 @@ use crate::type_aliases::lua_state::lua_State;
 pub unsafe fn vector_lerp(L: *mut lua_State) -> core::ffi::c_int {
     let a = lua_l_checkvector(L, 1);
     let b = lua_l_checkvector(L, 2);
-    let t = lua_l_checknumber(L, 3) as f32;
+    let t = lua_l_checknumber(L, 3) as crate::type_aliases::lua_vector_type::LuaVectorType;
 
     if LUA_VECTOR_SIZE == 4 {
         lua_pushvector_lua_state_f32_f32_f32_f32(

@@ -188,6 +188,7 @@ impl Not for ComponentDirt {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UpdateComponentsReport {
     pub did_update: bool,
+    pub(crate) did_layout: bool,
     pub steps: usize,
     pub updated_locals: Vec<usize>,
     pub max_steps_reached: bool,
@@ -875,6 +876,9 @@ pub(crate) enum RuntimeConstraintBoundsKind {
 pub(crate) struct RuntimeLayoutComponentState {
     layout_node_dirty: Cell<bool>,
     layout_node_revision: Cell<u64>,
+    /// The latest parent-local result produced by the retained layout node.
+    /// This remains the solved target while `layout` interpolates toward it.
+    solved_layout: Cell<Option<RuntimeLayoutRect>>,
     layout: Cell<RuntimeLayoutRect>,
     animation_a: Cell<RuntimeLayoutAnimationData>,
     animation_b: Cell<RuntimeLayoutAnimationData>,
@@ -937,6 +941,7 @@ pub(crate) struct RuntimeLayoutAdvance {
     pub(crate) keep_going: bool,
     pub(crate) layout_changed: bool,
     pub(crate) size_changed: bool,
+    pub(crate) path_changed: bool,
 }
 
 /// Runtime lifecycle bits owned by one scripted Component occurrence.
@@ -1045,6 +1050,7 @@ impl RuntimeLayoutComponentState {
         Self {
             layout_node_dirty: Cell::new(false),
             layout_node_revision: Cell::new(0),
+            solved_layout: Cell::new(None),
             layout: Cell::new(RuntimeLayoutRect::default()),
             animation_a: Cell::new(RuntimeLayoutAnimationData::default()),
             animation_b: Cell::new(RuntimeLayoutAnimationData::default()),
@@ -1083,6 +1089,10 @@ impl RuntimeLayoutComponentState {
         self.layout_node_dirty.get()
     }
 
+    pub(crate) fn sync_style(&self) {
+        self.layout_node_dirty.set(false);
+    }
+
     #[cfg(test)]
     pub(crate) fn layout_node_revision(&self) -> u64 {
         self.layout_node_revision.get()
@@ -1097,8 +1107,6 @@ impl RuntimeLayoutComponentState {
     }
 
     pub(crate) fn retain_bounds(&self, x: f32, y: f32, width: f32, height: f32) -> bool {
-        // The delegated solve consumed this retained node's dirty bit.
-        self.layout_node_dirty.set(false);
         self.position_left_changed.set(false);
         self.position_top_changed.set(false);
         self.force_update_layout_bounds.set(false);
@@ -1108,6 +1116,7 @@ impl RuntimeLayoutComponentState {
             width,
             height,
         };
+        self.solved_layout.set(Some(target));
         let previous_draw_bounds = if self.animates() {
             self.current_animation_data().to
         } else {
@@ -1162,7 +1171,16 @@ impl RuntimeLayoutComponentState {
         animation.to = target;
         animation.elapsed_seconds = 0.0;
         self.set_current_animation_data(animation);
-        draw_bounds_changed
+        // Animated target changes update `to`, propagate the still-current
+        // size, and dirty only world transform. C++ does not dirty the
+        // LayoutComponent's own background path until interpolation reaches
+        // the completion branch in `applyInterpolation`.
+        false
+    }
+
+    pub(crate) fn solved_bounds(&self) -> Option<(f32, f32, f32, f32)> {
+        let layout = self.solved_layout.get()?;
+        Some((layout.left, layout.top, layout.width, layout.height))
     }
 
     pub(crate) fn added_to_host(&self) {
@@ -1185,11 +1203,10 @@ impl RuntimeLayoutComponentState {
     }
 
     pub(crate) fn target_bounds(&self) -> (f32, f32, f32, f32) {
-        let layout = if self.animates() {
-            self.current_animation_data().to
-        } else {
-            self.layout.get()
-        };
+        let layout = self
+            .solved_layout
+            .get()
+            .unwrap_or_else(|| self.layout.get());
         (layout.left, layout.top, layout.width, layout.height)
     }
 
@@ -1273,7 +1290,7 @@ impl RuntimeLayoutComponentState {
         }
     }
 
-    fn animates(&self) -> bool {
+    pub(crate) fn animates(&self) -> bool {
         self.animation_style.get() != 0
             && self.effective_interpolation() != 0
             && self.effective_interpolation_time() > 0.0
@@ -1347,6 +1364,7 @@ impl RuntimeLayoutComponentState {
                 keep_going: false,
                 layout_changed: previous != animation.to,
                 size_changed,
+                path_changed: size_changed,
             };
         }
 
@@ -1364,6 +1382,7 @@ impl RuntimeLayoutComponentState {
             keep_going: factor != 1.0,
             layout_changed: previous != current,
             size_changed: previous.width != current.width || previous.height != current.height,
+            path_changed: false,
         }
     }
 
@@ -2313,6 +2332,56 @@ mod advancing_owner_tests {
         let final_step = layout.advance_interpolation(0.25, true);
         assert!(!final_step.keep_going);
         assert_eq!(layout.constraint_bounds(), (0.0, 0.0, 30.0, 40.0));
+    }
+
+    #[test]
+    fn layout_retains_solved_target_while_live_bounds_interpolate() {
+        let layout = RuntimeConcreteComponentState::for_type("LayoutComponent")
+            .layout
+            .expect("layout state");
+        assert_eq!(layout.solved_bounds(), None);
+
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(0.0, 0.0, 10.0, 20.0);
+        layout.retain_bounds(100.0, 50.0, 30.0, 40.0);
+
+        assert_eq!(layout.solved_bounds(), Some((100.0, 50.0, 30.0, 40.0)));
+        assert_eq!(layout.constraint_bounds(), (0.0, 0.0, 10.0, 20.0));
+    }
+
+    #[test]
+    fn animated_layout_dirties_its_own_path_only_at_completion() {
+        let layout = RuntimeConcreteComponentState::for_type("LayoutComponent")
+            .layout
+            .expect("layout state");
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(0.0, 0.0, 10.0, 20.0);
+
+        assert!(
+            !layout.retain_bounds(0.0, 0.0, 30.0, 40.0),
+            "a new animated target retains the existing background path"
+        );
+        assert!(!layout.advance_interpolation(0.5, true).path_changed);
+        assert!(!layout.advance_interpolation(0.5, true).path_changed);
+        assert!(
+            layout.advance_interpolation(0.1, true).path_changed,
+            "LayoutComponent::applyInterpolation adds Path dirt only in its completion branch"
+        );
+    }
+
+    #[test]
+    fn layout_target_remains_the_last_solve_when_animation_style_changes() {
+        let layout = RuntimeConcreteComponentState::for_type("LayoutComponent")
+            .layout
+            .expect("layout state");
+        layout.retain_bounds(0.0, 0.0, 10.0, 20.0);
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(100.0, 50.0, 30.0, 40.0);
+
+        layout.set_animation_style(0, 0, 0.0, None);
+
+        assert_eq!(layout.target_bounds(), (100.0, 50.0, 30.0, 40.0));
+        assert_eq!(layout.current_bounds(), (0.0, 0.0, 10.0, 20.0));
     }
 
     #[test]

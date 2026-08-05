@@ -759,10 +759,10 @@ def build_tiers(
             [
                 perf,
                 ratchet(
-                    "r4-timing-gate",
+                    "renderer-timing-gate",
                     "NOT_BUILT",
-                    "r4-timing-gate per-commit scorecard evidence not built "
-                    "(existing Phase R gate)",
+                    "renderer-timing-gate per-commit scorecard evidence not built "
+                    "(non-CI renderer timing gate)",
                 ),
                 size_ratchet(
                     evidence_dir,

@@ -8,9 +8,6 @@ You are running one cycle of the upstream-sync workflow defined in
 `docs/upstream-sync-map.md` — read it first; it is authoritative. This
 command may be invoked manually or by a scheduled job.
 
-GATE: if M8 is not checked off in `docs/v2-status.md`, stop and say so — the
-Upstream Sync cycle activates only after the migration closes.
-
 ## Steps
 
 1. **Prepare the pass.** The orchestrator fetches upstream, creates or refreshes
@@ -55,7 +52,7 @@ Upstream Sync cycle activates only after the migration closes.
 - Scheduled triage ends at step 4 with a report and a notification unless a
   standing category approval is recorded. It never infers approval from prior
   cycles.
-- All V2/goal ground rules apply to port slices (port code not behaviors,
+- All `docs/PORTING.md` ground rules apply to port slices (port code not behaviors,
   ratchet per commit, fences, single writer, threads policy for scouts).
 - Keep the pinned reference checkout untouched. Run candidate probes from the
   verified candidate worktree and remove cycle-only worktrees when the cycle

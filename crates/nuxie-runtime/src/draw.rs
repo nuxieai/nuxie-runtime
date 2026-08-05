@@ -117,7 +117,7 @@ use slice_mesh::{RuntimeSliceMeshOwner, RuntimeSliceMeshUpdate, RuntimeSliceMesh
 // the recursion to simple paths over the (few) artboards -- unlike a plain depth
 // cap it can neither overflow the stack nor fan out exponentially, and it never
 // truncates legitimate deep nesting. It is a DELIBERATE terminate-where-C++-
-// would-otherwise-loop divergence (v2-status item 27), unreachable on valid
+// would-otherwise-loop divergence (register D-list), unreachable on valid
 // (acyclic) files, so golden output is unchanged.
 
 macro_rules! cached_runtime_property_key {

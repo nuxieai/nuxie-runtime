@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -93,30 +93,30 @@ RENDERER_PERF_PARITY_REPORT_5 ?=
 RENDERER_PERF_PARITY_MAX_RATIO ?= 1.0
 RENDERER_PERF_PARITY_JSON ?= $(CURDIR)/target/renderer-perf-parity-gate.json
 RENDERER_PERF_PARITY_MARKDOWN ?= $(CURDIR)/target/renderer-perf-parity-gate.md
-R4_TIMING_GATE_OUT_DIR ?=
-R4_TIMING_GATE_RENDERER_PERF ?= $(CURDIR)/target/release/renderer-perf
-R4_TIMING_GATE_COMPARATOR ?= $(CURDIR)/target/release/r4-timing-compare
-R4_TIMING_GATE_MANIFEST ?= $(CURDIR)/tools/perf-compare/renderer-scenes.toml
-R4_TIMING_GATE_BASELINE_RUNNER ?= $(RENDERER_PERF_CPP_RUNNER)
-R4_TIMING_GATE_A_RUNNER ?=
-R4_TIMING_GATE_B_RUNNER ?=
-R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO ?= 1.0
-R4_TIMING_GATE_CAPTURE_MAX_RATIO ?= 1000
-R4_TIMING_GATE_MAX_B_OVER_A ?= 1.0
-R4_TIMING_GATE_MAX_CONTROL_DRIFT ?= 1.05
-R4_TIMING_GATE_MAX_REPEAT_DRIFT ?= 1.05
-R4_TIMING_GATE_HOST_SAMPLER ?=
-R4_TIMING_GATE_BASELINE_SOURCE_ID ?=
-R4_TIMING_GATE_A_SOURCE_ID ?=
-R4_TIMING_GATE_B_SOURCE_ID ?=
+RENDERER_TIMING_GATE_OUT_DIR ?=
+RENDERER_TIMING_GATE_RENDERER_PERF ?= $(CURDIR)/target/release/renderer-perf
+RENDERER_TIMING_GATE_COMPARATOR ?= $(CURDIR)/target/release/renderer-timing-compare
+RENDERER_TIMING_GATE_MANIFEST ?= $(CURDIR)/tools/perf-compare/renderer-scenes.toml
+RENDERER_TIMING_GATE_BASELINE_RUNNER ?= $(RENDERER_PERF_CPP_RUNNER)
+RENDERER_TIMING_GATE_A_RUNNER ?=
+RENDERER_TIMING_GATE_B_RUNNER ?=
+RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO ?= 1.0
+RENDERER_TIMING_GATE_CAPTURE_MAX_RATIO ?= 1000
+RENDERER_TIMING_GATE_MAX_B_OVER_A ?= 1.0
+RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT ?= 1.05
+RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT ?= 1.05
+RENDERER_TIMING_GATE_HOST_SAMPLER ?=
+RENDERER_TIMING_GATE_BASELINE_SOURCE_ID ?=
+RENDERER_TIMING_GATE_A_SOURCE_ID ?=
+RENDERER_TIMING_GATE_B_SOURCE_ID ?=
 
-export R4_TIMING_GATE_OUT_DIR R4_TIMING_GATE_RENDERER_PERF R4_TIMING_GATE_COMPARATOR R4_TIMING_GATE_MANIFEST
-export R4_TIMING_GATE_BASELINE_RUNNER R4_TIMING_GATE_A_RUNNER R4_TIMING_GATE_B_RUNNER
-export R4_TIMING_GATE_RENDERER_PERF_MAX_RATIO R4_TIMING_GATE_MAX_B_OVER_A R4_TIMING_GATE_MAX_CONTROL_DRIFT
-export R4_TIMING_GATE_CAPTURE_MAX_RATIO
-export R4_TIMING_GATE_MAX_REPEAT_DRIFT
-export R4_TIMING_GATE_HOST_SAMPLER
-export R4_TIMING_GATE_BASELINE_SOURCE_ID R4_TIMING_GATE_A_SOURCE_ID R4_TIMING_GATE_B_SOURCE_ID
+export RENDERER_TIMING_GATE_OUT_DIR RENDERER_TIMING_GATE_RENDERER_PERF RENDERER_TIMING_GATE_COMPARATOR RENDERER_TIMING_GATE_MANIFEST
+export RENDERER_TIMING_GATE_BASELINE_RUNNER RENDERER_TIMING_GATE_A_RUNNER RENDERER_TIMING_GATE_B_RUNNER
+export RENDERER_TIMING_GATE_RENDERER_PERF_MAX_RATIO RENDERER_TIMING_GATE_MAX_B_OVER_A RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT
+export RENDERER_TIMING_GATE_CAPTURE_MAX_RATIO
+export RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT
+export RENDERER_TIMING_GATE_HOST_SAMPLER
+export RENDERER_TIMING_GATE_BASELINE_SOURCE_ID RENDERER_TIMING_GATE_A_SOURCE_ID RENDERER_TIMING_GATE_B_SOURCE_ID
 RENDERER_COUNTER_TARGET_DIR ?= $(CURDIR)/target/renderer-counter
 RENDERER_COUNTER_CPP_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_COUNTER_RUST_RUNNER ?= $(RENDERER_COUNTER_TARGET_DIR)/release/renderer-perf-rust-runner
@@ -238,7 +238,7 @@ runtime-frame-loop-port-gate:
 		"runtime frame loop port tool unit tests" "$(MAKE) --no-print-directory runtime-frame-loop-port-test" \
 		"runtime frame loop correspondence checks" "$(MAKE) --no-print-directory runtime-frame-loop-port-check"
 
-# --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
+# --- Clippy lint gate (panic-freedom discipline) ------------------------------
 # The runtime crates opt into the panic-freedom clippy lints
 # (clippy::unwrap_used / indexing_slicing / arithmetic_side_effects):
 # - LINT_GATE_DENY_CRATES are fully clean and pin the lints at DENY in their
@@ -436,7 +436,7 @@ renderer-golden: renderer-replay
 # builds separate. CI may restore only RENDERER_DAWN_LIVE_REFERENCE_REPLAY from
 # its exact pinned-input cache; the Rust candidate below is always compiled
 # from HEAD. The historical RENDERER_DAWN_REFERENCE_REPLAY remains isolated for
-# the immutable Phase R oracle and is never relabeled as current-runtime output.
+# the immutable renderer-port pixel oracle and is never relabeled as current-runtime output.
 renderer-rust-replay-release:
 	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --bin renderer-replay
 
@@ -487,17 +487,17 @@ renderer-perf: renderer-perf-runners
 renderer-perf-parity-gate:
 	cargo run --quiet -p perf-compare --bin renderer-perf-parity-gate -- --report "$(RENDERER_PERF_PARITY_REPORT_1)" --report "$(RENDERER_PERF_PARITY_REPORT_2)" --report "$(RENDERER_PERF_PARITY_REPORT_3)" --report "$(RENDERER_PERF_PARITY_REPORT_4)" --report "$(RENDERER_PERF_PARITY_REPORT_5)" --max-ratio "$(RENDERER_PERF_PARITY_MAX_RATIO)" --json "$(RENDERER_PERF_PARITY_JSON)" --markdown "$(RENDERER_PERF_PARITY_MARKDOWN)"
 
-# Timing-defined R4 acceptance only. The gate invokes the fixed renderer-perf
+# Timing-defined renderer acceptance only. The gate invokes the fixed renderer-perf
 # executable with pinned baseline, A, and B runner paths; it never evaluates a
 # caller-provided shell command.
-r4-timing-gate-tools:
-	cargo build --quiet --release -p perf-compare --bin renderer-perf --bin r4-timing-compare
+renderer-timing-gate-tools:
+	cargo build --quiet --release -p perf-compare --bin renderer-perf --bin renderer-timing-compare
 
-r4-timing-gate: r4-timing-gate-tools
-	@test -n "$(strip $(R4_TIMING_GATE_BASELINE_SOURCE_ID))" || { echo "R4_TIMING_GATE_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
-	@test -n "$(strip $(R4_TIMING_GATE_A_SOURCE_ID))" || { echo "R4_TIMING_GATE_A_SOURCE_ID is required (identify the A runner source)" >&2; exit 2; }
-	@test -n "$(strip $(R4_TIMING_GATE_B_SOURCE_ID))" || { echo "R4_TIMING_GATE_B_SOURCE_ID is required (identify the B runner source)" >&2; exit 2; }
-	tools/r4-timing-gate.sh
+renderer-timing-gate: renderer-timing-gate-tools
+	@test -n "$(strip $(RENDERER_TIMING_GATE_BASELINE_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
+	@test -n "$(strip $(RENDERER_TIMING_GATE_A_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_A_SOURCE_ID is required (identify the A runner source)" >&2; exit 2; }
+	@test -n "$(strip $(RENDERER_TIMING_GATE_B_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_B_SOURCE_ID is required (identify the B runner source)" >&2; exit 2; }
+	tools/renderer-timing-gate.sh
 
 renderer-counter-runners:
 	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_COUNTER_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-counters --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
@@ -652,7 +652,7 @@ fuzz-build: fixtures
 # seed replay (-runs=0) while the runtime pipeline had open input-dependent HANG
 # findings (unbounded parent/reference-chain walks) that a timed mutation run
 # rediscovered within seconds. Those cycle-guard findings are now FIXED (see
-# fuzz/regressions/README.md and v2-status item 27), so all targets are back to
+# fuzz/regressions/README.md), so all targets are back to
 # timed mutation. The -timeout guard still turns any residual hang into a hard
 # failure.
 fuzz-smoke: fuzz-build

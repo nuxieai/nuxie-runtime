@@ -4,19 +4,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-e8-wave-candidate"
-candidate_pending_verification_files = [
-  "src/shapes/list_path.cpp",
-  "src/text/text_modifier.cpp",
-  "src/text/text_style.cpp",
-  "src/text/text_style_feature.cpp",
-  "src/text/text_target_modifier.cpp",
-  "src/text/text_variation_modifier.cpp",
-  "src/text/raw_text.cpp",
-]
-provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
-provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
-fl_b_verification = "reaccepted"
+phase = "closed"
 
 [expected_trace_artifacts]
 cpp_binary_sha256 = "760c91d700585bc566db3261c12adeb18570a3e94be5f7413a65a0532491b380"
@@ -27,27 +15,6 @@ rust_binary_sha256 = "a914b21d6fb35c7ec42f55a3d8a75310019f3363f43ff637f601aee726
 rust_coverage_sha256 = "f691901f3bea402c4d5049b4bbf26704480b96a4c0d52d108c230ca26830ab85"
 rust_mechanism_coverage_sha256 = "0b694863d6ac8fbcfe4ae3d809826f9f9f939e6b1a2b98a98694f7685aac4faf"
 rust_steady_coverage_sha256 = "51d12f79f9a037d18a6d75f7d55fb1bb0cf47b837a96c1970009338a2bd38048"
-
-[active_owner_family]
-id = "FL-E8-static-text-list-path-raw-text"
-checklist = "docs/runtime-frame-loop-fl-e8-tests.md"
-checklist_state = "planning"
-acceptance_state = "open"
-cpp_files = [
-  "src/shapes/list_path.cpp",
-  "src/text/raw_text.cpp",
-  "src/text/text_modifier.cpp",
-  "src/text/text_style.cpp",
-  "src/text/text_style_feature.cpp",
-  "src/text/text_target_modifier.cpp",
-  "src/text/text_variation_modifier.cpp",
-]
-required_adversarial = [
-  "WP0 ledger revert and family map",
-  "WP1 static-text extensions",
-  "WP2 dynamic ListPath",
-  "WP3 standalone RawText and shared color-glyph engine",
-]
 
 [expected_trace_landmarks]
 frame = [

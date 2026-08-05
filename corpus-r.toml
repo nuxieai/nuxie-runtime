@@ -1,4 +1,4 @@
-# Phase R pixel corpus. Paths are repository-relative.
+# Renderer pixel corpus. Paths are repository-relative.
 # Status advances from stub-fails -> exact as the Rust renderer converges.
 
 [[entry]]

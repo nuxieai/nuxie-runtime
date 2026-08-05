@@ -1,9 +1,9 @@
 # Upstream Sync cycle map
 
-Companion to `docs/porting-map-v2.md`. Defines the recurring Upstream Sync
-cycle that keeps Nuxie runtime current with `rive-app/rive-runtime` after the
-V2/M8 migration completes. M8, renderer Phase R, and three clean manual sync
-cycles are complete. A read-only weekly drift scout is active. The
+Defines the recurring Upstream Sync
+cycle that keeps Nuxie runtime current with `rive-app/rive-runtime` now that
+the original C++→Rust port (including the renderer) is complete. Four clean
+sync cycles are complete. A read-only weekly drift scout is active. The
 write-capable parity worker is also active after meeting its trust-count
 threshold. With no standing approvals recorded, its prompt fails closed and
 permits blocker-only reporting rather than repository changes. Cycle rows keep
@@ -126,7 +126,7 @@ explicit file ownership and overlap declarations, then schedule them as S4 did:
 2. Land foundational schema/runtime/dependency chains serially in dependency
    order; regenerate schema before its runtime consumers.
 3. Run disjoint owner sets in parallel, each on its own branch and worktree
-   under `~/dev/worktrees/`. Shared files belong to a named closeout/overlap set,
+   under `~/dev/worktrees/`. Shared files belong to a named overlap set,
    not to two concurrent writers.
 
 Within each set, preserve upstream order. Keep one commit per upstream change
@@ -245,7 +245,7 @@ worker may act on that category.
   followed by the S4C shared-file closeout on `levi/s4-ports-s4c`. The product
   pin advanced to `4ac7b327` only after the full ordinary, scripted, runtime,
   frame-loop, and attribution ratchets were green.
-- Clean manual cycles completed: 3
+- Clean manual cycles completed: 4 (S4 closed at `4ac7b327`)
 - Standing approvals: none
 - Current cycle authorization: closed. The S4 authorization was exhausted by
   the 30/30 approved PORT rows and pin-advance closeout; no cycle-scoped
@@ -276,10 +276,7 @@ worker may act on that category.
   - `docs/runtime-drawing-ownership.toml` `upstream_ref`
   - `docs/runtime-frame-loop-gaps.toml` `upstream_ref`
   - `docs/runtime-frame-loop-ownership.toml` `upstream_ref`
-  - `docs/runtime-frame-loop-status.md` current `Pinned C++` statement
   - `tools/runtime-frame-loop-port/README.md` trace-runner checkout contract
-  - `.claude/commands/closeout-executor.md` session-start checkout gate
-  - `docs/parity-closeout-status.md` current runner and upstream-pin statements
   - `file-correspondence-manifest.toml` `upstream_ref` (not
     `audit_upstream_ref`)
   - `test-correspondence-manifest.toml` `upstream_ref`

@@ -3102,6 +3102,26 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-08-04: `make renderer-golden` red on main is diagnosed and closed: 5 of
+  1,468 entries (`gm-feather_{cusp,ellipse,polyshapes,shapes,strokes}-msaa`)
+  diverged from the checked-in Dawn references by <=10 channel delta on 66-126
+  pixels each. Bisect over 059d2918..f020d12b with a 5-entry mini manifest
+  proves the flip is commit 09440677 ("[sync] Port rive-runtime 395defdb:
+  Suppress dithering at alpha 0"): the parent 76e6637e passes all five with
+  the same binaries on the same host, and 09440677 reproduces main's exact
+  per-case pixel counts. Host-GPU drift is refuted — the references were
+  captured on the same Apple M5 Max adapter, and both endpoints ran under
+  today's macOS 26.5.2 driver. The residual is dither noise the immutable
+  7c778d13 oracle still applies at alpha == 0 in overdrawn feather fringes
+  (verified pixel-level: opaque grayscale feather-gradient pixels, deltas
+  <=10), which upstream 395defdb — contained in the current runtime pin —
+  removes. Per the CI contract the Phase R oracle is not relabeled; the five
+  corpus entries instead carry a documented bounded tolerance
+  (`max_channel_delta = 12`, `max_different_pixels = 160`, comment citing
+  395defdb/09440677) to be restored to 2/32 when the reference oracle advances
+  past 395defdb. With the ratchet, all five report zero pixels over threshold
+  and the full corpus is exact=1,468, diverges=0, gated=0.
+
 - 2026-07-24: The seventh user-directed hot-loop slice ports
   `StateMachineInstance`'s authored definition owner without changing the
   renderer boundary. C++ stores the immutable `StateMachine*` at instance

@@ -12390,8 +12390,9 @@ impl TaffyRuntimeLayoutEngine {
                 transferred.1
             };
             if self.nested_artboard_layout_axis_scale(instance, local, width_axis) == 2 {
-                self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
-                    .or(retained)
+                retained.or_else(|| {
+                    self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
+                })
             } else {
                 retained.or_else(|| {
                     self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
@@ -30870,6 +30871,40 @@ mod tests {
                 .expect("opted-in root providers resolve")
                 .contains(&26),
             "DrawableFlag::ParticipatesInLayout opts a nested list into its owning layout"
+        );
+    }
+
+    #[test]
+    fn transferred_nested_hug_keeps_the_parent_owned_root_size() {
+        let bytes = cpp_runtime_fixture("script_create_text_runs.riv");
+        let file = read_runtime_file(&bytes).expect("script text-run fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("script text-run graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("main"))
+            .expect("fixture has the main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
+
+        instance.update_pass();
+
+        let host = instance
+            .layout_bounds(12)
+            .expect("the first nested button receives parent-owned layout");
+        let row = instance
+            .layout_bounds(11)
+            .expect("the parent row receives retained nested hug sizing");
+        assert!(
+            (host.height - 77.0).abs() <= 0.0001,
+            "host height was {}",
+            host.height
+        );
+        assert!(
+            (row.height - 117.0).abs() <= 0.0001,
+            "row height was {}",
+            row.height
         );
     }
 

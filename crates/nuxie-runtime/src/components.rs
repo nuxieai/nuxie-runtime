@@ -1198,7 +1198,10 @@ impl RuntimeLayoutComponentState {
     }
 
     pub(crate) fn target_bounds(&self) -> (f32, f32, f32, f32) {
-        let layout = self.solved_layout.get().unwrap_or_else(|| self.layout.get());
+        let layout = self
+            .solved_layout
+            .get()
+            .unwrap_or_else(|| self.layout.get());
         (layout.left, layout.top, layout.width, layout.height)
     }
 

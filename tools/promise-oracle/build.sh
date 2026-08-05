@@ -8,13 +8,29 @@ config="${1:-release}"
 # Reuses the golden runner's per-repo librive tree (tools/golden-runner/
 # build.sh default); the shared pinned checkout stays read-only for builds.
 runtime_out="$repo_root/target/golden-runner-librive/scripted-$config"
-luau_root="$rive_runtime/dependencies/luigi-rosso_luau_rive_0_728_vec3"
 output_dir="$repo_root/target/promise-oracle"
 output="$output_dir/rive_cpp_promise_oracle"
 provenance="$repo_root/tools/golden-runner/runtime-provenance.sh"
 runtime_archive="$runtime_out/librive.a"
 runtime_makefile="$runtime_out/rive.make"
 runtime_stamp="$runtime_archive.provenance"
+
+# Every header the oracle compiles against must come from the revision the
+# pinned librive (and the libluau_vm.a it links below) was built from, so the
+# revisions are read out of the pinned runtime's own premake files rather than
+# hardcoded here. `rive_dependency_dir` hard-errors instead of falling back, and
+# `set -e` turns that into a failed build.
+# shellcheck source=../build-support/rive_dependency_dir.sh
+source "$repo_root/tools/build-support/rive_dependency_dir.sh"
+luau_root="$(rive_dependency_dir "$rive_runtime" luigi-rosso/luau scripting/premake5.lua)"
+harfbuzz_root="$(rive_dependency_dir "$rive_runtime" rive-app/harfbuzz dependencies/premake5_harfbuzz_v2.lua)"
+sheenbidi_root="$(rive_dependency_dir "$rive_runtime" Tehreer/SheenBidi dependencies/premake5_sheenbidi_v2.lua)"
+miniaudio_root="$(rive_dependency_dir "$rive_runtime" rive-app/miniaudio dependencies/premake5_miniaudio_v2.lua)"
+# Not reached by main.cpp's include closure today, but rive/layout/layout_data.hpp
+# holds a YGNode and a YGStyle by value and those differ by 92 bytes between the
+# grid and non-grid yoga tags -- one new rive header in the closure turns a stale
+# path here into a silent LayoutData size skew against librive.
+yoga_root="$(rive_dependency_dir "$rive_runtime" rive-app/yoga dependencies/premake5_yoga_v2.lua)"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
     : "${CC:=/usr/bin/clang}"
@@ -60,10 +76,10 @@ mkdir -p "$output_dir"
     -I"$rive_runtime/include" \
     -I"$rive_runtime/scripting" \
     -I"$rive_runtime/dependencies" \
-    -I"$rive_runtime/dependencies/rive-app_harfbuzz_rive_13.1.1/src" \
-    -I"$rive_runtime/dependencies/Tehreer_SheenBidi_v2.6/Headers" \
-    -I"$rive_runtime/dependencies/rive-app_miniaudio_rive_changes_5" \
-    -I"$rive_runtime/dependencies/rive-app_yoga_rive_changes_v2_0_1_2" \
+    -I"$harfbuzz_root/src" \
+    -I"$sheenbidi_root/Headers" \
+    -I"$miniaudio_root" \
+    -I"$yoga_root" \
     -I"$luau_root/VM/include" \
     "$script_dir/main.cpp" \
     "$output_dir/lua_promise.o" \

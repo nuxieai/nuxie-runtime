@@ -440,11 +440,26 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
-    for slot in (54..55)
-        .chain(78..89)
-        .chain([90])
-        .chain(94..243)
-    {
+    let vector = [
+        (54, crate::functions::luau_f_vector::luau_f_vector as *const () as usize),
+        (78, crate::functions::luau_f_vectormagnitude::luau_f_vectormagnitude as *const () as usize),
+        (79, crate::functions::luau_f_vectornormalize::luau_f_vectornormalize as *const () as usize),
+        (80, crate::functions::luau_f_vectorcross::luau_f_vectorcross as *const () as usize),
+        (81, crate::functions::luau_f_vectordot::luau_f_vectordot as *const () as usize),
+        (82, crate::functions::luau_f_vectorfloor::luau_f_vectorfloor as *const () as usize),
+        (83, crate::functions::luau_f_vectorceil::luau_f_vectorceil as *const () as usize),
+        (84, crate::functions::luau_f_vectorabs::luau_f_vectorabs as *const () as usize),
+        (85, crate::functions::luau_f_vectorsign::luau_f_vectorsign as *const () as usize),
+        (86, crate::functions::luau_f_vectorclamp::luau_f_vectorclamp as *const () as usize),
+        (87, crate::functions::luau_f_vectormin::luauF_vectormin as *const () as usize),
+        (88, crate::functions::luau_f_vectormax::luau_f_vectormax as *const () as usize),
+        (90, crate::functions::luau_f_vectorlerp::luau_f_vectorlerp as *const () as usize),
+    ];
+    for (slot, expected) in vector {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in 94..243 {
         assert_eq!(address(luauF_table[slot]), missing, "slot {slot}");
     }
     assert_eq!(

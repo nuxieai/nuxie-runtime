@@ -59,6 +59,7 @@ const fn make_fastcall_table() -> [luau_FastFunction; 256] {
     table[51] = Some(crate::functions::luau_f_rawequal::luauF_rawequal);
     table[52] = Some(crate::functions::luau_f_tinsert::luau_f_tinsert);
     table[53] = Some(crate::functions::luau_f_tunpack::luau_f_tunpack);
+    table[54] = Some(crate::functions::luau_f_vector::luau_f_vector);
     table[55] = Some(crate::functions::luau_f_countlz::luau_f_countlz);
     table[56] = Some(crate::functions::luau_f_countrz::luau_f_countrz);
     table[57] = Some(crate::functions::luau_f_select::luau_f_select);
@@ -82,7 +83,19 @@ const fn make_fastcall_table() -> [luau_FastFunction; 256] {
     table[75] = Some(crate::functions::luau_f_writefp::luau_f_writefp::<f32>);
     table[76] = Some(crate::functions::luau_f_readfp::luau_f_readfp::<f64>);
     table[77] = Some(crate::functions::luau_f_writefp::luau_f_writefp::<f64>);
+    table[78] = Some(crate::functions::luau_f_vectormagnitude::luau_f_vectormagnitude);
+    table[79] = Some(crate::functions::luau_f_vectornormalize::luau_f_vectornormalize);
+    table[80] = Some(crate::functions::luau_f_vectorcross::luau_f_vectorcross);
+    table[81] = Some(crate::functions::luau_f_vectordot::luau_f_vectordot);
+    table[82] = Some(crate::functions::luau_f_vectorfloor::luau_f_vectorfloor);
+    table[83] = Some(crate::functions::luau_f_vectorceil::luau_f_vectorceil);
+    table[84] = Some(crate::functions::luau_f_vectorabs::luau_f_vectorabs);
+    table[85] = Some(crate::functions::luau_f_vectorsign::luau_f_vectorsign);
+    table[86] = Some(crate::functions::luau_f_vectorclamp::luau_f_vectorclamp);
+    table[87] = Some(crate::functions::luau_f_vectormin::luauF_vectormin);
+    table[88] = Some(crate::functions::luau_f_vectormax::luau_f_vectormax);
     table[89] = Some(crate::functions::luau_f_lerp::luau_f_lerp);
+    table[90] = Some(crate::functions::luau_f_vectorlerp::luau_f_vectorlerp);
     table[91] = Some(crate::functions::luau_f_isnan::luau_f_isnan);
     table[92] = Some(crate::functions::luau_f_isinf::luau_f_isinf);
     table[93] = Some(crate::functions::luau_f_isfinite::luau_f_isfinite);

@@ -7720,8 +7720,13 @@ impl ArtboardInstance {
                     .child
                     .update_pass_with_script_mode(script_mode, child_root_transform);
                 if child_had_dirty_layout || !nested.child.dirty_layout.is_empty() {
-                    nested.transferred_hug_size.set((None, None));
+                    let (retained_hug_size, affects_host_hug) =
+                        nested.child.transferred_hug_size_after_child_layout_change(
+                            nested.transferred_hug_size.get(),
+                        );
+                    nested.transferred_hug_size.set(retained_hug_size);
                     nested_child_layout_changed = true;
+                    changed |= affects_host_hug;
                 }
                 if dirt.contains(ComponentDirt::RENDER_OPACITY) {
                     if let Some(frame) = nested.initial_layout_paint_frame.borrow().as_ref() {
@@ -7867,13 +7872,11 @@ impl ArtboardInstance {
         // its style dirt here but receives its solve from the host.
         let calculates_own_layout =
             !self.layout_node_owned_by_host && self.layout_constraint_bounds.is_none();
-        // C++ transfers a mounted root into the parent Yoga graph, so the
-        // parent solve also refreshes that child's internal descendants. The
-        // decomposed Rust graphs reproduce that half of the parent solve
-        // against the retained root constraint, still gated by this child's
-        // exact dirty-style membership.
-        let calculates_constrained_layout = self.layout_constraint_bounds.is_some();
-        let calculates_layout = calculates_own_layout || calculates_constrained_layout;
+        // `takeLayoutData()` makes a mounted root part of its parent's Yoga
+        // tree and clears `m_updatesOwnLayout`. The child still consumes its
+        // exact dirty-style members here, but only the host's subsequent solve
+        // may calculate the transferred node (`artboard.cpp:1278-1361`).
+        let calculates_layout = calculates_own_layout;
         #[cfg(test)]
         if calculates_layout {
             self.layout_calculation_count += 1;
@@ -7886,9 +7889,6 @@ impl ArtboardInstance {
         let calculated_layout_bounds = calculated_layout_bounds.flatten();
         if calculates_layout {
             self.solved_layout_bounds = calculated_layout_bounds.clone();
-        }
-        if calculates_constrained_layout && calculated_layout_bounds.is_some() {
-            self.layout_constraint_bounds = calculated_layout_bounds.clone();
         }
         let layout_bounds = self
             .layout_constraint_bounds
@@ -8917,6 +8917,28 @@ impl ArtboardInstance {
             .and_then(|component| component.concrete.layout.as_ref())
             .and_then(|layout| layout.style)
             .and_then(|style| self.objects.component_local_id(style))
+    }
+
+    fn transferred_hug_size_after_child_layout_change(
+        &self,
+        transferred: (Option<f32>, Option<f32>),
+    ) -> ((Option<f32>, Option<f32>), bool) {
+        let style_local = self.layout_component_style_local(0);
+        let root_hugs_axis = |property_name: &str| {
+            style_local.and_then(|style_local| {
+                property_key_for_name("LayoutComponentStyle", property_name)
+                    .and_then(|key| self.uint_property(style_local, key))
+            }) == Some(2)
+        };
+        let width_hugs = root_hugs_axis("layoutWidthScaleType");
+        let height_hugs = root_hugs_axis("layoutHeightScaleType");
+        (
+            (
+                if width_hugs { None } else { transferred.0 },
+                if height_hugs { None } else { transferred.1 },
+            ),
+            width_hugs || height_hugs,
+        )
     }
 
     pub(crate) fn apply_double_property_changed(

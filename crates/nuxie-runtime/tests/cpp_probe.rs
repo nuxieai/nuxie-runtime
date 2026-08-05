@@ -25524,11 +25524,14 @@ fn assert_fl_c5_self_chaining_event_stops_at_100_against_cpp() {
             &format!("{label} step {step}"),
         );
     }
+    // Since upstream 482b24a1, events applied during loop iterations beyond
+    // the first stay host-visible until the next applyEvents: 99 loop-applied
+    // batches plus batch 101 pending after exactly 100 callbacks.
     assert_eq!(
-        cpp_reports[1].reported_event_count, 1,
-        "pinned C++ leaves batch 101 pending after exactly 100 callbacks"
+        cpp_reports[1].reported_event_count, 100,
+        "pinned C++ keeps loop-applied batches host-visible plus batch 101 pending"
     );
-    assert_eq!(rust_reports[1].1.reported_event_count(), 1);
+    assert_eq!(rust_reports[1].1.reported_event_count(), 100);
 }
 
 #[test]
@@ -83872,15 +83875,16 @@ fn fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp() {
         "pinned C++ constructor phases must remain strictly ordered"
     );
 
-    let rust_path =
-        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_instance.rs");
+    let rust_path = repo_root().join(
+        "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
+    );
     let rust_source = std::fs::read_to_string(&rust_path)
         .unwrap_or_else(|error| panic!("read {}: {error}", rust_path.display()));
     let rust_constructor_start = rust_source
         .find("pub(crate) fn new(")
         .expect("Rust StateMachineInstance::new");
     let rust_constructor_end = rust_source[rust_constructor_start..]
-        .find("fn initialize_ordinary_data_bind_container")
+        .find("fn initialize_component_provided_groups")
         .map(|offset| rust_constructor_start + offset)
         .expect("Rust constructor end");
     let rust_constructor = &rust_source[rust_constructor_start..rust_constructor_end];

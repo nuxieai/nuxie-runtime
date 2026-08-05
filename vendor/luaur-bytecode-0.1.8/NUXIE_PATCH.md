@@ -46,3 +46,9 @@ introduces a caller ("crash vs silently-unfolded" becomes observable then).
 - Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
 - Touched areas: bytecode-v13 double-vector emission, v100 class shapes and
   `NEWCLASS` graph support, dead-PC sentinels, and sealed feedback migration.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: default version-selection coverage for the pinned bytecode-v7
+  compatibility target.

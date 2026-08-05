@@ -54,3 +54,10 @@ Provenance:
 - Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
 - Touched areas: class inheritance and `NEWCLASS`, v13/v100 loading, managed
   C-closure debug names, `lua_usesexport`, and custom-pcall flag retirement.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: the pinned fastcall tail and Rive vector/math implementations,
+  `lua_pushvector2`, and the baked-ON `RIVE_LUAU` error/base-library behavior
+  (raw source prefixes, level-0 retry, and removal of `print`/`newproxy`).

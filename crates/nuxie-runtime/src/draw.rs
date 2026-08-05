@@ -6834,6 +6834,38 @@ impl ArtboardInstance {
             if should_propagate_size {
                 self.propagate_scripted_layout_size(local_id);
             }
+            return;
+        }
+        // A participant host's solve settles into the LayoutParticipant
+        // child's animated-slot state, C++
+        // `LayoutParticipant::updateLayoutBounds` (`layout_participant.cpp:
+        // 398-455`): first solve and the non-animating case snap, an
+        // in-flight solve retargets, and `retain_bounds` owns exactly that
+        // split. Dirt for the snap case stays with the existing map-driven
+        // reads; the animated slot publishes through the participant's
+        // advance entry.
+        if let Some(participant) =
+            self.runtime_layout_participant_local(local_id)
+                .and_then(|participant_local| {
+                    self.component(participant_local)
+                        .and_then(|component| component.concrete.participant_layout.as_ref())
+                })
+        {
+            let mut parent = self.component_parent_local(local_id);
+            let parent_bounds = loop {
+                let Some(parent_local) = parent else {
+                    break None;
+                };
+                if let Some(bounds) =
+                    all_bounds.and_then(|all_bounds| all_bounds.get(&parent_local).copied())
+                {
+                    break Some(bounds);
+                }
+                parent = self.component_parent_local(parent_local);
+            };
+            let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
+            let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
+            participant.retain_bounds(x, y, bounds.width, bounds.height);
         }
     }
 
@@ -8073,7 +8105,7 @@ impl ArtboardInstance {
             .or_else(|| self.runtime_layout_participant_local(owner_local))
     }
 
-    fn runtime_layout_participant_local(&self, owner_local: usize) -> Option<usize> {
+    pub(crate) fn runtime_layout_participant_local(&self, owner_local: usize) -> Option<usize> {
         self.component(owner_local)?
             .children
             .iter()
@@ -8753,6 +8785,21 @@ impl ArtboardInstance {
             .filter(|layout| layout.animates())
         {
             let (_, _, width, height) = layout.current_bounds();
+            bounds.width = width;
+            bounds.height = height;
+        } else if let Some(participant) = self
+            .runtime_layout_participant_local(current_local)
+            .and_then(|participant_local| {
+                self.component(participant_local)
+                    .and_then(|component| component.concrete.participant_layout.as_ref())
+            })
+            .filter(|participant| participant.animates())
+        {
+            // `LayoutParticipant::applyResolvedLayoutSize` sizes the host from
+            // the animated slot rather than the newest solve
+            // (`layout_participant.cpp:256-274`), the participant analog of
+            // the layout branch above.
+            let (_, _, width, height) = participant.current_bounds();
             bounds.width = width;
             bounds.height = height;
         }
@@ -30951,6 +30998,224 @@ mod tests {
             },
             "LayoutComponent::updateRenderPath keeps the solved artboard-space position while reading the live m_layout size"
         );
+    }
+
+    /// Shared driver for the three ported `layout_participant_test.cpp`
+    /// animation cases: C++ `Artboard::advance` runs `advanceInternal`
+    /// (advancing components — including the participant's interpolation)
+    /// and then `updateComponents` (solve + settle) (`artboard.cpp:
+    /// 1430-1480`).
+    fn advance_participant_frame(instance: &mut ArtboardInstance, elapsed: f32) {
+        instance
+            .advance_components_after_root_state_machines(elapsed, &mut |_, _, _| false)
+            .expect("component advance succeeds");
+        instance.update_pass();
+    }
+
+    fn animated_participant_instance() -> (RuntimeFile, GraphFile, ArtboardInstance) {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("layout/animated_participant.riv"))
+            .expect("animated_participant imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("animated_participant graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        // C++ `artboard->advance(0.0f)`: first solve snaps (no animate-in).
+        advance_participant_frame(&mut instance, 0.0);
+        (runtime, graphs, instance)
+    }
+
+    fn animated_participant_locals(instance: &ArtboardInstance) -> (usize, usize) {
+        let shape_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Shape")
+            .expect("fixture has one Shape")
+            .local_id;
+        let participant_local = instance
+            .runtime_layout_participant_local(shape_local)
+            .expect("the Shape hosts a LayoutParticipant");
+        // The (non-artboard) container with a style.
+        let container_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "LayoutComponent")
+            .expect("fixture has a styled container")
+            .local_id;
+        (participant_local, container_local)
+    }
+
+    fn participant_width(instance: &ArtboardInstance, participant_local: usize) -> f32 {
+        instance
+            .component(participant_local)
+            .and_then(|component| component.concrete.participant_layout.as_ref())
+            .expect("participant retains animated-slot state")
+            .current_bounds()
+            .2
+    }
+
+    /// Port of `layout_participant_test.cpp:203` "a participant animates its
+    /// slot under an animated layout": shrink the container at runtime and the
+    /// participant passes through intermediate widths over the 1s linear
+    /// interpolation instead of jumping straight to 100.
+    #[test]
+    fn a_participant_animates_its_slot_under_an_animated_layout() {
+        let (_runtime, _graphs, mut instance) = animated_participant_instance();
+        let (participant_local, container_local) = animated_participant_locals(&instance);
+        assert_eq!(
+            participant_width(&instance, participant_local),
+            200.0,
+            "first solve snaps to the full 200-wide container"
+        );
+        assert!(
+            instance
+                .component(participant_local)
+                .and_then(|component| component.concrete.participant_layout.as_ref())
+                .expect("participant state")
+                .animates(),
+            "the container's 1s linear interpolation cascades to the participant"
+        );
+
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width");
+        assert!(instance.set_double_property(container_local, width_key, 100.0));
+
+        let mut mid = 200.0;
+        for _ in 0..5 {
+            advance_participant_frame(&mut instance, 0.2);
+            let width = participant_width(&instance, participant_local);
+            if width > 100.0 && width < 200.0 {
+                mid = width;
+            }
+        }
+        assert!(mid < 200.0, "animated (didn't stay at 200)");
+        assert!(mid > 100.0, "caught mid-interpolation (didn't snap to 100)");
+
+        for _ in 0..3 {
+            advance_participant_frame(&mut instance, 1.0);
+        }
+        assert_eq!(
+            participant_width(&instance, participant_local),
+            100.0,
+            "the animation settles at the new slot"
+        );
+    }
+
+    /// Port of `layout_participant_test.cpp:256` "a participant re-targets an
+    /// in-flight layout animation": a second resize while elapsed != 0 smooths
+    /// from the current position (the isSmoothing double-buffer path) rather
+    /// than restarting, and settles at the newest target.
+    #[test]
+    fn a_participant_retargets_an_in_flight_layout_animation() {
+        let (_runtime, _graphs, mut instance) = animated_participant_instance();
+        let (participant_local, container_local) = animated_participant_locals(&instance);
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width");
+
+        assert!(instance.set_double_property(container_local, width_key, 100.0));
+        let mut mid_width = 200.0;
+        for _ in 0..8 {
+            if mid_width < 200.0 {
+                break;
+            }
+            advance_participant_frame(&mut instance, 0.1);
+            mid_width = participant_width(&instance, participant_local);
+        }
+        assert!(mid_width < 200.0, "in flight, not snapped");
+        assert!(mid_width > 100.0, "not yet settled at the target");
+
+        assert!(instance.set_double_property(container_local, width_key, 50.0));
+        for _ in 0..8 {
+            advance_participant_frame(&mut instance, 1.0);
+        }
+        assert_eq!(
+            participant_width(&instance, participant_local),
+            50.0,
+            "the smoothed retarget settles at the newest slot"
+        );
+    }
+
+    /// Port of `layout_participant_test.cpp` "disabling a layout's
+    /// interpolation frees participant animation": interpolationTime -> 0
+    /// re-cascades, and a later slot change snaps in one frame.
+    #[test]
+    fn disabling_a_layouts_interpolation_makes_the_participant_snap() {
+        let (_runtime, _graphs, mut instance) = animated_participant_instance();
+        let (participant_local, container_local) = animated_participant_locals(&instance);
+        let style_local = instance
+            .runtime_layout_component_style_local(container_local)
+            .expect("container has a style");
+        let time_key = property_key_for_name("LayoutComponentStyle", "interpolationTime")
+            .expect("LayoutComponentStyle.interpolationTime");
+        assert!(instance.set_double_property(style_local, time_key, 0.0));
+        advance_participant_frame(&mut instance, 0.0);
+        assert!(
+            !instance
+                .component(participant_local)
+                .and_then(|component| component.concrete.participant_layout.as_ref())
+                .expect("participant state")
+                .animates(),
+            "the cascade disarms the participant when the inherited time is 0"
+        );
+
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width");
+        assert!(instance.set_double_property(container_local, width_key, 100.0));
+        advance_participant_frame(&mut instance, 0.016);
+        assert_eq!(
+            participant_width(&instance, participant_local),
+            100.0,
+            "a slot change now snaps immediately instead of animating"
+        );
+    }
+
+    /// Port of `layout_participant_test.cpp:380` "a participant animates its
+    /// slot with a cubic interpolator": the eased curve still moves 200 -> 100
+    /// over 1s, just non-linearly — this drives the inherited-interpolator
+    /// transform branch of `advance_interpolation`.
+    #[test]
+    fn a_participant_animates_its_slot_with_a_cubic_interpolator() {
+        let runtime =
+            read_runtime_file(&cpp_runtime_fixture("layout/animated_cubic_participant.riv"))
+                .expect("animated_cubic_participant imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("animated_cubic_participant graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        advance_participant_frame(&mut instance, 0.0);
+        let (participant_local, container_local) = animated_participant_locals(&instance);
+        assert_eq!(participant_width(&instance, participant_local), 200.0);
+        assert!(
+            instance
+                .component(participant_local)
+                .and_then(|component| component.concrete.participant_layout.as_ref())
+                .expect("participant state")
+                .effective_interpolator()
+                .is_some(),
+            "the cubic interpolator cascades to the participant"
+        );
+
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width");
+        assert!(instance.set_double_property(container_local, width_key, 100.0));
+
+        let mut mid = 200.0;
+        for _ in 0..8 {
+            advance_participant_frame(&mut instance, 0.15);
+            let width = participant_width(&instance, participant_local);
+            if width > 100.0 && width < 200.0 {
+                mid = width;
+            }
+        }
+        assert!(mid < 200.0, "eased in-flight (didn't stay at 200)");
+        assert!(mid > 100.0, "caught mid-interpolation (didn't snap)");
+
+        for _ in 0..3 {
+            advance_participant_frame(&mut instance, 1.0);
+        }
+        assert_eq!(participant_width(&instance, participant_local), 100.0);
     }
 
     #[test]

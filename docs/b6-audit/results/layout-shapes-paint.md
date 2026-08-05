@@ -1229,6 +1229,19 @@ notes: "`GridTrack::syncContainerStyle` and the Rust `apply_grid_container_style
 
 ## B6-0455
 
+Remediated in part 2026-08-05 (F15/UNIV-1603): the absent `ParticipantAnimation`
+lifecycle recorded below is now ported — `concrete.participant_layout` reuses
+the LayoutComponent animation state in inherit-only mode, the cascade reaches
+participants through transparent containers, the participant advances as its
+own AdvancingComponent, the solve settles retargets through `retain_bounds`,
+and parametric-path control size reads the animated slot. Upstream
+`layout_participant_test.cpp` :203/:256 plus the disable-interpolation case are
+ported and bind to the implementation. The verdict is unchanged: the two
+mutation-gated mechanisms below still stand, and the taffy bounds map still
+never merges animated x/y (the position half of the finding, shared with
+LayoutComponent animation — see F15's remainder). The pre-port lifecycle text
+below is retained as the audit-time finding.
+
 row_id: B6-0455
 cpp_files: ["src/layout/layout_participant.cpp"]
 rust_module: "crates/nuxie-runtime/src/draw.rs"

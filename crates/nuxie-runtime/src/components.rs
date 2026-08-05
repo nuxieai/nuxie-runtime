@@ -1076,6 +1076,18 @@ impl RuntimeLayoutComponentState {
         }
     }
 
+    /// Pinned `LayoutParticipant`: the participant "has no animation style of
+    /// its own; it inherits the parent layout's" (`layout_participant.cpp:
+    /// 479-482,528-562`). Constructing the shared state in inherit mode makes
+    /// `animates()` reduce to exactly C++'s `willAnimate` gate — inherited
+    /// interpolation != hold and inherited time > 0 — with the own-style arm
+    /// unreachable.
+    fn new_participant() -> Self {
+        let state = Self::new("LayoutParticipant");
+        state.animation_style.set(1);
+        state
+    }
+
     pub(crate) fn mark_layout_node_dirty(&self) -> bool {
         let changed = !self.layout_node_dirty.replace(true);
         if changed {
@@ -1099,11 +1111,21 @@ impl RuntimeLayoutComponentState {
     }
 
     fn clone_for_occurrence(&self) -> Self {
-        Self {
+        let occurrence = Self {
             clip_property_key: self.clip_property_key,
             style_id_property_key: self.style_id_property_key,
             ..Self::new("LayoutComponent")
+        };
+        // A participant occurrence keeps the inherit-only animation mode it
+        // was constructed with (`new_participant`); it has no style object to
+        // re-derive it from. A LayoutComponent occurrence keeps the existing
+        // reset — its style binding re-applies `set_animation_style`. The
+        // absent styleId property key is what distinguishes a participant
+        // state: LayoutParticipant has no styleId in the schema.
+        if self.style_id_property_key.is_none() {
+            occurrence.animation_style.set(self.animation_style.get());
         }
+        occurrence
     }
 
     pub(crate) fn retain_bounds(&self, x: f32, y: f32, width: f32, height: f32) -> bool {
@@ -1512,6 +1534,11 @@ impl RuntimeConstraintState {
 pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) node: Option<RuntimeNodeState>,
     pub(crate) layout: Option<RuntimeLayoutComponentState>,
+    /// Pinned `LayoutParticipant`'s animated-slot state (`ParticipantAnimation`,
+    /// `layout_participant.cpp:29-43`). The same retarget/advance machinery as
+    /// `layout`, held in its own slot: a participant is never a LayoutComponent,
+    /// and the 60-odd `concrete.layout` call sites mean "is a LayoutComponent".
+    pub(crate) participant_layout: Option<RuntimeLayoutComponentState>,
     pub(crate) constraint_bounds: RuntimeConstraintBoundsKind,
     pub(crate) constraint: Option<RuntimeConstraintState>,
     pub(crate) follow_path: Option<RuntimeFollowPathState>,
@@ -1540,6 +1567,8 @@ impl RuntimeConcreteComponentState {
             node: type_is_a(type_name, "Node").then(RuntimeNodeState::new),
             layout: type_is_a(type_name, "LayoutComponent")
                 .then(|| RuntimeLayoutComponentState::new(type_name)),
+            participant_layout: (type_name == "LayoutParticipant")
+                .then(RuntimeLayoutComponentState::new_participant),
             constraint_bounds: if type_is_a(type_name, "Text") {
                 RuntimeConstraintBoundsKind::Text
             } else if type_is_a(type_name, "LayoutComponent") {
@@ -1589,6 +1618,10 @@ impl RuntimeConcreteComponentState {
                 .map(RuntimeNodeState::clone_for_occurrence),
             layout: self
                 .layout
+                .as_ref()
+                .map(RuntimeLayoutComponentState::clone_for_occurrence),
+            participant_layout: self
+                .participant_layout
                 .as_ref()
                 .map(RuntimeLayoutComponentState::clone_for_occurrence),
             constraint_bounds: self.constraint_bounds,
@@ -1984,6 +2017,51 @@ pub(crate) fn retain_runtime_layout_component_styles(
             .and_then(|component| component.concrete.layout.as_ref())
         {
             layout.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
+        }
+    }
+
+    // A LayoutParticipant inherits the OWNING layout's effective style, not
+    // its host parent's: C++ reaches it through `forEachLayoutProvider`, which
+    // sees through the Shape/Text host and any transparent containers
+    // (`layout_component.cpp:55-115,1305-1311`). Runs after the layout loop
+    // above so every owning layout's own inherited state is already settled.
+    let handles = objects.component_handles().to_vec();
+    for owner in handles {
+        if objects
+            .component(owner)
+            .and_then(|component| component.concrete.participant_layout.as_ref())
+            .is_none()
+        {
+            continue;
+        }
+        let mut inherited = (0, 0.0, None);
+        let mut parent = objects
+            .component(owner)
+            .and_then(|component| component.parent);
+        let mut visited = std::collections::BTreeSet::new();
+        while let Some(ancestor) = parent {
+            let Some(component) = objects.component(ancestor) else {
+                break;
+            };
+            // Cycle guard, matching the sibling topology walks in this file.
+            if !visited.insert(component.local_id) {
+                break;
+            }
+            if let Some(layout) = component.concrete.layout.as_ref() {
+                inherited = (
+                    layout.effective_interpolation(),
+                    layout.effective_interpolation_time(),
+                    layout.effective_interpolator(),
+                );
+                break;
+            }
+            parent = component.parent;
+        }
+        if let Some(participant) = objects
+            .component(owner)
+            .and_then(|component| component.concrete.participant_layout.as_ref())
+        {
+            participant.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
         }
     }
 }

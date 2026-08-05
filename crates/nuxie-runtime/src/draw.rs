@@ -6307,7 +6307,9 @@ impl ArtboardInstance {
             .component(layout_local)
             .and_then(|component| component.concrete.layout.as_ref())
         {
-            (bounds.x, bounds.y, bounds.width, bounds.height) = layout.current_bounds();
+            let (_, _, width, height) = layout.current_bounds();
+            bounds.width = width;
+            bounds.height = height;
         }
         bounds
     }
@@ -30816,8 +30818,8 @@ mod tests {
         let solved_bounds = BTreeMap::from([(
             layout_local,
             RuntimeLayoutBounds {
-                x: 0.0,
-                y: 0.0,
+                x: 30.0,
+                y: 40.0,
                 width: 140.0,
                 height: 100.0,
             },
@@ -30826,8 +30828,8 @@ mod tests {
         assert_eq!(
             instance.runtime_layout_control_size_for_path(rectangle_local, &solved_bounds),
             Some(RuntimeLayoutBounds {
-                x: 0.0,
-                y: 0.0,
+                x: 30.0,
+                y: 40.0,
                 width: 90.0,
                 height: 60.0,
             }),
@@ -30840,12 +30842,12 @@ mod tests {
                 Some(&solved_bounds),
             ),
             RuntimeLayoutBounds {
-                x: 0.0,
-                y: 0.0,
+                x: 30.0,
+                y: 40.0,
                 width: 90.0,
                 height: 60.0,
             },
-            "LayoutComponent::updateRenderPath also reads the live m_layout frame"
+            "LayoutComponent::updateRenderPath keeps the solved artboard-space position while reading the live m_layout size"
         );
     }
 

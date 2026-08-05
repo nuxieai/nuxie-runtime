@@ -4893,6 +4893,19 @@ impl ArtboardInstance {
     ) -> bool {
         let changed = self.objects.set_int_property(local_id, property_key, value);
         if changed {
+            // Generated C++ int setters run their concrete `*Changed()` callback
+            // before notifying Core observers, same as the double/uint paths.
+            // GridItemPlacement is the only int owner with such a callback, so
+            // this is a direct call rather than a dispatch chain; it does not
+            // suppress the invalidation below the way an `owner_callback_handled`
+            // chain would.
+            let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+            crate::grid_item_placement::int_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            );
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
             self.mark_changed_unless_view_model_instance(local_id);
             self.mark_prepared_changed_for_property(local_id, property_key);
@@ -8348,6 +8361,17 @@ impl ArtboardInstance {
             crate::layout_component::uint_property_changed(self, local_id, type_name, property_key)
         });
         let owner_callback = owner_callback.or_else(|| {
+            crate::grid_track::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::grid_item_placement::uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
             crate::artboard_component_list_override::uint_property_changed(
                 self,
                 local_id,
@@ -8785,6 +8809,14 @@ impl ArtboardInstance {
                 })
                 .or_else(|| {
                     crate::layout_component::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::grid_track::double_property_changed(
                         self,
                         local_id,
                         type_name,

@@ -372,7 +372,7 @@ e2e-composed-compare: fixtures scripted-golden-runner scripted-rust-golden-runne
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus "$(E2E_COMPOSED_CORPUS)" --side-channel --require-composed-session --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 silver-corpus-test:
-	cargo test -p silver-corpus
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test -p silver-corpus
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/silver-corpus -p 'test_*.py' -v
 
 silver-corpus-manifest-check:
@@ -397,7 +397,7 @@ cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe cpp-probe-scripted
 	@test -x "$(GOLDEN_RUNNER)" || { echo "missing executable pinned C++ golden runner: $(GOLDEN_RUNNER)" >&2; exit 2; }
 	@test -x "$(CPP_PROBE)" || { echo "missing executable pinned C++ probe: $(CPP_PROBE)" >&2; exit 2; }
 	@test -x "$(SCRIPTED_CPP_PROBE)" || { echo "missing executable pinned scripted C++ probe: $(SCRIPTED_CPP_PROBE)" >&2; exit 2; }
-	RIVE_GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_PROBE_SCRIPTED="$(SCRIPTED_CPP_PROBE)" cargo test --workspace
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_PROBE_SCRIPTED="$(SCRIPTED_CPP_PROBE)" cargo test --workspace
 
 renderer-replay:
 	cargo build --quiet -p renderer-replay

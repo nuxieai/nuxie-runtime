@@ -9,10 +9,14 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn runtime_root() -> PathBuf {
-    std::env::var_os("RIVE_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+fn runtime_root(test: &str) -> Option<PathBuf> {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR").map(PathBuf::from);
+    if root.is_none() {
+        eprintln!(
+            "skipping {test}; RIVE_RUNTIME_DIR is unset; point it at a pinned rive-runtime checkout"
+        );
+    }
+    root
 }
 
 #[test]
@@ -20,13 +24,15 @@ fn d_lp_upstream_eight_phase_scenario_is_byte_exact() -> anyhow::Result<()> {
     // D-LP-INIT, D-LP-XY, D-LP-RD, D-LP-DETACHED, D-LP-POINT,
     // D-LP-INVALID, D-LP-PARTIAL, and D-LP-LIVE (including all 60 frames)
     // are one action stream derived from data_binding_test.cpp:1585-1819.
+    let Some(runtime) = runtime_root("list_to_path silver differential") else {
+        return Ok(());
+    };
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))?;
     let case = manifest
         .cases
         .iter()
         .find(|case| case.id == "list_to_path")
         .ok_or_else(|| anyhow::anyhow!("missing exact list_to_path silver case"))?;
-    let runtime = runtime_root();
     let actual = parse_sriv(Execution::run(case, &runtime)?.bytes())?;
     let expected = parse_sriv(&std::fs::read(resolve_expected(&runtime, case))?)?;
     compare_sriv(&expected, &actual)

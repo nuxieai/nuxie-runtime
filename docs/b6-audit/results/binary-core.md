@@ -264,3 +264,45 @@ idiom_rules_invoked: ["AF-5 import-time devirtualization"]
 confidence: high
 notes: "C++ CoreUint64Type::deserialize is one readVarUint64 call. Rust replaces the field-type dispatch subclass with the generated UintStorage::Uint64 schema discriminant: read_known_uint_field matches Uint64 and calls BinaryReader::read_var_uint, the same full-range varuint64 wire read, unclamped. The WITH_RIVE_TOOLS deserializeRev delegates to deserialize and is outside the read-only runtime contract. Family grep cleared the decode path."
 ~~~
+
+## B6-0451
+
+Post-audit addition (2026-08-04): `src/core/field_types/core_int_type.cpp`
+first appears upstream after the frozen audit ref — it is absent at `d788e8ec`
+and present at the live pin `4ac7b327` (sync cycle S4). It replaces the
+pre-S4 `src/core/field_types/core_uint64_type.cpp` owner (B6-0448) as this
+cluster's newest field type and is audited against `4ac7b327` with the same
+axes as its `B6-0150..0155` siblings. C++ anchors cite that pin; Rust anchors
+cite the current tree.
+
+~~~yaml
+row_id: B6-0451
+cpp_files: ["src/core/field_types/core_int_type.cpp"]
+rust_module: "crates/nuxie-binary/src/core/field_types/core_int_type.rs"
+subsystem_cluster: binary-core
+sibling_files_swept:
+  - "src/core/binary_reader.cpp"
+  - "src/core/field_types/core_bool_type.cpp"
+  - "src/core/field_types/core_bytes_type.cpp"
+  - "src/core/field_types/core_color_type.cpp"
+  - "src/core/field_types/core_double_type.cpp"
+  - "src/core/field_types/core_string_type.cpp"
+  - "src/core/field_types/core_uint_type.cpp"
+  - "crates/nuxie-schema/src/lib.rs"
+  - "crates/nuxie-binary/src/core/field_types/mod.rs"
+  - "crates/nuxie-binary/src/core/binary_reader.rs"
+verdict: ADAPTED
+axes:
+  retained_identity: {status: isomorphic, evidence: ["cpp@4ac7b327:src/core/field_types/core_int_type.cpp:6-9", "crates/nuxie-binary/src/core/field_types/core_int_type.rs:5-20"], note: "scalar integer by value on both sides"}
+  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["cpp@4ac7b327:src/core/field_types/core_int_type.cpp:6-9", "crates/nuxie-binary/src/core/field_types/core_int_type.rs:10-12"]}
+  update_ordering: {status: isomorphic, phases_cpp: ["dispatch CoreIntType", "readVarUintAs<uint32_t>", "zigzagDecode", "return"], phases_rust: ["match static IntStorage", "read_var_uint", "zigzag decode", "return Result"]}
+  ownership: {status: isomorphic, evidence: ["cpp@4ac7b327:src/core/field_types/core_int_type.cpp:6-9", "crates/nuxie-binary/src/core/field_types/core_int_type.rs:5-20"]}
+  compensation:
+    status: adapted
+    mechanisms: []
+    import_time_constants:
+      - {name: "IntStorage schema discriminant", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-binary/src/core/field_types/core_int_type.rs:5-19"]}
+idiom_rules_invoked: ["AF-5 import-time devirtualization"]
+confidence: high
+notes: "C++ `CoreIntType::deserialize` is one `zigzagDecode(readVarUintAs<uint32_t>())`; the Rust owner performs the same u32 narrowing and the same `(encoded >> 1) ^ -(encoded & 1)` decode. Rust replaces the field-type dispatch subclass with the generated `IntStorage` schema discriminant, which is fixed at build and only read during decode, so it does not pass the mutation-timing gate. The additional `IntStorage::Int16` range check has no `.cpp` counterpart at this seam because C++ narrows in the generated `int16_t` setter instead; it is a decode-side placement of the same storage contract, not drift tracking. The `WITH_RIVE_TOOLS` `deserializeRev` delegates to `deserialize` and is outside the read-only runtime contract. Family grep cleared the decode path."
+~~~

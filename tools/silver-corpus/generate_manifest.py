@@ -219,6 +219,7 @@ EXACT = (
     "fill_trim_path",
     "focus_test",
     "focus_traversal",
+    "focusable_element",
     "follow_path_animate_shape",
     "follow_path_animate_solo",
     "follow_path_animate_target",
@@ -232,6 +233,7 @@ EXACT = (
     "hittest_collapsed_layouts",
     "hittest_nested",
     "image_fit_alignment_2",
+    "layout_grid_stack_grid_with_layouts_size_changing",
     "image_fit_alignment_3",
     "image_fit_alignment_updated_test",
     "list_items",
@@ -1827,7 +1829,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-focusable_element|frame 1, op 144 (color): expected color, got save
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
 component_list_grouped|frame 6, op 413 (transform), field tx: expected -90, got 0
@@ -1835,7 +1836,7 @@ component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color
 data_binding_artboards_test_recursive|frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame
 deterministic_mode|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
 draw_index_list|frame 0, op 35 (color): expected color, got makeRenderPaint
-focus_collapsing|frame 1, op 98 (color), field paint_id: expected 4, got 11
+focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
 formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
 formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
 formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
@@ -1858,7 +1859,6 @@ list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x800
 layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
 layout_text_match|frame 0, op 61 (save): expected save, got frame
 layout_grid_stack_grid_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
-layout_grid_stack_grid_with_layouts_size_changing|frame 1, op 227 (transform), field ty: expected 336.03223, got 310
 layout_grid_stack_grid_with_layouts_size_span_changing|frame 32, op 1592 (rewind): expected rewind, got drawPath
 layout_grid_stack_grid_with_layouts_span|frame 34, op 1116 (rewind): expected rewind, got drawPath
 layout_grid_stack_stack_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath

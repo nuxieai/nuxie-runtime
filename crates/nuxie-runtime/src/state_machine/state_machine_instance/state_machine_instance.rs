@@ -3729,27 +3729,41 @@ impl StateMachineInstance {
         self.focus.has_focusable_content()
     }
 
-    pub fn focus_next(&mut self) -> bool {
+    /// Pinned `FocusManager::{focusNext,focusPrevious,...}` evaluate
+    /// eligibility live at every traversal query
+    /// (`src/input/focus_manager.cpp:20-46`; `src/focus_data.cpp:511-560`),
+    /// while the retained Rust tree bakes collapse/hidden/renderOpacity into
+    /// its nodes. These artboard-bearing entry points resynchronize the bake
+    /// before traversing, like `RuntimeFocusActionTraversal::perform`;
+    /// otherwise a mount recorded before the first update pass would pin its
+    /// subtree ineligible forever.
+    pub fn focus_next(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(0))
     }
 
-    pub fn focus_previous(&mut self) -> bool {
+    pub fn focus_previous(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(1))
     }
 
-    pub fn focus_up(&mut self) -> bool {
+    pub fn focus_up(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(2))
     }
 
-    pub fn focus_down(&mut self) -> bool {
+    pub fn focus_down(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(3))
     }
 
-    pub fn focus_left(&mut self) -> bool {
+    pub fn focus_left(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(4))
     }
 
-    pub fn focus_right(&mut self) -> bool {
+    pub fn focus_right(&mut self, artboard: &ArtboardInstance) -> bool {
+        self.focus.refresh_visibility_change(artboard);
         self.change_focus(|focus| focus.traverse(5))
     }
 

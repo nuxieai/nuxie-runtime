@@ -1136,3 +1136,148 @@ axes:
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
 notes: "C++ pushes x/y geometry dirt and writes retained weighted translation; Rust reads arena values into rebuilt commands governed by path epochs. Coverage grep: generation|epoch|revision|dirty|observed|snapshot|candidate|alias plus mesh/effect/path family names across crates/nuxie-runtime/src and crates/nuxie-graph/src; sibling sweep found the off-file members named above."
+
+
+## Post-audit additions (2026-08-04)
+
+Four layout owners first appear upstream after the frozen audit ref: they are
+absent at `d788e8ec` and present at the live pin `4ac7b327` (sync cycle S4,
+`docs/sync/triage-2026-08-02-e0d4913f.md` S4-38/S4-41/S4-47/S4-48). They are
+audited against `4ac7b327` with the same five axes as the `B6-0248..0258`
+records above. C++ anchors cite that pin; Rust anchors cite the current tree.
+
+Two standing facts frame all four, and neither is counted as a finding:
+
+- The Yoga-to-Taffy engine substitution is declared register row **D3**
+  (`docs/parity-gap-register.md`, FLR-20 layout-engine ceiling). A `YGStyle`
+  write answered by a `taffy::Style` write is that ceiling, not drift.
+- All four still live inside `crates/nuxie-runtime/src/draw.rs`. FLR-16 owns
+  extracting them into direct Rust files; the mapped module below is therefore
+  `draw.rs`, exactly as for `B6-0248..0253`.
+
+The mutation-timing gate for every `layout revision/epoch fanout` record below:
+`ArtboardInstance::mark_layout_changed` increments `layout_revision` and
+`prepared_epoch` during the property-write/update cycle
+(`crates/nuxie-runtime/src/artboard.rs:6483-6486`), and
+`RuntimeLayoutBoundsCacheKey` consumes `layout_revision` as the retained
+layout-solve cache key (`crates/nuxie-runtime/src/draw.rs:14751-14756`). Those
+are cycle-time writes read to discover staleness, so they pass the gate; C++
+instead marks the owning retained `YGNode` dirty and has no counterpart counter.
+
+## B6-0453
+
+Remediated 2026-08-04, same day, in the commit that follows this record: the
+four `grid*Changed` pushes are now ported to
+`crates/nuxie-runtime/src/layout/grid_item_placement.rs`, so the push axis is
+isomorphic and the row takes B6-0252's shape — isomorphic push with the layout
+epoch fanout still counted under compensation. The verdict is unchanged and the
+axes below are stated post-fix. The pre-fix state is in this file's git history;
+the invalidation hole it describes (uint span writes never reaching
+`layout_revision`) is covered by
+`grid_item_placement_span_write_dirties_the_owning_layout_node`.
+
+row_id: B6-0453
+cpp_files: ["src/layout/grid_item_placement.cpp"]
+rust_module: "crates/nuxie-runtime/src/layout/grid_item_placement.rs; crates/nuxie-runtime/src/draw.rs"
+subsystem_cluster: "layout-shapes-paint"
+sibling_files_swept: ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/layout_component.rs", "crates/nuxie-runtime/src/layout/layout_node_provider.rs", "crates/nuxie-graph/src/lib.rs"]
+verdict: DIVERGENT
+axes:
+  retained_identity: {status: "adapted-arena-identity", evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:8-22,24-42", "crates/nuxie-runtime/src/draw.rs:12640-12660", "crates/nuxie-graph/src/lib.rs:607-817"], note: "C++ additionally retains the object in the provider's applier list and the parent's dependent list; Rust resolves both by arena child scan, which is AF-3 correct for `from()` but not a retained registration."}
+  push_vs_poll: {status: "isomorphic push; extra drift tracking counted under compensation", cpp_pushes: true, evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:73-85", "crates/nuxie-runtime/src/layout/grid_item_placement.rs:13-48", "crates/nuxie-runtime/src/layout/layout_node_provider.rs:5-50"]}
+  update_ordering: {status: "phase-sequence-equivalent; representation divergent", phases_cpp: "placement property change -> markOwnerDirty -> provider markLayoutNodeDirty -> syncStyleChanges applier pass -> solve", phases_rust: "placement property write -> mark_owner_dirty -> owner layout node dirty + layout_revision -> style_for_node rebuild -> taffy tree rebuild -> solve"}
+  ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:24-42", "crates/nuxie-graph/src/lib.rs:607-817"]}
+  compensation:
+    status: "present"
+    mechanisms: [{name: "layout revision fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:6491-6502", "crates/nuxie-runtime/src/draw.rs:14751-14756"]}]
+    import_time_constants: [{name: "GridItemPlacement property keys", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:12665-12680"]}]
+idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model"]
+confidence: high
+notes: "C++ keeps the placement object registered in two retained structures — `provider->addLayoutStyleApplier(this)` at onAddedClean and `parent()->addDependent(this)` at buildDependencies — and each of the four `grid*Changed` setters pushes `provider->markLayoutNodeDirty()` at the owning node. Rust now ports that push: `mark_owner_dirty` routes through `layout_node_provider::mark_layout_node_dirty`, which covers both provider shapes C++ resolves via `LayoutNodeProvider::from(parent())` — the parent itself when it is a retained LayoutComponent, and otherwise the layout owning a participant host. What remains divergent is representation, not information: the two retained registrations are still arena child scans at style-build time (`apply_grid_item_style`), and `mark_layout_node_changed` bumps the artboard-wide `layout_revision` that keys the retained layout-solve cache, which C++ has no counterpart for. The placement math is faithful, including the negative-cell shift (`cell < 0 ? cell - 1 : cell`) and the span>1 rule. Coverage grep: generation|epoch|revision|dirty|observed|snapshot|candidate|alias across crates/nuxie-runtime/src and crates/nuxie-graph/src; sibling sweep found the off-file members named above."
+
+## B6-0454
+
+Remediated 2026-08-04, same day, in the commit that follows this record. The
+behavior note below was the load-bearing one: a bound or keyed GridTrack size
+write reached `mark_prepared_changed` but never `mark_layout_changed`, and
+`RuntimeLayoutBoundsCacheKey` is keyed on `layout_revision`, so the stale solve
+was reused. All five `*Changed` pushes are now ported to
+`crates/nuxie-runtime/src/layout/grid_track.rs` and covered by
+`grid_track_size_write_dirties_the_retained_parent_layout_node` and
+`grid_track_uint_writes_dirty_the_retained_parent_layout_node`. The verdict is
+unchanged — the row now takes B6-0252's shape, isomorphic push with the layout
+epoch fanout under compensation — and the axes below are stated post-fix.
+
+row_id: B6-0454
+cpp_files: ["src/layout/grid_track.cpp"]
+rust_module: "crates/nuxie-runtime/src/layout/grid_track.rs; crates/nuxie-runtime/src/draw.rs"
+subsystem_cluster: "layout-shapes-paint"
+sibling_files_swept: ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/layout_component.rs", "crates/nuxie-graph/src/lib.rs"]
+verdict: DIVERGENT
+axes:
+  retained_identity: {status: "adapted-arena-identity", evidence: ["cpp@4ac7b327:src/layout/grid_track.cpp:93-116", "crates/nuxie-runtime/src/draw.rs:12509-12550", "crates/nuxie-graph/src/lib.rs:607-817"]}
+  push_vs_poll: {status: "isomorphic push; extra drift tracking counted under compensation", cpp_pushes: true, evidence: ["cpp@4ac7b327:src/layout/grid_track.cpp:10-24", "crates/nuxie-runtime/src/layout/grid_track.rs:7-50", "crates/nuxie-runtime/src/layout_component.rs:5-7"]}
+  update_ordering: {status: "phase-sequence-equivalent; representation divergent", phases_cpp: "track property change -> markLayoutDirty on the parent LayoutComponent -> syncContainerStyle rebuild -> solve", phases_rust: "track property write -> mark_layout_dirty on the parent LayoutComponent -> layout_revision -> apply_grid_container_style rebuild -> taffy tree rebuild -> solve"}
+  ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@4ac7b327:src/layout/grid_track.cpp:93-116", "crates/nuxie-graph/src/lib.rs:607-817"]}
+  compensation:
+    status: "present"
+    mechanisms: [{name: "layout revision fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:6491-6502", "crates/nuxie-runtime/src/draw.rs:14751-14756"]}]
+    import_time_constants: [{name: "GridTrack collection/trackType/trackMaxType closed enum switches", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:12553-12586"]}]
+idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model"]
+confidence: high
+notes: "`GridTrack::syncContainerStyle` and the Rust `apply_grid_container_style` agree structurally — both walk the container's children, skip non-tracks, bucket by `collection()` into the four template/auto lists, and drop collections past index 3 — and the size mapping agrees per case (points/percent/fr/auto, and the minmax pair when `trackMaxType() != 0`, with the C++ `trackMaxType - 1` shift matching the Rust max-type table). The invalidation route is now ported one-for-one, including C++'s `parent()->is<LayoutComponent>()` guard: a track under a non-layout parent dirties nothing on either side. What remains divergent is representation — `mark_layout_node_changed` bumps the artboard-wide `layout_revision` that keys the retained layout-solve cache, which C++ has no counterpart for because it re-solves through live Yoga nodes under their own dirty bits. Coverage grep as above; sibling sweep found the off-file members named."
+
+## B6-0455
+
+Remediated in part 2026-08-05 (F15/UNIV-1603): the absent `ParticipantAnimation`
+lifecycle recorded below is now ported — `concrete.participant_layout` reuses
+the LayoutComponent animation state in inherit-only mode, the cascade reaches
+participants through transparent containers, the participant advances as its
+own AdvancingComponent, the solve settles retargets through `retain_bounds`,
+and parametric-path control size reads the animated slot. Upstream
+`layout_participant_test.cpp` :203/:256 plus the disable-interpolation case are
+ported and bind to the implementation. The verdict is unchanged: the two
+mutation-gated mechanisms below still stand, and the taffy bounds map still
+never merges animated x/y (the position half of the finding, shared with
+LayoutComponent animation — see F15's remainder). The pre-port lifecycle text
+below is retained as the audit-time finding.
+
+row_id: B6-0455
+cpp_files: ["src/layout/layout_participant.cpp"]
+rust_module: "crates/nuxie-runtime/src/draw.rs"
+subsystem_cluster: "layout-shapes-paint"
+sibling_files_swept: ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/layout_component.rs", "crates/nuxie-runtime/src/layout/layout_node_provider.rs", "crates/nuxie-graph/src/lib.rs"]
+verdict: DIVERGENT
+axes:
+  retained_identity: {status: "divergent: C++ retains one LayoutData/YGNode per participant for its whole life; Rust owns no participant node and rebuilds the taffy tree each solve", evidence: ["cpp@4ac7b327:src/layout/layout_participant.cpp:114-127,188-212", "crates/nuxie-runtime/src/draw.rs:11340-11395", "crates/nuxie-runtime/src/draw.rs:14751-14756"]}
+  push_vs_poll: {status: "divergent: C++ pushes host WorldTransform dirt and owner markLayoutNodeDirty from resync/onSizingChanged/updateLayoutBounds; Rust derives participant bounds from a revision-keyed solved-bounds map", cpp_pushes: true, evidence: ["cpp@4ac7b327:src/layout/layout_participant.cpp:188-212,398-455,457-477", "crates/nuxie-runtime/src/draw.rs:15251-15296", "crates/nuxie-runtime/src/artboard.rs:6483-6486"]}
+  update_ordering: {status: "phase-sequence-equivalent; representation divergent", phases_cpp: "property change -> syncStyleChanges into the retained node -> markDirtyAndPropagate -> solve -> updateLayoutBounds -> controlSize + WorldTransform dirt", phases_rust: "property write -> layout_revision/prepared_epoch fence -> taffy tree rebuild -> solve -> layout_bounds map -> world-transform derivation"}
+  ownership: {status: "divergent at the animation lifecycle; arena-adapted elsewhere", evidence: ["cpp@4ac7b327:src/layout/layout_participant.cpp:29-43,64-70,528-562", "crates/nuxie-runtime/src/components.rs:1518-1524", "crates/nuxie-runtime/src/artboard.rs:8629-8657"]}
+  compensation:
+    status: "present"
+    mechanisms: [{name: "layout revision/prepared epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:6483-6486", "crates/nuxie-runtime/src/draw.rs:14751-14756"]}, {name: "world-transform memo keyed by cache_epoch/layout_revision", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:14813-14817,15271-15296"]}]
+    import_time_constants: [{name: "LayoutParticipant child lookup / LayoutNodeStyle property keys", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:8054-8062,8104-8130"]}]
+idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
+confidence: high
+notes: "The sizing half of this file is faithful: the participant is its own sizing style on both sides (`runtime_layout_node_style_local` falls through to the LayoutParticipant child, draw.rs:8047-8062), the measure hook is wired for hug axes (`TaffyMeasureContext::LayoutParticipantMeasure` -> `measure_layout_participant`, draw.rs:11373,13108-13130), and the applyBaseStyle fill/grow/shrink/basis and grid-branch rules are reproduced in `apply_flex_item_style`/`apply_grid_item_style` (draw.rs:12375-12445,12590-12628). The structural findings are the two above plus one absent lifecycle worth stating explicitly: the whole `ParticipantAnimation` family — `cascadeLayoutStyle` allocating state when the parent layout animates, `advanceComponent`, `applyInterpolation`, and the smoothing/retarget pair — has no Rust counterpart. Rust's layout animation state (`RuntimeLayoutComponentState`, which owns animation_a/b, is_smoothing_animation and the inherited interpolation trio) is constructed only for types that are-a LayoutComponent (`components.rs:1518-1524`), and `cascade_layout_component_animation_style` skips any child without that state (`artboard.rs:8629-8657`). A LayoutParticipant is-a LayoutNodeStyle/LayoutSizingStyle/Component, never a LayoutComponent, so a Shape/Text/Image participant under an animated layout snaps to each solved slot instead of interpolating toward it. This is recorded as a finding rather than a TRACKED-GAP because the two mechanisms above independently pass the mutation-timing gate (the spec forbids inventing a mechanism to reach DIVERGENT, not reporting real ones). Register row F15 (UNIV-1603) now owns the absent lifecycle; the verdict stays DIVERGENT on the mechanisms, and the gap analysis was independently confirmed against the fixture: `animated_participant.riv` carries `interpolationTime: 1.0` but zero keyframes, so its exact corpus status exercises only the initial solve, and upstream's own acceptance tests (`layout_participant_test.cpp:203,256`) drive the interpolation through a runtime resize the oracle never performs. Coverage grep as above; sibling sweep found the off-file members named."
+
+## B6-0456
+
+row_id: B6-0456
+cpp_files: ["src/layout/layout_sizing_style.cpp"]
+rust_module: "crates/nuxie-runtime/src/draw.rs"
+subsystem_cluster: "layout-shapes-paint"
+sibling_files_swept: ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/layout/layout_component_style.rs", "crates/nuxie-graph/src/lib.rs"]
+verdict: ADAPTED
+axes:
+  retained_identity: {status: "adapted-arena-identity", evidence: ["cpp@4ac7b327:src/layout/layout_sizing_style.cpp:38-51", "crates/nuxie-runtime/src/draw.rs:11912-11975", "crates/nuxie-graph/src/lib.rs:607-817"]}
+  push_vs_poll: {status: "isomorphic", cpp_pushes: false, evidence: ["cpp@4ac7b327:src/layout/layout_sizing_style.cpp:12-36,38-51,53-72", "crates/nuxie-runtime/src/draw.rs:11709-11721,11912-11975"], note: "the pinned file registers no observer and pushes no dirt; it is called by the owner's style sync. The Rust projection is likewise pull-only at style build."}
+  update_ordering: {status: "isomorphic", phases_cpp: "owner style sync -> applyBaseStyle/applyItemStyle write YGStyle", phases_rust: "owner style build -> style_for_node/apply_grid_item_style write taffy Style"}
+  ownership: {status: "adapted", evidence: ["cpp@4ac7b327:src/layout/layout_sizing_style.cpp:38-51", "crates/nuxie-graph/src/lib.rs:607-817"]}
+  compensation:
+    status: "clear"
+    mechanisms: []
+    import_time_constants: [{name: "display/min/max unit and justify-self closed enum switches", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:11709-11721,11912-11975,12590-12628"]}]
+idiom_rules_invoked: ["AF-1 arena-id retained identity", "AF-5 import-time devirtualization"]
+confidence: high
+notes: "This file is a pure style projection with no lifecycle of its own: `display()` collapses to none/flex, the four unit accessors are casts, `applyBaseStyle` writes min/max dimensions, and `applyItemStyle` writes the stack cell plus the justify-self resolution. Rust writes the same values into a taffy Style at the same phase — display at style_for_node:11709-11721, min/max at 11912-11975, and the stack-cell + hug-downgrade justify-self rule inside apply_grid_item_style:12590-12628, including the `fill` override back to stretch. The engine substitution is D3, not a finding, and the projection introduces no drift tracker of its own, so this row is ADAPTED on the same reasoning as B6-0253 rather than DIVERGENT like B6-0252 — the push obligations for these properties live in their owners (LayoutComponentStyle B6-0252, LayoutParticipant B6-0455), which is where the layout-revision finding is recorded. Coverage grep: generation|epoch|revision|dirty|observed|snapshot|candidate|alias across crates/nuxie-runtime/src and crates/nuxie-graph/src; sibling sweep found the off-file members named above."

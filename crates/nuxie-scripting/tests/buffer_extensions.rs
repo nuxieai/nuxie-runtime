@@ -663,3 +663,5 @@ fn buffer_convert_non_finite_float_to_integer_uses_rust_saturation_policy() {
 
     assert_eq!(result, (0.0, u32::MAX as f64, 0.0, 0, 255, 0));
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

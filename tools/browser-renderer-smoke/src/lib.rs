@@ -2,11 +2,11 @@
 mod wasm {
     use nuxie::{
         BlendMode, BrowserFactory, BrowserResizeError, Factory, File, FillRule, GpuCanvasPassState,
-        GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPlan, GpuCanvasShader,
-        GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderResourceKind,
-        GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
-        GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
-        PersistentFactory, RecordingFactory, Renderer, WgpuFactory,
+        GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderBinding,
+        GpuCanvasShaderEntry, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
+        GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
+        GpuCanvasUniformBuffer, ImageSampler, Mat2D, PersistentFactory, RecordingFactory, Renderer,
+        WgpuFactory,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -284,7 +284,10 @@ fn fs_main() -> @location(0) vec4<f32> {
                 .await
                 .map_err(js_error)?,
         );
-        let mut frame = factory.borrow().begin_frame(0xff00_0000).map_err(js_error)?;
+        let mut frame = factory
+            .borrow()
+            .begin_frame(0xff00_0000)
+            .map_err(js_error)?;
         instance
             .draw(&mut factory, &mut frame)
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
@@ -342,84 +345,6 @@ fn fs_main() -> @location(0) vec4<f32> {
             )));
         }
         Ok(format!("direct-gpu-canvas=webgpu red={red} blue={blue}"))
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_webgpu_clean_error_scope() -> Result<String, JsValue> {
-        let factory = WgpuFactory::new_async(8, 8).await.map_err(js_error)?;
-        let plan = GpuCanvasRenderPlan {
-            shader_wgsl: r#"
-                @vertex
-                fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-                    let x = f32(i32(index) - 1);
-                    let y = f32(i32(index & 1u) * 2 - 1);
-                    return vec4<f32>(x, y, 0.0, 1.0);
-                }
-
-                @fragment
-                fn fs_main() -> @location(0) vec4<f32> {
-                    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-                }
-            "#
-            .into(),
-            width: 8,
-            height: 8,
-            clear_color: [0.0, 0.0, 0.0, 1.0],
-            vertex_count: 3,
-            instance_count: 1,
-            first_vertex: 0,
-            first_instance: 0,
-            uniform_buffers: Vec::new(),
-            vertex_layouts: Vec::new(),
-            vertex_buffers: Vec::new(),
-        };
-        let pixels = factory.render_gpu_canvas(&plan).await.map_err(js_error)?;
-        let red = pixels
-            .chunks_exact(4)
-            .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
-            .count();
-        if pixels.len() != 8 * 8 * 4 || red != 32 {
-            return Err(JsValue::from_str(&format!(
-                "clean WebGPU error scope draw returned bytes={} red={red}, expected bytes=256 red=32",
-                pixels.len()
-            )));
-        }
-        Ok(format!(
-            "gpu-canvas-clean-error-scope=clean rendered-pixels=64 red-pixels={red}"
-        ))
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_webgpu_error_scope_preserves_gpu_error() -> Result<String, JsValue> {
-        let factory = WgpuFactory::new_async(8, 8).await.map_err(js_error)?;
-        let invalid_plan = GpuCanvasRenderPlan {
-            shader_wgsl: "this is not valid WGSL".into(),
-            width: 8,
-            height: 8,
-            clear_color: [0.0, 0.0, 0.0, 1.0],
-            vertex_count: 3,
-            instance_count: 1,
-            first_vertex: 0,
-            first_instance: 0,
-            uniform_buffers: Vec::new(),
-            vertex_layouts: Vec::new(),
-            vertex_buffers: Vec::new(),
-        };
-        match factory.render_gpu_canvas(&invalid_plan).await {
-            Err(error)
-                if error
-                    .to_string()
-                    .contains("wgpu rejected the validated plan") =>
-            {
-                Ok("gpu-canvas-error-scope=concrete-error-preserved".into())
-            }
-            Err(error) => Err(JsValue::from_str(&format!(
-                "unexpected WebGPU validation error: {error}"
-            ))),
-            Ok(_) => Err(JsValue::from_str(
-                "invalid WGSL did not produce a concrete WebGPU validation error",
-            )),
-        }
     }
 
     #[wasm_bindgen]
@@ -814,6 +739,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 pub use wasm::{
     assert_direct_gpu_canvas_image, assert_imported_gpu_canvas,
     assert_persistent_surface_acquisition_failure, assert_resize, assert_surface_acquisition_retry,
-    assert_webgpu_clean_error_scope, assert_webgpu_gpu_canvas_rejects_invalid_interface,
-    assert_webgpu_uniform_limit_rejection, recording_float_probe, run_backend, run_stream_case,
+    assert_webgpu_gpu_canvas_rejects_invalid_interface, assert_webgpu_uniform_limit_rejection,
+    recording_float_probe, run_backend, run_stream_case,
 };

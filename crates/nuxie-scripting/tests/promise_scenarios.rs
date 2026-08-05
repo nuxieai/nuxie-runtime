@@ -818,3 +818,5 @@ const COROUTINE_ERROR_SCENARIOS: &[Scenario] = &[
         expected: Expected::Exact("false,async: await() argument is not a Promise"),
     },
 ];
+mod support;
+use support::ScriptVmSourceTestExt as _;

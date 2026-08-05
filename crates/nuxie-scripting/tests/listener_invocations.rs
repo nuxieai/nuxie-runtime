@@ -1050,3 +1050,5 @@ fn legacy_perform_receives_a_pointer_event_or_the_upstream_placeholder() {
         ScriptValue::String("unknown".to_owned())
     );
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

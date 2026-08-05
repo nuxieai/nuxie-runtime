@@ -131,6 +131,7 @@ MIXED_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
 # file containing either marker family fails. Deleting entries is allowed and
 # should happen as the migration in docs/pure-runtime-boundary.md proceeds.
 INTERNAL_DEBT_FILES = {
+    "editor-gpu-tooling": set(),
     "apple-image-admission": {
         "crates/nux-capi/src/size_report_roots.rs",
         "crates/nuxie-renderer/src/lib.rs",
@@ -191,6 +192,11 @@ INTERNAL_DEBT_FILES = {
     },
 }
 INTERNAL_DEBT_MARKERS = {
+    "editor-gpu-tooling": re.compile(
+        r"\bGpuCanvas(?:Program|RenderPlan)\b|"
+        r"\bpub\s+fn\s+(?:eval|register_source_module)\b|"
+        r"\bpub\s+fn\s+load\s*\([^)]*\bsource\s*:\s*&str"
+    ),
     "apple-image-admission": re.compile(
         r"\bAPPLE_SAFE_IMAGE_|\bvalidate_image_bytes\b"
     ),
@@ -1172,20 +1178,22 @@ def check_repository(
                         f"{relative}:{line_number}: protected source imports a "
                         f"product/authoring module: {line.strip()}"
                     )
-                for family, marker in INTERNAL_DEBT_MARKERS.items():
-                    if not marker.search(line):
-                        continue
-                    observed_debt[family].add(relative)
-                    spread = (family, relative)
-                    if (
-                        relative not in INTERNAL_DEBT_FILES[family]
-                        and spread not in reported_debt_spread
-                    ):
-                        reported_debt_spread.add(spread)
-                        errors.append(
-                            f"{relative}:{line_number}: {family} boundary debt spread "
-                            "outside its grandfathered files"
-                        )
+            for family, marker in INTERNAL_DEBT_MARKERS.items():
+                match = marker.search(source)
+                if match is None:
+                    continue
+                observed_debt[family].add(relative)
+                spread = (family, relative)
+                if (
+                    relative not in INTERNAL_DEBT_FILES[family]
+                    and spread not in reported_debt_spread
+                ):
+                    reported_debt_spread.add(spread)
+                    line_number = source.count("\n", 0, match.start()) + 1
+                    errors.append(
+                        f"{relative}:{line_number}: {family} boundary debt spread "
+                        "outside its grandfathered files"
+                    )
 
     errors.extend(
         missing_debt_exception_errors(repo_root, observed_debt, INTERNAL_DEBT_FILES)

@@ -875,7 +875,10 @@ fn each_luau_vm_has_a_sixteen_mebibyte_memory_ceiling() {
     vm.begin_host_cycle();
 
     let error = vm
-        .eval::<luaur_rt::Value>(r#"return string.rep("x", 32 * 1024 * 1024)"#)
+        .run_source_bytecode::<luaur_rt::Value>(
+            "memory-limit",
+            r#"return string.rep("x", 32 * 1024 * 1024)"#,
+        )
         .unwrap_err();
 
     assert!(
@@ -1272,3 +1275,5 @@ fn host_values_at_the_exact_depth_node_and_string_limits_are_accepted() {
     .unwrap();
     assert_eq!(vm.drain_host_commands().len(), 1);
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

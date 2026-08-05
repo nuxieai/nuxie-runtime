@@ -32,6 +32,12 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelHandle>,
     pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    /// C++ `NestedArtboardHostFlags::pendingStatefulBinding`: `onAddedClean`
+    /// only schedules `bindStateful`; the occurrence consumes the latch on its
+    /// next advance, after the host's own data binds have applied
+    /// (`nested_artboard.cpp:156-165,623,977-987`). Replacement swaps flush it
+    /// synchronously instead (`nested_artboard.cpp:340-343`).
+    pub(crate) pending_stateful_binding: bool,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
@@ -93,6 +99,7 @@ impl Clone for RuntimeNestedArtboardInstance {
             data_bind_context_source_locals_by_path: self
                 .data_bind_context_source_locals_by_path
                 .clone(),
+            pending_stateful_binding: self.pending_stateful_binding,
             is_paused: self.is_paused,
             speed: self.speed,
             quantize: self.quantize,

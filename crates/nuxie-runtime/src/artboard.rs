@@ -6261,6 +6261,20 @@ impl ArtboardInstance {
                     .transferred_hug_layout_generation
                     .set(child_layout_generation);
             }
+            if nested.pending_stateful_binding && !nested.is_paused {
+                // C++ `NestedArtboard::advanceComponent` flushes a scheduled
+                // `bindStateful` after its collapsed/paused guards, before the
+                // nested animations advance (`src/nested_artboard.cpp:977-987`).
+                // Flush before detaching state machines so the child context
+                // forwards to them.
+                if let Some(file) = self.runtime_file_arc() {
+                    self.rebind_owned_view_model_context_after_nested_artboard_swap(
+                        &file,
+                        host_local,
+                        &mut nested,
+                    );
+                }
+            }
             self.detach_active_nested_state_machines(&mut nested);
             let result = match nested.begin_advance(elapsed_seconds) {
                 Err(changed) => Ok(changed),
@@ -10034,8 +10048,8 @@ fn build_runtime_nested_artboard_instance(
     // C++ initializes the authored nested animation occurrences before
     // `onAddedClean` discovers the active stateful VMI
     // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
-    // consume its default context during construction; the child-first bind
-    // below supplies the context once the complete occurrence exists.
+    // consume its default context during construction; the pending stateful
+    // latch below defers that bind to the occurrence's first advance.
     let animations =
         runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child);
     let data_bind_view_model_instance_locals_by_id =
@@ -10100,19 +10114,6 @@ fn build_runtime_nested_artboard_instance(
                 Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
             })
             .collect();
-    let mut local_handles = Vec::new();
-    if let Some(context) = stateful_view_model_context.clone() {
-        local_handles.push(context);
-    }
-    local_handles.extend(stateful_global_view_model_contexts.values().cloned());
-    let initial_data_context = if local_handles.is_empty() {
-        child.artboard_owned_data_context.clone()
-    } else {
-        Some(RuntimeOwnedDataContext::with_local_handles(
-            local_handles,
-            None,
-        ))
-    };
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -10122,7 +10123,13 @@ fn build_runtime_nested_artboard_instance(
     );
     let (data_bind_property_source_locals, data_bind_image_source_locals) =
         build_nested_host_data_bind_source_local_slots(&child, &data_bind_source_locals_by_path);
-    let mut nested = RuntimeNestedArtboardInstance {
+    // C++ `onAddedClean` only *schedules* the stateful bind for an authored
+    // stateful child VMI (`tryScheduleBindStateful`, requiring a non-null
+    // active VMI); the occurrence consumes the latch on its next advance so
+    // the host's own data binds apply first (`src/nested_artboard.cpp:623,
+    // 156-165,977-987`).
+    let pending_stateful_binding = stateful_view_model_context.is_some();
+    Ok(RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
         render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -10145,14 +10152,8 @@ fn build_runtime_nested_artboard_instance(
         speed,
         quantize,
         cumulated_seconds: 0.0,
-    };
-    if let Some(data_context) = initial_data_context.as_ref() {
-        // `NestedArtboard::bindStateful` binds the active local/global VMI
-        // list to the mounted child before its NestedStateMachine consumes the
-        // child's DataContext (`src/nested_artboard.cpp:156-185`).
-        nested.bind_owned_view_model_occurrence_data_context(file, data_context, true);
-    }
-    Ok(nested)
+        pending_stateful_binding,
+    })
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {

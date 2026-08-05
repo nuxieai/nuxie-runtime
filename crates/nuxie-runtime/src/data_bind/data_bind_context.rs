@@ -5810,6 +5810,9 @@ impl ArtboardInstance {
         host_local_id: usize,
         nested: &mut RuntimeNestedArtboardInstance,
     ) -> bool {
+        // This is the Rust `NestedArtboard::bindStateful`; C++ clears the
+        // pending latch before binding (`src/nested_artboard.cpp:167-169`).
+        nested.pending_stateful_binding = false;
         let mut local_handles = Vec::new();
         if let Some(context) = nested.stateful_view_model_context.clone() {
             local_handles.push(context);

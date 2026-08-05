@@ -408,8 +408,20 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
-    for slot in (49..55)
-        .chain(60..62)
+    let table = [
+        (49, crate::functions::luau_f_rawset::luau_f_rawset as *const () as usize),
+        (50, crate::functions::luau_f_rawget::luau_f_rawget as *const () as usize),
+        (51, crate::functions::luau_f_rawequal::luauF_rawequal as *const () as usize),
+        (52, crate::functions::luau_f_tinsert::luau_f_tinsert as *const () as usize),
+        (53, crate::functions::luau_f_tunpack::luau_f_tunpack as *const () as usize),
+        (60, crate::functions::luau_f_getmetatable::luau_f_getmetatable as *const () as usize),
+        (61, crate::functions::luau_f_setmetatable::luau_f_setmetatable as *const () as usize),
+    ];
+    for (slot, expected) in table {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in (54..55)
         .chain(65..89)
         .chain([90])
         .chain(94..243)

@@ -827,6 +827,7 @@
             speed: 1.0,
             quantize: -1.0,
             cumulated_seconds: 0.0,
+            pending_stateful_binding: false,
         }
     }
 
@@ -2173,6 +2174,7 @@
             speed: 1.0,
             quantize: 1.0,
             cumulated_seconds: 0.0,
+            pending_stateful_binding: false,
         };
 
         assert_eq!(nested.begin_advance(0.25), Err(true));
@@ -2638,6 +2640,7 @@
                 speed: 1.0,
                 quantize: -1.0,
                 cumulated_seconds: 0.0,
+                pending_stateful_binding: false,
             },
         );
 
@@ -2884,6 +2887,7 @@
                 speed: 2.0,
                 quantize: -1.0,
                 cumulated_seconds: 0.0,
+                pending_stateful_binding: false,
             },
         );
         parent.nested_artboard_locals.push(0);
@@ -2943,6 +2947,7 @@
                 speed: 2.0,
                 quantize: -1.0,
                 cumulated_seconds: 0.0,
+                pending_stateful_binding: false,
             },
         );
         parent.nested_artboard_locals.push(0);
@@ -6340,6 +6345,7 @@
                 speed: 1.0,
                 quantize: 0.0,
                 cumulated_seconds: 0.0,
+                pending_stateful_binding: false,
             },
         );
         instance.nested_artboard_locals.push(0);

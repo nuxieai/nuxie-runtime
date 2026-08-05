@@ -225,6 +225,7 @@ EXACT = (
     "follow_path_animate_target",
     "follow_path_constraint",
     "format_number_with_commas",
+    "global_viewmodels_test-auto_instance",
     "group_effect-main-missing-targets",
     "hittest_ab1",
     "hittest_ab1_grand_parent",
@@ -1828,7 +1829,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-global_viewmodels_test-auto_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
 component_list_grouped|frame 6, op 413 (transform), field tx: expected -90, got 0
@@ -1840,7 +1840,7 @@ focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
 formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
 formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
 formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
-global_viewmodels_test-set_instance|frame 0, op 27 (color), field paint_id: expected 5, got 6
+global_viewmodels_test-set_instance|frame 1, op 163 (frame): expected frame, got color
 hittest_ab_2_non_virtualized|frame 0, op 198 (color): expected color, got save
 hittest_ab_2_virtualized|frame 0, op 132 (color): expected color, got save
 image_fit_alignment|frame 2, op 115 (transform), field tx: expected 462.03198, got -197.96802

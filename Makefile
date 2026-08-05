@@ -152,7 +152,7 @@ check:
 	cargo check --workspace
 
 test: fixtures
-	cargo test --workspace
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test --workspace
 
 # --- Tool-check gates: the tool's unit tests and the check it performs are
 # independent verdicts, so neither is allowed to hide the other -------------

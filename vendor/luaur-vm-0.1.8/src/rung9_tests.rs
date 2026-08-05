@@ -325,12 +325,53 @@ fn bufferwritelong_fastcall_writes_only_in_bounds() {
 }
 
 #[test]
-fn rive_fastcall_table_only_wires_the_fork_delta() {
+fn fastcall_table_wires_scalar_math_and_the_rive_tail() {
     let missing = crate::functions::luau_f_missing::luau_f_missing as *const () as usize;
     assert_eq!(luauF_table.len(), 256);
-    assert!(luauF_table[..243]
-        .iter()
-        .all(|function| address(*function) == missing));
+    assert!(luauF_table[0].is_none());
+
+    let math = [
+        (2, crate::functions::luau_f_abs::luau_f_abs as *const () as usize),
+        (3, crate::functions::luau_f_acos::luau_f_acos as *const () as usize),
+        (4, crate::functions::luau_f_asin::luau_f_asin as *const () as usize),
+        (5, crate::functions::luau_f_atan_2::luau_f_atan_2 as *const () as usize),
+        (6, crate::functions::luau_f_atan::luau_f_atan as *const () as usize),
+        (7, crate::functions::luau_f_ceil::luau_f_ceil as *const () as usize),
+        (8, crate::functions::luau_f_cosh::luau_f_cosh as *const () as usize),
+        (9, crate::functions::luau_f_cos::luau_f_cos as *const () as usize),
+        (10, crate::functions::luau_f_deg::luau_f_deg as *const () as usize),
+        (11, crate::functions::luau_f_exp::luau_f_exp as *const () as usize),
+        (12, crate::functions::luau_f_floor::luau_f_floor as *const () as usize),
+        (13, crate::functions::luau_f_fmod::luau_f_fmod as *const () as usize),
+        (14, crate::functions::luau_f_frexp::luau_f_frexp as *const () as usize),
+        (15, crate::functions::luau_f_ldexp::luau_f_ldexp as *const () as usize),
+        (16, crate::functions::luau_f_log_10::luau_f_log_10 as *const () as usize),
+        (17, crate::functions::luau_f_log::luau_f_log as *const () as usize),
+        (18, crate::functions::luau_f_max::luau_f_max as *const () as usize),
+        (19, crate::functions::luau_f_min::luau_f_min as *const () as usize),
+        (20, crate::functions::luau_f_modf::luauF_modf as *const () as usize),
+        (21, crate::functions::luau_f_pow::luau_f_pow as *const () as usize),
+        (22, crate::functions::luau_f_rad::luau_f_rad as *const () as usize),
+        (23, crate::functions::luau_f_sinh::luau_f_sinh as *const () as usize),
+        (24, crate::functions::luau_f_sin::luau_f_sin as *const () as usize),
+        (25, crate::functions::luau_f_sqrt::luau_f_sqrt as *const () as usize),
+        (26, crate::functions::luau_f_tanh::luau_f_tanh as *const () as usize),
+        (27, crate::functions::luau_f_tan::luau_f_tan as *const () as usize),
+        (46, crate::functions::luau_f_clamp::luau_f_clamp as *const () as usize),
+        (47, crate::functions::luau_f_sign::luau_f_sign as *const () as usize),
+        (48, crate::functions::luau_f_round::luau_f_round as *const () as usize),
+        (89, crate::functions::luau_f_lerp::luau_f_lerp as *const () as usize),
+        (91, crate::functions::luau_f_isnan::luau_f_isnan as *const () as usize),
+        (92, crate::functions::luau_f_isinf::luau_f_isinf as *const () as usize),
+        (93, crate::functions::luau_f_isfinite::luau_f_isfinite as *const () as usize),
+    ];
+    for (slot, expected) in math {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in [1].into_iter().chain(28..46).chain(49..89).chain([90]).chain(94..243) {
+        assert_eq!(address(luauF_table[slot]), missing, "slot {slot}");
+    }
     assert_eq!(
         address(luauF_table[243]),
         crate::functions::luau_f_fround::luau_f_fround as *const () as usize

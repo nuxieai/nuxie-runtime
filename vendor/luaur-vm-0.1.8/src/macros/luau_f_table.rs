@@ -1,11 +1,44 @@
 //! C++ `extern const luau_FastFunction luauF_table[256]` (lbuiltins.h:9).
-//! Source: `VM/src/lbuiltins.cpp` (hand-ported fallback plus Rive tail)
+//! Source: `VM/src/lbuiltins.cpp` (hand-ported scalar dispatch plus Rive tail)
 use crate::type_aliases::luau_fast_function::luau_FastFunction;
 
 const fn make_fastcall_table() -> [luau_FastFunction; 256] {
-    // This fork deliberately leaves the untranslated upstream prefix missing.
     let mut table: [luau_FastFunction; 256] =
         [Some(crate::functions::luau_f_missing::luau_f_missing); 256];
+    table[0] = None;
+    table[2] = Some(crate::functions::luau_f_abs::luau_f_abs);
+    table[3] = Some(crate::functions::luau_f_acos::luau_f_acos);
+    table[4] = Some(crate::functions::luau_f_asin::luau_f_asin);
+    table[5] = Some(crate::functions::luau_f_atan_2::luau_f_atan_2);
+    table[6] = Some(crate::functions::luau_f_atan::luau_f_atan);
+    table[7] = Some(crate::functions::luau_f_ceil::luau_f_ceil);
+    table[8] = Some(crate::functions::luau_f_cosh::luau_f_cosh);
+    table[9] = Some(crate::functions::luau_f_cos::luau_f_cos);
+    table[10] = Some(crate::functions::luau_f_deg::luau_f_deg);
+    table[11] = Some(crate::functions::luau_f_exp::luau_f_exp);
+    table[12] = Some(crate::functions::luau_f_floor::luau_f_floor);
+    table[13] = Some(crate::functions::luau_f_fmod::luau_f_fmod);
+    table[14] = Some(crate::functions::luau_f_frexp::luau_f_frexp);
+    table[15] = Some(crate::functions::luau_f_ldexp::luau_f_ldexp);
+    table[16] = Some(crate::functions::luau_f_log_10::luau_f_log_10);
+    table[17] = Some(crate::functions::luau_f_log::luau_f_log);
+    table[18] = Some(crate::functions::luau_f_max::luau_f_max);
+    table[19] = Some(crate::functions::luau_f_min::luau_f_min);
+    table[20] = Some(crate::functions::luau_f_modf::luauF_modf);
+    table[21] = Some(crate::functions::luau_f_pow::luau_f_pow);
+    table[22] = Some(crate::functions::luau_f_rad::luau_f_rad);
+    table[23] = Some(crate::functions::luau_f_sinh::luau_f_sinh);
+    table[24] = Some(crate::functions::luau_f_sin::luau_f_sin);
+    table[25] = Some(crate::functions::luau_f_sqrt::luau_f_sqrt);
+    table[26] = Some(crate::functions::luau_f_tanh::luau_f_tanh);
+    table[27] = Some(crate::functions::luau_f_tan::luau_f_tan);
+    table[46] = Some(crate::functions::luau_f_clamp::luau_f_clamp);
+    table[47] = Some(crate::functions::luau_f_sign::luau_f_sign);
+    table[48] = Some(crate::functions::luau_f_round::luau_f_round);
+    table[89] = Some(crate::functions::luau_f_lerp::luau_f_lerp);
+    table[91] = Some(crate::functions::luau_f_isnan::luau_f_isnan);
+    table[92] = Some(crate::functions::luau_f_isinf::luau_f_isinf);
+    table[93] = Some(crate::functions::luau_f_isfinite::luau_f_isfinite);
     table[243] = Some(crate::functions::luau_f_fround::luau_f_fround);
     // Slot 244 is reserved and remains missing.
     table[245] = Some(crate::functions::luau_f_vectordistance::luau_f_vectordistance);

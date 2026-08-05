@@ -14,7 +14,7 @@ impl<'a> BytecodeGraphSerializer<'a> {
     pub fn emit_bytecode(&mut self) -> Vec<u32> {
         let schedule = self.reschedule();
         let mut insns_pc: Vec<u32> = Vec::new();
-        insns_pc.resize(self.func.instructions.len(), 0);
+        insns_pc.resize(self.func.instructions.len(), u32::MAX);
 
         for i in 0..schedule.len() {
             let block_op = schedule[i as usize];
@@ -36,7 +36,7 @@ impl<'a> BytecodeGraphSerializer<'a> {
                     let mut jump = BcJump::<VmConst>::create(self.func);
                     jump.set_target(fallthrough_op);
                     jump.append_to(block_op);
-                    insns_pc.resize(self.func.instructions.len(), 0);
+                    insns_pc.resize(self.func.instructions.len(), u32::MAX);
                 }
             }
             let ops = {

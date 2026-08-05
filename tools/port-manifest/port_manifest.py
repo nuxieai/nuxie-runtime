@@ -271,7 +271,7 @@ FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
 FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
     "ported",
     "crates/nuxie-runtime/src/semantic_inference_registry.rs",
-    "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds (SEMRES-report.md).",
+    "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds.",
 )
 FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
     "ported",

@@ -56,10 +56,6 @@
 
 # Orchestration scratch: worker reports and PR body files (session-local)
 *-report.md
-!/SILVGEN-report.md
-!/P2D-report.md
-!/P3F2-report.md
-!/SEMRES-report.md
 .*-body.txt
 *.log
 

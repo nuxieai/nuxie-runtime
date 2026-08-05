@@ -480,11 +480,13 @@ perf ratio measured and reported to the user.
 
 ## Phase 3 — Hardening & decisions (#HD) — P2
 
-- **#HD-1 Threading-model decision (A6) — USER-GATE, then S or L.** Either
-  document FlowSession's single-threaded contract as THE supported embedder
-  architecture (S: docs + register D-row) or port
-  `command_queue/command_server` (L: own mini-map first). Present the
-  trade-off with evidence from the register; do not pre-decide.
+- **#HD-1 Command-host follow-through (F3/A6) — BASELINE PARTIAL, PRODUCT
+  DECISION OPEN.** The direct `command_queue`/`command_server` port covers
+  79/83 pinned cases; four S4-45 blob cases remain WATCH. Advance product pins
+  independently, then measure Flow's atomic rollback, output ordering, wake,
+  wasm, latency/allocation, and terminal-error contract before deleting any
+  Flow machinery. Flow remains a shared product-host protocol during that
+  experiment, not an iOS-owned replacement for the baseline port.
 - **#HD-2 Renderer oracle hardening (V7) — LANE, M.** One additional
   adapter/OS in the pixel matrix; purpose-built C++ oracle config for the
   two clockwise-atomic hypotheses, or reclassify them as area-capped

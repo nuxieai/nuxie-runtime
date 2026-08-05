@@ -18,8 +18,12 @@ CRATE_ROOTS = (
     "crates/nuxie-render-api/src",
 )
 CATEGORY_VALUES = (
-    "scene-api",
-    "flowsession-abi",
+    "baseline-adaptation",
+    "product-authoring",
+    "product-host",
+    "product-data",
+    "product-trust",
+    "mixed-product-host",
     "retained-render",
     "codegen",
     "test-infra",

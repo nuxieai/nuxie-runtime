@@ -71,6 +71,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: make rust-attribution-gate
 
+      # The seam test and live workspace check are independent verdicts. This
+      # runs on Ubuntu because it parses every declared dependency table,
+      # including Apple target and optional feature tables, without compiling.
+      - name: Verify pure-runtime dependency boundary
+        if: ${{ !cancelled() }}
+        run: make seam-contract-gate
+
   # The hosted reusable workflow above owns the existing V2 gate but does not
   # export its raw summaries. Run the same floor separately so the scorecard
   # consumes real per-commit output and exit codes, never an inferred green

@@ -21,6 +21,7 @@ SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
+SEAM_CONTRACT_TOOL ?= $(CURDIR)/tools/seam-check/check.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
 PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
 PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
@@ -162,7 +163,7 @@ test: fixtures
 # fixed. That masked two separate live failures in #272 alone. The `-check`
 # targets now stand alone, and the `-gate` targets run the tests and the check
 # in one pass through tools/report-all.sh, which reports every failure.
-.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate
+.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate seam-contract-test seam-contract-check seam-contract-gate
 port-manifest-generate:
 	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
 
@@ -187,6 +188,17 @@ rust-attribution-gate:
 	@tools/report-all.sh "rust-attribution" \
 		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
 		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
+
+seam-contract-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/seam-check -p 'test_*.py' -v
+
+seam-contract-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(SEAM_CONTRACT_TOOL)" --repo-root "$(CURDIR)"
+
+seam-contract-gate:
+	@tools/report-all.sh "seam-contract" \
+		"seam contract tool unit tests" "$(MAKE) --no-print-directory seam-contract-test" \
+		"workspace dependency and source debt check" "$(MAKE) --no-print-directory seam-contract-check"
 
 b6-audit-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py

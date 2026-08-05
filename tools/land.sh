@@ -29,6 +29,7 @@ make rust-sources-fresh || exit 1
 # on their unit tests: a red suite stopped the check from running at all, so a
 # real drift underneath stayed hidden until the tests were fixed.
 gates=(cpp-probe runtime-frame-loop-port-gate rust-attribution-gate
+       seam-contract-gate
        feature-compile-gate
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
        scripted-golden-compare silver-corpus-test)

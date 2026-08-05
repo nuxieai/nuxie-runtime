@@ -1,34 +1,35 @@
-> **DRAFT — pending Levi review.** The guard runs grandfathered/report-only until the migration decisions below are ratified.
+# Pure runtime, product, authoring, and platform seam contract
 
-# Parity, C ABI, and product seam contract (draft)
+Status: ratified 2026-08-05 by the product-surface extraction audit and
+UNIV-1621. UNIV-1622 makes the dependency direction executable; later child
+issues remove the grandfathered debt without changing imported Rive behavior.
 
-Status: P3-h architecture-review draft. This document records the intended
-dependency direction and the current migration debt; it does not move code or
-close any parity-gap register row.
-
-The behavioral reference for this review is rive-runtime `d788e8ec`. The
-working branch already contains the S4 advance through `4ac7b327`, but that
-advance does not change the classification below: product additions are not
-promoted to parity merely because they share a crate with ported code.
+The behavioral reference is rive-runtime
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`. Product additions are not promoted
+to parity merely because they share a crate with ported code.
 
 ## The seam
 
-There are three modules, plus the oracle consumers that police the lowest one:
+The target has five ownership regions, plus the oracle consumers that police
+the lowest one:
 
 ```text
-                         product-specific ABI
-                                  |
-                                  v
-                         product / authoring
-                                  |
-                                  v
-portable C ABI adapter ------> parity baseline <------ replay/oracle tools
+nuxie-dev authoring/tooling -------------------+
+                                                |
+shared product contracts + Flow host -----------+----> parity baseline
+                                                |
+nuxie-ios Apple ABI/presentation adapter -------+
+
+browser presentation adapter ------------------------> renderer baseline
+
+portable C ABI + replay/oracle tools ----------------> parity baseline
 ```
 
-The portable C ABI and product layer are sibling consumers of the parity
-baseline. The product layer does not have to call Rust through the portable C
-ABI when an in-process Rust interface is available. A product-specific C or
-Swift boundary may adapt the product layer, but it is not `nux-capi`.
+The portable C ABI, shared product host, authoring module, and platform
+adapters are sibling consumers of baseline interfaces. Product code does not
+have to call Rust through the portable C ABI when an in-process interface is
+available. A product-specific C or Swift boundary may adapt the product host,
+but it is not `nux-capi`.
 
 ### Parity baseline
 
@@ -70,21 +71,46 @@ separately named product ABI above the product layer.
 
 Today `nux-capi` depends on the mixed `nuxie` package, but its source imports
 only baseline facade symbols. That package edge is temporary migration debt:
-after the split, its manifest must resolve only to the baseline facade.
+after the split, its manifest must resolve only to the baseline facade. The
+guard permits only the exact `default-features = false` edge; dependency
+features, default features, a second mixed edge, or a product dependency fail.
+Workspace-inherited aliases and Cargo's effective default-feature behavior are
+resolved before that decision. The existing facade's `renderer` feature
+forwarding, its exact provider-side activation set, and exact baseline symbol
+imports form explicit allowlists. The activated provider dependency is also
+ratcheted by resolved package and feature/default-feature shape, so the allowed
+token cannot be retargeted through a Cargo alias. The only approved `File`
+associated item is its baseline `import`; forwarding a product feature,
+importing or aliasing a product root
+re-export, or calling a product method on an allowed baseline type fails.
 
-### Product and authoring layer
+### Shared product host and editor authoring
 
-The product layer owns Nuxie policy and durable product vocabulary. It may
-depend on the parity baseline. It may combine several baseline calls into a
-deep module, but it may not duplicate or replace the pinned frame loop. In
-particular, it may select a player, validate a host batch, lower an authored
-document, and translate outputs; the actual import, advance/apply, hit,
-settlement, event, and draw semantics remain baseline-owned.
+The shared product host owns `.nux` package vocabulary and trust, ProjectDO
+converter programs, Nuxie Luau host effects, and the renderer-neutral Flow
+protocol used by Apple execution and editor/publisher conformance. The editor
+authoring owner owns Scene/SceneTx, generated authoring vocabulary, lowering,
+binary authored-record construction, stable authored identity, and editor
+observation/catalogue policy.
+
+Both may depend on the parity baseline. They may combine baseline calls into a
+deep module, but they may not duplicate or replace the pinned frame loop. The
+actual import, advance/apply, hit, settlement, event, and draw semantics remain
+baseline-owned.
 
 Product additions are classified as additions in the Rust attribution ledger,
 not mapped to a C++ file as `faithful`. If a product adapter deliberately
 changes pinned behavior, that requires the normal user-approved D-row; calling
 the behavior “SDK policy” is not sufficient.
+
+### Platform presentation adapters
+
+Apple drawable ownership, completion/disposition policy, trusted-image
+admission, and the Apple product ABI belong to the Apple adapter. Browser
+canvas ownership, resize/recovery policy, and direct presentation belong to the
+browser adapter. Backend-neutral factory, render-target, frame, and Metal/WebGPU
+mechanics remain renderer baseline behavior. Neither move justifies exposing
+raw device, queue, surface, or texture internals as a broad public interface.
 
 ### Replay and oracle tools
 
@@ -111,11 +137,16 @@ counts are review aids at the current tree, not ratchets.
 | ProjectDO converter vocabulary and execution | `crates/nuxie-runtime/src/project_data_converter.rs` (2,686 lines), its public re-exports in `nuxie-runtime/src/lib.rs`, ProjectDO decode/evaluation in `data_bind/context/context_value.rs`, and the list-length call from `data_bind/converters/data_converter_number_to_list.rs` | The durable ProjectDO ids, JSON envelope, React-time convention, compile/evaluate/reverse contract, and resolver are absent from the pinned C++ tree. This is the clearest product-to-baseline dependency inversion. |
 | Nuxie Luau host-effect protocol | `crates/nuxie-scripting/src/vm/host_commands.rs` (637 lines), `host_commands` fields/exports/installation in `vm.rs`, and host-specific portions of `vm/resource_limits.rs` | Installs private `require("nuxie")`, normalizes `HostValue`, queues `Trigger`/`ResponseSet`, defines cycle checkpoints, and applies product host payload/command limits. These are consumed by FlowSession, not by pinned Rive scripting. |
 | Product artifact trust | `crates/nuxie/src/script_import.rs`, the optional `nux-container` dependency, and authenticated import entry points/glue in `crates/nuxie/src/lib.rs` | Ed25519 manifest verification and binding authority to exact artifact bytes are product distribution policy. The baseline still needs an explicit embedder-controlled decision to execute bytecode, but it must not know the Nux package or manifest format. |
+| Binary authoring construction | `AuthoringRecord`, `AuthoringProperty`, `AuthoringValue`, and `RuntimeFile::from_authoring_records` in `nuxie-binary`, plus runtime fixture and codegen consumers | Builds runtime files from editor-authored records. Production construction moves with Scene; baseline tests eventually use test-support builders or normal byte import. |
+| Browser presentation | `BrowserFactory`, `BrowserFrame`, resize errors, and canvas lifecycle/recovery in `nuxie-renderer` | Browser/editor WebGPU presentation has no pinned C++ counterpart and belongs above the renderer seam. |
+| Apple presentation and admission | `AppleSurface`, presentation completion/disposition, Apple-safe image validation, and Apple roots in the portable size harness | These are Apple SDK lifecycle and trusted-artifact policies, not portable runtime semantics. |
+| Publisher-era import compatibility | pre-Backboard `ViewModelInstance` acceptance and graph filtering | This is product artifact compatibility. It must become an explicit product-owned legacy mode/corpus or be removed after affected artifacts are republished. |
 
-The existing `rust-additions.toml` supports this classification. It labels
-`flow_session.rs`, `script_import.rs`, the host-command/resource files, and
-`project_data_converter.rs` as `flowsession-abi` or `scene-api`. That ledger is
-file-granular, so it does not expose all mixed-file glue described next.
+`rust-additions.toml` uses ownership categories for these additions:
+`product-authoring`, `product-host`, `product-data`, `product-trust`, and
+`mixed-product-host`. Direct ports and justified Rust host adaptations use
+`baseline-adaptation`. The ledger is file-granular, so it does not expose all
+mixed-file glue described next.
 
 ### Mixed-file glue and transitive reach
 
@@ -151,8 +182,8 @@ The following are not seam violations:
   direct standalone RawText counterparts at the current S4 pin;
 - `crates/nuxie-audio`'s public facade over the pinned headless audio owners;
 - `nuxie-scripting::envelope::SignedContent`, which mirrors pinned
-  `include/rive/signed_content_header.hpp` even though the additions ledger
-  currently groups its Rust file with FlowSession work;
+  `include/rive/signed_content_header.hpp` and is classified as the
+  `baseline-adaptation` it actually represents;
 - generic Luau bytecode validation, VM memory/safepoint protection, and the
   ordinary Rive scripting host interface. Host-command payload limits and the
   private Nuxie module must be separated from those generic protections;
@@ -162,38 +193,46 @@ The following are not seam violations:
 
 ## Mechanical guard
 
-`tools/seam-check/check.py` is the stage-one guard. It checks every protected
-runtime/parity manifest and replay/oracle manifest for direct dependencies on
-the mixed `nuxie` facade, `nux-container`, or current/future product package
-names. It also rejects explicit `nuxie::flow_session` and product-authoring
-module paths in protected Rust sources. The package rule is deliberately
-fail-closed for renamed Cargo dependencies by checking both the dependency key
-and its `package` value.
+`tools/seam-check/check.py` derives its protected set from every Cargo workspace
+member, recursively including in-repository path dependencies that Cargo treats
+as implicit members. Only the named mixed/product/platform consumers are
+exempt; a new workspace package is protected by default. Every exempt package
+is also an upward dependency target that protected packages may not import,
+including product consumers whose names do not use a reserved prefix. It reads
+dependencies,
+dev-dependencies, and build-dependencies recursively under every target table,
+so optional, measurement, portable-C-ABI, Apple, wasm, and default-disabled
+declarations are checked as one fail-closed superset of supported feature and
+target combinations. Renamed dependencies are checked by both key and package
+name, including aliases inherited from `[workspace.dependencies]`. Feature
+forwarding through the temporary mixed `nuxie` edge is checked independently
+of whether the dependency declaration itself remains unchanged.
 
-The checker is useful today because all runtime and replay packages already
-avoid the mixed `nuxie` package. Its focused tests prove ordinary, renamed, and
-target-specific dependency failures, explicit module-path failures, and the
-current repository pass.
+The source ratchet scans `build.rs`, `src`, tests, examples, and benches. It
+rejects explicit product paths and prevents six audited families from spreading
+beyond their exact current files: ProjectDO, product host commands, browser
+presentation, Apple presentation, Apple image admission, and binary authoring
+construction. A cleared marker also makes its old exception fail as stale, so
+debt cannot be removed and later reintroduced under a dormant allowlist entry.
+Deleting a grandfathered file without removing its exception fails for the
+same reason. Comments and Rust string or character literals are stripped
+before source matching so documentation and diagnostic text do not affect the
+ratchet.
+Success output reports the observed files and the one exact
+`nux-capi -> nuxie` manifest debt edge rather than claiming the repository is
+already clean. Later moves may shrink or delete an exception; they may not add
+another file or edge silently.
 
-It is not the final seam proof. ProjectDO and host commands are presently
-inside protected packages, and root re-exports erase their module path. The
-checker therefore reports those two grandfathered internal debt families in
-its success output rather than claiming they are clean. No new grandfathered
-family is permitted. After extraction, both debt entries are deleted and the
-product package names become ordinary forbidden dependencies; a clean result
-must then report zero internal debt.
-
-The final CI command should be:
+The CI and landing command is:
 
 ```sh
-python3 tools/seam-check/check.py --repo-root .
-python3 -m unittest discover -s tools/seam-check -p 'test_*.py'
+make seam-contract-gate
 ```
 
-Wiring that command into a shared Makefile or CI workflow is landing-owner
-work, not part of this lane's disjoint diff.
+The gate runs the focused controls and live repository check as independent
+verdicts through `tools/report-all.sh`.
 
-## Migration sketch (no code moves in P3-h)
+## Migration sketch
 
 ### 1. Establish package ownership
 
@@ -241,9 +280,12 @@ baseline VM should accept module installation/host effects through its existing
 open scripting-host seam or a smaller injected module adapter; generic VM
 memory, bytecode, and safepoint protection stays below.
 
-FlowSession remains single-threaded unless HD-1 resolves F3/A6 differently.
-This migration does not choose between the command-server port and the
-documented FlowSession model, and therefore does not close F3 or A6.
+FlowSession remains a single-threaded product transaction protocol during the
+move. The baseline now has the direct CommandQueue/CommandServer port for 79 of
+83 pinned cases; four S4-45 blob cases remain WATCH. That port is not evidence
+of synchronous rollback, output ordering, wake, wasm, latency, allocation, or
+terminal-error equivalence. Move Flow unchanged, then decide responsibility by
+responsibility with a measured equivalence harness.
 
 Exit evidence: a baseline VM contains no `host_commands` field and does not
 install `require("nuxie")`; FlowSession focused tests pass through the product
@@ -293,7 +335,9 @@ mechanical gates, not after the package move itself.
 
 ## Register and provenance consequences
 
-- F3 and A6 remain pending until HD-1's user decision and its selected gate.
+- F3 is PARTIAL at 79/83 pinned command cases; the four S4-45 blob cases remain
+  WATCH. A6's old “no command-server model” premise is closed, while iOS pin
+  advancement and Flow/CommandServer equivalence remain product-host work.
 - A3--A5 remain pending until the portable C ABI exposes and tests the baseline
   capabilities. Moving FlowSession cannot close them.
 - The additive Scene note remains true; migration changes ownership, not
@@ -305,4 +349,3 @@ mechanical gates, not after the package move itself.
   owners must update both correspondence ledgers and frame-loop ownership when
   applicable, following FLR-16. Product adapters must carry an explicit
   “Nuxie-only; no pinned C++ counterpart” attribution comment.
-

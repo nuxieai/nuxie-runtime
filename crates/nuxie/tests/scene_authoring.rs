@@ -16373,3 +16373,243 @@ fn artboard_layout_style_none_exports_no_root_style_record() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn zero_opacity_gate_hides_descendant_shape_and_text_from_visible_queries() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, gate, card, label, defaults, gate_opacity), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
+            name: "Gate Root".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let gate = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Visibility Gate".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 160.0,
+                height: 80.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let inner = tx.create(
+            Parent::Object(gate),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Inner View".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 150.0,
+                height: 70.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let card = tx.create(
+            Parent::Object(inner),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 60.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(card),
+            NodeSpec::Rectangle(RectangleSpec {
+                name: "Card Rect".into(),
+                width: 80.0,
+                height: 40.0,
+                corner_radii: None,
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(card),
+            NodeSpec::Fill(FillSpec {
+                name: "Card Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        let label = tx.create(
+            Parent::Object(inner),
+            NodeSpec::Text(TextSpec {
+                name: "Label".into(),
+                x: 10.0,
+                y: 6.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 120.0,
+                height: 30.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(label),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Label Style".into(),
+                font_size: 18.0,
+                line_height: 22.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(label),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Label Run".into(),
+                text: "Nested".into(),
+                style,
+            }),
+        )?;
+        let mut view_models = tx.view_models();
+        let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
+            name: "GateState".into(),
+        })?;
+        let gate_opacity = view_models.create_number(
+            model,
+            ViewModelNumberSpec {
+                name: "gateOpacity".into(),
+            },
+        )?;
+        let defaults = view_models.create_instance(
+            model,
+            ViewModelInstanceSpec {
+                name: Some("Defaults".into()),
+            },
+        )?;
+        view_models.set_number(defaults, gate_opacity, 1.0)?;
+        view_models.set_artboard_default(artboard, defaults)?;
+        view_models.bind_opacity(gate, ViewModelNumberSource::direct(gate_opacity))?;
+        Ok((artboard, gate, card, label, defaults, gate_opacity))
+    })?;
+
+    let instance = scene.instantiate(artboard)?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+
+    let occurrence_center = |scene: &mut Scene, object: ObjectId| -> Option<Vec2D> {
+        scene
+            .frame()
+            .geometry_paths_with_bounds(instance)
+            .into_iter()
+            .find(|hit| hit.path().objects().last() == Some(&object))
+            .map(|hit| {
+                let bounds = hit.bounds();
+                Vec2D::new(
+                    bounds.min_x + (bounds.max_x - bounds.min_x) / 2.0,
+                    bounds.min_y + (bounds.max_y - bounds.min_y) / 2.0,
+                )
+            })
+    };
+    let card_center = occurrence_center(&mut scene, card)
+        .expect("the visible card participates in visible geometry");
+    let label_center = occurrence_center(&mut scene, label)
+        .expect("the visible label participates in visible geometry");
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, card_center)
+            .iter()
+            .any(|hit| hit.path().objects().last() == Some(&card)),
+        "the visible card is hit-testable",
+    );
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, label_center)
+            .iter()
+            .any(|hit| hit.path().objects().last() == Some(&label)),
+        "the visible label is hit-testable",
+    );
+
+    let live_gate_opacity = scene.vm_cursor(instance, defaults, gate_opacity)?;
+    assert!(scene.frame().set_vm(live_gate_opacity, 0.0)?);
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+
+    let hidden_visible_objects = scene
+        .frame()
+        .geometry_paths_with_bounds(instance)
+        .into_iter()
+        .filter_map(|hit| hit.path().objects().last().copied())
+        .collect::<Vec<_>>();
+    assert!(
+        !hidden_visible_objects.contains(&card),
+        "a zero-opacity gate removes its descendant shape from visible geometry",
+    );
+    assert!(
+        !hidden_visible_objects.contains(&label),
+        "a zero-opacity gate removes its descendant text from visible geometry",
+    );
+    let hidden_retained_objects = scene
+        .frame()
+        .retained_geometry_paths_with_bounds(instance)
+        .into_iter()
+        .filter_map(|hit| hit.path().objects().last().copied())
+        .collect::<Vec<_>>();
+    assert!(
+        hidden_retained_objects.contains(&card) && hidden_retained_objects.contains(&label),
+        "the retained catalogue keeps hidden occurrences across effective-opacity changes",
+    );
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, card_center)
+            .iter()
+            .all(|hit| hit.path().objects().last() != Some(&card)),
+        "a zero-opacity gate removes its descendant shape from point hits",
+    );
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, label_center)
+            .iter()
+            .all(|hit| hit.path().objects().last() != Some(&label)),
+        "a zero-opacity gate removes its descendant text from point hits",
+    );
+
+    assert!(scene.frame().set_vm(live_gate_opacity, 1.0)?);
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, label_center)
+            .iter()
+            .any(|hit| hit.path().objects().last() == Some(&label)),
+        "restoring the gate restores the exact text hit",
+    );
+    Ok(())
+}

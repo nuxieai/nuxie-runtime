@@ -4,9 +4,9 @@ use crate::functions::read_string::read_string;
 use crate::records::bc_function::BcFunction;
 use crate::records::bc_vm_const::BcVmConst;
 use crate::records::bytecode_graph_parser::BytecodeGraphParser;
+use crate::records::class_shape::ClassShape;
 use crate::records::debug_local_bytecode_graph::DebugLocal;
 use crate::records::table_shape::TableShape;
-use crate::records::class_shape::ClassShape;
 use crate::records::typed_local_bytecode_graph::TypedLocal;
 use crate::type_aliases::comp_time_bc_function::CompTimeBcFunction;
 use crate::type_aliases::instruction::Instruction;
@@ -198,15 +198,24 @@ pub fn from_function_bytecode(
                 let num_methods = read_var_int(&data, &mut offset) as usize;
                 let mut shape = ClassShape {
                     className: class_name,
-                    propertyNames: Vec::with_capacity(num_props),
-                    methodNames: Vec::with_capacity(num_methods),
+                    propertyNames: Vec::new(),
+                    methodNames: Vec::new(),
                 };
 
+                // decb2d05 Bytecode/src/BytecodeGraph.cpp:182-189 resizes and then
+                // appends; preserve the doubled layout intentionally for pinned-C fidelity.
+                shape.propertyNames.resize(num_props, 0);
+                shape.methodNames.resize(num_methods, 0);
+
                 for _ in 0..num_props {
-                    shape.propertyNames.push(read_var_int(&data, &mut offset) as i32);
+                    shape
+                        .propertyNames
+                        .push(read_var_int(&data, &mut offset) as i32);
                 }
                 for _ in 0..num_methods {
-                    shape.methodNames.push(read_var_int(&data, &mut offset) as i32);
+                    shape
+                        .methodNames
+                        .push(read_var_int(&data, &mut offset) as i32);
                 }
 
                 fn_.class_shapes.push(shape);

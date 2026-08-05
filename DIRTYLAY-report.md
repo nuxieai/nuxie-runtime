@@ -45,6 +45,8 @@ The continuation's thin commits were:
 - `88e044e6` — separate solved and animated layout control.
 - `ca71ce06` — update the drawing ownership ledger for the extracted path
   composer so the checker follows the current source owner.
+- `29049479` — reject reentrant layout dirt during the style cleaning pass and
+  correct the PathComposer lifecycle citation found by final review.
 
 ## Correctness evidence
 
@@ -70,7 +72,7 @@ history, so it is reported here rather than rewritten.
 
 Final gates:
 
-- `cargo test -p nuxie-runtime` — PASS (991 principal unit tests plus integration targets).
+- `cargo test -p nuxie-runtime` — PASS (992 principal unit tests plus integration targets).
 - `cargo test -p nuxie --features scripting` — PASS after refreshing the pinned C++ probe.
 - `cargo test -p silver-corpus --test runtime_frame_loop_backfill_bc` — PASS (3 passed, 1 ignored).
 - `make b6-audit-check runtime-frame-loop-port-check runtime-drawing-port-check` — PASS.
@@ -79,22 +81,21 @@ Final gates:
 
 ## Performance evidence
 
-The measured code revision is `ca71ce063c4911bf891b4764b89522e5b004fc37`;
-the subsequent report-only commit does not change the measured binary. Both
-runs used the pinned C++ runtime, release scripting-enabled runners, 100 frames
-at 60 Hz, C++ first, and the median of five iterations with no warmups.
+The measured code revision is `290494792ff3819f6f150510968df2177c6792f2`.
+Both runs used the pinned C++ runtime, release scripting-enabled runners, 100
+frames at 60 Hz, C++ first, and the median of five iterations with no warmups.
 
 | Fixture | Baseline Rust ms/frame | Final Rust ms/frame | Change | Final Rust/C++ |
 |---|---:|---:|---:|---:|
-| `car_widgets_v01` | 1.563576 | 0.444420 | -71.58% | 21.489x |
-| `zombie_skins` | 2.212570 | 0.499459 | -77.43% | 13.678x |
+| `car_widgets_v01` | 1.563576 | 0.436322 | -72.09% | 20.734x |
+| `zombie_skins` | 2.212570 | 0.502118 | -77.31% | 13.607x |
 
 The checked-in raw reports are in
 [`docs/evidence/dirtylay-2026-08-04/`](docs/evidence/dirtylay-2026-08-04/).
 Their SHA-256 digests are:
 
 - `baseline.json`: `7125199903d2962491c941aa087d720441141521af929839a462eb02aa0c34df`
-- `final.json`: `e4d0a93a989647daa7eaf8ebe7d6f070bab842d39b281726d49cff8173121d8e`
-- final `target/perf-gate.json`: `bfccc7381197f8feac6340902e8a0ef00a081ddac4a427d856cb6f6d759eebb3`
+- `final.json`: `f796385902c3d89b4ec01952b2b906b5881ebe6697d0321618d6ae59fa76f199`
+- final `target/perf-gate.json`: `cd6b5c7ef5f96ca85303a1bc04ba1c25c25cac0272296b210557db9a6fce5db0`
 
 No temporary artifacts were written under `/tmp`.

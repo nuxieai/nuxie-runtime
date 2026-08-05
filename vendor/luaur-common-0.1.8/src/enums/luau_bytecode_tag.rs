@@ -33,9 +33,10 @@ impl LuauBytecodeTag {
     pub const LBC_CONSTANT_TABLE_WITH_CONSTANTS: Self = Self(8);
     pub const LBC_CONSTANT_INTEGER: Self = Self(9);
     pub const LBC_CONSTANT_CLASS_SHAPE: Self = Self(10);
+    pub const LBC_CONSTANT_VECTORD: Self = Self(11);
 
     /** WARNING: This must always be last. */
-    pub const LBC_CONSTANT__COUNT: Self = Self(11);
+    pub const LBC_CONSTANT__COUNT: Self = Self(12);
 }
 
 pub const LBC_VERSION_MIN: LuauBytecodeTag = LuauBytecodeTag::LBC_VERSION_MIN;
@@ -58,5 +59,6 @@ pub const LBC_CONSTANT_TABLE_WITH_CONSTANTS: LuauBytecodeTag =
     LuauBytecodeTag::LBC_CONSTANT_TABLE_WITH_CONSTANTS;
 pub const LBC_CONSTANT_INTEGER: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_INTEGER;
 pub const LBC_CONSTANT_CLASS_SHAPE: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_CLASS_SHAPE;
+pub const LBC_CONSTANT_VECTORD: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT_VECTORD;
 
 pub const LBC_CONSTANT__COUNT: LuauBytecodeTag = LuauBytecodeTag::LBC_CONSTANT__COUNT;

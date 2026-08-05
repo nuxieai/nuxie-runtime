@@ -12,8 +12,11 @@ macro_rules! VCONST {
     (@kind Integer) => {
         crate::enums::r#type::Type::Type_Integer
     };
-    (@kind Vector) => {
-        crate::enums::r#type::Type::Type_Vector
+    (@kind Vectorf) => {
+        crate::enums::r#type::Type::Type_Vectorf
+    };
+    (@kind Vectord) => {
+        crate::enums::r#type::Type::Type_Vectord
     };
     (@kind String) => {
         crate::enums::r#type::Type::Type_String

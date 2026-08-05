@@ -27,7 +27,7 @@ impl<'func, 'ops> Sccp<'func, 'ops> {
             LUAU_ASSERT!(opcode != LuauOpcode::LOP_JUMPX);
             if isJumpD(opcode) {
                 self.remove_dead_edges(op);
-                self.erase_op(op);
+                self.func_mut().erase_op(op);
             } else {
                 self.rewrite_to_load(op, lattice);
             }

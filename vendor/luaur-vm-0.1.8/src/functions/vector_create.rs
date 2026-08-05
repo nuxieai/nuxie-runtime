@@ -23,9 +23,9 @@ pub unsafe fn vector_create(L: *mut lua_State) -> core::ffi::c_int {
         } else {
             0.0
         };
-        lua_pushvector_lua_state_f32_f32_f32_f32(L, x as f32, y as f32, z as f32, w as f32);
+        lua_pushvector_lua_state_f32_f32_f32_f32(L, x as crate::type_aliases::lua_vector_type::LuaVectorType, y as crate::type_aliases::lua_vector_type::LuaVectorType, z as crate::type_aliases::lua_vector_type::LuaVectorType, w as crate::type_aliases::lua_vector_type::LuaVectorType);
     } else {
-        lua_pushvector_lua_state_f32_f32_f32(L, x as f32, y as f32, z as f32);
+        lua_pushvector_lua_state_f32_f32_f32(L, x as crate::type_aliases::lua_vector_type::LuaVectorType, y as crate::type_aliases::lua_vector_type::LuaVectorType, z as crate::type_aliases::lua_vector_type::LuaVectorType);
     }
 
     1

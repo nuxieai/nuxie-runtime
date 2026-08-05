@@ -6,8 +6,8 @@ use crate::records::constant::Constant;
 use crate::records::function::Function;
 use crate::records::inline_frame::InlineFrame;
 use crate::records::local::Local;
-use crate::records::r#loop::Loop;
 use crate::records::loop_jump::LoopJump;
+use crate::records::r#loop::Loop;
 use crate::records::table_shape::TableShape;
 use crate::records::variable::Variable;
 use alloc::string::String;
@@ -40,6 +40,7 @@ pub struct Compiler {
     pub function_types: DenseHashMap<*mut AstExprFunction, String>,
     pub local_types: DenseHashMap<*mut AstLocal, LuauBytecodeType>,
     pub expr_types: DenseHashMap<*mut AstExpr, LuauBytecodeType>,
+    pub class_locals: DenseHashMap<AstName, *mut AstLocal>,
     pub inline_builtins: DenseHashMap<*mut AstExprCall, i32>,
     pub inline_builtins_backup: DenseHashMap<*mut AstExprCall, i32>,
     pub expr_changes: Vec<crate::records::expr_constant_change::ExprConstantChange>,

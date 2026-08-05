@@ -1,5 +1,4 @@
 use crate::enums::type_lexer::Type;
-use crate::functions::is_expr_l_value::is_expr_l_value;
 use crate::records::ast_array::AstArray;
 use crate::records::ast_attr::AstAttr;
 use crate::records::ast_expr::AstExpr;
@@ -42,7 +41,7 @@ impl Parser {
         let mut debugname = AstName::new();
         let mut expr = self.parse_function_name(&mut hasself, &mut debugname);
 
-        if !is_expr_l_value(expr) {
+        if !self.is_expr_l_value(expr) {
             expr = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(expr) as *mut AstExpr
             } else {

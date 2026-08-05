@@ -5,6 +5,7 @@ use crate::type_aliases::tms::TMS;
 
 #[allow(non_snake_case)]
 pub unsafe fn luaT_init(l: *mut lua_State) {
+    #[cfg(not(feature = "lua_vector_double"))]
     let typenames = [
         c"nil".as_ptr(),
         c"boolean".as_ptr(),
@@ -20,6 +21,24 @@ pub unsafe fn luaT_init(l: *mut lua_State) {
         c"buffer".as_ptr(),
         c"class".as_ptr(),
         c"object".as_ptr(),
+    ];
+
+    #[cfg(feature = "lua_vector_double")]
+    let typenames = [
+        c"nil".as_ptr(),
+        c"boolean".as_ptr(),
+        c"userdata".as_ptr(),
+        c"number".as_ptr(),
+        c"integer".as_ptr(),
+        c"string".as_ptr(),
+        c"table".as_ptr(),
+        c"function".as_ptr(),
+        c"userdata".as_ptr(),
+        c"thread".as_ptr(),
+        c"buffer".as_ptr(),
+        c"class".as_ptr(),
+        c"object".as_ptr(),
+        c"vector".as_ptr(),
     ];
 
     let eventnames = [

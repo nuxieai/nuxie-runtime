@@ -1,5 +1,5 @@
 #[inline]
-pub fn luai_lerpf(a: f32, b: f32, t: f32) -> f32 {
+pub fn luai_lerpf(a: crate::type_aliases::lua_vector_type::LuaVectorType, b: crate::type_aliases::lua_vector_type::LuaVectorType, t: crate::type_aliases::lua_vector_type::LuaVectorType) -> crate::type_aliases::lua_vector_type::LuaVectorType {
     if t == 1.0 {
         b
     } else {

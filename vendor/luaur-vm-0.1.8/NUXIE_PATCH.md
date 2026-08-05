@@ -41,3 +41,10 @@ Provenance:
 - Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
 - Touched areas: unsigned user-defined-class member offsets, dark negative-zero
   rounding, and flag-gated userdata direct-access GC marking/validation.
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: optional GC-backed double vectors, fixed-object allocation,
+  vector bytecode/runtime callers, embedder GC and weak-reference APIs,
+  backedge GC checks, public debug/memory APIs, and xpcall continuation depth.

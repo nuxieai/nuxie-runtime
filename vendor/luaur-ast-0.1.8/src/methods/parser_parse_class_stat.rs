@@ -7,12 +7,10 @@ use crate::records::ast_name::AstName;
 use crate::records::ast_stat::AstStat;
 use crate::records::ast_stat_class::AstStatClass;
 use crate::records::ast_type::AstType;
-use crate::records::binding::Binding;
 use crate::records::lexeme::{Lexeme, Type};
 use crate::records::location::Location;
 use crate::records::name::Name;
 use crate::records::parser::Parser;
-use crate::records::position::Position;
 use crate::records::temp_vector::TempVector;
 use crate::type_aliases::ast_class_member::AstClassMember;
 use luaur_common::records::dense_hash_set::DenseHashSet;
@@ -51,10 +49,22 @@ impl Parser {
             location: self.lexer.current().location,
         });
 
-        let saved_locals = self.save_locals();
-
-        let binding = Binding::new(name, core::ptr::null_mut(), Position::default(), true);
-        let name_local = self.push_local(&binding);
+        let name_local = unsafe {
+            let function_depth = self.function_stack.len() - 1;
+            let loop_depth = self
+                .function_stack
+                .last()
+                .map_or(0, |f| f.loop_depth as usize);
+            (*self.allocator).alloc(AstLocal::new(
+                name.name,
+                name.location,
+                core::ptr::null_mut(),
+                function_depth,
+                loop_depth,
+                core::ptr::null_mut(),
+                true,
+            ))
+        };
 
         let mut declarations = TempVector::new(&mut self.scratch_class_declarations);
 
@@ -230,20 +240,19 @@ impl Parser {
         }
 
         let copied_declarations = self.copy_temp_vector_t(&declarations);
-        let cls = unsafe {
+        let cls: *mut AstStatClass = unsafe {
             (*self.allocator).alloc(AstStatClass::new(
                 location,
                 name_local,
                 copied_declarations,
                 exported,
-            )) as *mut AstStat
+            ))
         };
 
         let name_local_name = unsafe { (*name_local).name };
         if self.classes_within_module.contains(&name_local_name) {
-            self.restore_locals(saved_locals);
             let expressions = self.copy_initializer_list_t(&[]);
-            let statements = self.copy_initializer_list_t(&[cls]);
+            let statements = self.copy_initializer_list_t(&[cls as *mut AstStat]);
             unsafe {
                 return self.report_stat_error(
                     (*name_local).location,
@@ -256,7 +265,7 @@ impl Parser {
                 ) as *mut AstStat;
             }
         }
-        self.classes_within_module.insert(name_local_name);
-        cls
+        *self.classes_within_module.get_or_insert(name_local_name) = cls;
+        cls as *mut AstStat
     }
 }

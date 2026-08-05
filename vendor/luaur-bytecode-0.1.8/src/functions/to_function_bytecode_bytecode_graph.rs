@@ -46,9 +46,15 @@ pub fn to_function_bytecode_bytecode_builder_comp_time_bc_function(
             BcVmConstKind::Number => {
                 consts.push(bcb.add_constant_number(unsafe { c.value.valueNumber }) as u16)
             }
-            BcVmConstKind::Vector => {
-                let value = unsafe { c.value.valueVector };
-                consts.push(bcb.add_constant_vector(value[0], value[1], value[2], value[3]) as u16);
+            BcVmConstKind::Vectorf => {
+                let value = unsafe { c.value.valueVectorf };
+                consts
+                    .push(bcb.add_constant_vectorf(value[0], value[1], value[2], value[3]) as u16);
+            }
+            BcVmConstKind::Vectord => {
+                let value = unsafe { c.value.valueVectord };
+                consts
+                    .push(bcb.add_constant_vectord(value[0], value[1], value[2], value[3]) as u16);
             }
             BcVmConstKind::String => consts
                 .push(bcb.add_constant_string(string_ref(unsafe { c.value.valueString })) as u16),

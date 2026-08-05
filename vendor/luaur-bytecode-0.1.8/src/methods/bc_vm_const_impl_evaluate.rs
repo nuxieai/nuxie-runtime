@@ -21,10 +21,10 @@ impl BcVmConstImpl {
             LuauOpcode::LOP_ADD => a + b,
             LuauOpcode::LOP_SUB => a - b,
             LuauOpcode::LOP_MUL => a * b,
-            LuauOpcode::LOP_DIV if b != 0.0 => a / b,
+            LuauOpcode::LOP_DIV => a / b,
             LuauOpcode::LOP_MOD if b != 0.0 => a - (a / b).floor() * b,
             LuauOpcode::LOP_POW => a.powf(b),
-            LuauOpcode::LOP_IDIV if b != 0.0 => (a / b).floor(),
+            LuauOpcode::LOP_IDIV => (a / b).floor(),
             _ => return None,
         };
 

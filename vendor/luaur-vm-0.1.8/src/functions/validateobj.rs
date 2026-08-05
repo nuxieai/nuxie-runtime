@@ -45,6 +45,8 @@ pub unsafe fn validateobj(g: *mut global_State, o: *mut GCObject) {
         t if t == lua_Type::LUA_TTHREAD as i32 => {
             validatestack(g, gco2th!(o) as *mut _);
         }
+        #[cfg(feature = "lua_vector_double")]
+        t if t == lua_Type::LUA_TVECTOR as i32 => {}
         t if t == lua_Type::LUA_TBUFFER as i32 => {}
         t if t == lua_Type::LUA_TPROTO as i32 => {
             validateproto(g, gco2p!(o) as *mut _);

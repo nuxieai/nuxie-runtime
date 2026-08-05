@@ -108,6 +108,10 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
+        with:
+          # The test-correspondence status ratchet walks the manifest's full
+          # git history; a shallow clone fails it closed.
+          fetch-depth: 0
 
       - name: Checkout reference rive-runtime
         uses: actions/checkout@v4

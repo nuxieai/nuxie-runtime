@@ -294,23 +294,28 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         row = rows[0]
         gaps = self.gaps.read_text()
         self.assertIn("ratchet = []", gaps)
+        # Hoisted out of the f-string: expression parts may not contain
+        # backslashes before Python 3.12, and CI pins 3.11.
+        matcher_line = (
+            f"detector = {json.dumps(row['detector'])}"
+            if "detector" in row
+            else f"pattern = {json.dumps(row['pattern'])}"
+        )
+        content_lines = (
+            "\n".join(
+                f"{key} = {json.dumps(row[key])}"
+                for key in ("content_begin", "content_end", "content_sha256")
+            )
+            if "content_sha256" in row
+            else ""
+        )
         block = textwrap.dedent(
             f"""
             [[ratchet]]
             id = {json.dumps(row["id"])}
             globs = {json.dumps(row["globs"])}
-            {
-                f"detector = {json.dumps(row['detector'])}"
-                if "detector" in row
-                else f"pattern = {json.dumps(row['pattern'])}"
-            }
-            {
-                f"content_begin = {json.dumps(row['content_begin'])}\n"
-                f"content_end = {json.dumps(row['content_end'])}\n"
-                f"content_sha256 = {json.dumps(row['content_sha256'])}"
-                if "content_sha256" in row
-                else ""
-            }
+            {matcher_line}
+            {content_lines}
             min_occurrences = {row.get("min_occurrences", 0)}
             max_occurrences = {row["max_occurrences"]}
             """

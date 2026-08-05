@@ -5,6 +5,7 @@ repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 prohibited_pattern='webgl2|femtovg|BrowserBackendPreference|BrowserBackend|WebGl2Factory|WebGl2Frame|WebGl2GpuCanvasRenderer|fallback_reason'
 prohibited_paths=(
+  "$repo_dir/crates/nuxie-browser-adapter"
   "$repo_dir/crates/nuxie-renderer"
   "$repo_dir/crates/nuxie/src/lib.rs"
   "$repo_dir/tools/browser-renderer-smoke"
@@ -20,23 +21,26 @@ fi
 
 cpu_presentation_pattern='CanvasRenderingContext2d|ImageData|put_image_data|present_pixels'
 if rg -n "$cpu_presentation_pattern" \
-  "$repo_dir/crates/nuxie-renderer/src/browser.rs" \
+  "$repo_dir/crates/nuxie-browser-adapter/src/browser.rs" \
+  "$repo_dir/crates/nuxie-renderer/src/presentation.rs" \
   "$repo_dir/crates/nuxie-renderer/Cargo.toml"; then
   echo "browser-webgpu-only check found a CPU canvas presentation path" >&2
   exit 1
 fi
 
-browser_source="$repo_dir/crates/nuxie-renderer/src/browser.rs"
-rg -q 'SurfaceTarget::Canvas' "$browser_source"
+browser_source="$repo_dir/crates/nuxie-browser-adapter/src/browser.rs"
+presentation_source="$repo_dir/crates/nuxie-renderer/src/presentation.rs"
+rg -q 'WebCanvasWindowHandle' "$browser_source"
 rg -q 'pub async fn present\(self\)' "$browser_source"
-rg -q 'get_current_texture\(\)' "$browser_source"
-rg -q 'queue\.present\(surface_texture\)' "$browser_source"
+rg -q 'get_current_texture\(\)' "$presentation_source"
+rg -q 'queue\.present\(self\.texture\)' "$presentation_source"
 rg -q 'pub async fn finish_with_readback\(self\)' "$browser_source"
-rg -q 'configuration\.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied' "$browser_source"
+rg -q 'WgpuPresentationAlpha::Premultiplied => wgpu::CompositeAlphaMode::PreMultiplied' \
+  "$presentation_source"
 
 current_texture_body=$(
   sed -n \
-    '/fn current_texture(&self)/,/fn acquire_current_texture(/p' \
+    '/fn current_frame(&self)/,/fn acquire_current_frame(/p' \
     "$browser_source"
 )
 rg -Fq 'acquire_surface_texture(' <<<"$current_texture_body"
@@ -51,25 +55,22 @@ surface_failure_body=$(
   sed -n '/fn surface_failure(/,$p' "$browser_source"
 )
 rg -Fq \
-  'wgpu::CurrentSurfaceTexture::Outdated => SurfaceAcquisitionFailure::Outdated' \
+  'WgpuPresentationAcquireError::Outdated => SurfaceAcquisitionFailure::Outdated' \
   <<<"$surface_failure_body"
 rg -Fq \
-  'wgpu::CurrentSurfaceTexture::Lost => SurfaceAcquisitionFailure::Lost' \
+  'WgpuPresentationAcquireError::Lost => SurfaceAcquisitionFailure::Lost' \
   <<<"$surface_failure_body"
 
 recreate_surface_body=$(
   sed -n \
-    '/fn recreate_surface(&self)/,/fn create_browser_surface(/p' \
+    '/fn recreate_surface(&self)/,/struct CanvasSurfaceTarget/p' \
     "$browser_source"
 )
 rg -Fq \
-  'create_browser_surface(&self.instance, self.canvas.clone(), "recreation")' \
-  <<<"$recreate_surface_body"
-rg -Fq \
-  'surface.configure(&self.device, &self.configuration.borrow());' \
+  '.recreate(CanvasSurfaceTarget(self.canvas.clone()))' \
   <<<"$recreate_surface_body"
 
-lifecycle_source="$repo_dir/crates/nuxie-renderer/src/browser_surface_lifecycle.rs"
+lifecycle_source="$repo_dir/crates/nuxie-browser-adapter/src/browser_surface_lifecycle.rs"
 rg -q 'SurfaceRecoveryAction::ReconfigureAndRetry' "$lifecycle_source"
 rg -q 'SurfaceRecoveryAction::RecreateAndRetry' "$lifecycle_source"
 rg -q 'second_failure_returns_typed_error_without_a_third_acquisition' \
@@ -111,7 +112,7 @@ readback_body=$(
     '/pub async fn finish_with_readback(self)/,/struct BrowserPresentation/p' \
     "$browser_source"
 )
-if rg -n 'current_texture|queue\.present' <<<"$readback_body"; then
+if rg -n 'current_frame|\.present\(' <<<"$readback_body"; then
   echo "browser-webgpu-only check found canvas presentation in explicit readback" >&2
   exit 1
 fi

@@ -84,11 +84,6 @@ pub use nuxie_render_api::{
 pub use nuxie_renderer::{
     ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError,
 };
-#[cfg(all(feature = "renderer", target_arch = "wasm32"))]
-pub use nuxie_renderer::{
-    BrowserFactory, BrowserFactory as DefaultRendererFactory, BrowserFrame,
-    BrowserFrame as DefaultRendererFrame, BrowserResizeError,
-};
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,

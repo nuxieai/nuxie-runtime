@@ -171,10 +171,7 @@ INTERNAL_DEBT_FILES = {
         "crates/nuxie-binary/tests/authoring_records.rs",
         "tools/nuxie-codegen/src/main.rs",
     },
-    "browser-presentation": {
-        "crates/nuxie-renderer/src/browser.rs",
-        "crates/nuxie-renderer/src/lib.rs",
-    },
+    "browser-presentation": set(),
     "project-data": {
         "crates/nuxie-runtime/src/project_data_converter.rs",
         "crates/nuxie-runtime/src/lib.rs",

@@ -78,7 +78,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (renderer / "src/lib.rs").write_text(
             "fn validate_image_bytes() {}\n"
             "pub struct AppleSurface;\n"
-            "pub struct BrowserFrame;\n"
         )
         self.create_package(
             "crates/nuxie",
@@ -1490,21 +1489,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("browser-presentation boundary debt spread", result.stderr)
 
-    def test_current_browser_file_is_a_ratchet_exception(self) -> None:
-        package = self.create_package(
-            "crates/nuxie-renderer", "nuxie-renderer", ""
+    def test_browser_presentation_has_no_debt_exceptions(self) -> None:
+        self.assertEqual(
+            BOUNDARY_TOOL.INTERNAL_DEBT_FILES["browser-presentation"], set()
         )
-        (package / "src/browser.rs").write_text("pub struct BrowserFactory;\n")
-        (package / "src/lib.rs").write_text(
-            "fn validate_image_bytes() {}\n"
-            "pub struct AppleSurface;\n"
-            "pub struct BrowserFrame;\n"
-        )
-
-        result = self.run_check()
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("browser-presentation=2", result.stdout)
 
     def test_rejects_apple_measurement_debt_in_new_file(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")

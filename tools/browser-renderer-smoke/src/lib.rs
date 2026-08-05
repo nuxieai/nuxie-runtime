@@ -1,13 +1,13 @@
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use nuxie::{
-        BlendMode, BrowserFactory, BrowserResizeError, Factory, File, FillRule, GpuCanvasPassState,
-        GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderBinding,
-        GpuCanvasShaderEntry, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
-        GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
-        GpuCanvasUniformBuffer, ImageSampler, Mat2D, PersistentFactory, RecordingFactory, Renderer,
-        WgpuFactory,
+        BlendMode, Factory, File, FillRule, GpuCanvasPassState, GpuCanvasPipelineState,
+        GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+        GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
+        GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
+        PersistentFactory, RecordingFactory, Renderer,
     };
+    use nuxie_browser_adapter::{BrowserFactory, BrowserResizeError};
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
     use wasm_bindgen::prelude::*;

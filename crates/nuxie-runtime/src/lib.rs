@@ -108,6 +108,10 @@ mod font_asset;
 mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
+#[path = "layout/grid_item_placement.rs"]
+mod grid_item_placement;
+#[path = "layout/grid_track.rs"]
+mod grid_track;
 mod hittest_command_path;
 mod input;
 mod intrinsically_sizeable;

@@ -25,13 +25,13 @@ EXPECTED_AUDIT_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 #     r=d["file"]; print(len(r), collections.Counter(x.get("b6_verdict") for x in r))'
 #
 # Rows the census reports under `None` are unaudited: add them to
-# POST_AUDIT_UNAUDITED below (and to the register follow-up that tracks it),
-# not to EXPECTED_COUNTS.
+# POST_AUDIT_UNAUDITED below, plus a `docs/parity-gap-register.md` H-row that
+# owns draining them --- not to EXPECTED_COUNTS.
 EXPECTED_ROW_COUNT = 456
 EXPECTED_COUNTS = {
     "ISOMORPHIC": 22,
-    "ADAPTED": 204,
-    "DIVERGENT": 153,
+    "ADAPTED": 211,
+    "DIVERGENT": 156,
     "TRACKED-GAP": 30,
     "N/A": 37,
 }
@@ -40,21 +40,19 @@ EXPECTED_COUNTS = {
 # them) keeps the unaudited surface visible: any further verdict-less row
 # fails this gate until it is audited or added here deliberately.
 #
-# This set is tracked debt, not a permanent exemption --- register row #H5
-# owns shrinking it. Audit a row into a verdict, delete it here, and restate
-# EXPECTED_COUNTS; #H5 closes when this set is empty.
-POST_AUDIT_UNAUDITED = {
-    "src/animation/keyframe_int.cpp",
-    "src/component_origin.cpp",
-    "src/core/field_types/core_int_type.cpp",
-    "src/data_bind/context/context_value_asset_blob.cpp",
-    "src/layout/grid_item_placement.cpp",
-    "src/layout/grid_track.cpp",
-    "src/layout/layout_participant.cpp",
-    "src/layout/layout_sizing_style.cpp",
-    "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp",
-    "src/viewmodel/viewmodel_instance_asset_blob.cpp",
-}
+# EMPTY as of 2026-08-04: the ten post-`d788e8ec` rows this set was created
+# for were audited against the live pin `4ac7b327` and became B6-0449..0458
+# (records under `docs/b6-audit/results/`, cluster preambles headed
+# "Post-audit additions (2026-08-04)"). Register row #H5, which owned draining
+# it, closed and was removed with them.
+#
+# The set stays here as the intake point, not as a permanent exemption: the
+# next pin advance that adds upstream files will fail this gate on the new
+# verdict-less rows. Adding them here (with a fresh register H-row) is the
+# deliberate acknowledgement, and clearing them again -- audit into a verdict,
+# delete the name, restate EXPECTED_COUNTS -- is the debt. Do it before the
+# sync after next, not after.
+POST_AUDIT_UNAUDITED: set[str] = set()
 SECOND_PASS_VERDICTS = {
     "TRACKED-GAP": {
         "B6-0027",
@@ -181,9 +179,13 @@ def main() -> None:
         note = row.get("note", "")
         if not any(token in note for token in OWNER_TOKENS):
             fail(f"{row['b6_row_id']} TRACKED-GAP note has no register owner")
+    pending = (
+        f" ({len(POST_AUDIT_UNAUDITED)} post-audit rows pending)"
+        if POST_AUDIT_UNAUDITED
+        else ""
+    )
     print(
-        f"B-6 audit closure: {len(audited)} audited rows "
-        f"({len(POST_AUDIT_UNAUDITED)} post-audit rows pending), zero UNKNOWN, "
+        f"B-6 audit closure: {len(audited)} audited rows{pending}, zero UNKNOWN, "
         "exact second-pass dispositions and owners verified"
     )
 

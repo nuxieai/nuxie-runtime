@@ -8,6 +8,42 @@ Row B6-0448 (`src/core/field_types/core_uint64_type.cpp`) was added on
 2026-07-31 to repair the B-2 inventory omission at the pin; its record is a
 post-audit amendment in [binary-core](results/binary-core.md).
 
+## Post-audit additions (2026-08-04)
+
+Rows **B6-0449..B6-0458** cover the ten upstream files that first appear
+*after* the frozen audit ref. They do not exist at `d788e8ec`, so they were
+audited against the live pin `4ac7b327` with the same five axes; C++ anchors
+cite that pin and Rust anchors cite the current tree. Each cluster file carries
+a "Post-audit additions (2026-08-04)" preamble stating that scope before its
+records.
+
+| row | upstream file | cluster | verdict |
+|---|---|---|---|
+| B6-0449 | `src/animation/keyframe_int.cpp` | animation | ADAPTED |
+| B6-0450 | `src/component_origin.cpp` | misc-core | ADAPTED |
+| B6-0451 | `src/core/field_types/core_int_type.cpp` | binary-core | ADAPTED |
+| B6-0452 | `src/data_bind/context/context_value_asset_blob.cpp` | data-bind-view-model | ADAPTED |
+| B6-0453 | `src/layout/grid_item_placement.cpp` | layout-shapes-paint | DIVERGENT |
+| B6-0454 | `src/layout/grid_track.cpp` | layout-shapes-paint | DIVERGENT |
+| B6-0455 | `src/layout/layout_participant.cpp` | layout-shapes-paint | DIVERGENT |
+| B6-0456 | `src/layout/layout_sizing_style.cpp` | layout-shapes-paint | ADAPTED |
+| B6-0457 | `src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp` | data-bind-view-model | ADAPTED |
+| B6-0458 | `src/viewmodel/viewmodel_instance_asset_blob.cpp` | data-bind-view-model | ADAPTED |
+
+These closed register row #H5 and emptied `POST_AUDIT_UNAUDITED` in
+`tools/b6-audit/check.py`; the gate census is now 456 rows at
+22/211/156/30/37 (ISOMORPHIC/ADAPTED/DIVERGENT/TRACKED-GAP/N-A). The
+per-verdict and per-cluster tables below are the frozen `d788e8ec` sweep and
+are deliberately not restated.
+
+Two findings surfaced by this sweep have owners: B6-0455's absent
+`ParticipantAnimation` lifecycle (`cascadeLayoutStyle`, `advanceComponent`,
+`applyInterpolation` — layout animation state is built only for types that
+are-a `LayoutComponent`, so participants snap instead of interpolating) is
+register row F15 / UNIV-1603; B6-0453/0454's missing layout-dirty pushes were
+fixed same-day (UNIV-1604) and those records are restated post-fix. B6-0455
+stays DIVERGENT on its own mutation-gated mechanisms rather than TRACKED-GAP.
+
 ## Final verdict totals
 
 | Verdict | Rows |

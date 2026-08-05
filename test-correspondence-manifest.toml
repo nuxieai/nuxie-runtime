@@ -425,9 +425,9 @@ note = "S4-38 directly asserts the three listed fixture layouts. Animated track 
 upstream = "tests/unit_tests/runtime/layout_participant_test.cpp"
 test_case_count = 19
 status = "partial"
-evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
-covered_test_cases = ["a fill participant fills a stack cell from a .riv file", "a Solo's active child is laid out through it from a .riv file", "a hug participant hugs its content from a .riv file", "a fixed-size participant keeps its size from a .riv file", "a display:none participant collapses and leaves the flow from a .riv file", "min/max constraints clamp a participant slot from a .riv file", "participants size to grid cells from a .riv file"]
-note = "S4-38 directly asserts the seven listed fixture outcomes; animation retargeting, transparent-container, component-list, and custom-path cases remain unclaimed."
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle", "crates/nuxie-runtime/src/draw.rs::a_participant_animates_its_slot_under_an_animated_layout", "crates/nuxie-runtime/src/draw.rs::a_participant_retargets_an_in_flight_layout_animation", "crates/nuxie-runtime/src/draw.rs::disabling_a_layouts_interpolation_makes_the_participant_snap", "crates/nuxie-runtime/src/draw.rs::a_participant_animates_its_slot_with_a_cubic_interpolator"]
+covered_test_cases = ["a fill participant fills a stack cell from a .riv file", "a Solo's active child is laid out through it from a .riv file", "a hug participant hugs its content from a .riv file", "a fixed-size participant keeps its size from a .riv file", "a display:none participant collapses and leaves the flow from a .riv file", "min/max constraints clamp a participant slot from a .riv file", "participants size to grid cells from a .riv file", "a participant animates its slot under an animated layout", "a participant re-targets an in-flight layout animation", "disabling a layout's interpolation frees participant animation", "a participant animates its slot with a cubic interpolator"]
+note = "S4-38 directly asserts the seven fixture outcomes; the four animation cases are F15/UNIV-1603 direct ports (linear, retarget, disable, cubic). Still unclaimed: cubic retarget-while-smoothing, Solo index helpers, transparent-container, component-list, and custom-path cases."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_scroll_test.cpp"

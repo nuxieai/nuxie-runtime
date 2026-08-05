@@ -994,6 +994,7 @@ pub enum AdvancingComponentKind {
     Artboard,
     NestedArtboard,
     LayoutComponent,
+    LayoutParticipant,
     ArtboardComponentList,
     ScrollConstraint,
     TextInput,
@@ -5620,6 +5621,10 @@ fn advancing_component_kind(object: &RuntimeObject) -> Option<AdvancingComponent
             Some(AdvancingComponentKind::NestedArtboard)
         }
         "LayoutComponent" => Some(AdvancingComponentKind::LayoutComponent),
+        // `LayoutParticipant` is an AdvancingComponent upstream: its
+        // `advanceComponent` drives the inherited layout-slot interpolation
+        // (`layout_participant.hpp:63-66`; `layout_participant.cpp:508-525`).
+        "LayoutParticipant" => Some(AdvancingComponentKind::LayoutParticipant),
         "ArtboardComponentList" => Some(AdvancingComponentKind::ArtboardComponentList),
         "ScrollConstraint" => Some(AdvancingComponentKind::ScrollConstraint),
         "TextInput" => Some(AdvancingComponentKind::TextInput),

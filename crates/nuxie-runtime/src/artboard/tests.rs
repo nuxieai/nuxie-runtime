@@ -5752,6 +5752,204 @@
         assert_eq!(instance.layout_revision(), revision);
     }
 
+    /// Pinned `GridTrack::trackValueChanged -> markLayoutDirty`
+    /// (`grid_track.cpp:10-22`). Before this callback was ported, a track size
+    /// write reached `mark_prepared_changed` but never `layout_revision`, and
+    /// `RuntimeLayoutBoundsCacheKey` is keyed on `layout_revision` -- so an
+    /// artboard whose only change was an animated or bound track size reused
+    /// its stale solved bounds.
+    #[test]
+    fn grid_track_size_write_dirties_the_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "GridTrack"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let track_value =
+            property_key_for_name("GridTrack", "trackValue").expect("GridTrack.trackValue");
+        let revision = instance.layout_revision();
+        assert!(instance.set_double_property(2, track_value, 24.0));
+        assert_ne!(
+            instance.layout_revision(),
+            revision,
+            "a track size write must invalidate the retained layout solve"
+        );
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_double_property(2, track_value, 24.0));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    /// Pinned `GridTrack::collectionChanged`/`trackTypeChanged`/
+    /// `trackMaxTypeChanged -> markLayoutDirty` (`grid_track.cpp:20-24`).
+    #[test]
+    fn grid_track_uint_writes_dirty_the_retained_parent_layout_node() {
+        for property_name in ["collection", "trackType", "trackMaxType"] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_component_for_type(0, "Artboard"),
+                    synthetic_component_for_type(1, "LayoutComponent"),
+                    synthetic_component_for_type(2, "GridTrack"),
+                ],
+                vec![0, 1, 2],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            for local_id in 0..3 {
+                instance.clear_component_dirt(local_id);
+            }
+
+            let key = property_key_for_name("GridTrack", property_name)
+                .unwrap_or_else(|| panic!("GridTrack.{property_name}"));
+            let revision = instance.layout_revision();
+            assert!(instance.set_uint_property(2, key, 1), "{property_name}");
+            assert_ne!(instance.layout_revision(), revision, "{property_name}");
+            assert!(
+                instance
+                    .component(1)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .expect("parent layout owner")
+                    .layout_node_is_dirty(),
+                "{property_name}"
+            );
+        }
+    }
+
+    /// A GridTrack whose parent is not a retained LayoutComponent has no owner
+    /// to dirty, exactly as C++'s `parent()->is<LayoutComponent>()` guard
+    /// (`grid_track.cpp:12-17`).
+    #[test]
+    fn grid_track_under_a_non_layout_parent_dirties_nothing() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "Node"),
+                synthetic_component_for_type(2, "GridTrack"),
+            ],
+            vec![0, 1, 2],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        for local_id in 0..3 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let track_value =
+            property_key_for_name("GridTrack", "trackValue").expect("GridTrack.trackValue");
+        assert!(instance.set_double_property(2, track_value, 8.0));
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .is_none(),
+            "a Node parent owns no retained layout node"
+        );
+    }
+
+    /// Pinned `GridItemPlacement::gridColumnSpanChanged -> markOwnerDirty`
+    /// (`grid_item_placement.cpp:73-85`). The span properties are uints, which
+    /// -- unlike the int cell properties -- never reached `layout_revision`
+    /// before this callback was ported.
+    #[test]
+    fn grid_item_placement_span_write_dirties_the_owning_layout_node() {
+        for property_name in ["gridColumnSpan", "gridRowSpan"] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_component_for_type(0, "Artboard"),
+                    synthetic_component_for_type(1, "LayoutComponent"),
+                    synthetic_component_for_type(2, "GridItemPlacement"),
+                ],
+                vec![0, 1, 2],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            for local_id in 0..3 {
+                instance.clear_component_dirt(local_id);
+            }
+
+            let key = property_key_for_name("GridItemPlacement", property_name)
+                .unwrap_or_else(|| panic!("GridItemPlacement.{property_name}"));
+            let revision = instance.layout_revision();
+            assert!(instance.set_uint_property(2, key, 2), "{property_name}");
+            assert_ne!(instance.layout_revision(), revision, "{property_name}");
+            assert!(
+                instance
+                    .component(1)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .expect("owning layout")
+                    .layout_node_is_dirty(),
+                "{property_name}"
+            );
+        }
+    }
+
+    /// `LayoutNodeProvider::from(parent())` resolves both provider shapes: a
+    /// LayoutComponent provides for itself, while a Shape/Text/Image host
+    /// provides via its LayoutParticipant child, whose own markLayoutNodeDirty
+    /// forwards to the owning layout (`grid_item_placement.cpp:32-39,73-79`;
+    /// `layout_participant.cpp:457-469`). A cell write under a Shape host must
+    /// therefore still reach the enclosing LayoutComponent.
+    #[test]
+    fn grid_item_placement_cell_write_reaches_the_layout_owning_a_participant_host() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "Shape"),
+                synthetic_component_for_type(3, "GridItemPlacement"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let grid_column =
+            property_key_for_name("GridItemPlacement", "gridColumn").expect("gridColumn");
+        assert!(instance.set_int_property(3, grid_column, 2));
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("owning layout")
+                .layout_node_is_dirty(),
+            "the placement's owner walk must cross the Shape host to its layout"
+        );
+    }
+
     #[test]
     fn layout_type_write_dirties_retained_parent_layout_and_its_layout_children() {
         let mut instance = synthetic_instance(

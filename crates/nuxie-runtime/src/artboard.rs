@@ -4940,6 +4940,19 @@ impl ArtboardInstance {
     ) -> bool {
         let changed = self.objects.set_int_property(local_id, property_key, value);
         if changed {
+            // Generated C++ int setters run their concrete `*Changed()` callback
+            // before notifying Core observers, same as the double/uint paths.
+            // GridItemPlacement is the only int owner with such a callback, so
+            // this is a direct call rather than a dispatch chain; it does not
+            // suppress the invalidation below the way an `owner_callback_handled`
+            // chain would.
+            let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+            crate::grid_item_placement::int_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            );
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
             self.mark_changed_unless_view_model_instance(local_id);
             self.mark_prepared_changed_for_property(local_id, property_key);
@@ -6035,6 +6048,9 @@ impl ArtboardInstance {
                 AdvancingComponentKind::LayoutComponent => {
                     self.advance_layout_component_entry(entry, elapsed_seconds, new_frame)
                 }
+                AdvancingComponentKind::LayoutParticipant => {
+                    self.advance_layout_participant_entry(entry, elapsed_seconds, new_frame)
+                }
                 AdvancingComponentKind::TextInput => {
                     self.advance_text_input_entry(entry, elapsed_seconds)
                 }
@@ -6132,6 +6148,70 @@ impl ArtboardInstance {
             self.mark_layout_node_changed(entry.local_id);
         }
         advance.keep_going
+    }
+
+    /// Pinned `LayoutParticipant::advanceComponent` -> `applyInterpolation`
+    /// (`layout_participant.cpp:508-525,564-644`): step the inherited-slot
+    /// interpolation; on movement, re-apply the resolved size to the host
+    /// (`applyResolvedLayoutSize` -> `controlSize`) and mark the host's world
+    /// transform dirty. Unlike LayoutComponent's entry there is no collapse
+    /// gate and no retained-node dirt — C++'s participant advance has neither.
+    fn advance_layout_participant_entry(
+        &mut self,
+        entry: RuntimeAdvancingComponent,
+        elapsed_seconds: f32,
+        new_frame: bool,
+    ) -> bool {
+        if !new_frame {
+            return false;
+        }
+        let Some(advance) = self
+            .component(entry.local_id)
+            .and_then(|component| component.concrete.participant_layout.as_ref())
+            .map(|participant| participant.advance_interpolation(elapsed_seconds, true))
+        else {
+            return false;
+        };
+        let Some(host_local) = self.component_parent_local(entry.local_id) else {
+            return advance.keep_going;
+        };
+        if advance.size_changed {
+            // `controlSize` resizes the host's parametric paths and re-lays
+            // out a Text host (`layout_participant.cpp:256-274`;
+            // `parametric_path.cpp:24-33`; `text.cpp` controlSize).
+            self.mark_runtime_layout_controlled_paths_dirty(host_local);
+            self.invalidate_runtime_layout_text_host(host_local);
+        }
+        if advance.layout_changed {
+            // `applyInterpolation` marks the host's world transform after
+            // each animated write (`layout_participant.cpp:614-618,633-640`),
+            // and the retained world-transform memo is keyed by
+            // `layout_revision`, so the moved slot must advance it.
+            self.add_dirt(host_local, ComponentDirt::WORLD_TRANSFORM, true);
+            self.layout_revision = self.layout_revision.wrapping_add(1);
+        }
+        advance.keep_going
+    }
+
+    /// The participant-host half of C++ `controlSize` on Text
+    /// (`text.cpp:1240-1287`): a changed resolved size invalidates the host's
+    /// retained text bounds and shape.
+    fn invalidate_runtime_layout_text_host(&mut self, host_local: usize) {
+        let Some(component) = self.component(host_local) else {
+            return;
+        };
+        if !matches!(component.type_name, "Text" | "TextInput") {
+            return;
+        }
+        if let Some(text) = component.concrete.text.as_ref() {
+            text.invalidate_bounds();
+        }
+        if let Some(text_input) = component.concrete.text_input.as_ref() {
+            text_input.raw.borrow_mut().mark_geometry_dirty();
+        }
+        self.runtime_drawables
+            .mark_text_shape_paths_retained_for_local(host_local);
+        self.add_dirt(host_local, ComponentDirt::TEXT_SHAPE, false);
     }
 
     fn advance_scripted_data_converter_entry(
@@ -8570,6 +8650,17 @@ impl ArtboardInstance {
             crate::layout_component::uint_property_changed(self, local_id, type_name, property_key)
         });
         let owner_callback = owner_callback.or_else(|| {
+            crate::grid_track::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::grid_item_placement::uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
             crate::artboard_component_list_override::uint_property_changed(
                 self,
                 local_id,
@@ -8861,20 +8952,58 @@ impl ArtboardInstance {
                 )
             })
             .unwrap_or((0, 0.0, None));
+        self.cascade_layout_animation_style_to_children(parent, inherited, &mut BTreeSet::new());
+    }
+
+    /// The child half of the cascade, following C++ `forEachLayoutProvider`
+    /// (`layout_component.cpp:55-115`): a child LayoutComponent is a leaf here
+    /// and recurses as its own cascade root; a Shape/Text/Image child resolves
+    /// to its LayoutParticipant child object, which inherits the layout's
+    /// effective style (`layout_component.cpp:1305-1311`;
+    /// `layout_participant.cpp:528-562`); any other container is transparent
+    /// and is seen through. (C++ additionally filters a Solo to its active
+    /// child; a hidden sibling's participant here inherits the same values it
+    /// would receive on activation, so the over-approximation has no visible
+    /// slot.)
+    fn cascade_layout_animation_style_to_children(
+        &self,
+        parent: ComponentHandle,
+        inherited: (u8, f32, Option<RuntimeInterpolator>),
+        visited: &mut BTreeSet<usize>,
+    ) {
         let child_len = self.component_child_len(parent);
         for index in 0..child_len {
             let Some(child) = self.component_child_at(parent, index) else {
                 continue;
             };
-            let Some(layout) = self
+            let Some(child_local) = self.objects.component_local_id(child) else {
+                continue;
+            };
+            // Cycle guard: malformed-but-accepted parent cycles must
+            // terminate, matching the topology guards in components.rs.
+            if !visited.insert(child_local) {
+                continue;
+            }
+            if let Some(layout) = self
                 .objects
                 .component(child)
                 .and_then(|component| component.concrete.layout.as_ref())
-            else {
+            {
+                layout.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
+                self.cascade_layout_component_animation_style(child);
                 continue;
-            };
-            layout.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
-            self.cascade_layout_component_animation_style(child);
+            }
+            if let Some(participant) =
+                self.runtime_layout_participant_local(child_local)
+                    .and_then(|participant_local| {
+                        self.component(participant_local)
+                            .and_then(|component| component.concrete.participant_layout.as_ref())
+                    })
+            {
+                participant.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
+                continue;
+            }
+            self.cascade_layout_animation_style_to_children(child, inherited, visited);
         }
     }
 
@@ -9029,6 +9158,14 @@ impl ArtboardInstance {
                 })
                 .or_else(|| {
                     crate::layout_component::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::grid_track::double_property_changed(
                         self,
                         local_id,
                         type_name,

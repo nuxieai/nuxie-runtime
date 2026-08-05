@@ -40,16 +40,21 @@ fn compile_source(source: &str) -> Result<Vec<u8>> {
 pub trait ScriptVmSourceTestExt {
     fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R>;
     fn load(&self, name: &str, source: &str) -> Result<Function>;
+    fn run_source_bytecode<R: FromLuaMulti>(&self, name: &str, source: &str) -> Result<R>;
     fn register_source_module(&self, name: &str, source: &str) -> Result<Value>;
 }
 
 impl ScriptVmSourceTestExt for ScriptVm {
     fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
-        self.run_bytecode("test-source", &compile_source(source)?)
+        self.lua().load(source).eval()
     }
 
     fn load(&self, name: &str, source: &str) -> Result<Function> {
-        self.load_bytecode(name, &compile_source(source)?)
+        self.lua().load(source).set_name(name).into_function()
+    }
+
+    fn run_source_bytecode<R: FromLuaMulti>(&self, name: &str, source: &str) -> Result<R> {
+        self.run_bytecode(name, &compile_source(source)?)
     }
 
     fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {

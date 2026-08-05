@@ -80,8 +80,6 @@ const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
       expected: [
         "direct-gpu-canvas=webgpu",
         "imported-gpu-canvas=webgpu",
-        "gpu-canvas-clean-error-scope=clean rendered-pixels=64 red-pixels=32",
-        "gpu-canvas-error-scope=concrete-error-preserved",
         "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
         "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
       ],

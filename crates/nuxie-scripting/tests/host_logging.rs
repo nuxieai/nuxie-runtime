@@ -79,7 +79,7 @@ fn surfaced_lua_errors_are_routed_to_the_host_as_error_lines() {
     vm.install_rive_globals().expect("Rive globals install");
 
     let error = vm
-        .eval::<()>("error('host logging failure')")
+        .run_source_bytecode::<()>("host-logging-error", "error('host logging failure')")
         .expect_err("Lua failure surfaces");
     let Error::RuntimeError(raw_lua_message) = error else {
         panic!("expected runtime error, got {error:?}");
@@ -181,3 +181,5 @@ fn a_sink_can_be_replaced_after_globals_are_sandboxed() {
         [(ScriptingLogLevel::Info, b"late sink".to_vec())]
     );
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

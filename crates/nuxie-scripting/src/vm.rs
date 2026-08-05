@@ -7,9 +7,8 @@
 //! it straight to `luau_load`. [`ScriptVm::load_bytecode`] is the Rust
 //! equivalent, built on `luaur_rt::Lua::exec_raw` + `luaur_vm::luau_load`.
 //!
-//! Source compilation ([`ScriptVm::eval`] / [`ScriptVm::load`]) is also
-//! exposed because luaur ships the Luau *compiler* too, which the C++
-//! runtime does not embed — useful for tests and future editor-style flows.
+//! Source compilation is deliberately owned by editor tooling. This baseline
+//! surface accepts the precompiled Luau bytecode carried by `.riv` files.
 
 mod buffer_ext;
 mod bytecode;
@@ -1545,8 +1544,8 @@ impl ScriptVm {
         Ok(())
     }
 
-    /// Compile and evaluate Luau *source*, returning the chunk's results.
-    pub fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
+    #[cfg(test)]
+    fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
         self.ensure_initialized()?;
         self.reserve_parent_stack_headroom()?;
         self.reset_execution_budget();
@@ -1554,8 +1553,8 @@ impl ScriptVm {
         self.track_resource_result(result)
     }
 
-    /// Compile Luau *source* into a callable function without running it.
-    pub fn load(&self, name: &str, source: &str) -> Result<Function> {
+    #[cfg(test)]
+    fn load(&self, name: &str, source: &str) -> Result<Function> {
         self.ensure_initialized()?;
         self.reserve_parent_stack_headroom()?;
         let result = self.lua.load(source).set_name(name).into_function();
@@ -1608,6 +1607,22 @@ impl ScriptVm {
         let chunk = self.load_bytecode(chunk_name, bytecode)?;
         self.reset_execution_budget();
         self.execute_loaded_module(chunk_name, chunk)
+    }
+
+    /// Evaluate precompiled Luau bytecode in the VM's shared global
+    /// environment while preserving the baseline execution accounting used by
+    /// other VM entry points.
+    ///
+    /// Runtime modules should use [`Self::run_bytecode`] for isolated globals.
+    /// Editor tooling uses this bytecode-only seam when interactive source
+    /// evaluation must define globals for later calls.
+    pub fn eval_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
+        self.ensure_initialized()?;
+        self.reserve_parent_stack_headroom()?;
+        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.reset_execution_budget();
+        let result = chunk.call(());
+        self.track_resource_result(result)
     }
 
     /// Execute a loaded script/module with the same environment isolation as
@@ -1734,16 +1749,6 @@ impl ScriptVm {
         self.cache_registered_module(name, result)
     }
 
-    fn register_loaded_module(&self, name: &str, function: Function) -> Result<Value> {
-        let cache = self.module_cache()?;
-        if let value @ (Value::Table(_) | Value::Function(_)) = cache.raw_get::<Value>(name)? {
-            return Ok(value);
-        }
-        self.reset_execution_budget();
-        let result: Value = self.execute_loaded_module(name, function)?;
-        self.cache_registered_module(name, result)
-    }
-
     fn cache_registered_module(&self, name: &str, result: Value) -> Result<Value> {
         let cache = self.module_cache()?;
         match &result {
@@ -1762,10 +1767,8 @@ impl ScriptVm {
         Ok(result)
     }
 
-    /// Compile and register a source module. Runtime `.riv` execution uses the
-    /// bytecode methods; this entry point supports editor/tooling flows and
-    /// conformance tests with the same flat prelinked module namespace.
-    pub fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {
+    #[cfg(test)]
+    fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {
         self.install_rive_globals()?;
         if let value @ (Value::Table(_) | Value::Function(_)) =
             self.module_cache()?.raw_get::<Value>(name)?
@@ -1773,7 +1776,9 @@ impl ScriptVm {
             return Ok(value);
         }
         let function = self.load(name, source)?;
-        self.register_loaded_module(name, function)
+        self.reset_execution_budget();
+        let result: Value = self.execute_loaded_module(name, function)?;
+        self.cache_registered_module(name, result)
     }
 
     /// Register a batch of modules, retrying until a pass makes no progress

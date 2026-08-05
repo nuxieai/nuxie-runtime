@@ -388,3 +388,5 @@ mod luau {
         );
     }
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

@@ -30,6 +30,13 @@ identities, Nux artifact manifests, product host commands, or platform
 presentation lifecycles. A product requirement enters through a small
 baseline-owned interface implemented by an adapter above the boundary.
 
+Luau source compilation/evaluation, source-module registration, deterministic
+critique sampling, raw-WGSL render plans, and direct pixel-readback workflows
+are editor tooling. The baseline accepts compiled ScriptAsset bytecode,
+including shared-global bytecode evaluation for editor callers, and executes
+imported GPUCanvas userdata through `GpuCanvasPlan`; nuxie-dev owns the source
+and snapshot layer above those contracts.
+
 ### Shared product host
 
 The shared product layer owns FlowSession, player selection, transactional host

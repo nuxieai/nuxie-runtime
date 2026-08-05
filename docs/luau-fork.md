@@ -5,8 +5,12 @@ that is Nuxie's scripting engine — and maintain the Luau engine port
 in-house rather than waiting on upstream luaur releases. This document
 records the fork point, the carried patches, and the port plan. It owns the
 exit path for the standing WATCH `deferred-2026-07-19-luau-engine`
-(docs/parity-gap-register.md): that row's exit criterion is now **fork
-parity with the pinned C++ engine**, not "luaur publishes a newer base".
+(docs/parity-gap-register.md): that row's exit criterion is **fork parity
+with the pinned C++ engine**, not "luaur publishes a newer base".
+**STATUS 2026-08-05: ladder complete — all nine rungs landed, WATCH CLOSED.**
+The vendored engine now carries every upstream delta from its 0.724-era
+base through official 0.732 plus the rive patch set at `rive_0_732`
+(`86eb0096`), which is what the pinned C++ runtime embeds.
 
 ## Why
 
@@ -170,14 +174,20 @@ preserving, row-by-row commits, focused gates per row, rung-level
 
 Additional plan points:
 
-1. **Known target symptom to retire:** `scope_probe` SIGTRAPs on
-   `lua_pushcclosurek`'s stack assertion under newer-engine comparison
-   (S4-3 carry-forward; C++ completes the stream while Rust traps —
-   C++ release builds compile the assertion out and survive on stack
-   slack). The upstream fix class is `LuauAutoStack` (rung 1, dark);
-   retiring the SIGTRAP will be a recorded flag-enable change validated
-   by scope_probe going exact, not a silent flip. Fork parity is not
-   claimed until this reproduces green.
+1. **`scope_probe` SIGTRAP — resolved before the ladder, not by it
+   (verified 2026-08-05).** The 2026-08-02 triage recorded Rust trapping
+   on `lua_pushcclosurek`'s stack assertion for this fixture. Direct
+   probe of the completed fork (`rust-golden-runner-scripted --file
+   fixtures/sync/scope_probe.riv --execute-scripts --samples 0.0,0.5,1.0`)
+   exits 0 with a complete 33-line stream — but so does the SAME probe at
+   the pre-ladder fork baseline (`2cb99385`). The symptom's precondition
+   was already gone: the S4-3 port (`76cb108a`, 2026-08-02, "Statically
+   link library requires") landed two days before the fork baseline. The
+   ladder therefore does NOT claim credit for retiring it; the honest
+   record is that the trap does not reproduce at either endpoint, and
+   `scope_probe` is corpus-`exact` under the standing gates. The upstream
+   fix class `LuauAutoStack` remains ported-but-dark (rung 1); enabling it
+   stays a separate recorded change with its own gate evidence.
 2. Oracles: the real bytecode-v7 fixture and the full forced-scripted
    ratchet remain the floor; the exact-0.732 C++ runner is the target
    comparison. The editor-emitted-bytecode compatibility matrix
@@ -194,3 +204,41 @@ Additional plan points:
 Out of scope for the fork-setup change that introduced this document: no
 engine internals were ported; the vendor expansion and workspace switch are
 provenance-only.
+
+## Ladder completion record (2026-08-05)
+
+All nine rungs landed, each as its own PR with the full gate battery green
+(corpus exactness held at every rung) and each preceded by an adversarial
+read-only audit bound to the C diff:
+
+| rung | PR | audit |
+|---|---|---|
+| baseline (vendor + workspace switch) | #247 | — |
+| ladder record | #250 | — |
+| 1 — 0.725 | #251 | ACCEPT, 0 findings |
+| 2 — 0.726 | #259 | ACCEPT, 0 findings |
+| 3 — 0.727 | #262 | ACCEPT, 0 findings |
+| 4 — 0.728 | #265 | ACCEPT, 0 findings |
+| 5 — 0.729 | #266 | 1 CONFIRMED → adjudicated to carried divergence 7 |
+| 6 — 0.730 | #269 | ACCEPT; dormant `arithToK` divergence recorded for re-audit |
+| 7 — 0.731 | #282 | ACCEPT, 0 findings |
+| 8 — 0.732 | #289 | 2 CONFIRMED → stale stack rebased; class-shape decode fixed to mirror C |
+| 9 — rive_0_732 patch set | #290 | ACCEPT, 0 findings |
+
+Method (reusable for the next engine bump): per rung, a read-only inventory
+maps every C hunk to its Rust twin with FFlag posture and scope class; the
+orchestrator adjudicates; a writer lane ports row-by-row with per-row focused
+gates in its own worktree; an adversarial auditor re-derives behavior from
+the C diff; then land.sh. Ledgers and per-rung disposition reports live in
+the lane worktrees' untracked `.luau-fork-work/`.
+
+**Standing follow-ups** (none block parity):
+
+- Fast-call dispatch is still entirely `luauF_missing` outside the rive block
+  (carried divergence 1) — a perf-only lane, semantically equivalent by
+  Luau's fallback design.
+- `arithToK` MOD/POW const-lhs: Rust skips where C crashes; unreachable today
+  (no `foldConstants` caller in either tree). Re-audit when a caller lands
+  (`vendor/luaur-bytecode-0.1.8/NUXIE_PATCH.md`).
+- Dark flags ported but pinned OFF track the oracle's flags-OFF profile.
+  Enabling any one is its own change with gate evidence.

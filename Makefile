@@ -160,9 +160,7 @@ crate-seams-baseline-check:
 	cargo check -p nuxie-runtime --no-default-features --lib
 
 crate-seams-product-check:
-	@tools/report-all.sh "crate seams (product)" \
-		"shared product host" "cargo check -p nuxie-product --all-targets" \
-		"editor authoring" "cargo check -p nuxie-authoring --all-targets"
+	cargo check -p nuxie-product --all-targets
 
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \

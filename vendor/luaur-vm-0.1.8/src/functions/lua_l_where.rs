@@ -3,47 +3,36 @@
 
 use core::ffi::c_int;
 
-use crate::functions::currentline::currentline;
-use crate::functions::getluaproto::get_lua_proto;
-use crate::functions::lua_o_chunkid::lua_o_chunkid;
-use crate::functions::lua_o_pushfstring::luaO_pushfstring;
+use crate::functions::lua_getinfo::lua_getinfo;
+use crate::functions::lua_pushfstring_l::lua_pushfstring_l;
 use crate::functions::lua_pushlstring::lua_pushlstring;
 use crate::functions::lua_rawcheckstack::lua_rawcheckstack;
-use crate::macros::getstr::getstr;
-use crate::macros::is_lua::isLua;
-use crate::macros::lua_idsize::LUA_IDSIZE;
+use crate::records::lua_debug::LuaDebug;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
 pub unsafe fn lua_l_where(L: *mut lua_State, level: c_int) {
-    let mut ci = (*L).ci;
-    for _ in 0..level {
-        if ci == (*L).base_ci {
-            lua_rawcheckstack(L, 1);
-            lua_pushlstring(L, c"".as_ptr(), 0);
-            return;
-        }
-        ci = ci.sub(1);
+    let mut ar: LuaDebug = core::mem::zeroed();
+    if lua_getinfo(L, level, c"sl".as_ptr(), &mut ar) != 0 && ar.currentline > 0 {
+        let source = core::ffi::CStr::from_ptr(ar.source).to_string_lossy();
+        lua_pushfstring_l(
+            L,
+            c"%s:%d: ".as_ptr(),
+            format_args!("{}:{}: ", source, ar.currentline),
+        );
+        return;
     }
 
-    if isLua!(ci) {
-        let proto = get_lua_proto(ci);
-        let source = (*proto).source;
-        let mut chunkbuf = [0; LUA_IDSIZE as usize];
-        let chunkid = lua_o_chunkid(
-            chunkbuf.as_mut_ptr(),
-            chunkbuf.len(),
-            getstr(source),
-            (*source).len as usize,
+    if lua_getinfo(L, 0, c"sl".as_ptr(), &mut ar) != 0 && ar.currentline > 0 {
+        let source = core::ffi::CStr::from_ptr(ar.source).to_string_lossy();
+        lua_pushfstring_l(
+            L,
+            c"%s:%d: ".as_ptr(),
+            format_args!("{}:{}: ", source, ar.currentline),
         );
-        let line = currentline(L, ci);
-        if line > 0 {
-            let chunk = core::ffi::CStr::from_ptr(chunkid).to_string_lossy();
-            luaO_pushfstring(L, c"%s:%d: ".as_ptr(), format_args!("{}:{}: ", chunk, line));
-            return;
-        }
+        return;
     }
 
     lua_rawcheckstack(L, 1);
-    lua_pushlstring(L, c"".as_ptr(), 0);
+    lua_pushlstring(L, c":: ".as_ptr(), 3);
 }

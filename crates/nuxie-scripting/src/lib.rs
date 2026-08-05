@@ -6,9 +6,9 @@
 //!   that wraps every `ScriptAsset` payload in a `.riv` file
 //!   (`[flags:1] [signature:64 if signed] [luau_bytecode:N]`, mirroring
 //!   C++ `nuxie::SignedContentHeader`).
-//! - [`vm`] (feature `luau`, default on): boot a Luau VM, run source, load
-//!   the precompiled Luau bytecode that `.riv` files actually carry, and
-//!   call functions / read results.
+//! - [`vm`] (feature `luau`, default on): boot a Luau VM, load the precompiled
+//!   Luau bytecode that `.riv` files actually carry, and call functions / read
+//!   results. Source compilation belongs to editor tooling.
 
 pub mod envelope;
 

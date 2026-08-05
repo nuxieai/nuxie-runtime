@@ -110,3 +110,5 @@ fn path_indexing_matches_cpp_out_of_range_behavior_and_keeps_methods() {
 
     assert_eq!(values, ("none".to_owned(), 0, true, true, false, 0));
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

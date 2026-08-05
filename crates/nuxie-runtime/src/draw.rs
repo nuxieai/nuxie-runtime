@@ -12367,10 +12367,8 @@ impl TaffyRuntimeLayoutEngine {
                 self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
             })
         } else {
-            self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
-                .or_else(|| {
-                    self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
-                })
+            self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                .or_else(|| self.nested_artboard_layout_axis_hug_size(instance, local, width_axis))
         }
     }
 
@@ -12412,17 +12410,30 @@ impl TaffyRuntimeLayoutEngine {
             let (_, _, width, height) = layout.current_bounds();
             return Some(if width_axis { width } else { height });
         }
-        let layout_size = nested
-            .child
-            .retained_layout_bounds()
-            .and_then(|bounds| bounds.get(&0).copied())
-            .map(|bounds| {
-                if width_axis {
-                    bounds.width
-                } else {
-                    bounds.height
-                }
-            });
+        let layout_size = if nested.child.layout_node_owned_by_host {
+            nested
+                .child
+                .retained_layout_bounds()
+                .and_then(|bounds| bounds.get(&0).copied())
+        } else {
+            nested
+                .child
+                .runtime_file()
+                .zip(nested.child.runtime_graph())
+                .and_then(|(runtime, graph)| {
+                    nested
+                        .child
+                        .runtime_taffy_layout_bounds(graph, Some(runtime))
+                        .and_then(|bounds| bounds.get(&0).copied())
+                })
+        }
+        .map(|bounds| {
+            if width_axis {
+                bounds.width
+            } else {
+                bounds.height
+            }
+        });
 
         layout_size.or_else(|| {
             Some(if width_axis {

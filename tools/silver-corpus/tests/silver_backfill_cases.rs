@@ -108,8 +108,12 @@ fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
 }
 
 #[test]
-#[ignore = "Post-FL-D runner gap: Execution::run constructs raw nuxie_runtime ArtboardInstance/StateMachineInstance values and never creates a nuxie_scripting ScriptingVm or attaches the fixture's ScriptAsset occurrence, so ScriptedListenerAction::performAction remains inert"]
 fn upstream_fl_bc_multi_listener_scripted_action_assertion() {
+    // The literal `state_machine_test.cpp:647` action stream terminates in the
+    // original `silver.matches(...)` assertion. Execution::run registers the
+    // fixture's ScriptAsset File VM and attaches the state machine's
+    // ScriptedListenerAction occurrences, so the scripted actions fire during
+    // the replay exactly as in the scripting-enabled upstream build.
     let Some(runtime) = runtime_root("upstream FL-B/FL-C multi-listener scripted assertion") else {
         return;
     };

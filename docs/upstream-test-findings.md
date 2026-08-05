@@ -8,9 +8,9 @@ here is removed. The full per-file disposition audit this was distilled from is
 in git history (`docs/runtime-frame-loop-test-backfill-bc.md`); per-row status
 lives in `test-correspondence-manifest.toml`.
 
-Of the 420 finding-recorded upstream assertions, 23 are literal production
-failures (4 click-sequence sites, 1 fresh-FocusNode site, and 18 silver sites);
-397 are blocked capability/harness observables retained by linked ignored tests.
+Of the 402 finding-recorded upstream assertions, 5 are literal production
+failures (4 click-sequence sites and 1 fresh-FocusNode site); 397 are blocked
+capability/harness observables retained by linked ignored tests.
 
 ### Finding: click up outside
 
@@ -57,22 +57,8 @@ generic focus-manager tests are intentionally not claimed as equivalents.
 layout-computed pointer expressions or long generated loops that the current
 silver action interpreter cannot encode. They are retained by
 `cpp_probe.rs::upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions`.
-Two multitouch silvers are byte-exact active tests; four other hit-test
-silvers are literal failing findings below.
-
-### Finding: silver runtime divergences
-
-The silver-corpus test
-`upstream_fl_bc_divergent_silver_assertions` replays ten literal action
-streams and compares them to the pinned `.sriv` files. It is ignored after
-reporting these production divergences:
-`focus_traversal` (frame 0/op 95), `hittest_ab1` (frame 1/op 153),
-`hittest_ab1_parent` (frame 1/op 192), `hittest_ab1_grand_parent` (frame
-2/op 304), `hittest_nested` (frame 1/op 155), `multi_listeners` (frame 2/op
-253), `sorted_listeners` (frame 0/op 32), `transition_actions` (frame 2/op
-72), `transition_duration_bind_list` (frame 0/op 13), and
-`transition_duration_bind_nested` (frame 0/op 57). These account for 18
-upstream assertion sites.
+The two multitouch silvers and the four hit-test silvers are exact active
+tests in `silver_backfill_cases.rs`.
 
 ### Finding: state-machine fixture surface
 

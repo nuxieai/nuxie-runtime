@@ -6259,6 +6259,96 @@
     }
 
     #[test]
+    fn mid_animation_data_bound_gap_resolves_transferred_nested_layout_same_frame() {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            PathBuf::from(root).join("tests/unit_tests/assets/global_variables_test.riv"),
+        )
+        .expect("read pinned global-variables fixture");
+        let file = read_runtime_file(&bytes).expect("global variables fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("global variables graphs build");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Main"))
+            .expect("fixture has the Main artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("fixture has its default state machine");
+        assert!(machine.bind_default_view_model_context_on_artboard(&mut instance));
+
+        instance.advance_state_machine_instance(&mut machine, 0.0);
+        instance
+            .advance_frame_components_with_state_machine_report(0.0, &mut machine)
+            .expect("frame component advance");
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(&mut machine),
+            )
+            .expect("settle after main advance");
+        let frame = instance.runtime_nested_artboard_layout_bounds_frame();
+        let hug_host = instance
+            .nested_artboard_locals
+            .iter()
+            .copied()
+            .find(|host_local| {
+                instance
+                    .nested_artboards
+                    .get(host_local)
+                    .is_some_and(|nested| (nested.child.width - 279.0879).abs() < 0.001)
+            })
+            .expect("the transferred IntermediateList child hugs to 279.0879 at rest");
+
+        // "Timeline 1" keys the data-bound Sizes.gaps number 16 -> 8; the
+        // host-first stateful sync lands the interpolated gap 12 in the
+        // mounted child and aligns the transfer key for the consumed authored
+        // write. C++ still re-solves the shared Yoga tree in this same frame
+        // (`artboard.cpp:1286-1314,1417-1443`).
+        let gap_key = property_key_for_name("LayoutComponentStyle", "gapHorizontal")
+            .expect("gapHorizontal key");
+        {
+            let nested = instance
+                .nested_artboards
+                .get_mut(&hug_host)
+                .expect("transferred child stays mounted");
+            assert_eq!(
+                nested.child.slot(3).and_then(|slot| slot.type_name),
+                Some("LayoutComponentStyle"),
+                "fixture layout: the IntermediateList row style is child-local 3"
+            );
+            assert!(nested.child.set_double_property(3, gap_key, 12.0));
+            nested.acknowledge_consumed_child_layout_revision();
+        }
+
+        // A frame whose parent layout revision has not moved replays the
+        // cached bounds snapshot; this apply performs no constraint refresh
+        // and must leave the pending child layout generation armed instead of
+        // absorbing it.
+        instance.apply_nested_artboard_layout_bounds(
+            hug_host,
+            frame.bounds.as_ref().as_ref(),
+            frame.key,
+        );
+        crate::layout_node_provider::mark_layout_node_dirty(&mut instance, hug_host);
+        instance.update_pass();
+
+        let child_width = instance
+            .nested_artboards
+            .get(&hug_host)
+            .map(|nested| nested.child.width)
+            .expect("transferred child stays mounted");
+        assert!(
+            (child_width - 263.0879).abs() < 0.001,
+            "a mid-animation data-bound gap write must re-solve the transferred \
+             nested layout in the same frame; got {child_width}"
+        );
+    }
+
+    #[test]
     fn named_root_text_value_run_write_uses_first_local_match_and_ignores_nested_runs() {
         let text_key =
             property_key_for_name("TextValueRun", "text").expect("TextValueRun.text key");

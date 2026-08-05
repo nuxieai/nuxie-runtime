@@ -1,11 +1,12 @@
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use nuxie::{
-        BlendMode, BrowserFactory, BrowserResizeError, Factory, File, FillRule, GpuCanvasPlan,
-        GpuCanvasRenderPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
-        GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
+        BlendMode, BrowserFactory, BrowserResizeError, Factory, File, FillRule, GpuCanvasPassState,
+        GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPlan, GpuCanvasShader,
+        GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderResourceKind,
+        GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
         GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
-        RecordingFactory, Renderer, WgpuFactory,
+        PersistentFactory, RecordingFactory, Renderer, WgpuFactory,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -74,6 +75,14 @@ fn fs_main() -> @location(0) vec4<f32> {
             uniform_buffers: Vec::new(),
             vertex_layouts: Vec::new(),
             vertex_buffers: Vec::new(),
+            index_buffer: None,
+            indexed_draw: None,
+            texture_bindings: Vec::new(),
+            sampler_bindings: Vec::new(),
+            pipeline_state: GpuCanvasPipelineState::default(),
+            pass_state: GpuCanvasPassState::default(),
+            pipelines: Vec::new(),
+            render_passes: Vec::new(),
         }
     }
 
@@ -270,10 +279,12 @@ fn fs_main() -> @location(0) vec4<f32> {
             )));
         }
         let mut instance = artboard.instantiate().map_err(js_error)?;
-        let mut factory = BrowserFactory::new(canvas, 32, 24)
-            .await
-            .map_err(js_error)?;
-        let mut frame = factory.begin_frame(0xff00_0000).map_err(js_error)?;
+        let mut factory = PersistentFactory::new(
+            BrowserFactory::new(canvas, 32, 24)
+                .await
+                .map_err(js_error)?,
+        );
+        let mut frame = factory.borrow().begin_frame(0xff00_0000).map_err(js_error)?;
         instance
             .draw(&mut factory, &mut frame)
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;

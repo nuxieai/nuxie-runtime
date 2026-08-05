@@ -7,6 +7,8 @@ pub mod methods;
 pub mod records;
 pub mod type_aliases;
 #[cfg(test)]
+mod builtin_bounds_tests;
+#[cfg(test)]
 mod rung8_tests;
 #[cfg(test)]
 mod rung9_tests;

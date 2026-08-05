@@ -107,12 +107,14 @@ carried (not version lag; all pre-date the fork and are gate-green today):
    `FixMathNoisePrecision` ON (Luau CLI keeps it OFF).
 6. `luaur-rt::Compiler` exposes a subset of engine `CompileOptions`.
 7. `&str`-based error formatting (rung-5 audit finding, adjudicated
-   2026-08-04): luaur's error layer takes `&str`, so non-UTF-8 bytes in a
-   userdata `__type` name are lossy-replaced (U+FFFD) in error messages
-   where C passes raw bytes — affects baseline `luaL_checkudata` and
-   rung-5 `luaL_checkudatatagged` alike. Unreachable for Nuxie's ASCII
-   type registrations; the scripted side-channel referees any
-   corpus-visible divergence.
+   2026-08-04; NARROWED at rung 9): luaur's error layer takes `&str`, so
+   non-UTF-8 bytes in a userdata `__type` name are lossy-replaced (U+FFFD)
+   in error messages where C passes raw bytes — this still affects
+   `luaL_checkudata`/`luaL_checkudatatagged` type names. Rung 9 gave
+   `luaL_where` and `pusherror` byte-exact paths (explicit lengths through
+   `lua_pushlstring`), so chunk/source bytes in error prefixes are now
+   faithful. Unreachable for Nuxie's ASCII type registrations; the
+   scripted side-channel referees any corpus-visible divergence.
 
 ## Oracle facts that bind the port
 
@@ -152,7 +154,7 @@ ratchet floor at every rung):
 | 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | landed 2026-08-04: unsigned-class cluster, bytecode target 9, mutation-tracker unification, SCCP evaluator/driver; dark flags `LuauMathRoundNegZero`, `LuauGcMarkUdataAccess`; dormant arithToK MOD/POW divergence recorded in luaur-bytecode NUXIE_PATCH.md for re-audit |
 | 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | landed 2026-08-04: double-vector representation foundation (VECTORD tag, vectorPrecision, allocator/lvector, caller sweep), class hoisting, dark `LuauCompileIifeInline`/`LuauBytecodeFold`/`LuauXpcallFixMessageYieldPath`/`LuauBackedgeHeapCheck`, memorydump/allocationrate wrappers |
 | 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | landed 2026-08-04: class inheritance (LOP_NEWCLASS/super/luaR_inheritclass), custom-pcall retirement (rung-1 unit now unconditional), CstAttr retirement, dark v13 double-vector constants / export-table optimization / managed debug names; audit-driven fix: class-shape decode mirrors C's resize+append doubled layout |
-| 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | inventoried |
+| 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | landed 2026-08-05: ALL 28 rows ported, 0 deferred — Rive builtin ABI (LBF_RIVE_FROUND=243, Vector block 245-255), fastcall table wired, math.fround (native + library), Rive vector fast functions, lua_pushvector2 (stale-z quirk faithful), RIVE_LUAU baked ON (no print/newproxy/writestring; rive luaL_where/pusherror), LBC_VERSION_TARGET 7, unconditional lexeme capture |
 
 Rung 9 is the rive patch set: vector fast functions on 3 components,
 native `math.fround`, `LBC_VERSION_TARGET` held at 7 (which is why the

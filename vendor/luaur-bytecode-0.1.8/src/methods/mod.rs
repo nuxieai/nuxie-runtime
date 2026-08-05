@@ -90,6 +90,7 @@ pub mod bytecode_builder_add_userdata_type;
 pub mod bytecode_builder_annotate_instruction;
 pub mod bytecode_builder_begin_function;
 pub mod bytecode_builder_bytecode_builder;
+pub mod bytecode_builder_clear_string_table;
 pub mod bytecode_builder_calc_lines_span;
 pub mod bytecode_builder_clear_state;
 pub mod bytecode_builder_constant_key_hash_operator_call;

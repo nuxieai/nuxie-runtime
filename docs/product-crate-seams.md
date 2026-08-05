@@ -28,7 +28,7 @@ an upward dependency on any package in this document.
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
 | `nuxie-authoring` | Scene/SceneTx as one deep authoring module | `nuxie` with defaults disabled | A second runtime scene facade or product host policy |
 | `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
-| `nuxie-apple-adapter` | Apple drawable presentation | `nuxie-renderer` on Apple only | Objective-C, Metal, `wgpu`, device, queue, or texture state |
+| `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
 
 The browser and Apple interfaces re-export only the existing high-level
 factory/frame or surface lifecycle. The moves in UNIV-1625 and UNIV-1626 must
@@ -58,9 +58,6 @@ Existing callers continue to compile during the migration:
 - `nuxie::flow_session::*` is identical to `nuxie_product::*` until UNIV-1630;
 - `nuxie::*` Scene exports and `nuxie::authoring::*` are identical to
   `nuxie_authoring::*` until UNIV-1627;
-- `nuxie_renderer::{AppleSurface, ApplePresentationCompletion,
-  SurfaceDisposition, SurfaceError}` is identical to
-  `nuxie_apple_adapter::*` until UNIV-1626.
 
 These are temporary re-exports, not duplicate adapters. Later tickets move the
 implementation once and remove the lower compatibility path after all callers
@@ -70,3 +67,9 @@ UNIV-1625 completed the browser cut: `BrowserFactory`, `BrowserFrame`, and
 `BrowserResizeError` are owned only by `nuxie-browser-adapter`. The renderer
 retains opaque presentation surface/frame primitives and exposes no raw wgpu
 device, queue, surface, or texture state.
+
+UNIV-1626 completed the Apple cut: surface lifecycle, CAMetalDrawable
+validation, presentation scheduling/completion, failure disposition, and
+trusted-image admission are owned only by `nuxie-apple-adapter`. The renderer
+retains an opaque `WgpuMetalPresenter` for final blit and shared device health;
+the portable `nux-capi` package has no Apple feature or measurement roots.

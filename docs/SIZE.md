@@ -33,12 +33,13 @@ scripting ON at 9,118,104 B (8.70 MiB) — ON breached, the gate reopened the
 same day, and the user approved the 9 MiB replacement (≈3.4% headroom over
 scripting ON).
 
-## Current measurement
+## Baseline evidence snapshot
 
-Measured 2026-07-20 at source revision `d8091cd5`, including the complete
-42-entry core-renderer and Darwin-presentation consumer harness. The committed
-evidence snapshot records the exact measurement revision, artifact digests,
-toolchain, public-root inventory, and symbol-size breakdown in
+Measured 2026-07-20 at source revision `d8091cd5`, using the then-current
+42-entry core-renderer and Darwin-presentation consumer harness. The active
+harness now audits 52 roots across the portable renderer and Apple adapter.
+The committed baseline snapshot records its exact measurement revision,
+artifact digests, toolchain, public-root inventory, and symbol-size breakdown in
 [`docs/evidence/size-b3-2026-07-20.md`](evidence/size-b3-2026-07-20.md). Two
 consecutive runs of `make size-report` produced the same output and
 byte-identical artifacts.
@@ -82,16 +83,17 @@ not Cargo's callback-only `libnux_capi.dylib`. The report constructs each
 artifact mechanically:
 
 1. Build `nux-capi` as `staticlib` + `cdylib` under the `release-size` profile,
-   with `--no-default-features --features size-report-roots`; add
-   `nuxie/scripting` for the scripting-on variant. The measurement feature
-   implies `apple-renderer` and is absent from normal SDK builds.
+   with `--no-default-features --features nuxie/renderer`; add
+   `nuxie/scripting` for the scripting-on variant. Separately build
+   `nuxie-apple-adapter` with its measurement-only `size-report-roots` feature.
 2. Verify the resolved dependency graph contains `nuxie-renderer` and the
    repository's vendored `wgpu` 30.0.0.
-3. Verify the measurement consumer's 42 calls exactly match the public methods
-   found in the renderer source: 16 `WgpuFactory`/`WgpuFrame` inherent methods,
-   11 Darwin presentation methods, seven `Factory` methods, and eight
-   `Renderer` methods. Re-link the staticlib as one Mach-O dylib, retaining
-   every public `_nux_*` C ABI export plus that exact consumer root.
+3. Verify the measurement consumer's 52 calls exactly match the public methods
+   found across the renderer and Apple adapter: 16 `WgpuFactory`/`WgpuFrame`
+   methods, six opaque Metal-presenter methods, 12 Apple policy methods, ten
+   `Factory` methods, and eight `Renderer` methods. Re-link both staticlibs as
+   one Mach-O dylib, retaining every public `_nux_*` C ABI export plus that
+   exact consumer root.
 4. Link with `-dead_strip -dead_strip_dylibs`, verify the C ABI export set is
    unchanged and both the exact consumer root and `wgpu_core` survived, then
    run `strip -S -x`.
@@ -103,13 +105,14 @@ deliberately avoids two misleading numbers:
 
 - The raw static archive contains object code that a consuming linker removes,
   so its on-disk size is not application footprint.
-- Merely enabling `nux-capi/apple-renderer` on Cargo's callback-only cdylib
-  compiles the renderer but does not reference it. Fat LTO removes almost all
-  renderer code, so that artifact does not measure the renderer.
+- Merely enabling `nuxie/renderer` on Cargo's callback-only cdylib compiles the
+  renderer but does not reference it. Fat LTO removes almost all renderer code,
+  so that artifact does not measure the renderer.
 
 Before the tooling correction, the unchanged report produced 3,782,736 B
 (3.61 MiB) scripting-off and 4,684,272 B (4.47 MiB) scripting-on. Enabling
-`apple-renderer` without link roots produced 3,783,168 B, only 432 B larger.
+the former `apple-renderer` feature without link roots produced 3,783,168 B,
+only 432 B larger.
 Those observations are the mechanical proof that the old artifact omitted the
 renderer closure.
 

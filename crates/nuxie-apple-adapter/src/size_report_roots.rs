@@ -7,11 +7,15 @@
 //! against both renderer source files and the committed audited inventory
 //! before accepting a measurement.
 
-use nuxie::{
-    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, GpuCanvasPassState,
-    GpuCanvasPipelineShaders, GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, ImageFilter,
-    ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderMode, RenderPaint, RenderPath, Renderer, WgpuFactory, WgpuFrame,
+use crate::{AppleImageAdmission, ApplePresentationCompletion, AppleSurface};
+use nuxie_render_api::{
+    BlendMode, Factory, FillRule, GpuCanvasPassState, GpuCanvasPipelineShaders,
+    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, ImageFilter, ImageSampler, ImageWrap,
+    Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPath, Renderer,
+};
+use nuxie_renderer::{
+    RenderMode, WgpuExternalDeviceFailureKind, WgpuFactory, WgpuFrame, WgpuMetalPresenter,
 };
 use std::ffi::c_void;
 use std::future::Future;
@@ -25,6 +29,7 @@ use std::task::{Context, Poll, Waker};
 struct RootArgs {
     factory: *mut WgpuFactory,
     frame: *mut WgpuFrame,
+    presenter: *mut WgpuMetalPresenter,
     surface: *mut AppleSurface,
     completion: *mut ApplePresentationCompletion,
     drawable: *mut c_void,
@@ -153,9 +158,9 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 45 {
-        0 => root!("inherent WgpuFactory::validate_image_bytes", {
-            black_box(WgpuFactory::validate_image_bytes(bytes).is_ok());
+    match selector % 52 {
+        0 => root!("inherent AppleImageAdmission::validate_image_bytes", {
+            black_box(AppleImageAdmission::validate_image_bytes(bytes).is_ok());
             0
         }),
         1 => root!("inherent WgpuFactory::new", {
@@ -570,31 +575,18 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };
-            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
-                return 0;
-            };
-            black_box(surface.copy_metal_device(factory).is_ok());
+            black_box(surface.copy_metal_device());
             0
         }),
         43 => root!("inherent AppleSurface::preflight_present", {
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };
-            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
-                return 0;
-            };
-            black_box(
-                surface
-                    .preflight_present(factory, selector & 1 != 0)
-                    .is_ok(),
-            );
+            black_box(surface.preflight_present(selector & 1 != 0).is_ok());
             0
         }),
-        _ => root!("inherent AppleSurface::present", {
+        44 => root!("inherent AppleSurface::present", {
             let Some(surface) = (unsafe { args.surface.as_mut() }) else {
-                return 0;
-            };
-            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
@@ -606,8 +598,70 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                     .map(|completion| ptr::read(completion))
             };
             black_box(
-                unsafe { surface.present(factory, ptr::read(frame), args.drawable, completion) }
-                    .is_ok(),
+                unsafe { surface.present(ptr::read(frame), args.drawable, completion) }.is_ok(),
+            );
+            0
+        }),
+        45 => root!("inherent WgpuFrame::metrics", {
+            let Some(frame) = (unsafe { args.frame.as_ref() }) else {
+                return 0;
+            };
+            black_box(frame.metrics());
+            0
+        }),
+        46 => root!("inherent WgpuFactory::create_metal_presenter", {
+            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
+                return 0;
+            };
+            black_box(factory.create_metal_presenter().is_ok());
+            0
+        }),
+        47 => root!("inherent WgpuMetalPresenter::copy_device", {
+            let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
+                return 0;
+            };
+            black_box(presenter.copy_device().is_ok());
+            0
+        }),
+        48 => root!("inherent WgpuMetalPresenter::copy_command_queue", {
+            let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
+                return 0;
+            };
+            black_box(presenter.copy_command_queue().is_ok());
+            0
+        }),
+        49 => root!("inherent WgpuMetalPresenter::device_health", {
+            let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
+                return 0;
+            };
+            black_box(presenter.device_health());
+            0
+        }),
+        50 => root!("inherent WgpuMetalPresenter::record_external_failure", {
+            let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
+                return 0;
+            };
+            presenter
+                .record_external_failure(WgpuExternalDeviceFailureKind::Internal, String::new());
+            0
+        }),
+        _ => root!("inherent WgpuMetalPresenter::render_to_texture", {
+            let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
+                return 0;
+            };
+            let Some(frame) = (unsafe { args.frame.as_mut() }) else {
+                return 0;
+            };
+            black_box(
+                unsafe {
+                    presenter.render_to_texture(
+                        ptr::read(frame),
+                        args.drawable,
+                        args.width,
+                        args.height,
+                    )
+                }
+                .is_ok(),
             );
             0
         }),

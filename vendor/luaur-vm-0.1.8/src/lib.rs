@@ -8,6 +8,8 @@ pub mod records;
 pub mod type_aliases;
 #[cfg(test)]
 mod rung8_tests;
+#[cfg(test)]
+mod rung9_tests;
 
 // C++ macros are global #defines; translated callers use them unqualified.
 // Pull every #[macro_export] macro from luau-common into textual scope so

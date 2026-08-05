@@ -92,6 +92,9 @@ pub fn get_builtin_function_id(builtin: &Builtin, options: &CompileOptions) -> i
         if builtin.method.operator_eq_c_char(c"frexp".as_ptr()) {
             return LBF_MATH_FREXP as i32;
         }
+        if builtin.method.operator_eq_c_char(c"fround".as_ptr()) {
+            return LBF_RIVE_FROUND as i32;
+        }
         if builtin.method.operator_eq_c_char(c"ldexp".as_ptr()) {
             return LBF_MATH_LDEXP as i32;
         }
@@ -323,6 +326,45 @@ pub fn get_builtin_function_id(builtin: &Builtin, options: &CompileOptions) -> i
         }
         if builtin.method.operator_eq_c_char(c"lerp".as_ptr()) {
             return LBF_VECTOR_LERP as i32;
+        }
+    }
+
+    if builtin.object.operator_eq_c_char(c"Vector".as_ptr()) {
+        if builtin.method.operator_eq_c_char(c"xy".as_ptr()) {
+            return LBF_VECTOR as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"origin".as_ptr()) {
+            return LBF_RIVE_VECTOR_ORIGIN as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"dot".as_ptr()) {
+            return LBF_RIVE_VECTOR_DOT as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"lerp".as_ptr()) {
+            return LBF_RIVE_VECTOR_LERP as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"distance".as_ptr()) {
+            return LBF_RIVE_VECTOR_DISTANCE as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"distanceSquared".as_ptr()) {
+            return LBF_RIVE_VECTOR_DISTANCE_SQUARED as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"length".as_ptr()) {
+            return LBF_RIVE_VECTOR_MAGNITUDE as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"lengthSquared".as_ptr()) {
+            return LBF_RIVE_VECTOR_LENGTH_SQUARED as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"normalized".as_ptr()) {
+            return LBF_RIVE_VECTOR_NORMALIZE as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"cross".as_ptr()) {
+            return LBF_RIVE_VECTOR2_CROSS as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"scaleAndAdd".as_ptr()) {
+            return LBF_RIVE_VECTOR_SCALE_AND_ADD as i32;
+        }
+        if builtin.method.operator_eq_c_char(c"scaleAndSub".as_ptr()) {
+            return LBF_RIVE_VECTOR_SCALE_AND_SUB as i32;
         }
     }
 

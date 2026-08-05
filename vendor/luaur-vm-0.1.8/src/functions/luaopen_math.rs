@@ -19,6 +19,7 @@ use crate::functions::math_exp::math_exp;
 use crate::functions::math_floor::math_floor;
 use crate::functions::math_fmod::math_fmod;
 use crate::functions::math_frexp::math_frexp;
+use crate::functions::math_fround::math_fround;
 use crate::functions::math_isfinite::math_isfinite;
 use crate::functions::math_isinf::math_isinf;
 use crate::functions::math_isnan::math_isnan;
@@ -52,7 +53,7 @@ use crate::macros::luau_tau::LUAU_TAU;
 use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 
-struct MathFuncs([LuaLReg; 38]);
+struct MathFuncs([LuaLReg; 39]);
 unsafe impl Sync for MathFuncs {}
 
 static MATH_FUNCS: MathFuncs = MathFuncs([
@@ -107,6 +108,10 @@ static MATH_FUNCS: MathFuncs = MathFuncs([
     LuaLReg {
         name: c"frexp".as_ptr(),
         func: Some(math_frexp),
+    },
+    LuaLReg {
+        name: c"fround".as_ptr(),
+        func: Some(math_fround),
     },
     LuaLReg {
         name: c"ldexp".as_ptr(),

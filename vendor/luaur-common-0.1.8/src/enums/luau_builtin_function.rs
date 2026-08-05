@@ -185,6 +185,23 @@ pub enum LuauBuiltinFunction {
     // buffer.readinteger / buffer.writeinteger (int64_t)
     LBF_BUFFER_READINTEGER,
     LBF_BUFFER_WRITEINTEGER,
+
+    // Rive Vector fast functions (3-component; cross is the 2D perp-dot).
+    // Pinned at the end of the 256-slot luauF_table to avoid collision with
+    // upstream additions; new entries grow downward from the block.
+    LBF_RIVE_FROUND = 243,
+    // 244 is reserved.
+    LBF_RIVE_VECTOR_DISTANCE = 245,
+    LBF_RIVE_VECTOR_DISTANCE_SQUARED,
+    LBF_RIVE_VECTOR_ORIGIN,
+    LBF_RIVE_VECTOR_LENGTH_SQUARED,
+    LBF_RIVE_VECTOR_DOT,
+    LBF_RIVE_VECTOR_MAGNITUDE,
+    LBF_RIVE_VECTOR_NORMALIZE,
+    LBF_RIVE_VECTOR_LERP,
+    LBF_RIVE_VECTOR2_CROSS,
+    LBF_RIVE_VECTOR_SCALE_AND_ADD,
+    LBF_RIVE_VECTOR_SCALE_AND_SUB,
 }
 
 impl LuauBuiltinFunction {
@@ -321,4 +338,24 @@ impl LuauBuiltinFunction {
     pub const LBF_INTEGER_BSWAP: Self = Self::LBF_INTEGER_BSWAP;
     pub const LBF_BUFFER_READINTEGER: Self = Self::LBF_BUFFER_READINTEGER;
     pub const LBF_BUFFER_WRITEINTEGER: Self = Self::LBF_BUFFER_WRITEINTEGER;
+    pub const LBF_RIVE_FROUND: Self = Self::LBF_RIVE_FROUND;
+    pub const LBF_RIVE_VECTOR_DISTANCE: Self = Self::LBF_RIVE_VECTOR_DISTANCE;
+    pub const LBF_RIVE_VECTOR_DISTANCE_SQUARED: Self = Self::LBF_RIVE_VECTOR_DISTANCE_SQUARED;
+    pub const LBF_RIVE_VECTOR_ORIGIN: Self = Self::LBF_RIVE_VECTOR_ORIGIN;
+    pub const LBF_RIVE_VECTOR_LENGTH_SQUARED: Self = Self::LBF_RIVE_VECTOR_LENGTH_SQUARED;
+    pub const LBF_RIVE_VECTOR_DOT: Self = Self::LBF_RIVE_VECTOR_DOT;
+    pub const LBF_RIVE_VECTOR_MAGNITUDE: Self = Self::LBF_RIVE_VECTOR_MAGNITUDE;
+    pub const LBF_RIVE_VECTOR_NORMALIZE: Self = Self::LBF_RIVE_VECTOR_NORMALIZE;
+    pub const LBF_RIVE_VECTOR_LERP: Self = Self::LBF_RIVE_VECTOR_LERP;
+    pub const LBF_RIVE_VECTOR2_CROSS: Self = Self::LBF_RIVE_VECTOR2_CROSS;
+    pub const LBF_RIVE_VECTOR_SCALE_AND_ADD: Self = Self::LBF_RIVE_VECTOR_SCALE_AND_ADD;
+    pub const LBF_RIVE_VECTOR_SCALE_AND_SUB: Self = Self::LBF_RIVE_VECTOR_SCALE_AND_SUB;
 }
+
+const _: () = {
+    assert!(LuauBuiltinFunction::LBF_RIVE_VECTOR_SCALE_AND_SUB as u8 == 255);
+    assert!(
+        LuauBuiltinFunction::LBF_RIVE_VECTOR_DISTANCE as u8
+            > LuauBuiltinFunction::LBF_MATH_ISFINITE as u8
+    );
+};

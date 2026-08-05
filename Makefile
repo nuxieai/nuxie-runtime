@@ -547,8 +547,9 @@ perf-json: golden-runner rust-golden-runner
 perf-gate-measure: CPP_CONFIG=release
 perf-gate-measure: RUST_PROFILE=release
 perf-gate-measure: perf-runtime-ref-check perf-corpus-check scripted-golden-runner scripted-rust-golden-runner
-	cargo build --quiet --release -p perf-compare --bin perf-compare
 	@set -e; \
+	tools/perf-gate/wait-for-quiet.sh; \
+	cargo build --quiet --release -p perf-compare --bin perf-compare; \
 	ids=$$(python3 "$(PERF_GATE_TOOL)" ids --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"); \
 	mkdir -p "$(dir $(PERF_GATE_REPORT))"; \
 	"$(PERF_GATE_PINNER)" "$(PERF_GATE_COMPARE)" --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-ids "$$ids" --iterations "$(PERF_GATE_ITERATIONS)" --warmups "$(PERF_GATE_WARMUPS)" --aggregate median --runner-order cpp-first --runner-benchmark --benchmark-frames "$(PERF_GATE_FRAMES)" --benchmark-hz "$(PERF_GATE_HZ)" --rust-execute-scripts --json "$(PERF_GATE_REPORT)" $(PERF_JSON_META)

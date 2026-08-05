@@ -676,7 +676,13 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     render_opacity * path_bucket.opacity,
                     shape_world,
                     path_commands,
-                    true,
+                    // C++ `Text::m_drawCommands` is opacity-independent:
+                    // `TextStylePaint::draw` re-tests `shapePaint->shouldDraw()`
+                    // on every draw (`src/text/text_style_paint.cpp:53-58`), so
+                    // the mutator-visibility half of that predicate must not be
+                    // baked into command existence here. It is applied at emit
+                    // time instead; see `runtime_draw_live_text_family`.
+                    false,
                     false,
                     true,
                 ) {
@@ -712,7 +718,9 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     render_opacity * path_bucket.opacity,
                     shape_world,
                     path_commands,
-                    true,
+                    // Opacity-independent for the same reason as the opaque
+                    // bucket above; `shouldDraw` runs at emit time.
+                    false,
                     false,
                     true,
                 ) else {

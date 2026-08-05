@@ -1083,6 +1083,9 @@ impl ArtboardInstance {
                 cloned_nested.animations = source_nested.animations.clone();
                 cloned_nested.layout_data_transferred = source_nested.layout_data_transferred;
                 cloned_nested.layout_data_transfer_key = source_nested.layout_data_transfer_key;
+                cloned_nested
+                    .transferred_hug_size
+                    .set(source_nested.transferred_hug_size.get());
                 cloned_nested.initial_layout_paint_frame.replace(None);
                 cloned_nested
                     .child
@@ -7114,9 +7117,7 @@ impl ArtboardInstance {
         // parent Yoga graph reports a new layout. The transfer key keeps later
         // precise child-local writes from causing a second solve in the same
         // outer update while still refreshing genuine parent assignments.
-        let mut did_update = image_assets_did_update
-            | font_assets_did_update
-            | self.apply_nested_artboard_layout_bounds_after_parent_solve();
+        let mut did_update = image_assets_did_update | font_assets_did_update;
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -7258,6 +7259,30 @@ impl ArtboardInstance {
             );
             layout_did_update |= update_report.did_layout;
             did_update |= update_report.did_update | nested_did_update;
+        }
+        if layout_did_update {
+            // A detached Rust child can finish settling a deeper transferred
+            // node after this parent's first measurement. C++ solves those
+            // shared Yoga nodes in one tree. Re-enter only while applying the
+            // parent result published a new precise dirty-layout member, so
+            // the first hosted result is the stable one and clean frames stay
+            // no-ops.
+            for _ in 0..100 {
+                did_update |= self.apply_nested_artboard_layout_bounds_after_parent_solve();
+                if self.dirty_layout.is_empty() {
+                    break;
+                }
+                let update_report = self.update_components_with_hook_recording(
+                    false,
+                    script_mode,
+                    root_transform,
+                    |_, _, _, _| {},
+                );
+                did_update |= update_report.did_update;
+                if !update_report.did_layout {
+                    break;
+                }
+            }
         }
         let has_unsettled_component_list_rows =
             self.component_list_locals().into_iter().any(|local_id| {
@@ -7651,6 +7676,7 @@ impl ArtboardInstance {
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             changed |= self.sync_nested_artboard_root_opacity(host_local_id);
         }
+        let mut nested_child_layout_changed = false;
         let paused_child_has_component_dirt = self
             .nested_artboards
             .get(&host_local_id)
@@ -7689,9 +7715,14 @@ impl ArtboardInstance {
                 let child_root_transform = nested
                     .child
                     .mounted_root_transform(root_transform.multiply(host_world));
+                let child_had_dirty_layout = !nested.child.dirty_layout.is_empty();
                 changed |= nested
                     .child
                     .update_pass_with_script_mode(script_mode, child_root_transform);
+                if child_had_dirty_layout || !nested.child.dirty_layout.is_empty() {
+                    nested.transferred_hug_size.set((None, None));
+                    nested_child_layout_changed = true;
+                }
                 if dirt.contains(ComponentDirt::RENDER_OPACITY) {
                     if let Some(frame) = nested.initial_layout_paint_frame.borrow().as_ref() {
                         // C++ consumes the initial nested-layout shader wave in
@@ -7717,6 +7748,9 @@ impl ArtboardInstance {
                         nested.child.retain_latest_unrealized_shape_gradient_state();
                     }
                 }
+            }
+            if nested_child_layout_changed {
+                changed |= crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
             }
         }
         if dirt.contains(ComponentDirt::WORLD_TRANSFORM)

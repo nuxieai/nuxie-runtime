@@ -214,6 +214,46 @@ impl ArtboardInstance {
                 width: bounds.width,
                 height: bounds.height,
             });
+        let transferred_intrinsic_size = self
+            .nested_artboards
+            .get(&host_local_id)
+            .filter(|nested| !nested.layout_data_transferred)
+            .and_then(|nested| {
+                nested
+                    .child
+                    .runtime_file()
+                    .zip(nested.child.runtime_graph())
+                    .and_then(|(runtime, graph)| {
+                        nested
+                            .child
+                            .runtime_taffy_layout_bounds(graph, Some(runtime))
+                    })
+                    .and_then(|bounds| bounds.get(&0).copied())
+            })
+            .map(|bounds| (Some(bounds.width), Some(bounds.height)));
+        let hug_axis_changed = |property_name: &str, intrinsic: Option<f32>, assigned: f32| {
+            property_key_for_name("NestedArtboardLayout", property_name)
+                .and_then(|key| self.uint_property(host_local_id, key))
+                == Some(2)
+                && intrinsic.is_some_and(|intrinsic| (intrinsic - assigned).abs() > 1.0e-4)
+        };
+        if transferred_intrinsic_size.is_some_and(|(width, height)| {
+            hug_axis_changed("instanceWidthScaleType", width, bounds.width)
+                || hug_axis_changed("instanceHeightScaleType", height, bounds.height)
+        }) {
+            // A nested child can settle its own transferred descendants after
+            // the parent's first detached measurement. C++ still has one
+            // shared Yoga tree, so that newer intrinsic participates before
+            // the host receives its first layout result. Publish the host
+            // again and defer the transfer one pass; otherwise an animating
+            // root would visibly interpolate from the stale preliminary size.
+            if let Some(nested) = self.nested_artboards.get(&host_local_id) {
+                nested
+                    .transferred_hug_size
+                    .set(transferred_intrinsic_size.unwrap());
+            }
+            return crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
+        }
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
             return false;
         };
@@ -243,6 +283,9 @@ impl ArtboardInstance {
         }
 
         let first_transfer = !nested.layout_data_transferred;
+        if let Some(intrinsic_size) = transferred_intrinsic_size {
+            nested.transferred_hug_size.set(intrinsic_size);
+        }
         let refresh_constraint_bounds = nested.layout_data_transfer_key.is_none_or(|key| {
             key.parent_layout != parent_layout
                 || key.assigned_bounds != bounds
@@ -342,7 +385,7 @@ impl ArtboardInstance {
             );
         }
         if changed {
-            self.mark_layout_node_changed(host_local_id);
+            crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
         }
         changed
     }

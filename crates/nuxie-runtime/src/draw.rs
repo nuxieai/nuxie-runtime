@@ -12207,6 +12207,13 @@ impl TaffyRuntimeLayoutEngine {
         style_local: Option<usize>,
         width_axis: bool,
     ) -> Option<AvailableSpace> {
+        if instance.layout_node_owned_by_host {
+            return Some(AvailableSpace::Definite(if width_axis {
+                instance.width
+            } else {
+                instance.height
+            }));
+        }
         if let Some(style_local) = style_local {
             const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
             if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG
@@ -12227,6 +12234,13 @@ impl TaffyRuntimeLayoutEngine {
         style_local: usize,
         width_axis: bool,
     ) -> Option<Dimension> {
+        if instance.layout_node_owned_by_host {
+            return Some(Dimension::length(if width_axis {
+                instance.width
+            } else {
+                instance.height
+            }));
+        }
         const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
         if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG {
             return Some(Dimension::auto());
@@ -12273,6 +12287,18 @@ impl TaffyRuntimeLayoutEngine {
         } else {
             width_scale
         };
+        if matches!(width_scale, 0 | 2) {
+            style.min_size.width = style.size.width;
+        }
+        if matches!(height_scale, 0 | 2) {
+            style.min_size.height = style.size.height;
+        }
+        if width_scale == 2 {
+            style.max_size.width = style.size.width;
+        }
+        if height_scale == 2 {
+            style.max_size.height = style.size.height;
+        }
         match main_scale {
             0 => {
                 style.flex_grow = 0.0;
@@ -12363,12 +12389,28 @@ impl TaffyRuntimeLayoutEngine {
             } else {
                 transferred.1
             };
-            retained.or_else(|| {
-                self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
-            })
+            if self.nested_artboard_layout_axis_scale(instance, local, width_axis) == 2 {
+                self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
+                    .or(retained)
+            } else {
+                retained.or_else(|| {
+                    self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                })
+            }
         } else {
-            self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
-                .or_else(|| self.nested_artboard_layout_axis_hug_size(instance, local, width_axis))
+            let value = self
+                .nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                .or_else(|| self.nested_artboard_layout_axis_hug_size(instance, local, width_axis));
+            if let Some(value) = value.filter(|value| value.is_finite() && *value >= 0.0) {
+                let (mut width, mut height) = nested.transferred_hug_size.get();
+                if width_axis {
+                    width = Some(value);
+                } else {
+                    height = Some(value);
+                }
+                nested.transferred_hug_size.set((width, height));
+            }
+            value
         }
     }
 

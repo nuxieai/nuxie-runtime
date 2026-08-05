@@ -54,6 +54,13 @@ jobs:
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
 
+      # The scorecard record wrapper (tools/parity-scorecard) needs
+      # Python >= 3.11 (tomllib).
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Build reference Rive runtime
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |
@@ -64,13 +71,28 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make fixtures
 
+      # The gate commands below are unchanged; the record wrapper streams
+      # their output, captures the raw summary and exit code as scorecard
+      # evidence, and exits with the gate's own exit code -- the gate stays
+      # exactly as blocking as a bare `make` invocation. This job is the
+      # single source of the oracle floor evidence; ci.yml used to re-run the
+      # same floor on a second hosted runner just to capture these files.
       - name: Run golden compare
         working-directory: ${{ github.workspace }}/rive-rust
-        run: make golden-compare
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate golden-compare \
+            --output target/parity-scorecard/evidence/golden-compare.json \
+            -- make golden-compare
 
       - name: Run forced-scripted golden compare
+        if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}/rive-rust
-        run: make scripted-golden-compare
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate scripted-golden-compare \
+            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
+            -- make scripted-golden-compare
 
       # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
       # an audit drift is a distinct failure and must not stop the workspace
@@ -83,7 +105,20 @@ jobs:
       - name: Run Rust workspace tests with the pinned C++ oracle
         if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}/rive-rust
-        run: make cpp-oracle-workspace-tests
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate cargo-test-workspace \
+            --output target/parity-scorecard/evidence/cargo-test-workspace.json \
+            -- make cpp-oracle-workspace-tests
+
+      - name: Upload oracle scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-oracle-${{ github.run_attempt }}
+          path: rive-rust/target/parity-scorecard/evidence/*.json
+          if-no-files-found: warn
+          retention-days: 7
 
   capi-smoke:
     name: C ABI smoke test
@@ -102,8 +137,30 @@ jobs:
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --no-self-update
 
+      # The scorecard record wrapper (tools/parity-scorecard) needs
+      # Python >= 3.11 (tomllib).
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Fetch pinned test assets
         run: make fixtures
 
+      # Same wrapper contract as the golden-compare job: identical command,
+      # identical exit code, plus the raw evidence file for the scorecard.
       - name: Build and run C smoke test
-        run: make capi-smoke
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate capi-smoke \
+            --output target/parity-scorecard/evidence/capi-smoke.json \
+            -- make capi-smoke
+
+      - name: Upload C ABI scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-capi-${{ github.run_attempt }}
+          path: target/parity-scorecard/evidence/capi-smoke.json
+          if-no-files-found: warn
+          retention-days: 7

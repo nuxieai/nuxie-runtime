@@ -13,6 +13,7 @@ use crate::records::lua_table::LuaTable;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
+use crate::type_aliases::tms::TMS;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_getmetatable(
@@ -34,8 +35,7 @@ pub unsafe fn luau_f_getmetatable(
         }
 
         let mtv = if !mt.is_null() {
-            // TM_METATABLE is index 1 in the tag method names array (TM_METATABLE = 1)
-            let key = (*(*L).global).tmname[1];
+            let key = (*(*L).global).tmname[TMS::TM_METATABLE as usize];
             lua_h_getstr(mt, key)
         } else {
             luaO_nilobject

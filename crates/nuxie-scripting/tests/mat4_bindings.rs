@@ -471,3 +471,5 @@ fn mat4_nontrivial_f32_results_are_bit_exact_to_cpp_rive() {
         ]
     );
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

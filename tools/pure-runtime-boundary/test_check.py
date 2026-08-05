@@ -1552,6 +1552,33 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("binary-authoring=1", result.stdout)
 
+    def test_rejects_editor_gpu_and_source_tooling_in_baseline_interfaces(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        (package / "src/editor_tools.rs").write_text(
+            "pub struct GpuCanvasProgram;\n"
+            "impl Vm { pub fn register_source_module(&self) {} }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("editor-gpu-tooling boundary debt spread", result.stderr)
+
+    def test_bytecode_gpu_canvas_baseline_interface_remains_allowed(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        (package / "src/gpu_canvas.rs").write_text(
+            "pub struct GpuCanvasBytecodeProgram;\n"
+            "impl Vm { pub fn load_bytecode(&self) {} }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_comments_do_not_create_false_imports(self) -> None:
         self.write_manifest("")
         (self.package / "src/lib.rs").write_text(

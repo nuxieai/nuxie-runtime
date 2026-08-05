@@ -154,3 +154,5 @@ fn gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors() {
         "{stream}"
     );
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

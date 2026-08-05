@@ -131,6 +131,7 @@ MIXED_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
 # file containing either marker family fails. Deleting entries is allowed and
 # should happen as the migration in docs/pure-runtime-boundary.md proceeds.
 INTERNAL_DEBT_FILES = {
+    "editor-gpu-tooling": set(),
     "apple-image-admission": {
         "crates/nux-capi/src/size_report_roots.rs",
         "crates/nuxie-renderer/src/lib.rs",
@@ -191,6 +192,11 @@ INTERNAL_DEBT_FILES = {
     },
 }
 INTERNAL_DEBT_MARKERS = {
+    "editor-gpu-tooling": re.compile(
+        r"\bGpuCanvas(?:Program|RenderPlan)\b|"
+        r"\bpub\s+fn\s+(?:eval|register_source_module)\b|"
+        r"\bpub\s+fn\s+load\s*\([^)]*\bsource\s*:\s*&str"
+    ),
     "apple-image-admission": re.compile(
         r"\bAPPLE_SAFE_IMAGE_|\bvalidate_image_bytes\b"
     ),

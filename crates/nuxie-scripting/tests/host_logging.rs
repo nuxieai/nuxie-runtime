@@ -181,3 +181,5 @@ fn a_sink_can_be_replaced_after_globals_are_sandboxed() {
         [(ScriptingLogLevel::Info, b"late sink".to_vec())]
     );
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

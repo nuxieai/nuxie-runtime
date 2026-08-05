@@ -91,9 +91,8 @@ pub use nuxie_renderer::{
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
-    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
-    GpuCanvasVertexLayout, RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame,
-    WgpuFrameMetrics,
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
 };
 #[cfg(all(feature = "renderer", not(target_arch = "wasm32")))]
 pub use nuxie_renderer::{

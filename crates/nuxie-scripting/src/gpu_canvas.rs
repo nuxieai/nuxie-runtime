@@ -36,7 +36,6 @@ use crate::vm::{Error, RendererBindings, Result, ScriptVm};
 /// portable minimum limits so malformed authored scripts fail in Rust before
 /// reaching a backend allocation or validation path.
 pub const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
-pub const MAX_GPU_CANVAS_SCRIPT_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_CPU_BUFFER_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;
 pub const MAX_VERTEX_BUFFER_BYTES: usize = 16 * 1024 * 1024;
@@ -1849,32 +1848,30 @@ fn same_optional_shader(left: Option<&GpuShader>, right: Option<&GpuShader>) -> 
     }
 }
 
-/// Retained pure-Rust Luau program used for deterministic temporal sampling.
-pub struct GpuCanvasProgram {
+/// Retained bytecode-backed GPU-canvas instance.
+///
+/// Source compilation and temporal sampling policy belong to editor tooling;
+/// the baseline owns only execution of already compiled Luau and the imported
+/// GPUCanvas userdata/plan contract.
+pub struct GpuCanvasBytecodeProgram {
     vm: ScriptVm,
     instance: Table,
     state: Rc<RefCell<GpuCanvasState>>,
     execution_budget: Rc<Cell<u32>>,
 }
 
-impl std::fmt::Debug for GpuCanvasProgram {
+impl std::fmt::Debug for GpuCanvasBytecodeProgram {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_struct("GpuCanvasProgram")
+            .debug_struct("GpuCanvasBytecodeProgram")
             .finish_non_exhaustive()
     }
 }
 
-impl GpuCanvasProgram {
-    /// Compile source, run its protocol generator, and retain the returned
-    /// script instance. Syntax and generator-shape failures are returned with
-    /// the VM diagnostic intact.
-    pub fn compile(source: &str) -> Result<Self> {
-        if source.len() > MAX_GPU_CANVAS_SCRIPT_SOURCE_BYTES {
-            return Err(Error::runtime(format!(
-                "GPU-canvas Luau source exceeds {MAX_GPU_CANVAS_SCRIPT_SOURCE_BYTES} bytes"
-            )));
-        }
+impl GpuCanvasBytecodeProgram {
+    /// Load precompiled Luau bytecode, run its protocol generator, and retain
+    /// the returned script instance.
+    pub fn load(bytecode: &[u8]) -> Result<Self> {
         let vm = ScriptVm::new();
         vm.lua().set_memory_limit(MAX_LUAU_VM_MEMORY_BYTES)?;
         let execution_budget = Rc::new(Cell::new(MAX_LUAU_INTERRUPTS_PER_CALL));
@@ -1912,9 +1909,7 @@ impl GpuCanvasProgram {
             renderer_bindings: None,
         };
         let context = vm.lua().create_userdata(bindings)?;
-        let chunk = vm
-            .load("editor-gpu-canvas", source)
-            .map_err(|error| Error::runtime(format!("gpu-canvas Luau syntax error: {error}")))?;
+        let chunk = vm.load_bytecode("gpu-canvas", bytecode)?;
         execution_budget.set(MAX_LUAU_INTERRUPTS_PER_CALL);
         let generator: Function = chunk.call(()).map_err(|error| {
             Error::runtime(format!(

@@ -611,7 +611,7 @@ pub use gpu_canvas::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
     GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
-    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasResourceLifetime,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
     GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };

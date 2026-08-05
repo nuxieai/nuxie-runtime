@@ -1272,3 +1272,5 @@ fn host_values_at_the_exact_depth_node_and_string_limits_are_accepted() {
     .unwrap();
     assert_eq!(vm.drain_host_commands().len(), 1);
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

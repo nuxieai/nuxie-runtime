@@ -48,3 +48,5 @@ fn dirty_shared_path_rebuild_across_callbacks_in_one_frame_uses_a_fresh_render_p
     assert!(stream.contains("drawPath path={id=2,"), "{stream}");
     assert!(stream.contains("drawPath path={id=3,"), "{stream}");
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

@@ -130,3 +130,5 @@ fn failed_candidate_modules_do_not_poison_the_parent_vm_stack() {
         .expect("failed utility registration must preserve checked parent-stack headroom");
     assert_eq!(table(result).get::<i64>("value").unwrap(), 42);
 }
+mod support;
+use support::ScriptVmSourceTestExt as _;

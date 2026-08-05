@@ -391,12 +391,25 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
-    for slot in [1]
-        .into_iter()
-        .chain(40..46)
-        .chain(49..55)
-        .chain(57..59)
-        .chain(60..64)
+    let core_and_string = [
+        (1, crate::functions::luau_f_assert::luau_f_assert as *const () as usize),
+        (40, crate::functions::luau_f_type::luau_f_type as *const () as usize),
+        (41, crate::functions::luau_f_byte::luauF_byte as *const () as usize),
+        (42, crate::functions::luau_f_char::luau_f_char as *const () as usize),
+        (43, crate::functions::luau_f_len::luau_f_len as *const () as usize),
+        (44, crate::functions::luau_f_typeof::luau_f_typeof as *const () as usize),
+        (45, crate::functions::luau_f_sub::luau_f_sub as *const () as usize),
+        (57, crate::functions::luau_f_select::luau_f_select as *const () as usize),
+        (58, crate::functions::luau_f_rawlen::luau_f_rawlen as *const () as usize),
+        (62, crate::functions::luau_f_tonumber::luau_f_tonumber as *const () as usize),
+        (63, crate::functions::luau_f_tostring::luau_f_tostring as *const () as usize),
+    ];
+    for (slot, expected) in core_and_string {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in (49..55)
+        .chain(60..62)
         .chain(65..89)
         .chain([90])
         .chain(94..243)

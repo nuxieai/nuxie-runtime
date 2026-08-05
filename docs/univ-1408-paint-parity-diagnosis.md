@@ -248,3 +248,61 @@ predates the mounted-layout/retained-paint repair family on runtime main
 (`6e1eec2a`, `d65b2783`, V29 text-paint mounting, mounted component-list
 child transforms). A remeasure of the product visual suite against
 `6f6191e4` is the decisive next measurement.
+
+## Final localization (2026-08-04): the border family root cause
+
+The refuted H2 was refuted only for a Shape parented directly to the
+Artboard. The product mounts every view under a `LayoutComponent`, and with
+that parent the runtime content-sizes the authored centerline rectangle to
+the layout's solved bounds:
+
+- `layout_border_rectangle_control_size` (new) authors the product's border
+  lowering (`Rectangle 92x60`, `Stroke 4`) under a `LayoutComponent 96x64`
+  and records a **96x64** path — `Shape::controlSize` ->
+  `ParametricPath::controlSize` overwrote the inset rectangle.
+- Replaying that recorded stream through `renderer-replay --mode msaa`
+  yields exactly 624 dark CSS px (2,496 at DPR 2) in a 2px ring flush with
+  the box edge: byte-for-byte the nightly `border-basic` failure signature
+  (DOM/baseline have 4,864; the missing 592 CSS px^2 is the artboard-clipped
+  outer half plus hidden inner half of the mis-centered stroke).
+- The REAL ProductHost stream (captured natively from the failing
+  `border-basic` project snapshot via `ProductHost<RecordingSurface>` at
+  runtime `6f6191e4`) contains the same 96x64 stroke rectangle.
+- Pinned C++ does the same unconditionally:
+  `src/layout_component.cpp:983-1013` (`propagateSizeToChildren` skips only
+  nested layouts, layout-transparent containers, and participants),
+  `src/shapes/shape.cpp:561-579` (non-participant `Shape::controlSize`
+  forwards to the first parametric path), and
+  `src/shapes/parametric_path.cpp:24-33` (`controlSize` sets width/height
+  to the layout size with no scale-type guard).
+- The same probe run at the pre-roll pointer `ae81ae0a` shows the identical
+  resize, so the runtime's content-size behavior did not change across the
+  roll; what changed is the mounted structure/bounds coverage on the
+  product side.
+
+Verdict: the runtime is C++-parity-correct; the border fix belongs in the
+product mount/lowering (the border Shape must not be content-sized — e.g.
+a layout-transparent wrapper — or must author geometry that survives
+`controlSize`). A runtime-side skip would be a deliberate divergence from
+the pin and is not justified.
+
+## Final localization (2026-08-04): the geometry/paint-split family
+
+Native `ProductHost<RecordingSurface>` captures of the real failing
+snapshots (no browser, no GPU) show the displaced backgrounds are already
+in the recorded stream while sibling text draws are correct:
+
+- `paywall-limited-time-pill`: label transform x = 37.596 (= pill x 23.596
+  + paddingLeft 14, correct); background center x = 127.596 instead of
+  150.0 — the fill's left edge lands at 1.19, matching the reported "fill
+  pixels start around CSS x=1.5".
+- `paywall-pro-tip-card`: card background (362x139.9) world top y = -7.47
+  instead of 20; its text children sit at the correct 43.0/62.4.
+- `paywall-product-radio-badge`: badge fill top y = 24.98 versus inspected
+  y = 11 — the reported ~14 px fill/label split.
+
+So this family is also upstream of rasterization: the structural
+translate value rules driving background Shapes in the mounted scene
+resolve different positions than the (correct) solved layout used by text
+and by geometry inspection. The probe makes the remaining bisect
+mechanical.

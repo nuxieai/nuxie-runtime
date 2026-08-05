@@ -657,6 +657,100 @@ fn write_stream(
 
 const FILL_COLOR: u32 = 0xff22_c55e;
 
+/// The product mounts every view as a `LayoutComponent`; the border Shape and
+/// its inset centerline Rectangle are children of that layout. This variant
+/// reproduces that structure so layout size propagation
+/// (`Shape::controlSize` -> `ParametricPath::controlSize`) applies to the
+/// authored rectangle exactly as it would in the product scene.
+fn create_layout_border_scene(
+    width: f32,
+    height: f32,
+    border_width: f32,
+) -> Result<(Scene, nuxie::ArtboardId)> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "UNIV-1408 layout border".into(),
+            width,
+            height,
+            layout_style: None,
+        })?;
+        let layout = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Border View".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width,
+                height,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let shape = tx.create(
+            Parent::Object(layout),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Border Shape".into(),
+                x: width / 2.0,
+                y: height / 2.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new(
+                "Border centerline",
+                (width - border_width).max(0.0),
+                (height - border_width).max(0.0),
+            )),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Border Stroke".into(),
+                thickness: border_width,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Border Color".into(),
+                color: BORDER_COLOR,
+            }),
+        )?;
+        Ok(artboard)
+    })?;
+    Ok((scene, artboard))
+}
+
+#[test]
+#[ignore = "UNIV-1408: measure layout size propagation into the border rectangle"]
+fn layout_border_rectangle_control_size() -> Result<()> {
+    let (mut scene, artboard) = create_layout_border_scene(96.0, 64.0, 4.0)?;
+    let stream = render_scene(&mut scene, artboard)?;
+    let (transform, path, paint) = recorded_draw(&stream, BORDER_COLOR)?;
+    let bounds = path.raw_path.precise_bounds().context("layout border bounds")?;
+    println!(
+        "thickness={} transform={transform:?} path_bounds={bounds:?} width={} height={}",
+        paint.thickness,
+        bounds.max_x - bounds.min_x,
+        bounds.max_y - bounds.min_y,
+    );
+    Ok(())
+}
+
 fn create_filled_border_scene(
     width: f32,
     height: f32,
@@ -750,5 +844,8 @@ fn dump_streams() -> Result<()> {
 
     let (mut scene, artboard) = create_filled_border_scene(96.0, 64.0, 4.0)?;
     write_stream("border_basic_filled", 96, 64, &mut scene, artboard)?;
+
+    let (mut scene, artboard) = create_layout_border_scene(96.0, 64.0, 4.0)?;
+    write_stream("border_basic_layout", 96, 64, &mut scene, artboard)?;
     Ok(())
 }

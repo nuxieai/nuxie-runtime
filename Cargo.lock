@@ -1179,11 +1179,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "nuxie-apple-adapter"
+version = "0.1.0"
+dependencies = [
+ "nuxie-renderer",
+]
+
+[[package]]
 name = "nuxie-audio"
 version = "0.1.0"
 dependencies = [
  "cpal",
  "symphonia",
+]
+
+[[package]]
+name = "nuxie-authoring"
+version = "0.1.0"
+dependencies = [
+ "nuxie",
 ]
 
 [[package]]
@@ -1195,6 +1209,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "nuxie-browser-adapter"
+version = "0.1.0"
+dependencies = [
+ "nuxie-renderer",
 ]
 
 [[package]]
@@ -1228,6 +1249,13 @@ dependencies = [
  "jpeg-decoder",
  "moxcms",
  "png",
+]
+
+[[package]]
+name = "nuxie-product"
+version = "0.1.0"
+dependencies = [
+ "nuxie",
 ]
 
 [[package]]

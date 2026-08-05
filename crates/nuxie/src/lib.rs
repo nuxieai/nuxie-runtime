@@ -47,6 +47,15 @@ mod scripted_listener_action_lifecycle_tests;
 pub use raw_text::{
     RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,
 };
+/// Transitional namespace for the editor-authoring interface.
+///
+/// New authoring callers should depend on `nuxie-authoring`. The crate-root
+/// exports below remain temporarily so existing callers can migrate without a
+/// behavior change; UNIV-1627 removes them after the implementation moves.
+pub mod authoring {
+    pub use super::scene::*;
+}
+// Temporary compatibility exports. Prefer the `nuxie-authoring` crate.
 pub use scene::*;
 #[cfg(feature = "scripting")]
 pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};

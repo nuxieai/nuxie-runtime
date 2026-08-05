@@ -290,13 +290,14 @@ impl TextOutlinePen {
         let font_size = self.scale * TEXT_SHAPE_SCALE_F32;
         if self.transform == Mat2D::IDENTITY {
             // C++ first records HarfBuzz outlines in em units, then maps the
-            // normalized path with the font-size matrix. Preserve its scale-
-            // and-translate operation order here.
+            // normalized path with the font-size matrix through
+            // Mat2D::mapPoints (text.cpp transformInPlace), whose
+            // scale-and-translate lane clang contracts into an FMA.
             let glyph_center = self.center_x - self.x;
             let translation_x = -glyph_center + ((self.x + glyph_center) + self.offset_x);
             return (
-                font_size * x + translation_x,
-                font_size * y + (self.y + self.offset_y),
+                font_size.mul_add(x, translation_x),
+                font_size.mul_add(y, self.y + self.offset_y),
             );
         }
         let point = (self.x + x * font_size, self.y + y * font_size);

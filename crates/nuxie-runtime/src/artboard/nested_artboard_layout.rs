@@ -283,6 +283,13 @@ impl ArtboardInstance {
         }
 
         let first_transfer = !nested.layout_data_transferred;
+        // A child layout generation that was already pending at entry is the
+        // C++ `markHostingLayoutDirty` state for this host: a mid-frame style
+        // write (for example a data-bound gap) has dirtied the transferred
+        // node, and the parent's next solve must re-measure the hug. Only a
+        // refresh below actually consumes it.
+        let hug_generation_pending = nested.transferred_hug_layout_generation.get()
+            != nested.child.runtime_transferred_layout_generation();
         if let Some(intrinsic_size) = transferred_intrinsic_size {
             nested.transferred_hug_size.set(intrinsic_size);
         }
@@ -374,13 +381,19 @@ impl ArtboardInstance {
         if changed {
             nested.child.update_pass();
         }
-        nested
-            .transferred_hug_layout_generation
-            .set(nested.child.runtime_transferred_layout_generation());
         // Record after assigned-root writes and their child update pass. Those
         // writes dirty the transferred root node themselves; only a later
         // child layout generation should emulate C++ `markHostingLayoutDirty`
-        // and request another parent-owned constraint refresh.
+        // and request another parent-owned constraint refresh. A generation
+        // that was already pending at entry is exactly that hosting-dirty
+        // state — when this apply performed no refresh (stale parent bounds
+        // from a cached frame), absorbing it here would skip the parent's
+        // same-frame re-measure of the hug, drawing one frame late.
+        if first_transfer || refresh_constraint_bounds || !hug_generation_pending {
+            nested
+                .transferred_hug_layout_generation
+                .set(nested.child.runtime_transferred_layout_generation());
+        }
         let transfer_key = RuntimeNestedLayoutDataTransferKey {
             parent_layout,
             assigned_bounds: bounds,

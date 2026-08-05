@@ -875,7 +875,10 @@ fn each_luau_vm_has_a_sixteen_mebibyte_memory_ceiling() {
     vm.begin_host_cycle();
 
     let error = vm
-        .eval::<luaur_rt::Value>(r#"return string.rep("x", 32 * 1024 * 1024)"#)
+        .run_source_bytecode::<luaur_rt::Value>(
+            "memory-limit",
+            r#"return string.rep("x", 32 * 1024 * 1024)"#,
+        )
         .unwrap_err();
 
     assert!(

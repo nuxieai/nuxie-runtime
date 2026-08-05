@@ -674,11 +674,7 @@ impl ArtboardInstance {
     }
 
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawableDispatch> {
-        // FL-E5 made the immutable runtime file an occurrence-retained input.
-        // Keep layout measurement on that retained engine state so Text can
-        // shape against the constraints Taffy passes during this solve.
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
-        self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
+        self.draw_commands_with_layout_bounds(graph, self.retained_layout_bounds())
     }
 
     /// Settle pending writes and return visible Shape and Text locals under
@@ -1873,6 +1869,9 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return;
         };
+        // This is the bootstrap that produces Text's first intrinsic bounds,
+        // which are themselves an input to layout. It is deliberately not a
+        // steady-frame fallback: the missing-bounds guard makes it one-shot.
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
         let Some(bounds) = build_static_text_constraint_bounds(
             runtime,
@@ -1889,6 +1888,7 @@ impl ArtboardInstance {
         {
             text.retain_bounds(bounds);
         }
+        crate::layout_node_provider::mark_layout_node_dirty(self, local_id);
     }
 
     pub fn text_caret(
@@ -6859,7 +6859,7 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return BTreeMap::new();
         };
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
+        let layout_bounds = self.retained_layout_bounds();
         list_locals
             .into_iter()
             .map(|list_local| {
@@ -6871,13 +6871,13 @@ impl ArtboardInstance {
                     self.runtime_component_world_transform_with_bounds(
                         host_transform_local,
                         graph,
-                        layout_bounds.as_ref(),
+                        layout_bounds,
                     )
                 } else {
                     let base = self.runtime_component_world_transform_with_bounds(
                         list_local,
                         graph,
-                        layout_bounds.as_ref(),
+                        layout_bounds,
                     );
                     self.component_handle(list_local)
                         .map(|list| {
@@ -8753,10 +8753,10 @@ impl ArtboardInstance {
     pub(crate) fn runtime_parametric_path_layout_control_size(
         &self,
         path_local: usize,
-        graph: &ArtboardGraph,
+        _graph: &ArtboardGraph,
     ) -> Option<(f32, f32)> {
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file())?;
-        let control_size = self.runtime_layout_control_size_for_path(path_local, &layout_bounds)?;
+        let layout_bounds = self.retained_layout_bounds()?;
+        let control_size = self.runtime_layout_control_size_for_path(path_local, layout_bounds)?;
         Some((control_size.width, control_size.height))
     }
 
@@ -10967,11 +10967,7 @@ pub(crate) fn runtime_component_list_item_layout_size(
         return size;
     }
     item.child
-        .runtime_graph()
-        .and_then(|graph| {
-            item.child
-                .runtime_taffy_layout_bounds(graph, item.child.runtime_file())
-        })
+        .retained_layout_bounds()
         .and_then(|bounds| bounds.get(&0).copied())
         .map(|bounds| (bounds.width, bounds.height))
         .unwrap_or((item.child.width, item.child.height))
@@ -12145,9 +12141,11 @@ impl TaffyRuntimeLayoutEngine {
                 let units = self.nested_artboard_layout_axis_units(instance, local, width_axis);
                 if value < 0.0 {
                     Some(
-                        self.nested_artboard_layout_axis_intrinsic_dimension(
+                        self.nested_artboard_layout_axis_retained_or_hug_size(
                             instance, local, width_axis,
                         )
+                        .filter(|value| value.is_finite() && *value >= 0.0)
+                        .map(Dimension::length)
                         .unwrap_or_else(Dimension::auto),
                     )
                 } else {
@@ -12156,9 +12154,40 @@ impl TaffyRuntimeLayoutEngine {
             }
             1 => Some(Dimension::auto()),
             2 => self
-                .nested_artboard_layout_axis_intrinsic_dimension(instance, local, width_axis)
+                .nested_artboard_layout_axis_retained_or_hug_size(instance, local, width_axis)
+                .filter(|value| value.is_finite() && *value >= 0.0)
+                .map(Dimension::length)
                 .or_else(|| Some(Dimension::auto())),
             _ => None,
+        }
+    }
+
+    fn nested_artboard_layout_axis_retained_or_hug_size(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        width_axis: bool,
+    ) -> Option<f32> {
+        let nested = instance.nested_artboards.get(&local)?;
+        if nested.layout_data_transferred {
+            // `takeLayoutData()` has transferred this root node into the
+            // parent. Its assigned Artboard dimensions are the retained Yoga
+            // node size; the child's local root bounds can additionally carry
+            // padding and must not replace that parent-owned measurement.
+            let transferred = nested.transferred_hug_size.get();
+            let retained = if width_axis {
+                transferred.0
+            } else {
+                transferred.1
+            };
+            retained.or_else(|| {
+                self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+            })
+        } else {
+            self.nested_artboard_layout_axis_hug_size(instance, local, width_axis)
+                .or_else(|| {
+                    self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)
+                })
         }
     }
 
@@ -12202,14 +12231,8 @@ impl TaffyRuntimeLayoutEngine {
         }
         let layout_size = nested
             .child
-            .runtime_file()
-            .zip(nested.child.runtime_graph())
-            .and_then(|(runtime, graph)| {
-                nested
-                    .child
-                    .runtime_taffy_layout_bounds(graph, Some(runtime))
-                    .and_then(|bounds| bounds.get(&0).copied())
-            })
+            .retained_layout_bounds()
+            .and_then(|bounds| bounds.get(&0).copied())
             .map(|bounds| {
                 if width_axis {
                     bounds.width
@@ -12234,7 +12257,7 @@ impl TaffyRuntimeLayoutEngine {
         width_axis: bool,
     ) -> Option<f32> {
         let nested = instance.nested_artboards.get(&local)?;
-        nested
+        let value = nested
             .child
             .runtime_file()
             .zip(nested.child.runtime_graph())
@@ -12256,7 +12279,17 @@ impl TaffyRuntimeLayoutEngine {
                 } else {
                     bounds.height
                 }
-            })
+            });
+        if let Some(value) = value.filter(|value| value.is_finite() && *value >= 0.0) {
+            let (mut width, mut height) = nested.transferred_hug_size.get();
+            if width_axis {
+                width = Some(value);
+            } else {
+                height = Some(value);
+            }
+            nested.transferred_hug_size.set((width, height));
+        }
+        value
     }
 
     fn nested_artboard_layout_axis_scale(
@@ -15428,18 +15461,14 @@ impl RuntimeArtboardPathState {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let bounds = if instance.layout_node_owned_by_host {
-                // `Artboard::takeLayoutData()` disables the mounted child's
-                // own layout solve. Draw reads the last parent-owned Yoga
-                // snapshot instead of recomputing the transferred subtree
-                // from live child data binds (`artboard.cpp:1245-1253,
-                // 1332-1341`; `nested_artboard_layout.cpp:24-42`).
-                instance.layout_constraint_bounds.as_deref().cloned()
-            } else {
-                TaffyRuntimeLayoutEngine
-                    .compute_layout(instance, graph, runtime)
-                    .map(|layout| layout.bounds)
-            };
+            // Rebuild only for a published layout generation. Component dirt
+            // alone no longer changes this key, so paint/transform-only frames
+            // reuse the retained cache without entering Taffy. The computed
+            // frame preserves bootstrap and mounted-topology behavior whose
+            // C++ Yoga node is shared across Rust's decomposed artboard graphs.
+            let bounds = instance
+                .runtime_taffy_layout_bounds(graph, runtime)
+                .or_else(|| instance.retained_layout_bounds().cloned());
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
                 bounds: Arc::new(bounds),
@@ -18865,7 +18894,7 @@ impl RuntimeAabb {
 
     fn from_artboard_with_layout(instance: &ArtboardInstance, graph: &ArtboardGraph) -> Self {
         instance
-            .runtime_taffy_layout_bounds(graph, instance.runtime_file())
+            .retained_layout_bounds()
             .and_then(|bounds| bounds.get(&0).copied())
             .or_else(|| instance.runtime_root_artboard_layout_bounds(graph))
             .map(|bounds| Self {
@@ -19030,16 +19059,16 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
     let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+    let width_changed = runtime_layout_component_property_key_for_name("width")
+        .is_some_and(|key| child.set_double_property(0, key, bounds.width));
+    let height_changed = runtime_layout_component_property_key_for_name("height")
+        .is_some_and(|key| child.set_double_property(0, key, bounds.height));
+    if assigned_size_changed
+        || width_changed
+        || height_changed
+        || !child.layout_constraint_bounds_enabled
+    {
         child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
-    if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
-        child.set_double_property(0, width_key, bounds.width);
-    }
-    if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
-        child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())
 }
@@ -19053,21 +19082,19 @@ pub(crate) fn runtime_apply_component_list_item_layout_bounds(
     // the child's own layout constraints, not merely a draw-time frame.
     let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
     let mut changed = assigned_size_changed || !child.layout_constraint_bounds_enabled;
-    if assigned_size_changed && child.layout_constraint_bounds_enabled {
-        // The hosted root is still the child's LayoutComponent owner. Refresh
-        // its retained constraint frame before the same-pass child update so
-        // Artboard::updateRenderPath sees the newly assigned row size, as the
-        // pinned transferred Yoga node does (`artboard_component_list.cpp:
-        // 220-260`; `artboard.cpp:1138-1157`).
-        child.refresh_layout_constraint_bounds();
-    } else {
-        child.enable_layout_constraint_bounds();
-    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         changed |= child.set_double_property(0, width_key, bounds.width);
     }
     if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
         changed |= child.set_double_property(0, height_key, bounds.height);
+    }
+    if changed {
+        // The hosted root is still the child's LayoutComponent owner. Apply
+        // the assigned root properties before the one retained constraint
+        // solve so descendants observe the new row size immediately
+        // (`artboard_component_list.cpp:220-260`;
+        // `artboard.cpp:1138-1157`).
+        child.refresh_layout_constraint_bounds();
     }
     changed
 }

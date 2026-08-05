@@ -341,6 +341,9 @@ impl ArtboardInstance {
                 (transfer_key, nested.child.layout_constraint_bounds.clone()),
             );
         }
+        if changed {
+            self.mark_layout_node_changed(host_local_id);
+        }
         changed
     }
 }

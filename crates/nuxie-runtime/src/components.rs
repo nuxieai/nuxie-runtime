@@ -188,6 +188,7 @@ impl Not for ComponentDirt {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UpdateComponentsReport {
     pub did_update: bool,
+    pub(crate) did_layout: bool,
     pub steps: usize,
     pub updated_locals: Vec<usize>,
     pub max_steps_reached: bool,
@@ -1083,6 +1084,10 @@ impl RuntimeLayoutComponentState {
         self.layout_node_dirty.get()
     }
 
+    pub(crate) fn sync_style(&self) {
+        self.layout_node_dirty.set(false);
+    }
+
     #[cfg(test)]
     pub(crate) fn layout_node_revision(&self) -> u64 {
         self.layout_node_revision.get()
@@ -1097,8 +1102,6 @@ impl RuntimeLayoutComponentState {
     }
 
     pub(crate) fn retain_bounds(&self, x: f32, y: f32, width: f32, height: f32) -> bool {
-        // The delegated solve consumed this retained node's dirty bit.
-        self.layout_node_dirty.set(false);
         self.position_left_changed.set(false);
         self.position_top_changed.set(false);
         self.force_update_layout_bounds.set(false);

@@ -781,6 +781,8 @@
             prepared_epoch: 1,
             path_epoch: 1,
             layout_revision: 1,
+            dirty_layout: BTreeSet::new(),
+            layout_calculation_count: 0,
             text_shape_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
@@ -806,6 +808,7 @@
             render_cache_revision: 0,
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
+            transferred_hug_size: Cell::new((None, None)),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
             data_bind_path_ids: None,
@@ -2148,6 +2151,7 @@
             render_cache_revision: 0,
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
+            transferred_hug_size: Cell::new((None, None)),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
             data_bind_path_ids: None,
@@ -2601,6 +2605,7 @@
                 initial_layout_paint_frame: RefCell::new(Some(
                     RuntimeInitialNestedLayoutPaintFrame::default(),
                 )),
+                transferred_hug_size: Cell::new((None, None)),
                 layout_data_transferred: true,
                 layout_data_transfer_key: Some(RuntimeNestedLayoutDataTransferKey {
                     parent_layout: RuntimeNestedLayoutBoundsCacheKey {
@@ -2857,6 +2862,7 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -2914,6 +2920,7 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -5120,6 +5127,43 @@
     }
 
     #[test]
+    fn update_components_calculates_layout_only_for_precise_dirty_layout_members() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![root, layout], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        for local_id in 0..2 {
+            instance.clear_component_dirt(local_id);
+        }
+        instance.dirty_layout.clear();
+
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 0);
+
+        assert!(instance.mark_layout_node_changed(1));
+        assert_eq!(instance.dirty_layout, BTreeSet::from([1]));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 1);
+        assert!(instance.dirty_layout.is_empty());
+        assert!(
+            !instance
+                .component(1)
+                .unwrap()
+                .concrete
+                .layout
+                .as_ref()
+                .unwrap()
+                .layout_node_is_dirty()
+        );
+
+        assert!(instance.add_dirt(1, ComponentDirt::LAYOUT_STYLE, false));
+        assert_eq!(instance.dirty_layout, BTreeSet::from([1]));
+        instance.update_components();
+        assert_eq!(instance.layout_calculation_count, 2);
+    }
+
+    #[test]
     fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
         let mut layout = synthetic_component(0, 0);
         layout.type_name = "LayoutComponent";
@@ -5469,7 +5513,7 @@
 
     #[test]
     fn layout_revision_tracks_layout_dirt_separately_from_draw_cache_epoch() {
-        let component = synthetic_component(0, 0);
+        let component = synthetic_component_for_type(0, "LayoutComponent");
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
         let initial_layout_revision = instance.layout_revision();
@@ -6001,9 +6045,9 @@
 
     #[test]
     fn nested_layout_bounds_cache_tracks_layout_revision() {
-        let mut host = synthetic_component(0, 0);
-        host.type_name = "NestedArtboardLayout";
-        let mut instance = synthetic_instance(vec![host], vec![0]);
+        let host = synthetic_component_for_type(0, "NestedArtboardLayout");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![host, layout], vec![0, 1]);
         instance.nested_artboards.insert(
             0,
             RuntimeNestedArtboardInstance {
@@ -6016,6 +6060,7 @@
                     crate::draw::RuntimeOccurrenceRenderResources::default(),
                 ),
                 initial_layout_paint_frame: RefCell::new(None),
+                transferred_hug_size: Cell::new((None, None)),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
                 data_bind_path_ids: None,
@@ -6054,7 +6099,7 @@
         );
         assert!(Arc::ptr_eq(&first_bounds, &after_paint.bounds));
 
-        assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
+        assert!(instance.add_dirt(1, ComponentDirt::LAYOUT_STYLE, false));
         let after_layout = instance.runtime_nested_artboard_layout_bounds_frame();
         assert_eq!(
             instance

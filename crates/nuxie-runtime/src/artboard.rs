@@ -507,6 +507,12 @@ pub struct ArtboardInstance {
     pub(crate) prepared_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_revision: u64,
+    /// C++ `Artboard::m_dirtyLayout`: the exact LayoutComponent occurrences
+    /// whose retained style/node state must be synchronized before the next
+    /// layout calculation. Ordinary Components dirt does not enter this set.
+    dirty_layout: BTreeSet<usize>,
+    #[cfg(test)]
+    layout_calculation_count: usize,
     text_shape_revision: u64,
     text_affecting_locals: Vec<bool>,
     // C++ SolidColor mutates its attached RenderPaint when its property dirt
@@ -667,6 +673,9 @@ impl Clone for ArtboardInstance {
             // (`artboard.hpp:548-601`; `artboard.cpp:1038-1057`).
             path_epoch: 1,
             layout_revision: self.layout_revision,
+            dirty_layout: BTreeSet::new(),
+            #[cfg(test)]
+            layout_calculation_count: 0,
             text_shape_revision: self.text_shape_revision,
             text_affecting_locals: self.text_affecting_locals.clone(),
             solid_color_paint_revisions: self.solid_color_paint_revisions.clone(),
@@ -1059,6 +1068,11 @@ impl ArtboardInstance {
         self.layout_constraint_bounds_enabled = source.layout_constraint_bounds_enabled;
         self.layout_constraint_bounds = source.layout_constraint_bounds.clone();
         self.solved_layout_bounds = source.solved_layout_bounds.clone();
+        self.dirty_layout = source.dirty_layout.clone();
+        #[cfg(test)]
+        {
+            self.layout_calculation_count = source.layout_calculation_count;
+        }
         for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 // A transient layout clone is a non-mutating view of this
@@ -2482,6 +2496,9 @@ impl ArtboardInstance {
             prepared_epoch: 1,
             path_epoch: 1,
             layout_revision: 1,
+            dirty_layout: BTreeSet::new(),
+            #[cfg(test)]
+            layout_calculation_count: 0,
             text_shape_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
@@ -2519,7 +2536,7 @@ impl ArtboardInstance {
         Ok(instance)
     }
 
-    fn initialize_root_layout_bounds(&self) {
+    fn initialize_root_layout_bounds(&mut self) {
         let Some(layout) = self
             .component(0)
             .and_then(|component| component.concrete.layout.as_ref())
@@ -2531,6 +2548,8 @@ impl ArtboardInstance {
         // (`src/artboard.cpp:264-273`). Occurrence cloning reruns that same
         // initialize lifecycle.
         layout.retain_bounds(0.0, 0.0, self.width, self.height);
+        layout.mark_layout_node_dirty();
+        self.dirty_layout.insert(0);
     }
 
     fn initialize_path_target_flags(&mut self, graph: &ArtboardGraph) {
@@ -4260,7 +4279,10 @@ impl ArtboardInstance {
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
         self.mark_changed();
-        self.mark_layout_changed();
+        // Artboard inherits LayoutComponent in C++; generated width/height
+        // setters therefore route through LayoutComponent::widthChanged and
+        // heightChanged, which enroll this exact root in m_dirtyLayout.
+        self.mark_layout_node_changed(0);
         // C++ layout settlement adds Path dirt when the solved width or
         // height changes, before LayoutComponent::update rebuilds the
         // Artboard-owned local/world paths
@@ -4299,6 +4321,20 @@ impl ArtboardInstance {
             .as_deref()?
             .get(&local_id)
             .copied()
+    }
+
+    pub(crate) fn retained_layout_bounds(&self) -> Option<&BTreeMap<usize, RuntimeLayoutBounds>> {
+        self.layout_constraint_bounds
+            .as_deref()
+            .or_else(|| self.solved_layout_bounds.as_deref())
+    }
+
+    pub(crate) fn retained_layout_bounds_arc(
+        &self,
+    ) -> Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>> {
+        self.layout_constraint_bounds
+            .clone()
+            .or_else(|| self.solved_layout_bounds.clone())
     }
 
     /// LayoutComponent::worldBounds in this Artboard's coordinate space.
@@ -6068,6 +6104,11 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_layout_resource_dirty_for_local(entry.local_id);
         }
+        if advance.keep_going {
+            // Pinned LayoutComponent::applyInterpolation dirties the exact
+            // retained Yoga node while interpolation is still active.
+            self.mark_layout_node_changed(entry.local_id);
+        }
         advance.keep_going
     }
 
@@ -6489,14 +6530,21 @@ impl ArtboardInstance {
     /// is only a derived fence for the retained layout solve; unrelated paint
     /// preparation is not dirtied.
     pub(crate) fn mark_layout_node_changed(&mut self, local_id: usize) -> bool {
-        let owner_changed = self
+        let Some(layout) = self
             .component(local_id)
             .and_then(|component| component.concrete.layout.as_ref())
-            .is_some_and(|layout| layout.mark_layout_node_dirty());
-        if !owner_changed {
+        else {
+            return false;
+        };
+        let owner_changed = layout.mark_layout_node_dirty();
+        let starts_layout_generation = self.dirty_layout.is_empty();
+        let set_changed = self.dirty_layout.insert(local_id);
+        if !owner_changed && !set_changed {
             return false;
         }
-        self.layout_revision = self.layout_revision.wrapping_add(1);
+        if starts_layout_generation && set_changed {
+            self.layout_revision = self.layout_revision.wrapping_add(1);
+        }
         self.mark_components_dirty();
         true
     }
@@ -6572,7 +6620,7 @@ impl ArtboardInstance {
             }
         }
         self.add_dirt(list_local, ComponentDirt::LAYOUT_STYLE, false)
-            | self.mark_layout_node_changed(list_local)
+            | crate::layout_node_provider::mark_layout_node_dirty(self, list_local)
     }
 
     pub(crate) fn mark_path_changed(&mut self) {
@@ -6673,13 +6721,13 @@ impl ArtboardInstance {
         }
     }
 
-    fn mark_component_list_source_changed(&mut self) {
+    fn mark_component_list_source_changed(&mut self, list_local: usize) {
         // An item-owned write can feed arbitrary bindings on the parent. Until
         // those dependencies are indexed, conservatively invalidate every
         // parent rendering cache that can consume the retained list source.
         self.mark_changed();
         self.mark_path_changed();
-        self.mark_layout_changed();
+        crate::layout_node_provider::mark_layout_node_dirty(self, list_local);
     }
 
     fn mark_draw_order_changed(&mut self) {
@@ -6871,7 +6919,10 @@ impl ArtboardInstance {
         self.runtime_meshes
             .mark_component_dirt(local_id, accumulated);
         if accumulated.contains(ComponentDirt::LAYOUT_STYLE) {
-            self.mark_layout_changed();
+            // LayoutComponent::onDirty routes LayoutStyle dirt back through
+            // markLayoutNodeDirty, publishing this exact owner to Artboard's
+            // dirty-layout set.
+            self.mark_layout_node_changed(local_id);
         }
         if component_dirt_affects_path_epoch(accumulated) {
             if let Some(component) = self.component(local_id) {
@@ -7076,30 +7127,30 @@ impl ArtboardInstance {
         // bounded outer-update sequence into this component walk.
         let mut deferred_nested_opacity_hosts = BTreeSet::new();
         let mut nested_did_update = false;
-        if self
-            .update_components_with_hook_recording(
-                false,
-                script_mode,
-                root_transform,
-                |instance, local_id, dirt, script_mode| {
-                    nested_did_update |= instance.update_nested_artboard_from_host_dirt(
-                        local_id,
-                        dirt,
-                        script_mode,
-                        root_transform,
-                    );
-                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
-                        && instance
-                            .nested_artboards
-                            .get(&local_id)
-                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
-                    {
-                        deferred_nested_opacity_hosts.insert(local_id);
-                    }
-                },
-            )
-            .did_update
-        {
+        let mut layout_did_update = false;
+        let update_report = self.update_components_with_hook_recording(
+            false,
+            script_mode,
+            root_transform,
+            |instance, local_id, dirt, script_mode| {
+                nested_did_update |= instance.update_nested_artboard_from_host_dirt(
+                    local_id,
+                    dirt,
+                    script_mode,
+                    root_transform,
+                );
+                if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                    && instance
+                        .nested_artboards
+                        .get(&local_id)
+                        .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                {
+                    deferred_nested_opacity_hosts.insert(local_id);
+                }
+            },
+        );
+        layout_did_update |= update_report.did_layout;
+        if update_report.did_update {
             did_update = true;
         }
         did_update |= nested_did_update;
@@ -7110,9 +7161,9 @@ impl ArtboardInstance {
                 if !self.joysticks[joystick_index].can_apply_before_update() {
                     self.update_data_binds_for_update_pass(root_transform);
                 }
-                if !self.joysticks[joystick_index].can_apply_before_update()
-                    && self
-                        .update_components_with_hook_recording(
+                if !self.joysticks[joystick_index].can_apply_before_update() {
+                    let update_report =
+                        self.update_components_with_hook_recording(
                             false,
                             script_mode,
                             root_transform,
@@ -7132,42 +7183,40 @@ impl ArtboardInstance {
                                     deferred_nested_opacity_hosts.insert(local_id);
                                 }
                             },
-                        )
-                        .did_update
-                {
-                    did_update = true;
+                        );
+                    layout_did_update |= update_report.did_layout;
+                    if update_report.did_update {
+                        did_update = true;
+                    }
                 }
                 did_update |= nested_did_update;
                 did_update |= self.apply_runtime_joystick_at(joystick_index);
             }
             self.update_data_binds_for_update_pass(root_transform);
             let mut nested_did_update = false;
-            if self
-                .update_components_with_hook_recording(
-                    false,
-                    script_mode,
-                    root_transform,
-                    |instance, local_id, dirt, script_mode| {
-                        nested_did_update |= instance.update_nested_artboard_from_host_dirt(
-                            local_id,
-                            dirt,
-                            script_mode,
-                            root_transform,
-                        );
-                        if dirt.contains(ComponentDirt::RENDER_OPACITY)
-                            && instance
-                                .nested_artboards
-                                .get(&local_id)
-                                .is_some_and(|nested| {
-                                    nested.child.has_dirt(ComponentDirt::COMPONENTS)
-                                })
-                        {
-                            deferred_nested_opacity_hosts.insert(local_id);
-                        }
-                    },
-                )
-                .did_update
-            {
+            let update_report = self.update_components_with_hook_recording(
+                false,
+                script_mode,
+                root_transform,
+                |instance, local_id, dirt, script_mode| {
+                    nested_did_update |= instance.update_nested_artboard_from_host_dirt(
+                        local_id,
+                        dirt,
+                        script_mode,
+                        root_transform,
+                    );
+                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                        && instance
+                            .nested_artboards
+                            .get(&local_id)
+                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                    {
+                        deferred_nested_opacity_hosts.insert(local_id);
+                    }
+                },
+            );
+            layout_did_update |= update_report.did_layout;
+            if update_report.did_update {
                 did_update = true;
             }
             did_update |= nested_did_update;
@@ -7178,6 +7227,38 @@ impl ArtboardInstance {
             // settlement; pushed Core properties remain queue-driven.
             self.update_data_binds_for_update_pass(root_transform);
         }
+        // C++ shares mounted Yoga nodes with the parent, so style callbacks
+        // raised by child/data-bind settlement are visible at the parent's
+        // pre-component sync point. Rust's detached child graphs can publish
+        // those exact members during the component walk above. Consume that
+        // non-empty set once here, before mounted-list bounds are derived;
+        // ordinary component dirt never enters this path.
+        if !self.dirty_layout.is_empty() {
+            let mut nested_did_update = false;
+            let update_report = self.update_components_with_hook_recording(
+                false,
+                script_mode,
+                root_transform,
+                |instance, local_id, dirt, script_mode| {
+                    nested_did_update |= instance.update_nested_artboard_from_host_dirt(
+                        local_id,
+                        dirt,
+                        script_mode,
+                        root_transform,
+                    );
+                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                        && instance
+                            .nested_artboards
+                            .get(&local_id)
+                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                    {
+                        deferred_nested_opacity_hosts.insert(local_id);
+                    }
+                },
+            );
+            layout_did_update |= update_report.did_layout;
+            did_update |= update_report.did_update | nested_did_update;
+        }
         let has_unsettled_component_list_rows =
             self.component_list_locals().into_iter().any(|local_id| {
                 self.component_list_items(local_id).is_some_and(|items| {
@@ -7186,7 +7267,7 @@ impl ArtboardInstance {
                         .any(|item| item.settled_layout_size.get().is_none())
                 })
             });
-        if (!self.suppress_mounted_component_list_layout_updates && did_update)
+        if (!self.suppress_mounted_component_list_layout_updates && layout_did_update)
             || has_unsettled_component_list_rows
         {
             did_update |= self.update_component_list_layout_bounds(root_transform);
@@ -7727,6 +7808,80 @@ impl ArtboardInstance {
         )
     }
 
+    /// C++ `Artboard::syncStyleChanges`: consume only the precise dirty-layout
+    /// membership and solve layout only when that set was non-empty.
+    fn sync_style_changes(
+        &mut self,
+        graph_owner: Option<&(Arc<Vec<ArtboardGraph>>, usize)>,
+    ) -> bool {
+        let dirty_layout = std::mem::take(&mut self.dirty_layout);
+        if dirty_layout.is_empty() {
+            return false;
+        }
+
+        for local_id in &dirty_layout {
+            if let Some(layout) = self
+                .component(*local_id)
+                .and_then(|component| component.concrete.layout.as_ref())
+            {
+                layout.sync_style();
+            }
+        }
+
+        // Taffy reads authored style directly in Rust, so consuming the exact
+        // members above is the style-sync phase. A host-owned root consumes
+        // its style dirt here but receives its solve from the host.
+        let calculates_own_layout =
+            !self.layout_node_owned_by_host && self.layout_constraint_bounds.is_none();
+        // C++ transfers a mounted root into the parent Yoga graph, so the
+        // parent solve also refreshes that child's internal descendants. The
+        // decomposed Rust graphs reproduce that half of the parent solve
+        // against the retained root constraint, still gated by this child's
+        // exact dirty-style membership.
+        let calculates_constrained_layout = self.layout_constraint_bounds.is_some();
+        let calculates_layout = calculates_own_layout || calculates_constrained_layout;
+        #[cfg(test)]
+        if calculates_layout {
+            self.layout_calculation_count += 1;
+        }
+        let calculated_layout_bounds = calculates_layout.then(|| {
+            let (graphs, graph_index) = graph_owner?;
+            self.runtime_taffy_layout_bounds(&graphs[*graph_index], self.runtime_file())
+                .map(Arc::new)
+        });
+        let calculated_layout_bounds = calculated_layout_bounds.flatten();
+        if calculates_layout {
+            self.solved_layout_bounds = calculated_layout_bounds.clone();
+        }
+        if calculates_constrained_layout && calculated_layout_bounds.is_some() {
+            self.layout_constraint_bounds = calculated_layout_bounds.clone();
+        }
+        let layout_bounds = self
+            .layout_constraint_bounds
+            .clone()
+            .or_else(|| calculated_layout_bounds.clone())
+            .or_else(|| self.solved_layout_bounds.clone());
+        if let Some(layout_bounds) = layout_bounds.as_deref() {
+            for (&local_id, &bounds) in layout_bounds {
+                if local_id == 0 && self.layout_node_owned_by_host {
+                    continue;
+                }
+                self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
+            }
+            // The solve above can dirty a Text owner after the pre-guard
+            // enrollment. Mirror `propagateSizeToChildren -> controlSize` by
+            // enrolling that exact second set before component traversal.
+            for text_local in self.runtime_drawables.dirty_text_locals() {
+                self.add_dirt(text_local, ComponentDirt::PATH, false);
+            }
+            if let Some((graphs, graph_index)) = graph_owner {
+                self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);
+                self.control_runtime_layout_joysticks(&graphs[*graph_index], layout_bounds);
+            }
+        }
+        true
+    }
+
     fn update_components_with_hook_recording<F>(
         &mut self,
         record_updated_locals: bool,
@@ -7763,35 +7918,8 @@ impl ArtboardInstance {
             return report;
         }
 
-        // C++ layout propagation settles control sizes before Path::update.
-        // Root occurrences do not use `layout_constraint_bounds` as a durable
-        // nested-layout override, so compute the same solved frame locally for
-        // this dependency traversal. Keep this after the clean-frame return:
-        // an unchanged C++ update does not solve the layout tree.
-        let layout_bounds = self.layout_constraint_bounds.clone().or_else(|| {
-            let (graphs, graph_index) = graph_owner.as_ref()?;
-            self.runtime_taffy_layout_bounds(&graphs[*graph_index], self.runtime_file())
-                .map(Arc::new)
-        });
-        self.solved_layout_bounds = layout_bounds.clone();
-        if let Some(layout_bounds) = layout_bounds.as_deref() {
-            for (&local_id, &bounds) in layout_bounds {
-                if local_id == 0 && self.layout_node_owned_by_host {
-                    continue;
-                }
-                self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
-            }
-            // The solve above can dirty a Text owner after the pre-guard
-            // enrollment. Mirror `propagateSizeToChildren -> controlSize` by
-            // enrolling that exact second set before component traversal.
-            for text_local in self.runtime_drawables.dirty_text_locals() {
-                self.add_dirt(text_local, ComponentDirt::PATH, false);
-            }
-            if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-                self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);
-                self.control_runtime_layout_joysticks(&graphs[*graph_index], layout_bounds);
-            }
-        }
+        report.did_layout = self.sync_style_changes(graph_owner.as_ref());
+        let layout_bounds = self.retained_layout_bounds_arc();
 
         report.did_update = true;
         let max_steps = 100;
@@ -9883,6 +10011,7 @@ fn build_runtime_nested_artboard_instance(
         render_cache_revision: 0,
         render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
         initial_layout_paint_frame: RefCell::new(None),
+        transferred_hug_size: Cell::new((None, None)),
         layout_data_transferred: false,
         layout_data_transfer_key: None,
         data_bind_path_ids,

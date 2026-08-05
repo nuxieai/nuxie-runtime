@@ -3,43 +3,29 @@
 ## C++ → Rust file correspondence
 
 Files: 456
-Status counts: `divergent-by-decision`: 4; `faithful`: 444; `pending`: 8
-Named pending files: 8
-
-### scripted
-
-- `src/scripted/scripted_interpolator.cpp`
-
-### unavailable
-
-- `src/command_queue.cpp`
-- `src/command_server.cpp`
-- `src/lua/lua_scripted_context.cpp`
-- `src/semantic/semantic_data.cpp`
-- `src/semantic/semantic_inference_registry.cpp`
-- `src/semantic/semantic_manager.cpp`
-- `src/semantic/semantic_provider.cpp`
+Status counts: `divergent-by-decision`: 4; `faithful`: 448; `partial`: 4
+Named pending files: 0
 
 ## Rust → C++ attribution
 
-Ledger coverage: 459 Rust files (429 attributed by manifest inversion; 30 classified additions)
-Addition categories: `codegen`: 17; `flowsession-abi`: 7; `retained-render`: 1; `scene-api`: 4; `test-infra`: 1
+Ledger coverage: 484 Rust files (454 attributed by manifest inversion; 30 classified additions)
+Addition categories: `baseline-adaptation`: 4; `codegen`: 17; `mixed-product-host`: 2; `product-authoring`: 1; `product-data`: 1; `product-host`: 2; `product-trust`: 1; `retained-render`: 1; `test-infra`: 1
 
 ## Test correspondence
 
 Files: 157
 Test cases: 1404
-Status counts: `n-a`: 2; `partial`: 31; `pending`: 78; `ported-differential`: 5; `ported-direct`: 41
+Status counts: `n-a`: 2; `partial`: 30; `pending`: 78; `ported-differential`: 5; `ported-direct`: 42
 
 ## Silver corpus
 
 Entries: 252
-Status counts: `divergent`: 102; `exact`: 76; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 30
-Exact ratchet: 76/76 (met)
+Status counts: `divergent`: 101; `exact`: 77; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 30
+Exact ratchet: 77/77 (met)
 
 ## Golden corpus
 
-Entries: 356
+Entries: 363
 
 ## Runtime frame-loop ledger
 

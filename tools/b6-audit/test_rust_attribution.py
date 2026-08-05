@@ -13,7 +13,17 @@ ADDITIONS_HEADER = textwrap.dedent(
     """\
     schema = "nuxie-rust-additions/v1"
     schema_version = 1
-    category_values = ["scene-api", "flowsession-abi", "retained-render", "codegen", "test-infra"]
+    category_values = [
+      "baseline-adaptation",
+      "product-authoring",
+      "product-host",
+      "product-data",
+      "product-trust",
+      "mixed-product-host",
+      "retained-render",
+      "codegen",
+      "test-infra",
+    ]
     """
 )
 
@@ -165,7 +175,7 @@ class RustAttributionCliTest(unittest.TestCase):
                 """
                 [[addition]]
                 path = "crates/nuxie/src/missing.rs"
-                category = "scene-api"
+                category = "product-authoring"
                 """
             ).lstrip()
         )

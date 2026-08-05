@@ -3,6 +3,11 @@
 Pinned oracle: `rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5`,
 `tests/unit_tests/runtime/command_queue_test.cpp` (83 `TEST_CASE`s).
 
+Register status: F3 is **PARTIAL at 79/83** and A6's former “no command
+server” premise is closed. The four remaining cases are the S4-45 blob WATCH
+rows below; Flow-session equivalence is shared-product evidence and is not a
+baseline command-queue gap.
+
 The lane-focused command is:
 
 ```text

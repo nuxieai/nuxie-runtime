@@ -87,6 +87,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: make rust-attribution-gate
 
+      # The boundary test and live workspace check are independent verdicts. This
+      # runs on Ubuntu because it parses every declared dependency table,
+      # including Apple target and optional feature tables, without compiling.
+      - name: Verify pure-runtime dependency boundary
+        if: ${{ !cancelled() }}
+        run: make pure-runtime-boundary-gate
+
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own
   # scorecard evidence, so this job no longer re-runs that floor on a second

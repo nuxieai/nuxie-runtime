@@ -18,6 +18,8 @@ pub enum LuauProtoFlag {
     LPF_NATIVE_FUNCTION = 1 << 2,
     /// function can be inlined
     LPF_INLINABLE = 1 << 3,
+    /// top-level function uses export statements and returns the export table
+    LPF_USES_EXPORT = 1 << 4,
 }
 
 impl LuauProtoFlag {
@@ -25,4 +27,5 @@ impl LuauProtoFlag {
     pub const LPF_NATIVE_COLD: Self = Self::LPF_NATIVE_COLD;
     pub const LPF_NATIVE_FUNCTION: Self = Self::LPF_NATIVE_FUNCTION;
     pub const LPF_INLINABLE: Self = Self::LPF_INLINABLE;
+    pub const LPF_USES_EXPORT: Self = Self::LPF_USES_EXPORT;
 }

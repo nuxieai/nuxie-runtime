@@ -14,24 +14,12 @@ fn get_import_id_2(id0: i32, id1: i32) -> u32 {
 
 impl Compiler {
     pub fn compile_export_table(&mut self) {
-        LUAU_ASSERT!(!self.exported_locals.is_empty() || !self.exported_classes.is_empty());
+        LUAU_ASSERT!(!self.exports.is_empty());
         LUAU_ASSERT!(!self.current_function.is_null());
 
-        let export_local = &mut self.export_table_local as *mut _;
+        self.ensure_export_table(self.current_function as *mut _);
 
-        if !self.locals.contains(&export_local) {
-            let table_reg = self.alloc_reg(self.current_function as *mut _, 1);
-            let hash_size = Compiler::encode_hash_size(
-                (self.exported_locals.len() + self.exported_classes.size()) as u32,
-            );
-
-            unsafe {
-                (*self.bytecode).emit_abc(LuauOpcode::LOP_NEWTABLE, table_reg, hash_size, 0);
-                (*self.bytecode).emit_aux(0);
-            }
-
-            self.push_local(export_local, table_reg, K_DEFAULT_ALLOC_PC);
-        }
+        let export_local = &mut self.exports.export_table_local as *mut _;
 
         let loc_node = self.current_function;
         let table_reg = self.get_local_reg(export_local);
@@ -39,7 +27,7 @@ impl Compiler {
         let table_reg = table_reg as u8;
 
         if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
-            let exported_classes = self.exported_classes.clone();
+            let exported_classes = self.exports.exported_classes.clone();
             for (class_local, class_reg) in exported_classes.iter() {
                 let class_name_ref = unsafe { sref_ast_name((**class_local).name) };
                 let class_name_cid =
@@ -61,6 +49,33 @@ impl Compiler {
                         bytecode_builder_get_string_hash(class_name_ref) as u8,
                     );
                     (*self.bytecode).emit_aux(class_name_cid as u32);
+                }
+            }
+        }
+
+        if luaur_common::FFlag::LuauOptimizeExportTable.get() {
+            let exported_functions = self.exports.exported_functions.clone();
+            for func_local in exported_functions.iter() {
+                let name_ref = unsafe { sref_ast_name((**func_local).name) };
+                let cid = unsafe { (*self.bytecode).add_constant_string(name_ref) };
+                if cid < 0 {
+                    unsafe {
+                        CompileError::raise(
+                            &(**func_local).location,
+                            format_args!("Exceeded constant limit; simplify the code to compile"),
+                        );
+                    }
+                }
+
+                let func_reg = self.get_local_reg(*func_local);
+                unsafe {
+                    (*self.bytecode).emit_abc(
+                        LuauOpcode::LOP_SETTABLEKS,
+                        func_reg as u8,
+                        table_reg,
+                        bytecode_builder_get_string_hash(name_ref) as u8,
+                    );
+                    (*self.bytecode).emit_aux(cid as u32);
                 }
             }
         }

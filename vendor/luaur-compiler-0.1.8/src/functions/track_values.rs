@@ -13,8 +13,34 @@ use luaur_ast::records::ast_local::AstLocal;
 use luaur_ast::records::ast_name::AstName;
 use luaur_ast::records::ast_node::AstNode;
 use luaur_common::records::dense_hash_map::DenseHashMap;
+use luaur_common::records::dense_hash_set::DenseHashSet;
 
 pub fn track_values(
+    globals: &mut DenseHashMap<AstName, Global>,
+    variables: &mut DenseHashMap<*mut AstLocal, Variable>,
+    class_locals: &mut DenseHashMap<AstName, *mut AstLocal>,
+    exported_functions: &mut DenseHashSet<*mut AstLocal>,
+    exported_variables: &mut alloc::vec::Vec<*mut AstLocal>,
+    root: *mut AstNode,
+) {
+    let mut visitor = ValueVisitor::value_visitor_with_exports(
+        globals,
+        variables,
+        class_locals,
+        exported_functions,
+        exported_variables,
+    );
+
+    unsafe {
+        luaur_ast::visit::dispatch_node(root, &mut visitor);
+    }
+
+    *globals = visitor.globals;
+    *variables = visitor.variables;
+    *class_locals = visitor.class_locals;
+}
+
+pub fn track_values_deprecated(
     globals: &mut DenseHashMap<AstName, Global>,
     variables: &mut DenseHashMap<*mut AstLocal, Variable>,
     class_locals: &mut DenseHashMap<AstName, *mut AstLocal>,

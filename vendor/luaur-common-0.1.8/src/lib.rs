@@ -115,6 +115,7 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
     FFlag::LuauNoDuplicateBinaryPrefix.set(false);
     FFlag::LuauOccursCheckForAllBindings.set(value);
+    FFlag::LuauOptimizeExportTable.set(false);
     FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
     FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
     FFlag::LuauPropertyModifierMismatchErrors.set(value);
@@ -367,6 +368,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauNoDuplicateBinaryPrefix);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauOccursCheckForAllBindings);
+    // Compiler/src/Compiler.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauOptimizeExportTable);
     // Analysis/src/Unifier2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauPropagateFreeTypesIntoUnionAndIntersectionBounds);
     // Analysis/src/ConstraintGenerator.cpp

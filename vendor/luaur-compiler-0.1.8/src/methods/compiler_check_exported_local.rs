@@ -15,8 +15,6 @@ impl Compiler {
                         format_args!("'export' may only be applied to top-level statements"),
                     );
                 }
-
-                self.exported_locals.push(local);
             }
         }
     }

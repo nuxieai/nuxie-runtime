@@ -1,6 +1,7 @@
 use crate::records::builtin_ast_types::BuiltinAstTypes;
 use crate::records::compile_options::CompileOptions;
 use crate::records::compiler::Compiler;
+use crate::records::exports::Exports;
 use luaur_ast::records::ast_local::AstLocal;
 use luaur_ast::records::ast_name::AstName;
 use luaur_ast::records::ast_name_table::AstNameTable;
@@ -39,7 +40,7 @@ impl Compiler {
             local_changes: Vec::new(),
             builtin_types: BuiltinAstTypes::new(options.vector_type),
             names: names as *mut AstNameTable,
-            export_table_local: AstLocal::new(
+            exports: Exports::new(AstLocal::new(
                 export_name,
                 Location::default(),
                 core::ptr::null_mut(),
@@ -47,7 +48,7 @@ impl Compiler {
                 0,
                 core::ptr::null_mut(),
                 true,
-            ),
+            )),
             builtins_fold: core::ptr::null(),
             builtins_fold_library_k: false,
             reg_top: 0,
@@ -65,8 +66,6 @@ impl Compiler {
             loops: Vec::new(),
             inline_frames: Vec::new(),
             captures: Vec::new(),
-            exported_locals: Vec::new(),
-            exported_classes: DenseHashMap::new(core::ptr::null_mut()),
         };
 
         compiler.local_stack.reserve(16);

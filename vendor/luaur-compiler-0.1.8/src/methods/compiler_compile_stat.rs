@@ -167,7 +167,10 @@ impl Compiler {
 
             let stat = rtti::ast_node_as::<AstStatLocalFunction>(node as *mut AstNode);
             if !stat.is_null() {
-                if luaur_common::FFlag::LuauExportValueSyntax.get() && (*(*stat).name).is_exported {
+                if luaur_common::FFlag::LuauExportValueSyntax.get()
+                    && !luaur_common::FFlag::LuauOptimizeExportTable.get()
+                    && (*(*stat).name).is_exported
+                {
                     self.check_exported_local((*stat).name, &(*stat).base.base.location);
 
                     self.ensure_export_table(stat as *mut AstNode);
@@ -199,9 +202,6 @@ impl Compiler {
                     let var = self.alloc_reg(stat as *mut AstNode, 1);
 
                     self.push_local((*stat).name, var, !0u32);
-                    if luaur_common::FFlag::LuauExportValueSyntax.get() {
-                        self.check_exported_local((*stat).name, &(*stat).base.base.location);
-                    }
                     self.compile_expr_function((*stat).func, var);
 
                     // We *have* to pushLocal before compiling the function (it may refer

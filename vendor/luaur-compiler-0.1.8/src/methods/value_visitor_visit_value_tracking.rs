@@ -37,6 +37,16 @@ impl ValueVisitor {
                     .unwrap_or(&core::ptr::null_mut());
                 self.variables.get_or_insert(var_ptr).init = core::ptr::null_mut();
             }
+
+            if luaur_common::FFlag::LuauOptimizeExportTable.get()
+                && !self.exported_variables.is_null()
+            {
+                for local in node_ref.vars.as_slice() {
+                    if (**local).is_exported {
+                        (*self.exported_variables).push(*local);
+                    }
+                }
+            }
         }
 
         true

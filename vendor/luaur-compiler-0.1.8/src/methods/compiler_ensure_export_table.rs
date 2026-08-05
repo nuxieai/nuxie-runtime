@@ -7,7 +7,9 @@ const K_DEFAULT_ALLOC_PC: u32 = !0u32;
 
 impl Compiler {
     pub fn ensure_export_table(&mut self, node: *mut AstNode) {
-        let export_local = &mut self.export_table_local as *mut _;
+        self.exports.has_exports = true;
+
+        let export_local = &mut self.exports.export_table_local as *mut _;
         if self.locals.contains(&export_local) {
             return;
         }
@@ -16,13 +18,24 @@ impl Compiler {
 
         let table_reg = self.alloc_reg(node, 1);
         unsafe {
-            (*self.bytecode).emit_abc(
-                LuauOpcode::LOP_NEWTABLE,
-                table_reg,
-                Compiler::encode_hash_size(0),
-                0,
-            );
-            (*self.bytecode).emit_aux(0);
+            if luaur_common::FFlag::LuauOptimizeExportTable.get()
+                && self.exports.exported_table_cid != -1
+                && self.exports.exported_table_cid < 32768
+            {
+                (*self.bytecode).emit_ad(
+                    LuauOpcode::LOP_DUPTABLE,
+                    table_reg,
+                    self.exports.exported_table_cid as i16,
+                );
+            } else {
+                (*self.bytecode).emit_abc(
+                    LuauOpcode::LOP_NEWTABLE,
+                    table_reg,
+                    Compiler::encode_hash_size(0),
+                    0,
+                );
+                (*self.bytecode).emit_aux(0);
+            }
         }
 
         self.push_local(export_local, table_reg, K_DEFAULT_ALLOC_PC);

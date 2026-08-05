@@ -56,8 +56,14 @@ impl Compiler {
 
             for i in 0..stat_ref.vars.size {
                 let local = *stat_ref.vars.data.add(i);
+                let local_variable = self.variables.find(&local).copied().unwrap_or_default();
 
-                if luaur_common::FFlag::LuauExportValueSyntax.get() && (*local).is_exported {
+                if luaur_common::FFlag::LuauExportValueSyntax.get()
+                    && (*local).is_exported
+                    && (!luaur_common::FFlag::LuauOptimizeExportTable.get()
+                        || !local_variable.constant
+                        || self.exports.exported_table_cid == -1)
+                {
                     self.ensure_export_table(stat as *mut AstNode);
 
                     let name_ref = sref_ast_name((*local).name);

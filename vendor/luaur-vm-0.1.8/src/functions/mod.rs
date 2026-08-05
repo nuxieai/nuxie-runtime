@@ -556,6 +556,7 @@ pub mod lua_tolstringatom;
 pub mod lua_tonumberx;
 pub mod lua_topointer;
 pub mod lua_tostringatom;
+pub mod lua_usesexport;
 pub mod lua_totalbytes;
 pub mod lua_tothread;
 pub mod lua_tounsignedx;

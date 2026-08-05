@@ -13,6 +13,7 @@ pub mod compiler_alloc_reg;
 pub mod compiler_always_terminates;
 pub mod compiler_are_locals_captured;
 pub mod compiler_are_locals_redundant;
+pub mod compiler_build_export_table_shape;
 pub mod compiler_at_top_level;
 pub mod compiler_can_import;
 pub mod compiler_can_import_chain;

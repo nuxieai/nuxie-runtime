@@ -40,9 +40,9 @@ FEATURE_ROWS = {
         "F5: keyboard listener runtime is absent.",
     ),
     "src/semantic/semantic_manager.cpp": (
-        "partial",
+        "ported",
         "crates/nuxie-runtime/src/semantic_manager.rs",
-        "SEMRES: nested focus and Simpsons are exact; data_binding_lists matches Selected propagation, removals, and all post-action diffs, but four initial mounted Text bounds and snapshot-adapted generic bounds dirt keep the row partial (SEMRES-report.md).",
+        "FTAIL: nested focus, Simpsons, and the three-sample data_binding_lists semantic projection are exact. Runtime component settlement journals owner WorldTransform/Path dirt and the retained tree consumes it once per synchronization, replacing the former snapshot-only generic refresh.",
     ),
     "src/lua/lua_promise.cpp": (
         "ported",
@@ -264,9 +264,9 @@ for _path, _module in {
     )
 
 FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
-    "partial",
+    "ported",
     "crates/nuxie-runtime/src/semantic_data.rs",
-    "SEMRES: data_binding_lists now matches Selected propagation, removals, hierarchy patches, and all post-action diffs; four initial mounted Text bounds keep the full differential red, and generic bounds dirt remains snapshot-adapted rather than owner-pushed (SEMRES-report.md).",
+    "FTAIL closes the SEMRES remainder: data_binding_lists is exact across the initial and action frames, including four glyph-shaped mounted Text bounds, and generic owner WorldTransform/Path settlement now pushes one-shot semantic bounds dirt (text.cpp:534-615,1154-1233; semantic_data.cpp:273-293,501-532).",
 )
 FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
     "ported",
@@ -274,9 +274,9 @@ FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
     "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds (SEMRES-report.md).",
 )
 FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
-    "partial",
+    "ported",
     "crates/nuxie-runtime/src/semantic_provider.rs",
-    "SEMRES: nested focus and Simpsons provider/root/pre-layout bounds are exact; four initial mounted Text bounds and the remaining owner-pushed generic bounds-dirt port keep the provider family partial (SEMRES-report.md).",
+    "FTAIL: provider/root/pre-layout bounds remain exact and data_binding_lists now includes exact initial glyph-shaped Text bounds. Semantic reads prepare retained text geometry before objectWorldBounds and generic owner dirt refreshes bounds after component settlement.",
 )
 
 for _path in {
@@ -285,9 +285,9 @@ for _path in {
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
 
 FEATURE_ROWS["src/lua/lua_scripted_context.cpp"] = (
-    "absent",
-    "",
-    "F7/F3F6 audit: a partial ScriptedContext method surface exists, but pinned canvas/features and full ScriptedObject-backed markNeedsUpdate/lifecycle semantics remain absent. LT-2 commit 7f486955 is not on current origin/main and addresses lua_properties rather than this residue, so the coherent binding remains unpromoted.",
+    "partial",
+    "crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/gpu_canvas.rs",
+    "FTAIL partial promotion at pinned 4ac7b327: ScriptedContext exposes the complete method-name surface, a readonly conservative headless features table, and independent optional gpuCanvas descriptors, alongside the retained viewModel/dataContext, image/blob/audio, shader, decodeImage, and lifetime behavior. F7 retains the residue: Canvas 2D is deliberately out of scope behind the named `unsupported: scripted-context-canvas binding is unavailable` diagnostic with no importable fixture reaching canvas(), and component-derived ScriptedObject owners still need owner-specific markNeedsUpdate overrides.",
 )
 
 FEATURE_ROWS.update(
@@ -505,13 +505,10 @@ def check_manifest(
     duplicates = sorted(path for path, count in path_counts.items() if count > 1)
     if duplicates:
         raise ValueError(f"duplicate manifest rows: {', '.join(duplicates)}")
-    declared = set(path_counts)
-    missing = sorted(upstream - declared)
-    if missing:
-        raise ValueError(f"missing manifest rows: {', '.join(missing)}")
-    stale = sorted(declared - upstream)
-    if stale:
-        raise ValueError(f"stale manifest rows: {', '.join(stale)}")
+    # Ref first: a checkout at the wrong ref makes every row difference below
+    # look like manifest drift, so reporting "missing manifest rows" for files
+    # that merely exist at a different revision sends the reader hunting the
+    # wrong bug. Compare the refs while the message can still name the cause.
     if upstream_ref is not None:
         if not isinstance(manifest_ref, str):
             raise ValueError("manifest is missing upstream_ref")
@@ -519,6 +516,13 @@ def check_manifest(
             raise ValueError(
                 f"upstream ref mismatch: manifest {manifest_ref}, checkout {upstream_ref}"
             )
+    declared = set(path_counts)
+    missing = sorted(upstream - declared)
+    if missing:
+        raise ValueError(f"missing manifest rows: {', '.join(missing)}")
+    stale = sorted(declared - upstream)
+    if stale:
+        raise ValueError(f"stale manifest rows: {', '.join(stale)}")
     for row in rows:
         for field in ("upstream", "status", "rust_module", "note"):
             if field not in row:

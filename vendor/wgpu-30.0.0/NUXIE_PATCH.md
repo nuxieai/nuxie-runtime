@@ -12,6 +12,17 @@ sources. Their normalized manifests point to the same vendored HAL so backend
 features cannot accidentally enable a second registry copy. Every package
 retains its upstream MIT and Apache-2.0 license files.
 
+Every vendored wgpu manifest — these six plus `../wgpu-hal-30.0.0` — also ends
+in an empty `[workspace]` table. These packages are excluded from the root
+workspace and built on their own via `--manifest-path` (see
+`renderer-wgpu-backend-check`), so cargo otherwise searches upward for a
+workspace root. From a git worktree rooted inside the main checkout
+(`.claude/worktrees/<name>`) that search walks past the worktree's own root,
+which excludes them, into the parent checkout's `Cargo.toml`, which does not —
+and cargo then rejects the mismatch, breaking `cargo fmt --all` and every
+`--manifest-path` check run from a worktree. The empty table terminates the
+search at the package itself, which is what each of these already was.
+
 Provenance:
 
 - Package: crates.io `wgpu` 30.0.0
@@ -21,7 +32,9 @@ Provenance:
   present `GpuError` values. Rejected promises and real errors retain their
   upstream behavior.
 - Upstream issue: https://github.com/wasm-bindgen/wasm-bindgen/issues/5234
-- Distribution-manifest wiring SHA-256: `693f49693094a63d258bf151bb462f1345a37bd1720e828c427c79edc874791a`
+- Distribution-manifest wiring SHA-256: `6467ef6c7710d213551530bdbb4a82ed200a46810dcb920d7ff9309b6c9e2ecc`
+  (was `693f49693094a63d258bf151bb462f1345a37bd1720e828c427c79edc874791a`
+  before the empty `[workspace]` tables described above)
 - Direct-crate test lock SHA-256: `3f2d79fa13fcedee842d5ca987245d8e01025469bf119c193197b6236c8ccd48`
 
 The wiring hash is the SHA-256 of the ordinary `shasum -a 256` output, in

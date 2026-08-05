@@ -1,40 +1,40 @@
-struct ag {
+struct cg {
     c2_: array<vec4<u32>>,
 }
 
-struct Zf {
+struct bg {
     c2_: array<vec4<u32>>,
 }
 
-struct He {
+struct Je {
     c2_: array<vec2<u32>>,
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
-struct Ie {
+struct Ke {
     c2_: array<vec4<f32>>,
 }
 
@@ -52,27 +52,27 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
-@id(2) override Yg: bool = true;
+@id(0) override Yg: bool = true;
+@id(2) override ah: bool = true;
 
 @group(0) @binding(7)
 var LC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> ED: ag;
+var<storage> ED: cg;
 @group(0) @binding(2)
-var<storage> PB: Zf;
+var<storage> PB: bg;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> UB_1: vec4<f32>;
 var<private> VB_1: vec4<f32>;
 @group(0) @binding(3)
-var<storage> AD: He;
+var<storage> AD: Je;
 @group(0) @binding(0)
 var<uniform> n: CC;
 var<private> U1_: vec2<f32>;
 var<private> e2_: f32;
 @group(0) @binding(4)
-var<storage> RB: Ie;
+var<storage> RB: Ke;
 var<private> f1_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(9)
@@ -379,7 +379,7 @@ fn main_1() {
     let _e429 = local;
     let _e431 = AD.c2_[_e429];
     let _e433 = (_e431.x & 15u);
-    if Wg {
+    if Yg {
         let _e434 = (_e433 == 0u);
         if _e434 {
             phi_2267_ = _e431.y;
@@ -402,12 +402,12 @@ fn main_1() {
         let _e451 = phi_2269_;
         U1_[0u] = _e451;
     }
-    if Yg {
+    if ah {
         e2_ = f32(((_e431.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e433 == 1u) {
         let _e459 = unpack4x8unorm(_e431.y);
-        if Yg {
+        if ah {
             phi_2271_ = _e459;
         } else {
             let _e462 = (_e459.xyz * _e459.w);
@@ -418,7 +418,7 @@ fn main_1() {
         let _e482 = phi_2271_;
         f1_ = _e482;
     } else {
-        if (Wg && (_e433 == 0u)) {
+        if (Yg && (_e433 == 0u)) {
             let _e486 = (_e431.x >> bitcast<u32>(16i));
             let _e488 = n.Z5_;
             if (_e486 == 0u) {
@@ -457,8 +457,8 @@ fn main_1() {
         }
     }
     if _e426 {
-        let _e547 = n.df;
-        let _e549 = n.ef;
+        let _e547 = n.ff;
+        let _e549 = n.gf;
         let _e557 = vec4<f32>(((_e424.x * _e547) - 1f), ((_e424.y * _e549) - sign(_e549)), 0f, 1f);
         phi_2284_ = vec4<f32>(_e557.x, _e557.y, (1f - (f32(_e422) * 0.000061035156f)), _e557.w);
     } else {

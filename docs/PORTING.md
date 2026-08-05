@@ -711,18 +711,14 @@ both runtimes) finds the weird interleavings automatically.
 
 ### 6.3 The tripwire / fence culture
 
-The failure mode is *you* — V1 spent 94% of its map pinning data-binding edge
-cases while nothing rendered. Stop and return to the milestone queue if any fire
-(`.claude/commands/goal.md`): three commits on one C++ behavior family with no
+The failure mode is *you* — the first porting attempt spent 94% of its map
+pinning data-binding edge cases while nothing rendered. Stop and return to the
+work queue if any of these tripwires fire: three commits on one C++ behavior family with no
 corpus file changing status; writing a doc that enumerates C++ cases or a test
 for behavior no corpus file exercises; a commit message that cannot name a
 milestone tag; extending the frozen contract suite; or `exact-segments`
 unmoved in ~10 commits. Perfectionism about one behavior is scope failure, not
 rigor — shipped-and-diffed beats proven-in-isolation.
-
-The full command reference (session loop, porting method, perf rules, thread
-protocol) is `.claude/commands/goal.md` — this section summarizes it, it does not
-replace it.
 
 ---
 

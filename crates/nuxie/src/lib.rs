@@ -7969,8 +7969,8 @@ mod external_image_asset_tests {
             .expect("FileAsset schema definition")
             .properties
             .iter()
-            .find(|property| property.name == "fileAssetId")
-            .expect("FileAsset fileAssetId property")
+            .find(|property| property.name == "assetId")
+            .expect("FileAsset assetId property")
             .key
             .int;
         let runtime = RuntimeFile::from_authoring_records(vec![

@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 var<private> x6_1: vec4<f32>;
@@ -27,7 +27,7 @@ var<private> y6_1: vec4<f32>;
 var<private> L4_1: vec4<f32>;
 var<private> F7_1: u32;
 var<private> C5_1: vec3<f32>;
-var<private> Hg: vec4<u32>;
+var<private> Jg: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> n: CC;
 
@@ -308,7 +308,7 @@ fn main_1() {
         phi_1020_ = vec4<u32>(_e323.x, _e323.y, bitcast<u32>((_e308 - (floor((_e308 / 6.2831855f)) * 6.2831855f))), _e323.w);
     }
     let _e347 = phi_1020_;
-    Hg = vec4<u32>(_e347.x, _e347.y, _e347.z, _e131);
+    Jg = vec4<u32>(_e347.x, _e347.y, _e347.z, _e131);
     return;
 }
 
@@ -320,6 +320,6 @@ fn main(@location(0) x6_: vec4<f32>, @location(1) y6_: vec4<f32>, @location(2) L
     F7_1 = F7_;
     C5_1 = C5_;
     main_1();
-    let _e11 = Hg;
+    let _e11 = Jg;
     return _e11;
 }

@@ -31,7 +31,16 @@ local include_dirs = {
 local harfbuzz = first_dir(dep_cache .. '/*/harfbuzz-*/src')
 local sheenbidi = first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
 local yoga = first_dir(dep_cache .. '/*/yoga-*')
-local miniaudio = first_dir(dep_cache .. '/*/miniaudio-*')
+-- Upstream fetches dependencies through build/dependency.lua's
+-- `dependency.github`, which clones to dependencies/<project>_<tag>. The
+-- legacy dependencies/<host>/cache/<hash>/ tree only survives in checkouts
+-- that predate that migration, and it holds pre-migration tags there
+-- (miniaudio-rive_changes_4 against the pin's rive_changes_5). Prefer the
+-- current layout so a fresh checkout -- CI, or any clean clone -- resolves the
+-- same headers the pinned librive was built against; keep the legacy cache as
+-- a fallback for older local checkouts.
+local miniaudio = first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*')
+    or first_dir(dep_cache .. '/*/miniaudio-*')
 local luau = first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
 local libhydrogen = first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
 
@@ -46,6 +55,17 @@ if yoga then
 end
 if miniaudio then
     table.insert(include_dirs, miniaudio)
+elseif with_audio then
+    -- Silently dropping the include dir turns a missing dependency into
+    -- "'miniaudio.h' file not found" from deep inside a rive header. Name the
+    -- real cause and the paths searched.
+    error(
+        'audio probe requires miniaudio headers; searched '
+            .. rive_runtime
+            .. '/dependencies/rive-app_miniaudio_* and '
+            .. dep_cache
+            .. '/*/miniaudio-*'
+    )
 end
 if with_scripting then
     table.insert(include_dirs, rive_runtime .. '/scripting')

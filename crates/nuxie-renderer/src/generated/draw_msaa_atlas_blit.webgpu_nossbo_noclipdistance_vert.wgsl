@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -37,8 +37,8 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
-@id(2) override Yg: bool = true;
+@id(0) override Yg: bool = true;
+@id(2) override ah: bool = true;
 
 @group(0) @binding(2)
 var PB: texture_2d<u32>;
@@ -78,11 +78,11 @@ fn main_1() {
     let _e52 = textureLoad(PB, vec2<i32>(bitcast<i32>((_e45 & 127u)), bitcast<i32>((_e45 >> bitcast<u32>(7i)))), 0i);
     let _e54 = _e40.xy;
     let _e56 = bitcast<vec3<f32>>(_e52.yzw);
-    let _e62 = n.zg;
+    let _e62 = n.Bg;
     C2_ = (((_e54 * _e56.x) + _e56.yz) * _e62);
     let _e70 = textureLoad(AD, vec2<i32>(bitcast<i32>((_e42 & 127u)), bitcast<i32>((_e43 >> bitcast<u32>(7i)))), 0i);
     let _e72 = (_e70.x & 15u);
-    if Wg {
+    if Yg {
         let _e73 = (_e72 == 0u);
         if _e73 {
             phi_631_ = _e70.y;
@@ -105,12 +105,12 @@ fn main_1() {
         let _e90 = phi_633_;
         I3_ = _e90;
     }
-    if Yg {
+    if ah {
         e2_ = f32(((_e70.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e72 == 1u) {
         let _e151 = unpack4x8unorm(_e70.y);
-        if Yg {
+        if ah {
             phi_634_ = _e151;
         } else {
             let _e154 = (_e151.xyz * _e151.w);
@@ -146,8 +146,8 @@ fn main_1() {
             f1_ = vec4<f32>(_e120.x, _e120.y, bitcast<f32>(_e70.y), (-2f - _e117.z));
         }
     }
-    let _e176 = n.df;
-    let _e178 = n.ef;
+    let _e176 = n.ff;
+    let _e178 = n.gf;
     let _e186 = vec4<f32>(((_e40.x * _e176) - 1f), ((_e40.y * _e178) - sign(_e178)), 0f, 1f);
     unnamed.gl_Position = vec4<f32>(_e186.x, _e186.y, (1f - (f32(_e52.x) * 0.000061035156f)), _e186.w);
     return;

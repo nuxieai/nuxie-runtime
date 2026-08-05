@@ -36,12 +36,13 @@ These closed register row #H5 and emptied `POST_AUDIT_UNAUDITED` in
 per-verdict and per-cluster tables below are the frozen `d788e8ec` sweep and
 are deliberately not restated.
 
-One finding needs an owner it does not have: B6-0455 records that the C++
+Two findings surfaced by this sweep have owners: B6-0455's absent
 `ParticipantAnimation` lifecycle (`cascadeLayoutStyle`, `advanceComponent`,
-`applyInterpolation`) has no Rust counterpart, because layout animation state
-is built only for types that are-a `LayoutComponent`. It is filed as a
-DIVERGENT note rather than a TRACKED-GAP because no F/A/C/RB register row
-covers participant layout animation today.
+`applyInterpolation` — layout animation state is built only for types that
+are-a `LayoutComponent`, so participants snap instead of interpolating) is
+register row F15 / UNIV-1603; B6-0453/0454's missing layout-dirty pushes were
+fixed same-day (UNIV-1604) and those records are restated post-fix. B6-0455
+stays DIVERGENT on its own mutation-gated mechanisms rather than TRACKED-GAP.
 
 ## Final verdict totals
 

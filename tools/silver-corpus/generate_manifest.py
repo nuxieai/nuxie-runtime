@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -2711,7 +2712,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rive-runtime-dir",
         type=Path,
-        default=Path("/Users/levi/dev/oss/rive-runtime"),
+        default=Path(
+            os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime")
+        ),
     )
     parser.add_argument("--output", type=Path, default=Path("silver-corpus.toml"))
     parser.add_argument("--check", action="store_true")

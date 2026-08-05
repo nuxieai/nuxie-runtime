@@ -10,6 +10,19 @@ on:
 permissions:
   contents: read
 
+# Hosted macOS capacity is far below the demand of every push and PR sync
+# queueing ~6 macOS jobs each. GitHub silently cancels any job still queued
+# after 24 hours (conclusion flips to `cancelled` with no log), which is how
+# the trusted golden-compare gate stopped reporting on main -- the 9684cdf7
+# divergence landed unseen exactly this way. Collapse superseded runs instead
+# of queueing them: on branches and PRs a newer sync cancels the in-flight
+# run; on main an in-flight run always finishes (its per-commit gate evidence
+# is load-bearing) and a newer push only replaces the one *pending* run,
+# which then reports an explicit `cancelled` rather than expiring silently.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   # Current sync-pin runtime/golden/perf candidate. The renderer-golden job
   # overrides this with the historical renderer-port oracle revision that
@@ -78,6 +91,11 @@ jobs:
   parity-runtime-evidence:
     name: Parity runtime floor evidence
     runs-on: macos-14
+    # macOS timeouts on this and the jobs below are hang guards only, set at
+    # 2-3x the observed worst-case duration. A wedged job that holds one of
+    # the few hosted macOS slots for the 6-hour default pushes the shared
+    # queue toward GitHub's silent 24-hour expiry cancellation.
+    timeout-minutes: 180
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -204,6 +222,7 @@ jobs:
   browser-renderer:
     name: Browser WebGPU
     runs-on: macos-14
+    timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -248,6 +267,9 @@ jobs:
   renderer-golden:
     name: Renderer pixel golden
     runs-on: macos-14
+    # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
+    # bootstrap builds from depot_tools and needs the extra headroom.
+    timeout-minutes: 300
     env:
       RUSTUP_TOOLCHAIN: stable
       # Do not relabel the checked-in renderer-port Dawn references. Advancing this
@@ -477,6 +499,7 @@ jobs:
   perf-gate:
     name: Hot-loop performance gate
     runs-on: macos-14
+    timeout-minutes: 90
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:

@@ -28,6 +28,10 @@ jobs:
   golden-compare:
     name: Golden compare
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
+    # Hang guard at >2x the observed worst case (~51 min hosted). This gate
+    # must always end in a real conclusion; see the concurrency note in
+    # ci.yml for the 24-hour queue-expiry failure mode it pairs with.
+    timeout-minutes: 120
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:
@@ -84,6 +88,7 @@ jobs:
   capi-smoke:
     name: C ABI smoke test
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
+    timeout-minutes: 30
     env:
       RUSTUP_TOOLCHAIN: stable
     defaults:

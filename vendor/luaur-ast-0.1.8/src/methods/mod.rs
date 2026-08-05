@@ -400,6 +400,7 @@ pub mod parser_parse_call_list;
 pub mod parser_parse_char_array;
 pub mod parser_parse_chunk;
 pub mod parser_parse_class_stat;
+pub mod parser_parse_class_ref_expr;
 pub mod parser_parse_compound_assignment;
 pub mod parser_parse_compound_op;
 pub mod parser_parse_continue;

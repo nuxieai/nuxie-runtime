@@ -14,6 +14,9 @@ pub(crate) unsafe fn traverseclosure(g: *mut global_State, cl: *mut Closure) {
     if (*cl).isC != 0 {
         // ManuallyDrop is repr(transparent); upvals/uprefs are C flexible arrays
         let c = core::ptr::addr_of_mut!((*cl).inner.c) as *mut CClosure;
+        if luaur_common::FFlag::LuauManagedDebugNames.get() && !(*c).debugname.is_null() {
+            crate::stringmark!((*c).debugname);
+        }
         let upvals = core::ptr::addr_of_mut!((*c).upvals) as *mut TValue;
         for i in 0..(*cl).nupvalues as usize {
             // mark its upvalues

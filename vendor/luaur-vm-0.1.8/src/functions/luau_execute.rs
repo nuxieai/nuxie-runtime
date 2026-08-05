@@ -27,6 +27,7 @@ use crate::functions::lua_h_resizearray::lua_h_resizearray;
 use crate::functions::lua_h_setstr::lua_h_setstr as luaH_setstr;
 use crate::functions::lua_o_rawequal_obj::luaO_rawequalObj;
 use crate::functions::lua_r_addclassmember::lua_r_addclassmember;
+use crate::functions::lua_r_inheritclass::lua_r_inheritclass;
 use crate::functions::lua_t_gettmbyobj::lua_t_gettmbyobj;
 use crate::functions::lua_v_call_tm::lua_v_call_tm;
 use crate::functions::lua_v_concat::lua_v_concat;
@@ -84,6 +85,7 @@ use crate::macros::objectvalue::objectvalue;
 use crate::macros::pvalue::pvalue;
 use crate::macros::setbvalue::setbvalue;
 use crate::macros::setclvalue::setclvalue;
+use crate::macros::setclassvalue::setclassvalue;
 use crate::macros::sethvalue::sethvalue;
 use crate::macros::setnilvalue::setnilvalue;
 use crate::macros::setnvalue::setnvalue;
@@ -96,6 +98,7 @@ use crate::macros::setvvalue::setvvalue;
 use crate::macros::sizenode::sizenode;
 use crate::macros::tsvalue::tsvalue;
 use crate::macros::ttisboolean::ttisboolean;
+use crate::macros::ttisclass::ttisclass;
 use crate::macros::ttisfunction::ttisfunction;
 use crate::macros::ttisnil::ttisnil;
 use crate::macros::ttisnumber::ttisnumber;
@@ -4554,6 +4557,34 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     }
 
                     VM_ASSERT_PC!(pc, L, cl);
+                    continue 'dispatch;
+                }
+                LuauOpcode::LOP_NEWCLASS => {
+                    let insn = *pc;
+                    pc = pc.add(1);
+                    let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
+                    let super_ = LUAU_INSN_B!(insn) as u8;
+                    let aux = *pc;
+                    pc = pc.add(1);
+                    let kv = VM_KV!(aux, L, cl, k) as *mut TValue;
+
+                    setobj_2_s!(L, ra, kv as *const TValue);
+                    let new_class = &mut **classvalue!(ra as *const TValue) as *mut LuauClass;
+
+                    if super_ != u8::MAX {
+                        (*(*L).ci).context.savedpc = pc;
+                        let rb = VM_REG!(super_ as u32, L, base) as *mut TValue;
+                        if !ttisclass!(rb as *const TValue) {
+                            luaG_typeerrorL(L, rb as *const TValue, c"extend".as_ptr());
+                        }
+                        let inherited = lua_r_inheritclass(
+                            L,
+                            new_class,
+                            &mut **classvalue!(rb as *const TValue) as *mut LuauClass,
+                        );
+                        setclassvalue!(L, ra, inherited);
+                    }
+
                     continue 'dispatch;
                 }
 

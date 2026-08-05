@@ -729,6 +729,10 @@ impl<'a> Printer<'a> {
                 let name =
                     unsafe { core::ffi::CStr::from_ptr((*c.name).name.value).to_string_lossy() };
                 self.writer.identifier(&name);
+                if !c.super_.is_null() {
+                    self.writer.keyword("extends");
+                    self.visualize_ast_expr(c.super_);
+                }
                 for member in unsafe { crate::records::ast_array::AstArray::iter(&c.members) } {
                     match member {
                         Variant2::V0(prop) => {

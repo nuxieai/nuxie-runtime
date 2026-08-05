@@ -625,11 +625,17 @@ impl<'a> BytecodeGraphParser<'a> {
                 }
 
                 LuauOpcode::LOP_NEWCLASSMEMBER => {
+                    LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
                     self.add_vm_reg_input(node, LUAU_INSN_A(insn) as u8);
-                    if !luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
-                        self.add_vm_reg_input(node, LUAU_INSN_C(insn) as u8);
-                    }
+                    self.add_vm_reg_input(node, LUAU_INSN_C(insn) as u8);
                     self.add_vm_const_input(node, aux);
+                }
+
+                LuauOpcode::LOP_NEWCLASS => {
+                    LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+                    self.add_vm_reg_input(node, LUAU_INSN_B(insn) as u8);
+                    self.add_vm_const_input(node, aux);
+                    self.add_producer(LUAU_INSN_A(insn) as u8, node_op);
                 }
 
                 LuauOpcode::LOP__COUNT => {

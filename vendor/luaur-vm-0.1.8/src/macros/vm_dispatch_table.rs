@@ -94,6 +94,7 @@ macro_rules! VM_DISPATCH_TABLE {
         $crate::VM_DISPATCH_OP!(LOP_NEWCLASSMEMBER),
         $crate::VM_DISPATCH_OP!(LOP_CALLFB),
         $crate::VM_DISPATCH_OP!(LOP_CMPPROTO),
+        $crate::VM_DISPATCH_OP!(LOP_NEWCLASS),
     };
 }
 

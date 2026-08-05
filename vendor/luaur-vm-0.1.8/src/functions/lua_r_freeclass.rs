@@ -13,20 +13,24 @@ pub unsafe fn lua_r_freeclass(L: *mut lua_State, classobject: *mut LuauClass, pa
     let numberof_instance_members = (*classobject).numberofinstancemembers;
     let static_member_count = numberof_all_members - numberof_instance_members;
 
-    luaM_freearray!(
-        L,
-        (*classobject).staticmembers,
-        static_member_count,
-        TValue,
-        (*classobject).memcat
-    );
-    luaM_freearray!(
-        L,
-        (*classobject).offsettomember,
-        numberof_all_members,
-        *mut TString,
-        (*classobject).memcat
-    );
+    if !(*classobject).staticmembers.is_null() {
+        luaM_freearray!(
+            L,
+            (*classobject).staticmembers,
+            static_member_count,
+            TValue,
+            (*classobject).memcat
+        );
+    }
+    if !(*classobject).offsettomember.is_null() {
+        luaM_freearray!(
+            L,
+            (*classobject).offsettomember,
+            numberof_all_members,
+            *mut TString,
+            (*classobject).memcat
+        );
+    }
     luaM_freegco_(
         L,
         classobject as *mut GCObject,

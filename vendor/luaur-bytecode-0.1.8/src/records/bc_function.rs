@@ -7,6 +7,7 @@ use crate::records::bc_proj::BcProj;
 use crate::records::bc_vm_const::BcVmConst;
 use crate::records::debug_local_bytecode_graph::DebugLocal;
 use crate::records::table_shape::TableShape;
+use crate::records::class_shape::ClassShape;
 use crate::records::typed_local_bytecode_graph::TypedLocal;
 use crate::type_aliases::reg_map::RegMap;
 use alloc::string::String;
@@ -30,6 +31,7 @@ pub struct BcFunction {
     pub phis: Vec<BcPhi>,
     pub projections: Vec<BcProj>,
     pub table_shapes: Vec<TableShape>,
+    pub class_shapes: Vec<ClassShape>,
 
     pub entry_block: BcOp,
     pub exit_block: BcOp,
@@ -62,6 +64,7 @@ impl Default for BcFunction {
             phis: Vec::new(),
             projections: Vec::new(),
             table_shapes: Vec::new(),
+            class_shapes: Vec::new(),
             entry_block: BcOp::new(),
             exit_block: BcOp::new(),
             type_info: String::new(),

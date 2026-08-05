@@ -72,6 +72,14 @@ pub fn to_function_bytecode_bytecode_builder_comp_time_bc_function(
             BcVmConstKind::Integer => {
                 consts.push(bcb.add_constant_integer(unsafe { c.value.valueInteger }) as u16)
             }
+            BcVmConstKind::ClassShape => {
+                LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+                let value_class_shape = unsafe { c.value.valueClassShape };
+                LUAU_ASSERT!(value_class_shape < fn_.class_shapes.len() as u32);
+                consts.push(
+                    bcb.add_class_shape(fn_.class_shapes[value_class_shape as usize].clone()) as u16,
+                );
+            }
         }
     }
 

@@ -509,6 +509,15 @@ impl<'a> BytecodeGraphSerializer<'a> {
                 self.bcb.emit_ad(LuauOpcode::LOP_CMPPROTO, reg_input_0, 0);
                 self.bcb.emit_aux(imm_int_1 as u32);
             }
+            LuauOpcode::LOP_NEWCLASS => {
+                LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+                let out = self.get_register(insn_op);
+                let reg_input_0 = self.get_reg_input(insn, 0);
+                let vm_const_input_aux = self.get_vm_const_input_aux(insn, 1);
+                self.bcb
+                    .emit_abc(LuauOpcode::LOP_NEWCLASS, out, reg_input_0, 0);
+                self.bcb.emit_aux(vm_const_input_aux);
+            }
             LuauOpcode::LOP__COUNT => {
                 LUAU_UNREACHABLE!();
             }

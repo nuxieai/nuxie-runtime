@@ -6,6 +6,7 @@ use crate::records::bc_vm_const::BcVmConst;
 use crate::records::bytecode_graph_parser::BytecodeGraphParser;
 use crate::records::debug_local_bytecode_graph::DebugLocal;
 use crate::records::table_shape::TableShape;
+use crate::records::class_shape::ClassShape;
 use crate::records::typed_local_bytecode_graph::TypedLocal;
 use crate::type_aliases::comp_time_bc_function::CompTimeBcFunction;
 use crate::type_aliases::instruction::Instruction;
@@ -43,6 +44,8 @@ const LBC_CONSTANT_TABLE_WITH_CONSTANTS: u8 =
 const LBC_CONSTANT_INTEGER: u8 = LuauBytecodeTag::LBC_CONSTANT_INTEGER.0 as u8;
 #[allow(non_upper_case_globals)]
 const LBC_CONSTANT_VECTORD: u8 = LuauBytecodeTag::LBC_CONSTANT_VECTORD.0 as u8;
+#[allow(non_upper_case_globals)]
+const LBC_CONSTANT_CLASS_SHAPE: u8 = LuauBytecodeTag::LBC_CONSTANT_CLASS_SHAPE.0 as u8;
 
 pub fn from_function_bytecode(
     bytecode: String,
@@ -183,6 +186,30 @@ pub fn from_function_bytecode(
                 } else {
                     magnitude as i64
                 };
+            }
+            LBC_CONSTANT_CLASS_SHAPE => {
+                LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+
+                fn_.constants[i].kind = BcVmConstKind::ClassShape;
+                fn_.constants[i].value.valueClassShape = fn_.class_shapes.len() as u32;
+
+                let class_name = read_var_int(&data, &mut offset) as i32;
+                let num_props = read_var_int(&data, &mut offset) as usize;
+                let num_methods = read_var_int(&data, &mut offset) as usize;
+                let mut shape = ClassShape {
+                    className: class_name,
+                    propertyNames: Vec::with_capacity(num_props),
+                    methodNames: Vec::with_capacity(num_methods),
+                };
+
+                for _ in 0..num_props {
+                    shape.propertyNames.push(read_var_int(&data, &mut offset) as i32);
+                }
+                for _ in 0..num_methods {
+                    shape.methodNames.push(read_var_int(&data, &mut offset) as i32);
+                }
+
+                fn_.class_shapes.push(shape);
             }
             _ => {
                 LUAU_ASSERT!(false, "Unknown constant type!");

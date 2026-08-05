@@ -10,6 +10,7 @@ use crate::macros::api_check::api_check;
 use crate::macros::api_checknelems::api_checknelems;
 use crate::macros::api_incr_top::api_incr_top;
 use crate::macros::iswhite::iswhite;
+use crate::macros::lua_s_new::luaS_new;
 use crate::macros::lua_c_check_gc::luaC_checkGC;
 use crate::macros::setclvalue::setclvalue;
 use crate::macros::setobj_2_n::setobj2n;
@@ -39,7 +40,15 @@ pub unsafe fn lua_pushcclosurek(
     let cc = core::ptr::addr_of_mut!((*cl).inner.c) as *mut CClosure;
     (*cc).f = r#fn;
     (*cc).cont = cont;
-    (*cc).debugname = debugname;
+    if luaur_common::FFlag::LuauManagedDebugNames.get() {
+        (*cc).debugname = if debugname.is_null() {
+            core::ptr::null_mut()
+        } else {
+            luaS_new(L, debugname)
+        };
+    } else {
+        (*cc).debugname_DEPRECATED = debugname;
+    }
 
     (*L).top = (*L).top.sub(nup as usize);
     let upvals = core::ptr::addr_of_mut!((*cc).upvals) as *mut TValue;

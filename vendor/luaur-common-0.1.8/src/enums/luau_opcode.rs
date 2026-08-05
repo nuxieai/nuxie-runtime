@@ -91,6 +91,7 @@ pub enum LuauOpcode {
     LOP_NEWCLASSMEMBER,
     LOP_CALLFB,
     LOP_CMPPROTO,
+    LOP_NEWCLASS,
     LOP__COUNT,
 }
 
@@ -184,6 +185,7 @@ impl LuauOpcode {
     pub const LOP_NEWCLASSMEMBER: LuauOpcode = LuauOpcode::LOP_NEWCLASSMEMBER;
     pub const LOP_CALLFB: LuauOpcode = LuauOpcode::LOP_CALLFB;
     pub const LOP_CMPPROTO: LuauOpcode = LuauOpcode::LOP_CMPPROTO;
+    pub const LOP_NEWCLASS: LuauOpcode = LuauOpcode::LOP_NEWCLASS;
     pub const LOP__COUNT: LuauOpcode = LuauOpcode::LOP__COUNT;
 }
 

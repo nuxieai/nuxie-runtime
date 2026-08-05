@@ -484,6 +484,7 @@ pub mod lua_pushunsigned;
 pub mod lua_pushvalue;
 pub mod lua_pushvector_lapi;
 pub mod lua_pushvector_lapi_alt_b;
+pub mod lua_pushvector2;
 pub mod lua_pushvfstring;
 pub mod lua_r_addclassmember;
 pub mod lua_r_addclassmetatable;

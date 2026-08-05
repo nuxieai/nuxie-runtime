@@ -8,27 +8,27 @@ struct gl_PerVertex {
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct VertexOutput {
@@ -40,9 +40,9 @@ struct VertexOutput {
     @location(0) member_3: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
-@id(2) override Yg: bool = true;
-@id(1) override Xg: bool = true;
+@id(0) override Yg: bool = true;
+@id(2) override ah: bool = true;
+@id(1) override Zg: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 @group(0) @binding(2)
@@ -83,11 +83,11 @@ fn main_1() {
     let _e56 = textureLoad(PB, _e55, 0i);
     let _e58 = _e44.xy;
     let _e60 = bitcast<vec3<f32>>(_e56.yzw);
-    let _e66 = n.zg;
+    let _e66 = n.Bg;
     C2_ = (((_e58 * _e60.x) + _e60.yz) * _e66);
     let _e74 = textureLoad(AD, vec2<i32>(bitcast<i32>((_e46 & 127u)), bitcast<i32>((_e47 >> bitcast<u32>(7i)))), 0i);
     let _e76 = (_e74.x & 15u);
-    if Wg {
+    if Yg {
         let _e77 = (_e76 == 0u);
         if _e77 {
             phi_721_ = _e74.y;
@@ -110,10 +110,10 @@ fn main_1() {
         let _e94 = phi_723_;
         I3_ = _e94;
     }
-    if Yg {
+    if ah {
         e2_ = f32(((_e74.x >> bitcast<u32>(4i)) & 15u));
     }
-    if Xg {
+    if Zg {
         let _e99 = textureLoad(RB, _e55, 0i);
         let _e107 = (_e48 + 3u);
         let _e114 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e107 & 127u)), bitcast<i32>((_e107 >> bitcast<u32>(7i)))), 0i);
@@ -133,7 +133,7 @@ fn main_1() {
     }
     if (_e76 == 1u) {
         let _e200 = unpack4x8unorm(_e74.y);
-        if Yg {
+        if ah {
             phi_724_ = _e200;
         } else {
             let _e203 = (_e200.xyz * _e200.w);
@@ -169,8 +169,8 @@ fn main_1() {
             f1_ = vec4<f32>(_e169.x, _e169.y, bitcast<f32>(_e74.y), (-2f - _e166.z));
         }
     }
-    let _e225 = n.df;
-    let _e227 = n.ef;
+    let _e225 = n.ff;
+    let _e227 = n.gf;
     let _e235 = vec4<f32>(((_e44.x * _e225) - 1f), ((_e44.y * _e227) - sign(_e227)), 0f, 1f);
     unnamed.gl_Position = vec4<f32>(_e235.x, _e235.y, (1f - (f32(_e56.x) * 0.000061035156f)), _e235.w);
     return;

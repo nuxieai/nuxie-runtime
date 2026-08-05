@@ -386,7 +386,6 @@ pub mod parser_parse;
 pub mod parser_parse_assertion_expr;
 pub mod parser_parse_assignment;
 pub mod parser_parse_attribute;
-pub mod parser_parse_attribute_deprecated;
 pub mod parser_parse_attr_list;
 pub mod parser_parse_attribute_stat;
 pub mod parser_parse_attributes;

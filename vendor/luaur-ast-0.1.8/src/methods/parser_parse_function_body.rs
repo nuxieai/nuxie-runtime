@@ -35,9 +35,6 @@ impl Parser {
         is_const: bool,
         cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> (*mut AstExprFunction, *mut AstLocal) {
-        luaur_common::LUAU_ASSERT!(
-            cst_attr_lists.is_null() || luaur_common::FFlag::LuauCstAttr.get()
-        );
         let mut start = match_function.location;
         if attributes.size > 0 {
             start = unsafe { (**attributes.data).base.location };
@@ -49,10 +46,7 @@ impl Parser {
             core::ptr::null_mut()
         };
 
-        if luaur_common::FFlag::LuauCstAttr.get()
-            && !cst_node.is_null()
-            && !cst_attr_lists.is_null()
-        {
+        if !cst_node.is_null() && !cst_attr_lists.is_null() {
             unsafe {
                 (*cst_node).attr_lists = self.copy_temp_vector_t(&*cst_attr_lists);
             }

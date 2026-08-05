@@ -480,22 +480,13 @@ impl<'a> Printer<'a> {
             let cst_node = self.lookup_cst_node::<CstStatFunction>(
                 program as *mut AstStat as *mut crate::records::ast_node::AstNode,
             );
-            if FFlag::LuauCstAttr.get() {
-                if !cst_node.is_null() {
-                    self.visualize_attributes(unsafe { &(*a.func).attributes }, unsafe {
-                        &(*cst_node).attr_lists
-                    });
-                    self.advance(unsafe { &(*cst_node).function_keyword_position });
-                } else {
-                    self.visualize_attributes(unsafe { &(*a.func).attributes }, core::ptr::null());
-                }
+            if !cst_node.is_null() {
+                self.visualize_attributes(unsafe { &(*a.func).attributes }, unsafe {
+                    &(*cst_node).attr_lists
+                });
+                self.advance(unsafe { &(*cst_node).function_keyword_position });
             } else {
-                for attr in unsafe { (*a.func).attributes.iter() } {
-                    self.visualize_attribute(unsafe { &mut **attr });
-                }
-                if !cst_node.is_null() {
-                    self.advance(unsafe { &(*cst_node).function_keyword_position });
-                }
+                self.visualize_attributes(unsafe { &(*a.func).attributes }, core::ptr::null());
             }
             self.writer.keyword("function");
             self.visualize_ast_expr(a.name);
@@ -509,7 +500,7 @@ impl<'a> Printer<'a> {
             let cst_node = self.lookup_cst_node::<CstStatLocalFunction>(
                 program as *mut AstStat as *mut crate::records::ast_node::AstNode,
             );
-            if FFlag::LuauCstAttr.get() && !cst_node.is_null() {
+            if !cst_node.is_null() {
                 self.visualize_attributes(unsafe { &(*a.func).attributes }, unsafe {
                     &(*cst_node).attr_lists
                 });

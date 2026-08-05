@@ -13,11 +13,7 @@ impl Parser {
         let mut cst_attr_lists = TempVector::<*mut CstAttrList>::new(
             &mut self.scratch_cst_attr_list,
         );
-        let cst_attr_lists_ptr = if luaur_common::FFlag::LuauCstAttr.get() {
-            &mut cst_attr_lists
-        } else {
-            core::ptr::null_mut()
-        };
+        let cst_attr_lists_ptr = &mut cst_attr_lists as *mut _;
         let attributes: AstArray<*mut AstAttr> = self.parse_attributes(cst_attr_lists_ptr);
 
         if self.lexer.current().r#type != Type::ReservedFunction {

@@ -11649,6 +11649,309 @@ fn restore_preserves_parent_before_child_order_after_interleaved_creation() -> R
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum RemovedSlotUnitShape {
+    Base,
+    ExtraRectangle,
+    NoColor,
+}
+
+struct RemovedSlotFixture {
+    scene: Scene,
+    artboard: ArtboardId,
+    root: ObjectId,
+    leading: ObjectId,
+    middle: ObjectId,
+    following: ObjectId,
+}
+
+fn removed_slot_layout(
+    tx: &mut SceneTx<'_>,
+    parent: Parent,
+    name: &str,
+) -> std::result::Result<ObjectId, EditAbort> {
+    tx.create(
+        parent,
+        NodeSpec::LayoutComponent(LayoutComponentSpec {
+            name: name.into(),
+            x: 0.0,
+            y: 0.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            clip: false,
+            width: 80.0,
+            height: 80.0,
+            fractional_width: 1.0,
+            fractional_height: 1.0,
+            style: LayoutComponentStyleSpec::default(),
+        }),
+    )
+}
+
+fn author_removed_slot_unit_visuals(
+    tx: &mut SceneTx<'_>,
+    owner: ObjectId,
+    name: &str,
+    color: ColorInt,
+    shape: RemovedSlotUnitShape,
+) -> std::result::Result<(), EditAbort> {
+    let visual = tx.create(
+        Parent::Object(owner),
+        NodeSpec::Shape(ShapeSpec {
+            name: format!("{name} visual"),
+            x: 40.0,
+            y: 40.0,
+            opacity: 1.0,
+            rotation: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }),
+    )?;
+    tx.create(
+        Parent::Object(visual),
+        NodeSpec::Rectangle(RectangleSpec::new(format!("{name} bounds"), 60.0, 60.0)),
+    )?;
+    let fill = tx.create(
+        Parent::Object(visual),
+        NodeSpec::Fill(FillSpec {
+            name: format!("{name} fill"),
+        }),
+    )?;
+    if !matches!(shape, RemovedSlotUnitShape::NoColor) {
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: format!("{name} color"),
+                color,
+            }),
+        )?;
+    }
+    if matches!(shape, RemovedSlotUnitShape::ExtraRectangle) {
+        tx.create(
+            Parent::Object(visual),
+            NodeSpec::Rectangle(RectangleSpec::new(
+                format!("{name} extra bounds"),
+                30.0,
+                30.0,
+            )),
+        )?;
+    }
+    Ok(())
+}
+
+fn author_removed_slot_fixture(
+    middle_color: ColorInt,
+    middle_shape: RemovedSlotUnitShape,
+) -> Result<RemovedSlotFixture> {
+    let mut scene = Scene::new();
+    let ((artboard, root, leading, middle, following), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
+            name: "Removed-slot screen".into(),
+            width: 300.0,
+            height: 100.0,
+        })?;
+        let root = removed_slot_layout(tx, Parent::Artboard(artboard), "Screen root")?;
+
+        // Phase one mirrors the editor: every sibling unit owner (and its
+        // automatically authored style satellite) precedes every leaf run.
+        let leading = removed_slot_layout(tx, Parent::Object(root), "Leading unit")?;
+        let middle = removed_slot_layout(tx, Parent::Object(root), "Middle unit")?;
+        let following = removed_slot_layout(tx, Parent::Object(root), "Following unit")?;
+
+        // Phase two gives each unit a late visual run, making each complete
+        // unit footprint non-contiguous and interleaved with its siblings.
+        author_removed_slot_unit_visuals(
+            tx,
+            leading,
+            "Leading unit",
+            0xffff_0000,
+            RemovedSlotUnitShape::Base,
+        )?;
+        author_removed_slot_unit_visuals(tx, middle, "Middle unit", middle_color, middle_shape)?;
+        author_removed_slot_unit_visuals(
+            tx,
+            following,
+            "Following unit",
+            0xff00_00ff,
+            RemovedSlotUnitShape::Base,
+        )?;
+
+        // Keep a real component-list subtree after every unit record. Its
+        // empty source avoids adding occurrence draw noise while its visual
+        // and style records ensure the replacement cannot correctly stay at
+        // the record tail.
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            layout_style: None,
+            name: "Removed-slot list item".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let (item_model, items) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Removed-slot root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Removed-slot item model".into(),
+            })?;
+            let items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Removed-slot root defaults".into()),
+                },
+            )?;
+            let item_defaults = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Removed-slot item defaults".into()),
+                },
+            )?;
+            view_models.set_artboard_default(artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, item_defaults)?;
+            (item_model, items)
+        };
+        let trailing = tx.create_component_list(
+            artboard,
+            ArtboardComponentListSpec {
+                name: "Trailing component list".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: Some(ArtboardComponentListFlow {
+                    axis: ArtboardComponentListAxis::Vertical,
+                    reverse: false,
+                    gap: 0.0,
+                }),
+                source: ViewModelListSource::direct(items),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        tx.reparent(trailing.object_id(), Parent::Object(root), ChildIndex::Last)?;
+        Ok((artboard, root, leading, middle, following))
+    })?;
+    Ok(RemovedSlotFixture {
+        scene,
+        artboard,
+        root,
+        leading,
+        middle,
+        following,
+    })
+}
+
+fn replace_removed_slot_middle(
+    fixture: &mut RemovedSlotFixture,
+    shape: RemovedSlotUnitShape,
+    adopt_removed_slots: bool,
+) -> Result<ObjectId> {
+    let (replacement, _) = fixture.scene.edit(|tx| {
+        let removed = tx.remove(fixture.middle)?;
+        // The incremental reinstall authors both phases contiguously at the
+        // tail, then restores only the native child slot before adopting the
+        // old record footprint.
+        let replacement = removed_slot_layout(tx, Parent::Object(fixture.root), "Middle unit")?;
+        author_removed_slot_unit_visuals(tx, replacement, "Middle unit", 0xffff_aa00, shape)?;
+        tx.reorder(replacement, ChildIndex::At(1))?;
+        if adopt_removed_slots {
+            tx.place_record_block_in_removed_slots(replacement, &removed)?;
+        }
+        Ok(replacement)
+    })?;
+    fixture.middle = replacement;
+    Ok(replacement)
+}
+
+fn removed_slot_draw_stream(fixture: &mut RemovedSlotFixture) -> Result<String> {
+    let instance = fixture.scene.instantiate(fixture.artboard)?;
+    canonical_draw_stream(&mut fixture.scene, instance)
+}
+
+#[test]
+fn removed_slots_restore_an_interleaved_unit_record_footprint() -> Result<()> {
+    let mut cold = author_removed_slot_fixture(0xffff_aa00, RemovedSlotUnitShape::Base)?;
+    let cold_stream = removed_slot_draw_stream(&mut cold)?;
+
+    let mut retained = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+    replace_removed_slot_middle(&mut retained, RemovedSlotUnitShape::Base, true)?;
+    assert_eq!(
+        removed_slot_draw_stream(&mut retained)?,
+        cold_stream,
+        "adopting the removed non-contiguous footprint must converge with cold two-phase authoring"
+    );
+
+    let mut reordered_only = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+    replace_removed_slot_middle(&mut reordered_only, RemovedSlotUnitShape::Base, false)?;
+    assert_ne!(
+        removed_slot_draw_stream(&mut reordered_only)?,
+        cold_stream,
+        "native child reorder alone compacts the replacement block and cannot restore cold draw order"
+    );
+    Ok(())
+}
+
+#[test]
+fn removed_slots_accept_larger_and_smaller_replacement_blocks() -> Result<()> {
+    for shape in [
+        RemovedSlotUnitShape::ExtraRectangle,
+        RemovedSlotUnitShape::NoColor,
+    ] {
+        let mut cold = author_removed_slot_fixture(0xffff_aa00, shape)?;
+        let cold_stream = removed_slot_draw_stream(&mut cold)?;
+        let mut retained = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+        replace_removed_slot_middle(&mut retained, shape, true)?;
+        assert_eq!(
+            removed_slot_draw_stream(&mut retained)?,
+            cold_stream,
+            "larger blocks append extras after the last filled slot and smaller blocks close unused trailing slots"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn removed_slots_reject_sibling_crossing_without_poisoning_the_transaction() -> Result<()> {
+    let mut fixture = author_removed_slot_fixture(0xff00_ff00, RemovedSlotUnitShape::Base)?;
+    let following = fixture.following;
+    let (_, _) = fixture.scene.edit(|tx| {
+        let removed = tx.remove(fixture.leading)?;
+        let rejected = tx
+            .place_record_block_in_removed_slots(following, &removed)
+            .expect_err(
+                "the leading unit's footprint would move the following unit before its sibling",
+            );
+        assert_eq!(
+            rejected.diagnostic().reason,
+            EditReason::RecordSlotCrossesSiblings
+        );
+        tx.set(following, props::WORLD_OPACITY, 0.5)?;
+        Ok(())
+    })?;
+
+    let instance = fixture.scene.instantiate(fixture.artboard)?;
+    let opacity = fixture
+        .scene
+        .cursor(instance, following, props::WORLD_OPACITY)?;
+    assert_eq!(fixture.scene.frame().get(opacity)?, 0.5);
+    Ok(())
+}
+
 #[test]
 fn restoring_an_existing_identity_aborts_the_entire_edit_with_a_collision_diagnostic() -> Result<()>
 {

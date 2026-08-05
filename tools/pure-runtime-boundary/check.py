@@ -1178,20 +1178,22 @@ def check_repository(
                         f"{relative}:{line_number}: protected source imports a "
                         f"product/authoring module: {line.strip()}"
                     )
-                for family, marker in INTERNAL_DEBT_MARKERS.items():
-                    if not marker.search(line):
-                        continue
-                    observed_debt[family].add(relative)
-                    spread = (family, relative)
-                    if (
-                        relative not in INTERNAL_DEBT_FILES[family]
-                        and spread not in reported_debt_spread
-                    ):
-                        reported_debt_spread.add(spread)
-                        errors.append(
-                            f"{relative}:{line_number}: {family} boundary debt spread "
-                            "outside its grandfathered files"
-                        )
+            for family, marker in INTERNAL_DEBT_MARKERS.items():
+                match = marker.search(source)
+                if match is None:
+                    continue
+                observed_debt[family].add(relative)
+                spread = (family, relative)
+                if (
+                    relative not in INTERNAL_DEBT_FILES[family]
+                    and spread not in reported_debt_spread
+                ):
+                    reported_debt_spread.add(spread)
+                    line_number = source.count("\n", 0, match.start()) + 1
+                    errors.append(
+                        f"{relative}:{line_number}: {family} boundary debt spread "
+                        "outside its grandfathered files"
+                    )
 
     errors.extend(
         missing_debt_exception_errors(repo_root, observed_debt, INTERNAL_DEBT_FILES)

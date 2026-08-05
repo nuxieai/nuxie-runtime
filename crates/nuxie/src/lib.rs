@@ -6818,6 +6818,30 @@ mod owned_instance_tests {
         PersistentFactory::new(RecordingFactory::new())
     }
 
+    #[cfg(feature = "scripting")]
+    fn compile_luau_probe(source: &str) -> Vec<u8> {
+        use luaur_compiler::functions::luau_compile::luau_compile;
+
+        luaur_common::set_all_flags(true);
+        let mut output_size = 0;
+        let output = luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            std::ptr::null_mut(),
+            &mut output_size,
+        );
+        assert!(!output.is_null(), "pinned Luau compiler returned null");
+        // SAFETY: luau_compile returns a malloc allocation of output_size bytes.
+        let bytecode =
+            unsafe { std::slice::from_raw_parts(output.cast::<u8>(), output_size) }.to_vec();
+        unsafe extern "C" {
+            fn free(pointer: *mut std::ffi::c_void);
+        }
+        // SAFETY: output is the allocation returned by luau_compile above.
+        unsafe { free(output.cast()) };
+        bytecode
+    }
+
     fn external_fixture(relative: &str) -> Vec<u8> {
         let path = std::path::PathBuf::from(
             std::env::var_os("RIVE_RUNTIME_DIR")
@@ -7945,13 +7969,14 @@ mod owned_instance_tests {
         let ready = scripts
             .build_candidate(&runtime, &mut factory)
             .expect("prelinked scoped modules register from the exact candidate fixture");
+        let probe = compile_luau_probe(
+            "local probe = require('scope_probe')\n\
+             local bareLeaked = pcall(require, 'draco')\n\
+             return probe.lib, probe.hasDecode, probe.cached, bareLeaked",
+        );
         let (lib, has_decode, cached, bare_leaked): (i64, i64, i64, bool) = ready
             .vm
-            .eval(
-                "local probe = require('scope_probe')\n\
-                 local bareLeaked = pcall(require, 'draco')\n\
-                 return probe.lib, probe.hasDecode, probe.cached, bareLeaked",
-            )
+            .run_bytecode("scope-probe", &probe)
             .expect("root scope probe reads registered results");
         assert_eq!((lib, has_decode, cached), (1, 1, 1));
         assert!(
@@ -7985,11 +8010,12 @@ mod owned_instance_tests {
         let ready = scripts
             .build_candidate(&runtime, &mut factory)
             .expect("scripts register with Data initialized");
+        let probe = compile_luau_probe(&format!(
+            "return Data[{model_name:?}] ~= nil and type(Data[{model_name:?}].new) == 'function'"
+        ));
         let has_constructor: bool = ready
             .vm
-            .eval(&format!(
-                "return Data[{model_name:?}] ~= nil and type(Data[{model_name:?}].new) == 'function'"
-            ))
+            .run_bytecode("data-constructor-probe", &probe)
             .expect("Data constructor probe runs");
         assert!(has_constructor);
     }

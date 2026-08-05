@@ -1566,6 +1566,25 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("editor-gpu-tooling boundary debt spread", result.stderr)
 
+    def test_rejects_multiline_source_loading_api_in_baseline_interfaces(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        (package / "src/editor_tools.rs").write_text(
+            "impl Vm {\n"
+            "    pub fn load(\n"
+            "        &self,\n"
+            "        name: &str,\n"
+            "        source: &str,\n"
+            "    ) {}\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("editor-gpu-tooling boundary debt spread", result.stderr)
+
     def test_bytecode_gpu_canvas_baseline_interface_remains_allowed(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""

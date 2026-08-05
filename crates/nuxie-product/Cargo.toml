@@ -1,0 +1,17 @@
+[package]
+name = "nuxie-product"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = ["js-host-seed"]
+js-host-seed = ["nuxie/js-host-seed"]
+renderer = ["nuxie/renderer"]
+scripting = ["nuxie/scripting"]
+threading = ["nuxie/threading"]
+
+[dependencies]
+nuxie = { path = "../nuxie", default-features = false }

@@ -201,6 +201,9 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
+      - name: Compile the browser adapter seam
+        run: make crate-seams-browser-check
+
       - name: Record WebGPU-only browser support gate
         env:
           BROWSER_RENDERER_BROWSER: chrome

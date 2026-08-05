@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-product-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -150,6 +150,29 @@ fmt-check:
 	cargo fmt --all -- --check
 
 check:
+	cargo check --workspace
+
+# Independently selectable package cuts for the product-surface extraction.
+# The platform targets compile their real target-gated interfaces rather than
+# succeeding through an empty host cfg. `crate-seams-full-check` remains the
+# ordinary whole-workspace verdict.
+crate-seams-baseline-check:
+	cargo check -p nuxie-runtime --no-default-features --lib
+
+crate-seams-product-check:
+	@tools/report-all.sh "crate seams (product)" \
+		"shared product host" "cargo check -p nuxie-product --all-targets" \
+		"editor authoring" "cargo check -p nuxie-authoring --all-targets"
+
+crate-seams-browser-check:
+	RUSTC="$$(rustup which --toolchain stable rustc)" \
+		"$$(rustup which --toolchain stable cargo)" check \
+		-p nuxie-browser-adapter --target wasm32-unknown-unknown --all-targets
+
+crate-seams-apple-check:
+	cargo check -p nuxie-apple-adapter --all-targets
+
+crate-seams-full-check:
 	cargo check --workspace
 
 test: fixtures
@@ -307,12 +330,14 @@ feature-compile-gate-portable:
 		"renderer-replay --features perf-diagnostics" "cargo check -p renderer-replay --features perf-diagnostics --bins" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
-		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib"
+		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
+		"product and authoring seams" "$(MAKE) --no-print-directory crate-seams-product-check"
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
 		"nux-capi --features apple-renderer,size-report-roots" "cargo check -p nux-capi --features apple-renderer,size-report-roots --lib" \
-		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets"
+		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
+		"Apple adapter seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
 	@tools/report-all.sh "feature-compile-gate" \

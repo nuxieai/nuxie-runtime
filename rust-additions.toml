@@ -9,6 +9,7 @@ category_values = [
   "product-host",
   "product-data",
   "product-trust",
+  "platform-adapter",
   "mixed-product-host",
   "retained-render",
   "codegen",
@@ -134,3 +135,19 @@ category = "product-authoring"
 [[addition]]
 path = "crates/nuxie/src/script_import.rs"
 category = "product-trust"
+
+[[addition]]
+path = "crates/nuxie-product/src/lib.rs"
+category = "product-host"
+
+[[addition]]
+path = "crates/nuxie-authoring/src/lib.rs"
+category = "product-authoring"
+
+[[addition]]
+path = "crates/nuxie-browser-adapter/src/lib.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-apple-adapter/src/lib.rs"
+category = "platform-adapter"

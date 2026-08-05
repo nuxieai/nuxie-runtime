@@ -325,10 +325,17 @@ fn bufferwritelong_fastcall_writes_only_in_bounds() {
 }
 
 #[test]
-fn fastcall_table_wires_completed_families_and_rive_tail() {
+fn fastcall_table_matches_all_256_rive_tip_slots() {
     let missing = crate::functions::luau_f_missing::luau_f_missing as *const () as usize;
     assert_eq!(luauF_table.len(), 256);
     assert!(luauF_table[0].is_none());
+    let mut seen = [false; 256];
+    seen[0] = true;
+    let mut verify = |slot: usize, expected: usize| {
+        assert!(!seen[slot], "slot {slot} was checked more than once");
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        seen[slot] = true;
+    };
 
     let math = [
         (2, crate::functions::luau_f_abs::luau_f_abs as *const () as usize),
@@ -366,7 +373,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (93, crate::functions::luau_f_isfinite::luau_f_isfinite as *const () as usize),
     ];
     for (slot, expected) in math {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let bit32 = [
@@ -388,7 +395,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (64, crate::functions::luau_f_byteswap::luau_f_byteswap as *const () as usize),
     ];
     for (slot, expected) in bit32 {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let core_and_string = [
@@ -405,7 +412,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (63, crate::functions::luau_f_tostring::luau_f_tostring as *const () as usize),
     ];
     for (slot, expected) in core_and_string {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let table = [
@@ -418,7 +425,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (61, crate::functions::luau_f_setmetatable::luau_f_setmetatable as *const () as usize),
     ];
     for (slot, expected) in table {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let buffer = [
@@ -437,7 +444,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (77, crate::functions::luau_f_writefp::luau_f_writefp::<f64> as *const () as usize),
     ];
     for (slot, expected) in buffer {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let vector = [
@@ -456,7 +463,7 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (90, crate::functions::luau_f_vectorlerp::luau_f_vectorlerp as *const () as usize),
     ];
     for (slot, expected) in vector {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     let integer = [
@@ -501,17 +508,17 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         (132, crate::functions::luau_f_bufferwritelong::luau_f_bufferwritelong as *const () as usize),
     ];
     for (slot, expected) in integer {
-        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+        verify(slot, expected);
     }
 
     for slot in 133..243 {
-        assert_eq!(address(luauF_table[slot]), missing, "slot {slot}");
+        verify(slot, missing);
     }
-    assert_eq!(
-        address(luauF_table[243]),
-        crate::functions::luau_f_fround::luau_f_fround as *const () as usize
+    verify(
+        243,
+        crate::functions::luau_f_fround::luau_f_fround as *const () as usize,
     );
-    assert_eq!(address(luauF_table[244]), missing);
+    verify(244, missing);
 
     let expected = [
         crate::functions::luau_f_vectordistance::luau_f_vectordistance as *const () as usize,
@@ -530,8 +537,10 @@ fn fastcall_table_wires_completed_families_and_rive_tail() {
         crate::functions::luau_f_vectorscaleandsub::luau_f_vectorscaleandsub as *const () as usize,
     ];
     for (offset, expected) in expected.into_iter().enumerate() {
-        assert_eq!(address(luauF_table[245 + offset]), expected);
+        verify(245 + offset, expected);
     }
+    drop(verify);
+    assert_eq!(seen.iter().filter(|&&checked| checked).count(), 256);
 }
 
 #[test]

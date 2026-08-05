@@ -61,3 +61,13 @@ Provenance:
 - Touched areas: the pinned fastcall tail and Rive vector/math implementations,
   `lua_pushvector2`, and the baked-ON `RIVE_LUAU` error/base-library behavior
   (raw source prefixes, level-0 retry, and removal of `print`/`newproxy`).
+
+## Fast-call dispatch enablement
+
+- Repaired dormant upstream fast-call translations whose fallback, numeric,
+  table, buffer, or stack behavior diverged from the pinned C++ engine.
+- Wired the scalar implementations for builtin slots 1-132 while preserving
+  slot 0 as null, slots 133-242 and 244 as `luau_f_missing`, and the existing
+  Rive block at slots 243 and 245-255.
+- Added behavioral regressions for the repaired twins and an exhaustive
+  256-index dispatch-table identity test.

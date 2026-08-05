@@ -95,7 +95,14 @@ pub fn visit_ast_expr_call(this: &mut TypeMapVisitor<'_>, node: *mut AstExprCall
                 | LuauBuiltinFunction::LBF_BUFFER_READF64
                 | LuauBuiltinFunction::LBF_VECTOR_MAGNITUDE
                 | LuauBuiltinFunction::LBF_VECTOR_DOT
-                | LuauBuiltinFunction::LBF_MATH_LERP => {
+                | LuauBuiltinFunction::LBF_MATH_LERP
+                | LuauBuiltinFunction::LBF_RIVE_FROUND
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_DISTANCE
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_DISTANCE_SQUARED
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_LENGTH_SQUARED
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_DOT
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_MAGNITUDE
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR2_CROSS => {
                     this.record_resolved_type_ast_expr_ast_type(
                         node as *mut AstExpr,
                         &this.builtin_types.number_type as *const _ as *const AstType,
@@ -133,7 +140,12 @@ pub fn visit_ast_expr_call(this: &mut TypeMapVisitor<'_>, node: *mut AstExprCall
                 | LuauBuiltinFunction::LBF_VECTOR_CLAMP
                 | LuauBuiltinFunction::LBF_VECTOR_MIN
                 | LuauBuiltinFunction::LBF_VECTOR_MAX
-                | LuauBuiltinFunction::LBF_VECTOR_LERP => {
+                | LuauBuiltinFunction::LBF_VECTOR_LERP
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_ORIGIN
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_NORMALIZE
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_LERP
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_SCALE_AND_ADD
+                | LuauBuiltinFunction::LBF_RIVE_VECTOR_SCALE_AND_SUB => {
                     this.record_resolved_type_ast_expr_ast_type(
                         node as *mut AstExpr,
                         &this.builtin_types.vector_type as *const _ as *const AstType,

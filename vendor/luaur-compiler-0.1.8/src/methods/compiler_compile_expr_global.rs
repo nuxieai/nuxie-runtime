@@ -8,6 +8,21 @@ use luaur_common::enums::luau_opcode::LuauOpcode;
 impl Compiler {
     pub fn compile_expr_global(&mut self, expr: *mut AstExprGlobal, target: u8) {
         unsafe {
+            if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
+                if let Some(local) = self.class_locals.find(&(*expr).name).copied() {
+                    let reg = self.get_local_reg(local);
+                    if reg >= 0 {
+                        if target != reg as u8 {
+                            (*self.bytecode).emit_abc(LuauOpcode::LOP_MOVE, target, reg as u8, 0);
+                        }
+                    } else {
+                        let uid = self.get_upval(local);
+                        (*self.bytecode).emit_abc(LuauOpcode::LOP_GETUPVAL, target, uid, 0);
+                    }
+                    return;
+                }
+            }
+
             let name = sref_ast_name((*expr).name);
             let cid = (*self.bytecode).add_constant_string(name);
             if cid < 0 {

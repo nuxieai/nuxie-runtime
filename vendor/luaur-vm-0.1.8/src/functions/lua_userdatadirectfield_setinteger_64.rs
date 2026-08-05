@@ -5,7 +5,11 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 #[export_name = "luaur_lua_userdatadirectfield_setinteger64"]
 pub unsafe fn lua_userdatadirectfield_setinteger64(result: *mut core::ffi::c_void, n: i64) {
     LUAU_ASSERT!(luaur_common::FFlag::LuauDirectFieldGet.get());
-    setlvalue!(result as *mut TValue, n);
+    #[cfg(feature = "lua_vector_double")]
+    let slot = (*(result as *mut crate::records::direct_field_result::DirectFieldResult)).slot;
+    #[cfg(not(feature = "lua_vector_double"))]
+    let slot = result as *mut TValue;
+    setlvalue!(slot, n);
 }
 
 #[export_name = "luaur_lua_userdatadirectfield_setinteger_64"]

@@ -9,7 +9,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_vectornormalize(
-    _L: *mut lua_State,
+    L: *mut lua_State,
     res: StkId,
     arg0: *mut TValue,
     nresults: core::ffi::c_int,
@@ -20,14 +20,14 @@ pub unsafe fn luau_f_vectornormalize(
         let v = vvalue!(arg0).as_ptr();
 
         if LUA_VECTOR_SIZE == 4 {
-            let inv_sqrt = 1.0f32
+            let inv_sqrt = 1.0 as crate::type_aliases::lua_vector_type::LuaVectorType
                 / ((*v.offset(0)) * (*v.offset(0))
                     + (*v.offset(1)) * (*v.offset(1))
                     + (*v.offset(2)) * (*v.offset(2))
                     + (*v.offset(3)) * (*v.offset(3)))
                 .sqrt();
 
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 (*v.offset(0)) * inv_sqrt,
                 (*v.offset(1)) * inv_sqrt,
@@ -35,18 +35,18 @@ pub unsafe fn luau_f_vectornormalize(
                 (*v.offset(3)) * inv_sqrt
             );
         } else {
-            let inv_sqrt = 1.0f32
+            let inv_sqrt = 1.0 as crate::type_aliases::lua_vector_type::LuaVectorType
                 / ((*v.offset(0)) * (*v.offset(0))
                     + (*v.offset(1)) * (*v.offset(1))
                     + (*v.offset(2)) * (*v.offset(2)))
                 .sqrt();
 
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 (*v.offset(0)) * inv_sqrt,
                 (*v.offset(1)) * inv_sqrt,
                 (*v.offset(2)) * inv_sqrt,
-                0.0f32
+                0.0 as crate::type_aliases::lua_vector_type::LuaVectorType
             );
         }
 

@@ -5,8 +5,12 @@ that is Nuxie's scripting engine — and maintain the Luau engine port
 in-house rather than waiting on upstream luaur releases. This document
 records the fork point, the carried patches, and the port plan. It owns the
 exit path for the standing WATCH `deferred-2026-07-19-luau-engine`
-(docs/parity-gap-register.md): that row's exit criterion is now **fork
-parity with the pinned C++ engine**, not "luaur publishes a newer base".
+(docs/parity-gap-register.md): that row's exit criterion is **fork parity
+with the pinned C++ engine**, not "luaur publishes a newer base".
+**STATUS 2026-08-05: ladder complete — all nine rungs landed, WATCH CLOSED.**
+The vendored engine now carries every upstream delta from its 0.724-era
+base through official 0.732 plus the rive patch set at `rive_0_732`
+(`86eb0096`), which is what the pinned C++ runtime embeds.
 
 ## Why
 
@@ -107,12 +111,14 @@ carried (not version lag; all pre-date the fork and are gate-green today):
    `FixMathNoisePrecision` ON (Luau CLI keeps it OFF).
 6. `luaur-rt::Compiler` exposes a subset of engine `CompileOptions`.
 7. `&str`-based error formatting (rung-5 audit finding, adjudicated
-   2026-08-04): luaur's error layer takes `&str`, so non-UTF-8 bytes in a
-   userdata `__type` name are lossy-replaced (U+FFFD) in error messages
-   where C passes raw bytes — affects baseline `luaL_checkudata` and
-   rung-5 `luaL_checkudatatagged` alike. Unreachable for Nuxie's ASCII
-   type registrations; the scripted side-channel referees any
-   corpus-visible divergence.
+   2026-08-04; NARROWED at rung 9): luaur's error layer takes `&str`, so
+   non-UTF-8 bytes in a userdata `__type` name are lossy-replaced (U+FFFD)
+   in error messages where C passes raw bytes — this still affects
+   `luaL_checkudata`/`luaL_checkudatatagged` type names. Rung 9 gave
+   `luaL_where` and `pusherror` byte-exact paths (explicit lengths through
+   `lua_pushlstring`), so chunk/source bytes in error prefixes are now
+   faithful. Unreachable for Nuxie's ASCII type registrations; the
+   scripted side-channel referees any corpus-visible divergence.
 
 ## Oracle facts that bind the port
 
@@ -150,9 +156,9 @@ ratchet floor at every rung):
 | 4 | `f1f121dc..ddcea05e` (0.728) | 395+/301- | landed 2026-08-04: 57 rows ported, 9 no-op; three flag removals hardwired ON (`LuauConstJustReportErrorForUnderfill`, `LuauCstExprGroup`, `LuauErrorTolerantPrettyPrinting`); bytecode-graph SSA maturation (reverse def-use, sealed SSA, inliner phi anchoring, cyclic-phi serialization) |
 | 5 | `ddcea05e..6e9b580e` (0.729) | 1596+/96- | landed 2026-08-04: bytecode v12 unit (dark emission + unconditional loader), Proto::cost, SCCP + DenseHash2 foundation, resume-ccalls hardwiring, direct-field GC remarking; audit REJECT adjudicated to documented divergence 7 (&str error layer) |
 | 6 | `6e9b580e..e8ae48c4` (0.730) | 1363+/547- | landed 2026-08-04: unsigned-class cluster, bytecode target 9, mutation-tracker unification, SCCP evaluator/driver; dark flags `LuauMathRoundNegZero`, `LuauGcMarkUdataAccess`; dormant arithToK MOD/POW divergence recorded in luaur-bytecode NUXIE_PATCH.md for re-audit |
-| 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | inventoried |
-| 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | inventoried |
-| 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | inventoried |
+| 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | landed 2026-08-04: double-vector representation foundation (VECTORD tag, vectorPrecision, allocator/lvector, caller sweep), class hoisting, dark `LuauCompileIifeInline`/`LuauBytecodeFold`/`LuauXpcallFixMessageYieldPath`/`LuauBackedgeHeapCheck`, memorydump/allocationrate wrappers |
+| 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | landed 2026-08-04: class inheritance (LOP_NEWCLASS/super/luaR_inheritclass), custom-pcall retirement (rung-1 unit now unconditional), CstAttr retirement, dark v13 double-vector constants / export-table optimization / managed debug names; audit-driven fix: class-shape decode mirrors C's resize+append doubled layout |
+| 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | landed 2026-08-05: ALL 28 rows ported, 0 deferred — Rive builtin ABI (LBF_RIVE_FROUND=243, Vector block 245-255), fastcall table wired, math.fround (native + library), Rive vector fast functions, lua_pushvector2 (stale-z quirk faithful), RIVE_LUAU baked ON (no print/newproxy/writestring; rive luaL_where/pusherror), LBC_VERSION_TARGET 7, unconditional lexeme capture |
 
 Rung 9 is the rive patch set: vector fast functions on 3 components,
 native `math.fround`, `LBC_VERSION_TARGET` held at 7 (which is why the
@@ -168,14 +174,20 @@ preserving, row-by-row commits, focused gates per row, rung-level
 
 Additional plan points:
 
-1. **Known target symptom to retire:** `scope_probe` SIGTRAPs on
-   `lua_pushcclosurek`'s stack assertion under newer-engine comparison
-   (S4-3 carry-forward; C++ completes the stream while Rust traps —
-   C++ release builds compile the assertion out and survive on stack
-   slack). The upstream fix class is `LuauAutoStack` (rung 1, dark);
-   retiring the SIGTRAP will be a recorded flag-enable change validated
-   by scope_probe going exact, not a silent flip. Fork parity is not
-   claimed until this reproduces green.
+1. **`scope_probe` SIGTRAP — resolved before the ladder, not by it
+   (verified 2026-08-05).** The 2026-08-02 triage recorded Rust trapping
+   on `lua_pushcclosurek`'s stack assertion for this fixture. Direct
+   probe of the completed fork (`rust-golden-runner-scripted --file
+   fixtures/sync/scope_probe.riv --execute-scripts --samples 0.0,0.5,1.0`)
+   exits 0 with a complete 33-line stream — but so does the SAME probe at
+   the pre-ladder fork baseline (`2cb99385`). The symptom's precondition
+   was already gone: the S4-3 port (`76cb108a`, 2026-08-02, "Statically
+   link library requires") landed two days before the fork baseline. The
+   ladder therefore does NOT claim credit for retiring it; the honest
+   record is that the trap does not reproduce at either endpoint, and
+   `scope_probe` is corpus-`exact` under the standing gates. The upstream
+   fix class `LuauAutoStack` remains ported-but-dark (rung 1); enabling it
+   stays a separate recorded change with its own gate evidence.
 2. Oracles: the real bytecode-v7 fixture and the full forced-scripted
    ratchet remain the floor; the exact-0.732 C++ runner is the target
    comparison. The editor-emitted-bytecode compatibility matrix
@@ -192,3 +204,41 @@ Additional plan points:
 Out of scope for the fork-setup change that introduced this document: no
 engine internals were ported; the vendor expansion and workspace switch are
 provenance-only.
+
+## Ladder completion record (2026-08-05)
+
+All nine rungs landed, each as its own PR with the full gate battery green
+(corpus exactness held at every rung) and each preceded by an adversarial
+read-only audit bound to the C diff:
+
+| rung | PR | audit |
+|---|---|---|
+| baseline (vendor + workspace switch) | #247 | — |
+| ladder record | #250 | — |
+| 1 — 0.725 | #251 | ACCEPT, 0 findings |
+| 2 — 0.726 | #259 | ACCEPT, 0 findings |
+| 3 — 0.727 | #262 | ACCEPT, 0 findings |
+| 4 — 0.728 | #265 | ACCEPT, 0 findings |
+| 5 — 0.729 | #266 | 1 CONFIRMED → adjudicated to carried divergence 7 |
+| 6 — 0.730 | #269 | ACCEPT; dormant `arithToK` divergence recorded for re-audit |
+| 7 — 0.731 | #282 | ACCEPT, 0 findings |
+| 8 — 0.732 | #289 | 2 CONFIRMED → stale stack rebased; class-shape decode fixed to mirror C |
+| 9 — rive_0_732 patch set | #290 | ACCEPT, 0 findings |
+
+Method (reusable for the next engine bump): per rung, a read-only inventory
+maps every C hunk to its Rust twin with FFlag posture and scope class; the
+orchestrator adjudicates; a writer lane ports row-by-row with per-row focused
+gates in its own worktree; an adversarial auditor re-derives behavior from
+the C diff; then land.sh. Ledgers and per-rung disposition reports live in
+the lane worktrees' untracked `.luau-fork-work/`.
+
+**Standing follow-ups** (none block parity):
+
+- Fast-call dispatch is still entirely `luauF_missing` outside the rive block
+  (carried divergence 1) — a perf-only lane, semantically equivalent by
+  Luau's fallback design.
+- `arithToK` MOD/POW const-lhs: Rust skips where C crashes; unreachable today
+  (no `foldConstants` caller in either tree). Re-audit when a caller lands
+  (`vendor/luaur-bytecode-0.1.8/NUXIE_PATCH.md`).
+- Dark flags ported but pinned OFF track the oracle's flags-OFF profile.
+  Enabling any one is its own change with gate evidence.

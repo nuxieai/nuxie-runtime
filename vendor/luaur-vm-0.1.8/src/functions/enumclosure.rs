@@ -21,11 +21,21 @@ pub(crate) unsafe fn enumclosure(ctx: *mut EnumContext, cl: *mut Closure) {
     }
 
     if cl_ref.isC != 0 {
+        let c = &cl_ref.inner.c;
+        let debugname = if luaur_common::FFlag::LuauManagedDebugNames.get() {
+            if c.debugname.is_null() {
+                core::ptr::null()
+            } else {
+                getstr(c.debugname)
+            }
+        } else {
+            c.debugname_DEPRECATED
+        };
         enumnode(
             ctx,
             obj,
             size_cclosure(cl_ref.nupvalues as c_int),
-            cl_ref.inner.c.debugname,
+            debugname,
         );
     } else {
         let p: *mut Proto = cl_ref.inner.l.p;

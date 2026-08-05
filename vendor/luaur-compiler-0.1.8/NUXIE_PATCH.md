@@ -29,3 +29,21 @@
 - Ported official Luau 0.730 delta (upstream 6e9b580e..e8ae48c4).
 - Touched areas: unconditional table-function inlining and escape-based table
   mutation tracking, including removal of the deprecated tracker.
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: precision-selectable vector constants and folding, hoisted
+  class locals across parsing/value tracking/codegen, and dark IIFE inlining.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: superclass-aware `NEWCLASS` emission, shaped export tables,
+  export-aware value tracking, delayed function exports, and proto marking.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: Rive `math.fround`/`Vector` builtin recognition, exact
+  arity/safety metadata, and numeric/vector result type mapping.

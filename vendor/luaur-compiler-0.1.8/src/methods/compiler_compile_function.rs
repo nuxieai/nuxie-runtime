@@ -6,6 +6,7 @@ use luaur_ast::records::ast_expr_function::AstExprFunction;
 use luaur_ast::records::ast_node::AstNode;
 use luaur_ast::records::ast_stat::AstStat;
 use luaur_common::enums::luau_bytecode_type::LBC_TYPE_ANY;
+use luaur_common::enums::luau_proto_flag::LuauProtoFlag;
 use luaur_common::enums::luau_opcode::LuauOpcode;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 use luaur_common::macros::luau_timetrace_argument::LUAU_TIMETRACE_ARGUMENT;
@@ -29,6 +30,13 @@ impl Compiler {
             );
             if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.current_function = func;
+            }
+
+            if luaur_common::FFlag::LuauExportValueSyntax.get()
+                && luaur_common::FFlag::LuauOptimizeExportTable.get()
+                && self.at_top_level()
+            {
+                self.build_export_table_shape();
             }
 
             let mut rs = self.reg_scope_compiler();
@@ -60,6 +68,10 @@ impl Compiler {
             let mut terminates_early = false;
             self.current_function = func;
 
+            if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() && self.at_top_level() {
+                self.preallocate_hoisted_classes(stat);
+            }
+
             for i in 0..(*stat).body.size {
                 let body_stat = *(*stat).body.data.add(i);
                 self.compile_stat(body_stat);
@@ -71,9 +83,7 @@ impl Compiler {
 
             if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.set_debug_line_end(stat as *mut AstNode);
-                if (!self.exported_locals.is_empty() || !self.exported_classes.is_empty())
-                    && self.at_top_level()
-                {
+                if !self.exports.is_empty() && self.at_top_level() {
                     self.compile_export_table();
                 } else if !terminates_early {
                     self.close_locals(0);
@@ -135,6 +145,12 @@ impl Compiler {
             }
             if func_ref.has_native_attribute() {
                 *protoflags |= 4; // LPF_NATIVE_FUNCTION = 1 << 2 (was wrongly 2)
+            }
+            if luaur_common::FFlag::LuauExportValueSyntax.get()
+                && !self.exports.is_empty()
+                && func_ref.function_depth == 0
+            {
+                *protoflags |= LuauProtoFlag::LPF_USES_EXPORT as u8;
             }
 
             // C: `isInlinable = !hasMultiRet && !getfenvUsed && !setfenvUsed;

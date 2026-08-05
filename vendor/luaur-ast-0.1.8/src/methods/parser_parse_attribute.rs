@@ -10,7 +10,6 @@ use crate::records::temp_vector::TempVector;
 
 impl Parser {
     pub fn parse_attribute(&mut self, attributes: &mut TempVector<'_, *mut AstAttr>) {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         luaur_common::LUAU_ASSERT!(self.lexer.current().r#type == Type::Attribute);
 
         let empty: AstArray<*mut AstExpr> = AstArray::default();

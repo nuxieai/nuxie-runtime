@@ -22,7 +22,6 @@ impl CstStatLocalFunction {
         local_keyword_position: Position,
         function_keyword_position: Position,
     ) -> Self {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         Self {
             base: CstNode {
                 class_index: <Self as CstNodeClass>::CLASS_INDEX,

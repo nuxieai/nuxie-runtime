@@ -1,5 +1,4 @@
 use crate::enums::type_lexer::Type;
-use crate::functions::is_expr_l_value::is_expr_l_value;
 use crate::records::ast_array::AstArray;
 use crate::records::ast_attr::AstAttr;
 use crate::records::ast_expr::AstExpr;
@@ -20,20 +19,11 @@ impl Parser {
         attributes: &AstArray<*mut AstAttr>,
         cst_attr_lists: *mut TempVector<'_, *mut CstAttrList>,
     ) -> *mut AstStatFunction {
-        if !cst_attr_lists.is_null() {
-            luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
-        }
-        let start = if luaur_common::FFlag::LuauCstAttr.get() {
-            self.get_attribute_start_location(
-                attributes,
-                cst_attr_lists,
-                self.lexer.current().location,
-            )
-        } else if attributes.size > 0 {
-            unsafe { (**attributes.data).base.location }
-        } else {
-            self.lexer.current().location
-        };
+        let start = self.get_attribute_start_location(
+            attributes,
+            cst_attr_lists,
+            self.lexer.current().location,
+        );
 
         let match_function = *self.lexer.current();
         self.next_lexeme();
@@ -42,7 +32,7 @@ impl Parser {
         let mut debugname = AstName::new();
         let mut expr = self.parse_function_name(&mut hasself, &mut debugname);
 
-        if !is_expr_l_value(expr) {
+        if !self.is_expr_l_value(expr) {
             expr = if luaur_common::FFlag::LuauExportValueSyntax.get() {
                 self.report_l_value_error(expr) as *mut AstExpr
             } else {
@@ -79,7 +69,7 @@ impl Parser {
 
         if self.options.store_cst_data {
             let cst_node = unsafe {
-                if luaur_common::FFlag::LuauCstAttr.get() && !cst_attr_lists.is_null() {
+                if !cst_attr_lists.is_null() {
                     (*self.allocator).alloc(CstStatFunction::new_with_attr_lists(
                         self.copy_temp_vector_t(&*cst_attr_lists),
                         match_function.location.begin,

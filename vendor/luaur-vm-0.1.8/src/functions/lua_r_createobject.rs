@@ -24,9 +24,9 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
     ) as *mut crate::records::luau_object::LuauObject;
     luaC_init!(L, classinst, lua_Type::LUA_TOBJECT as core::ffi::c_int);
     (*classinst).lclass = classobject;
-    (*classinst).numberofmembers = (*classobject).numberofinstancemembers;
     (*classinst).members =
-        luaM_newarray!(L, (*classinst).numberofmembers, TValue, (*L).activememcat);
+        luaM_newarray!(L, (*classobject).numberofinstancemembers, TValue, (*L).activememcat);
+    (*classinst).numberofmembers = (*classobject).numberofinstancemembers;
     let numargs: core::ffi::c_int = lua_gettop(L);
 
     // We need to initialize all of the instance members to `nil` to start.

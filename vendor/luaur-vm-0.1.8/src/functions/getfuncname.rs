@@ -9,9 +9,13 @@ pub fn getfuncname(cl: *mut Closure) -> *const core::ffi::c_char {
         }
 
         if (*cl).isC != 0 {
-            let c_debugname = (&(*cl).inner.c).debugname;
-            if !c_debugname.is_null() {
-                c_debugname
+            let c = &(*cl).inner.c;
+            if luaur_common::FFlag::LuauManagedDebugNames.get() && !c.debugname.is_null() {
+                getstr(c.debugname)
+            } else if !luaur_common::FFlag::LuauManagedDebugNames.get()
+                && !c.debugname_DEPRECATED.is_null()
+            {
+                c.debugname_DEPRECATED
             } else {
                 core::ptr::null()
             }

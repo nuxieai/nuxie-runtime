@@ -31,12 +31,20 @@ impl Compiler {
                 Type::Type_Integer => {
                     cid = (*self.bytecode).add_constant_integer((*constant).data.value_integer64);
                 }
-                Type::Type_Vector => {
-                    cid = (*self.bytecode).add_constant_vector(
-                        (*constant).data.value_vector[0],
-                        (*constant).data.value_vector[1],
-                        (*constant).data.value_vector[2],
-                        (*constant).data.value_vector[3],
+                Type::Type_Vectorf => {
+                    cid = (*self.bytecode).add_constant_vectorf(
+                        (*constant).data.value_vectorf[0],
+                        (*constant).data.value_vectorf[1],
+                        (*constant).data.value_vectorf[2],
+                        (*constant).data.value_vectorf[3],
+                    );
+                }
+                Type::Type_Vectord => {
+                    cid = (*self.bytecode).add_constant_vectord(
+                        (*constant).data.value_vectord[0],
+                        (*constant).data.value_vectord[1],
+                        (*constant).data.value_vectord[2],
+                        (*constant).data.value_vectord[3],
                     );
                 }
                 Type::Type_String => {

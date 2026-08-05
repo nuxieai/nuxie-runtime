@@ -57,6 +57,9 @@ pub unsafe fn lua_newstate(f: lua_Alloc, ud: *mut core::ffi::c_void) -> *mut lua
     (*g).strt.hash = core::ptr::null_mut();
     setnilvalue!(&mut (*g).pseudotemp as *mut TValue);
     setnilvalue!(registry!(L) as *const TValue as *mut TValue);
+    setnilvalue!(core::ptr::addr_of_mut!((*g).weakregistry));
+    (*g).weakregistryfree = 0;
+    (*g).embeddergc = None;
     (*g).gcstate = crate::macros::gc_spause::GCSpause as u8;
     (*g).gray = core::ptr::null_mut();
     (*g).grayagain = core::ptr::null_mut();
@@ -81,6 +84,7 @@ pub unsafe fn lua_newstate(f: lua_Alloc, ud: *mut core::ffi::c_void) -> *mut lua
 
     for i in 0..LUA_UTAG_LIMIT as usize {
         (*g).udatagc[i] = None;
+        (*g).udatamark[i] = None;
         (*g).udatamt[i] = core::ptr::null_mut();
     }
 

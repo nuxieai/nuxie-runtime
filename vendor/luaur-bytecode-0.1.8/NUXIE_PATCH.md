@@ -34,3 +34,21 @@ opcode check into the selection guard and skips the fold instead. Zero call
 sites for bytecode `foldConstants` exist in either tree at this pin, so the
 divergence is unreachable. Re-audit this site at the first rung that
 introduces a caller ("crash vs silently-unfolded" becomes observable then).
+
+## Luau fork rung 7
+
+- Ported official Luau 0.731 delta (upstream e8ae48c4..f8ca77ac).
+- Touched areas: float/double vector constant tags and graph round-tripping,
+  centralized def-use-safe `BcFunction` rewrites, and SCCP IEEE division.
+
+## Luau fork rung 8
+
+- Ported official Luau 0.732 delta (upstream f8ca77ac..decb2d05).
+- Touched areas: bytecode-v13 double-vector emission, v100 class shapes and
+  `NEWCLASS` graph support, dead-PC sentinels, and sealed feedback migration.
+
+## Luau fork rung 9
+
+- Ported rive_0_732 fork patch set (decb2d05..86eb0096).
+- Touched areas: default version-selection coverage for the pinned bytecode-v7
+  compatibility target.

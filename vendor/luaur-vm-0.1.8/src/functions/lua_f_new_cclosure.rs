@@ -23,7 +23,8 @@ pub unsafe fn luaF_newCclosure(l: *mut lua_State, nelems: c_int, e: *mut LuaTabl
     let cc = core::ptr::addr_of_mut!((*c).inner.c) as *mut CClosure;
     (*cc).f = None;
     (*cc).cont = None;
-    (*cc).debugname = core::ptr::null();
+    (*cc).debugname = core::ptr::null_mut();
+    (*cc).debugname_DEPRECATED = core::ptr::null();
 
     c
 }

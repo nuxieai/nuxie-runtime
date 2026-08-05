@@ -382,6 +382,14 @@ impl BytecodeBuilder {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VJUMP!(LUAU_INSN_D(insn), i, self.insns, insnvalid);
                 }
+                LuauOpcode::LOP_NEWCLASS => {
+                    LUAU_ASSERT!(luaur_common::FFlag::DebugLuauUserDefinedClasses.get());
+                    VREG!(LUAU_INSN_A(insn) as u8, func);
+                    let super_ = LUAU_INSN_B(insn) as u8;
+                    LUAU_ASSERT!(super_ == 0xff || (super_ as usize) < func.maxstacksize as usize);
+                    LUAU_ASSERT!(LUAU_INSN_C(insn) == 0);
+                    VCONST!(self.insns[i + 1] as usize, ClassShape, self);
+                }
                 _ => {
                     LUAU_ASSERT!(false, "Unsupported opcode");
                 }

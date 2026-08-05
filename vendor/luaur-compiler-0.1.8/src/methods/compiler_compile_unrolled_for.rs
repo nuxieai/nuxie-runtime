@@ -47,6 +47,7 @@ impl Compiler {
                     &mut self.locstants,
                     self.builtins_fold,
                     self.builtins_fold_library_k,
+                    self.options.vector_precision == 1,
                     self.options.library_member_constant_cb,
                     stat as *mut AstNode,
                     &mut *self.names,

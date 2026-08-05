@@ -232,30 +232,15 @@ impl<'a> Printer<'a> {
                 self.writer.symbol("]");
             }
         } else if let Some(a) = unsafe { ast_node_as::<AstExprFunction>(node).as_mut() } {
-            if luaur_common::FFlag::LuauCstAttr.get() {
-                let cst_node = self.lookup_cst_node_impl::<CstExprFunction>(node);
-                if !cst_node.is_null() {
-                    self.visualize_attributes(
-                        &a.attributes,
-                        unsafe { &(*cst_node).attr_lists },
-                    );
-                    if unsafe { (*cst_node).function_keyword_position.has_value() } {
-                        self.advance(unsafe { &(*cst_node).function_keyword_position });
-                    }
-                } else {
-                    for attr in a.attributes.iter() {
-                        self.visualize_attribute(unsafe { &mut **attr });
-                    }
+            let cst_node = self.lookup_cst_node_impl::<CstExprFunction>(node);
+            if !cst_node.is_null() {
+                self.visualize_attributes(&a.attributes, unsafe { &(*cst_node).attr_lists });
+                if unsafe { (*cst_node).function_keyword_position.has_value() } {
+                    self.advance(unsafe { &(*cst_node).function_keyword_position });
                 }
             } else {
                 for attr in a.attributes.iter() {
                     self.visualize_attribute(unsafe { &mut **attr });
-                }
-                let cst_node = self.lookup_cst_node_impl::<CstExprFunction>(node);
-                if !cst_node.is_null()
-                    && unsafe { (*cst_node).function_keyword_position.has_value() }
-                {
-                    self.advance(unsafe { &(*cst_node).function_keyword_position });
                 }
             }
             self.writer.keyword("function");

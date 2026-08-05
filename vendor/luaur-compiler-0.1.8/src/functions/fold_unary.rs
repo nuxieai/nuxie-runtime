@@ -19,13 +19,20 @@ pub fn fold_unary(result: &mut Constant, op: AstExprUnaryOp, arg: &Constant) {
                 unsafe {
                     result.data.value_number = -arg.data.value_number;
                 }
-            } else if arg.r#type == Type::Type_Vector {
-                result.r#type = Type::Type_Vector;
+            } else if arg.r#type == Type::Type_Vectorf {
+                result.r#type = Type::Type_Vectorf;
                 unsafe {
-                    result.data.value_vector[0] = -arg.data.value_vector[0];
-                    result.data.value_vector[1] = -arg.data.value_vector[1];
-                    result.data.value_vector[2] = -arg.data.value_vector[2];
-                    result.data.value_vector[3] = -arg.data.value_vector[3];
+                    result.data.value_vectorf[0] = -arg.data.value_vectorf[0];
+                    result.data.value_vectorf[1] = -arg.data.value_vectorf[1];
+                    result.data.value_vectorf[2] = -arg.data.value_vectorf[2];
+                    result.data.value_vectorf[3] = -arg.data.value_vectorf[3];
+                }
+            } else if arg.r#type == Type::Type_Vectord {
+                result.r#type = Type::Type_Vectord;
+                unsafe {
+                    for i in 0..4 {
+                        result.data.value_vectord[i] = -arg.data.value_vectord[i];
+                    }
                 }
             }
         }

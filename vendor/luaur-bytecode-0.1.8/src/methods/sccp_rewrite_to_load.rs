@@ -9,7 +9,7 @@ impl<'func, 'ops> Sccp<'func, 'ops> {
     pub fn rewrite_to_load(&mut self, op: BcOp, lattice: ConstnessLattice) {
         let used_ops = self.func().instructions[op.index as usize].ops.clone();
         for used_op in used_ops.iter().copied() {
-            self.erase_use(op, used_op);
+            self.func_mut().erase_use(op, used_op);
         }
         let new_operand = if lattice.kind == Constness::VmConstant {
             lattice.vm_const.expect("VM constant lattice")

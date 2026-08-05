@@ -17,7 +17,10 @@ impl Compiler {
         unsafe {
             let expr = rtti::ast_node_as::<AstExprLocal>(node as *mut _);
             if !expr.is_null() {
-                if luaur_common::FFlag::LuauExportValueSyntax.get() && (*(*expr).local).is_exported
+                if luaur_common::FFlag::LuauExportValueSyntax.get()
+                    && (*(*expr).local).is_exported
+                    && (!luaur_common::FFlag::LuauOptimizeExportTable.get()
+                        || !self.exports.exported_functions.contains(&(*expr).local))
                 {
                     return LValue {
                         kind: Kind::Kind_IndexName,
@@ -55,6 +58,18 @@ impl Compiler {
             } else {
                 let expr = rtti::ast_node_as::<AstExprGlobal>(node as *mut _);
                 if !expr.is_null() {
+                    if luaur_common::FFlag::DebugLuauUserDefinedClasses.get() {
+                        if let Some(class_local) = self.class_locals.find(&(*expr).name) {
+                            crate::records::compile_error::CompileError::raise(
+                                &(*expr).base.base.location,
+                                format_args!(
+                                    "'{}' refers to a class and cannot be used as a variable name (defined on line {})",
+                                    core::ffi::CStr::from_ptr((*expr).name.value).to_string_lossy(),
+                                    (**class_local).location.begin.line + 1
+                                ),
+                            );
+                        }
+                    }
                     LValue {
                         kind: Kind::Kind_Global,
                         reg: 0,

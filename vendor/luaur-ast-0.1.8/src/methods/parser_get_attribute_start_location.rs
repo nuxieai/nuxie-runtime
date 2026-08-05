@@ -12,7 +12,6 @@ impl Parser {
         cst_attr_lists: *const TempVector<'_, *mut CstAttrList>,
         default_location: Location,
     ) -> Location {
-        luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauCstAttr.get());
         if attributes.size > 0 {
             if !cst_attr_lists.is_null() && unsafe { (*cst_attr_lists).size() > 0 } {
                 let first_attr_location = unsafe { (**attributes.data).base.location };

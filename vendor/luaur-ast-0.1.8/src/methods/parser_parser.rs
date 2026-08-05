@@ -10,7 +10,6 @@ use crate::records::parser::Parser;
 use crate::records::position::Position;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 use luaur_common::records::dense_hash_map::DenseHashMap;
-use luaur_common::records::dense_hash_set::DenseHashSet;
 
 // C++ `kParseNameError = "%error-id%"` (ParseResult.h). The port used "(error)".
 const K_PARSE_NAME_ERROR: &str = "%error-id%";
@@ -39,6 +38,7 @@ impl Parser {
             allocator,
             comment_locations: alloc::vec::Vec::new(),
             hotcomments: alloc::vec::Vec::new(),
+            lexemes: alloc::vec::Vec::new(),
             hotcomment_header: true,
             recursion_counter: 0,
             name_self: AstName::default(),
@@ -50,7 +50,7 @@ impl Parser {
             type_function_depth: 0,
             local_map: DenseHashMap::new(AstName::default()),
             local_stack: alloc::vec::Vec::with_capacity(16),
-            classes_within_module: DenseHashSet::new(AstName::default()),
+            classes_within_module: DenseHashMap::new(AstName::default()),
             parse_errors: alloc::vec::Vec::new(),
             // C++ sizes this `[unsigned(Lexeme::Type::Reserved_END)]`; 256 only
             // covered char tokens and overflowed on reserved-keyword types

@@ -13,9 +13,20 @@ use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_unref(L: *mut lua_State, ref_: c_int) {
+pub unsafe fn lua_unref(L: *mut lua_State, ref_: c_int) -> c_int {
+    if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        let g = (*L).global;
+        crate::functions::registryunref::registryunref(
+            L,
+            ref_,
+            core::ptr::addr_of_mut!((*g).registry),
+            core::ptr::addr_of_mut!((*g).registryfree),
+        );
+        return crate::macros::lua_noref::LUA_NOREF;
+    }
+
     if ref_ <= LUA_REFNIL {
-        return;
+        return crate::macros::lua_noref::LUA_NOREF;
     }
 
     let g: *mut global_State = (*L).global;
@@ -36,4 +47,5 @@ pub unsafe fn lua_unref(L: *mut lua_State, ref_: c_int) {
     setnvalue!(mutable_slot, (*g).registryfree as f64);
 
     (*g).registryfree = ref_;
+    crate::macros::lua_noref::LUA_NOREF
 }

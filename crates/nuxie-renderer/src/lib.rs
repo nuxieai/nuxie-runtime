@@ -10,8 +10,6 @@ mod atlas_pipeline;
 #[cfg(test)]
 mod atlas_placement_oracle;
 mod atomic_pipeline;
-#[cfg(any(test, target_arch = "wasm32"))]
-mod browser_surface_lifecycle;
 mod clockwise_atomic_pipeline;
 mod composite_pipeline;
 #[cfg(test)]
@@ -22,9 +20,6 @@ mod gpu;
 mod gpu_canvas;
 mod gr_triangulator;
 mod gradient_pipeline;
-// Kept standalone until a renderer path has a proven grouping integration.
-#[cfg(target_arch = "wasm32")]
-mod browser;
 #[allow(dead_code)]
 mod intersection_board;
 mod logical_flush;
@@ -35,6 +30,8 @@ mod msaa_stencil_pipeline;
 mod path_pipeline;
 #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
 mod present_pipeline;
+#[cfg(target_arch = "wasm32")]
+mod presentation;
 mod skyline;
 mod storage_texture;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -106,7 +103,10 @@ impl fmt::Display for RendererError {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use browser::{BrowserFactory, BrowserFrame, BrowserResizeError};
+pub use presentation::{
+    WgpuPresentationAcquireError, WgpuPresentationAlpha, WgpuPresentationFrame,
+    WgpuPresentationSurface,
+};
 
 impl Error for RendererError {}
 

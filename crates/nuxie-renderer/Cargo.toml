@@ -36,10 +36,7 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["block2
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
+raw-window-handle = "0.6"
 
 [dev-dependencies]
 nuxie-render-stream = { path = "../nuxie-render-stream" }

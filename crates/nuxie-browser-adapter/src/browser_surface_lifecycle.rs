@@ -1,3 +1,5 @@
+//! Browser-owned bounded surface acquisition and recovery policy.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SurfaceAcquisitionFailure {
     Timeout,
@@ -59,8 +61,8 @@ mod tests {
     use std::convert::Infallible;
 
     use super::{
-        acquire_surface_texture, surface_recovery_action, SurfaceAcquisitionFailure,
-        SurfaceRecoveryAction, SurfaceRecoveryError,
+        SurfaceAcquisitionFailure, SurfaceRecoveryAction, SurfaceRecoveryError,
+        acquire_surface_texture, surface_recovery_action,
     };
 
     #[test]

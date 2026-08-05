@@ -1,13 +1,19 @@
-use super::browser_surface_lifecycle::{
-    acquire_surface_texture, SurfaceAcquisitionFailure, SurfaceRecoveryAction, SurfaceRecoveryError,
+use crate::browser_surface_lifecycle::{
+    SurfaceAcquisitionFailure, SurfaceRecoveryAction, SurfaceRecoveryError, acquire_surface_texture,
 };
-use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
-use super::{RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     ImageDecodeError, ImageSampler, Mat2D, RawPath, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
     Renderer,
+};
+use nuxie_renderer::{
+    RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuPresentationAcquireError,
+    WgpuPresentationAlpha, WgpuPresentationFrame, WgpuPresentationSurface,
+};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WebCanvasWindowHandle,
+    WindowHandle,
 };
 use std::cell::Cell;
 use std::cell::RefCell;
@@ -327,14 +333,7 @@ impl BrowserFrame {
             presentation,
             lease,
         } = self;
-        let surface_texture = presentation.current_texture()?;
-        let view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        inner
-            .finish_to_texture_view_async(&view, &presentation.presenter)
-            .await?;
-        presentation.queue.present(surface_texture);
+        presentation.current_frame()?.present(inner).await?;
         drop(lease);
         Ok(())
     }
@@ -356,13 +355,10 @@ impl BrowserFrame {
 }
 
 struct BrowserPresentation {
-    instance: wgpu::Instance,
-    device: wgpu::Device,
     canvas: HtmlCanvasElement,
-    surface: RefCell<wgpu::Surface<'static>>,
-    configuration: RefCell<wgpu::SurfaceConfiguration>,
-    presenter: PresentPipeline,
-    queue: wgpu::Queue,
+    surface: RefCell<WgpuPresentationSurface>,
+    width: Cell<u32>,
+    height: Cell<u32>,
 }
 
 impl BrowserPresentation {
@@ -372,45 +368,29 @@ impl BrowserPresentation {
         width: u32,
         height: u32,
     ) -> Result<Self, RendererError> {
-        let instance = factory.context.instance.clone();
-        let device = factory.context.device.clone();
-        let surface = create_browser_surface(&instance, canvas.clone(), "creation")?;
-        let mut configuration = surface
-            .get_default_config(&factory.context.adapter, width, height)
-            .ok_or_else(|| {
-                RendererError::Adapter(
-                    "selected WebGPU adapter cannot present to the browser canvas".into(),
-                )
-            })?;
-        configuration.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
-        surface.configure(&device, &configuration);
+        let surface = factory.create_presentation_surface(
+            CanvasSurfaceTarget(canvas.clone()),
+            width,
+            height,
+            WgpuPresentationAlpha::Premultiplied,
+        )?;
         Ok(Self {
-            presenter: PresentPipeline::new(
-                &device,
-                configuration.format,
-                PresentTargetAlpha::Premultiplied,
-            ),
-            instance,
-            device,
             canvas,
             surface: RefCell::new(surface),
-            configuration: RefCell::new(configuration),
-            queue: factory.context.queue.clone(),
+            width: Cell::new(width),
+            height: Cell::new(height),
         })
     }
 
     fn configure(&self, width: u32, height: u32) {
-        let mut configuration = self.configuration.borrow_mut();
-        configuration.width = width;
-        configuration.height = height;
-        self.surface
-            .borrow()
-            .configure(&self.device, &configuration);
+        self.surface.borrow_mut().configure(width, height);
+        self.width.set(width);
+        self.height.set(height);
     }
 
-    fn current_texture(&self) -> Result<wgpu::SurfaceTexture, RendererError> {
+    fn current_frame(&self) -> Result<WgpuPresentationFrame, RendererError> {
         acquire_surface_texture(
-            || self.acquire_current_texture(),
+            || self.acquire_current_frame(),
             |action| match action {
                 SurfaceRecoveryAction::ReconfigureAndRetry => self.reconfigure_surface(),
                 SurfaceRecoveryAction::RecreateAndRetry => self.recreate_surface(),
@@ -424,42 +404,42 @@ impl BrowserPresentation {
         })
     }
 
-    fn acquire_current_texture(&self) -> Result<wgpu::SurfaceTexture, SurfaceAcquisitionFailure> {
-        match self.surface.borrow().get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(texture)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => Ok(texture),
-            status => Err(surface_failure(status)),
-        }
+    fn acquire_current_frame(&self) -> Result<WgpuPresentationFrame, SurfaceAcquisitionFailure> {
+        self.surface.borrow().acquire().map_err(surface_failure)
     }
 
     fn reconfigure_surface(&self) -> Result<(), RendererError> {
-        let configuration = self.configuration.borrow();
         self.surface
-            .borrow()
-            .configure(&self.device, &configuration);
+            .borrow_mut()
+            .configure(self.width.get(), self.height.get());
         Ok(())
     }
 
     fn recreate_surface(&self) -> Result<(), RendererError> {
-        let surface = create_browser_surface(&self.instance, self.canvas.clone(), "recreation")?;
-        surface.configure(&self.device, &self.configuration.borrow());
-        *self.surface.borrow_mut() = surface;
-        Ok(())
+        self.surface
+            .borrow_mut()
+            .recreate(CanvasSurfaceTarget(self.canvas.clone()))
     }
 }
 
-fn create_browser_surface(
-    instance: &wgpu::Instance,
-    canvas: HtmlCanvasElement,
-    operation: &'static str,
-) -> Result<wgpu::Surface<'static>, RendererError> {
-    instance
-        .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
-        .map_err(|error| {
-            RendererError::Device(format!(
-                "browser WebGPU canvas surface {operation} failed: {error}"
-            ))
-        })
+#[derive(Clone)]
+struct CanvasSurfaceTarget(HtmlCanvasElement);
+
+impl HasWindowHandle for CanvasSurfaceTarget {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        let value: &JsValue = &self.0;
+        let raw = WebCanvasWindowHandle::from_wasm_bindgen_0_2(value).into();
+        // SAFETY: `raw` points at the JsValue retained by this owned target.
+        // wgpu boxes the target before asking for the handle and retains that
+        // box for the complete surface lifetime.
+        Ok(unsafe { WindowHandle::borrow_raw(raw) })
+    }
+}
+
+impl HasDisplayHandle for CanvasSurfaceTarget {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        Ok(DisplayHandle::web())
+    }
 }
 
 fn surface_acquisition_error(
@@ -484,16 +464,13 @@ fn surface_acquisition_error(
     RendererError::Device(format!("browser WebGPU canvas surface {status}{recovery}"))
 }
 
-fn surface_failure(status: wgpu::CurrentSurfaceTexture) -> SurfaceAcquisitionFailure {
-    match status {
-        wgpu::CurrentSurfaceTexture::Timeout => SurfaceAcquisitionFailure::Timeout,
-        wgpu::CurrentSurfaceTexture::Occluded => SurfaceAcquisitionFailure::Occluded,
-        wgpu::CurrentSurfaceTexture::Outdated => SurfaceAcquisitionFailure::Outdated,
-        wgpu::CurrentSurfaceTexture::Lost => SurfaceAcquisitionFailure::Lost,
-        wgpu::CurrentSurfaceTexture::Validation => SurfaceAcquisitionFailure::Validation,
-        wgpu::CurrentSurfaceTexture::Success(_) | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
-            unreachable!("successful surface acquisition has no failure status")
-        }
+fn surface_failure(error: WgpuPresentationAcquireError) -> SurfaceAcquisitionFailure {
+    match error {
+        WgpuPresentationAcquireError::Timeout => SurfaceAcquisitionFailure::Timeout,
+        WgpuPresentationAcquireError::Occluded => SurfaceAcquisitionFailure::Occluded,
+        WgpuPresentationAcquireError::Outdated => SurfaceAcquisitionFailure::Outdated,
+        WgpuPresentationAcquireError::Lost => SurfaceAcquisitionFailure::Lost,
+        WgpuPresentationAcquireError::Validation => SurfaceAcquisitionFailure::Validation,
     }
 }
 

@@ -27,7 +27,7 @@ an upward dependency on any package in this document.
 |---|---|---|---|
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
 | `nuxie-authoring` | Scene/SceneTx as one deep authoring module | `nuxie` with defaults disabled | A second runtime scene facade or product host policy |
-| `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` on wasm only | `wgpu`, device, queue, surface, or texture state |
+| `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-apple-adapter` | Apple drawable presentation | `nuxie-renderer` on Apple only | Objective-C, Metal, `wgpu`, device, queue, or texture state |
 
 The browser and Apple interfaces re-export only the existing high-level
@@ -58,8 +58,6 @@ Existing callers continue to compile during the migration:
 - `nuxie::flow_session::*` is identical to `nuxie_product::*` until UNIV-1630;
 - `nuxie::*` Scene exports and `nuxie::authoring::*` are identical to
   `nuxie_authoring::*` until UNIV-1627;
-- `nuxie_renderer::{BrowserFactory, BrowserFrame, BrowserResizeError}` is
-  identical to `nuxie_browser_adapter::*` until UNIV-1625;
 - `nuxie_renderer::{AppleSurface, ApplePresentationCompletion,
   SurfaceDisposition, SurfaceError}` is identical to
   `nuxie_apple_adapter::*` until UNIV-1626.
@@ -67,3 +65,8 @@ Existing callers continue to compile during the migration:
 These are temporary re-exports, not duplicate adapters. Later tickets move the
 implementation once and remove the lower compatibility path after all callers
 have switched.
+
+UNIV-1625 completed the browser cut: `BrowserFactory`, `BrowserFrame`, and
+`BrowserResizeError` are owned only by `nuxie-browser-adapter`. The renderer
+retains opaque presentation surface/frame primitives and exposes no raw wgpu
+device, queue, surface, or texture state.

@@ -40,6 +40,7 @@ unicode-script = "0.5.8"
 nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
+nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 png = "0.18"
 sha2 = "0.10"
 

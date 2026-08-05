@@ -308,8 +308,8 @@ fn empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw
     assert_eq!(resolved[0].value, "");
     // Runtime local 1 is the Text record. Empty shaping retains only the
     // insertion boundary; offset 1 would prove a synthesized character.
-    assert!(instance.text_caret(1, 0).is_some());
-    assert!(instance.text_caret(1, 1).is_none());
+    assert!(instance.raw_mut().text_caret(1, 0).is_some());
+    assert!(instance.raw_mut().text_caret(1, 1).is_none());
 
     let mut factory = RecordingFactory::new();
     let mut renderer = factory.make_renderer();

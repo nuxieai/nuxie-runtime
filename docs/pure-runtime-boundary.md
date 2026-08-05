@@ -78,7 +78,7 @@ guard therefore ratchets, reports, and only permits these audited debt classes:
 
 - ProjectDO implementation and re-exports in runtime/data-binding files;
 - product host commands and host resource limits in scripting files;
-- authoring constructors in binary/runtime fixture owners;
+- test-support authoring builders in binary/runtime fixture owners;
 - the exact `nux-capi -> nuxie` mixed-facade edge needed by the current
   portable ABI.
 

@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -442,7 +443,9 @@ TEST_CASE("renders selected board", "[silver]")
             generate_manifest.render([producer])
 
     def test_checked_in_manifest_is_generated_from_pinned_upstream(self):
-        runtime_dir = Path("/Users/levi/dev/oss/rive-runtime")
+        runtime_dir = Path(
+            os.environ.get("RIVE_RUNTIME_DIR", "/Users/levi/dev/oss/rive-runtime")
+        )
         manifest = Path(__file__).resolve().parents[2] / "silver-corpus.toml"
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")

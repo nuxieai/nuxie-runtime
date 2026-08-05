@@ -1416,12 +1416,24 @@ seconds = 0.016
         );
     }
 
+    fn pinned_runtime_dir(test: &str) -> Option<PathBuf> {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR").map(PathBuf::from);
+        if root.is_none() {
+            eprintln!(
+                "skipping {test}; RIVE_RUNTIME_DIR is unset; point it at a pinned rive-runtime checkout"
+            );
+        }
+        root
+    }
+
     #[test]
     fn executes_each_new_view_model_mutation_kind_against_pinned_fixtures() {
-        let runtime_dir = Path::new("/Users/levi/dev/oss/rive-runtime");
-        if !runtime_dir.is_dir() {
+        let Some(runtime_dir) = pinned_runtime_dir(
+            "executes_each_new_view_model_mutation_kind_against_pinned_fixtures",
+        ) else {
             return;
-        }
+        };
+        let runtime_dir = runtime_dir.as_path();
         let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
@@ -1492,10 +1504,12 @@ seconds = 0.016
 
     #[test]
     fn executes_six_dynamic_scroll_bodies_against_pinned_fixtures() {
-        let runtime_dir = Path::new("/Users/levi/dev/oss/rive-runtime");
-        if !runtime_dir.is_dir() {
+        let Some(runtime_dir) =
+            pinned_runtime_dir("executes_six_dynamic_scroll_bodies_against_pinned_fixtures")
+        else {
             return;
-        }
+        };
+        let runtime_dir = runtime_dir.as_path();
         let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)

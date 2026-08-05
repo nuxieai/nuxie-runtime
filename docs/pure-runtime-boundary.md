@@ -95,12 +95,18 @@ resolves package aliases and workspace-inherited specifications using Cargo's
 path and default-feature behavior. The temporary mixed facade is constrained
 to its exact dependency table, key, effective defaults, feature forwarding,
 provider activation/dependency shape, and approved baseline symbols.
+Both sides of the temporary edge are pinned to their audited in-workspace
+providers; registry, git, alias, duplicate, and target-specific substitutions
+are rejected.
 
-The source check scans build scripts, Cargo-declared custom targets, `src`,
-tests, examples, and benches. It rejects product paths and prevents every
-audited internal-debt family from appearing outside its exact files. Comments
-and literals are stripped before matching. Cleared or deleted exceptions fail
-as stale so debt cannot be silently reintroduced later.
+The source check scans every Rust source in each package, including build
+scripts and custom-target module trees outside conventional folders. It
+rejects product paths and cross-package compiler source edges, including
+conditional `path` attributes and `include!` forms it cannot prove local. The
+runtime's exact generated-object include is the sole audited dynamic exception.
+The check prevents every audited internal-debt family from appearing outside
+its exact files. Comments and literals are stripped before matching. Cleared or
+deleted exceptions fail as stale so debt cannot be silently reintroduced later.
 
 Run the independent unit and live-workspace verdicts with:
 

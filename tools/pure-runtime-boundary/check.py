@@ -9,6 +9,8 @@ debt that this checker prevents from spreading.
 from __future__ import annotations
 
 import argparse
+import ast
+import functools
 import pathlib
 import re
 import sys
@@ -222,6 +224,24 @@ LOCAL_PRODUCT_MODULE = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:mod|use)\s+"
     r"(?:(?:crate|self|super)::)*(?:authoring|flow_session)(?:::|\s*;)"
 )
+RUST_STRING_LITERAL = (
+    r'(?P<literal>"(?:\\.|[^"\\])*"|'
+    r'r(?P<hashes>#{0,255})"(?P<raw>.*?)"(?P=hashes))'
+)
+RUST_PATH_SOURCE_EDGE = re.compile(
+    rf"\bpath\s*=\s*{RUST_STRING_LITERAL}", re.DOTALL
+)
+RUST_INCLUDE_SOURCE_EDGE = re.compile(
+    rf"\binclude\s*!\s*\(\s*{RUST_STRING_LITERAL}\s*\)", re.DOTALL
+)
+RUST_INCLUDE_INVOCATION = re.compile(r"\binclude\s*!\s*[\(\[\{]")
+RUST_PATH_ASSIGNMENT = re.compile(r"\bpath\s*=")
+ALLOWED_DYNAMIC_INCLUDES = {
+    "crates/nuxie-runtime/src/objects.rs": re.compile(
+        r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
+        r'\s*"/runtime_objects\.rs"\s*\)\s*\)'
+    ),
+}
 
 
 def normalized_package_name(name: str) -> str:
@@ -240,18 +260,30 @@ def dependency_tables(
 ) -> Iterator[tuple[tuple[str, ...], dict[str, object]]]:
     if not isinstance(value, dict):
         return
-    for key, child in value.items():
-        child_path = (*path, str(key))
-        # A non-virtual workspace root is both a package manifest and the
-        # workspace manifest. Central declarations are not dependency edges of
-        # that root package; only member tables which inherit them are edges.
-        if not path and str(key) == "workspace":
+    dependency_table_names = (
+        "dependencies",
+        "dev-dependencies",
+        "build-dependencies",
+    )
+    for table_name in dependency_table_names:
+        table = value.get(table_name)
+        if isinstance(table, dict):
+            yield (*path, table_name), table
+    # Cargo dependency edges may additionally occur directly below
+    # [target.<selector>]. Arbitrary package/tool metadata can also contain a
+    # table named `dependencies`; it is data, not a Cargo edge.
+    if path:
+        return
+    targets = value.get("target")
+    if not isinstance(targets, dict):
+        return
+    for selector, target in targets.items():
+        if not isinstance(target, dict):
             continue
-        if str(key) in {"dependencies", "dev-dependencies", "build-dependencies"}:
-            if isinstance(child, dict):
-                yield child_path, child
-            continue
-        yield from dependency_tables(child, child_path)
+        for table_name in dependency_table_names:
+            table = target.get(table_name)
+            if isinstance(table, dict):
+                yield ("target", str(selector), table_name), table
 
 
 def dependency_package(dependency_name: str, specification: object) -> str:
@@ -394,6 +426,7 @@ def mixed_facade_debt_error(
     dependency_name: str,
     resolved_name: str,
     specification: object,
+    resolved_path: str | None,
 ) -> str | None:
     if (package_name, normalized_package_name(resolved_name)) != MIXED_FACADE_DEBT:
         return "not-grandfathered"
@@ -401,6 +434,8 @@ def mixed_facade_debt_error(
         return "mixed-facade debt edge expanded outside [dependencies]"
     if normalized_package_name(dependency_name) != "nuxie":
         return "mixed-facade debt edge must use dependency key 'nuxie'"
+    if resolved_path != "crates/nuxie":
+        return "mixed-facade debt edge must resolve to local crates/nuxie"
     if specification.get("default-features") is not False:
         return "mixed-facade debt edge expanded by enabling default features"
     features = specification.get("features", [])
@@ -524,6 +559,7 @@ def mixed_facade_feature_errors(
 def mixed_facade_provider_feature_errors(
     packages: list[tuple[str, str, dict[str, object]]],
     workspace_dependencies: dict[str, object],
+    repo_root: pathlib.Path,
 ) -> list[str]:
     provider = next(
         (
@@ -534,6 +570,28 @@ def mixed_facade_provider_feature_errors(
         None,
     )
     if provider is None:
+        consumer_uses_provider = False
+        for _, package_name, manifest in packages:
+            if package_name != MIXED_FACADE_DEBT[0]:
+                continue
+            for _, dependencies in dependency_tables(manifest):
+                for dependency_name, specification in dependencies.items():
+                    effective = specification
+                    if (
+                        isinstance(specification, dict)
+                        and specification.get("workspace") is True
+                    ):
+                        effective, _ = inherited_dependency_specification(
+                            dependency_name, specification, workspace_dependencies
+                        )
+                    if normalized_package_name(
+                        dependency_package(dependency_name, effective)
+                    ) == MIXED_FACADE_DEBT[1]:
+                        consumer_uses_provider = True
+        if consumer_uses_provider:
+            return [
+                "mixed facade provider 'nuxie' must remain an in-workspace package"
+            ]
         return []
     package, manifest = provider
     features = manifest.get("features")
@@ -557,21 +615,57 @@ def mixed_facade_provider_feature_errors(
                 f"activations changed from {sorted(approved_activations)!r} to "
                 f"{sorted(actual)!r}"
             )
-    dependencies = manifest.get("dependencies")
-    if not isinstance(dependencies, dict):
-        errors.append(f"{package}/Cargo.toml: mixed facade [dependencies] must be a table")
-        return errors
+    package_paths = {package_name: path for path, package_name, _ in packages}
     for dependency_name, approved_package in MIXED_FACADE_ALLOWED_PROVIDER_DEPENDENCIES.items():
-        specification = dependencies.get(dependency_name)
+        entries: list[tuple[tuple[str, ...], str, object]] = []
+        for table_path, dependencies in dependency_tables(manifest):
+            for candidate_name, candidate_specification in dependencies.items():
+                candidate_effective = candidate_specification
+                if (
+                    isinstance(candidate_specification, dict)
+                    and candidate_specification.get("workspace") is True
+                ):
+                    candidate_effective, inheritance_error = (
+                        inherited_dependency_specification(
+                            candidate_name,
+                            candidate_specification,
+                            workspace_dependencies,
+                        )
+                    )
+                    if inheritance_error is not None:
+                        continue
+                resolved = dependency_package(candidate_name, candidate_effective)
+                if (
+                    normalized_package_name(candidate_name) == dependency_name
+                    or normalized_package_name(resolved) == approved_package
+                ):
+                    entries.append((table_path, candidate_name, candidate_specification))
+        if len(entries) != 1 or entries[0][:2] != (("dependencies",), dependency_name):
+            locations = [
+                f"{'.'.join(table_path)}:{candidate_name}"
+                for table_path, candidate_name, _ in entries
+            ]
+            errors.append(
+                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
+                "must have exactly one declaration at [dependencies] under its "
+                f"approved key; found {locations!r}"
+            )
+            if not entries:
+                continue
+        table_path, declared_name, specification = entries[0]
         effective = specification
-        if isinstance(specification, dict) and specification.get("workspace") is True:
+        inherited = (
+            isinstance(specification, dict)
+            and specification.get("workspace") is True
+        )
+        if inherited:
             effective, inheritance_error = inherited_dependency_specification(
-                dependency_name, specification, workspace_dependencies
+                declared_name, specification, workspace_dependencies
             )
             if inheritance_error is not None:
                 errors.append(f"{package}/Cargo.toml: {inheritance_error}")
                 continue
-        resolved_package = dependency_package(dependency_name, effective)
+        resolved_package = dependency_package(declared_name, effective)
         if resolved_package != approved_package:
             errors.append(
                 f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
@@ -583,6 +677,24 @@ def mixed_facade_provider_feature_errors(
                 "must use an explicit table"
             )
             continue
+        dependency_path = effective.get("path")
+        dependency_base = repo_root if inherited else repo_root / package
+        resolved_local_path = None
+        if isinstance(dependency_path, str):
+            try:
+                resolved_local_path = (
+                    (dependency_base / dependency_path)
+                    .resolve()
+                    .relative_to(repo_root)
+                    .as_posix()
+                )
+            except ValueError:
+                pass
+        if resolved_local_path != package_paths.get(approved_package):
+            errors.append(
+                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
+                f"must resolve to local {package_paths.get(approved_package)!r}"
+            )
         features = effective.get("features", [])
         defaults = effective.get("default-features", True)
         if effective.get("optional") is not True or features not in (None, []) or defaults is not True:
@@ -690,8 +802,12 @@ def missing_debt_exception_errors(
 
 
 def package_rust_sources(
-    package_root: pathlib.Path, manifest: dict[str, object]
+    package_root: pathlib.Path,
+    manifest: dict[str, object],
+    workspace_package_roots: set[pathlib.Path] | None = None,
 ) -> Iterator[pathlib.Path]:
+    package_root = package_root.resolve()
+    workspace_package_roots = workspace_package_roots or {package_root}
     sources: set[pathlib.Path] = set()
     package = manifest.get("package")
     build = package.get("build") if isinstance(package, dict) else None
@@ -711,11 +827,149 @@ def package_rust_sources(
         if isinstance(target_path, str):
             sources.add((package_root / target_path).resolve())
 
-    for directory in ("src", "tests", "examples", "benches"):
-        source_root = package_root / directory
-        if source_root.is_dir():
-            sources.update(path.resolve() for path in source_root.rglob("*.rs"))
+    # A custom target can place its module tree anywhere below the package
+    # root. Scan every Rust file there, not only Cargo's conventional folders.
+    for path in package_root.rglob("*.rs"):
+        relative_parts = path.relative_to(package_root).parts
+        if relative_parts and relative_parts[0] in {"target", ".git"}:
+            continue
+        # A non-virtual workspace root may contain other package roots. Their
+        # sources are owned by those packages (which can intentionally be
+        # unprotected), not by the root package.
+        if any(
+            package_root in owner.parents and owner in path.parents
+            for owner in workspace_package_roots
+        ):
+            continue
+        sources.add(path.resolve())
     yield from sorted(sources)
+
+
+@functools.cache
+def manifest_declares_package(manifest_path: pathlib.Path) -> bool:
+    if not manifest_path.is_file():
+        return False
+    try:
+        manifest = tomllib.loads(manifest_path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    return isinstance(manifest.get("package"), dict)
+
+
+def rust_string_literal_value(match: re.Match[str]) -> str | None:
+    raw = match.group("raw")
+    if raw is not None:
+        return raw
+    try:
+        value = ast.literal_eval(match.group("literal"))
+    except (SyntaxError, ValueError):
+        return None
+    return value if isinstance(value, str) else None
+
+
+def rust_attribute_ranges(code_mask: str) -> Iterator[tuple[int, int]]:
+    for match in re.finditer(r"#\s*\[", code_mask):
+        open_bracket = code_mask.find("[", match.start(), match.end())
+        depth = 1
+        cursor = open_bracket + 1
+        while cursor < len(code_mask) and depth:
+            if code_mask[cursor] == "[":
+                depth += 1
+            elif code_mask[cursor] == "]":
+                depth -= 1
+            cursor += 1
+        if depth == 0:
+            yield match.start(), cursor
+
+
+def source_edge_boundary_error(
+    relative: str,
+    source_path: pathlib.Path,
+    package_root: pathlib.Path,
+    source: str,
+    match: re.Match[str],
+    edge_kind: str,
+) -> str | None:
+    source_edge = rust_string_literal_value(match)
+    line = source.count("\n", 0, match.start()) + 1
+    if source_edge is None:
+        return (
+            f"{relative}:{line}: protected source {edge_kind} path "
+            "could not be verified"
+        )
+    resolved = (source_path.parent / source_edge).resolve()
+    try:
+        resolved.relative_to(package_root)
+    except ValueError:
+        crosses_boundary = True
+    else:
+        crosses_boundary = any(
+            manifest_declares_package(parent / "Cargo.toml")
+            for parent in resolved.parents
+            if parent != package_root and package_root in parent.parents
+        )
+    if crosses_boundary:
+        return (
+            f"{relative}:{line}: protected source {edge_kind} crosses "
+            f"a package boundary to {resolved}"
+        )
+    return None
+
+
+def cross_package_source_edge_errors(
+    relative: str,
+    source_path: pathlib.Path,
+    package_root: pathlib.Path,
+    source: str,
+) -> list[str]:
+    errors = []
+    package_root = package_root.resolve()
+    code_mask = strip_rust_non_code(source)
+    attribute_ranges = list(rust_attribute_ranges(code_mask))
+    verified_path_starts = set()
+    for match in RUST_PATH_SOURCE_EDGE.finditer(source):
+        if code_mask[match.start()].isspace():
+            continue
+        if not any(start <= match.start() < end for start, end in attribute_ranges):
+            continue
+        verified_path_starts.add(match.start())
+        error = source_edge_boundary_error(
+            relative, source_path, package_root, source, match, "path attribute"
+        )
+        if error is not None:
+            errors.append(error)
+    for start, end in attribute_ranges:
+        for assignment in RUST_PATH_ASSIGNMENT.finditer(code_mask, start, end):
+            if assignment.start() not in verified_path_starts:
+                line = source.count("\n", 0, assignment.start()) + 1
+                errors.append(
+                    f"{relative}:{line}: protected source path attribute form "
+                    "could not be verified"
+                )
+
+    verified_include_starts = set()
+    for match in RUST_INCLUDE_SOURCE_EDGE.finditer(source):
+        if code_mask[match.start()].isspace():
+            continue
+        verified_include_starts.add(match.start())
+        error = source_edge_boundary_error(
+            relative, source_path, package_root, source, match, "include!"
+        )
+        if error is not None:
+            errors.append(error)
+    allowed_dynamic = ALLOWED_DYNAMIC_INCLUDES.get(relative)
+    for invocation in RUST_INCLUDE_INVOCATION.finditer(code_mask):
+        if invocation.start() in verified_include_starts:
+            continue
+        if allowed_dynamic is not None and allowed_dynamic.match(
+            source, invocation.start()
+        ):
+            continue
+        line = source.count("\n", 0, invocation.start()) + 1
+        errors.append(
+            f"{relative}:{line}: protected source include! form could not be verified"
+        )
+    return errors
 
 
 def inherited_dependency_specification(
@@ -756,6 +1010,9 @@ def check_repository(
     repo_root: pathlib.Path,
 ) -> tuple[list[str], dict[str, set[str]], int, int, int]:
     packages, workspace_dependencies, errors = workspace_packages(repo_root)
+    workspace_package_roots = {
+        (repo_root / package).resolve() for package, _, _ in packages
+    }
     observed_debt = {family: set() for family in INTERNAL_DEBT_FILES}
     reported_debt_spread: set[tuple[str, str]] = set()
     manifest_debt_count = 0
@@ -763,7 +1020,9 @@ def check_repository(
     protected_count = 0
 
     errors.extend(
-        mixed_facade_provider_feature_errors(packages, workspace_dependencies)
+        mixed_facade_provider_feature_errors(
+            packages, workspace_dependencies, repo_root
+        )
     )
 
     for package, package_name, manifest in packages:
@@ -795,12 +1054,34 @@ def check_repository(
                     resolved_name
                 ):
                     table = ".".join(table_path)
+                    inherited = (
+                        isinstance(specification, dict)
+                        and specification.get("workspace") is True
+                    )
+                    dependency_path = (
+                        effective_specification.get("path")
+                        if isinstance(effective_specification, dict)
+                        else None
+                    )
+                    resolved_path = None
+                    if isinstance(dependency_path, str):
+                        dependency_base = repo_root if inherited else package_root
+                        try:
+                            resolved_path = (
+                                (dependency_base / dependency_path)
+                                .resolve()
+                                .relative_to(repo_root)
+                                .as_posix()
+                            )
+                        except ValueError:
+                            pass
                     debt_error = mixed_facade_debt_error(
                         package_name,
                         table_path,
                         dependency_name,
                         resolved_name,
                         effective_specification,
+                        resolved_path,
                     )
                     if debt_error is None:
                         manifest_debt_count += 1
@@ -817,7 +1098,9 @@ def check_repository(
                         f"through [{table}]"
                     )
 
-        for source_path in package_rust_sources(package_root, manifest):
+        for source_path in package_rust_sources(
+            package_root, manifest, workspace_package_roots
+        ):
             try:
                 relative = source_path.relative_to(repo_root).as_posix()
             except ValueError:
@@ -827,10 +1110,16 @@ def check_repository(
                 )
                 continue
             try:
-                source = strip_rust_non_code(source_path.read_text())
+                raw_source = source_path.read_text()
             except OSError as error:
                 errors.append(f"{relative}: cannot read source: {error}")
                 continue
+            errors.extend(
+                cross_package_source_edge_errors(
+                    relative, source_path, package_root, raw_source
+                )
+            )
+            source = strip_rust_non_code(raw_source)
             if package_name == MIXED_FACADE_DEBT[0]:
                 errors.extend(mixed_facade_source_errors(relative, source))
             lines = source.splitlines()

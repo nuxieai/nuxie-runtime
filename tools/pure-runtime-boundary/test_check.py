@@ -69,6 +69,29 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.write_workspace()
         return package
 
+    def create_mixed_facade_provider(self) -> None:
+        renderer = self.create_package(
+            "crates/nuxie-renderer",
+            "nuxie-renderer",
+            "",
+        )
+        (renderer / "src/lib.rs").write_text(
+            "fn validate_image_bytes() {}\n"
+            "pub struct AppleSurface;\n"
+            "pub struct BrowserFrame;\n"
+        )
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [features]
+            renderer = ["dep:nuxie-renderer"]
+
+            [dependencies]
+            nuxie-renderer = { path = "../nuxie-renderer", optional = true }
+            """,
+        )
+
     def write_manifest(self, body: str) -> None:
         (self.package / "Cargo.toml").write_text(
             textwrap.dedent(
@@ -247,6 +270,345 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("./Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
 
+    def test_root_package_scan_does_not_claim_nested_product_sources(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        (product / "src").mkdir(parents=True)
+        (product / "src/lib.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text("// protected root package\n")
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_virtual_manifest_does_not_hide_protected_root_source(self) -> None:
+        hidden = self.root / "src/hidden"
+        hidden.mkdir(parents=True)
+        (hidden / "Cargo.toml").write_text("[workspace]\nmembers = []\n")
+        (hidden / "mod.rs").write_text("pub struct ProjectDataSecret;\n")
+        (self.root / "src/lib.rs").write_text("mod hidden;\n")
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("src/hidden/mod.rs", result.stderr)
+        self.assertIn("project-data boundary debt", result.stderr)
+
+    def test_unlisted_nested_package_does_not_hide_compiled_root_module(self) -> None:
+        hidden = self.root / "src/hidden"
+        hidden.mkdir(parents=True)
+        (hidden / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "misleading-owner"
+                version = "0.0.0"
+                """
+            )
+        )
+        (hidden / "mod.rs").write_text("pub struct ProjectDataSecret;\n")
+        (self.root / "src/lib.rs").write_text("mod hidden;\n")
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("src/hidden/mod.rs", result.stderr)
+        self.assertIn("project-data boundary debt", result.stderr)
+
+    def test_root_package_cannot_path_import_nested_product_source(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        (product / "src").mkdir(parents=True)
+        (product / "src/secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "src/lib.rs").write_text("mod secret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            '#[path = "../crates/nuxie-authoring/src/secret.rs"]\nmod secret;\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("path attribute crosses a package boundary", result.stderr)
+
+    def test_root_package_cannot_cfg_attr_product_source(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        product.mkdir(parents=True)
+        (product / "secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            '#[cfg_attr(target_os = "ios", '
+            'path = "../crates/nuxie-authoring/secret.rs")]\n'
+            "mod secret;\n"
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("path attribute crosses a package boundary", result.stderr)
+
+    def test_root_package_cannot_include_nested_product_source(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        product.mkdir(parents=True)
+        (product / "secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            'include!("../crates/nuxie-authoring/secret.rs");\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! crosses a package boundary", result.stderr)
+
+    def test_root_package_cannot_raw_include_nested_product_source(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        product.mkdir(parents=True)
+        (product / "secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie-authoring"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            'include!(r#"../crates/nuxie-authoring/secret.rs"#);\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! crosses a package boundary", result.stderr)
+
+    def test_root_package_cannot_high_hash_raw_include_product_source(self) -> None:
+        product = self.root / "crates/nuxie-authoring"
+        product.mkdir(parents=True)
+        (product / "secret.rs").write_text("pub struct ProjectDataSecret;\n")
+        (product / "Cargo.toml").write_text(
+            "[package]\nname = \"nuxie-authoring\"\nversion = \"0.0.0\"\n"
+        )
+        (self.root / "src").mkdir()
+        hashes = "#" * 17
+        (self.root / "src/lib.rs").write_text(
+            f'include!(r{hashes}"../crates/nuxie-authoring/secret.rs"{hashes});\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie-authoring"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! crosses a package boundary", result.stderr)
+
+    def test_root_package_rejects_composed_include_path(self) -> None:
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            'include!(concat!("../crates/", "nuxie-authoring/secret.rs"));\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! form could not be verified", result.stderr)
+
+    def test_root_package_rejects_commented_include_form(self) -> None:
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            'include!/* boundary obscurer */("inside.rs");\n'
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! form could not be verified", result.stderr)
+
+    def test_root_package_rejects_alternate_delimiter_include(self) -> None:
+        (self.root / "src").mkdir()
+        (self.root / "src/lib.rs").write_text('include! { "inside.rs" }\n')
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "root-runtime"
+                version = "0.0.0"
+
+                [workspace]
+                members = ["crates/nuxie-runtime"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include! form could not be verified", result.stderr)
+
+    def test_audited_runtime_codegen_include_is_allowed(self) -> None:
+        (self.package / "src/objects.rs").write_text(
+            'include!(concat!(env!("OUT_DIR"), "/runtime_objects.rs"));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_workspace_dependencies_are_not_root_package_edges(self) -> None:
         (self.root / "src").mkdir()
         (self.root / "src/lib.rs").write_text("// root package\n")
@@ -363,6 +725,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("nuxie-product", result.stderr)
 
     def test_allows_exact_portable_c_abi_mixed_facade_debt(self) -> None:
+        self.create_mixed_facade_provider()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -446,6 +809,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("feature 'helper' forwards forbidden", result.stderr)
 
     def test_allows_current_renderer_feature_forwarding(self) -> None:
+        self.create_mixed_facade_provider()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -501,6 +865,57 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expanded with dependency features", result.stderr)
+
+    def test_rejects_nonlocal_portable_c_abi_mixed_facade_provider(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { git = "https://example.invalid/nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must resolve to local crates/nuxie", result.stderr)
+
+    def test_rejects_excluded_local_mixed_facade_provider(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+        provider = self.root / "crates/nuxie"
+        (provider / "src").mkdir(parents=True)
+        (provider / "src/lib.rs").write_text("// excluded product provider\n")
+        (provider / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie"
+                version = "0.0.0"
+                """
+            )
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nux-capi"]
+                exclude = ["crates/nuxie"]
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("provider 'nuxie' must remain an in-workspace package", result.stderr)
 
     def test_workspace_inheritance_cannot_disable_provider_default_features(self) -> None:
         self.create_package(
@@ -576,6 +991,80 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("resolves to 'nuxie-product'", result.stderr)
         self.assertIn("default features and no explicit features", result.stderr)
+
+    def test_rejects_target_specific_renderer_provider_expansion(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+        self.create_package(
+            "crates/nuxie-renderer",
+            "nuxie-renderer",
+            "",
+        )
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [features]
+            renderer = ["dep:nuxie-renderer"]
+
+            [dependencies]
+            nuxie-renderer = { path = "../nuxie-renderer", optional = true }
+
+            [target.'cfg(target_os = "ios")'.dependencies]
+            nuxie-renderer = { path = "../nuxie-renderer", optional = true, features = ["product-presentation"] }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must have exactly one declaration at [dependencies]", result.stderr)
+
+    def test_rejects_workspace_inherited_target_renderer_alias(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+        self.create_package(
+            "crates/nuxie-renderer",
+            "nuxie-renderer",
+            "",
+        )
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [features]
+            renderer = ["dep:nuxie-renderer"]
+
+            [dependencies]
+            nuxie-renderer = { path = "../nuxie-renderer", optional = true }
+
+            [target.'cfg(target_os = "ios")'.dependencies]
+            renderer-alias.workspace = true
+            """,
+        )
+        self.write_workspace(
+            """
+            [workspace.dependencies]
+            renderer-alias = { package = "nuxie-renderer", path = "crates/nuxie-renderer", features = ["product-presentation"] }
+            """
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("target.cfg(target_os = \"ios\").dependencies:renderer-alias", result.stderr)
 
     def test_rejects_explicit_product_module_path(self) -> None:
         self.write_manifest("")
@@ -728,6 +1217,47 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("runtime.rs", result.stderr)
         self.assertIn("product/authoring module", result.stderr)
+
+    def test_rejects_custom_target_sibling_module_debt(self) -> None:
+        self.write_manifest(
+            """
+            [lib]
+            path = "runtime.rs"
+            """
+        )
+        (self.package / "runtime.rs").write_text("mod authoring_support;\n")
+        (self.package / "authoring_support.rs").write_text(
+            "pub struct ProjectDataSecret;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("authoring_support.rs", result.stderr)
+        self.assertIn("project-data boundary debt spread", result.stderr)
+
+    def test_source_directory_named_target_is_scanned(self) -> None:
+        self.write_manifest("")
+        target_module = self.package / "src/target"
+        target_module.mkdir()
+        (target_module / "mod.rs").write_text("pub struct ProjectDataSecret;\n")
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("src/target/mod.rs", result.stderr)
+
+    def test_package_metadata_dependencies_are_not_cargo_edges(self) -> None:
+        self.write_manifest(
+            """
+            [package.metadata.tool.dependencies]
+            nuxie-product = "documentation-only"
+            """
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_all_declared_custom_cargo_target_paths_are_discovered(self) -> None:
         manifest = {

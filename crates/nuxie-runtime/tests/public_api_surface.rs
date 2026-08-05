@@ -89,10 +89,10 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
     exact_public_signature!(StateMachineInstance::set_bool => fn(&mut StateMachineInstance, usize, bool) -> bool);
     exact_public_signature!(StateMachineInstance::set_number => fn(&mut StateMachineInstance, usize, f32) -> bool);
     exact_public_signature!(StateMachineInstance::fire_trigger => fn(&mut StateMachineInstance, usize) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_up => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_down => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_left => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_right => fn(&mut StateMachineInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_up => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_down => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_left => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_right => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
     exact_public_signature!(
         StateMachineInstance::key_input
             => fn(&mut StateMachineInstance, &mut ArtboardInstance, u32, u32, bool, bool) -> bool
@@ -507,10 +507,10 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
     exact_public_signature!(StateMachineInstance::set_bool => fn(&mut StateMachineInstance, usize, bool) -> bool);
     exact_public_signature!(StateMachineInstance::set_number => fn(&mut StateMachineInstance, usize, f32) -> bool);
     exact_public_signature!(StateMachineInstance::fire_trigger => fn(&mut StateMachineInstance, usize) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_up => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_down => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_left => fn(&mut StateMachineInstance) -> bool);
-    exact_public_signature!(StateMachineInstance::focus_right => fn(&mut StateMachineInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_up => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_down => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_left => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
+    exact_public_signature!(StateMachineInstance::focus_right => fn(&mut StateMachineInstance, &ArtboardInstance) -> bool);
     exact_public_signature!(StateMachineInstance::set_focus => fn(&mut StateMachineInstance, Option<usize>) -> bool);
     exact_public_signature!(StateMachineInstance::focus_state => fn(&StateMachineInstance) -> FocusState);
     exact_public_signature!(StateMachineInstance::internal_focus_manager => fn(&StateMachineInstance) -> bool);

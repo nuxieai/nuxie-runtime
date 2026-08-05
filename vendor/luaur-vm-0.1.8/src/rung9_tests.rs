@@ -325,7 +325,7 @@ fn bufferwritelong_fastcall_writes_only_in_bounds() {
 }
 
 #[test]
-fn fastcall_table_wires_scalar_math_and_the_rive_tail() {
+fn fastcall_table_wires_completed_families_and_rive_tail() {
     let missing = crate::functions::luau_f_missing::luau_f_missing as *const () as usize;
     assert_eq!(luauF_table.len(), 256);
     assert!(luauF_table[0].is_none());
@@ -369,7 +369,38 @@ fn fastcall_table_wires_scalar_math_and_the_rive_tail() {
         assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
     }
 
-    for slot in [1].into_iter().chain(28..46).chain(49..89).chain([90]).chain(94..243) {
+    let bit32 = [
+        (28, crate::functions::luau_f_arshift::luau_f_arshift as *const () as usize),
+        (29, crate::functions::luau_f_band::luau_f_band as *const () as usize),
+        (30, crate::functions::luau_f_bnot::luau_f_bnot as *const () as usize),
+        (31, crate::functions::luau_f_bor::luau_f_bor as *const () as usize),
+        (32, crate::functions::luau_f_bxor::luau_f_bxor as *const () as usize),
+        (33, crate::functions::luau_f_btest::luau_f_btest as *const () as usize),
+        (34, crate::functions::luau_f_extract::luauF_extract as *const () as usize),
+        (35, crate::functions::luau_f_lrotate::luau_f_lrotate as *const () as usize),
+        (36, crate::functions::luau_f_lshift::luau_f_lshift as *const () as usize),
+        (37, crate::functions::luau_f_replace::luau_f_replace as *const () as usize),
+        (38, crate::functions::luau_f_rrotate::luau_f_rrotate as *const () as usize),
+        (39, crate::functions::luau_f_rshift::luau_f_rshift as *const () as usize),
+        (55, crate::functions::luau_f_countlz::luau_f_countlz as *const () as usize),
+        (56, crate::functions::luau_f_countrz::luau_f_countrz as *const () as usize),
+        (59, crate::functions::luau_f_extractk::luau_f_extractk as *const () as usize),
+        (64, crate::functions::luau_f_byteswap::luau_f_byteswap as *const () as usize),
+    ];
+    for (slot, expected) in bit32 {
+        assert_eq!(address(luauF_table[slot]), expected, "slot {slot}");
+    }
+
+    for slot in [1]
+        .into_iter()
+        .chain(40..46)
+        .chain(49..55)
+        .chain(57..59)
+        .chain(60..64)
+        .chain(65..89)
+        .chain([90])
+        .chain(94..243)
+    {
         assert_eq!(address(luauF_table[slot]), missing, "slot {slot}");
     }
     assert_eq!(

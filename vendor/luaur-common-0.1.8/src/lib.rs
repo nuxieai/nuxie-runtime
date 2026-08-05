@@ -81,7 +81,6 @@ pub fn set_all_flags(value: bool) {
     FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
     FFlag::LuauConstraintGraph.set(value);
     FFlag::LuauCostModel.set(false);
-    FFlag::LuauCustomYieldablePcalls.set(false);
     FFlag::LuauCompileEmitVectorDouble.set(false);
     FFlag::LuauDirectFieldGet.set(value);
     FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
@@ -309,8 +308,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauConstraintGraph);
     // Bytecode/src/BytecodeGraph.cpp; VM/src/lvmload.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCostModel);
-    // VM/src/laux.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCustomYieldablePcalls);
     // VM/src/lvmexecute.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauDirectFieldGet);
     crate::LUAU_FLAGVERSION!(LuauDirectFieldGet, 3);

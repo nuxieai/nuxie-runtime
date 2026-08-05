@@ -33,7 +33,7 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
         luaD_seterrorobj(l, status, (*l).top);
     }
 
-    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() && (*ci).context.errfunc != 0 {
+    if (*ci).context.errfunc != 0 {
         let old_ci = saveci!(l, ci);
         let errfunc = (*ci).context.errfunc;
         let err = luaD_rawrunprotected(
@@ -60,41 +60,21 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
         (*ci).context.errfunc = 0;
     }
 
-    if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
-        if luaur_common::FFlag::LuauXpcallFixMessageYieldPath.get() {
-            (*l).nCcalls = (*l).baseCcalls;
-        }
-
-        (*l).ci = ci;
-        luaF_close(l, (*(*l).ci).base);
-
-        (*l).base = (*ci).base;
-        (*ci).top = (*l).top;
-
-        restore_stack_limit(l);
-
-        let n = (*c).cont.unwrap()(l, status);
-
-        if (*l).status != lua_Status::LUA_OK as u8 {
-            return;
-        }
-
-        luau_poscall(l, (*l).top.offset(-(n as isize)));
-    } else {
-        (*l).base = (*ci).base;
-        (*ci).top = (*l).top;
-
-        let old_ci = saveci!(l, ci);
-
-        let n = (*c).cont.unwrap()(l, status);
-
-        (*l).ci = restoreci!(l, old_ci);
-
-        luaF_close(l, (*(*l).ci).base);
-        restore_stack_limit(l);
-
-        luau_poscall(l, (*l).top.offset(-(n as isize)));
+    if luaur_common::FFlag::LuauXpcallFixMessageYieldPath.get() {
+        (*l).nCcalls = (*l).baseCcalls;
     }
+
+    (*l).ci = ci;
+    luaF_close(l, (*(*l).ci).base);
+    (*l).base = (*ci).base;
+    (*ci).top = (*l).top;
+    restore_stack_limit(l);
+
+    let n = (*c).cont.unwrap()(l, status);
+    if (*l).status != lua_Status::LUA_OK as u8 {
+        return;
+    }
+    luau_poscall(l, (*l).top.offset(-(n as isize)));
 
     resume_continue(l);
 }

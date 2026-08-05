@@ -27,9 +27,7 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
             let cont_opt = (*c).cont;
             LUAU_ASSERT!(cont_opt.is_some());
 
-            if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
-                (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
-            }
+            (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
 
             if let Some(cont) = cont_opt {
                 let n = cont(L, 0);
@@ -41,9 +39,7 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
                     break;
                 }
 
-                if luaur_common::FFlag::LuauCustomYieldablePcalls.get()
-                    && (*L).status == SCHEDULED_REENTRY as u8
-                {
+                if (*L).status == SCHEDULED_REENTRY as u8 {
                     continue;
                 }
 

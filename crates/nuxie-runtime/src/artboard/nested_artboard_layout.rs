@@ -214,6 +214,46 @@ impl ArtboardInstance {
                 width: bounds.width,
                 height: bounds.height,
             });
+        let transferred_intrinsic_size = self
+            .nested_artboards
+            .get(&host_local_id)
+            .filter(|nested| !nested.layout_data_transferred)
+            .and_then(|nested| {
+                nested
+                    .child
+                    .runtime_file()
+                    .zip(nested.child.runtime_graph())
+                    .and_then(|(runtime, graph)| {
+                        nested
+                            .child
+                            .runtime_taffy_layout_bounds(graph, Some(runtime))
+                    })
+                    .and_then(|bounds| bounds.get(&0).copied())
+            })
+            .map(|bounds| (Some(bounds.width), Some(bounds.height)));
+        let hug_axis_changed = |property_name: &str, intrinsic: Option<f32>, assigned: f32| {
+            property_key_for_name("NestedArtboardLayout", property_name)
+                .and_then(|key| self.uint_property(host_local_id, key))
+                == Some(2)
+                && intrinsic.is_some_and(|intrinsic| (intrinsic - assigned).abs() > 1.0e-4)
+        };
+        if transferred_intrinsic_size.is_some_and(|(width, height)| {
+            hug_axis_changed("instanceWidthScaleType", width, bounds.width)
+                || hug_axis_changed("instanceHeightScaleType", height, bounds.height)
+        }) {
+            // A nested child can settle its own transferred descendants after
+            // the parent's first detached measurement. C++ still has one
+            // shared Yoga tree, so that newer intrinsic participates before
+            // the host receives its first layout result. Publish the host
+            // again and defer the transfer one pass; otherwise an animating
+            // root would visibly interpolate from the stale preliminary size.
+            if let Some(nested) = self.nested_artboards.get(&host_local_id) {
+                nested
+                    .transferred_hug_size
+                    .set(transferred_intrinsic_size.unwrap());
+            }
+            return crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
+        }
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
             return false;
         };
@@ -243,6 +283,9 @@ impl ArtboardInstance {
         }
 
         let first_transfer = !nested.layout_data_transferred;
+        if let Some(intrinsic_size) = transferred_intrinsic_size {
+            nested.transferred_hug_size.set(intrinsic_size);
+        }
         let refresh_constraint_bounds = nested.layout_data_transfer_key.is_none_or(|key| {
             key.parent_layout != parent_layout
                 || key.assigned_bounds != bounds
@@ -292,6 +335,12 @@ impl ArtboardInstance {
         // Reversing these two operations changes the first layout solve.
         if refresh_constraint_bounds {
             nested.child.refresh_layout_constraint_bounds();
+            // C++ calculates the transferred child node and its descendants
+            // inside the parent's Yoga tree, then publishes every provider's
+            // new bounds in the same `updateLayoutBounds` traversal. Rust's
+            // decomposed child graph has already consumed its dirty-layout
+            // membership, so publish the host-owned solve here directly.
+            nested.child.retain_host_owned_layout_constraint_bounds();
             changed = true;
         } else {
             changed |= !nested.child.layout_constraint_bounds_enabled;
@@ -325,6 +374,9 @@ impl ArtboardInstance {
         if changed {
             nested.child.update_pass();
         }
+        nested
+            .transferred_hug_layout_generation
+            .set(nested.child.runtime_transferred_layout_generation());
         // Record after assigned-root writes and their child update pass. Those
         // writes dirty the transferred root node themselves; only a later
         // child layout generation should emulate C++ `markHostingLayoutDirty`
@@ -340,6 +392,9 @@ impl ArtboardInstance {
                 host_local_id,
                 (transfer_key, nested.child.layout_constraint_bounds.clone()),
             );
+        }
+        if changed {
+            crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
         }
         changed
     }

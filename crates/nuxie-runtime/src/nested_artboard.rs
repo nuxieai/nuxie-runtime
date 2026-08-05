@@ -19,6 +19,11 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     /// Initial paint state retained until `NestedArtboardLayout` transfers its
     /// layout data to this exact mounted child.
     pub(crate) initial_layout_paint_frame: RefCell<Option<RuntimeInitialNestedLayoutPaintFrame>>,
+    /// Intrinsic Hug size observed before this child's root layout node was
+    /// transferred to its parent-owned layout tree.
+    pub(crate) transferred_hug_size: Cell<(Option<f32>, Option<f32>)>,
+    /// Last child layout generation represented by `transferred_hug_size`.
+    pub(crate) transferred_hug_layout_generation: Cell<u64>,
     pub(crate) layout_data_transferred: bool,
     layout_data_transfer_key: Option<RuntimeNestedLayoutDataTransferKey>,
     pub(crate) data_bind_path_ids: Option<Vec<u32>>,
@@ -59,6 +64,8 @@ impl Clone for RuntimeNestedArtboardInstance {
             render_cache_revision: self.render_cache_revision,
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
+            transferred_hug_size: Cell::new((None, None)),
+            transferred_hug_layout_generation: Cell::new(0),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
             data_bind_path_ids: self.data_bind_path_ids.clone(),

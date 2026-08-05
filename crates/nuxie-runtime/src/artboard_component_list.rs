@@ -67,6 +67,17 @@ impl RuntimeComponentListItemInstance {
         // that `None` as intrinsic input makes a virtualized row resize its
         // ancestors for one frame during pool reuse.
         self.settled_layout_size = Cell::new(hosted_layout_size);
+        if let Some((width, height)) = hosted_layout_size {
+            crate::draw::runtime_apply_component_list_item_layout_bounds(
+                &mut self.child,
+                crate::draw::RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width,
+                    height,
+                },
+            );
+        }
         self.transform = fresh.transform;
         self.render_cache_revision = fresh.render_cache_revision;
     }

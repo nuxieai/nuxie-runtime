@@ -224,3 +224,37 @@ The equivalent comparator arguments are:
 --rust-execute-scripts \
 --iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
 ```
+
+## 2026-08-04 dirty-layout addendum
+
+The dirty-layout lane measured the two requested layout-heavy fixtures before
+the incremental port (`d208e97c`) and after the reviewed runtime change
+(`29049479`). Both revisions used the C++ runtime
+pinned at `4ac7b327`, release scripting-enabled runners, 100 frames at 60 Hz,
+C++ first, script execution enabled, and the median of five iterations with no
+warmups. The table reports the runner's `advance + draw` phase divided by 100;
+loading and startup are excluded.
+
+| Fixture | Baseline Rust ms/frame | Final Rust ms/frame | Rust change | Baseline Rust/C++ | Final Rust/C++ |
+|---|---:|---:|---:|---:|---:|
+| `car_widgets_v01` | 1.563576 | 0.436322 | -72.09% | 46.677x | 20.734x |
+| `zombie_skins` | 2.212570 | 0.502118 | -77.31% | 39.910x | 13.607x |
+
+The independent 24-row `make perf-gate` sample also passed. In that run,
+`car_widgets_v01` measured 0.446300 ms/frame (21.364x, ceiling 334x) and
+`zombie_skins` measured 0.496583 ms/frame (13.655x, ceiling 24x).
+
+Raw before/after reports and their SHA-256 digests are checked in under
+[`evidence/dirtylay-2026-08-04/`](evidence/dirtylay-2026-08-04/):
+
+- `baseline.json`: `7125199903d2962491c941aa087d720441141521af929839a462eb02aa0c34df`
+- `final.json`: `f796385902c3d89b4ec01952b2b906b5881ebe6697d0321618d6ae59fa76f199`
+
+The equivalent comparator arguments are:
+
+```sh
+--corpus corpus.toml --corpus-ids car_widgets_v01,zombie_skins \
+--runner-benchmark --benchmark-frames 100 --benchmark-hz 60 \
+--rust-execute-scripts \
+--iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
+```

@@ -32,13 +32,7 @@ pub(crate) fn constrain_scroll_virtualizer(
     if !virtualize || !has_virtualizer || (!force && applied < child_count) {
         return false;
     }
-    let computed_layout_bounds = artboard
-        .runtime_graph()
-        .and_then(|graph| artboard.runtime_taffy_layout_bounds(graph, artboard.runtime_file()));
-    let retained_layout_bounds = artboard.layout_constraint_bounds.clone();
-    let layout_bounds = retained_layout_bounds
-        .as_deref()
-        .or(computed_layout_bounds.as_ref());
+    let layout_bounds = artboard.retained_layout_bounds();
     let metrics = {
         let scroll = artboard
             .objects

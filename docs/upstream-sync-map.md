@@ -258,6 +258,17 @@ worker may act on that category.
   remain queued with updated staleness counters. With Standing approvals at
   `none`, the write-capable worker is fail-closed until a new inventory is
   explicitly authorized.
+- 2026-08-05: `deferred-2026-07-19-luau-engine` is **CLOSED** — the 2026-08-02
+  freeze ("engine pin FROZEN until the parity closeout completes") was
+  superseded by the in-house luaur fork ported rung-by-rung to the pinned
+  engine's `rive_0_732` tip (docs/luau-fork.md ladder record, PRs #247-#290;
+  closure recorded in parity-gap-register D4 / parity-scorecard D4). The
+  editor-emitted-bytecode half of the row's exit criterion is carried by the
+  editor-bytecode compatibility matrix in docs/luau-fork.md. The next
+  inventory drops this row; the other deferred WATCH rows
+  (`deferred-2026-07-19-ore-gpu`, `deferred-2026-08-02-command-queue-blob`,
+  `deferred-2026-08-02-triangulation-cache`,
+  `deferred-2026-08-02-wgpu-clip-planes`) remain queued unchanged.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/_trusted-macos.yml` `RIVE_RUNTIME_REF`
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`

@@ -199,7 +199,10 @@ Additional plan points:
    not by version bumps. Revisit the version scheme if the fork diverges
    enough that a distinct version communicates better.
 4. When fork parity lands, update the `deferred-2026-07-19-luau-engine`
-   WATCH row to CLOSED with the fork-parity evidence.
+   WATCH row to CLOSED with the fork-parity evidence. **Done 2026-08-05:**
+   parity-gap-register D4 and parity-scorecard D4 record the closure; the
+   editor-emitted-bytecode half of the WATCH exit criterion is carried by
+   the compatibility matrix below.
 
 Out of scope for the fork-setup change that introduced this document: no
 engine internals were ported; the vendor expansion and workspace switch are

@@ -613,6 +613,15 @@ jobs:
       - name: Build and smoke-run fuzz targets
         run: make fuzz-smoke FUZZ_CARGO=cargo FUZZ_SMOKE_SECONDS=20
 
+      - name: Upload fuzz crash/timeout reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-smoke-artifacts-${{ github.run_attempt }}
+          path: fuzz/artifacts/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Panic-freedom clippy gate for the SDK runtime crates (v2-status item 20
   # #6). Self-contained: library targets only, no reference runtime needed.
   # Denies clippy::unwrap_used / indexing_slicing / arithmetic_side_effects on

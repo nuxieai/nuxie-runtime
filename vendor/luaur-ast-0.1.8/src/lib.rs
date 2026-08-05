@@ -14,6 +14,8 @@ pub mod methods;
 mod parser_tests;
 pub mod records;
 pub mod rtti;
+#[cfg(test)]
+mod rung9_tests;
 pub mod testdata;
 pub mod type_aliases;
 pub mod visit;

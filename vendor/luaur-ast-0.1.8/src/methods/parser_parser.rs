@@ -38,6 +38,7 @@ impl Parser {
             allocator,
             comment_locations: alloc::vec::Vec::new(),
             hotcomments: alloc::vec::Vec::new(),
+            lexemes: alloc::vec::Vec::new(),
             hotcomment_header: true,
             recursion_counter: 0,
             name_self: AstName::default(),

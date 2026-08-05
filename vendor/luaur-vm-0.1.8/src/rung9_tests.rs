@@ -236,6 +236,9 @@ fn getmetatable_fastcall_returns_the_tables_metatable() {
 
         crate::functions::lua_createtable::lua_createtable(state, 0, 0);
         crate::functions::lua_createtable::lua_createtable(state, 0, 0);
+        crate::functions::lua_pushstring::lua_pushstring(state, c"__newindex".as_ptr());
+        crate::functions::lua_pushnumber::lua_pushnumber(state, 17.0);
+        crate::functions::lua_rawset::lua_rawset(state, -3);
         let expected = crate::hvalue!((*state).top.sub(1));
         assert_eq!(crate::functions::lua_setmetatable::lua_setmetatable(state, -2), 1);
 

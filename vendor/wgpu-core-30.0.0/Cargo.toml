@@ -240,3 +240,5 @@ missing_debug_implementations = "warn"
 level = "warn"
 priority = 0
 check-cfg = ["cfg(wgpu_validate_locks)"]
+
+[workspace]

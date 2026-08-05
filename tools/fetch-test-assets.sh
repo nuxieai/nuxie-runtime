@@ -34,7 +34,7 @@ assets=(
   "semantic/semantic_list_scroll_focus_fixed.riv|38b2bcd006c44ecbe78ce0957d7382c36ea7e07f753aa7755116b654d0691240||semantic/semantic_list_scroll_focus_fixed.riv"
   "sync/scope_probe.riv|fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347|b73bc6755421c41281f9d5c8c04d8444fc43f585"
   "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
-  "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944|0a2e478ac331586387308068e01306225ecbb20d"
+  "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
   "sync/stateful_component_image_test.riv|47dcbcd02cd228f0e4ec71eaac84748f46f95b24737818f61b04d46242b48393|353ef4fccbf6f1801def7d737a4103657dc63a1c"
   "sync/layout_text_match.riv|1fea1a6102259aacd9b164cfac0b4a2f67d4fa4587b78f5eb25a2f195de7bcdb|f5cfee3a5d6a6728167b58a71b47455ace063690"
@@ -89,9 +89,18 @@ for entry in "${assets[@]}"; do
   elif [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/assets/$source_path" ]]; then
     cp "$runtime_dir/tests/unit_tests/assets/$source_path" "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
-    curl --fail --location --silent --show-error \
+    # Upstream garbage-collects commits once they fall off every branch, so a
+    # recorded source ref can start 404ing long after it vendored the asset.
+    # Retry at the pin; the checksum below still decides whether the bytes are
+    # the revision we recorded.
+    if ! curl --fail --location --silent --show-error \
       "$base_url/$source_ref/tests/unit_tests/assets/$source_path" \
       --output "$destination"
+    then
+      curl --fail --location --silent --show-error \
+        "$base_url/$ref/tests/unit_tests/assets/$source_path" \
+        --output "$destination"
+    fi
   fi
 
   actual=$(sha256 "$destination")

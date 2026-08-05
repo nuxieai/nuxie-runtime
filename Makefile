@@ -134,6 +134,20 @@ schema:
 	cargo run -p nuxie-codegen -- --defs "$(DEFS_DIR)" --out crates/nuxie-schema/src/generated/schema.rs
 	cargo fmt --all
 
+.PHONY: fmt fmt-check
+# `cargo fmt --all` formats the workspace members *and* their local path-based
+# dependencies, so it reaches the workspace-excluded vendored wgpu packages.
+# Each of those manifests carries an empty `[workspace]` table so cargo stops
+# its workspace search at the package itself; without it, a git worktree rooted
+# inside the main checkout (`.claude/worktrees/<name>`) makes cargo walk up past
+# the worktree root into the parent checkout's `Cargo.toml` and reject the
+# workspace mismatch. See vendor/wgpu-30.0.0/NUXIE_PATCH.md.
+fmt:
+	cargo fmt --all
+
+fmt-check:
+	cargo fmt --all -- --check
+
 check:
 	cargo check --workspace
 

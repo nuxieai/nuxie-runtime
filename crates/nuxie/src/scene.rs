@@ -23267,6 +23267,9 @@ fn lower_artboard(
                 EditReason::CapacityExceeded,
             )
         })?;
+        // Safe by construction: `records` is seeded with the artboard record
+        // above and only ever pushed to, so index 0 is always that record.
+        #[allow(clippy::indexing_slicing)]
         records[0]
             .properties
             .push(ExportedProperty::LayoutComponentStyleId(style_local_id));

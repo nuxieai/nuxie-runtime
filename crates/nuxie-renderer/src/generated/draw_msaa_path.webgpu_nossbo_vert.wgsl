@@ -8,27 +8,27 @@ struct gl_PerVertex {
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct VertexOutput {
@@ -39,9 +39,9 @@ struct VertexOutput {
     @location(0) member_2: vec4<f32>,
 }
 
-@id(0) override Wg: bool = true;
-@id(2) override Yg: bool = true;
-@id(1) override Xg: bool = true;
+@id(0) override Yg: bool = true;
+@id(2) override ah: bool = true;
+@id(1) override Zg: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 @group(0) @binding(7)
@@ -378,7 +378,7 @@ fn main_1() {
     let _e452 = local_1;
     let _e457 = textureLoad(AD, vec2<i32>(bitcast<i32>((_e448 & 127u)), bitcast<i32>((_e452 >> bitcast<u32>(7i)))), 0i);
     let _e459 = (_e457.x & 15u);
-    if Wg {
+    if Yg {
         let _e460 = (_e459 == 0u);
         if _e460 {
             phi_2440_ = _e457.y;
@@ -401,10 +401,10 @@ fn main_1() {
         let _e477 = phi_2442_;
         U1_[0u] = _e477;
     }
-    if Yg {
+    if ah {
         e2_ = f32(((_e457.x >> bitcast<u32>(4i)) & 15u));
     }
-    if Xg {
+    if Zg {
         let _e484 = local_2;
         let _e485 = (_e484 + 2u);
         let _e492 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e485 & 127u)), bitcast<i32>((_e485 >> bitcast<u32>(7i)))), 0i);
@@ -427,7 +427,7 @@ fn main_1() {
     }
     if (_e459 == 1u) {
         let _e541 = unpack4x8unorm(_e457.y);
-        if Yg {
+        if ah {
             phi_2444_ = _e541;
         } else {
             let _e544 = (_e541.xyz * _e541.w);
@@ -438,7 +438,7 @@ fn main_1() {
         let _e564 = phi_2444_;
         f1_ = _e564;
     } else {
-        if (Wg && (_e459 == 0u)) {
+        if (Yg && (_e459 == 0u)) {
             let _e568 = (_e457.x >> bitcast<u32>(16i));
             let _e570 = n.Z5_;
             if (_e568 == 0u) {
@@ -477,8 +477,8 @@ fn main_1() {
         }
     }
     if _e446 {
-        let _e625 = n.df;
-        let _e627 = n.ef;
+        let _e625 = n.ff;
+        let _e627 = n.gf;
         let _e635 = vec4<f32>(((_e444.x * _e625) - 1f), ((_e444.y * _e627) - sign(_e627)), 0f, 1f);
         phi_2459_ = vec4<f32>(_e635.x, _e635.y, (1f - (f32(_e442) * 0.000061035156f)), _e635.w);
     } else {

@@ -8,27 +8,27 @@ struct gl_PerVertex {
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct VertexOutput {
@@ -40,8 +40,8 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_3: u32,
 }
 
-@id(0) override Wg: bool = true;
-@id(1) override Xg: bool = true;
+@id(0) override Yg: bool = true;
+@id(1) override Zg: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -67,7 +67,7 @@ fn main_1() {
     let _e43 = ((mat2x2<f32>(vec2<f32>(_e31.x, _e31.y), vec2<f32>(_e31.z, _e31.w)) * _e39) + _e41.xy);
     let _e44 = PC_1;
     E5_ = _e44;
-    if Wg {
+    if Yg {
         let _e46 = IB_1[1u];
         let _e48 = n.Z5_;
         if (_e46 == 0u) {
@@ -78,7 +78,7 @@ fn main_1() {
         let _e55 = phi_384_;
         I3_ = _e55;
     }
-    if Xg {
+    if Zg {
         let _e56 = QB_1;
         if any((_e56 != vec4<f32>(0f, 0f, 0f, 0f))) {
             let _e68 = ((mat2x2<f32>(vec2<f32>(_e56.x, _e56.y), vec2<f32>(_e56.z, _e56.w)) * _e43) + _e41.zw);
@@ -94,8 +94,8 @@ fn main_1() {
             unnamed.gl_ClipDistance[0i] = _e84;
         }
     }
-    let _e94 = n.df;
-    let _e96 = n.ef;
+    let _e94 = n.ff;
+    let _e96 = n.gf;
     let _e104 = vec4<f32>(((_e43.x * _e94) - 1f), ((_e43.y * _e96) - sign(_e96)), 0f, 1f);
     let _e106 = IB_1[3u];
     let _e116 = IB_1[0u];

@@ -15,9 +15,11 @@ env:
   # this with the historical Phase R oracle revision that produced its checked-
   # in reference artifacts.
   RIVE_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
-  # Read-only Phase S inventory reference for port-manifest completeness. This
-  # does not advance the product runtime pin above.
-  PORT_MANIFEST_RIVE_RUNTIME_REF: b73bc6755421c41281f9d5c8c04d8444fc43f585
+  # Read-only inventory reference for port-manifest completeness. MUST equal
+  # `upstream_ref` in port-manifest.toml -- the check compares them and fails
+  # on any mismatch. Advance both together: b647c854 moved the manifest to
+  # 4ac7b327 and left this at the old b73bc675 seed, which failed the job.
+  PORT_MANIFEST_RIVE_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
   RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
   RIVE_PREMAKE_TAG: v5.0.0-beta7
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
@@ -305,6 +307,28 @@ jobs:
           brew install --build-from-source "$tap/spirv-tools"
           brew install --build-from-source "$tap/glslang"
           cargo install naga-cli --version 30.0.0 --locked
+
+      # Upstream does not track `renderer/dependencies/`; premake fetches it
+      # during the renderer build, which this shader-only checkout never runs.
+      # The WGSL minifier (renderer/src/shaders/minify.py) imports ply, so
+      # materialize exactly the revision renderer/premake5_pls_renderer.lua
+      # pins -- `dependency.github('dabeaz/ply', '3.11')` -- where
+      # tools/generate-renderer-shaders.sh points PYTHONPATH. The digest below
+      # is over the package sources and matches the premake-fetched tree.
+      - name: Vendor pinned PLY for the WGSL minifier
+        run: |
+          ply_dir=rive-runtime-shaders/renderer/dependencies/dabeaz_ply_3.11
+          expected=c8fe4f16bcbc43ee015f3377044418054917f281a42c2cd23f950d4606965bfe
+          curl -fsSL https://github.com/dabeaz/ply/archive/refs/tags/3.11.tar.gz \
+            | tar -xz -C "${RUNNER_TEMP}"
+          mkdir -p "$(dirname "$ply_dir")"
+          mv "${RUNNER_TEMP}/ply-3.11" "$ply_dir"
+          actual="$(cd "$ply_dir" && find ply -type f -name '*.py' -print0 \
+            | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "pinned PLY digest mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
 
       - name: Verify renderer shader provenance
         env:

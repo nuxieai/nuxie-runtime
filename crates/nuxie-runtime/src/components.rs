@@ -876,6 +876,9 @@ pub(crate) enum RuntimeConstraintBoundsKind {
 pub(crate) struct RuntimeLayoutComponentState {
     layout_node_dirty: Cell<bool>,
     layout_node_revision: Cell<u64>,
+    /// The latest parent-local result produced by the retained layout node.
+    /// This remains the solved target while `layout` interpolates toward it.
+    solved_layout: Cell<Option<RuntimeLayoutRect>>,
     layout: Cell<RuntimeLayoutRect>,
     animation_a: Cell<RuntimeLayoutAnimationData>,
     animation_b: Cell<RuntimeLayoutAnimationData>,
@@ -1046,6 +1049,7 @@ impl RuntimeLayoutComponentState {
         Self {
             layout_node_dirty: Cell::new(false),
             layout_node_revision: Cell::new(0),
+            solved_layout: Cell::new(None),
             layout: Cell::new(RuntimeLayoutRect::default()),
             animation_a: Cell::new(RuntimeLayoutAnimationData::default()),
             animation_b: Cell::new(RuntimeLayoutAnimationData::default()),
@@ -1111,6 +1115,7 @@ impl RuntimeLayoutComponentState {
             width,
             height,
         };
+        self.solved_layout.set(Some(target));
         let previous_draw_bounds = if self.animates() {
             self.current_animation_data().to
         } else {
@@ -1166,6 +1171,11 @@ impl RuntimeLayoutComponentState {
         animation.elapsed_seconds = 0.0;
         self.set_current_animation_data(animation);
         draw_bounds_changed
+    }
+
+    pub(crate) fn solved_bounds(&self) -> Option<(f32, f32, f32, f32)> {
+        let layout = self.solved_layout.get()?;
+        Some((layout.left, layout.top, layout.width, layout.height))
     }
 
     pub(crate) fn added_to_host(&self) {
@@ -2316,6 +2326,21 @@ mod advancing_owner_tests {
         let final_step = layout.advance_interpolation(0.25, true);
         assert!(!final_step.keep_going);
         assert_eq!(layout.constraint_bounds(), (0.0, 0.0, 30.0, 40.0));
+    }
+
+    #[test]
+    fn layout_retains_solved_target_while_live_bounds_interpolate() {
+        let layout = RuntimeConcreteComponentState::for_type("LayoutComponent")
+            .layout
+            .expect("layout state");
+        assert_eq!(layout.solved_bounds(), None);
+
+        layout.set_animation_style(2, 1, 1.0, None);
+        layout.retain_bounds(0.0, 0.0, 10.0, 20.0);
+        layout.retain_bounds(100.0, 50.0, 30.0, 40.0);
+
+        assert_eq!(layout.solved_bounds(), Some((100.0, 50.0, 30.0, 40.0)));
+        assert_eq!(layout.constraint_bounds(), (0.0, 0.0, 10.0, 20.0));
     }
 
     #[test]

@@ -55,11 +55,18 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
 
       # The scorecard record wrapper (tools/parity-scorecard) needs
-      # Python >= 3.11 (tomllib).
-      - name: Install Python
+      # Python >= 3.11 (tomllib). setup-python assumes the hosted image's
+      # /Users/runner tool-cache layout and fails on the self-hosted pool, so
+      # persistent runners must provide a system python3 instead.
+      - name: Install Python (hosted)
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Verify system Python (self-hosted)
+        if: runner.environment != 'github-hosted'
+        run: python3 -c 'import sys, tomllib; assert sys.version_info >= (3, 11), sys.version'
 
       - name: Build reference Rive runtime
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
@@ -138,11 +145,18 @@ jobs:
         run: rustup toolchain install stable --profile minimal --no-self-update
 
       # The scorecard record wrapper (tools/parity-scorecard) needs
-      # Python >= 3.11 (tomllib).
-      - name: Install Python
+      # Python >= 3.11 (tomllib). setup-python assumes the hosted image's
+      # /Users/runner tool-cache layout and fails on the self-hosted pool, so
+      # persistent runners must provide a system python3 instead.
+      - name: Install Python (hosted)
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Verify system Python (self-hosted)
+        if: runner.environment != 'github-hosted'
+        run: python3 -c 'import sys, tomllib; assert sys.version_info >= (3, 11), sys.version'
 
       - name: Fetch pinned test assets
         run: make fixtures

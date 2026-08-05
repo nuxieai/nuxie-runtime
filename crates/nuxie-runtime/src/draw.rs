@@ -31175,9 +31175,10 @@ mod tests {
     /// transform branch of `advance_interpolation`.
     #[test]
     fn a_participant_animates_its_slot_with_a_cubic_interpolator() {
-        let runtime =
-            read_runtime_file(&cpp_runtime_fixture("layout/animated_cubic_participant.riv"))
-                .expect("animated_cubic_participant imports");
+        let runtime = read_runtime_file(&cpp_runtime_fixture(
+            "layout/animated_cubic_participant.riv",
+        ))
+        .expect("animated_cubic_participant imports");
         let graphs =
             GraphFile::from_runtime_file(&runtime).expect("animated_cubic_participant graphs");
         let graph = graphs.artboards.first().expect("fixture has an artboard");

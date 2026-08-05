@@ -26855,6 +26855,77 @@ mod tests {
         }
     }
 
+    /// C++ `Text::m_drawCommands` is opacity-independent: `TextStylePaint::draw`
+    /// re-tests `shapePaint->shouldDraw()` on every draw
+    /// (`src/text/text_style_paint.cpp:53-58`), so a Text shaped while its
+    /// render opacity is 0 keeps its commands and draws again once the opacity
+    /// returns. Rust retains the built frame and only propagates opacity on a
+    /// RenderOpacity-only dirt, so baking that predicate into command existence
+    /// would strand the Text with an empty command set forever.
+    #[test]
+    fn text_shaped_at_zero_render_opacity_recovers_when_opacity_returns() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            0.0,
+        ));
+        instance.update_pass();
+
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let retained_dark = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .retained_frame()
+            .expect("a fully transparent Text still retains its frame");
+        assert!(
+            !retained_dark.commands.is_empty(),
+            "shaping at zero render opacity must still build the text draw commands"
+        );
+        assert!(
+            retained_dark.commands.iter().all(|command| {
+                !runtime_shape_paint_state_is_effectively_visible(&command.paint_state)
+            }),
+            "every command is invisible at zero render opacity, so none of them draw"
+        );
+
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            1.0,
+        ));
+        assert!(instance.update_pass());
+
+        let retained_lit = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner")
+            .retained_frame()
+            .expect("opacity propagation retains text");
+        assert_eq!(
+            retained_dark.commands.len(),
+            retained_lit.commands.len(),
+            "the retained command set must not depend on render opacity"
+        );
+        assert!(
+            retained_lit.commands.iter().any(|command| {
+                runtime_shape_paint_state_is_effectively_visible(&command.paint_state)
+            }),
+            "restoring render opacity must make the retained glyph commands draw again"
+        );
+    }
+
     #[test]
     fn transform_only_wave_through_text_variation_helper_retains_text_render_paths() {
         let bytes = include_bytes!("../../../fixtures/fl-e8/text_variation_modifier.riv");

@@ -1,12 +1,12 @@
 # SDK Binary Size
 
-This is the reproducible binary-size evidence for parity-closeout ticket
-**#B-3**. The tracked artifact is now the post-Phase-R Darwin SDK link closure:
+This is the reproducible binary-size evidence behind the SDK size budget.
+The tracked artifact is the Darwin SDK link closure, renderer included:
 the portable `nux-capi` ABI with the pure-Rust `nuxie-renderer` and vendored
 `wgpu` backend retained. It is measured with scripting both disabled and
 enabled.
 
-**Budget (#B-3 decision, 2026-07-21, user-approved): 9 MiB = 9,437,184 B,
+**Budget (decided 2026-07-21, user-approved): 9 MiB = 9,437,184 B,
 blocking for BOTH scripting variants.** `make size-report` fails when either
 link closure exceeds it, and `make parity-scorecard` validates the recorded
 evidence against `size.budget_bytes` in `parity-scorecard.toml`. A breach
@@ -105,7 +105,7 @@ deliberately avoids two misleading numbers:
   so its on-disk size is not application footprint.
 - Merely enabling `nux-capi/apple-renderer` on Cargo's callback-only cdylib
   compiles the renderer but does not reference it. Fat LTO removes almost all
-  renderer code, so that artifact does not measure Phase R.
+  renderer code, so that artifact does not measure the renderer.
 
 Before the tooling correction, the unchanged report produced 3,782,736 B
 (3.61 MiB) scripting-off and 4,684,272 B (4.47 MiB) scripting-on. Enabling
@@ -155,13 +155,12 @@ The scripting-on variant must retain `nuxie-scripting` + `luaur-vm`, and the
 scripting-off variant must retain neither. The command restores Cargo's
 renderer-on/scripting-off `release-size` output after measuring both variants.
 
-## Budget status — USER-GATE
+## Budget status
 
-The pre-Phase-R recommendation was **≤2.75 MiB per architecture**, with a
-3.0 MiB alert, and tracked a different artifact that excluded the renderer.
-Both numbers are now historical; neither is silently widened or repurposed.
+The budget decision is recorded at the top of this document: 9 MiB, blocking
+for both scripting variants, enforced by `make size-report` and validated by
+`make parity-scorecard` against `size.budget_bytes` in `parity-scorecard.toml`.
 
-The user must choose the new renderer-on budget and whether the blocking metric
-tracks the scripting-off closure alone or requires both scripting variants.
-Until that decision is recorded in `docs/parity-closeout-status.md`, #B-3 and
-the size half of scorecard tier 5 remain pending.
+The renderer-excluded recommendation that preceded it (**≤2.75 MiB per
+architecture**, 3.0 MiB alert) tracked a different artifact and is historical;
+neither number is silently widened or repurposed.

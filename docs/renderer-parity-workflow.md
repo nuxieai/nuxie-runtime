@@ -107,7 +107,7 @@ Five fresh, isolated reports from that architecture-aligned source passed on
 | clockwise atomic | 0.989737 | 5/5 | Rust about 1.0% faster |
 | MSAA | 0.989055 | 3/5 | Rust about 1.1% faster |
 
-The immutable, source-controlled gate report is
+The immutable gate report is preserved in git history at
 `docs/evidence/renderer-parity-2026-07-18/final-parity-gate.json`
 (SHA-256
 `6c9cb88d4e8f189af529f7e453ddd88db521cb755a9742e328b984d52f092bfb`).
@@ -125,7 +125,7 @@ the pinned C++ counter runner SHA-256 is
 `f291ebded45728b39b47ed0f7585663e2116229dcccc61b176e99b4fc824c385`;
 the counter generator SHA-256 is
 `cda2b9ad477c241fe3e128db2959e13fac8043a5deb5b3bd35da1326d9e5e22e`;
-the schema-v2 report is
+the schema-v2 report is preserved in git history at
 `docs/evidence/renderer-parity-2026-07-18/renderer-work-counters.json`
 (SHA-256
 `92b73d58f6ee5e58baaf4d30a34f4478152a57818bee6b7db0962e19ef25a6bc`).

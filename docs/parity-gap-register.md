@@ -85,7 +85,8 @@ unobserved.
 ## F — Feature/subsystem gaps (code that does not exist)
 
 Ranked by upstream line count × product relevance. "Historical backlog"
-ceilings from `v2-status.md` are merged in.
+ceilings from the original port's status log (git history: `docs/v2-status.md`)
+are merged in.
 
 | id | subsystem | size (≈lines) | status | notes |
 |---|---|---|---|---|
@@ -101,7 +102,7 @@ ceilings from `v2-status.md` are merged in.
 | F10 | **Behavioral-verify candidates** — concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Text` (659/666), `TransitionValueIdComparator` (601) | — | UNKNOWN | Cheapest wins in the register: author one fixture each; either it's generically handled (close row) or it diffs (new F-row). |
 | F11 | **Compressed-texture decoders** (astc/bc/ktx2/etc) | 735 | ABSENT | GPU texture path; relevance depends on whether editor exports these. |
 | F12 | **Async work pool** (346) + **profiler** (407) | 753 | PARTIAL | P1-m ports the profiler records, lifecycle, wire format, and runtime hooks; its capture backend is the declared D16 adaptation. The async work pool remains absent and matters only if F3 is ported. |
-| F13 | Historical backlog ceilings (recorded in `v2-status.md`): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live data-bound nested-host controls beyond generated defaults, richer static-text modifiers (shape/origin, gradient text effects) | — | LATENT | Currently exact for all corpus files; will surface as diffs when fixtures exist (see C-rows). |
+| F13 | Historical backlog ceilings (from the original port's status log): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live data-bound nested-host controls beyond generated defaults, richer static-text modifiers (shape/origin, gradient text effects) | — | LATENT | Currently exact for all corpus files; will surface as diffs when fixtures exist (see C-rows). |
 | F14 | `binary_writer`/`binary_data_reader`, `static_scene.cpp`, `hittest_command_path.cpp`, `intrinsically_sizeable.cpp` | ~350 | ABSENT (accepted) | Read-only runtime doesn't need writers; note and close. |
 
 ## A — Embedder API surface gaps
@@ -246,4 +247,8 @@ appear.
    *performance* (V10 blocking ratio ≤ 1.0). "Verifiable replacement" =
    every tier green or its exceptions listed in D.
 
-| W3 | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff()` dereferences a freed `LayoutComponent` (heap-use-after-free, ASan-proven, deterministic in debug) | WATCH (upstream-blocked at `4ac7b327`) | Side-channel comparison quarantined for `replace_view_model` and `data_binding_artboards_test` via `side_channel_divergence`; draw streams stay compared. Rust port must be audited for the mirrored eviction gap (nested-VMI lane adjudication). Evidence: CPPCRASH-report on `levi/vfix-convergence`. |
+## W — Upstream watch items (blocked on upstream fixes)
+
+| id | gap | status | notes |
+|---|---|---|---|
+| W3 | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff()` dereferences a freed `LayoutComponent` (heap-use-after-free, ASan-proven, deterministic in debug) | WATCH (upstream-blocked at `4ac7b327`) | Side-channel comparison quarantined for `replace_view_model` and `data_binding_artboards_test` via `side_channel_divergence`; draw streams stay compared. Rust port must be audited for the mirrored eviction gap (nested-VMI lane adjudication). Details and a candidate upstream patch: `docs/watch-cpp-nest-semantic-uaf.md`, `docs/watch-cpp-nest-semantic-uaf-candidate-fix.patch`. |

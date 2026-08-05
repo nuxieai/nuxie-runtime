@@ -335,7 +335,7 @@ feature-compile-gate-portable:
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
-		"nux-capi --features apple-renderer,size-report-roots" "cargo check -p nux-capi --features apple-renderer,size-report-roots --lib" \
+		"nuxie-apple-adapter --features size-report-roots" "cargo check -p nuxie-apple-adapter --features size-report-roots --lib" \
 		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
 		"Apple adapter seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 

@@ -19,6 +19,7 @@ ongoing workflows, and every document here supports one of them:
 | `upstream-test-findings.md` | Open coverage gaps and production divergences found while porting the upstream unit-test suite; each is anchored by an `#[ignore]`d Rust test. |
 | `command-queue-test-ledger.md` | CommandQueue/CommandServer upstream-test correspondence, including the S4-45 WATCH residue. |
 | `pure-runtime-boundary.md` | Ratified ownership and dependency-direction contract separating the ported runtime baseline from product, editor, browser, and Apple layers. |
+| `product-crate-seams.md` | Transitional package ownership, narrow interfaces, build selectors, and compatibility paths for the product-surface extraction. |
 | `side-channel-format.md` | Wire format of the golden-stream runtime side channel (settled bool, hit results, events, semantics). Implemented by both golden runners. |
 | `SIZE.md` | The blocking 9 MiB SDK size budget and its measurement method. |
 | `renderer-parity-workflow.md` | Acceptance contract for renderer performance parity (1.0x threshold, fixed report matrix). |

@@ -1,4 +1,5 @@
 use crate::functions::compute_cost::compute_cost;
+use crate::functions::unwrap_expr_of_type::unwrap_expr_of_type;
 use crate::records::compiler::Compiler;
 use luaur_ast::records::ast_expr_call::AstExprCall;
 use luaur_ast::records::ast_expr_function::AstExprFunction;
@@ -93,7 +94,18 @@ impl Compiler {
 
             let threshold = threshold_base * inline_profit / 100;
 
-            if inlined_cost > threshold {
+            if luaur_common::FFlag::LuauCompileIifeInline.get() {
+                let is_iife = !unwrap_expr_of_type::<AstExprFunction>((*expr).func).is_null();
+
+                if inlined_cost > threshold && !is_iife {
+                    (*self.bytecode).add_debug_remark(format_args!(
+                        "inlining failed: too expensive (cost {}, profit {:.2}x)",
+                        inlined_cost,
+                        inline_profit as f64 / 100.0
+                    ));
+                    return false;
+                }
+            } else if inlined_cost > threshold {
                 (*self.bytecode).add_debug_remark(format_args!(
                     "inlining failed: too expensive (cost {}, profit {:.2}x)",
                     inlined_cost,

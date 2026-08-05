@@ -1,5 +1,6 @@
 use crate::functions::cleartable::cleartable;
 use crate::functions::clearupvals::clearupvals;
+use crate::functions::embeddermarkref::embeddermarkref;
 use crate::functions::markmt::markmt;
 use crate::functions::marktaggetmt::marktaggetmt;
 use crate::functions::markudatadirectaccess::markudatadirectaccess;
@@ -47,6 +48,25 @@ pub unsafe fn atomic(l: *mut lua_State) -> usize {
     (*g).gray = (*g).grayagain;
     (*g).grayagain = core::ptr::null_mut();
     work += propagateall(g);
+
+    if luaur_common::FFlag::LuauGcTraceUdata.get() {
+        #[cfg(feature = "luai_gcmetrics")]
+        let mut embedder_start = crate::functions::lua_clock::lua_clock();
+
+        if let Some(embeddergc) = (*g).embeddergc {
+            embeddergc((*g).mainthread, Some(embeddermarkref));
+            while !(*g).gray.is_null() {
+                work += propagateall(g);
+                embeddergc((*g).mainthread, Some(embeddermarkref));
+            }
+        }
+
+        #[cfg(feature = "luai_gcmetrics")]
+        {
+            (*g).gcmetrics.currcycle.atomictimeembedder +=
+                crate::functions::record_gc_delta_time::record_gc_delta_time(&mut embedder_start);
+        }
+    }
 
     work += cleartable(l, (*g).weak);
     (*g).weak = core::ptr::null_mut();

@@ -12,6 +12,7 @@ pub union GcObject {
     pub buf: core::mem::ManuallyDrop<crate::records::luau_buffer::LuauBuffer>,
     pub lclass: core::mem::ManuallyDrop<crate::records::luau_class::LuauClass>,
     pub lobject: core::mem::ManuallyDrop<crate::records::luau_object::LuauObject>,
+    pub vec: core::mem::ManuallyDrop<crate::records::luau_vector::LuauVector>,
 }
 
 #[allow(non_camel_case_types)]

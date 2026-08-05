@@ -42,7 +42,9 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
             (*ci).base.add((errfunc - 1) as usize) as *mut core::ffi::c_void,
         );
 
-        (*l).nCcalls = (*l).baseCcalls;
+        if !luaur_common::FFlag::LuauXpcallFixMessageYieldPath.get() {
+            (*l).nCcalls = (*l).baseCcalls;
+        }
 
         if err == 0 {
             status = lua_Status::LUA_ERRRUN as i32;
@@ -59,6 +61,10 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
     }
 
     if luaur_common::FFlag::LuauCustomYieldablePcalls.get() {
+        if luaur_common::FFlag::LuauXpcallFixMessageYieldPath.get() {
+            (*l).nCcalls = (*l).baseCcalls;
+        }
+
         (*l).ci = ci;
         luaF_close(l, (*(*l).ci).base);
 

@@ -110,6 +110,7 @@ impl<'a> ConstantVisitor<'a> {
                             id,
                             unsafe { self.builtin_args.as_ptr().add(offset) },
                             expr.args.size,
+                            self.vector_double_precision,
                         );
                     }
                     self.builtin_args.truncate(offset);
@@ -129,22 +130,39 @@ impl<'a> ConstantVisitor<'a> {
                         result = *prop;
                     }
                 }
-            } else if value.r#type == Type::Type_Vector {
+            } else if value.r#type == Type::Type_Vectorf {
                 if expr.index.operator_eq_c_char(c"x".as_ptr())
                     || expr.index.operator_eq_c_char(c"X".as_ptr())
                 {
                     result.r#type = Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[0] } as f64;
+                    result.data.value_number = unsafe { value.data.value_vectorf[0] } as f64;
                 } else if expr.index.operator_eq_c_char(c"y".as_ptr())
                     || expr.index.operator_eq_c_char(c"Y".as_ptr())
                 {
                     result.r#type = Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[1] } as f64;
+                    result.data.value_number = unsafe { value.data.value_vectorf[1] } as f64;
                 } else if expr.index.operator_eq_c_char(c"z".as_ptr())
                     || expr.index.operator_eq_c_char(c"Z".as_ptr())
                 {
                     result.r#type = Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[2] } as f64;
+                    result.data.value_number = unsafe { value.data.value_vectorf[2] } as f64;
+                }
+            } else if value.r#type == Type::Type_Vectord {
+                if expr.index.operator_eq_c_char(c"x".as_ptr())
+                    || expr.index.operator_eq_c_char(c"X".as_ptr())
+                {
+                    result.r#type = Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[0] };
+                } else if expr.index.operator_eq_c_char(c"y".as_ptr())
+                    || expr.index.operator_eq_c_char(c"Y".as_ptr())
+                {
+                    result.r#type = Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[1] };
+                } else if expr.index.operator_eq_c_char(c"z".as_ptr())
+                    || expr.index.operator_eq_c_char(c"Z".as_ptr())
+                {
+                    result.r#type = Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[2] };
                 }
             } else if self.fold_library_k {
                 if let Some(eg) = unsafe {
@@ -166,6 +184,28 @@ impl<'a> ConstantVisitor<'a> {
                                 &mut result as *mut Constant
                                     as *mut crate::type_aliases::compile_constant::CompileConstant,
                             );
+                        }
+
+                        if self.vector_double_precision && result.r#type == Type::Type_Vectorf {
+                            let copy = result;
+                            result.r#type = Type::Type_Vectord;
+                            for i in 0..4 {
+                                unsafe {
+                                    result.data.value_vectord[i] =
+                                        copy.data.value_vectorf[i] as f64;
+                                }
+                            }
+                        } else if !self.vector_double_precision
+                            && result.r#type == Type::Type_Vectord
+                        {
+                            let copy = result;
+                            result.r#type = Type::Type_Vectorf;
+                            for i in 0..4 {
+                                unsafe {
+                                    result.data.value_vectorf[i] =
+                                        copy.data.value_vectord[i] as f32;
+                                }
+                            }
                         }
                     }
                 }

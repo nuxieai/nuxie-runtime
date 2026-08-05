@@ -21,6 +21,7 @@ pub struct LuaCompileOptions {
     pub vector_ctor: *const c_char,
 
     pub vector_type: *const c_char,
+    pub vector_precision: i32,
 
     pub mutable_globals: *const *const c_char,
 

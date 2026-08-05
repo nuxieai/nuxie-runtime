@@ -14,7 +14,8 @@ pub union ConstantData {
     pub(crate) value_boolean: bool,
     pub(crate) value_number: f64,
     pub(crate) value_integer64: i64,
-    pub(crate) value_vector: [f32; 4],
+    pub(crate) value_vectorf: [f32; 4],
+    pub(crate) value_vectord: [f64; 4],
     pub(crate) value_table: usize,
     pub(crate) value_string: *const core::ffi::c_char,
 }
@@ -58,7 +59,8 @@ impl core::fmt::Debug for Constant {
                 Type::Type_Boolean => ds.field("value_boolean", &self.data.value_boolean),
                 Type::Type_Number => ds.field("value_number", &self.data.value_number),
                 Type::Type_Integer => ds.field("value_integer64", &self.data.value_integer64),
-                Type::Type_Vector => ds.field("value_vector", &self.data.value_vector),
+                Type::Type_Vectorf => ds.field("value_vectorf", &self.data.value_vectorf),
+                Type::Type_Vectord => ds.field("value_vectord", &self.data.value_vectord),
                 Type::Type_Table => ds.field("value_table", &self.data.value_table),
                 Type::Type_String => ds.field("value_string", &self.data.value_string),
             };

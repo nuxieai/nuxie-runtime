@@ -74,7 +74,12 @@ pub fn compile_or_throw_bytecode_builder_parse_result_ast_name_table_compile_opt
     let mut compiler = Compiler::compiler(bytecode, &options, names);
 
     assign_mutable(&mut compiler.globals, names, options.mutable_globals);
-    track_values(&mut compiler.globals, &mut compiler.variables, root_node);
+    track_values(
+        &mut compiler.globals,
+        &mut compiler.variables,
+        &mut compiler.class_locals,
+        root_node,
+    );
 
     if options.optimization_level >= 1
         && (!names.get(c"getfenv".as_ptr()).value.is_null()
@@ -132,6 +137,7 @@ pub fn compile_or_throw_bytecode_builder_parse_result_ast_name_table_compile_opt
             &mut compiler.locstants,
             compiler.builtins_fold,
             compiler.builtins_fold_library_k,
+            options.vector_precision == 1,
             options.library_member_constant_cb,
             root_node,
             names,

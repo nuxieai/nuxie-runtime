@@ -10,7 +10,8 @@ local runner_name = os.getenv('RIVE_CPP_PROBE_RUNNER_NAME') or 'rive_cpp_probe'
 if not runtime_libdir then
     error('RIVE_CPP_PROBE_RUNTIME_LIBDIR must name a provenance-verified archive directory')
 end
-local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
+local dep_root = rive_runtime .. '/dependencies'
+local dep_cache = dep_root .. '/' .. os.host() .. '/cache'
 
 local function first_dir(pattern)
     local matches = os.matchdirs(pattern)
@@ -18,6 +19,87 @@ local function first_dir(pattern)
         return matches[1]
     end
     return nil
+end
+
+local function read_file(path)
+    local handle = io.open(path, 'r')
+    if handle == nil then
+        return nil
+    end
+    local contents = handle:read('*a')
+    handle:close()
+    return contents
+end
+
+-- The tag the pinned runtime's own premake asks `dependency.github` for.
+local function pinned_tag(premake_file, project)
+    local contents = read_file(rive_runtime .. '/' .. premake_file)
+    if contents == nil then
+        return nil
+    end
+    return contents:match(
+        "dependency%.github%(%s*'" .. project:gsub('%W', '%%%0') .. "'%s*,%s*'([^']+)'"
+    )
+end
+
+-- Resolve a C++ dependency to the exact revision the pinned librive was built
+-- from. The probe is the oracle for C++ differential testing, so compiling it
+-- against a different revision than the archive it links is an ABI/behavior
+-- mismatch hidden inside the thing that decides what "correct" means.
+--
+-- Upstream fetches dependencies through build/dependency.lua's
+-- `dependency.github(project, tag)`, which clones to dependencies/<project>_<tag>
+-- with '/' replaced by '_'. Read the tag out of the runtime's premake instead
+-- of globbing that directory: several projects have more than one tag checked
+-- out side by side -- rive-app_yoga_rive_changes_v2_0_1_2 next to
+-- ..._v2_0_1_2_grid, three luigi-rosso_luau_* revisions -- and `os.matchdirs`
+-- hands back whichever sorts first, which is the wrong one in both cases.
+--
+-- The pre-migration dependencies/<host>/cache/<hash>/<name>-<tag> tree survives
+-- only in checkouts old enough to predate the migration, and it holds the tags
+-- current at that time (harfbuzz 10.1.0 against the pin's 13.1.1, yoga
+-- rive_changes_v2_0_1 against rive_changes_v2_0_1_2_grid). It is a last resort
+-- for when the tag cannot be read at all, never a stand-in for a known tag.
+local function dependency_dir(project, premake_file, legacy_pattern)
+    local tag = pinned_tag(premake_file, project)
+    if tag ~= nil then
+        local dirname = (project .. '_' .. tag):gsub('/', '_')
+        local dir = dep_root .. '/' .. dirname
+        if os.isdir(dir) then
+            return dir
+        end
+        error(
+            'cpp-probe: the pinned runtime builds '
+                .. project
+                .. ' at '
+                .. tag
+                .. ', but '
+                .. dir
+                .. ' does not exist. Build librive first so the dependency is'
+                .. ' fetched; the legacy '
+                .. dep_cache
+                .. ' tree holds a different revision and is not a substitute.'
+        )
+    end
+    local legacy = legacy_pattern and first_dir(dep_cache .. legacy_pattern)
+    if legacy ~= nil then
+        return legacy
+    end
+    -- A silent nil drops the include directory, which resurfaces either as a
+    -- "file not found" from deep inside a rive header or -- worse -- as a
+    -- probe that compiles clean against headers librive was never built with.
+    error(
+        'cpp-probe: cannot determine the '
+            .. project
+            .. ' revision the pinned librive was built with; no'
+            .. " dependency.github('"
+            .. project
+            .. "', ...) in "
+            .. rive_runtime
+            .. '/'
+            .. premake_file
+            .. (legacy_pattern and ', and nothing matching ' .. dep_cache .. legacy_pattern or '')
+    )
 end
 
 local include_dirs = {
@@ -28,58 +110,44 @@ local include_dirs = {
     '/usr/include',
 }
 
-local harfbuzz = first_dir(dep_cache .. '/*/harfbuzz-*/src')
-local sheenbidi = first_dir(dep_cache .. '/*/SheenBidi-*/Headers')
-local yoga = first_dir(dep_cache .. '/*/yoga-*')
--- Upstream fetches dependencies through build/dependency.lua's
--- `dependency.github`, which clones to dependencies/<project>_<tag>. The
--- legacy dependencies/<host>/cache/<hash>/ tree only survives in checkouts
--- that predate that migration, and it holds pre-migration tags there
--- (miniaudio-rive_changes_4 against the pin's rive_changes_5). Prefer the
--- current layout so a fresh checkout -- CI, or any clean clone -- resolves the
--- same headers the pinned librive was built against; keep the legacy cache as
--- a fallback for older local checkouts.
-local miniaudio = first_dir(rive_runtime .. '/dependencies/rive-app_miniaudio_*')
-    or first_dir(dep_cache .. '/*/miniaudio-*')
-local luau = first_dir(rive_runtime .. '/dependencies/luigi-rosso_luau_*')
-local libhydrogen = first_dir(rive_runtime .. '/dependencies/luigi-rosso_libhydrogen_*')
+local harfbuzz =
+    dependency_dir('rive-app/harfbuzz', 'dependencies/premake5_harfbuzz_v2.lua', '/*/harfbuzz-*')
+local sheenbidi =
+    dependency_dir('Tehreer/SheenBidi', 'dependencies/premake5_sheenbidi_v2.lua', '/*/SheenBidi-*')
+-- Required, not decorative: rive/layout/layout_data.hpp holds a YGNode and a
+-- YGStyle by value, so every probe translation unit that reaches shape.hpp
+-- takes its layout sizes and offsets from these headers.
+local yoga = dependency_dir('rive-app/yoga', 'dependencies/premake5_yoga_v2.lua', '/*/yoga-*')
+local luau
+local libhydrogen
 
-if harfbuzz then
-    table.insert(include_dirs, harfbuzz)
-end
-if sheenbidi then
-    table.insert(include_dirs, sheenbidi)
-end
-if yoga then
-    table.insert(include_dirs, yoga)
-end
-if miniaudio then
-    table.insert(include_dirs, miniaudio)
-elseif with_audio then
-    -- Silently dropping the include dir turns a missing dependency into
-    -- "'miniaudio.h' file not found" from deep inside a rive header. Name the
-    -- real cause and the paths searched.
-    error(
-        'audio probe requires miniaudio headers; searched '
-            .. rive_runtime
-            .. '/dependencies/rive-app_miniaudio_* and '
-            .. dep_cache
-            .. '/*/miniaudio-*'
+table.insert(include_dirs, harfbuzz .. '/src')
+table.insert(include_dirs, sheenbidi .. '/Headers')
+table.insert(include_dirs, yoga)
+if with_audio then
+    table.insert(
+        include_dirs,
+        dependency_dir(
+            'rive-app/miniaudio',
+            'dependencies/premake5_miniaudio_v2.lua',
+            '/*/miniaudio-*'
+        )
     )
 end
 if with_scripting then
+    -- The scripted probe compiles Luau's own Compiler/Ast/Bytecode/Common
+    -- sources and links luau_vm out of librive, so a revision skew here means
+    -- one Luau compiling bytecode for another Luau's VM.
+    luau = dependency_dir('luigi-rosso/luau', 'scripting/premake5.lua')
+    libhydrogen = dependency_dir('luigi-rosso/libhydrogen', 'scripting/premake5.lua')
     table.insert(include_dirs, rive_runtime .. '/scripting')
     table.insert(include_dirs, rive_runtime .. '/decoders/include')
-    if luau then
-        table.insert(include_dirs, luau .. '/VM/include')
-        table.insert(include_dirs, luau .. '/Compiler/include')
-        table.insert(include_dirs, luau .. '/Bytecode/include')
-        table.insert(include_dirs, luau .. '/Ast/include')
-        table.insert(include_dirs, luau .. '/Common/include')
-    end
-    if libhydrogen then
-        table.insert(include_dirs, libhydrogen)
-    end
+    table.insert(include_dirs, luau .. '/VM/include')
+    table.insert(include_dirs, luau .. '/Compiler/include')
+    table.insert(include_dirs, luau .. '/Bytecode/include')
+    table.insert(include_dirs, luau .. '/Ast/include')
+    table.insert(include_dirs, luau .. '/Common/include')
+    table.insert(include_dirs, libhydrogen)
 end
 
 project('rive_cpp_probe')
@@ -104,7 +172,7 @@ files({
     '../testing_random_provider.cpp',
     rive_runtime .. '/utils/no_op_factory.cpp',
 })
-if with_scripting and luau then
+if with_scripting then
     files({
         luau .. '/Compiler/src/**.cpp',
         luau .. '/Bytecode/src/**.cpp',
@@ -148,6 +216,7 @@ if os.host() == 'macosx' then
         table.insert(mac_links, 2, 'miniaudio')
     end
     if with_scripting then
+        table.insert(mac_links, 2, 'miniaudio')
         table.insert(mac_links, 2, 'rive_decoders')
         table.insert(mac_links, 3, 'luau_vm')
         table.insert(mac_links, 4, 'libpng')
@@ -170,6 +239,7 @@ else
         table.insert(unix_links, 2, 'miniaudio')
     end
     if with_scripting then
+        table.insert(unix_links, 2, 'miniaudio')
         table.insert(unix_links, 2, 'rive_decoders')
         table.insert(unix_links, 3, 'luau_vm')
         table.insert(unix_links, 4, 'libpng')

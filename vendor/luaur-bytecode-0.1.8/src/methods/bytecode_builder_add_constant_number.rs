@@ -15,7 +15,9 @@ impl BytecodeBuilder {
         let mut k = ConstantKey {
             r#type: Type::Type_Number,
             value: 0,
-            extra: 0,
+            extra1: 0,
+            extra2: 0,
+            extra3: 0,
         };
 
         // Expecting double to be 64-bit

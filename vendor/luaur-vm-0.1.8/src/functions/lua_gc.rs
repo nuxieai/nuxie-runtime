@@ -135,6 +135,9 @@ pub fn lua_gc(
                 res = (*g).gcstepsize >> 10;
                 (*g).gcstepsize = data << 10;
             }
+            x if x == lua_GCOp::LUA_GCISPAUSED as i32 => {
+                res = ((*g).gcstate as i32 == GCSpause) as core::ffi::c_int;
+            }
             _ => {
                 res = -1; // invalid option
             }

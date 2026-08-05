@@ -6,7 +6,8 @@ pub enum Type {
     Type_Boolean,
     Type_Number,
     Type_Integer,
-    Type_Vector,
+    Type_Vectorf,
+    Type_Vectord,
     Type_String,
     Type_Table,
 }
@@ -17,7 +18,8 @@ impl Type {
     pub const Type_Boolean: Self = Self::Type_Boolean;
     pub const Type_Number: Self = Self::Type_Number;
     pub const Type_Integer: Self = Self::Type_Integer;
-    pub const Type_Vector: Self = Self::Type_Vector;
+    pub const Type_Vectorf: Self = Self::Type_Vectorf;
+    pub const Type_Vectord: Self = Self::Type_Vectord;
     pub const Type_String: Self = Self::Type_String;
     pub const Type_Table: Self = Self::Type_Table;
 }

@@ -86,7 +86,6 @@ where
     }
 
     fn do_hash(&self, key: &K) -> usize {
-        debug_assert!(self.hash_shift > 32);
         ((self.hasher.hash(key) as u64).wrapping_mul(11_400_714_819_323_198_485) >> self.hash_shift)
             as usize
     }

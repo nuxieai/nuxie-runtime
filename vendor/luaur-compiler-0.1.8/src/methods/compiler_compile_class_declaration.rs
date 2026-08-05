@@ -7,8 +7,11 @@ use luaur_common::records::variant::Variant2;
 
 impl Compiler {
     pub fn compile_class_declaration(&mut self, decl: *mut AstStatClass) {
-        let dest = self.alloc_reg(decl as *mut _, 1);
-        self.push_local(unsafe { (*decl).name }, dest, !0u32);
+        let class_local = self.class_locals.find(&unsafe { (*(*decl).name).name });
+        LUAU_ASSERT!(class_local.is_some());
+        let dest_reg = self.get_local_reg(*class_local.unwrap());
+        LUAU_ASSERT!(dest_reg >= 0);
+        let dest = dest_reg as u8;
         if luaur_common::FFlag::LuauExportValueSyntax.get() && unsafe { (*decl).exported } {
             self.ensure_export_table(decl as *mut _);
             *self.exported_classes.get_or_insert(unsafe { (*decl).name }) = dest;

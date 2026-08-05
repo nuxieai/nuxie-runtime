@@ -40,6 +40,8 @@ pub(crate) unsafe fn dumpobj(f: *mut core::ffi::c_void, o: *mut GCObject) {
         t if t == lua_Type::LUA_TTHREAD as i32 => {
             dumpthread(f, gco2th!(o) as *const _ as *mut _);
         }
+        #[cfg(feature = "lua_vector_double")]
+        t if t == lua_Type::LUA_TVECTOR as i32 => {}
         t if t == lua_Type::LUA_TBUFFER as i32 => {
             dumpbuffer(f, gco2buf!(o) as *const _ as *mut _);
         }

@@ -9,7 +9,7 @@ use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
 pub unsafe fn luau_f_vectorsign(
-    _L: *mut lua_State,
+    L: *mut lua_State,
     res: StkId,
     arg0: *mut TValue,
     nresults: core::ffi::c_int,
@@ -20,7 +20,7 @@ pub unsafe fn luau_f_vectorsign(
         let v = vvalue!(arg0).as_ptr();
 
         if LUA_VECTOR_SIZE == 4 {
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 luaui_signf(*v.offset(0)),
                 luaui_signf(*v.offset(1)),
@@ -28,12 +28,12 @@ pub unsafe fn luau_f_vectorsign(
                 luaui_signf(*v.offset(3))
             );
         } else {
-            setvvalue!(
+            setvvalue!(L,
                 res,
                 luaui_signf(*v.offset(0)),
                 luaui_signf(*v.offset(1)),
                 luaui_signf(*v.offset(2)),
-                0.0f32
+                0.0 as crate::type_aliases::lua_vector_type::LuaVectorType
             );
         }
 

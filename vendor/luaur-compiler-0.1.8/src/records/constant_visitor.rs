@@ -24,6 +24,7 @@ pub struct ConstantVisitor<'a> {
     pub(crate) locals: &'a mut DenseHashMap<*mut AstLocal, Constant>,
     pub(crate) builtins: *const DenseHashMap<*mut AstExprCall, i32>,
     pub(crate) fold_library_k: bool,
+    pub(crate) vector_double_precision: bool,
     pub(crate) library_member_constant_cb: LibraryMemberConstantCallback,
     pub(crate) string_table: &'a mut AstNameTable,
     pub(crate) constant_tables: Vec<DenseHashMap<AstName, Constant>>,
@@ -42,6 +43,7 @@ impl<'a> ConstantVisitor<'a> {
         locals: &'a mut DenseHashMap<*mut AstLocal, Constant>,
         builtins: *const DenseHashMap<*mut AstExprCall, i32>,
         fold_library_k: bool,
+        vector_double_precision: bool,
         library_member_constant_cb: LibraryMemberConstantCallback,
         string_table: &'a mut AstNameTable,
         constant_table_locals: &'a DenseHashMap<*mut AstLocal, TableConstantKind>,
@@ -61,6 +63,7 @@ impl<'a> ConstantVisitor<'a> {
             locals,
             builtins,
             fold_library_k,
+            vector_double_precision,
             library_member_constant_cb,
             string_table,
             constant_tables,
@@ -186,6 +189,7 @@ impl<'a> ConstantVisitor<'a> {
                             *bfid_ptr,
                             unsafe { self.builtin_args.as_ptr().add(offset) },
                             expr.args.size as usize,
+                            self.vector_double_precision,
                         );
                     }
 
@@ -216,18 +220,34 @@ impl<'a> ConstantVisitor<'a> {
                         result = *prop;
                     }
                 }
-            } else if value.r#type == crate::enums::type_constant_folding::Type::Type_Vector {
+            } else if value.r#type == crate::enums::type_constant_folding::Type::Type_Vectorf {
                 let index_str =
                     unsafe { core::ffi::CStr::from_ptr(expr.index.value).to_string_lossy() };
                 if index_str == "x" || index_str == "X" {
                     result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[0] as f64 };
+                    result.data.value_number = unsafe { value.data.value_vectorf[0] as f64 };
                 } else if index_str == "y" || index_str == "Y" {
                     result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[1] as f64 };
+                    result.data.value_number = unsafe { value.data.value_vectorf[1] as f64 };
                 } else if index_str == "z" || index_str == "Z" {
                     result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
-                    result.data.value_number = unsafe { value.data.value_vector[2] as f64 };
+                    result.data.value_number = unsafe { value.data.value_vectorf[2] as f64 };
+                }
+
+                // Do not handle 'w' component because it isn't known if the runtime will be configured in 3-wide or 4-wide mode
+                // In 3-wide, access to 'w' will call unspecified metamethod or fail
+            } else if value.r#type == crate::enums::type_constant_folding::Type::Type_Vectord {
+                let index_str =
+                    unsafe { core::ffi::CStr::from_ptr(expr.index.value).to_string_lossy() };
+                if index_str == "x" || index_str == "X" {
+                    result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[0] };
+                } else if index_str == "y" || index_str == "Y" {
+                    result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[1] };
+                } else if index_str == "z" || index_str == "Z" {
+                    result.r#type = crate::enums::type_constant_folding::Type::Type_Number;
+                    result.data.value_number = unsafe { value.data.value_vectord[2] };
                 }
 
                 // Do not handle 'w' component because it isn't known if the runtime will be configured in 3-wide or 4-wide mode
@@ -253,6 +273,32 @@ impl<'a> ConstantVisitor<'a> {
                         let constant_ptr = &mut result as *mut Constant
                             as *mut crate::type_aliases::compile_constant::CompileConstant;
                         unsafe { cb(eg.name.value, expr.index.value, constant_ptr) };
+
+                        if self.vector_double_precision
+                            && result.r#type
+                                == crate::enums::type_constant_folding::Type::Type_Vectorf
+                        {
+                            let copy = result;
+                            result.r#type = crate::enums::type_constant_folding::Type::Type_Vectord;
+                            for i in 0..4 {
+                                unsafe {
+                                    result.data.value_vectord[i] =
+                                        copy.data.value_vectorf[i] as f64;
+                                }
+                            }
+                        } else if !self.vector_double_precision
+                            && result.r#type
+                                == crate::enums::type_constant_folding::Type::Type_Vectord
+                        {
+                            let copy = result;
+                            result.r#type = crate::enums::type_constant_folding::Type::Type_Vectorf;
+                            for i in 0..4 {
+                                unsafe {
+                                    result.data.value_vectorf[i] =
+                                        copy.data.value_vectord[i] as f32;
+                                }
+                            }
+                        }
                     }
                 }
             }

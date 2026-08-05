@@ -1,5 +1,6 @@
 use crate::macros::luau_f_table::luauF_table;
 use crate::macros::nvalue::nvalue;
+use crate::macros::setclvalue::setclvalue;
 use crate::macros::setnvalue::setnvalue;
 use crate::macros::setvvalue::setvvalue;
 use crate::macros::vvalue::vvalue;
@@ -49,28 +50,38 @@ fn select_fastcall_reads_varargs_before_the_frame_base() {
         let stack = (*state).stack;
         let mut proto: crate::records::proto::Proto = core::mem::zeroed();
         proto.numparams = 2;
+        proto.maxstacksize = 8;
+        let closure = crate::functions::lua_f_new_lclosure::luaF_newLclosure(
+            state,
+            0,
+            core::ptr::null_mut(),
+            &mut proto,
+        );
 
         (*(*state).ci).func = stack;
         (*(*state).ci).p = &mut proto;
+        setclvalue!(state, stack, closure);
         (*state).base = stack.add(6);
         setnvalue!(stack.add(3), 11.0);
         setnvalue!(stack.add(4), 22.0);
         setnvalue!(stack.add(5), 33.0);
         setnvalue!(stack.add(7), 2.0);
 
-        luaur_common::FFlag::LuauCIProto.push_test_override(true);
-        let status = crate::functions::luau_f_select::luau_f_select(
-            state,
-            stack.add(8),
-            stack.add(7),
-            1,
-            core::ptr::null_mut(),
-            1,
-        );
-        luaur_common::FFlag::LuauCIProto.pop_test_override();
+        for ci_proto in [false, true] {
+            luaur_common::FFlag::LuauCIProto.push_test_override(ci_proto);
+            let status = crate::functions::luau_f_select::luau_f_select(
+                state,
+                stack.add(8),
+                stack.add(7),
+                1,
+                core::ptr::null_mut(),
+                1,
+            );
+            luaur_common::FFlag::LuauCIProto.pop_test_override();
 
-        assert_eq!(status, 1);
-        assert_eq!(nvalue!(stack.add(8)), 22.0);
+            assert_eq!(status, 1, "LuauCIProto={ci_proto}");
+            assert_eq!(nvalue!(stack.add(8)), 22.0, "LuauCIProto={ci_proto}");
+        }
 
         (*state).base = original_base;
         (*(*state).ci).func = original_func;
@@ -541,6 +552,137 @@ fn fastcall_table_matches_all_256_rive_tip_slots() {
     }
     drop(verify);
     assert_eq!(seen.iter().filter(|&&checked| checked).count(), 256);
+}
+
+#[test]
+fn integer_fastcall_family_executes_under_scoped_flags() {
+    unsafe {
+        luaur_common::FFlag::LuauIntegerFastcalls.push_test_override(true);
+        luaur_common::FFlag::LuauIntegerBufferFastcalls.push_test_override(true);
+
+        let mut input = [TValue::default(); 3];
+        let mut result = TValue::default();
+
+        setnvalue!(input.as_mut_ptr(), 6.0);
+        assert_eq!(
+            luauF_table[94].unwrap()(
+                core::ptr::null_mut(),
+                &mut result,
+                input.as_mut_ptr(),
+                1,
+                input.as_mut_ptr().add(1),
+                1,
+            ),
+            1
+        );
+        assert_eq!(crate::lvalue!(&result), 6);
+
+        crate::setlvalue!(input.as_mut_ptr(), 6);
+        assert_eq!(
+            luauF_table[95].unwrap()(
+                core::ptr::null_mut(),
+                &mut result,
+                input.as_mut_ptr(),
+                1,
+                input.as_mut_ptr().add(1),
+                1,
+            ),
+            1
+        );
+        assert_eq!(nvalue!(&result), 6.0);
+
+        let integer_cases = [
+            (96, [6, 0, 0], 1, -6),
+            (97, [6, 2, 0], 2, 8),
+            (98, [6, 2, 0], 2, 4),
+            (99, [6, 2, 0], 2, 12),
+            (100, [6, 2, 0], 2, 3),
+            (101, [6, 2, 0], 2, 2),
+            (102, [6, 2, 0], 2, 6),
+            (103, [6, 2, 0], 2, 0),
+            (104, [6, 2, 0], 2, 3),
+            (105, [6, 2, 0], 2, 3),
+            (106, [6, 2, 0], 2, 0),
+            (107, [6, 2, 0], 2, 0),
+            (108, [6, 2, 8], 3, 6),
+            (109, [6, 2, 0], 2, 2),
+            (110, [6, 2, 0], 2, 6),
+            (111, [6, 0, 0], 1, -7),
+            (112, [6, 2, 0], 2, 4),
+            (121, [6, 2, 0], 2, 24),
+            (122, [6, 2, 0], 2, 1),
+            (123, [6, 2, 0], 2, 1),
+            (124, [6, 2, 0], 2, 24),
+            (125, [6, 2, 0], 2, 6u64.rotate_right(2) as i64),
+            (126, [6, 1, 2], 3, 3),
+            (128, [6, 0, 0], 1, 1),
+            (129, [6, 0, 0], 1, 61),
+            (130, [6, 0, 0], 1, 6i64.swap_bytes()),
+        ];
+        for (slot, values, nparams, expected) in integer_cases {
+            for (target, value) in input.iter_mut().zip(values) {
+                crate::setlvalue!(target, value);
+            }
+            assert_eq!(
+                luauF_table[slot].unwrap()(
+                    core::ptr::null_mut(),
+                    &mut result,
+                    input.as_mut_ptr(),
+                    1,
+                    input.as_mut_ptr().add(1),
+                    nparams,
+                ),
+                1,
+                "slot {slot}"
+            );
+            assert_eq!(crate::lvalue!(&result), expected, "slot {slot}");
+        }
+
+        let boolean_cases = [
+            (113, 0),
+            (114, 0),
+            (115, 0),
+            (116, 0),
+            (117, 1),
+            (118, 1),
+            (119, 1),
+            (120, 1),
+            (127, 1),
+        ];
+        for (slot, expected) in boolean_cases {
+            crate::setlvalue!(input.as_mut_ptr(), 6);
+            crate::setlvalue!(input.as_mut_ptr().add(1), 2);
+            assert_eq!(
+                luauF_table[slot].unwrap()(
+                    core::ptr::null_mut(),
+                    &mut result,
+                    input.as_mut_ptr(),
+                    1,
+                    input.as_mut_ptr().add(1),
+                    2,
+                ),
+                1,
+                "slot {slot}"
+            );
+            assert_eq!(crate::bvalue!(&result), expected, "slot {slot}");
+        }
+
+        let state = crate::functions::lua_l_newstate::lua_l_newstate();
+        assert!(!state.is_null());
+        crate::functions::lua_newbuffer::lua_newbuffer(state, 8);
+        let buffer = (*state).top.sub(1);
+        let args = (*state).top;
+        let value = 0x0102_0304_0506_0708i64;
+        setnvalue!(args, 0.0);
+        crate::setlvalue!(args.add(1), value);
+        assert_eq!(luauF_table[132].unwrap()(state, args.add(2), buffer, 0, args, 3), 0);
+        assert_eq!(luauF_table[131].unwrap()(state, args.add(2), buffer, 1, args, 2), 1);
+        assert_eq!(crate::lvalue!(args.add(2)), value);
+        crate::functions::lua_close::lua_close(state);
+
+        luaur_common::FFlag::LuauIntegerBufferFastcalls.pop_test_override();
+        luaur_common::FFlag::LuauIntegerFastcalls.pop_test_override();
+    }
 }
 
 #[test]

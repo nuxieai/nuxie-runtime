@@ -20,18 +20,36 @@ pub(crate) fn build_static_text_constraint_bounds(
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Option<(f32, f32, f32, f32)> {
     if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) {
-        let controlled = layout_constraint.and_then(|constraint| {
-            slice
-                .local_bounds_with_layout_constraint(runtime, instance, constraint)
-                .ok()
-                .flatten()
-        });
-        let unconstrained = slice.local_bounds(runtime, instance).ok().flatten();
-        if let Some(bounds) = controlled.or(unconstrained) {
-            return Some(bounds);
-        }
+        return build_static_text_constraint_bounds_from_slice(
+            &slice,
+            runtime,
+            graph,
+            instance,
+            text_local,
+            layout_constraint,
+        );
     }
     static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None)
+}
+
+pub(crate) fn build_static_text_constraint_bounds_from_slice(
+    slice: &StaticTextSlice,
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Option<(f32, f32, f32, f32)> {
+    let controlled = layout_constraint.and_then(|constraint| {
+        slice
+            .local_bounds_with_layout_constraint(runtime, instance, constraint)
+            .ok()
+            .flatten()
+    });
+    let unconstrained = slice.local_bounds(runtime, instance).ok().flatten();
+    controlled.or(unconstrained).or_else(|| {
+        static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None)
+    })
 }
 pub(crate) fn static_text_layout_measure_bounds(
     runtime: &RuntimeFile,

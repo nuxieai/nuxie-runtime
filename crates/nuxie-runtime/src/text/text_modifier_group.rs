@@ -310,7 +310,7 @@ impl StaticTextModifierGroup {
         instance: &ArtboardInstance,
         text: &str,
         runs: &[StaticResolvedRun],
-        lines: &[StaticTextLine<'_>],
+        lines: &[StaticTextLine],
     ) -> Result<Vec<f32>> {
         let mut coverage = vec![0.0; text.chars().count()];
         for range in &self.ranges {

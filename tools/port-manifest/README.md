@@ -17,11 +17,17 @@ Each row records an upstream path, one of `ported`, `partial`, `absent`, or
 Known gaps are seeded from the parity register; every `absent` row must cite
 its `F` id.
 
-Run the blocking check with:
+Run the blocking gate with:
 
 ```sh
-RIVE_RUNTIME_DIR=/path/to/rive-runtime make port-manifest-check
+RIVE_RUNTIME_DIR=/path/to/rive-runtime make port-manifest-gate
 ```
+
+That runs this tool's unit tests and the manifest check as two independent
+verdicts and reports both. Use `make port-manifest-check` to run the manifest
+check alone. The check is deliberately not a make-prerequisite of the tests:
+when it was, a red suite meant the check never ran, so real manifest drift
+stayed invisible underneath the test failure.
 
 The check fails for missing, duplicate, or stale upstream rows, invalid
 statuses, drift from the register seeds, and declared Rust modules that no

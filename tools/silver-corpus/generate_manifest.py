@@ -193,6 +193,7 @@ EXACT = (
     "advance_blend_mode-inputs",
     "advance_blend_mode-vms",
     "animated_clipping-layout",
+    "animated_clipping-nodes",
     "artboard_list_map_rules",
     "artboard_width_test",
     "bidirectional_precedence-source_first",
@@ -1819,7 +1820,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
 bidirectional_stateful_property|frame 3, op 180 (transform), field tx: expected 150, got 100
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save

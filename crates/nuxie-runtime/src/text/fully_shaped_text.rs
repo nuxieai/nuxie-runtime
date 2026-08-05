@@ -3,8 +3,8 @@
 /// Keeping caret, hit, and selection geometry on this exact path prevents the
 /// editor from growing an observation-side text layout that can drift from the
 /// glyphs the runtime draws.
-#[derive(Clone)]
-struct StaticShapedTextLayout {
+#[derive(Debug, Clone)]
+pub(crate) struct StaticShapedTextLayout {
     text: String,
     lines: Vec<StaticShapedTextLine>,
     caret_boundaries: Option<Vec<StaticCaretBoundary>>,
@@ -13,7 +13,19 @@ struct StaticShapedTextLayout {
     has_geometric_modifiers: bool,
     has_non_monotone_advances: bool,
 }
-#[derive(Clone)]
+
+/// C++ `Text::{m_shape,m_lines}`: retained HarfBuzz glyph topology and line
+/// breaks, before `buildRenderStyles` applies positioning, modifiers, and the
+/// local render transform.
+#[derive(Debug, Clone)]
+pub(crate) struct StaticShapedTextTopology {
+    text: String,
+    resolved_runs: Vec<StaticResolvedRun>,
+    contextual_glyphs: Vec<StyledTextGlyph>,
+    lines: Vec<StaticTextLine>,
+    font_scale: f32,
+}
+#[derive(Debug, Clone)]
 struct StaticShapedTextLine {
     line_index: usize,
     char_start: usize,
@@ -27,7 +39,7 @@ struct StaticShapedTextLine {
     bottom: f32,
     glyphs: Vec<StaticPositionedTextGlyph>,
 }
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct StaticPositionedTextGlyph {
     glyph: StyledTextGlyph,
     x: f32,

@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -134,27 +134,59 @@ schema:
 	cargo run -p nuxie-codegen -- --defs "$(DEFS_DIR)" --out crates/nuxie-schema/src/generated/schema.rs
 	cargo fmt --all
 
+.PHONY: fmt fmt-check
+# `cargo fmt --all` formats the workspace members *and* their local path-based
+# dependencies, so it reaches the workspace-excluded vendored wgpu packages.
+# Each of those manifests carries an empty `[workspace]` table so cargo stops
+# its workspace search at the package itself; without it, a git worktree rooted
+# inside the main checkout (`.claude/worktrees/<name>`) makes cargo walk up past
+# the worktree root into the parent checkout's `Cargo.toml` and reject the
+# workspace mismatch. See vendor/wgpu-30.0.0/NUXIE_PATCH.md.
+fmt:
+	cargo fmt --all
+
+fmt-check:
+	cargo fmt --all -- --check
+
 check:
 	cargo check --workspace
 
 test: fixtures
 	cargo test --workspace
 
-.PHONY: port-manifest-generate port-manifest-test port-manifest-check rust-attribution-test rust-attribution-check
+# --- Tool-check gates: the tool's unit tests and the check it performs are
+# independent verdicts, so neither is allowed to hide the other -------------
+# These checks used to be written `X-check: X-test`, which makes the unit tests
+# a precondition for the check: a red test suite meant the check never ran at
+# all, and any real drift underneath stayed invisible until the tests were
+# fixed. That masked two separate live failures in #272 alone. The `-check`
+# targets now stand alone, and the `-gate` targets run the tests and the check
+# in one pass through tools/report-all.sh, which reports every failure.
+.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate
 port-manifest-generate:
 	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
 
 port-manifest-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/port-manifest -p 'test_*.py' -v
 
-port-manifest-check: port-manifest-test
+port-manifest-check:
 	python3 "$(PORT_MANIFEST_TOOL)" check --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --repo-root "$(CURDIR)" --manifest "$(PORT_MANIFEST)"
+
+port-manifest-gate:
+	@tools/report-all.sh "port-manifest" \
+		"port-manifest tool unit tests" "$(MAKE) --no-print-directory port-manifest-test" \
+		"upstream C++ port manifest check" "$(MAKE) --no-print-directory port-manifest-check"
 
 rust-attribution-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/b6-audit -p 'test_rust_attribution.py' -v
 
-rust-attribution-check: rust-attribution-test
+rust-attribution-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUST_ATTRIBUTION_TOOL)" --repo-root "$(CURDIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --additions "$(RUST_ADDITIONS)"
+
+rust-attribution-gate:
+	@tools/report-all.sh "rust-attribution" \
+		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
+		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
 
 b6-audit-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py
@@ -162,11 +194,16 @@ b6-audit-check:
 runtime-drawing-port-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-drawing-port -p 'test_*.py' -v
 
-runtime-drawing-port-check: runtime-drawing-port-test
+runtime-drawing-port-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRAWING_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_DRAWING_OWNERSHIP)" --gaps "$(RUNTIME_DRAWING_GAPS)"
 
-runtime-drawing-port-closed: runtime-drawing-port-test
+runtime-drawing-port-closed:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRAWING_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_DRAWING_OWNERSHIP)" --gaps "$(RUNTIME_DRAWING_GAPS)" --require-closed
+
+runtime-drawing-port-gate:
+	@tools/report-all.sh "runtime-drawing-port" \
+		"runtime drawing port tool unit tests" "$(MAKE) --no-print-directory runtime-drawing-port-test" \
+		"runtime drawing port ledger check" "$(MAKE) --no-print-directory runtime-drawing-port-check"
 
 runtime-frame-loop-port-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-frame-loop-port -p 'test_*.py' -v
@@ -181,15 +218,25 @@ runtime-frame-loop-trace: runtime-frame-loop-trace-runners
 		--output-dir "$(RUNTIME_FRAME_LOOP_TRACE_DIR)" \
 		--output "$(RUNTIME_FRAME_LOOP_TRACE_EVIDENCE)"
 
-runtime-frame-loop-port-check: runtime-frame-loop-port-test
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"
+# The three correspondence checks below are independent verdicts over the same
+# ledger, so they run through report-all.sh rather than as a `set -e` chain
+# that would report only the first drift.
+runtime-frame-loop-port-check:
+	@tools/report-all.sh "runtime-frame-loop-port-check" \
+		"test correspondence" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"' \
+		"layout style handler" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"' \
+		"frame loop ownership ledger" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"'
 
-runtime-frame-loop-port-closed: runtime-frame-loop-port-test
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --require-closed
+runtime-frame-loop-port-closed:
+	@tools/report-all.sh "runtime-frame-loop-port-closed" \
+		"test correspondence" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"' \
+		"layout style handler" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"' \
+		"frame loop ownership ledger (closed)" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --require-closed'
+
+runtime-frame-loop-port-gate:
+	@tools/report-all.sh "runtime-frame-loop-port" \
+		"runtime frame loop port tool unit tests" "$(MAKE) --no-print-directory runtime-frame-loop-port-test" \
+		"runtime frame loop correspondence checks" "$(MAKE) --no-print-directory runtime-frame-loop-port-check"
 
 # --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
 # The runtime crates opt into the panic-freedom clippy lints
@@ -218,6 +265,47 @@ lint-gate:
 			| grep -c -- "--> crates/$$crate/src" || true); \
 		echo "== lint-gate (warn): $$crate -- $$count own-src warning sites =="; \
 	done
+
+# --- Feature compile gate ---------------------------------------------------
+# Code behind a Cargo feature that no CI job builds does not compile in CI, and
+# a `#[cfg(feature = ...)]` module that nothing compiles rots silently. That is
+# how crates/nux-capi/src/size_report_roots.rs sat broken on main: the only
+# consumer of `size-report-roots` is tools/size-report.sh, whose renderer root
+# inventory check runs (correctly) ahead of the fat-LTO build, so the compile
+# errors were never reached.
+#
+# This gate type-checks -- `cargo check`, no linking, no fixtures beyond the
+# pinned assets -- every first-party feature that no other CI job builds. New
+# feature declarations belong here unless some existing job already compiles
+# them; `git grep -- --features Makefile .github` shows what does.
+#
+# Two tiers because two hosts:
+# - PORTABLE runs anywhere and is wired into the ubuntu Clippy lint gate job.
+# - APPLE needs an Apple target (nuxie re-exports AppleSurface and friends only
+#   on ios/macos), so it is wired into the macOS runtime-evidence job ahead of
+#   that job's expensive reference-runtime build.
+# Both tiers report every failing entry rather than stopping at the first.
+.PHONY: feature-compile-gate feature-compile-gate-portable feature-compile-gate-apple
+feature-compile-gate-portable:
+	@tools/report-all.sh "feature-compile-gate (portable)" \
+		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
+		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --test cpp_probe" \
+		"nuxie-renderer --features perf-diagnostics" "cargo check -p nuxie-renderer --features perf-diagnostics --lib" \
+		"nuxie-renderer --features perf-counters" "cargo check -p nuxie-renderer --features perf-counters --lib" \
+		"renderer-replay --features perf-diagnostics" "cargo check -p renderer-replay --features perf-diagnostics --bins" \
+		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
+		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
+		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib"
+
+feature-compile-gate-apple:
+	@tools/report-all.sh "feature-compile-gate (apple)" \
+		"nux-capi --features apple-renderer,size-report-roots" "cargo check -p nux-capi --features apple-renderer,size-report-roots --lib" \
+		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets"
+
+feature-compile-gate:
+	@tools/report-all.sh "feature-compile-gate" \
+		"portable tier" "$(MAKE) --no-print-directory feature-compile-gate-portable" \
+		"apple tier" "$(MAKE) --no-print-directory feature-compile-gate-apple"
 
 inspect:
 	@cargo run --quiet -p nuxie-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
@@ -290,10 +378,22 @@ silver-corpus-test:
 silver-corpus-manifest-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(SILVER_CORPUS_GENERATOR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(SILVER_CORPUS_MANIFEST)" --check
 
-silver-corpus: silver-corpus-test silver-corpus-manifest-check
+# validate reads the manifest, so the manifest check stays a genuine
+# precondition of it. The unit tests do not: they were only a prerequisite, and
+# as one a red suite stopped both the manifest check and the validation from
+# running at all.
+silver-corpus-validate: silver-corpus-manifest-check
 	cargo run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime
 
-cpp-oracle-workspace-tests: b6-audit-check fixtures golden-runner cpp-probe cpp-probe-scripted
+silver-corpus:
+	@tools/report-all.sh "silver-corpus" \
+		"silver corpus unit tests" "$(MAKE) --no-print-directory silver-corpus-test" \
+		"silver corpus manifest check and validation" "$(MAKE) --no-print-directory silver-corpus-validate"
+
+# b6-audit-check is deliberately NOT a prerequisite here: it is an unrelated
+# policy check, and as a prerequisite an audit drift would stop the workspace
+# test floor from running at all. CI runs it as its own step.
+cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe cpp-probe-scripted
 	@test -x "$(GOLDEN_RUNNER)" || { echo "missing executable pinned C++ golden runner: $(GOLDEN_RUNNER)" >&2; exit 2; }
 	@test -x "$(CPP_PROBE)" || { echo "missing executable pinned C++ probe: $(CPP_PROBE)" >&2; exit 2; }
 	@test -x "$(SCRIPTED_CPP_PROBE)" || { echo "missing executable pinned scripted C++ probe: $(SCRIPTED_CPP_PROBE)" >&2; exit 2; }
@@ -447,8 +547,9 @@ perf-json: golden-runner rust-golden-runner
 perf-gate-measure: CPP_CONFIG=release
 perf-gate-measure: RUST_PROFILE=release
 perf-gate-measure: perf-runtime-ref-check perf-corpus-check scripted-golden-runner scripted-rust-golden-runner
-	cargo build --quiet --release -p perf-compare --bin perf-compare
 	@set -e; \
+	tools/perf-gate/wait-for-quiet.sh; \
+	cargo build --quiet --release -p perf-compare --bin perf-compare; \
 	ids=$$(python3 "$(PERF_GATE_TOOL)" ids --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"); \
 	mkdir -p "$(dir $(PERF_GATE_REPORT))"; \
 	"$(PERF_GATE_PINNER)" "$(PERF_GATE_COMPARE)" --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-ids "$$ids" --iterations "$(PERF_GATE_ITERATIONS)" --warmups "$(PERF_GATE_WARMUPS)" --aggregate median --runner-order cpp-first --runner-benchmark --benchmark-frames "$(PERF_GATE_FRAMES)" --benchmark-hz "$(PERF_GATE_HZ)" --rust-execute-scripts --json "$(PERF_GATE_REPORT)" $(PERF_JSON_META)
@@ -491,8 +592,15 @@ size-report:
 parity-scorecard-test:
 	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/parity-scorecard -p 'test_*.py' -v
 
-parity-scorecard: parity-scorecard-test
+# The snapshot no longer hides behind the tool's unit tests: a red suite used
+# to stop the snapshot from being taken at all.
+parity-scorecard-snapshot:
 	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --output "$(PARITY_SCORECARD_DOC)"
+
+parity-scorecard:
+	@tools/report-all.sh "parity-scorecard" \
+		"parity scorecard tool unit tests" "$(MAKE) --no-print-directory parity-scorecard-test" \
+		"parity scorecard snapshot" "$(MAKE) --no-print-directory parity-scorecard-snapshot"
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture

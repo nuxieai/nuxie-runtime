@@ -1,25 +1,25 @@
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
 struct gl_PerVertex {
@@ -457,7 +457,7 @@ fn main_1() {
             let _e598 = phi_2566_;
             let _e600 = phi_2562_;
             let _e602 = phi_2538_;
-            let _e608 = n.wg;
+            let _e608 = n.yg;
             let _e611 = select(_e598.xy, vec2<f32>(1f, -1f), vec2((_e608 != 0u)));
             let _e617 = vec4<f32>(_e611.x, _e598.y, _e598.z, _e598.w);
             phi_2609_ = vec4<f32>(_e617.x, _e611.y, _e617.z, _e617.w);
@@ -476,8 +476,8 @@ fn main_1() {
         let _e639 = textureLoad(PB, vec2<i32>(bitcast<i32>((_e632 & 127u)), bitcast<i32>((_e632 >> bitcast<u32>(7i)))), 0i);
         let _e641 = bitcast<vec3<f32>>(_e639.yzw);
         let _e645 = ((_e627 * _e641.x) + _e641.yz);
-        let _e648 = n.nd[0u];
-        let _e651 = n.nd[1u];
+        let _e648 = n.pd[0u];
+        let _e651 = n.pd[1u];
         phi_2610_ = vec4<f32>(((_e645.x * _e648) - 1f), ((_e645.y * _e651) - sign(_e651)), 0f, 1f);
     } else {
         let _e661 = n.P2_;

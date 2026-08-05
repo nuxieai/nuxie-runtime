@@ -52,13 +52,13 @@ use crate::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands;
 use crate::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned;
 use crate::text::{
     RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
-    RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
-    runtime_text_draw_data, runtime_text_input_shape_paint_commands,
-    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_clip_bounds,
-    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
-    static_text_layout_debug_report, static_text_layout_measure_bounds,
-    static_text_selection_rects, static_text_value, static_text_value_run_hit,
-    text_input_layout_measure_bounds,
+    RuntimeTextLayoutDebugReport, StaticShapedTextTopology, StaticTextClipBounds, StaticTextSlice,
+    build_static_text_constraint_bounds, build_static_text_constraint_bounds_from_slice,
+    runtime_text_draw_data_from_retained_topology, runtime_text_input_shape_paint_commands,
+    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_constraint_bounds,
+    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
+    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
+    static_text_value_run_hit, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -5333,6 +5333,8 @@ impl ArtboardInstance {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: Some(source_path.raw_path),
@@ -5563,7 +5565,7 @@ impl ArtboardInstance {
                 let text_local =
                     crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
                 self.runtime_drawables
-                    .mark_text_resource_dirty_for_local(text_local);
+                    .mark_text_paint_dirty_for_local(text_local);
                 self.add_dirt(text_local, ComponentDirt::PAINT, false);
             }
         }
@@ -6799,7 +6801,7 @@ impl ArtboardInstance {
                         text_input.raw.borrow_mut().mark_geometry_dirty();
                     }
                     self.runtime_drawables
-                        .mark_text_resource_dirty_for_local(text_local);
+                        .mark_text_shape_paths_retained_for_local(text_local);
                     self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
                 }
                 let has_layout_draw_owner = self
@@ -9860,8 +9862,16 @@ impl RuntimeClippingShapeOwner {
 #[derive(Debug)]
 struct RuntimeTextDrawOwner {
     dirty: Cell<bool>,
+    pending_update_dirt: Cell<ComponentDirt>,
     render_styles_dirty: Cell<bool>,
     retain_paths_on_rebuild: Cell<bool>,
+    /// C++ `Text::{m_allRuns,m_textStylePaints,m_modifierGroups}`: immutable
+    /// imported topology retained by this concrete Text occurrence.
+    topology: RefCell<Option<Arc<StaticTextSlice>>>,
+    /// C++ `Text::{m_shape,m_lines}`. The outer Cell distinguishes a retained
+    /// empty shape from a shape that has not been built or was invalidated.
+    shaped_topology_valid: Cell<bool>,
+    shaped_topology: RefCell<Option<Arc<StaticShapedTextTopology>>>,
     retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
     backend: RefCell<RuntimeTextBackendResources>,
 }
@@ -9875,7 +9885,9 @@ impl Clone for RuntimeTextDrawOwner {
         // (`src/generated/text/text_base.cpp:6-10`,
         // `include/rive/generated/text/text_base.hpp:244-262`,
         // `src/text/text_style_paint.cpp:13-19,125-134`).
-        Self::default()
+        let cloned = Self::default();
+        *cloned.topology.borrow_mut() = self.topology.borrow().clone();
+        cloned
     }
 }
 
@@ -9883,8 +9895,12 @@ impl Default for RuntimeTextDrawOwner {
     fn default() -> Self {
         Self {
             dirty: Cell::new(true),
+            pending_update_dirt: Cell::new(ComponentDirt::PATH),
             render_styles_dirty: Cell::new(true),
             retain_paths_on_rebuild: Cell::new(false),
+            topology: RefCell::new(None),
+            shaped_topology_valid: Cell::new(false),
+            shaped_topology: RefCell::new(None),
             retained: RefCell::new(None),
             backend: RefCell::new(RuntimeTextBackendResources::default()),
         }
@@ -9892,16 +9908,43 @@ impl Default for RuntimeTextDrawOwner {
 }
 
 impl RuntimeTextDrawOwner {
+    fn topology_or_build(
+        &self,
+        build: impl FnOnce() -> Result<StaticTextSlice>,
+    ) -> Result<Arc<StaticTextSlice>> {
+        if self.topology.borrow().is_none() {
+            *self.topology.borrow_mut() = Some(Arc::new(build()?));
+        }
+        self.topology
+            .borrow()
+            .as_ref()
+            .cloned()
+            .context("Text occurrence did not retain its imported topology")
+    }
+
     fn is_dirty(&self) -> bool {
         self.dirty.get() || self.retained.borrow().is_none()
     }
 
     fn mark_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
     }
 
     fn mark_paths_retained_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        if !self.render_styles_dirty.get() {
+            self.retain_paths_on_rebuild.set(true);
+        }
+    }
+
+    fn mark_paint_paths_retained_dirty(&self) {
+        self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
         if !self.render_styles_dirty.get() {
             self.retain_paths_on_rebuild.set(true);
         }
@@ -9909,8 +9952,37 @@ impl RuntimeTextDrawOwner {
 
     fn mark_render_styles_dirty(&self) {
         self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PAINT);
         self.render_styles_dirty.set(true);
         self.retain_paths_on_rebuild.set(false);
+    }
+
+    fn mark_shape_dirty_unless_paths_retained(&self) {
+        self.shaped_topology_valid.set(false);
+        self.shaped_topology.borrow_mut().take();
+        self.mark_render_styles_dirty_unless_paths_retained();
+    }
+
+    fn mark_external_font_shape_dirty(&self) {
+        self.dirty.set(true);
+        self.pending_update_dirt
+            .set(self.pending_update_dirt.get() | ComponentDirt::PATH);
+        self.shaped_topology_valid.set(false);
+        self.shaped_topology.borrow_mut().take();
+        self.render_styles_dirty.set(true);
+        self.retain_paths_on_rebuild.set(false);
+    }
+
+    fn shaped_topology_or_build(
+        &self,
+        build: impl FnOnce() -> Result<Option<StaticShapedTextTopology>>,
+    ) -> Result<Option<Arc<StaticShapedTextTopology>>> {
+        if !self.shaped_topology_valid.get() {
+            *self.shaped_topology.borrow_mut() = build()?.map(Arc::new);
+            self.shaped_topology_valid.set(true);
+        }
+        Ok(self.shaped_topology.borrow().clone())
     }
 
     fn mark_render_styles_dirty_unless_paths_retained(&self) {
@@ -9918,6 +9990,100 @@ impl RuntimeTextDrawOwner {
         if !self.retain_paths_on_rebuild.get() {
             self.render_styles_dirty.set(true);
         }
+    }
+
+    fn propagate_render_opacity(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        opacity_owner_local: usize,
+    ) -> bool {
+        let render_opacity = instance
+            .component(opacity_owner_local)
+            .map_or(1.0, |component| component.transform.render_opacity);
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        for command in Arc::make_mut(&mut frame.commands) {
+            let effective_opacity =
+                render_opacity * command.text_path_bucket_opacity.unwrap_or(1.0);
+            command.render_opacity = effective_opacity;
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
+            {
+                command.paint_state = runtime_shape_paint_state(instance, paint, effective_opacity);
+            }
+        }
+        true
+    }
+
+    fn propagate_world_transform(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        text_local: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> bool {
+        let text_world = instance.runtime_component_world_transform_with_bounds(
+            text_local,
+            graph,
+            layout_bounds,
+        );
+        let mut retained = self.retained.borrow_mut();
+        let Some(frame) = retained.as_mut() else {
+            return false;
+        };
+        let shape_world = text_world.multiply(frame.shape_local_transform);
+        let commands = Arc::make_mut(&mut frame.commands);
+        let mut world_geometry_changed = false;
+        for command in commands.iter_mut() {
+            let previous_shape_world = command.shape_world_override.unwrap_or(shape_world);
+            if let Some(paint) =
+                command
+                    .text_paint_ref
+                    .and_then(|(container_index, paint_index)| {
+                        graph
+                            .shape_paint_containers
+                            .get(container_index)
+                            .and_then(|container| container.paints.get(paint_index))
+                    })
+            {
+                let path_kind = runtime_live_shape_paint_path_kind(instance, paint)
+                    .unwrap_or(command.path_kind);
+                command.paint_space_transform =
+                    runtime_shape_paint_space_transform(path_kind, shape_world);
+                if path_kind == RuntimeShapePaintPathKind::World {
+                    let delta = shape_world.multiply(previous_shape_world.invert_or_identity());
+                    transform_path_commands(&mut command.path_commands, delta);
+                    transform_path_commands(&mut command.effect_path_commands, delta);
+                    if let Some(feather) = command.feather_state.as_mut() {
+                        transform_path_commands(&mut feather.inner_path_commands, delta);
+                    }
+                    world_geometry_changed = true;
+                }
+            }
+            command.shape_world_override = Some(shape_world);
+        }
+        if world_geometry_changed {
+            frame.paths = Arc::new(runtime_text_owned_raw_paths(commands));
+        }
+        if let Some(color) = frame.color.as_mut() {
+            Arc::make_mut(color).shape_world = shape_world;
+        }
+        frame.clip_path = frame.clip_bounds.map(|bounds| {
+            Arc::new(runtime_raw_path_from_commands(
+                &runtime_text_clip_path_commands(bounds, text_world),
+            ))
+        });
+        true
     }
 
     fn retained_or_build(
@@ -9950,6 +10116,7 @@ impl RuntimeTextDrawOwner {
             }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
+            self.pending_update_dirt.set(ComponentDirt::NONE);
             self.render_styles_dirty.set(false);
             self.retain_paths_on_rebuild.set(false);
         }
@@ -10445,28 +10612,44 @@ impl RuntimeDrawableList {
                 // A font-resource replacement is C++ FontAsset::fontChanged
                 // -> TextShape dirt, so every affected Text executes
                 // buildRenderStyles and clears its opacity paths.
-                owner.mark_render_styles_dirty();
+                owner.mark_external_font_shape_dirty();
             }
         }
     }
 
-    pub(crate) fn dirty_text_locals(&self) -> Vec<usize> {
+    pub(crate) fn dirty_text_locals(&self) -> Vec<(usize, ComponentDirt)> {
         self.drawables
             .iter()
             .take(self.imported_count)
             .filter(|drawable| drawable.type_name == "Text")
             .filter_map(|drawable| {
-                drawable
-                    .text_draw_owner
-                    .as_ref()
-                    .is_some_and(RuntimeTextDrawOwner::is_dirty)
-                    .then_some(drawable.local_id)
-                    .flatten()
+                let owner = drawable.text_draw_owner.as_ref()?;
+                if !owner.is_dirty() {
+                    return None;
+                }
+                let pending = owner.pending_update_dirt.get();
+                Some((
+                    drawable.local_id?,
+                    if pending.is_empty() {
+                        ComponentDirt::PATH
+                    } else {
+                        pending
+                    },
+                ))
             })
             .collect()
     }
 
-    pub(crate) fn mark_text_resource_dirty_for_local(&self, local_id: usize) {
+    pub(crate) fn mark_text_paint_dirty_for_local(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.mark_paint_paths_retained_dirty();
+        }
+    }
+
+    pub(crate) fn mark_text_shape_paths_retained_for_local(&self, local_id: usize) {
         let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
             return;
         };
@@ -13790,6 +13973,8 @@ pub struct RuntimeShapePaintCommand {
     pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
     pub(crate) text_path_bucket_slot: Option<usize>,
+    pub(crate) text_path_bucket_opacity: Option<f32>,
+    pub(crate) text_paint_ref: Option<(usize, usize)>,
     pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
     pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
     // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
@@ -14903,7 +15088,9 @@ struct RuntimeCachedTextShapePaints {
     replay: Arc<Vec<RuntimeTextReplay>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    clip_bounds: Option<StaticTextClipBounds>,
     color: Option<Arc<RuntimeRetainedColorGlyphs>>,
+    shape_local_transform: Mat2D,
     publishes_layout_dirty: bool,
 }
 
@@ -16846,6 +17033,8 @@ fn runtime_prepare_gradient_paint_command(
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -16984,25 +17173,59 @@ fn runtime_build_text_draw_frame(
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: false,
             });
         }
     }
-    let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
+    let topology = if drawable.type_name == "Text" {
+        Some(
+            drawable
+                .text_draw_owner
+                .as_ref()
+                .context("live Text is missing its retained owner")?
+                .topology_or_build(|| {
+                    StaticTextSlice::from_graph(runtime, graph, drawable_local)
+                })?,
+        )
+    } else {
+        None
+    };
+    let (mut commands, clip_bounds, color, shape_local_transform) = if drawable.type_name == "Text"
+    {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
-        let draw_data = runtime_text_draw_data(
+        let topology = topology
+            .as_deref()
+            .context("live Text did not retain its imported topology")?;
+        let owner = drawable
+            .text_draw_owner
+            .as_ref()
+            .context("live Text is missing its retained owner")?;
+        let text_world = instance.runtime_component_world_transform_with_bounds(
+            drawable_local,
+            graph,
+            layout_bounds,
+        );
+        let shaped_topology = owner.shaped_topology_or_build(|| {
+            topology.render_topology(runtime, instance, layout_constraint, text_world)
+        })?;
+        let draw_data = runtime_text_draw_data_from_retained_topology(
+            topology,
             runtime,
             instance,
             graph,
             drawable_local,
             layout_bounds,
             layout_constraint,
+            shaped_topology.as_deref(),
         )?;
+        let shape_local_transform = draw_data.local_transform;
         (
             draw_data.commands,
-            static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+            topology.clip_bounds(runtime, instance, layout_constraint)?,
             (!draw_data.color_glyphs.is_empty()).then(|| {
                 Arc::new(RuntimeRetainedColorGlyphs {
                     glyphs: draw_data.color_glyphs,
@@ -17010,6 +17233,7 @@ fn runtime_build_text_draw_frame(
                     shape_world: draw_data.shape_world,
                 })
             }),
+            shape_local_transform,
         )
     } else {
         (
@@ -17022,6 +17246,7 @@ fn runtime_build_text_draw_frame(
             )?,
             None,
             None,
+            Mat2D::IDENTITY,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
@@ -17043,7 +17268,10 @@ fn runtime_build_text_draw_frame(
             ))
         });
     if drawable.type_name == "Text"
-        && let Some(bounds) = build_static_text_constraint_bounds(
+        && let Some(bounds) = build_static_text_constraint_bounds_from_slice(
+            topology
+                .as_deref()
+                .expect("Text topology is retained before bounds publication"),
             runtime,
             graph,
             instance,
@@ -17061,7 +17289,9 @@ fn runtime_build_text_draw_frame(
         replay: Arc::new(replay),
         paths,
         clip_path,
+        clip_bounds,
         color,
+        shape_local_transform,
         publishes_layout_dirty: true,
     })
 }
@@ -17208,11 +17438,37 @@ impl ArtboardInstance {
             let Some(owner) = drawable.text_draw_owner.as_ref() else {
                 continue;
             };
-            if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
-                // A direct dependency Path/Paint propagation is a C++
-                // buildRenderStyles boundary. Layout propagation explicitly
-                // classifies its retained-frame refresh first because it
-                // shares the Path/TextShape bit without replacing paths.
+            let rebuild_dirt = dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT);
+            if rebuild_dirt.is_empty() && dirt.contains(ComponentDirt::RENDER_OPACITY) {
+                // C++ `Text::update(RenderOpacity)` only calls
+                // `TextStylePaint::propagateOpacity`; shaped paragraphs,
+                // lines, draw commands, and render paths remain retained.
+                // Refresh the command-side opacity used by Rust's pooled
+                // paints without reconstructing glyph topology or geometry.
+                owner.propagate_render_opacity(self, graph, target_local);
+            }
+            if rebuild_dirt.is_empty()
+                && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                && drawable.type_name == "Text"
+            {
+                // C++ updates m_shapeWorldTransform and m_clipPath after the
+                // shape/paint branch. Preserve shaped glyph topology and the
+                // retained backend objects while refreshing world-space
+                // command and clip data.
+                owner.propagate_world_transform(self, graph, target_local, layout_bounds);
+            }
+            if rebuild_dirt.is_empty()
+                && (!dirt.contains(ComponentDirt::WORLD_TRANSFORM) || drawable.type_name == "Text")
+            {
+                continue;
+            }
+            if dirt.contains(ComponentDirt::TEXT_SHAPE) {
+                // C++ Path dirt replaces `m_shape`/`m_lines`, then rebuilds
+                // render styles from the new shaped topology.
+                owner.mark_shape_dirty_unless_paths_retained();
+            } else if dirt.contains(ComponentDirt::PAINT) {
+                // C++ Paint dirt rebuilds positioning, modifiers, transforms,
+                // and style paths from retained `m_shape`/`m_lines`.
                 owner.mark_render_styles_dirty_unless_paths_retained();
             } else {
                 owner.mark_dirty();
@@ -20382,6 +20638,8 @@ fn runtime_shape_paint_command_with_effect_path(
         aliases_local_clockwise_path,
         uses_temporary_paint: false,
         text_path_bucket_slot: None,
+        text_path_bucket_opacity: None,
+        text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
         prepared_raw_path: None,
@@ -26250,7 +26508,9 @@ mod tests {
                 replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                clip_bounds: None,
                 color: None,
+                shape_local_transform: Mat2D::IDENTITY,
                 publishes_layout_dirty: true,
             })
         };
@@ -26278,7 +26538,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26360,6 +26622,15 @@ mod tests {
                 true,
             )
             .expect("initial retained text draws");
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let shaped_before = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("initial update retains shaped paragraphs and lines");
         let retained_owner = instance
             .runtime_shapes
             .text_style_paint_owner(style_paint.local_id)
@@ -26433,6 +26704,18 @@ mod tests {
             text_updates, 2,
             "TextStylePaint dirt must schedule exactly one retained-paint rebuild"
         );
+        let shaped_after = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Paint-only update keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(&shaped_before, &shaped_after),
+            "Paint-only dirt must rebuild styles from retained shape/line topology"
+        );
 
         factory.clear();
         instance
@@ -26457,6 +26740,128 @@ mod tests {
             !stream.contains("makeRenderPaint"),
             "TextStylePaint dirt must refill its retained RenderPaint: {stream}"
         );
+
+        let shaped_before_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Text keeps shaped paragraphs and lines after Paint rebuild");
+        assert!(instance.set_color_property(color_local, color_key, 0xff66_7788));
+        instance.add_dirt(style_local, ComponentDirt::PAINT, false);
+        assert!(instance.update_pass());
+        let shaped_after_pre_update_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("pre-update Paint dirt keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(
+                &shaped_before_pre_update_paint,
+                &shaped_after_pre_update_paint
+            ),
+            "pre-update ShapePaint dirt must not be promoted to TextShape dirt"
+        );
+
+        let frame_before_text_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner")
+            .retained_frame()
+            .expect("Paint rebuild retains a render frame");
+        let origin_x_key =
+            property_key_for_name("Text", "originX").expect("Text.originX property key");
+        let origin_x = instance
+            .double_property(text_local, origin_x_key)
+            .unwrap_or(0.0);
+        assert!(instance.set_double_property(text_local, origin_x_key, origin_x + 0.125));
+        assert!(instance.update_pass());
+        let owner_after_text_paint = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text keeps its retained owner");
+        let shaped_after_text_paint = owner_after_text_paint
+            .shaped_topology
+            .borrow()
+            .clone()
+            .expect("Text-origin Paint dirt keeps shaped paragraphs and lines");
+        assert!(
+            Arc::ptr_eq(&shaped_after_pre_update_paint, &shaped_after_text_paint),
+            "Text-owned Paint dirt must reuse shape/line topology"
+        );
+        assert_ne!(
+            frame_before_text_paint.shape_local_transform,
+            owner_after_text_paint
+                .retained_frame()
+                .expect("Text-origin Paint dirt retains a render frame")
+                .shape_local_transform,
+            "Text-owned Paint dirt must recompute paint-phase positioning"
+        );
+    }
+
+    #[test]
+    fn text_render_opacity_propagates_without_rebuilding_retained_paths() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let retained_before = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner")
+            .retained_frame()
+            .expect("initial update retains text");
+        let paths_before = Arc::clone(&retained_before.paths);
+        let path_commands_before = retained_before
+            .commands
+            .iter()
+            .map(|command| command.path_commands.clone())
+            .collect::<Vec<_>>();
+
+        assert!(instance.set_transform_property(
+            text_local,
+            crate::TransformProperty::Opacity,
+            0.25,
+        ));
+        assert!(instance.update_pass());
+
+        let owner = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner");
+        assert!(!owner.is_dirty());
+        let retained_after = owner
+            .retained_frame()
+            .expect("opacity propagation retains text");
+        assert!(Arc::ptr_eq(&paths_before, &retained_after.paths));
+        assert_eq!(
+            path_commands_before,
+            retained_after
+                .commands
+                .iter()
+                .map(|command| command.path_commands.clone())
+                .collect::<Vec<_>>()
+        );
+        for command in retained_after.commands.iter() {
+            assert_eq!(
+                command.render_opacity,
+                0.25 * command.text_path_bucket_opacity.unwrap_or(1.0)
+            );
+        }
     }
 
     #[test]
@@ -26495,6 +26900,18 @@ mod tests {
             )
             .expect("initial retained text draws");
         let cold = cold_factory.canonical_recording().stream().to_string();
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let (commands_before, paths_before) = {
+            let owner = instance.runtime_drawables.drawables[drawable_index]
+                .text_draw_owner
+                .as_ref()
+                .expect("Text has a retained owner");
+            let frame_before = owner.retained_frame().expect("initial update retains text");
+            (
+                Arc::as_ptr(&frame_before.commands),
+                Arc::as_ptr(&frame_before.paths),
+            )
+        };
 
         // A position-only layout move publishes recursive WORLD_TRANSFORM dirt
         // from the moved owner (`layout_component.cpp:1167-1178`). When that
@@ -26508,6 +26925,23 @@ mod tests {
         instance.update_pass();
         instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, true);
         instance.update_pass();
+
+        let frame_after = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retains its owner")
+            .retained_frame()
+            .expect("world transform keeps retained text");
+        assert_eq!(
+            Arc::as_ptr(&frame_after.commands),
+            commands_before,
+            "world-transform dirt must not reconstruct shaped draw commands",
+        );
+        assert_eq!(
+            Arc::as_ptr(&frame_after.paths),
+            paths_before,
+            "world-transform dirt must retain local glyph paths",
+        );
 
         let mut fresh_factory = nuxie_render_api::RecordingFactory::new();
         let mut fresh_renderer = fresh_factory.make_renderer();
@@ -26761,7 +27195,9 @@ mod tests {
             replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner
@@ -26812,6 +27248,8 @@ mod tests {
                 aliases_local_clockwise_path: false,
                 uses_temporary_paint: false,
                 text_path_bucket_slot: None,
+                text_path_bucket_opacity: None,
+                text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: None,
@@ -26819,7 +27257,9 @@ mod tests {
             replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            clip_bounds: None,
             color: None,
+            shape_local_transform: Mat2D::IDENTITY,
             publishes_layout_dirty: true,
         };
         owner.mark_render_styles_dirty();
@@ -26848,7 +27288,9 @@ mod tests {
                     replay: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    clip_bounds: None,
                     color: None,
+                    shape_local_transform: Mat2D::IDENTITY,
                     publishes_layout_dirty: true,
                 })
             })

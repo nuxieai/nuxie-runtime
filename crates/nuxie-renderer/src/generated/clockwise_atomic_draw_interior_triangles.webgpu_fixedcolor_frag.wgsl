@@ -1,53 +1,53 @@
-struct ee {
+struct ge {
     c2_: array<u32>,
 }
 
 struct CC {
-    cc: f32,
-    md: f32,
-    df: f32,
-    ef: f32,
+    ec: f32,
+    od: f32,
+    ff: f32,
+    gf: f32,
     m6_: u32,
-    Dg: u32,
-    Pe: u32,
-    Qe: u32,
+    Fg: u32,
+    Re: u32,
+    Se: u32,
     R7_: vec4<i32>,
-    zg: vec2<f32>,
-    nd: vec2<f32>,
+    Bg: vec2<f32>,
+    pd: vec2<f32>,
     a2_: u32,
-    Eg: f32,
+    Gg: f32,
     Z5_: u32,
     P2_: f32,
-    od: f32,
-    Ke: u32,
+    qd: f32,
+    Me: u32,
     z3_: f32,
     A3_: f32,
-    pd: f32,
-    wg: u32,
+    rd: f32,
+    yg: u32,
 }
 
-struct h0zd {
+struct h0Bd {
     c2_: array<u32>,
 }
 
-struct ee_1 {
+struct ge_1 {
     c2_: array<atomic<u32>>,
 }
 
-@id(7) override dh: bool = true;
-@id(1) override Xg: bool = true;
-@id(0) override Wg: bool = true;
+@id(7) override fh: bool = true;
+@id(1) override Zg: bool = true;
+@id(0) override Yg: bool = true;
 
 @group(0) @binding(8)
 var KD: texture_2d<f32>;
 @group(3) @binding(8)
-var Kb: sampler;
+var Mb: sampler;
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
 @group(1) @binding(13)
 var S5_: sampler;
 @group(0) @binding(6)
-var<storage, read_write> P0_: ee_1;
+var<storage, read_write> P0_: ge_1;
 @group(0) @binding(0)
 var<uniform> n: CC;
 var<private> gl_FragCoord_1: vec4<f32>;
@@ -58,7 +58,7 @@ var<private> d3_1: vec2<u32>;
 var<private> L0_1: vec4<f32>;
 var<private> U1_1: vec2<f32>;
 @group(2) @binding(1)
-var<storage, read_write> h0_: h0zd;
+var<storage, read_write> h0_: h0Bd;
 var<private> C1_: vec4<f32>;
 @group(3) @binding(9)
 var aa: sampler;
@@ -116,7 +116,7 @@ fn main_1() {
                 phi_1308_ = ((0.001953125f * _e116) + _e117);
             }
             let _e124 = phi_1308_;
-            let _e127 = textureSampleLevel(KD, Kb, vec2<f32>(_e124, -(_e89.w)), 0f);
+            let _e127 = textureSampleLevel(KD, Mb, vec2<f32>(_e124, -(_e89.w)), 0f);
             phi_1310_ = vec4<f32>(_e127.x, _e127.y, _e127.z, _e127.w);
         } else {
             let _e95 = textureSampleLevel(IC, S5_, _e89.xy, (-2f - _e89.w));
@@ -139,14 +139,14 @@ fn main_1() {
     let _e150 = d3_1[0u];
     let _e151 = vec2<u32>(floor(_e145));
     phi_1312_ = 1f;
-    if Xg {
+    if Zg {
         let _e179 = L0_1;
         let _e182 = min(_e179.xy, _e179.zw);
         phi_1312_ = min(min(_e182.x, _e182.y), 1f);
     }
     let _e188 = phi_1312_;
-    phi_657_ = Wg;
-    if Wg {
+    phi_657_ = Yg;
+    if Yg {
         let _e190 = U1_1[0u];
         phi_657_ = (_e190 != 0f);
     }
@@ -232,10 +232,10 @@ fn main_1() {
     }
     let _e285 = phi_1342_;
     phi_1353_ = f32();
-    if dh {
+    if fh {
         let _e287 = n.z3_;
         let _e289 = n.A3_;
-        if dh {
+        if fh {
             phi_1350_ = ((fract((52.982918f * fract(((0.06711056f * _e53.x) + (0.00583715f * _e53.y))))) * _e287) + _e289);
         } else {
             phi_1350_ = 0f;
@@ -247,7 +247,7 @@ fn main_1() {
     let _e305 = (_e143.xyz * _e285);
     let _e309 = vec4<f32>(_e305.x, _e305.y, _e305.z, _e285);
     let _e310 = _e309.xyz;
-    if (dh && (_e285 != 0f)) {
+    if (fh && (_e285 != 0f)) {
         phi_1370_ = (vec3(_e303) + _e310);
     } else {
         phi_1370_ = _e310;

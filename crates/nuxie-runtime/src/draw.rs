@@ -9216,7 +9216,18 @@ impl RuntimeShapePaintOwner {
             | RuntimeShapePaintState::RadialGradient { .. }),
         ) = state
         {
-            self.pending_gradient_states.borrow_mut().push(state);
+            let mut pending = self.pending_gradient_states.borrow_mut();
+            if self.initial_gradient_event_supplied.get()
+                && self.backend.value.borrow().context_id.is_none()
+            {
+                // A mounted-layout occurrence can receive its parent-owned
+                // solve after the isolated initial shader frame but before a
+                // RenderFactory is attached. C++ observes only the final
+                // post-frame dependency update at that boundary; replace the
+                // provisional detached-child event instead of replaying both.
+                pending.clear();
+            }
+            pending.push(state);
         }
     }
 }
@@ -34215,6 +34226,57 @@ mod tests {
             )
             .expect("second drain is a no-op");
         assert_eq!(stats.linear_gradients.borrow().len(), first_shader_count);
+    }
+
+    #[test]
+    fn mounted_layout_solve_replaces_the_provisional_post_frame_gradient() {
+        let bytes = synthetic_nested_layout_gradient_chain_riv();
+        let file = read_runtime_file(&bytes).expect("nested layout chain imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested layout chain graphs");
+        let graph = graphs.artboards.first().expect("parent graph");
+        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("nested layout chain instance");
+        let child = instance
+            .nested_artboards
+            .values()
+            .next()
+            .expect("mounted layout child")
+            .child
+            .as_ref();
+        let frame = child.capture_initial_nested_layout_paint_frame();
+        let frame_state = frame.gradients[0].paint_state.clone();
+        let provisional =
+            runtime_shape_paint_state_with_endpoints(frame_state.clone(), 0.0, 0.0, 20.0, 0.0);
+        let solved =
+            runtime_shape_paint_state_with_endpoints(frame_state.clone(), 0.0, 0.0, 80.0, 0.0);
+        let owner_ref = child
+            .runtime_shapes
+            .paint_owner_refs
+            .first()
+            .expect("child has one ShapePaint owner");
+        let owner = child
+            .runtime_shapes
+            .get(owner_ref.shape_local)
+            .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            .expect("ShapePaint owner resolves");
+        owner
+            .pending_gradient_states
+            .replace(vec![frame_state, provisional.clone()]);
+
+        child.transfer_owned_shape_gradient_events_to_initial_frame(&frame);
+        assert_eq!(
+            owner.pending_gradient_states.borrow().as_slice(),
+            std::slice::from_ref(&provisional),
+            "the pre-transfer host update is provisionally retained"
+        );
+
+        owner.paint_state.replace(Some(solved.clone()));
+        owner.record_gradient_update();
+        assert_eq!(
+            owner.pending_gradient_states.borrow().as_slice(),
+            std::slice::from_ref(&solved),
+            "the parent-owned solve is the sole post-frame shader event observed when the backend attaches"
+        );
     }
 
     #[test]

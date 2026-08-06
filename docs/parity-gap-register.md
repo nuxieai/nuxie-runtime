@@ -121,7 +121,7 @@ in this repository.
 | A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the `nuxie-ios` FlowSession boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
 | A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |
-| A6 | **Command-server product adoption incomplete** — the 83/83 baseline port closes the old “no model” premise. The current iOS pin predates the completed port, and Flow's synchronous rollback/ordering/wake/error contract is not yet proven equivalent. | 2 |
+| A6 | **RESOLVED 2026-08-05 — Command-server product adoption evaluated.** The shared `flow_command_equivalence` harness proves scalar mutation equivalence but non-equivalent output phases, atomic rollback, wake scheduling, terminal errors, and host model. `docs/flow-command-equivalence.md` records the decision: CommandServer remains the baseline port, while Flow retains its product transaction machinery. | 2 |
 | A7 | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Responsive hosts need this. | 2 |
 | A8 | Async decode callbacks; RTTI-style typed queries; semantic-tree protocol (pairs with F6). | 3 |
 
@@ -218,7 +218,7 @@ A4/A5 (text runs + events in the portable surface), F2+F5 (text-input
 interaction — upstream is moving here, H1), F4 (scroll physics), F1/A2
 (audio, if any flow ships sound), C3 (production-flow corpus lane).
 
-**P2 — SDK completeness.** A6 integration/equivalence follow-through, A7
+**P2 — SDK completeness.** A7
 (resize), remaining capi/VM coverage, F10/C1 cheap fixture sweeps, V6/V7
 renderer-oracle hardening, V10 blocking perf gate, H2 size re-measure.
 

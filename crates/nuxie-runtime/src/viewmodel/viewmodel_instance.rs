@@ -4202,6 +4202,56 @@ impl RuntimeOwnedViewModelInstance {
         Some(property_path)
     }
 
+    pub fn blob_asset_value_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeBlobAssetValue> {
+        let names = property_path.split('/').collect::<Vec<_>>();
+        if names.is_empty() || names.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.blob_asset_property_path_by_names(&names)?;
+        self.blob_asset_value_by_property_path(&property_path)
+    }
+
+    pub fn set_live_blob_asset_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        asset: Option<Arc<RuntimeBlobAsset>>,
+    ) -> bool {
+        let names = property_path.split('/').collect::<Vec<_>>();
+        if names.is_empty() || names.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        let Some(property_path) = self.blob_asset_property_path_by_names(&names) else {
+            return false;
+        };
+        let value = asset
+            .map(RuntimeBlobAssetValue::from_live_asset)
+            .unwrap_or_default();
+        self.apply_blob_asset_data_bind_value_by_property_path(&property_path, &value)
+    }
+
+    fn blob_asset_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .blob_assets
+                .iter()
+                .any(|asset| asset.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (asset_name, view_model_names) = property_path.split_last()?;
+        let (mut view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        let property_index = view_model.property_index_by_name(asset_name)?;
+        view_model
+            .active_blob_asset_value_by_property_index(property_index)?;
+        view_model_path.push(property_index);
+        Some(view_model_path)
+    }
+
     pub fn set_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(artboard) = self
             .artboards

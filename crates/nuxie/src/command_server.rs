@@ -8,13 +8,14 @@
 use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use crate::{
-    Factory, File, Mat2D, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeFileAssetLoader,
-    SemanticBounds, SemanticsDiff, StateMachineInstance, Vec2D, ViewModelInstance,
+    Factory, File, Mat2D, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeBlobAsset,
+    RuntimeFileAssetLoader, SemanticBounds, SemanticsDiff, StateMachineInstance, Vec2D,
+    ViewModelInstance,
     command_queue::{
-        ArtboardHandle, AudioSourceHandle, Command, CommandDataType, CommandEvent, CommandQueue,
-        CommandValue, DrawCallback, DrawKey, FileAssetData, FileHandle, Fit, FontHandle,
-        PointerEvent, PointerKind, RenderImageHandle, StateMachineHandle, ViewModelInstanceHandle,
-        ViewModelPropertyData, ViewModelSource,
+        ArtboardHandle, AudioSourceHandle, BlobAssetHandle, Command, CommandDataType, CommandEvent,
+        CommandQueue, CommandValue, DrawCallback, DrawKey, FileAssetData, FileHandle, Fit,
+        FontHandle, PointerEvent, PointerKind, RenderImageHandle, StateMachineHandle,
+        ViewModelInstanceHandle, ViewModelPropertyData, ViewModelSource,
     },
 };
 
@@ -94,6 +95,7 @@ pub struct CommandServer {
     images: BTreeMap<RenderImageHandle, RenderImageEntry>,
     audio_sources: BTreeMap<AudioSourceHandle, Arc<crate::AudioSource>>,
     fonts: BTreeMap<FontHandle, RawTextFont>,
+    blobs: BTreeMap<BlobAssetHandle, Arc<RuntimeBlobAsset>>,
     global_images: BTreeMap<String, RenderImageHandle>,
     global_audio: BTreeMap<String, AudioSourceHandle>,
     global_fonts: BTreeMap<String, FontHandle>,
@@ -121,6 +123,7 @@ impl CommandServer {
             images: BTreeMap::new(),
             audio_sources: BTreeMap::new(),
             fonts: BTreeMap::new(),
+            blobs: BTreeMap::new(),
             global_images: BTreeMap::new(),
             global_audio: BTreeMap::new(),
             global_fonts: BTreeMap::new(),
@@ -175,6 +178,9 @@ impl CommandServer {
     }
     pub fn font(&self, handle: FontHandle) -> Option<&RawTextFont> {
         self.fonts.get(&handle)
+    }
+    pub fn blob(&self, handle: BlobAssetHandle) -> Option<&Arc<RuntimeBlobAsset>> {
+        self.blobs.get(&handle)
     }
     #[doc(hidden)]
     pub fn view_model(&self, handle: ViewModelInstanceHandle) -> Option<&ViewModelInstance> {
@@ -1353,6 +1359,36 @@ impl CommandServer {
                     self.global_fonts.retain(|_, value| *value != handle);
                     self.emit(CommandEvent::FontDeleted { handle, request_id });
                 }
+                Command::DecodeBlob {
+                    handle,
+                    bytes,
+                    request_id,
+                } => {
+                    self.blobs.insert(
+                        handle,
+                        Arc::new(RuntimeBlobAsset::new("", Arc::from(bytes))),
+                    );
+                    self.emit(CommandEvent::BlobDecoded { handle, request_id });
+                }
+                Command::ExternalBlob {
+                    handle,
+                    blob,
+                    request_id,
+                } => match blob {
+                    Some(blob) => {
+                        self.blobs.insert(handle, blob);
+                        self.emit(CommandEvent::BlobDecoded { handle, request_id });
+                    }
+                    None => self.emit(CommandEvent::BlobError {
+                        handle,
+                        request_id,
+                        error: "External blob was empty".to_owned(),
+                    }),
+                },
+                Command::DeleteBlob { handle, request_id } => {
+                    self.blobs.remove(&handle);
+                    self.emit(CommandEvent::BlobDeleted { handle, request_id });
+                }
                 Command::AddGlobalImage { name, handle } => {
                     if self.images.contains_key(&handle) {
                         self.global_images.insert(name, handle);
@@ -1717,6 +1753,11 @@ impl CommandServer {
             CommandValue::Image(None) => Some(None),
             _ => None,
         };
+        let blob = match &value {
+            CommandValue::Blob(Some(value)) => self.blobs.get(value).cloned().map(Some),
+            CommandValue::Blob(None) => Some(None),
+            _ => None,
+        };
         let artboard = match &value {
             CommandValue::Artboard(Some(value)) => self
                 .artboards
@@ -1837,6 +1878,18 @@ impl CommandServer {
                     );
                 exists
             }),
+            CommandValue::Blob(_) => blob.is_some_and(|blob| {
+                let exists = entry
+                    .instance
+                    .raw()
+                    .blob_asset_value_by_property_name_path(&path)
+                    .is_some();
+                let _ = entry
+                    .instance
+                    .raw_mut()
+                    .set_live_blob_asset_by_property_name_path(&path, blob);
+                exists
+            }),
             CommandValue::None => false,
         };
         if !changed {
@@ -1913,6 +1966,16 @@ impl CommandServer {
                 });
                 CommandValue::Image(handle)
             }
+            CommandDataType::AssetBlob => {
+                let value = raw.blob_asset_value_by_property_name_path(path)?;
+                let handle = value.live_blob_asset().and_then(|value| {
+                    self.blobs
+                        .iter()
+                        .find_map(|(handle, blob)| Arc::ptr_eq(blob, value).then_some(*handle))
+                });
+                CommandValue::Blob(handle)
+            }
+            CommandDataType::AssetFont => return None,
             CommandDataType::Artboard => {
                 let source_exists = raw
                     .artboard_source_handle_by_property_name_path(path)
@@ -2082,10 +2145,33 @@ fn data_type_for_property(type_name: &str) -> CommandDataType {
         CommandDataType::ViewModel
     } else if type_name.ends_with("AssetImage") {
         CommandDataType::AssetImage
+    } else if type_name.ends_with("AssetFont") {
+        CommandDataType::AssetFont
+    } else if type_name.ends_with("AssetBlob") {
+        CommandDataType::AssetBlob
+    } else if type_name.ends_with("SymbolListIndex") {
+        CommandDataType::SymbolListIndex
     } else if type_name.ends_with("Artboard") {
         CommandDataType::Artboard
     } else {
         CommandDataType::None
+    }
+}
+
+#[cfg(test)]
+mod property_data_type_tests {
+    use super::{CommandDataType, data_type_for_property};
+
+    #[test]
+    fn property_metadata_covers_pinned_asset_font_and_symbol_list_index() {
+        assert_eq!(
+            data_type_for_property("ViewModelPropertyAssetFont"),
+            CommandDataType::AssetFont
+        );
+        assert_eq!(
+            data_type_for_property("ViewModelPropertySymbolListIndex"),
+            CommandDataType::SymbolListIndex
+        );
     }
 }
 

@@ -294,23 +294,28 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         row = rows[0]
         gaps = self.gaps.read_text()
         self.assertIn("ratchet = []", gaps)
+        # Hoisted out of the f-string: expression parts may not contain
+        # backslashes before Python 3.12, and CI pins 3.11.
+        matcher_line = (
+            f"detector = {json.dumps(row['detector'])}"
+            if "detector" in row
+            else f"pattern = {json.dumps(row['pattern'])}"
+        )
+        content_lines = (
+            "\n".join(
+                f"{key} = {json.dumps(row[key])}"
+                for key in ("content_begin", "content_end", "content_sha256")
+            )
+            if "content_sha256" in row
+            else ""
+        )
         block = textwrap.dedent(
             f"""
             [[ratchet]]
             id = {json.dumps(row["id"])}
             globs = {json.dumps(row["globs"])}
-            {
-                f"detector = {json.dumps(row['detector'])}"
-                if "detector" in row
-                else f"pattern = {json.dumps(row['pattern'])}"
-            }
-            {
-                f"content_begin = {json.dumps(row['content_begin'])}\n"
-                f"content_end = {json.dumps(row['content_end'])}\n"
-                f"content_sha256 = {json.dumps(row['content_sha256'])}"
-                if "content_sha256" in row
-                else ""
-            }
+            {matcher_line}
+            {content_lines}
             min_occurrences = {row.get("min_occurrences", 0)}
             max_occurrences = {row["max_occurrences"]}
             """
@@ -789,7 +794,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_verified_fragment_rejects_closed_whole_file(self) -> None:
+    def test_verified_fragment_rejects_closed_whole_file_with_pending_verification(
+        self,
+    ) -> None:
         (self.repo / "crates/runtime/src/transport.rs").write_text(
             "struct RuntimeTransport;\n"
         )
@@ -820,8 +827,42 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "requires open (pending or partial) whole-file", result.stderr
+            "has incompatible whole-file status or verification", result.stderr
         )
+
+    def test_verified_fragment_allows_verified_closed_whole_file(self) -> None:
+        (self.repo / "crates/runtime/src/transport.rs").write_text(
+            "struct RuntimeTransport;\n"
+        )
+        self.manifest.write_text(
+            self.manifest.read_text()
+            .replace("max_multi_module_rows = 0", "max_multi_module_rows = 1")
+            .replace(
+                'status = "pending"\nverification = "pending-verification"',
+                'status = "faithful"\nverification = "orchestrator-verified"',
+            )
+            .replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/transport.rs"\n'
+                'note = "MR exception: verified frame-loop fragment plus '
+                'out-of-loop transport."',
+            )
+        )
+        self.ledger.write_text(
+            self.ledger.read_text()
+            .replace("faithful = 0", "faithful = 1", 1)
+            .replace("pending = 1", "pending = 0", 1)
+            .replace(
+                'dynamically_reached = true\nstatus = "pending"',
+                'dynamically_reached = true\nstatus = "faithful"\n'
+                'correspondence_scope = "verified-fragment"',
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_fl_e_wave_acceptance_candidate_allows_pending_verification(self) -> None:
         self.write_files(file_status="adapted")

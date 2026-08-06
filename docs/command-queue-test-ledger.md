@@ -3,10 +3,11 @@
 Pinned oracle: `rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5`,
 `tests/unit_tests/runtime/command_queue_test.cpp` (83 `TEST_CASE`s).
 
-Register status: F3 is **PARTIAL at 79/83** and A6's former “no command
-server” premise is closed. The four remaining cases are the S4-45 blob WATCH
-rows below; Flow-session equivalence is shared-product evidence and is not a
-baseline command-queue gap.
+Register status: F3 is **CLOSED at 83/83** and A6's former “no command server”
+premise is closed. The four S4-45 blob cases were direct upstream runtime
+behavior, so they are ported here rather than assigned to an editor or Apple
+product layer. Flow-session equivalence remains shared-product evidence and is
+not a baseline command-queue gap.
 
 The lane-focused command is:
 
@@ -14,7 +15,7 @@ The lane-focused command is:
 cargo test -p nuxie --test command_queue --no-fail-fast
 ```
 
-## Complete upstream case ports (79)
+## Complete upstream case ports (83)
 
 | Upstream `TEST_CASE` | Rust evidence |
 |---|---|
@@ -36,8 +37,10 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `View Model Listed Listener` | `view_model_listed_listener` — asserts the pinned six-name ordering and suppresses the callback for an invalid file. |
 | `View Model Listener` | `view_model_listener` — asserts the pinned instance-name ordering and all ten typed property definitions, including enum and nested-model metadata. |
 | `View Model Instance Listener` | `view_model_instance_listener` — preserves delete callbacks for all valid and invalid named/artboard instance handles. |
-| `External Resources` | `external_resources` — covers external image/audio/font identity and delete cleanup; the S4-45 blob assertions remain on WATCH. |
+| `External Resources` | `external_resources` — covers external image/audio/font/blob identity and delete cleanup. |
 | `RenderImage` | `render_image` — retains a successfully decoded handle, rejects invalid bytes, and removes both handles on delete. |
+| `BlobAsset` | `blob_asset` — preserves raw and empty byte payloads behind typed handles, then removes both handles on delete. |
+| `blob asset listener callbacks` | `blob_asset_listener_callbacks` — covers decoded, external, null-external error, and deleted listener messages with handle and request-id fidelity. |
 | `AudioSource` | `audio_source` — retains a successful decode, rejects invalid bytes, removes both handles, and delivers the matching delete callback. |
 | `Font` | `font` — retains a successful decode, rejects invalid bytes, removes both handles, and delivers the matching delete callback. |
 | `View Model Property Set/Get` | `view_model_property_set_get` — compares every typed get callback's request/path/value in order, covers nested replacement and authored enum strings, proves decoded/external image and artboard retained identity, clearing, failed-set retention, invalid values/paths/handles, and deletion/error accounting. |
@@ -45,6 +48,8 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `Set Artboard Size / Reset Artboard Size` | `set_and_reset_artboard_size` — observes explicit size and scale changes on the server-owned artboard and restores the authored dimensions. |
 | `Set Artboard Volume / Get Artboard Volume` | `set_and_get_artboard_volume` — observes queued server-side volume updates and the requested `0.75` callback with its request ID. |
 | `View Model Property Subscriptions` | `view_model_property_subscriptions` — covers the nine typed subscriptions, changed-value and trigger delivery at the end-of-poll subscription pass, invalid path/type errors, and unsubscribe. |
+| `View Model Blob Property Set` | `view_model_blob_property_set` — sets and clears retained blob bytes by property path, preserves shared identity, and reports invalid handle/path/view-model errors. |
+| `View Model Blob Property Subscription` | `view_model_blob_property_subscription` — subscribes to the authored blob property, emits its typed handle on change, rejects a bad path, and stops after unsubscribe. |
 | `View Model Property Async Subscriptions` | `view_model_property_async_subscriptions` — delivers a changed number subscription across the background server/message boundary and then unsubscribes. |
 | `List View Model Property Set/Get` | `list_view_model_property_set_get` — checks exact appended/inserted/swapped handle identity and order around authored entries, exact sizes, unchanged state after invalid operations, and all invalid-handle/path/index errors. |
 | `file Error Messages` | `file_error_messages` — checks the expected error counts for invalid file operations without producing success callbacks. |
@@ -72,7 +77,7 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `pointer input` | `pointer_input` — ports pointer move/down/up/exit dispatch and the bound Boolean results from the pinned fixture. |
 | `pointer down advances before rapid pointer up` | `pointer_down_advances_before_rapid_pointer_up` — proves the down transition advances before the immediately queued up event. |
 | `pointer input translation` | `pointer_input_translation` — applies the pinned contain-fit/alignment transform before pointer dispatch. |
-| `global Listener` | `global_listener` — routes file, artboard, state-machine, view-model, image, audio, and font callbacks through global listeners; S4-45 blob messages remain WATCH. |
+| `global Listener` | `global_listener` — routes file, artboard, state-machine, view-model, image, audio, font, and blob callbacks through global listeners. |
 | `sync pointer events` | `sync_pointer_events` — interleaves 20 queued and synchronous move/down/up calls on the server owner thread and safely ignores calls after deletion. |
 | `requestViewModelInstanceListClear` | `request_view_model_instance_list_clear` — clears a populated list property and reports the empty result. |
 | `dependency lifetime management` | `dependency_lifetime_management` — deletes one artboard and one state machine while proving only their dependent handles are cleaned up and siblings remain live. |
@@ -109,16 +114,14 @@ not extra case-count credit.
 No current-pin non-F6 upstream case remains pending. This floor may only
 tighten; newly discovered baseline gaps must be recorded before implementation.
 
-## S4-45 WATCH rows (4)
+## S4-45 blob disposition
 
-These current-pin cases remain WATCH rather than pending baseline or F6 work;
-they require an explicit command-protocol/version decision for S4-45 blob
-handles and messages.
-
-1. `BlobAsset`
-2. `blob asset listener callbacks`
-3. `View Model Blob Property Set`
-4. `View Model Blob Property Subscription`
+All four cases are implemented as baseline command-runtime behavior. Upstream
+commit `3c77a64d01c2afd2a50e47a324ee77972be5b370` added blob handles, queue/server
+transport, listener messages, and view-model blob set/subscription behavior to
+the C++ runtime itself. The Rust port retains each C++ `rcp<BlobAsset>` as an
+`Arc<RuntimeBlobAsset>` and uses `CommandValue::Blob` for its typed handle;
+neither adaptation introduces editor, Flow, or Apple lifecycle policy.
 
 ## Pending F6 dependency rows (0)
 
@@ -126,5 +129,5 @@ PR #216's F6 semantic runtime and PR #218's mounted-focus correction unblock
 all 13 former dependency rows. The focused semantic queue run is green at
 13/13; the pending floor tightens from 13 to 0 and may not be raised.
 
-Ratchet accounting: **79 complete + 0 pending non-F6 + 0 pending F6 +
-4 S4-45 WATCH = 83 expected upstream cases**.
+Ratchet accounting: **83 complete + 0 pending non-F6 + 0 pending F6 +
+0 WATCH = 83 expected upstream cases**.

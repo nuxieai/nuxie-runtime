@@ -25,9 +25,9 @@ FEATURE_ROWS = {
         "FL-E6: retained cursor editing and selection behavior is ported.",
     ),
     "src/command_queue.cpp": (
-        "partial",
+        "ported",
         "crates/nuxie/src/command_queue.rs",
-        "P3F/F3F6: faithful equivalents cover 79/83 pinned command_queue_test.cpp cases, including all 13 former F6-gated semantic cases. The four S4-45 blob command/message cases remain WATCH, so this whole-file row stays partial.",
+        "P3F/F3F6/S4-45: faithful equivalents cover all 83 pinned command_queue_test.cpp cases, including the 13 former F6-gated semantic cases and four blob handle/message/view-model cases.",
     ),
     "src/constraints/scrolling/elastic_scroll_physics.cpp": (
         "absent",
@@ -114,9 +114,9 @@ FEATURE_ROWS.update(
             "P2F2: dense-ordinal AudioEvent resolution, multiplied asset/Artboard volume, configured/default-engine event-unwind playback, and Artboard-scoped teardown are ported.",
         ),
         "src/command_server.cpp": (
-            "partial",
+            "ported",
             "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs",
-            "P3F/F3F6: semantic command dispatch, diff delivery, and view mapping bring faithful equivalents to 79/83 pinned command_queue_test.cpp cases. The four S4-45 blob cases remain WATCH, so this whole-file row stays partial. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate.",
+            "P3F/F3F6/S4-45: semantic command dispatch, diff delivery, view mapping, and blob handle/message/view-model behavior bring faithful equivalents to all 83 pinned command_queue_test.cpp cases. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate.",
         ),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
             "partial",

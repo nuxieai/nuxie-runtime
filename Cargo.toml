@@ -15,6 +15,7 @@ members = [
     "crates/nuxie-schema",
     "crates/nuxie-scripting",
     "tools/golden-compare",
+    "tools/luaur-rt-test-harness",
     "tools/perf-compare",
     "tools/pixel-compare",
     "tools/renderer-fuzz-replay",

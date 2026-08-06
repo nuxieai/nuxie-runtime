@@ -2834,6 +2834,7 @@ impl WgpuFrame {
     /// side of backend differentials; unlike `prepare_logical_frame`, it proves
     /// the production encoder consumed the shared typed output while retaining
     /// diagnostics.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn finish_logical_frame_for_differential(
         self,
     ) -> Result<LogicalFrameReport, RendererError> {

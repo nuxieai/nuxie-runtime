@@ -26,16 +26,14 @@ use nuxie_binary::{
 };
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryHit, RuntimeImageDimensionConflict,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeSemanticTextHit,
-    StateMachineEventContext, embedded_fonts_are_parseable,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, StateMachineEventContext, embedded_fonts_are_parseable,
 };
 
 pub mod command_queue;
 pub mod command_server;
 pub mod flow_session;
 mod raw_text;
-mod scene;
 #[cfg(feature = "scripting")]
 mod script_import;
 
@@ -47,16 +45,6 @@ mod scripted_listener_action_lifecycle_tests;
 pub use raw_text::{
     RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,
 };
-/// Transitional namespace for the editor-authoring interface.
-///
-/// New authoring callers should depend on `nuxie-authoring`. The crate-root
-/// exports below remain temporarily so existing callers can migrate without a
-/// behavior change; UNIV-1627 removes them after the implementation moves.
-pub mod authoring {
-    pub use super::scene::*;
-}
-// Temporary compatibility exports. Prefer the `nuxie-authoring` crate.
-pub use scene::*;
 #[cfg(feature = "scripting")]
 pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};
 
@@ -100,14 +88,15 @@ pub use nuxie_runtime::{
     ProjectDataConverterResolver, ProjectDataConverterReverseResult,
     ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
     ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
-    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath, RuntimeFileAsset,
-    RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState, RuntimeOwnedViewModelContext,
-    RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
-    ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
-    ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
-    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
-    SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
+    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath, RuntimeBlobAsset,
+    RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState,
+    RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput,
+    ScriptCoreString, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
+    ScriptModuleFailure, ScriptValue, ScriptingVm, SemanticActionType, SemanticBounds,
+    SemanticDrainError, SemanticRole, SemanticState, SemanticTrait, SemanticsBoundsUpdate,
+    SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode, StateMachineInputInstance,
+    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent, has_semantic_state,
+    has_semantic_trait,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
@@ -4300,9 +4289,16 @@ impl File {
         Self::import_with_trusted_scripts(bytes, ScriptExecutionLimits::new())
     }
 
-    pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
-        // RuntimeFile values constructed by Scene are authored in-process and
-        // deliberately opt into unsigned editor bytecode execution.
+    /// Finalize an already decoded, trusted runtime file.
+    ///
+    /// This is the non-byte counterpart to the trusted import path. Callers
+    /// must only pass runtime files produced from authenticated or locally
+    /// constructed content because unsigned script execution is enabled.
+    pub fn from_trusted_runtime(runtime: RuntimeFile) -> Result<Self> {
+        Self::from_runtime(runtime)
+    }
+
+    fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
         Self::from_runtime_with_script_authorization(
             runtime,
             ScriptExecutionAuthorization::Authenticated,
@@ -4949,25 +4945,6 @@ impl<'a> ArtboardInstance<'a> {
             bounds.x + bounds.width,
             bounds.y + bounds.height,
         ))
-    }
-
-    /// Return the canonical downstream shaped Text caret in source-artboard
-    /// world space for one exact UTF-8 byte boundary.
-    ///
-    /// A boundary skipped with leading whitespace at a soft wrap snaps to the
-    /// next visual line. Static Text does not synthesize a caret after a
-    /// trailing newline or other static line separator. CRLF is one authored
-    /// separator, so the boundary between its two scalars has no geometry.
-    ///
-    /// Returns `None` for an offset past the source or inside a UTF-8 scalar;
-    /// an unknown local or non-Text object; missing or invalid font data for
-    /// the base style or any participating nonempty run; nonfinite layout,
-    /// transform, or modifier geometry; and unsupported or unknown overflow.
-    /// Geometry v1 supports only `Visible`, `Fit`, and `FitFontSize`; `Hidden`,
-    /// `Clipped`, and `Ellipsis` fail closed.
-    pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
-        let (top, bottom) = self.raw.text_caret(local_id, byte_offset)?;
-        Some(CaretGeometry { top, bottom })
     }
 
     /// Return the nearest valid UTF-8 byte caret for one source-artboard
@@ -5701,42 +5678,9 @@ impl OwnedArtboardInstance {
             .map(StateMachineEventContext::from_geometry_hit)
     }
 
-    pub(crate) fn hit_test_path_segments_with_bounds(
-        &mut self,
-        point: Vec2D,
-    ) -> Vec<RuntimeGeometryHit> {
-        self.raw.hit_test_segments_with_bounds(point)
-    }
-
-    pub(crate) fn geometry_path_segments_with_bounds(&mut self) -> Vec<RuntimeGeometryHit> {
-        self.raw.visible_geometry_with_bounds()
-    }
-
-    pub(crate) fn retained_geometry_path_segments_with_bounds(
-        &mut self,
-    ) -> Vec<RuntimeGeometryHit> {
-        self.raw.retained_geometry_with_bounds()
-    }
-
-    pub(crate) fn semantic_text_path_segments_with_bounds(
-        &mut self,
-    ) -> Vec<RuntimeSemanticTextHit> {
-        self.raw.semantic_text_with_bounds()
-    }
-
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         self.raw.object_world_bounds(local_id)
-    }
-
-    pub(crate) fn register_intrinsic_image_dimensions(
-        &mut self,
-        asset_global: u32,
-        width: u32,
-        height: u32,
-    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
-        self.raw
-            .register_image_dimensions(asset_global, width, height)
     }
 
     /// Return the settled, layout-aware world transform for one runtime-local object.
@@ -5766,17 +5710,6 @@ impl OwnedArtboardInstance {
             bounds.x + bounds.width,
             bounds.y + bounds.height,
         ))
-    }
-
-    /// Return the canonical downstream shaped Text caret in source-artboard
-    /// world space for one exact UTF-8 byte boundary.
-    ///
-    /// This is the owning mirror of [`ArtboardInstance::text_caret`] and has
-    /// the same invalid-offset, target-kind, shaping, finite-geometry,
-    /// overflow, soft-wrap, and trailing-static-separator behavior.
-    pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
-        let (top, bottom) = self.raw.text_caret(local_id, byte_offset)?;
-        Some(CaretGeometry { top, bottom })
     }
 
     /// Return the nearest valid UTF-8 byte caret for one source-artboard
@@ -7763,7 +7696,10 @@ mod owned_instance_tests {
         );
         assert_eq!(borrowed.world_bounds(0), owned.world_bounds(0));
         assert_eq!(borrowed.world_transform(0), owned.world_transform(0));
-        assert_eq!(borrowed.text_caret(0, 0), owned.text_caret(0, 0));
+        assert_eq!(
+            borrowed.raw_mut().text_caret(0, 0),
+            owned.raw_mut().text_caret(0, 0)
+        );
         assert_eq!(
             borrowed.text_hit(0, Vec2D::new(0.0, 0.0)),
             owned.text_hit(0, Vec2D::new(0.0, 0.0))
@@ -8018,6 +7954,10 @@ mod external_image_asset_tests {
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
 
     fn file_with_image_and_font_assets() -> File {
+        let backboard_type = nuxie_schema::definition_by_name("Backboard")
+            .expect("Backboard schema definition")
+            .type_key
+            .int;
         let image_asset_type = nuxie_schema::definition_by_name("ImageAsset")
             .expect("ImageAsset schema definition")
             .type_key
@@ -8026,22 +7966,30 @@ mod external_image_asset_tests {
             .expect("FontAsset schema definition")
             .type_key
             .int;
+        let file_asset_id_key = nuxie_schema::definition_by_name("FileAsset")
+            .expect("FileAsset schema definition")
+            .properties
+            .iter()
+            .find(|property| property.name == "assetId")
+            .expect("FileAsset assetId property")
+            .key
+            .int;
         let runtime = RuntimeFile::from_authoring_records(vec![
             AuthoringRecord {
-                type_key: crate::scene::TYPE_BACKBOARD,
+                type_key: backboard_type,
                 properties: Vec::new(),
             },
             AuthoringRecord {
                 type_key: image_asset_type,
                 properties: vec![AuthoringProperty {
-                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    key: file_asset_id_key,
                     value: AuthoringValue::Uint(7),
                 }],
             },
             AuthoringRecord {
                 type_key: font_asset_type,
                 properties: vec![AuthoringProperty {
-                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    key: file_asset_id_key,
                     value: AuthoringValue::Uint(8),
                 }],
             },

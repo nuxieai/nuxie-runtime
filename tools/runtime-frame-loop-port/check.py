@@ -1153,17 +1153,20 @@ def validate_file_rows(
                     f"file {path} verified fragment must be faithful, got "
                     f"{status!r}"
                 )
-            # A fragment stays independently verified while the whole file has
-            # not been promoted to a closed status; both "pending" and
-            # "partial" rows are still open (command_server.cpp sits at
-            # partial: 79/83 faithful with S4-45 blob cases WATCH-held).
-            if (
-                manifest_status not in ("pending", "partial")
-                or verification != "pending-verification"
-            ):
+            # A fragment stays independently verified whether the whole file is
+            # still open or has subsequently been promoted. Open whole-file
+            # rows retain pending verification; closed rows require the normal
+            # orchestrator verification claim.
+            if manifest_status in ("pending", "partial"):
+                verification_is_accepted = verification == "pending-verification"
+            elif manifest_status in CLOSED_STATUSES:
+                verification_is_accepted = verification == "orchestrator-verified"
+            else:
+                verification_is_accepted = False
+            if not verification_is_accepted:
                 errors.append(
-                    f"file {path} verified fragment requires open (pending or "
-                    "partial) whole-file correspondence"
+                    f"file {path} verified fragment has incompatible whole-file "
+                    "status or verification"
                 )
         elif status in CLOSED_STATUSES:
             verification_is_accepted = verification == "orchestrator-verified" or (

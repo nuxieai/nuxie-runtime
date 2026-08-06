@@ -8,21 +8,17 @@ here is removed. The full per-file disposition audit this was distilled from is
 in git history (`docs/runtime-frame-loop-test-backfill-bc.md`); per-row status
 lives in `test-correspondence-manifest.toml`.
 
-Of the 420 finding-recorded upstream assertions, 23 are literal production
-failures (4 click-sequence sites, 1 fresh-FocusNode site, and 18 silver sites);
-397 are blocked capability/harness observables retained by linked ignored tests.
-
-### Finding: click up outside
-
-This is a production-behavior failure, not merely a missing harness surface.
-The literal pinned `click_event.riv` port in
-`cpp_probe.rs::upstream_click_event_fixture_reports_exact_group_click_sequence`
-passes through the setup and first click (A1–A8, now active in
-`upstream_click_event_fixture_initial_and_first_click_contract`), then fails
-A9–A12. Upstream `hittest_test.cpp:284–310` requires cumulative event counts
-`[1, 1, 1, 2, 3]`; Rust reports `[1, 2, 2, 3, 4]`, beginning with the
-pointer-down at `(75,75)` and pointer-up at `(300,75)`. The full sequence test
-is ignored exactly as written.
+Of the 420 finding-recorded upstream assertions, 22 were literal production
+failures (4 click-sequence sites, 1 fresh-FocusNode site, and 17 silver
+sites); all 22 were fixed at their root causes in commit `9684cdf7` and their
+pinned tests are active and unweakened
+(`cpp_probe.rs::upstream_click_event_fixture_reports_exact_group_click_sequence`,
+`focus_data.rs::upstream_focus_node_fresh_focusable_defaults_to_null`, and the
+silver-corpus test `upstream_fl_bc_resolved_silver_assertions`). The remaining
+398 are blocked capability/harness observables retained by linked ignored
+tests — including one silver assertion site
+(`multi_listeners`) whose replay needs a scripting-capable silver runner, not
+a runtime change.
 
 ### Finding: mutable animation quantize
 
@@ -33,21 +29,16 @@ Rust imports and correctly tests the authored `true` value (`160`) but exposes
 retained by
 `cpp_probe.rs::upstream_quantize_toggle_requires_missing_mutable_definition_api`.
 
-### Finding: FocusNode representation
-
-`focus_test.cpp:91` requires a fresh node's Focusable pointer to be null.
-`FocusNode::new()` currently stores `has_focusable = true`; the literal
-assertion therefore fails. Upstream's per-node `isScope()` and `manager()`
-pointer observables are also not represented directly. The ignored test is
-`focus.rs::upstream_focus_node_fresh_focusable_scope_and_manager_defaults`.
-
 ### Finding: focus fixture surface
 
 The exact Focusable pointer/delegation cases and 16 remaining fixture cases
 require bindable-artboard swaps, VM assets, component-list occurrences,
 and repeated focus-tree builds through an occurrence-facing API not exposed by
-the Rust focus test seam. They are retained by
-`focus.rs::upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface`;
+the Rust focus test seam. Upstream's per-node `isScope()` and `manager()`
+pointer observables (`focus_test.cpp:91/93`) are likewise not represented
+per node: scope topology and manager ownership live on `FocusManager`. They
+are retained by
+`focus_data.rs::upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface`;
 generic focus-manager tests are intentionally not claimed as equivalents.
 
 ### Finding: silver hit-test fixtures
@@ -57,22 +48,29 @@ generic focus-manager tests are intentionally not claimed as equivalents.
 layout-computed pointer expressions or long generated loops that the current
 silver action interpreter cannot encode. They are retained by
 `cpp_probe.rs::upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions`.
-Two multitouch silvers are byte-exact active tests; four other hit-test
-silvers are literal failing findings below.
+Two multitouch silvers are byte-exact active tests; the four hit-test silvers
+that were literal failing findings are fixed and byte-exact in the active
+silver-corpus test `upstream_fl_bc_resolved_silver_assertions`.
 
-### Finding: silver runtime divergences
+### Finding: silver scripted-listener harness gap
 
-The silver-corpus test
-`upstream_fl_bc_divergent_silver_assertions` replays ten literal action
-streams and compares them to the pinned `.sriv` files. It is ignored after
-reporting these production divergences:
-`focus_traversal` (frame 0/op 95), `hittest_ab1` (frame 1/op 153),
-`hittest_ab1_parent` (frame 1/op 192), `hittest_ab1_grand_parent` (frame
-2/op 304), `hittest_nested` (frame 1/op 155), `multi_listeners` (frame 2/op
-253), `sorted_listeners` (frame 0/op 32), `transition_actions` (frame 2/op
-72), `transition_duration_bind_list` (frame 0/op 13), and
-`transition_duration_bind_nested` (frame 0/op 57). These account for 18
-upstream assertion sites.
+Upstream `state_machine_test.cpp:600` ("Listeners with multiple types of
+events") terminates in `silver.matches("multi_listeners")` — one assertion
+site. `multi_listeners.riv` carries five `ScriptAsset`/`ScriptedListenerAction`
+pairs; upstream's `File` import auto-creates the scripting VM when script
+assets are present (`src/file.cpp:688-694`) and
+`ScriptedListenerAction::performStateful` runs the script on dispatch
+(`src/animation/scripted_listener_action.cpp`). The silver runner's
+`Execution::run` builds raw `nuxie-runtime` instances with no
+`nuxie-scripting` VM and never attaches the fixture's `ScriptAsset`
+occurrences, so the scripted action is inert and the replay diverges at
+frame 2/op 253 (expected `makeRenderPath`, got `drawPath`). This is a silver
+harness capability, not a runtime divergence: the same fixture is `exact` in
+the scripted golden lane (`corpus.toml` `multi_listeners`, samples 0/0.5/1),
+where both runners execute scripting. Retained by the silver-corpus test
+`silver_backfill_cases.rs::upstream_fl_bc_multi_listener_scripted_action_assertion`;
+the other nine formerly-divergent streams (17 assertion sites) are active in
+`upstream_fl_bc_resolved_silver_assertions`.
 
 ### Finding: state-machine fixture surface
 

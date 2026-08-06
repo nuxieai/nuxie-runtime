@@ -12,8 +12,8 @@ use std::{
 };
 
 use crate::{
-    AudioSource, RawTextFont, RenderImage, SemanticActionType, SemanticsDiff, Vec2D,
-    command_server::CommandServer,
+    AudioSource, RawTextFont, RenderImage, RuntimeBlobAsset, SemanticActionType, SemanticsDiff,
+    Vec2D, command_server::CommandServer,
 };
 
 macro_rules! command_handle {
@@ -36,6 +36,7 @@ command_handle!(ViewModelInstanceHandle);
 command_handle!(RenderImageHandle);
 command_handle!(AudioSourceHandle);
 command_handle!(FontHandle);
+command_handle!(BlobAssetHandle);
 command_handle!(DrawKey);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +53,8 @@ pub enum CommandDataType {
     Integer,
     SymbolListIndex,
     AssetImage,
+    AssetFont,
+    AssetBlob,
     Artboard,
 }
 
@@ -70,6 +73,8 @@ impl fmt::Display for CommandDataType {
             Self::Integer => "Integer",
             Self::SymbolListIndex => "Symbol List Index",
             Self::AssetImage => "Asset Image",
+            Self::AssetFont => "Asset Font",
+            Self::AssetBlob => "Asset Blob",
             Self::Artboard => "Artboard",
         })
     }
@@ -86,6 +91,7 @@ pub enum CommandValue {
     Trigger,
     ViewModel(ViewModelInstanceHandle),
     Image(Option<RenderImageHandle>),
+    Blob(Option<BlobAssetHandle>),
     Artboard(Option<ArtboardHandle>),
 }
 
@@ -300,6 +306,19 @@ pub enum CommandEvent {
         request_id: u64,
         error: String,
     },
+    BlobDecoded {
+        handle: BlobAssetHandle,
+        request_id: u64,
+    },
+    BlobDeleted {
+        handle: BlobAssetHandle,
+        request_id: u64,
+    },
+    BlobError {
+        handle: BlobAssetHandle,
+        request_id: u64,
+        error: String,
+    },
     ArtboardsListed {
         handle: FileHandle,
         request_id: u64,
@@ -375,6 +394,7 @@ pub(crate) enum ListenerKey {
     Image(RenderImageHandle),
     Audio(AudioSourceHandle),
     Font(FontHandle),
+    Blob(BlobAssetHandle),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -386,6 +406,7 @@ enum GlobalListenerKey {
     Image,
     Audio,
     Font,
+    Blob,
 }
 
 pub(crate) type ServerCallback = Box<dyn FnOnce(&mut CommandServer) + Send + 'static>;
@@ -631,6 +652,20 @@ pub(crate) enum Command {
         handle: FontHandle,
         request_id: u64,
     },
+    DecodeBlob {
+        handle: BlobAssetHandle,
+        bytes: Vec<u8>,
+        request_id: u64,
+    },
+    ExternalBlob {
+        handle: BlobAssetHandle,
+        blob: Option<Arc<RuntimeBlobAsset>>,
+        request_id: u64,
+    },
+    DeleteBlob {
+        handle: BlobAssetHandle,
+        request_id: u64,
+    },
     AddGlobalImage {
         name: String,
         handle: RenderImageHandle,
@@ -724,6 +759,7 @@ struct Counters {
     image: u64,
     audio: u64,
     font: u64,
+    blob: u64,
     draw: u64,
 }
 
@@ -821,6 +857,9 @@ impl CommandQueue {
     }
     pub fn set_global_font_listener(&self, listener: Option<&Listener>) {
         self.set_global(GlobalListenerKey::Font, listener);
+    }
+    pub fn set_global_blob_listener(&self, listener: Option<&Listener>) {
+        self.set_global(GlobalListenerKey::Blob, listener);
     }
 
     pub fn load_file(
@@ -1402,6 +1441,39 @@ impl CommandQueue {
     pub fn delete_font(&self, handle: FontHandle, request_id: u64) {
         self.enqueue(Command::DeleteFont { handle, request_id });
     }
+    pub fn decode_blob(
+        &self,
+        bytes: Vec<u8>,
+        listener: Option<&Listener>,
+        request_id: u64,
+    ) -> BlobAssetHandle {
+        let handle = self.next(|c| &mut c.blob, BlobAssetHandle);
+        self.register(ListenerKey::Blob(handle), listener);
+        self.enqueue(Command::DecodeBlob {
+            handle,
+            bytes,
+            request_id,
+        });
+        handle
+    }
+    pub fn add_external_blob(
+        &self,
+        blob: Option<Arc<RuntimeBlobAsset>>,
+        listener: Option<&Listener>,
+        request_id: u64,
+    ) -> BlobAssetHandle {
+        let handle = self.next(|c| &mut c.blob, BlobAssetHandle);
+        self.register(ListenerKey::Blob(handle), listener);
+        self.enqueue(Command::ExternalBlob {
+            handle,
+            blob,
+            request_id,
+        });
+        handle
+    }
+    pub fn delete_blob(&self, handle: BlobAssetHandle, request_id: u64) {
+        self.enqueue(Command::DeleteBlob { handle, request_id });
+    }
     pub fn add_global_image_asset(&self, name: impl Into<String>, handle: RenderImageHandle) {
         self.enqueue(Command::AddGlobalImage {
             name: name.into(),
@@ -1584,6 +1656,9 @@ impl CommandEvent {
             FontDecoded { handle, .. } | FontDeleted { handle, .. } | FontError { handle, .. } => {
                 ListenerKey::Font(*handle)
             }
+            BlobDecoded { handle, .. } | BlobDeleted { handle, .. } | BlobError { handle, .. } => {
+                ListenerKey::Blob(*handle)
+            }
         })
     }
 }
@@ -1598,6 +1673,7 @@ impl ListenerKey {
             Self::Image(_) => GlobalListenerKey::Image,
             Self::Audio(_) => GlobalListenerKey::Audio,
             Self::Font(_) => GlobalListenerKey::Font,
+            Self::Blob(_) => GlobalListenerKey::Blob,
         }
     }
 }

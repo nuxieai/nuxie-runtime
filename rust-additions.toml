@@ -129,10 +129,6 @@ path = "crates/nuxie/src/flow_session.rs"
 category = "product-host"
 
 [[addition]]
-path = "crates/nuxie/src/scene.rs"
-category = "product-authoring"
-
-[[addition]]
 path = "crates/nuxie/src/script_import.rs"
 category = "product-trust"
 
@@ -141,13 +137,25 @@ path = "crates/nuxie-product/src/lib.rs"
 category = "product-host"
 
 [[addition]]
-path = "crates/nuxie-authoring/src/lib.rs"
-category = "product-authoring"
-
-[[addition]]
 path = "crates/nuxie-browser-adapter/src/lib.rs"
 category = "platform-adapter"
 
 [[addition]]
+path = "crates/nuxie-browser-adapter/src/browser.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-browser-adapter/src/browser_surface_lifecycle.rs"
+category = "platform-adapter"
+
+[[addition]]
 path = "crates/nuxie-apple-adapter/src/lib.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-apple-adapter/src/apple.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-apple-adapter/src/size_report_roots.rs"
 category = "platform-adapter"

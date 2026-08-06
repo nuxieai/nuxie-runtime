@@ -2,8 +2,8 @@
 //!
 //! These tests port the non-rendering command-loop invariants from
 //! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`. The
-//! case-by-case correspondence, including the remaining S4-45 WATCH residue,
-//! is recorded in `docs/command-queue-test-ledger.md`.
+//! complete case-by-case correspondence is recorded in
+//! `docs/command-queue-test-ledger.md`.
 
 use std::{
     any::Any,
@@ -17,8 +17,8 @@ use std::{
 };
 
 use nuxie::{
-    AudioSource, RawTextFont, RecordingFactory, RenderImage, SemanticActionType, SemanticRole,
-    SemanticState, SemanticTrait, SemanticsDiff, SemanticsDiffNode,
+    AudioSource, RawTextFont, RecordingFactory, RenderImage, RuntimeBlobAsset, SemanticActionType,
+    SemanticRole, SemanticState, SemanticTrait, SemanticsDiff, SemanticsDiffNode,
     command_queue::{
         ArtboardHandle, CommandDataType, CommandEvent, CommandQueue, CommandValue, Fit, Listener,
         PointerEvent, StateMachineHandle,
@@ -65,6 +65,8 @@ const GLOBAL_VARIABLES_FIXTURE: &[u8] =
 const SEMANTIC_SIMPSONS_FIXTURE: &[u8] = include_bytes!("../../../fixtures/semantic/simpsons.riv");
 const SEMANTIC_FOCUS_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv");
+const DATA_BIND_BLOB_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/sync/data_bind_blob_test.riv");
 
 fn server(queue: &CommandQueue) -> CommandServer {
     CommandServer::new(queue.clone(), Box::new(RecordingFactory::new()))
@@ -1033,9 +1035,15 @@ fn external_resources() {
     let audio = Arc::new(AudioSource::from_encoded(AUDIO_FIXTURE.to_vec()).expect("decode audio"));
     let audio_identity = Arc::as_ptr(&audio) as usize;
     let font = RawTextFont::decode(Arc::<[u8]>::from(FONT_FIXTURE)).expect("decode font");
+    let blob = Arc::new(RuntimeBlobAsset::new(
+        "external",
+        Arc::<[u8]>::from([1, 2, 3, 4, 5]),
+    ));
+    let blob_identity = Arc::as_ptr(&blob) as usize;
     let image_handle = queue.add_external_image(image, None, 0);
     let audio_handle = queue.add_external_audio(audio, None, 0);
     let font_handle = queue.add_external_font(font, None, 0);
+    let blob_handle = queue.add_external_blob(Some(blob), None, 0);
     let mut server = server(&queue);
     assert!(server.process_commands());
     let retained_image = server.image(image_handle).expect("external image");
@@ -1054,14 +1062,20 @@ fn external_resources() {
             .face_index(),
         0
     );
+    assert_eq!(
+        Arc::as_ptr(server.blob(blob_handle).expect("external blob")) as usize,
+        blob_identity
+    );
 
     queue.delete_image(image_handle, 0);
     queue.delete_audio(audio_handle, 0);
     queue.delete_font(font_handle, 0);
+    queue.delete_blob(blob_handle, 0);
     assert!(server.process_commands());
     assert!(server.image(image_handle).is_none());
     assert!(server.audio_source(audio_handle).is_none());
     assert!(server.font(font_handle).is_none());
+    assert!(server.blob(blob_handle).is_none());
 }
 
 #[test]
@@ -1078,6 +1092,201 @@ fn render_image() {
     assert!(server.process_commands());
     assert!(server.image(image).is_none());
     assert!(server.image(bad_image).is_none());
+}
+
+#[test]
+fn blob_asset() {
+    let queue = CommandQueue::new();
+    let bytes = vec![0x10, 0x20, 0x30, 0x40];
+    let blob = queue.decode_blob(bytes.clone(), None, 0);
+    let empty_blob = queue.decode_blob(Vec::new(), None, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    assert_eq!(
+        server.blob(blob).map(|blob| blob.bytes()),
+        Some(bytes.as_slice())
+    );
+    assert_eq!(
+        server.blob(empty_blob).map(|blob| blob.bytes()),
+        Some(&[][..])
+    );
+
+    queue.delete_blob(blob, 0);
+    queue.delete_blob(empty_blob, 0);
+    assert!(server.process_commands());
+    assert!(server.blob(blob).is_none());
+    assert!(server.blob(empty_blob).is_none());
+}
+
+#[test]
+fn blob_asset_listener_callbacks() {
+    let queue = CommandQueue::new();
+    let (decode_listener, decode_log) = event_log();
+    let (external_listener, external_log) = event_log();
+    let (error_listener, error_log) = event_log();
+    let decoded = queue.decode_blob(vec![1, 2, 3], Some(&decode_listener), 0x10);
+    let external = queue.add_external_blob(
+        Some(Arc::new(RuntimeBlobAsset::new(
+            "external",
+            Arc::<[u8]>::from([4, 5, 6]),
+        ))),
+        Some(&external_listener),
+        0x20,
+    );
+    let missing = queue.add_external_blob(None, Some(&error_listener), 0x30);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    assert!(events(&decode_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::BlobDecoded { handle, request_id: 0x10 } if *handle == decoded
+    )));
+    assert!(events(&external_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::BlobDecoded { handle, request_id: 0x20 } if *handle == external
+    )));
+    assert!(events(&error_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::BlobError { handle, request_id: 0x30, error }
+            if *handle == missing && !error.is_empty()
+    )));
+
+    queue.delete_blob(decoded, 0x11);
+    queue.delete_blob(external, 0x21);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&decode_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::BlobDeleted { handle, request_id: 0x11 } if *handle == decoded
+    )));
+    assert!(events(&external_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::BlobDeleted { handle, request_id: 0x21 } if *handle == external
+    )));
+}
+
+#[test]
+fn view_model_blob_property_set() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_BLOB_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let root = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    let bytes = vec![0x0a, 0x0b, 0x0c];
+    let blob = queue.decode_blob(bytes.clone(), None, 0);
+    queue.set_view_model_value(root, "xml", CommandValue::Blob(Some(blob)), 0);
+    queue.run_once(move |server| {
+        let expected = server.blob(blob).expect("decoded blob");
+        let actual = server
+            .view_model(root)
+            .expect("root view model")
+            .raw()
+            .blob_asset_value_by_property_name_path("xml")
+            .and_then(|value| value.live_blob_asset().cloned())
+            .expect("blob property");
+        assert!(Arc::ptr_eq(&actual, expected));
+        assert_eq!(actual.bytes(), bytes.as_slice());
+    });
+
+    let deleted = queue.decode_blob(vec![1], None, 0);
+    queue.delete_blob(deleted, 0);
+    queue.set_view_model_value(root, "xml", CommandValue::Blob(Some(deleted)), 0x41);
+    queue.set_view_model_value(root, "missing", CommandValue::Blob(Some(blob)), 0x42);
+    queue.run_once(move |server| {
+        let expected = server.blob(blob).expect("retained blob");
+        let actual = server
+            .view_model(root)
+            .expect("root view model")
+            .raw()
+            .blob_asset_value_by_property_name_path("xml")
+            .and_then(|value| value.live_blob_asset().cloned())
+            .expect("failed set retains prior blob");
+        assert!(Arc::ptr_eq(&actual, expected));
+    });
+
+    queue.set_view_model_value(root, "xml", CommandValue::Blob(None), 0);
+    queue.run_once(move |server| {
+        let value = server
+            .view_model(root)
+            .expect("root view model")
+            .raw()
+            .blob_asset_value_by_property_name_path("xml")
+            .expect("blob property");
+        assert!(value.live_blob_bytes().is_none());
+    });
+    queue.delete_view_model(root, 0);
+    queue.set_view_model_value(root, "xml", CommandValue::Blob(Some(blob)), 0x43);
+
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let error_ids = events(&log)
+        .into_iter()
+        .filter_map(|event| match event {
+            CommandEvent::ViewModelError { request_id, .. }
+                if matches!(request_id, 0x41 | 0x42 | 0x43) =>
+            {
+                Some(request_id)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(error_ids, [0x41, 0x42, 0x43]);
+}
+
+#[test]
+fn view_model_blob_property_subscription() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_BLOB_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let root = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    queue.subscribe_to_view_model_property(root, "xml", CommandDataType::AssetBlob, 0x50);
+    queue.subscribe_to_view_model_property(root, "Bad property", CommandDataType::AssetBlob, 0x51);
+    queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 1));
+    let blob = queue.decode_blob(vec![1, 2, 3], None, 0);
+    queue.set_view_model_value(root, "xml", CommandValue::Blob(Some(blob)), 0);
+
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(
+                event,
+                CommandEvent::ViewModelValue {
+                    handle,
+                    request_id: 0x50,
+                    path,
+                    value: CommandValue::Blob(Some(actual)),
+                } if *handle == root && path == "xml" && *actual == blob
+            ))
+            .count(),
+        1
+    );
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelError { handle, request_id: 0x51, .. } if *handle == root
+    )));
+
+    queue.unsubscribe_from_view_model_property(root, "xml", CommandDataType::AssetBlob);
+    queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
+    assert!(server.process_commands());
 }
 
 #[test]
@@ -2645,6 +2854,7 @@ fn global_listener() {
     queue.set_global_image_listener(Some(&listener));
     queue.set_global_audio_listener(Some(&listener));
     queue.set_global_font_listener(Some(&listener));
+    queue.set_global_blob_listener(Some(&listener));
     let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 1);
     let artboard = queue.instantiate_default_artboard(file, None, 0);
     let machine = queue.instantiate_default_state_machine(artboard, None, 0);
@@ -2653,6 +2863,7 @@ fn global_listener() {
     let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
     let audio = queue.decode_audio(AUDIO_FIXTURE.to_vec(), None, 0);
     let font = queue.decode_font(FONT_FIXTURE.to_vec(), None, 0);
+    let blob = queue.decode_blob(vec![1, 2, 3], None, 0);
     queue.request_artboard_names(file, 2);
     queue.request_view_model_names(file, 3);
     queue.request_view_model_instance_names(file, "Test All", 4);
@@ -2674,6 +2885,7 @@ fn global_listener() {
     queue.delete_image(image, 8);
     queue.delete_file(file, 7);
     queue.delete_audio(audio, 9);
+    queue.delete_blob(blob, 21);
     let mut server = server(&queue);
     assert!(server.process_commands());
     queue.process_messages();
@@ -2686,6 +2898,7 @@ fn global_listener() {
         |event: &CommandEvent| matches!(event, CommandEvent::ImageDecoded { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::AudioDecoded { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::FontDecoded { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::BlobDecoded { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::StateMachineSettled { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::ArtboardsListed { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::StateMachinesListed { .. }),
@@ -2704,6 +2917,7 @@ fn global_listener() {
         |event: &CommandEvent| matches!(event, CommandEvent::ImageDeleted { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::FileDeleted { .. }),
         |event: &CommandEvent| matches!(event, CommandEvent::AudioDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::BlobDeleted { .. }),
     ] {
         assert!(captured.iter().any(predicate));
     }

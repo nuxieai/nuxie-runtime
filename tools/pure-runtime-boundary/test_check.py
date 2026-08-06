@@ -87,7 +87,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             nuxie-renderer = { path = "../nuxie-renderer", optional = true }
             """,
         )
-        (facade / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
+        (facade / "src/lib.rs").write_text(
+            "#[cfg(test)]\nmod tests { pub struct AuthoringRecord; }\n"
+        )
 
     def write_manifest(self, body: str) -> None:
         (self.package / "Cargo.toml").write_text(
@@ -952,11 +954,23 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             nuxie = { path = ".", default-features = false, features = ["test-support"] }
             """,
         )
-        (facade / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
+        (facade / "src/lib.rs").write_text(
+            "#[cfg(test)]\nmod tests { pub struct AuthoringRecord; }\n"
+        )
 
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_production_authoring_marker_in_nuxie_lib(self) -> None:
+        facade = self.create_package("crates/nuxie", "nuxie", "")
+        (facade / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("binary-authoring test-only boundary debt", result.stderr)
+        self.assertIn("escaped its #[cfg(test)] module", result.stderr)
 
     def test_rejects_expansion_of_nuxie_self_test_support_dependency(self) -> None:
         self.create_package(
@@ -1020,6 +1034,51 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("crates/nuxie/Cargo.toml", result.stderr)
         self.assertIn("in-repo path dependency", result.stderr)
+        self.assertIn("outside the protected workspace scan", result.stderr)
+
+    def test_rejects_unapproved_vendor_helper_outside_workspace_scan(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = { path = "../../vendor/helper" }
+            """,
+        )
+        self.create_package("crates/nuxie-product", "nuxie-product", "")
+        helper = self.root / "vendor/helper"
+        (helper / "src").mkdir(parents=True)
+        (helper / "src/lib.rs").write_text("// hidden first-party helper\n")
+        (helper / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "helper"
+                version = "0.0.0"
+
+                [dependencies]
+                nuxie-product = { path = "../../crates/nuxie-product" }
+                """
+            )
+        )
+        members = ",\n".join(f'    "{member}"' for member in self.members)
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                f"""
+                [workspace]
+                members = [
+                {members}
+                ]
+                exclude = ["vendor/helper"]
+                resolver = "3"
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("vendor/helper", result.stderr)
         self.assertIn("outside the protected workspace scan", result.stderr)
 
     def test_rejects_expansion_of_portable_abi_facade_edge(self) -> None:
@@ -1534,7 +1593,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
-    def test_allows_neutral_host_cycle_transaction_method(self) -> None:
+    def test_rejects_product_host_cycle_method_in_new_file(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
@@ -1544,7 +1603,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
     def test_rejects_product_host_command_drain_method_in_new_file(self) -> None:
         package = self.create_package(

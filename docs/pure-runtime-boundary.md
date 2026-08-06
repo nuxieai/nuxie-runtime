@@ -107,9 +107,9 @@ forbidden upward dependency targets. New workspace packages are protected by
 default. The dependency-closure guarantee is first-party and in-repository:
 local path providers reachable from a protected package must themselves be in
 the scanned package set rather than escaping through a workspace exclusion.
-Explicit `vendor/` packages, registry dependencies, and git dependency internals
-remain the responsibility of the repository's lockfile and supply-chain
-controls.
+An exact audited set of third-party vendored packages, plus registry and git
+dependency internals, remains the responsibility of the repository's lockfile
+and supply-chain controls; the `vendor/` prefix itself is not an exemption.
 
 The manifest check covers dependency, dev-dependency, build-dependency, target,
 optional, default-disabled, measurement, and portable-ABI declarations. It

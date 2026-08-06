@@ -9712,6 +9712,41 @@ mod tests {
     }
 
     #[test]
+    fn separately_prepared_null_clip_handles_preserve_wgpu_path_identity() {
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let raw_clip = logical_triangle();
+        let first_clip = factory.make_render_path(raw_clip.clone(), FillRule::NonZero);
+        let second_clip = factory.make_render_path(raw_clip.clone(), FillRule::NonZero);
+        let content = factory.make_render_path(logical_triangle(), FillRule::NonZero);
+        let paint = factory.make_render_paint();
+        let mut frame = factory.begin_frame(0);
+        for clip in [&first_clip, &second_clip] {
+            frame.save();
+            frame.clip_path(clip.as_ref());
+            frame.draw_path(content.as_ref(), paint.as_ref());
+            frame.restore();
+        }
+        let wgpu = frame.prepare_logical_frame().unwrap();
+
+        let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        let first_clip = null.prepare_path(&raw_clip, FillRule::NonZero);
+        let second_clip = null.prepare_path(&raw_clip, FillRule::NonZero);
+        let content = null.prepare_path(&logical_triangle(), FillRule::NonZero);
+        null.begin_frame();
+        for clip in [&first_clip, &second_clip] {
+            null.save();
+            null.clip_path(clip).unwrap();
+            null.draw_path(&content, LogicalPathPaint::default())
+                .unwrap();
+            null.restore();
+        }
+        let shadow = null.flush().unwrap();
+
+        assert_eq!(wgpu.draw_count, 4);
+        assert_eq!(shadow, wgpu);
+    }
+
+    #[test]
     fn wgpu_encoder_consumes_one_shared_logical_resource_plan() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let path = LogicalPath {

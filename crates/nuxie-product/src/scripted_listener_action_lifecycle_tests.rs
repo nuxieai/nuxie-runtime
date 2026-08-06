@@ -4332,6 +4332,220 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
 }
 
 #[test]
+fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
+    let bytes = bound_listener_input_file(
+        br#"
+            local nuxie = require("nuxie")
+            local generation = 0
+
+            return function(_context)
+                generation += 1
+                nuxie.trigger("empty_listener_generator")
+                return {
+                    init = function(self, initContext)
+                        if generation ~= 1 then
+                            error("the unresolved table was regenerated")
+                        end
+                        if initContext:viewModel() == nil
+                            or self.boundChild == nil
+                            or self.boundAmount ~= 1
+                        then
+                            error("the owned live context did not hydrate")
+                        end
+                        nuxie.trigger("empty_listener_init")
+                        return true
+                    end,
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+    );
+    let runtime = read_runtime_file_for_facade(&bytes).expect("import empty-listener fixture");
+    let file = Arc::new(file_from_runtime(runtime).expect("build empty-listener file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate empty-listener artboard");
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("instantiate empty-listener machine");
+    let mut factory = script_factory();
+    instance
+        .prepare_host_scripts(&mut factory)
+        .expect("bootstrap empty-listener scripts");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate valid facade fallback");
+    assert!(
+        machine.bind_owned_view_model_contexts(&nuxie_runtime::RuntimeOwnedViewModelContext::new()),
+        "install an occurrence-owned DataContext with no main instance"
+    );
+
+    instance
+        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .expect("mount the unresolved listener occurrence");
+    let mut factory_option = Some(&mut factory as &mut dyn Factory);
+    instance
+        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .expect("empty owned context keeps the listener unresolved");
+    let cold_commands = instance
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|command| match command {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cold_commands,
+        ["empty_listener_generator"],
+        "an unrelated facade root cannot initialize an occurrence whose own DataContext is empty"
+    );
+
+    let root_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+        file.runtime(),
+        root.handle().clone(),
+    );
+    machine.bind_owned_view_model_context_handle(&root_context);
+    instance
+        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .expect("the same table hydrates after its owned context becomes live");
+    let live_commands = instance
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|command| match command {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        live_commands,
+        ["empty_listener_init"],
+        "the retained table initializes once from its occurrence-owned context (`lua_scripted_context.cpp:129-146`)"
+    );
+}
+
+#[test]
+fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
+    let bytes = bound_listener_scripted_converter_file_with_missing_child(
+        br#"
+            return function(_context)
+                return {
+                    init = function(_self, _initContext) return true end,
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+        br#"
+            local nuxie = require("nuxie")
+            local generation = 0
+
+            return function(_context)
+                generation += 1
+                nuxie.trigger("empty_converter_generator")
+                return {
+                    init = function(self, _initContext)
+                        if generation ~= 1 then
+                            error("the unresolved converter was regenerated")
+                        end
+                        if self.customAmount ~= 1 or self.customChild == nil then
+                            error("the owned live context did not hydrate converter inputs")
+                        end
+                        nuxie.trigger("empty_converter_init")
+                        return true
+                    end,
+                    convert = function(_self, input)
+                        nuxie.trigger("empty_converter_convert")
+                        return input
+                    end,
+                }
+            end
+        "#,
+    );
+    let runtime = read_runtime_file_for_facade(&bytes).expect("import empty-converter fixture");
+    let file = Arc::new(file_from_runtime(runtime).expect("build empty-converter file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate empty-converter artboard");
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("instantiate empty-converter machine");
+    let mut factory = script_factory();
+    instance
+        .prepare_host_scripts(&mut factory)
+        .expect("bootstrap empty-converter scripts");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate valid facade fallback");
+    let child = ViewModelInstance::from_raw_handle(RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(file.runtime(), 1)
+            .expect("instantiate compatible child"),
+    ));
+    assert!(
+        root.handle()
+            .link_view_model_by_property_name_path("child", child.handle())
+            .expect("attach valid fallback child")
+    );
+    assert!(
+        machine.bind_owned_view_model_contexts(&nuxie_runtime::RuntimeOwnedViewModelContext::new()),
+        "install an occurrence-owned DataContext with no main instance"
+    );
+
+    instance
+        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .expect("mount the unresolved converter occurrence");
+    let mut factory_option = Some(&mut factory as &mut dyn Factory);
+    instance
+        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .expect("empty owned context keeps the converter unresolved");
+    let cold_commands = instance
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|command| match command {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cold_commands,
+        ["empty_converter_generator"],
+        "converter custom inputs cannot leak through the valid facade fallback"
+    );
+
+    let root_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+        file.runtime(),
+        root.handle().clone(),
+    );
+    machine.bind_owned_view_model_context_handle(&root_context);
+    instance
+        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .expect("the same converter table hydrates from its owned context");
+    instance.advance_with_state_machine(&mut machine, 0.0);
+    let live_commands = instance
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|command| match command {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        live_commands,
+        ["empty_converter_init", "empty_converter_convert"],
+        "the retained converter initializes and converts once from its occurrence-owned context"
+    );
+}
+
+#[test]
 fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
     let bytes = bound_listener_input_file(
         br#"

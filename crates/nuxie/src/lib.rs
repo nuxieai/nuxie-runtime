@@ -5931,13 +5931,13 @@ impl OwnedArtboardInstance {
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
     pub fn drain_script_host_effects<T: 'static>(&self) -> Option<T> {
-        self.file
-            .scripts
-            .borrow()
-            .drain_host_effects()?
-            .downcast::<T>()
-            .ok()
-            .map(|effects| *effects)
+        let effects = self.file.scripts.borrow().drain_host_effects()?;
+        Some(*effects.downcast::<T>().unwrap_or_else(|_| {
+            panic!(
+                "script host effects had an unexpected concrete type; expected {}",
+                std::any::type_name::<T>()
+            )
+        }))
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
@@ -7580,6 +7580,38 @@ mod owned_instance_tests {
         assert!(cloned.data().is_some());
         drop(cloned);
         assert!(weak_file.upgrade().is_none());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_child_advance_does_not_consume_the_supplied_root_trigger() {
+        let file = Arc::new(facade_view_model_file());
+        let owning_artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate owning artboard");
+        let root = owning_artboard
+            .instantiate_view_model_instance(0)
+            .expect("instantiate the authored root");
+        let supplied = nuxie_runtime::script_view_model_from_owned(file.runtime(), root.handle())
+            .expect("project the supplied root into the script facade");
+        assert!(supplied.fire_trigger("submit"));
+        assert_eq!(supplied.trigger("submit"), Some(4));
+
+        let mut child =
+            FileScriptArtboard::new_with_view_model(file, 0, None, Some(supplied.clone()))
+                .expect("instantiate the concrete scripted child");
+        assert_eq!(supplied.trigger("submit"), Some(4));
+        assert!(
+            nuxie_runtime::ScriptArtboard::advance(&mut child, 0.0)
+                .expect("advance the concrete child"),
+            "C++ advanceAndApply forces a zero-second child frame to keep going"
+        );
+        assert_eq!(
+            supplied.trigger("submit"),
+            Some(4),
+            "child advance leaves root trigger consumption to the owning host frame"
+        );
+        assert!(supplied.advance_script_frame());
+        assert_eq!(supplied.trigger("submit"), Some(0));
     }
 
     #[test]

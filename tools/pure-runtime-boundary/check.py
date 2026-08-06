@@ -38,9 +38,7 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
-PRODUCT_FLOW_ROOT_REEXPORT = re.compile(
-    r"\bpub\s+use\s+(?:crate::)?flow_session::\s*\*\s*;"
-)
+PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 
 # All workspace packages are protected by default. These named packages are
 # current/future owners above the baseline, plus the one browser consumer that
@@ -1192,13 +1190,15 @@ def check_repository(
         except OSError as error:
             errors.append(f"crates/nuxie-product/src/lib.rs: cannot read source: {error}")
         else:
-            match = PRODUCT_FLOW_ROOT_REEXPORT.search(product_source)
-            if match is not None:
+            for match in PRODUCT_ROOT_REEXPORT.finditer(product_source):
+                prefix = product_source[: match.start()]
+                if prefix.count("{") != prefix.count("}"):
+                    continue
                 line_number = product_source.count("\n", 0, match.start()) + 1
                 errors.append(
                     "crates/nuxie-product/src/lib.rs:"
-                    f"{line_number}: Flow must remain namespaced under flow_session; "
-                    "the retired crate-root compatibility export cannot return"
+                    f"{line_number}: product vocabulary must remain namespaced; "
+                    "crate-root compatibility exports cannot return"
                 )
 
     return (

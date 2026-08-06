@@ -59,7 +59,8 @@ make crate-seams-apple-check
 make crate-seams-full-check
 ```
 
-The product selector also checks that `nuxie-product --no-default-features
+The product selector compiles and runs the product-owned scripted-listener
+lifecycle suite. It also checks that `nuxie-product --no-default-features
 --features scripting` does not recover `js-host-seed` through a transitive
 dependency; this is the self-contained publisher-wasm profile. The browser
 selector targets `wasm32-unknown-unknown` so it cannot pass by compiling away
@@ -77,10 +78,10 @@ source even in its test build.
 The former `nuxie::flow_session` shipping path remains removed. Product
 consumers must depend on `nuxie-product` directly.
 
-Forty-three lifecycle cases moved with the product owner. Three white-box
-cases were retired because they reached only the private `FileScriptArtboard`
-or the former test-only constructor entry point; neither has a production
-consumer or a public host contract to preserve.
+Forty-five lifecycle cases moved with the product owner through public host
+seams. The one concrete `FileScriptArtboard` trigger-consumption case remains
+with the baseline facade's private unit tests, where it can exercise that
+implementation detail without product source inclusion.
 
 UNIV-1627 completed the authoring cut: the runtime workspace no longer owns an
 authoring package or exports Scene symbols. `nuxie-binary` exposes authored

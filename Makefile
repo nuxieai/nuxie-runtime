@@ -161,6 +161,7 @@ crate-seams-baseline-check:
 
 crate-seams-product-check:
 	cargo check -p nuxie-product --all-targets
+	cargo test -p nuxie-product --features scripting --lib
 	@$(MAKE) --no-print-directory crate-seams-product-host-free-check \
 		PRODUCT_FEATURES=scripting
 	@if $(MAKE) --no-print-directory crate-seams-product-host-free-check \

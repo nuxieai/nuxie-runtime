@@ -192,6 +192,33 @@ class MicrobenchContractTests(unittest.TestCase):
             [("paper_bboxes_6_copies", 19_305), ("marty_bboxes_187_copies", 12_377)],
         )
 
+    def test_pinned_draw_capability_requires_raster_ordering(self):
+        tool = load_tool()
+        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        with tempfile.TemporaryDirectory() as directory:
+            upstream = pathlib.Path(directory)
+            for source in {case.source for case in inventory.cases}:
+                target = upstream / source
+                target.parent.mkdir(parents=True, exist_ok=True)
+                names = [case.name for case in inventory.cases if case.source == source]
+                target.write_text("\n".join(f"REGISTER_BENCH({name});" for name in names))
+            capability = upstream / inventory.draw_capability_source
+            capability.parent.mkdir(parents=True, exist_ok=True)
+            capability.write_text(
+                "m_platformFeatures.supportsRasterOrderingMode = false;\n"
+            )
+            cases = [
+                case._replace(source_sha256=tool.sha256(upstream / case.source))
+                for case in inventory.cases
+            ]
+            fixture = inventory._replace(
+                cases=cases,
+                draw_capability_source_sha256=tool.sha256(capability),
+            )
+
+            with self.assertRaisesRegex(tool.ContractError, "enable RasterOrdering"):
+                tool.check_upstream_case_contract(upstream, fixture)
+
     def test_dataset_check_rejects_modified_bytes(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
@@ -232,7 +259,7 @@ class MicrobenchContractTests(unittest.TestCase):
 
         rows = [line for line in table.splitlines() if line.startswith("| `")]
         ratio_rows = [line for line in rows if "2.000x" in line]
-        directional_rows = [line for line in rows if "rasterOrdering" in line]
+        directional_rows = [line for line in rows if "selects RasterOrdering" in line]
         self.assertEqual(len(ratio_rows), 10)
         self.assertEqual(len(directional_rows), 10)
         self.assertTrue(any("| `BuildRawPath` |" in row for row in rows))

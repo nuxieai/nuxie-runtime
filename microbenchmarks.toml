@@ -1,5 +1,7 @@
 schema = "nuxie-upstream-microbench-v1"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+draw_capability_source = "tests/common/render_context_null.cpp"
+draw_capability_source_sha256 = "b9c116b13f5fae974b77758885bc7128ef04c2402cca657ce65aca03587939ed"
 
 [[dataset]]
 name = "paper_bboxes_6_copies"
@@ -46,7 +48,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawFeatheredPaths_paper"
@@ -54,7 +56,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawOneChopStrokes"
@@ -62,7 +64,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawOneCuspStrokes"
@@ -70,7 +72,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawRiveRenderPaths"
@@ -78,7 +80,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawRiveRenderPathsAsRoundJoinStrokes"
@@ -86,7 +88,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawRiveRenderPathsAsStrokes"
@@ -94,7 +96,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawTwoChopStrokes"
@@ -102,7 +104,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawTwoCuspStrokes"
@@ -110,7 +112,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "DrawZeroChopStrokes"
@@ -118,7 +120,7 @@ crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
 comparison = "directional"
-equivalence = "upstream RenderContextNULL advertises rasterOrdering=false while Rust exercises ClockwiseAtomic; track equivalent capability negotiation in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
+equivalence = "upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727)"
 
 [[case]]
 name = "IntersectionBoardBench_marty"

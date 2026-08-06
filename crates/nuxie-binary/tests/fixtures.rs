@@ -6233,13 +6233,17 @@ fn runtime_view_models_match_cpp_file_view_model_collection() {
     );
     assert_eq!(
         file.import_status(3),
-        Some(RuntimeImportStatus::Imported),
-        "publisher-era files attach instances to the latest ViewModel before a Backboard exists"
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject
+        }),
+        "ViewModelInstance::import requires the pinned C++ BackboardImporter context"
     );
     assert_eq!(
         file.import_status(4),
-        Some(RuntimeImportStatus::Imported),
-        "values following a pre-Backboard instance import with that instance"
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject
+        }),
+        "values following a dropped instance have no ViewModelInstance importer context"
     );
 
     let view_models = file.view_models();
@@ -6259,21 +6263,10 @@ fn runtime_view_models_match_cpp_file_view_model_collection() {
             .iter()
             .map(|instance| { instance.object.string_property("name").unwrap_or_default() })
             .collect::<Vec<_>>(),
-        vec!["no-backboard", "first-instance"],
-        "pre-Backboard instances attach to the latest ViewModel while later instances resolve by viewModelId"
+        vec!["first-instance"],
+        "imported instances resolve by viewModelId under the Backboard"
     );
-    assert_eq!(view_models[0].instances[0].values.len(), 1);
-    assert_eq!(
-        view_models[0].instances[0].values[0].object.type_name,
-        "ViewModelInstanceBoolean"
-    );
-    let publisher_value = file
-        .data_context_view_model_property_for_instance(view_models[0].instances[0].object, &[0, 0])
-        .expect("publisher-era instance value resolves through the data-context path");
-    assert_eq!(
-        file.view_model_instance_boolean_value_for_object(publisher_value),
-        Some(true)
-    );
+    assert!(view_models[0].instances[0].values.is_empty());
 
     assert_eq!(
         view_models[1].object.string_property_bytes("name"),
@@ -7021,7 +7014,9 @@ fn runtime_import_status_tracks_view_model_and_enum_contexts() {
             },
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
-            RuntimeImportStatus::Imported,
+            RuntimeImportStatus::Dropped {
+                reason: RuntimeImportDropReason::MissingObject
+            },
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,

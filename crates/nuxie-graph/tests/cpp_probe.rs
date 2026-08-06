@@ -254,8 +254,8 @@ fn graph_file_collections_follow_runtime_file_cpp_parity() {
             .iter()
             .map(|instance| instance.object.id)
             .collect::<Vec<_>>(),
-        vec![1, 3],
-        "RuntimeFile retains the publisher-era compatibility instance"
+        vec![3],
+        "RuntimeFile matches the C++ BackboardImporter requirement"
     );
 
     assert_eq!(

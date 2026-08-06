@@ -6,11 +6,7 @@ pub(super) fn imports_successfully(
     context: &ImportContext,
 ) -> Option<bool> {
     if definition.name == "ViewModelInstance" {
-        // Publisher-era instances attach to ViewModel; current instances attach
-        // to Backboard and resolve viewModelId.
-        return Some(
-            context.latest(ImportStackKey::Backboard) || context.latest(ImportStackKey::ViewModel),
-        );
+        return Some(context.latest(ImportStackKey::Backboard));
     }
     if matches!(
         definition.name,

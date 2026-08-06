@@ -75,7 +75,7 @@ C++-first and Rust-first orders. The release Rust runner provenance record was:
 Here `source digest` is the provenance script's `digest_state`: the SHA-256 of
 the sorted workspace/member content-digest record. It and the runner hash can
 be reproduced by checking out `74e8fbeb`, running
-`make scripted-rust-golden-runner`, and reading
+`make scripted-rust-golden-runner RUST_PROFILE=release`, and reading
 `target/golden-gate/scripted-release.json`. Reproduction also requires the
 recorded Rust compiler because the digest state includes `rustc --version`.
 

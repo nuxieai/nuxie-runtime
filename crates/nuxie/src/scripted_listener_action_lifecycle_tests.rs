@@ -1070,7 +1070,7 @@ fn public_machine_construction_synchronously_prepares_scripted_data_without_bloc
         .expect("instantiate public construction artboard");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
     let mut machine = instance
         .default_state_machine_instance()
@@ -1155,7 +1155,7 @@ fn public_machine_construction_retains_preparation_failure_without_dropping_the_
         .expect("instantiate failed public construction artboard");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
 
     let machine = instance
@@ -1383,7 +1383,7 @@ fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
         .scripted_object_global_id();
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap unbound scripted-listener file VM");
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
@@ -1581,7 +1581,7 @@ fn first_no_factory_listener_preparation_does_not_make_an_idle_nonzero_frame_cha
     while instance.raw_mut().update_pass() {}
     assert!(
         !instance
-            .prepare_flow_scripts(&mut factory)
+            .prepare_host_scripts(&mut factory)
             .expect("prepare the File VM without initializing the listener"),
         "the listener-only fixture has no scripted artboard draw work"
     );
@@ -1719,7 +1719,7 @@ fn concrete_scripted_child_advance_forces_zero_keep_going_without_consuming_supp
         .expect("instantiate owning artboard");
     let mut factory = script_factory();
     owning_artboard
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("prepare the File VM");
     let root = owning_artboard
         .instantiate_view_model_instance(0)
@@ -2503,10 +2503,10 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         )
         .expect("public factory advance");
     let first = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("public_converter_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("public_converter_") => {
                 Some(name)
             }
             _ => None,
@@ -2532,11 +2532,11 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         .expect("steady public factory advance");
     assert!(
         instance
-            .drain_flow_host_commands()
+            .drain_host_commands()
             .into_iter()
             .all(|command| !matches!(
                 command,
-                LuaHostCommand::Trigger { ref name, .. }
+                ScriptHostCommand::Trigger { ref name, .. }
                     if name == "public_converter_generator"
                         || name == "public_converter_init"
             )),
@@ -2700,10 +2700,10 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         "each concrete ordinary DataBind occurrence owns a live table"
     );
     let first = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. }
+            ScriptHostCommand::Trigger { name, .. }
                 if name.starts_with("ordinary_generator_")
                     || name.starts_with("ordinary_init_")
                     || name.starts_with("ordinary_convert_enter_")
@@ -2739,11 +2739,11 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         .expect("steady ordinary-converter advance");
     assert!(
         instance
-            .drain_flow_host_commands()
+            .drain_host_commands()
             .into_iter()
             .all(|command| !matches!(
                 command,
-                LuaHostCommand::Trigger { ref name, .. }
+                ScriptHostCommand::Trigger { ref name, .. }
                     if name.starts_with("ordinary_generator_")
                         || name.starts_with("ordinary_init_")
             )),
@@ -2827,10 +2827,10 @@ fn ordinary_converter_replacement_is_visible_to_the_next_authored_bind_same_fram
     );
     assert_eq!(
         instance
-            .drain_flow_host_commands()
+            .drain_host_commands()
             .into_iter()
             .filter_map(|command| match command {
-                LuaHostCommand::Trigger { name, .. } if name.starts_with("replacement_") => {
+                ScriptHostCommand::Trigger { name, .. } if name.starts_with("replacement_") => {
                     Some(name)
                 }
                 _ => None,
@@ -2923,10 +2923,12 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("mount the first-root occurrence");
     let first = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => Some(name),
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => {
+                Some(name)
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -2952,10 +2954,12 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("rebind the retained occurrences to the second root");
     let rebound = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => Some(name),
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => {
+                Some(name)
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -3376,7 +3380,7 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("instantiate atomic-hydration machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap atomic-hydration scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -3396,10 +3400,10 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("retain converter table through the machine-owned scoped context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let creation_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
                 Some(name)
             }
             _ => None,
@@ -3453,10 +3457,10 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("rehydrate the retained converter table without a facade root fallback");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let rebind_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
                 Some(name)
             }
             _ => None,
@@ -3516,7 +3520,7 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
         .expect("instantiate retry-preflight machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap retry-preflight scripts");
 
     let valid_root = instance
@@ -3541,10 +3545,10 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("first converter lifetime reaches its rejecting init");
     let first_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
                 Some(name)
             }
             _ => None,
@@ -3577,10 +3581,10 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     rehydrate_script_listener_actions(&file, &mut machine, None, None, &mut factory_option)
         .expect("ordinary missing-input preflight remains inert");
     let unresolved_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
                 Some(name)
             }
             _ => None,
@@ -3612,10 +3616,10 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
         .expect("the regenerated table completes hydration and init");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let recovered_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
                 Some(name)
             }
             _ => None,
@@ -4055,7 +4059,7 @@ fn listener_init_failure_retries_during_constructor_initialization() {
         2,
     );
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap the file VM");
     let action_ids = machine
         .scripted_listener_actions()
@@ -4128,16 +4132,18 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
         .expect("instantiate cold-generator machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap cold-generator scripts");
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run cold then live listener initialization");
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name == "listener_cold_then_live" => Some(name),
+            ScriptHostCommand::Trigger { name, .. } if name == "listener_cold_then_live" => {
+                Some(name)
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -4189,16 +4195,16 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
         .expect("instantiate cold-table machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap cold-table scripts");
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("retain cold table through live ViewModel hydration");
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name == "listener_cold_table_live_init" => {
+            ScriptHostCommand::Trigger { name, .. } if name == "listener_cold_table_live_init" => {
                 Some(name)
             }
             _ => None,
@@ -4258,16 +4264,16 @@ fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
         .expect("instantiate constructor-order machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap constructor-order scripts");
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run the complete constructor lifecycle");
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. }
+            ScriptHostCommand::Trigger { name, .. }
                 if matches!(
                     name.as_str(),
                     "listener_preconverter_init" | "converter_bound"
@@ -4327,7 +4333,7 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
         .expect("construct machine without a DataContext");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap post-bind scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4341,10 +4347,10 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run explicit-bind lifecycle");
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. }
+            ScriptHostCommand::Trigger { name, .. }
                 if matches!(name.as_str(), "listener_postbind_init" | "converter_bound") =>
             {
                 Some(name)
@@ -4397,7 +4403,7 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("instantiate empty-listener machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap empty-listener scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4410,10 +4416,10 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, Some(&root))
         .expect("empty owned context keeps the listener unresolved");
     let cold_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
                 Some(name)
             }
             _ => None,
@@ -4434,10 +4440,10 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     rehydrate_script_listener_actions(&file, &mut machine, None, None, &mut factory_option)
         .expect("the same table hydrates after its owned context becomes live");
     let live_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
                 Some(name)
             }
             _ => None,
@@ -4496,7 +4502,7 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("instantiate empty-converter machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap empty-converter scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4520,10 +4526,10 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, Some(&root))
         .expect("empty owned context keeps the converter unresolved");
     let cold_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
                 Some(name)
             }
             _ => None,
@@ -4545,10 +4551,10 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("the same converter table hydrates from its owned context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let live_commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
                 Some(name)
             }
             _ => None,
@@ -4597,7 +4603,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         .expect("instantiate failed-hydration machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap failed-hydration VM");
     let action_id = machine
         .scripted_listener_actions()
@@ -4620,10 +4626,10 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         machine.pointer_down(&mut instance.raw, 50.0, 50.0, 1),
         "the pending listener still owns its C++ m_self table"
     );
-    assert!(instance.drain_flow_host_commands().iter().any(|command| {
+    assert!(instance.drain_host_commands().iter().any(|command| {
         matches!(
             command,
-            LuaHostCommand::Trigger { name, .. }
+            ScriptHostCommand::Trigger { name, .. }
                 if name == "pending_listener_performed"
         )
     }));
@@ -4639,10 +4645,10 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
             .scripted_listener_action_user_init_pending(action_id)
             .expect("completed deferred init state")
     );
-    assert!(instance.drain_flow_host_commands().iter().any(|command| {
+    assert!(instance.drain_host_commands().iter().any(|command| {
         matches!(
             command,
-            LuaHostCommand::Trigger { name, .. }
+            ScriptHostCommand::Trigger { name, .. }
                 if name == "deferred_listener_initialized"
         )
     }));
@@ -4677,7 +4683,7 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
         .expect("instantiate factoryless listener machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("register the protocol while the renderer factory is available");
 
     let mut no_factory = None;
@@ -4685,10 +4691,12 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
         .expect("generator/init are scripting-VM operations");
 
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("factoryless_listener_") => {
+            ScriptHostCommand::Trigger { name, .. }
+                if name.starts_with("factoryless_listener_") =>
+            {
                 Some(name)
             }
             _ => None,
@@ -4735,7 +4743,7 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
         .expect("instantiate factoryless retry machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("register retry protocol");
 
     let mut no_factory = None;
@@ -4745,10 +4753,10 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
         .expect("factoryless retry recreates and initializes");
 
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("factoryless_retry_") => {
+            ScriptHostCommand::Trigger { name, .. } if name.starts_with("factoryless_retry_") => {
                 Some(name)
             }
             _ => None,
@@ -4808,7 +4816,7 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
         .expect("instantiate factoryless converter machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("register converter protocol while the renderer factory is available");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4832,10 +4840,12 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
     .expect("factoryless converter retry recreates and initializes");
 
     let commands = instance
-        .drain_flow_host_commands()
+        .drain_host_commands()
         .into_iter()
         .filter_map(|command| match command {
-            LuaHostCommand::Trigger { name, .. } if name.starts_with("factoryless_converter_") => {
+            ScriptHostCommand::Trigger { name, .. }
+                if name.starts_with("factoryless_converter_") =>
+            {
                 Some(name)
             }
             _ => None,
@@ -4876,7 +4886,7 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
         .expect("instantiate public-update machine");
     let mut factory = script_factory();
     instance
-        .prepare_flow_scripts(&mut factory)
+        .prepare_host_scripts(&mut factory)
         .expect("bootstrap public-update VM");
     let root = instance
         .instantiate_view_model_instance(0)

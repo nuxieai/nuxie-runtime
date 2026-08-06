@@ -125,7 +125,7 @@ path = "crates/nuxie-scripting/src/vm/resource_limits.rs"
 category = "mixed-product-host"
 
 [[addition]]
-path = "crates/nuxie/src/flow_session.rs"
+path = "crates/nuxie-product/src/flow_session.rs"
 category = "product-host"
 
 [[addition]]

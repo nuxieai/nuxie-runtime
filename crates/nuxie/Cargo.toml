@@ -11,6 +11,7 @@ default = ["renderer", "js-host-seed"]
 js-host-seed = ["nuxie-runtime/js-host-seed", "nuxie-scripting?/js-host-seed"]
 renderer = ["dep:nuxie-renderer"]
 threading = ["nuxie-runtime/threading"]
+test-support = []
 scripting = [
     "dep:ed25519-dalek",
     "dep:nux-container",

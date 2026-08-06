@@ -7,13 +7,11 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use nuxie::{
-    File,
-    flow_session::{
-        FlowInstanceId, FlowInstanceRef, FlowNewInstance, FlowOperation, FlowScalarValue,
-        FlowSession, FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch, FlowStateChangeValue,
-        FlowStateMutation, FlowValue, FlowValueArena, FlowValueId, FlowValueType,
-    },
+use nuxie::File;
+use nuxie_product::flow_session::{
+    FlowInstanceId, FlowInstanceRef, FlowNewInstance, FlowOperation, FlowScalarValue, FlowSession,
+    FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch, FlowStateChangeValue,
+    FlowStateMutation, FlowValue, FlowValueArena, FlowValueId, FlowValueType,
 };
 
 fn external_fixture(name: &str) -> Vec<u8> {
@@ -178,8 +176,8 @@ fn list_index_properties_round_trip_without_becoming_enums() {
 
     assert!(matches!(
         result.outputs.as_slice(),
-        [nuxie::flow_session::FlowOutput {
-            payload: nuxie::flow_session::FlowOutputPayload::StateChanged {
+        [nuxie_product::flow_session::FlowOutput {
+            payload: nuxie_product::flow_session::FlowOutputPayload::StateChanged {
                 value: Some(FlowStateChangeValue::Scalar(FlowScalarValue::ListIndex(7))),
                 origin_mutation_id: Some(41),
                 ..
@@ -188,7 +186,9 @@ fn list_index_properties_round_trip_without_becoming_enums() {
         }]
     ));
     let values = session
-        .perform(FlowOperation::Query(nuxie::flow_session::FlowQuery::Values))
+        .perform(FlowOperation::Query(
+            nuxie_product::flow_session::FlowQuery::Values,
+        ))
         .expect("query values")
         .values
         .expect("values");
@@ -233,8 +233,8 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         .expect("structural replacement result carries authoritative values");
     assert!(matches!(
         replacement.outputs.as_slice(),
-        [nuxie::flow_session::FlowOutput {
-            payload: nuxie::flow_session::FlowOutputPayload::StateChanged {
+        [nuxie_product::flow_session::FlowOutput {
+            payload: nuxie_product::flow_session::FlowOutputPayload::StateChanged {
                 instance_id: Some(id),
                 path,
                 value: Some(FlowStateChangeValue::ViewModelReference {
@@ -257,7 +257,9 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         .expect("replacement child root in result snapshot");
     assert_eq!(property_id(replacement_values, root, "child"), child_root);
     let values = session
-        .perform(FlowOperation::Query(nuxie::flow_session::FlowQuery::Values))
+        .perform(FlowOperation::Query(
+            nuxie_product::flow_session::FlowQuery::Values,
+        ))
         .expect("query values")
         .values
         .expect("values");
@@ -281,7 +283,9 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         }))
         .expect("mutate shared child");
     let values = session
-        .perform(FlowOperation::Query(nuxie::flow_session::FlowQuery::Values))
+        .perform(FlowOperation::Query(
+            nuxie_product::flow_session::FlowQuery::Values,
+        ))
         .expect("query shared values")
         .values
         .expect("values");
@@ -290,7 +294,7 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
 
     let before_catalog = session
         .perform(FlowOperation::Query(
-            nuxie::flow_session::FlowQuery::Catalog,
+            nuxie_product::flow_session::FlowQuery::Catalog,
         ))
         .expect("query catalog")
         .catalog
@@ -319,14 +323,16 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         .expect_err("wrong-schema replacement must fail");
     assert_eq!(error.kind(), FlowSessionErrorKind::Conflict);
     let values = session
-        .perform(FlowOperation::Query(nuxie::flow_session::FlowQuery::Values))
+        .perform(FlowOperation::Query(
+            nuxie_product::flow_session::FlowQuery::Values,
+        ))
         .expect("query rolled-back values")
         .values
         .expect("values");
     assert_eq!(string_property(&values, child, "label"), "shared");
     let catalog = session
         .perform(FlowOperation::Query(
-            nuxie::flow_session::FlowQuery::Catalog,
+            nuxie_product::flow_session::FlowQuery::Catalog,
         ))
         .expect("query rolled-back catalog")
         .catalog

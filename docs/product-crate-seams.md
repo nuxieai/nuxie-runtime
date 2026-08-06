@@ -15,12 +15,12 @@ nuxie-browser-adapter --+----> nuxie-renderer
 nuxie-apple-adapter ----+----> nuxie-renderer
 ```
 
-`nuxie` remains mixed only while Flow lives there. Scene/SceneTx, generated
-authoring vocabulary, lowering, transactions, export, remounting, stable
-identity, and authored observations are owned by nuxie-dev's
-`nuxie-authoring` crate. Protected baseline, portable-ABI, replay, oracle,
-fuzz, golden, and performance packages may not add an upward dependency on an
-authoring or product package.
+Flow now lives in `nuxie-product`; the shipping `nuxie` facade contains no Flow
+module or product dependency. Scene/SceneTx, generated authoring vocabulary,
+lowering, transactions, export, remounting, stable identity, and authored
+observations are owned by nuxie-dev's `nuxie-authoring` crate. Protected
+baseline, portable-ABI, replay, oracle, fuzz, golden, and performance packages
+may not add an upward dependency on an authoring or product package.
 
 ## Package ownership and interface
 
@@ -54,12 +54,17 @@ The full selector is the ordinary whole-workspace build.
 
 ## Temporary compatibility paths
 
-Existing callers continue to compile during the migration:
+Two compatibility paths remain for UNIV-1634 to remove:
 
-- `nuxie::flow_session::*` is identical to `nuxie_product::*` until UNIV-1630;
-This is a temporary re-export, not a duplicate adapter. Later tickets move the
-Flow implementation once and remove the lower compatibility path after all
-callers have switched.
+- `nuxie_product::*` re-exports `nuxie_product::flow_session::*` for callers
+  that adopted the initial crate seam before the physical move.
+- `nuxie` includes the product-owned source only in its scripting unit-test
+  build so the existing white-box listener lifecycle suite can keep exercising
+  the product transaction boundary. The shipping library does not compile or
+  export this module; the closeout moves those tests behind public host seams.
+
+The former `nuxie::flow_session` shipping path is removed. Product consumers
+must depend on `nuxie-product` directly.
 
 UNIV-1627 completed the authoring cut: the runtime workspace no longer owns an
 authoring package or exports Scene symbols. `nuxie-binary` exposes authored

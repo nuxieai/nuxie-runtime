@@ -30,8 +30,8 @@ inside the timed boundary.
   `NullLogicalRenderer`. Both sides execute ten 1600x1600 begin/draw/flush
   frames, include logical planning and typed shadow-buffer writes, and omit
   final GPU submission. They remain directional, however: pinned C++
-  `RenderContextNULL` advertises `rasterOrdering=false`, while the Rust workload
-  explicitly configures `ClockwiseAtomic`. Equal capability negotiation is
+  `RenderContextNULL` selects `RasterOrdering`, while the Rust workload
+  explicitly configures `ClockwiseAtomic`. Equal interlock-mode selection is
   tracked by [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727). The
   [dated resolution record](evidence/upstream-draw-microbenchmark-blocker-2026-08-06.md)
   maps the production seam, the remaining mismatch, and regression coverage.
@@ -48,7 +48,9 @@ rule to clockwise, matching upstream.
 The two bbox arrays and `paper.riv` are deterministic byte conversions of the
 upstream generated headers. `make microbench-gate` parses `REGISTER_BENCH`
 directly from the pinned C++ sources, requires exactly the declared 20 cases,
-checks every benchmark source hash, and checks fixture conversions and hashes.
+checks every benchmark source hash, verifies the pinned `RenderContextNULL`
+capability source still enables RasterOrdering, and checks fixture conversions
+and hashes.
 
 ## Reproducible run
 

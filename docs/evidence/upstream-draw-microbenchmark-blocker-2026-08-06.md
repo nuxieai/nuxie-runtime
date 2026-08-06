@@ -18,8 +18,9 @@ Pinned C++ `tests/bench/draw_pls_path.cpp` measures ten repetitions of:
 The C++ null adapter skips only final GPU submission. Production flush still
 performs logical layout, retained allocation growth, shadow-buffer mapping,
 typed path/paint/contour/gradient/tessellation/triangle/draw-list writes,
-rewind, and per-frame teardown. The pinned Null backend reports
-`PlatformFeatures::rasterOrdering=false`.
+rewind, and per-frame teardown. Its pinned `RenderContextNULL` capability
+source enables `supportsRasterOrderingMode`, so the default frame selects
+`RasterOrdering`.
 
 Rust Criterion constructs `NullFrameWorkload` once outside the measured
 closure. Construction captures the same paths, fill rules, authored paint
@@ -38,8 +39,8 @@ retained C++ context and its allocation-growth behavior. Rust's null adapter
 is the terminal consumer of the production typed resource output and performs
 no WebGPU device, encoder, pipeline, or submission work. It currently runs
 with an explicit `ClockwiseAtomic` configuration. Because that differs from
-the upstream Null backend's capability-selected interlock mode, the two raw
-timings are useful directionally but their quotient is not a valid speed ratio.
+the upstream `RenderContextNULL` `RasterOrdering` selection, the two raw timings
+are useful directionally but their quotient is not a valid speed ratio.
 
 ## Production seam evidence
 
@@ -66,7 +67,9 @@ writes, or teardown and must not be substituted for the production Null seam.
 ## Evidence contract
 
 `make microbench-gate` verifies the exact 20-case registry, pinned upstream
-source hashes/ref, fixture conversions, and local Criterion registrations.
+benchmark and `RenderContextNULL` capability source hashes/ref, the upstream
+RasterOrdering capability assignment, fixture conversions, and local Criterion
+registrations.
 `make microbench-run` refuses dirty or blocked inventories, builds the C++
 benchmark into the sealed run directory from the validated clean pinned
 checkout's committed archive, and records the committed Rust source revision, benchmark-content

@@ -46,6 +46,8 @@ class Dataset(NamedTuple):
 class Inventory(NamedTuple):
     schema: str
     upstream_ref: str
+    draw_capability_source: str
+    draw_capability_source_sha256: str
     cases: list[Case]
     datasets: list[Dataset]
 
@@ -121,7 +123,14 @@ def load_inventory(path: pathlib.Path) -> Inventory:
         )
         for dataset in raw.get("dataset", [])
     ]
-    return Inventory(raw["schema"], raw["upstream_ref"], cases, datasets)
+    return Inventory(
+        raw["schema"],
+        raw["upstream_ref"],
+        raw["draw_capability_source"],
+        raw["draw_capability_source_sha256"],
+        cases,
+        datasets,
+    )
 
 
 def check_dataset(repo_root: pathlib.Path, dataset: Dataset) -> None:
@@ -205,6 +214,24 @@ def check_upstream_case_contract(upstream: pathlib.Path, inventory: Inventory) -
             raise ContractError(
                 f"{case.source} sha256 mismatch: expected {case.source_sha256}, got {actual}"
             )
+    capability_source = upstream / inventory.draw_capability_source
+    if not capability_source.is_file():
+        raise ContractError(
+            f"missing pinned upstream draw capability source: "
+            f"{inventory.draw_capability_source}"
+        )
+    actual = sha256(capability_source)
+    if actual != inventory.draw_capability_source_sha256:
+        raise ContractError(
+            f"{inventory.draw_capability_source} sha256 mismatch: "
+            f"expected {inventory.draw_capability_source_sha256}, got {actual}"
+        )
+    if "m_platformFeatures.supportsRasterOrderingMode = true;" not in (
+        capability_source.read_text()
+    ):
+        raise ContractError(
+            "pinned upstream RenderContextNULL must enable RasterOrdering"
+        )
 
 
 def parse_bbox_header(path: pathlib.Path, expected_count: int) -> bytes:

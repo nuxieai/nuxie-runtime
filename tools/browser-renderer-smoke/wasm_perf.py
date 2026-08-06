@@ -665,20 +665,32 @@ def verify_config_against_seal(
 def verify_browser_measurement_contract(
     provenance: dict[str, Any], browser: dict[str, Any]
 ) -> None:
-    expected = {
-        **provenance["measurement"],
-        "fixtures": [
-            {
-                key: fixture[key]
-                for key in ("id", "bytes", "sha256", "sample_seconds")
-            }
-            for fixture in provenance["fixtures"].values()
-        ],
+    measurement = browser.get("measurement")
+    if not isinstance(measurement, dict):
+        raise ContractError("browser results omitted measurement contract")
+    current_measurement = {
+        key: measurement.get(key) for key in ("repeat", "runs", "warmups")
     }
-    if browser.get("measurement") != expected:
+    if current_measurement != provenance["measurement"]:
         raise ContractError(
             "browser measurement contract differs from sealed measurement: "
-            f"sealed={expected!r} browser={browser.get('measurement')!r}"
+            f"sealed={provenance['measurement']!r} browser={current_measurement!r}"
+        )
+    fixtures = measurement.get("fixtures")
+    if not isinstance(fixtures, list):
+        raise ContractError("browser measurement contract omitted fixtures")
+    current_by_id = {fixture.get("id"): fixture for fixture in fixtures}
+    expected_by_id = {
+        fixture_id: {
+            key: fixture[key]
+            for key in ("id", "bytes", "sha256", "sample_seconds")
+        }
+        for fixture_id, fixture in provenance["fixtures"].items()
+    }
+    if len(current_by_id) != len(fixtures) or current_by_id != expected_by_id:
+        raise ContractError(
+            "browser measurement contract differs from sealed measurement: "
+            f"sealed={expected_by_id!r} browser={current_by_id!r}"
         )
 
 

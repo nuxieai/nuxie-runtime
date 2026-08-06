@@ -505,12 +505,44 @@ def _artifact_record(path: Path) -> dict[str, Any]:
     }
 
 
+def _seal_fixture_records(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
+    sealed: dict[str, Any] = {}
+    for fixture in fixtures:
+        fixture_id = fixture.get("id")
+        if not isinstance(fixture_id, str) or not fixture_id:
+            raise ContractError("measured fixture omitted identity")
+        if fixture_id in sealed:
+            raise ContractError(f"duplicate measured fixture identity: {fixture_id}")
+        source = _artifact_record(Path(fixture["path"]))
+        staged = _artifact_record(Path(fixture["staged_path"]))
+        expected_identity = {
+            "bytes": fixture.get("bytes"),
+            "sha256": fixture.get("sha256"),
+        }
+        for label, record in (("source", source), ("staged", staged)):
+            actual_identity = {key: record[key] for key in ("bytes", "sha256")}
+            if actual_identity != expected_identity:
+                raise ContractError(
+                    f"measured fixture identity mismatch: {fixture_id} {label} "
+                    f"expected={expected_identity!r} current={actual_identity!r}"
+                )
+        sealed[fixture_id] = {
+            "id": fixture_id,
+            "bytes": expected_identity["bytes"],
+            "sha256": expected_identity["sha256"],
+            "source_path": source["path"],
+            "staged_path": staged["path"],
+        }
+    return sealed
+
+
 def seal_run_provenance(
     sources: dict[str, str],
     repo_root: Path,
     rive_runtime_dir: Path,
     *,
     artifacts: dict[str, Path],
+    fixtures: list[dict[str, Any]] | None = None,
     allowed_outputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     verify_source_provenance(
@@ -524,6 +556,7 @@ def seal_run_provenance(
         "artifacts": {
             name: _artifact_record(path) for name, path in sorted(artifacts.items())
         },
+        "fixtures": _seal_fixture_records(fixtures or []),
     }
 
 
@@ -546,6 +579,41 @@ def verify_run_provenance(
             raise ContractError(
                 f"measured artifact changed after seal: {name} "
                 f"expected={expected!r} current={current!r}"
+            )
+    for fixture_id, expected in sealed.get("fixtures", {}).items():
+        expected_identity = {key: expected[key] for key in ("bytes", "sha256")}
+        for label, path_key in (("source", "source_path"), ("staged", "staged_path")):
+            current = _artifact_record(Path(expected[path_key]))
+            current_identity = {key: current[key] for key in ("bytes", "sha256")}
+            if current_identity != expected_identity:
+                raise ContractError(
+                    f"sealed fixture changed after seal: {fixture_id} {label} "
+                    f"expected={expected_identity!r} current={current_identity!r}"
+                )
+
+
+def verify_browser_fixture_identities(
+    sealed_fixtures: dict[str, Any], browser: dict[str, Any]
+) -> None:
+    loaded_fixtures = browser.get("loaded_fixtures")
+    if not isinstance(loaded_fixtures, dict):
+        raise ContractError("browser results omitted loaded fixture identities")
+    if set(loaded_fixtures) != set(sealed_fixtures):
+        raise ContractError(
+            "browser loaded fixture identities do not match sealed fixtures: "
+            f"sealed={sorted(sealed_fixtures)} loaded={sorted(loaded_fixtures)}"
+        )
+    for fixture_id, expected in sealed_fixtures.items():
+        loaded = loaded_fixtures[fixture_id]
+        if not isinstance(loaded, dict) or set(loaded) != {"bytes", "sha256"}:
+            raise ContractError(
+                f"browser loaded fixture identity is invalid: {fixture_id} {loaded!r}"
+            )
+        expected_identity = {key: expected[key] for key in ("bytes", "sha256")}
+        if loaded != expected_identity:
+            raise ContractError(
+                f"browser loaded fixture identity mismatch: {fixture_id} "
+                f"expected={expected_identity!r} loaded={loaded!r}"
             )
 
 
@@ -574,7 +642,13 @@ def prepare_run(args: argparse.Namespace) -> None:
             url_path = staged_path.resolve().relative_to(repo_root)
         except ValueError as error:
             raise ContractError("staging directory must be inside the repository root") from error
-        staged_fixtures.append({**fixture, "url": f"/{url_path.as_posix()}"})
+        staged_fixtures.append(
+            {
+                **fixture,
+                "staged_path": str(staged_path.resolve()),
+                "url": f"/{url_path.as_posix()}",
+            }
+        )
     identity = {
         "git_sha": source_provenance["repo_sha"],
         "git_tree_sha": source_provenance["repo_tree_sha"],
@@ -614,12 +688,19 @@ def seal_run(args: argparse.Namespace) -> None:
             "wasm": args.wasm_artifact,
             "wasm_bindgen_js": args.wasm_bindgen_js,
         },
+        fixtures=config["fixtures"],
         allowed_outputs=[path.resolve() for path in args.allowed_output],
     )
     config["provenance"] = sealed
     config["identity"]["artifacts"] = {
         name: {key: record[key] for key in ("bytes", "sha256")}
         for name, record in sealed["artifacts"].items()
+    }
+    config["identity"]["fixtures"] = {
+        fixture_id: {
+            key: record[key] for key in ("bytes", "sha256")
+        }
+        for fixture_id, record in sealed["fixtures"].items()
     }
     args.config.write_text(canonical_json(config), encoding="utf-8")
 
@@ -658,7 +739,9 @@ def _native_runs(config: dict[str, Any], runner: Path) -> dict[str, list[dict[st
             command = [
                 str(runner),
                 "--file",
-                fixture["path"],
+                fixture["staged_path"],
+                "--expected-file-sha256",
+                fixture["sha256"],
                 "--samples",
                 str(fixture["sample_seconds"]),
                 "--benchmark",
@@ -738,7 +821,11 @@ def finalize_run(args: argparse.Namespace) -> None:
     if browser.get("schema") != "nuxie-wasm-perf-browser-raw-v1":
         raise ContractError("unsupported browser results schema")
     provenance = config.get("provenance")
-    if not isinstance(provenance, dict) or not provenance.get("artifacts"):
+    if (
+        not isinstance(provenance, dict)
+        or not provenance.get("artifacts")
+        or not provenance.get("fixtures")
+    ):
         raise ContractError("wasm perf config omitted sealed run provenance")
     allowed_outputs = [path.resolve() for path in args.allowed_output]
     verify_run_provenance(
@@ -747,6 +834,7 @@ def finalize_run(args: argparse.Namespace) -> None:
         args.rive_runtime_dir.resolve(),
         allowed_outputs=allowed_outputs,
     )
+    verify_browser_fixture_identities(provenance["fixtures"], browser)
     expected_native = Path(provenance["artifacts"]["native_runner"]["path"])
     if args.native_runner.resolve() != expected_native:
         raise ContractError(

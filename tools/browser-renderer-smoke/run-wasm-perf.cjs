@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const { chromium } = require("playwright");
+const { assertLoadedFixtureIdentity } = require("./wasm-perf-driver-lib.cjs");
 
 const [baseUrl, configPath, outputPath] = process.argv.slice(2);
 if (!baseUrl || !configPath || !outputPath) {
@@ -33,18 +34,29 @@ if (browserMode === "chrome") {
     }
 
     const fixtures = {};
+    const loadedFixtures = {};
     for (const fixture of config.fixtures) {
       console.log(`measuring wasm fixture ${fixture.id}`);
-      const bytes = await page.evaluate(async (url) => {
+      const loaded = await page.evaluate(async (url) => {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`fixture fetch failed ${response.status} ${url}`);
-        return new Uint8Array(await response.arrayBuffer());
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        const sha256 = Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        return {
+          bytes,
+          identity: { bytes: bytes.byteLength, sha256 },
+        };
       }, fixture.url);
+      assertLoadedFixtureIdentity(fixture.id, fixture, loaded.identity);
+      loadedFixtures[fixture.id] = loaded.identity;
       const runs = await page.evaluate(
         async ({ bytes, repeat, sampleSeconds, warmups, runs }) =>
           window.measureWasmFixtureRuns({ bytes, repeat, sampleSeconds, warmups, runs }),
         {
-          bytes,
+          bytes: loaded.bytes,
           repeat: config.repeat,
           sampleSeconds: fixture.sample_seconds,
           warmups: config.warmups,
@@ -62,6 +74,7 @@ if (browserMode === "chrome") {
       schema: "nuxie-wasm-perf-browser-raw-v1",
       browser: browserMode,
       browser_version: browser.version(),
+      loaded_fixtures: loadedFixtures,
       fixtures,
     };
     fs.writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`);

@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import wasm_perf
 
@@ -112,6 +113,214 @@ class SourceProvenanceTests(unittest.TestCase):
                 self.runtime,
                 allowed_outputs=allowed,
             )
+
+    def test_seals_staged_fixture_and_rejects_mutation_after_seal(self):
+        generated = self.repo / "generated"
+        generated.mkdir()
+        native = generated / "native-runner"
+        native.write_bytes(b"native-v1")
+        source_fixture = self.runtime / "fixture.riv"
+        staged_fixture = generated / "fixture.riv"
+        staged_fixture.write_bytes(source_fixture.read_bytes())
+        fixture_bytes = source_fixture.read_bytes()
+        fixture = {
+            "id": "fixture",
+            "path": str(source_fixture),
+            "staged_path": str(staged_fixture),
+            "bytes": len(fixture_bytes),
+            "sha256": hashlib.sha256(fixture_bytes).hexdigest(),
+        }
+        allowed = [generated]
+        sources = wasm_perf.capture_source_provenance(
+            self.repo, self.runtime, allowed_outputs=allowed
+        )
+        sealed = wasm_perf.seal_run_provenance(
+            sources,
+            self.repo,
+            self.runtime,
+            artifacts={"native_runner": native},
+            fixtures=[fixture],
+            allowed_outputs=allowed,
+        )
+
+        staged_fixture.write_bytes(b"mutated")
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "sealed fixture changed.*fixture.*staged"
+        ):
+            wasm_perf.verify_run_provenance(
+                sealed,
+                self.repo,
+                self.runtime,
+                allowed_outputs=allowed,
+            )
+
+    def test_rejects_browser_bytes_mutated_during_measurement_then_restored(self):
+        expected_bytes = b"fixture-v1"
+        expected = {
+            "fixture": {
+                "id": "fixture",
+                "bytes": len(expected_bytes),
+                "sha256": hashlib.sha256(expected_bytes).hexdigest(),
+                "source_path": "/runtime/fixture.riv",
+                "staged_path": "/target/fixture.riv",
+            }
+        }
+        browser = {
+            "loaded_fixtures": {
+                "fixture": {
+                    "bytes": len(b"fixture-v2"),
+                    "sha256": hashlib.sha256(b"fixture-v2").hexdigest(),
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "browser loaded fixture identity mismatch.*fixture"
+        ):
+            wasm_perf.verify_browser_fixture_identities(expected, browser)
+
+    def test_accepts_multiple_browser_fixtures_with_exact_sealed_identities(self):
+        sealed = {}
+        loaded = {}
+        for fixture_id, contents in (("large", b"large"), ("small", b"small")):
+            identity = {
+                "bytes": len(contents),
+                "sha256": hashlib.sha256(contents).hexdigest(),
+            }
+            sealed[fixture_id] = {
+                "id": fixture_id,
+                **identity,
+                "source_path": f"/runtime/{fixture_id}.riv",
+                "staged_path": f"/target/{fixture_id}.riv",
+            }
+            loaded[fixture_id] = identity
+
+        wasm_perf.verify_browser_fixture_identities(
+            sealed, {"loaded_fixtures": loaded}
+        )
+
+    def test_finalize_accepts_multiple_fixtures_with_one_sealed_byte_identity(self):
+        args, fixture_ids = self._finalize_fixture_run(fixture_count=2)
+
+        wasm_perf.finalize_run(args)
+
+        report = json.loads(args.output.read_text(encoding="utf-8"))
+        self.assertEqual([row["id"] for row in report["fixtures"]], fixture_ids)
+
+    def test_finalize_rejects_fixture_mutated_during_native_measurement(self):
+        args, _fixture_ids = self._finalize_fixture_run(
+            fixture_count=1, mutate_during_native=True
+        )
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "sealed fixture changed.*fixture-0.*staged"
+        ):
+            wasm_perf.finalize_run(args)
+
+    def _finalize_fixture_run(
+        self, *, fixture_count: int, mutate_during_native: bool = False
+    ) -> tuple[SimpleNamespace, list[str]]:
+        generated = self.repo / "generated"
+        generated.mkdir()
+        runner = generated / "native-runner"
+        mutation = 'printf "mutated" > "$2"\n' if mutate_during_native else ""
+        runner.write_text(
+            "#!/bin/sh\n"
+            "set -eu\n"
+            f"{mutation}"
+            "printf 'rive-golden-benchmark-v1\\n"
+            "elapsed_ms=1\\ntotal_ms=1\\nadvance_ms=0.4\\ninput_ms=0\\n"
+            "prepare_ms=0\\ndraw_ms=0.5\\nbookkeeping_ms=0.1\\nsegments=1\\n"
+            "scene_kind=state_machine\\ndefault_state_machine_id=0\\n"
+            "view_model_initialization=schema-default\\n'\n",
+            encoding="utf-8",
+        )
+        runner.chmod(0o755)
+        source_fixture = self.runtime / "fixture.riv"
+        fixture_bytes = source_fixture.read_bytes()
+        fixture_identity = {
+            "bytes": len(fixture_bytes),
+            "sha256": hashlib.sha256(fixture_bytes).hexdigest(),
+        }
+        fixtures = []
+        browser_runs = {}
+        loaded_fixtures = {}
+        fixture_ids = []
+        for index in range(fixture_count):
+            fixture_id = f"fixture-{index}"
+            staged = generated / f"{fixture_id}.riv"
+            staged.write_bytes(fixture_bytes)
+            fixtures.append(
+                {
+                    "id": fixture_id,
+                    **fixture_identity,
+                    "path": str(source_fixture),
+                    "staged_path": str(staged),
+                    "relative_path": "fixture.riv",
+                    "sample_seconds": 0.0,
+                }
+            )
+            browser_runs[fixture_id] = [timing(2.0, 0.8, 1.0, 1)]
+            loaded_fixtures[fixture_id] = fixture_identity
+            fixture_ids.append(fixture_id)
+        allowed = [generated]
+        sources = wasm_perf.capture_source_provenance(
+            self.repo, self.runtime, allowed_outputs=allowed
+        )
+        sealed = wasm_perf.seal_run_provenance(
+            sources,
+            self.repo,
+            self.runtime,
+            artifacts={"native_runner": runner},
+            fixtures=fixtures,
+            allowed_outputs=allowed,
+        )
+        config = generated / "config.json"
+        config.write_text(
+            wasm_perf.canonical_json(
+                {
+                    "schema": "nuxie-wasm-perf-config-v1",
+                    "repeat": 1,
+                    "runs": 1,
+                    "warmups": 0,
+                    "identity": {
+                        "git_sha": sources["repo_sha"],
+                        "rive_runtime_sha": sources["rive_runtime_sha"],
+                        "browser": "pending",
+                        "build_profile": "release",
+                    },
+                    "provenance": sealed,
+                    "fixtures": fixtures,
+                }
+            ),
+            encoding="utf-8",
+        )
+        browser_results = generated / "browser.json"
+        browser_results.write_text(
+            wasm_perf.canonical_json(
+                {
+                    "schema": "nuxie-wasm-perf-browser-raw-v1",
+                    "browser": "chromium",
+                    "browser_version": "test",
+                    "loaded_fixtures": loaded_fixtures,
+                    "fixtures": browser_runs,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return (
+            SimpleNamespace(
+                config=config,
+                browser_results=browser_results,
+                native_runner=runner,
+                repo_root=self.repo,
+                rive_runtime_dir=self.runtime,
+                allowed_output=allowed,
+                output=generated / "report.json",
+                markdown=None,
+            ),
+            fixture_ids,
+        )
 
 
 class CorpusSelectionTests(unittest.TestCase):

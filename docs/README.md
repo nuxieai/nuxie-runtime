@@ -20,6 +20,7 @@ ongoing workflows, and every document here supports one of them:
 | `command-queue-test-ledger.md` | Complete CommandQueue/CommandServer upstream-test correspondence, including the S4-45 blob disposition. |
 | `pure-runtime-boundary.md` | Ratified ownership and dependency-direction contract separating the ported runtime baseline from product, editor, browser, and Apple layers. |
 | `product-crate-seams.md` | Transitional package ownership, narrow interfaces, build selectors, and compatibility paths for the product-surface extraction. |
+| `project-data-runtime-seam.md` | Decision and evidence for the product-owned ProjectDO evaluator and the neutral external-data adapter retained by the baseline bind graph. |
 | `flow-command-equivalence.md` | Measured decision record showing why CommandServer does not replace Flow's product transaction contract. |
 | `side-channel-format.md` | Wire format of the golden-stream runtime side channel (settled bool, hit results, events, semantics). Implemented by both golden runners. |
 | `SIZE.md` | The blocking 9 MiB SDK size budget and its measurement method. |

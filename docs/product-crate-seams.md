@@ -10,6 +10,7 @@ errors, and behavior.
 ```text
 nuxie-dev authoring ----+----> nuxie baseline facade ----> baseline crates
 nuxie-product ----------+
+nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
 nuxie-product-scripting-+
                         |
 nuxie-browser-adapter --+----> nuxie-renderer
@@ -21,6 +22,9 @@ module, ordered host effects, and their quotas live in
 `nuxie-product-scripting`. The shipping `nuxie` facade contains no Flow module
 or product dependency; it owns the neutral host-extension interface and an
 opaque exact-byte capability consumed during baseline VM setup.
+ProjectDO's value model, program compiler, evaluator, and adapter live in
+`nuxie-project-data`; the baseline owns only the product-neutral runtime-value,
+program, state, resolver, and registry interfaces used by the bind graph.
 Scene/SceneTx, generated authoring vocabulary,
 lowering, transactions, export, remounting, stable identity, and authored
 observations are owned by nuxie-dev's `nuxie-authoring` crate. Protected
@@ -32,6 +36,7 @@ may not add an upward dependency on an authoring or product package.
 | Package | Owns during migration | Direct workspace dependency | Deliberately does not expose |
 |---|---|---|---|
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
+| `nuxie-project-data` | ProjectDO value model, program compiler/evaluator, encoded artifact envelope, and adapter registration | `nuxie-runtime` with defaults disabled | Baseline bind-graph internals, editor authoring, Flow, or platform ABI policy |
 | `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |

@@ -24,7 +24,7 @@ every file-import or locally-authored-runtime adoption path.
 | Allocation | Decode happens once per external script asset in `RuntimeDataBindGraphConverterBuildCache`. Runtime-to-product translation allocates only for owned strings, lists, objects, and value paths; scalar values remain copy-only. List materialization is capped at 10,000 items before allocation. |
 | Dispatch/performance | Payload classification scans the small installed-registry list, then decode and conversion each use one trait-object dispatch. Repeated references to one asset share one decoded `Arc`; the focused cache test observes one scripting catalog build and one external program decode for two converter references. |
 | Errors | An unclaimed payload remains an ordinary script. Once a registry claims a payload, a decode error produces `Unsupported` and never falls through to Luau. Product evaluator errors cross the seam as opaque strings and become a runtime execution failure at the bind boundary. |
-| State retention | `RuntimeExternalDataState` defines clone, clear, and active-state behavior. The adapter test drives a stateful interpolation, clones the in-flight state, verifies identical midpoint output, and verifies clearing deactivates it. A retained-operand runtime test verifies live resolver reads and bind dirt propagation. |
+| State retention | `RuntimeExternalDataState` defines clone, clear, and active-state behavior. The adapter test drives a stateful interpolation, clones the in-flight state, verifies identical midpoint output, and verifies clearing deactivates it. `nuxie-product/tests/project_data_bind_graph.rs` then constructs a real `NUXPCV1` artifact, adopts it through the product entry point, binds its authored ViewModel source into the live graph, and observes the retained interpolation at 0%, 50%, and 100%. A retained-operand runtime test separately verifies live resolver reads and bind dirt propagation. |
 
 ## Boundary guarantees
 
@@ -34,5 +34,8 @@ every file-import or locally-authored-runtime adoption path.
   depends upward on the product crate.
 - Pure evaluator tests live with `nuxie-project-data`. Baseline seam tests use a
   deliberately unrelated fake registry and program.
+- The product integration suite composes the real encoded ProjectData adapter
+  with the live baseline bind graph; it is the parity guard for adapter
+  registration, payload decode, output application, and retained state.
 - `serde` and `serde_json` are no longer production dependencies of
   `nuxie-runtime`; they remain dev dependencies for C++ oracle tests.

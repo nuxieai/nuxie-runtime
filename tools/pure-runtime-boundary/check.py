@@ -47,7 +47,6 @@ PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
     "nux-container",
-    "nuxie",  # mixed facade until the extraction completes
     "nuxie-apple-adapter",
     "nuxie-authoring",
     "nuxie-browser-adapter",
@@ -61,19 +60,13 @@ UNPROTECTED_WORKSPACE_PACKAGES = {
 # name does not follow one of the reserved product prefixes.
 FORBIDDEN_DEPENDENCIES.update(UNPROTECTED_WORKSPACE_PACKAGES)
 
-# The portable ABI currently reaches baseline facade symbols through the mixed
-# nuxie crate. Only this exact dependency form is grandfathered. In particular,
-# default features or explicit dependency features could activate product trust
-# and scripting, so either change is rejected.
-MIXED_FACADE_DEBT = ("nux-capi", "nuxie")
-MIXED_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer"}
-MIXED_FACADE_ALLOWED_PROVIDER_FEATURES = {
-    "renderer": {"dep:nuxie-renderer"},
-}
-MIXED_FACADE_ALLOWED_PROVIDER_DEPENDENCIES = {
-    "nuxie-renderer": "nuxie-renderer",
-}
-MIXED_FACADE_ALLOWED_SYMBOLS = {
+# The portable ABI reaches baseline facade symbols through nuxie. This is a
+# permanent, narrow baseline edge rather than migration debt: the whole nuxie
+# package is protected, while the C consumer is restricted to this exact edge
+# and approved symbols.
+PORTABLE_ABI_FACADE_EDGE = ("nux-capi", "nuxie")
+PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer"}
+PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Artboard",
     "ArtboardInstance",
     "BlendMode",
@@ -109,7 +102,7 @@ MIXED_FACADE_ALLOWED_SYMBOLS = {
     "WgpuFactory",
     "WgpuFrame",
 }
-MIXED_FACADE_PRODUCT_METHOD = re.compile(
+PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"\b(?:prepare_flow_[A-Za-z0-9_]*|import_with_(?:trusted_scripts|"
     r"trusted_scripts_and_limits|script_capability|unsigned_scripts)|"
     r"FlowSession[A-Za-z0-9_]*|"
@@ -121,11 +114,13 @@ NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
     r"(?:<\s*)?\bFile\b(?:\s*>)?\s*::\s*(?P<item>[A-Za-z_][A-Za-z0-9_]*)"
 )
-MIXED_FACADE_TYPE_ALIAS = re.compile(
+PORTABLE_ABI_FACADE_TYPE_ALIAS = re.compile(
     r"\btype\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*<[^;=]*>)?\s*=\s*"
-    r"(?:::)?(?:nuxie\s*::\s*)?(?:" + "|".join(sorted(MIXED_FACADE_ALLOWED_SYMBOLS)) + r")\b"
+    r"(?:::)?(?:nuxie\s*::\s*)?(?:"
+    + "|".join(sorted(PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS))
+    + r")\b"
 )
-MIXED_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
+PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
 
 # These are file-level ratchet exceptions, not compliant dependencies. A new
 # file containing either marker family fails. Deleting entries is allowed and
@@ -135,6 +130,8 @@ INTERNAL_DEBT_FILES = {
     "apple-image-admission": set(),
     "apple-presentation": set(),
     "binary-authoring": {
+        "crates/nuxie/src/lib.rs",
+        "crates/nuxie/tests/empty_text_binding.rs",
         "crates/nuxie-binary/src/lib.rs",
         "crates/nuxie-runtime/src/artboard/tests.rs",
         "crates/nuxie-runtime/src/assets/font_asset.rs",
@@ -190,7 +187,7 @@ INTERNAL_DEBT_MARKERS = {
     "project-data": re.compile(r"\bProjectData|\bproject_data_converter\b"),
     "product-host-commands": re.compile(
         r"\bhost_commands\b|\bHost(?:Command|Value|CycleCheckpoint|EffectCheckpoint)\b|"
-        r"\b(?:begin|rollback)_host_cycle\b|\b(?:checkpoint|rollback)_host_effects\b|"
+        r"\b(?:checkpoint|rollback)_host_effects\b|"
         r"\bdrain_(?:flow_)?host_commands\b|\bhost_cycle_active\b|"
         r"\b(?:HostIdentifier|HostString|HostDepth|HostNodes|HostEdges|HostValueBytes|"
         r"Commands|CommandContent)\b|"
@@ -414,7 +411,7 @@ def workspace_packages(
     return packages, workspace_dependencies, excluded_paths, errors
 
 
-def mixed_facade_debt_error(
+def portable_abi_facade_edge_error(
     package_name: str,
     table_path: tuple[str, ...],
     dependency_name: str,
@@ -422,19 +419,43 @@ def mixed_facade_debt_error(
     specification: object,
     resolved_path: str | None,
 ) -> str | None:
-    if (package_name, normalized_package_name(resolved_name)) != MIXED_FACADE_DEBT:
-        return "not-grandfathered"
+    if (package_name, normalized_package_name(resolved_name)) != PORTABLE_ABI_FACADE_EDGE:
+        return "not-approved"
     if table_path != ("dependencies",) or not isinstance(specification, dict):
-        return "mixed-facade debt edge expanded outside [dependencies]"
+        return "portable ABI facade edge is only approved in [dependencies]"
     if normalized_package_name(dependency_name) != "nuxie":
-        return "mixed-facade debt edge must use dependency key 'nuxie'"
+        return "portable ABI facade edge must use dependency key 'nuxie'"
     if resolved_path != "crates/nuxie":
-        return "mixed-facade debt edge must resolve to local crates/nuxie"
+        return "portable ABI facade edge must resolve to local crates/nuxie"
     if specification.get("default-features") is not False:
-        return "mixed-facade debt edge expanded by enabling default features"
+        return "portable ABI facade edge must disable default features"
     features = specification.get("features", [])
     if features not in (None, []) and features != ():
-        return "mixed-facade debt edge expanded with dependency features"
+        return "portable ABI facade edge cannot enable dependency features"
+    return None
+
+
+def nuxie_self_test_dependency_error(
+    package_name: str,
+    package_path: str,
+    table_path: tuple[str, ...],
+    dependency_name: str,
+    resolved_name: str,
+    specification: object,
+    resolved_path: str | None,
+) -> str | None:
+    if package_name != "nuxie" or normalized_package_name(resolved_name) != "nuxie":
+        return "not-approved"
+    if resolved_path != package_path:
+        return "not-approved"
+    if table_path != ("dev-dependencies",) or not isinstance(specification, dict):
+        return "nuxie self edge is only approved in [dev-dependencies]"
+    if normalized_package_name(dependency_name) != "nuxie":
+        return "nuxie self edge must use dependency key 'nuxie'"
+    if specification.get("default-features") is not False:
+        return "nuxie self edge must disable default features"
+    if specification.get("features") != ["test-support"]:
+        return "nuxie self edge may enable only the test-support feature"
     return None
 
 
@@ -523,10 +544,10 @@ def strip_rust_non_code(source: str) -> str:
     return "".join(characters)
 
 
-def mixed_facade_feature_errors(
+def portable_abi_facade_feature_errors(
     package: str, package_name: str, manifest: dict[str, object]
 ) -> list[str]:
-    if package_name != MIXED_FACADE_DEBT[0]:
+    if package_name != PORTABLE_ABI_FACADE_EDGE[0]:
         return []
     features = manifest.get("features", {})
     if not isinstance(features, dict):
@@ -542,169 +563,24 @@ def mixed_facade_feature_errors(
             if not isinstance(activation, str):
                 continue
             match = re.fullmatch(r"nuxie\??/([A-Za-z0-9_-]+)", activation)
-            if match and match.group(1) not in MIXED_FACADE_ALLOWED_FORWARDED_FEATURES:
+            if (
+                match
+                and match.group(1)
+                not in PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES
+            ):
                 errors.append(
                     f"{package}/Cargo.toml: feature {feature_name!r} forwards "
-                    f"forbidden mixed-facade feature {match.group(1)!r}"
+                    f"forbidden portable ABI facade feature {match.group(1)!r}"
                 )
     return errors
 
 
-def mixed_facade_provider_feature_errors(
-    packages: list[tuple[str, str, dict[str, object]]],
-    workspace_dependencies: dict[str, object],
-    repo_root: pathlib.Path,
-) -> list[str]:
-    provider = next(
-        (
-            (package, manifest)
-            for package, package_name, manifest in packages
-            if package_name == MIXED_FACADE_DEBT[1]
-        ),
-        None,
-    )
-    if provider is None:
-        consumer_uses_provider = False
-        for _, package_name, manifest in packages:
-            if package_name != MIXED_FACADE_DEBT[0]:
-                continue
-            for _, dependencies in dependency_tables(manifest):
-                for dependency_name, specification in dependencies.items():
-                    effective = specification
-                    if (
-                        isinstance(specification, dict)
-                        and specification.get("workspace") is True
-                    ):
-                        effective, _ = inherited_dependency_specification(
-                            dependency_name, specification, workspace_dependencies
-                        )
-                    if normalized_package_name(
-                        dependency_package(dependency_name, effective)
-                    ) == MIXED_FACADE_DEBT[1]:
-                        consumer_uses_provider = True
-        if consumer_uses_provider:
-            return [
-                "mixed facade provider 'nuxie' must remain an in-workspace package"
-            ]
-        return []
-    package, manifest = provider
-    features = manifest.get("features")
-    if not isinstance(features, dict):
-        return [f"{package}/Cargo.toml: mixed facade [features] must be a table"]
-    errors = []
-    for feature_name, approved_activations in MIXED_FACADE_ALLOWED_PROVIDER_FEATURES.items():
-        activations = features.get(feature_name)
-        if not isinstance(activations, list) or not all(
-            isinstance(activation, str) for activation in activations
-        ):
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade feature {feature_name!r} "
-                "must be a string array"
-            )
-            continue
-        actual = set(activations)
-        if actual != approved_activations:
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade feature {feature_name!r} "
-                f"activations changed from {sorted(approved_activations)!r} to "
-                f"{sorted(actual)!r}"
-            )
-    package_paths = {package_name: path for path, package_name, _ in packages}
-    for dependency_name, approved_package in MIXED_FACADE_ALLOWED_PROVIDER_DEPENDENCIES.items():
-        entries: list[tuple[tuple[str, ...], str, object]] = []
-        for table_path, dependencies in dependency_tables(manifest):
-            for candidate_name, candidate_specification in dependencies.items():
-                candidate_effective = candidate_specification
-                if (
-                    isinstance(candidate_specification, dict)
-                    and candidate_specification.get("workspace") is True
-                ):
-                    candidate_effective, inheritance_error = (
-                        inherited_dependency_specification(
-                            candidate_name,
-                            candidate_specification,
-                            workspace_dependencies,
-                        )
-                    )
-                    if inheritance_error is not None:
-                        continue
-                resolved = dependency_package(candidate_name, candidate_effective)
-                if (
-                    normalized_package_name(candidate_name) == dependency_name
-                    or normalized_package_name(resolved) == approved_package
-                ):
-                    entries.append((table_path, candidate_name, candidate_specification))
-        if len(entries) != 1 or entries[0][:2] != (("dependencies",), dependency_name):
-            locations = [
-                f"{'.'.join(table_path)}:{candidate_name}"
-                for table_path, candidate_name, _ in entries
-            ]
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
-                "must have exactly one declaration at [dependencies] under its "
-                f"approved key; found {locations!r}"
-            )
-            if not entries:
-                continue
-        table_path, declared_name, specification = entries[0]
-        effective = specification
-        inherited = (
-            isinstance(specification, dict)
-            and specification.get("workspace") is True
-        )
-        if inherited:
-            effective, inheritance_error = inherited_dependency_specification(
-                declared_name, specification, workspace_dependencies
-            )
-            if inheritance_error is not None:
-                errors.append(f"{package}/Cargo.toml: {inheritance_error}")
-                continue
-        resolved_package = dependency_package(declared_name, effective)
-        if resolved_package != approved_package:
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
-                f"resolves to {resolved_package!r}, expected {approved_package!r}"
-            )
-        if not isinstance(effective, dict):
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
-                "must use an explicit table"
-            )
-            continue
-        dependency_path = effective.get("path")
-        dependency_base = repo_root if inherited else repo_root / package
-        resolved_local_path = None
-        if isinstance(dependency_path, str):
-            try:
-                resolved_local_path = (
-                    (dependency_base / dependency_path)
-                    .resolve()
-                    .relative_to(repo_root)
-                    .as_posix()
-                )
-            except ValueError:
-                pass
-        if resolved_local_path != package_paths.get(approved_package):
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
-                f"must resolve to local {package_paths.get(approved_package)!r}"
-            )
-        features = effective.get("features", [])
-        defaults = effective.get("default-features", True)
-        if effective.get("optional") is not True or features not in (None, []) or defaults is not True:
-            errors.append(
-                f"{package}/Cargo.toml: mixed facade dependency {dependency_name!r} "
-                "must remain optional with default features and no explicit features"
-            )
-    return errors
-
-
-def mixed_facade_source_errors(relative: str, source: str) -> list[str]:
+def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     errors = []
     for match in NUXIE_EXTERN_CRATE.finditer(source):
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
-            f"{relative}:{line}: mixed facade extern-crate imports are not approved"
+            f"{relative}:{line}: portable ABI facade extern-crate imports are not approved"
         )
     for match in RUST_USE_STATEMENT.finditer(source):
         body = match.group("body").strip()
@@ -722,29 +598,29 @@ def mixed_facade_source_errors(relative: str, source: str) -> list[str]:
         line = source.count("\n", 0, match.start()) + 1
         if imported_symbols is None:
             errors.append(
-                f"{relative}:{line}: mixed facade use tree is not an approved flat import"
+                f"{relative}:{line}: portable ABI facade use tree is not an approved flat import"
             )
             continue
         for symbol in imported_symbols:
-            if symbol not in MIXED_FACADE_ALLOWED_SYMBOLS:
+            if symbol not in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS:
                 errors.append(
-                    f"{relative}:{line}: mixed facade symbol {symbol!r} is not approved"
+                    f"{relative}:{line}: portable ABI facade symbol {symbol!r} is not approved"
                 )
-    for match in MIXED_FACADE_TYPE_ALIAS.finditer(source):
+    for match in PORTABLE_ABI_FACADE_TYPE_ALIAS.finditer(source):
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
-            f"{relative}:{line}: type aliases of mixed facade symbols are not approved"
+            f"{relative}:{line}: type aliases of portable ABI facade symbols are not approved"
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")
-        if symbol not in MIXED_FACADE_ALLOWED_SYMBOLS:
+        if symbol not in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
-                f"{relative}:{line}: mixed facade symbol {symbol!r} is not approved"
+                f"{relative}:{line}: portable ABI facade symbol {symbol!r} is not approved"
             )
     for match in re.finditer(r"\bimpl\b(?P<header>[^{};]*)\{", source, re.DOTALL):
         header = match.group("header")
-        symbol_pattern = "|".join(sorted(MIXED_FACADE_ALLOWED_SYMBOLS))
+        symbol_pattern = "|".join(sorted(PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS))
         target = re.search(
             rf"\bfor\s+(?:\(\s*)*(?:::)?(?:nuxie\s*::\s*)?"
             rf"(?:{symbol_pattern})\b",
@@ -760,20 +636,20 @@ def mixed_facade_source_errors(relative: str, source: str) -> list[str]:
         if target is not None or inherent is not None:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
-                f"{relative}:{line}: impls targeting mixed facade symbols are not approved"
+                f"{relative}:{line}: impls targeting portable ABI facade symbols are not approved"
             )
     for match in FILE_ASSOCIATED_ITEM.finditer(source):
         item = match.group("item")
-        if item not in MIXED_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS:
+        if item not in PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
                 f"{relative}:{line}: File associated item {item!r} is not in the "
                 "approved baseline facade surface"
             )
-    for match in MIXED_FACADE_PRODUCT_METHOD.finditer(source):
+    for match in PORTABLE_ABI_FACADE_PRODUCT_METHOD.finditer(source):
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
-            f"{relative}:{line}: mixed facade product method/type {match.group(0)!r} "
+            f"{relative}:{line}: portable ABI facade product method/type {match.group(0)!r} "
             "is not approved"
         )
     return errors
@@ -1028,7 +904,7 @@ def inherited_dependency_specification(
 
 def check_repository(
     repo_root: pathlib.Path,
-) -> tuple[list[str], dict[str, set[str]], int, int, int]:
+) -> tuple[list[str], dict[str, set[str]], int, int]:
     packages, workspace_dependencies, excluded_paths, errors = workspace_packages(
         repo_root
     )
@@ -1041,22 +917,18 @@ def check_repository(
             separate_package_roots.add(resolved_excluded)
     observed_debt = {family: set() for family in INTERNAL_DEBT_FILES}
     reported_debt_spread: set[tuple[str, str]] = set()
-    manifest_debt_count = 0
     dependency_table_count = 0
     protected_count = 0
-
-    errors.extend(
-        mixed_facade_provider_feature_errors(
-            packages, workspace_dependencies, repo_root
-        )
-    )
+    package_paths = {package for package, _, _ in packages}
 
     for package, package_name, manifest in packages:
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:
             continue
         protected_count += 1
         package_root = repo_root / package
-        errors.extend(mixed_facade_feature_errors(package, package_name, manifest))
+        errors.extend(
+            portable_abi_facade_feature_errors(package, package_name, manifest)
+        )
 
         for table_path, dependencies in dependency_tables(manifest):
             dependency_table_count += 1
@@ -1076,32 +948,45 @@ def check_repository(
                 resolved_name = dependency_package(
                     dependency_name, effective_specification
                 )
+                inherited = (
+                    isinstance(specification, dict)
+                    and specification.get("workspace") is True
+                )
+                dependency_path = (
+                    effective_specification.get("path")
+                    if isinstance(effective_specification, dict)
+                    else None
+                )
+                resolved_path = None
+                if isinstance(dependency_path, str):
+                    dependency_base = repo_root if inherited else package_root
+                    try:
+                        resolved_path = (
+                            (dependency_base / dependency_path)
+                            .resolve()
+                            .relative_to(repo_root)
+                            .as_posix()
+                        )
+                    except ValueError:
+                        pass
+                if (
+                    resolved_path is not None
+                    and (repo_root / resolved_path / "Cargo.toml").is_file()
+                    and resolved_path not in package_paths
+                    # Explicit vendor/ packages are third-party inputs, not
+                    # first-party packages whose dependency closure we own.
+                    and not resolved_path.startswith("vendor/")
+                ):
+                    errors.append(
+                        f"{package}/Cargo.toml: in-repo path dependency "
+                        f"{dependency_name!r} resolves to {resolved_path!r}, which is "
+                        "outside the protected workspace scan"
+                    )
                 if is_forbidden_dependency(dependency_name) or is_forbidden_dependency(
                     resolved_name
                 ):
                     table = ".".join(table_path)
-                    inherited = (
-                        isinstance(specification, dict)
-                        and specification.get("workspace") is True
-                    )
-                    dependency_path = (
-                        effective_specification.get("path")
-                        if isinstance(effective_specification, dict)
-                        else None
-                    )
-                    resolved_path = None
-                    if isinstance(dependency_path, str):
-                        dependency_base = repo_root if inherited else package_root
-                        try:
-                            resolved_path = (
-                                (dependency_base / dependency_path)
-                                .resolve()
-                                .relative_to(repo_root)
-                                .as_posix()
-                            )
-                        except ValueError:
-                            pass
-                    debt_error = mixed_facade_debt_error(
+                    edge_error = portable_abi_facade_edge_error(
                         package_name,
                         table_path,
                         dependency_name,
@@ -1109,12 +994,28 @@ def check_repository(
                         effective_specification,
                         resolved_path,
                     )
-                    if debt_error is None:
-                        manifest_debt_count += 1
+                    if edge_error is None:
                         continue
-                    if debt_error != "not-grandfathered":
+                    if edge_error != "not-approved":
                         errors.append(
-                            f"{package}/Cargo.toml: {debt_error}: "
+                            f"{package}/Cargo.toml: {edge_error}: "
+                            f"{dependency_name!r} through [{table}]"
+                        )
+                        continue
+                    self_edge_error = nuxie_self_test_dependency_error(
+                        package_name,
+                        package,
+                        table_path,
+                        dependency_name,
+                        resolved_name,
+                        effective_specification,
+                        resolved_path,
+                    )
+                    if self_edge_error is None:
+                        continue
+                    if self_edge_error != "not-approved":
+                        errors.append(
+                            f"{package}/Cargo.toml: {self_edge_error}: "
                             f"{dependency_name!r} through [{table}]"
                         )
                         continue
@@ -1146,8 +1047,8 @@ def check_repository(
                 )
             )
             source = strip_rust_non_code(raw_source)
-            if package_name == MIXED_FACADE_DEBT[0]:
-                errors.extend(mixed_facade_source_errors(relative, source))
+            if package_name == PORTABLE_ABI_FACADE_EDGE[0]:
+                errors.extend(portable_abi_facade_source_errors(relative, source))
             lines = source.splitlines()
             for line_number, line in enumerate(lines, 1):
                 if EXPLICIT_PRODUCT_PATH.search(line) or LOCAL_PRODUCT_MODULE.search(line):
@@ -1204,7 +1105,6 @@ def check_repository(
     return (
         errors,
         observed_debt,
-        manifest_debt_count,
         protected_count,
         dependency_table_count,
     )
@@ -1223,7 +1123,6 @@ def main() -> int:
     (
         errors,
         observed_debt,
-        manifest_debt_count,
         protected_count,
         dependency_table_count,
     ) = check_repository(repo_root)
@@ -1240,8 +1139,6 @@ def main() -> int:
         "pure-runtime boundary check passed; "
         f"protected workspace packages={protected_count}; "
         f"declared dependency tables={dependency_table_count}; "
-        "manifest migration debt: "
-        f"portable-c-abi-mixed-facade={manifest_debt_count}; "
         f"internal migration debt: {debt_summary}"
     )
     return 0

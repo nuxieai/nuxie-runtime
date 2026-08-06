@@ -45,80 +45,80 @@ name = "DrawCustomFeathers"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawFeatheredPaths_paper"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawOneChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawOneCuspStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawRiveRenderPaths"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawRiveRenderPathsAsRoundJoinStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawRiveRenderPathsAsStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawTwoChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawTwoCuspStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "DrawZeroChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
 source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
-comparison = "directional"
-equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
+comparison = "ratio"
+equivalence = "same 1600x1600 null frame, draw-path inputs, ten-frame begin/draw/flush lifecycle, and minimum statistic"
 
 [[case]]
 name = "IntersectionBoardBench_marty"
@@ -165,16 +165,16 @@ name = "MapPointsAffine"
 crate = "nuxie-runtime"
 source = "tests/bench/map_points.cpp"
 source_sha256 = "c4dfb829e0473ee5c66510d331585b44b7b5c7f5293b67de6ec0b71f6fadf36d"
-comparison = "directional"
-equivalence = "C++ bulk SIMD mapPoints API versus Rust scalar map_point loop; timings are directional only"
+comparison = "ratio"
+equivalence = "same bulk 4096-point buffers, affine specialization, 4096 mapping passes, and minimum statistic"
 
 [[case]]
 name = "MapPointsScaleTrans"
 crate = "nuxie-runtime"
 source = "tests/bench/map_points.cpp"
 source_sha256 = "c4dfb829e0473ee5c66510d331585b44b7b5c7f5293b67de6ec0b71f6fadf36d"
-comparison = "directional"
-equivalence = "C++ bulk SIMD mapPoints API versus Rust scalar map_point loop; timings are directional only"
+comparison = "ratio"
+equivalence = "same bulk 4096-point buffers, scale-translate specialization, 4096 mapping passes, and minimum statistic"
 
 [[case]]
 name = "MeasurePath"

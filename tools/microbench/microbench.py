@@ -266,22 +266,22 @@ def render_report(
             f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
             f"{rust / 1_000_000:.6f} ms | {rust / cpp:.3f}x |"
         )
-    lines.extend([
-        "",
-        "## Directional timings (not ratio-comparable)",
-        "",
-        "| Benchmark | C++ workload | Rust primitive | Why no ratio |",
-        "|---|---:|---:|---|",
-    ])
-    for case in inventory.cases:
-        if case.comparison != "directional":
-            continue
-        cpp = cpp_nanoseconds[case.name]
-        rust = rust_nanoseconds[case.name]
-        lines.append(
-            f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
-            f"{rust / 1_000_000:.6f} ms | {case.equivalence} |"
-        )
+    directional = [case for case in inventory.cases if case.comparison == "directional"]
+    if directional:
+        lines.extend([
+            "",
+            "## Directional timings (not ratio-comparable)",
+            "",
+            "| Benchmark | C++ workload | Rust primitive | Why no ratio |",
+            "|---|---:|---:|---|",
+        ])
+        for case in directional:
+            cpp = cpp_nanoseconds[case.name]
+            rust = rust_nanoseconds[case.name]
+            lines.append(
+                f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
+                f"{rust / 1_000_000:.6f} ms | {case.equivalence} |"
+            )
     return "\n".join(lines) + "\n"
 
 

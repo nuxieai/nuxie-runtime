@@ -11,27 +11,27 @@ repetition count, and minimum-per-iteration statistic.
 
 ## Workload correspondence
 
-Eight cases have equivalent measured boundaries and receive ratios:
+All 20 cases have equivalent measured boundaries and receive direct ratios:
 
 - `BuildRawPath`, `IterateRawPath`, `MeasurePath`, and `RawPathBounds`.
+- `MapPointsScaleTrans` and `MapPointsAffine` use the production bulk
+  `map_points`/`map_points_in_place` slice APIs for the same 4,096-point buffers
+  and 4,096 passes as C++ `Mat2D::mapPoints`.
 - The four `Intersection*` cases.
+- The ten `Draw*` cases use the feature-gated production-compiled null-frame
+  seam: a 1600x1600 `begin_frame`, each captured `draw_path`, and `flush`, for
+  ten frames. The renderer keeps its production tessellation scratch across
+  frames, as the C++ null render context keeps its CPU resource rings.
 
 `MeasurePath` uses the opt-in runtime support seam to construct the production
 measure directly from the transformed `RawPath`; no Rust-only command adapter is
 inside the timed boundary.
 
-Twelve cases are directional and never receive ratios:
-
-- The ten C++ `Draw*` cases time `RiveRenderer` begin-frame, draw-path, and flush
-  against a null render context. The Rust cases time the deepest currently
-  accessible production CPU fill, stroke, or feather preparation primitive.
-- The two C++ `MapPoints*` cases use a vectorized bulk API. Rust currently
-  exposes only scalar `Mat2D::map_point`, applied to the same 4,096-point set and
-  iteration count.
-
-The report keeps these directional timings in a separate table and states the
-boundary gap. They are useful within each implementation, not as cross-runtime
-speed ratios.
+The null-frame seam intentionally has no GPU target or submission. This matches
+the upstream `RenderContextNULL` boundary: both sides execute their renderer's
+CPU path preparation and lifecycle work, while backend rendering is a no-op.
+The internal staging architecture differs between implementations, which is
+the work the direct boundary ratio is intended to expose.
 
 The path coordinates, matrix values, C `srand(0)`/`rand()` inputs, and ten-frame
 draw loops follow the pinned sources. Random point normalization uses the host C
@@ -84,9 +84,10 @@ The timed binaries call production-compiled code through doc-hidden
 `upstream-microbenchmarks` modules in `nuxie-runtime` and `nuxie-renderer`.
 These opt-in public symbols are not in default builds, but they are a permanent
 API and maintenance tradeoff: refactors of the measured internals must keep the
-narrow seam current. This is preferable to copying private source modules into
-the bench target, which compiles `cfg(test)` counters and statistics into timed
-code and can suppress real tests under `--all-features`.
+narrow seam and its begin/draw/flush lifecycle current. This is preferable to
+copying private source modules into the bench target, which compiles `cfg(test)`
+counters and statistics into timed code and can suppress real tests under
+`--all-features`.
 
 Criterion remains a dev-only dependency. Renderer's optional `libc` dependency
 is enabled only by the benchmark-support feature for the upstream C PRNG input

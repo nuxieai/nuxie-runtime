@@ -112,61 +112,120 @@ fn forced_feather_stroke_style() -> (StrokeJoin, StrokeCap) {
     (StrokeJoin::Round, StrokeCap::Round)
 }
 
-pub fn prepare_paths(paths: &[CapturedPathPaint], preparation: Preparation) -> usize {
-    let mut result = 0usize;
-    let mut scratch = draw::StrokePreparationScratch::default();
-    for _ in 0..10 {
-        for path in paths {
-            let prepared = match preparation {
-                Preparation::Authored if path.feather != 0.0 => draw::build_feather_tessellation(
+#[derive(Default)]
+pub struct NullFrameRenderer {
+    scratch: draw::StrokePreparationScratch,
+    frame_active: bool,
+    frame_result: usize,
+    completed_frames: u64,
+}
+
+impl NullFrameRenderer {
+    pub fn begin_frame(&mut self, width: u32, height: u32) {
+        assert!(!self.frame_active, "null frame already active");
+        assert_eq!((width, height), (1600, 1600));
+        self.scratch.reset_for_reuse();
+        self.frame_result = 0;
+        self.frame_active = true;
+    }
+
+    pub fn draw_path(&mut self, path: &CapturedPathPaint, preparation: Preparation) {
+        assert!(self.frame_active, "null frame must begin before draw");
+        let prepared = match preparation {
+            Preparation::Authored if path.feather != 0.0 => draw::build_feather_tessellation(
+                &path.path,
+                Mat2D::IDENTITY,
+                path.feather,
+                (path.style == RenderPaintStyle::Stroke).then_some((
+                    path.thickness,
+                    path.join,
+                    path.cap,
+                )),
+            ),
+            Preparation::Authored if path.style == RenderPaintStyle::Stroke => {
+                draw::build_stroke_tessellation_with_layout_using_scratch(
                     &path.path,
                     Mat2D::IDENTITY,
-                    path.feather,
-                    (path.style == RenderPaintStyle::Stroke).then_some((
-                        path.thickness,
-                        path.join,
-                        path.cap,
-                    )),
-                ),
-                Preparation::Authored if path.style == RenderPaintStyle::Stroke => {
-                    draw::build_stroke_tessellation_with_layout_using_scratch(
-                        &path.path,
-                        Mat2D::IDENTITY,
-                        path.thickness,
-                        path.join,
-                        path.cap,
-                        &mut scratch,
-                    )
-                    .map(|value| value.tessellation)
-                }
-                Preparation::Authored => draw::build_fill_tessellation(&path.path, Mat2D::IDENTITY),
-                Preparation::Strokes(join) => {
-                    draw::build_stroke_tessellation_with_layout_using_scratch(
-                        &path.path,
-                        Mat2D::IDENTITY,
-                        2.0,
-                        join,
-                        StrokeCap::Butt,
-                        &mut scratch,
-                    )
-                    .map(|value| value.tessellation)
-                }
-                Preparation::Feather(feather) => draw::build_feather_tessellation(
-                    &path.path,
-                    Mat2D::IDENTITY,
-                    feather,
-                    (path.style == RenderPaintStyle::Stroke).then(|| {
-                        let (join, cap) = forced_feather_stroke_style();
-                        (path.thickness, join, cap)
-                    }),
-                ),
-            };
-            if let Some(prepared) = prepared {
-                result = result.wrapping_add(prepared.spans.len());
+                    path.thickness,
+                    path.join,
+                    path.cap,
+                    &mut self.scratch,
+                )
+                .map(|value| value.tessellation)
             }
+            Preparation::Authored => draw::build_fill_tessellation(&path.path, Mat2D::IDENTITY),
+            Preparation::Strokes(join) => {
+                draw::build_stroke_tessellation_with_layout_using_scratch(
+                    &path.path,
+                    Mat2D::IDENTITY,
+                    2.0,
+                    join,
+                    StrokeCap::Butt,
+                    &mut self.scratch,
+                )
+                .map(|value| value.tessellation)
+            }
+            Preparation::Feather(feather) => draw::build_feather_tessellation(
+                &path.path,
+                Mat2D::IDENTITY,
+                feather,
+                (path.style == RenderPaintStyle::Stroke).then(|| {
+                    let (join, cap) = forced_feather_stroke_style();
+                    (path.thickness, join, cap)
+                }),
+            ),
+        };
+        if let Some(prepared) = prepared {
+            self.frame_result = self.frame_result.wrapping_add(prepared.spans.len());
         }
     }
-    result
+
+    pub fn flush(&mut self) -> usize {
+        assert!(self.frame_active, "null frame must begin before flush");
+        self.frame_active = false;
+        self.completed_frames = self.completed_frames.saturating_add(1);
+        self.frame_result
+    }
+
+    pub fn run_ten_frames(
+        &mut self,
+        paths: &[CapturedPathPaint],
+        preparation: Preparation,
+    ) -> usize {
+        let mut result = 0usize;
+        for _ in 0..10 {
+            self.begin_frame(1600, 1600);
+            for path in paths {
+                self.draw_path(path, preparation);
+            }
+            result = result.wrapping_add(self.flush());
+        }
+        result
+    }
+
+    pub fn completed_frames(&self) -> u64 {
+        self.completed_frames
+    }
+}
+
+pub struct NullFrameWorkload {
+    paths: Vec<CapturedPathPaint>,
+    preparation: Preparation,
+    renderer: NullFrameRenderer,
+}
+
+impl NullFrameWorkload {
+    pub fn new(paths: Vec<CapturedPathPaint>, preparation: Preparation) -> Self {
+        Self {
+            paths,
+            preparation,
+            renderer: NullFrameRenderer::default(),
+        }
+    }
+
+    pub fn run(&mut self) -> usize {
+        self.renderer.run_ten_frames(&self.paths, self.preparation)
+    }
 }
 
 fn reset_cpp_rand() {
@@ -182,7 +241,7 @@ fn cpp_rand() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use nuxie_render_api::{StrokeCap, StrokeJoin};
+    use nuxie_render_api::{FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin};
 
     #[test]
     fn forced_feather_uses_upstream_round_stroke_style() {
@@ -190,5 +249,27 @@ mod tests {
             super::forced_feather_stroke_style(),
             (StrokeJoin::Round, StrokeCap::Round)
         );
+    }
+
+    #[test]
+    fn null_frame_seam_runs_begin_draw_flush_for_ten_frames() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(10.0, 10.0);
+        let paths = [super::CapturedPathPaint {
+            path,
+            fill_rule: FillRule::Clockwise,
+            style: RenderPaintStyle::Stroke,
+            thickness: 2.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+            feather: 0.0,
+        }];
+        let mut renderer = super::NullFrameRenderer::default();
+
+        let result = renderer.run_ten_frames(&paths, super::Preparation::Authored);
+
+        assert_eq!(renderer.completed_frames(), 10);
+        assert!(result > 0);
     }
 }

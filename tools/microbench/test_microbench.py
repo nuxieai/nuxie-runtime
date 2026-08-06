@@ -80,7 +80,7 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(content), 32)
         self.assertEqual(content[:16].hex(), "ffffffff020000000300000004000000")
 
-    def test_report_only_emits_ratios_for_equivalent_cases(self):
+    def test_report_emits_direct_ratios_for_all_twenty_equivalent_boundaries(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
         cpp = {case.name: index + 1.0 for index, case in enumerate(inventory.cases)}
@@ -92,10 +92,8 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(rows), 20)
         self.assertIn("| `BuildRawPath` |", rows[0])
         self.assertTrue(any("| `RawPathBounds` |" in row for row in rows))
-        ratio_rows = [row for row in rows if "2.000x" in row]
-        self.assertEqual(len(ratio_rows), 8)
-        self.assertNotIn("2.000x", next(row for row in rows if "MapPointsAffine" in row))
-        self.assertNotIn("2.000x", next(row for row in rows if "DrawRiveRenderPaths" in row))
+        self.assertTrue(all("2.000x" in row for row in rows))
+        self.assertNotIn("Directional timings", table)
 
     def test_criterion_uses_per_iteration_minimum_like_upstream_harness(self):
         tool = load_tool()

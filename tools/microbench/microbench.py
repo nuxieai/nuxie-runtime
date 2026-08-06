@@ -57,6 +57,49 @@ def sha256(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+def benchmark_content_identity(repo_root: pathlib.Path, revision: str = "HEAD") -> str:
+    """Hash committed repository content while excluding generated evidence docs."""
+    tree = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", "--full-tree", revision],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    ).stdout
+    digest = hashlib.sha256(b"nuxie-upstream-microbench-content-v1\0")
+    for entry in tree.split(b"\0"):
+        if not entry:
+            continue
+        _, path = entry.split(b"\t", 1)
+        if path.startswith(b"docs/evidence/"):
+            continue
+        digest.update(entry)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def uncommitted_benchmark_paths(repo_root: pathlib.Path) -> list[str]:
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    changed: list[str] = []
+    index = 0
+    while index < len(status):
+        entry = status[index]
+        index += 1
+        if not entry:
+            continue
+        code = entry[:2]
+        paths = [entry[3:].decode()]
+        if b"R" in code or b"C" in code:
+            paths.append(status[index].decode())
+            index += 1
+        changed.extend(path for path in paths if not path.startswith("docs/evidence/"))
+    return changed
+
+
 def load_inventory(path: pathlib.Path) -> Inventory:
     with path.open("rb") as source:
         raw = tomllib.load(source)
@@ -116,6 +159,15 @@ def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
         missing = sorted(expected - registered)
         extra = sorted(registered - expected)
         raise ContractError(f"criterion registry mismatch: missing={missing}, extra={extra}")
+
+
+def check_runnable_inventory(inventory: Inventory) -> None:
+    blocked = [case.name for case in inventory.cases if case.comparison != "ratio"]
+    if blocked:
+        raise ContractError(
+            "benchmark evidence requires equivalent direct-ratio boundaries; "
+            f"blocked={blocked}"
+        )
 
 
 def discover_upstream_cases(upstream: pathlib.Path, inventory: Inventory) -> set[str]:
@@ -282,6 +334,17 @@ def render_report(
                 f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
                 f"{rust / 1_000_000:.6f} ms | {case.equivalence} |"
             )
+    blocked = [case for case in inventory.cases if case.comparison == "blocked"]
+    if blocked:
+        lines.extend([
+            "",
+            "## Blocked equivalence",
+            "",
+            "| Benchmark | Missing production seam |",
+            "|---|---|",
+        ])
+        for case in blocked:
+            lines.append(f"| `{case.name}` | {case.equivalence} |")
     return "\n".join(lines) + "\n"
 
 
@@ -321,6 +384,7 @@ def run_benchmarks(
     measurement: int,
     sample_size: int,
 ) -> pathlib.Path:
+    check_runnable_inventory(inventory)
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ContractError(f"run directory must be absent or empty: {run_dir}")
     if command_output(["git", "status", "--porcelain"], repo_root):
@@ -344,10 +408,11 @@ def run_benchmarks(
     cpp_output = run_dir / "cpp.txt"
     run_manifest = run_dir / "run.json"
     run: dict = {
-        "schema": "nuxie-upstream-microbench-run-v2",
+        "schema": "nuxie-upstream-microbench-run-v3",
         "status": "running",
         "run_id": run_id,
         "repo_revision": revision,
+        "benchmark_content_sha256": benchmark_content_identity(repo_root),
         "upstream_revision": inventory.upstream_ref,
         "settings": {
             "cpp_duration_seconds": duration,
@@ -415,10 +480,17 @@ def load_run(
 ) -> dict:
     run = json.loads(run_manifest.read_text())
     validate_run_artifacts(run)
-    revision = command_output(["git", "rev-parse", "HEAD"], repo_root)
-    if run.get("repo_revision") != revision:
+    dirty = uncommitted_benchmark_paths(repo_root)
+    if dirty:
+        raise ContractError(f"uncommitted benchmark content: {dirty}")
+    measured_identity = run.get("benchmark_content_sha256")
+    if not measured_identity:
+        raise ContractError("run manifest has no benchmark content identity")
+    current_identity = benchmark_content_identity(repo_root)
+    if measured_identity != current_identity:
         raise ContractError(
-            f"stale run revision: expected current {revision}, got {run.get('repo_revision')}"
+            "stale benchmark content: "
+            f"expected measured {measured_identity}, got current {current_identity}"
         )
     if run["artifacts"]["inventory"]["sha256"] != sha256(manifest_path):
         raise ContractError("stale run inventory hash")

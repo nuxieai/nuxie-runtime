@@ -6,16 +6,16 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
+use nuxie::host_interfaces::{
+    RuntimeEventPropertyValue, RuntimeObject, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeViewModelLinkError, StateMachineReportedEvent,
+};
+use nuxie::{
     Factory, File, LinearAnimationInstance, NoopScriptHost, OwnedArtboardInstance, Renderer,
     StateMachineInstance, ViewModelInstance,
 };
 #[cfg(feature = "scripting")]
-use crate::{LuaHostCommand, LuaHostValue};
-use nuxie_runtime::{
-    RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimeViewModelLinkError, StateMachineReportedEvent,
-};
+use nuxie::{ScriptHostCommand, ScriptHostValue};
 
 /// Maximum UTF-8 byte length accepted for an identifier or property path.
 pub const MAX_ID_PATH_BYTES: usize = 4 * 1024;
@@ -97,7 +97,7 @@ impl fmt::Display for FlowSessionError {
 
 impl std::error::Error for FlowSessionError {}
 
-fn flow_script_error(error: crate::ScriptError) -> FlowSessionError {
+fn flow_script_error(error: nuxie::ScriptError) -> FlowSessionError {
     let kind = if error.resource_code().is_some() {
         FlowSessionErrorKind::ScriptResourceExceeded
     } else {
@@ -109,7 +109,7 @@ fn flow_script_error(error: crate::ScriptError) -> FlowSessionError {
 fn flow_anyhow_error(error: anyhow::Error) -> FlowSessionError {
     let kind = if error.chain().any(|cause| {
         cause
-            .downcast_ref::<crate::ScriptError>()
+            .downcast_ref::<nuxie::ScriptError>()
             .is_some_and(|error| error.resource_code().is_some())
     }) {
         FlowSessionErrorKind::ScriptResourceExceeded
@@ -524,7 +524,7 @@ pub enum FlowQuery {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlowInputSnapshot {
     pub name: Option<String>,
-    pub kind: crate::StateMachineInputKind,
+    pub kind: nuxie::StateMachineInputKind,
     pub value: FlowScalarValue,
 }
 
@@ -587,7 +587,7 @@ fn detached_view_model_snapshot(instance: Option<&ViewModelInstance>) -> Option<
     let raw = RuntimeOwnedViewModelHandle::detached_graph(std::slice::from_ref(instance.handle()))
         .into_iter()
         .next()?;
-    Some(ViewModelInstance { raw })
+    Some(ViewModelInstance::from_raw_handle(raw))
 }
 
 /// Deep, renderer-neutral module owning one live flow.
@@ -768,7 +768,7 @@ impl FlowSession {
             let mut dirty = false;
             dirty |= session
                 .artboard
-                .prepare_flow_scripts(factory)
+                .prepare_host_scripts(factory)
                 .map_err(|error| {
                     flow_script_error(error.with_context("script bootstrap failed"))
                 })?;
@@ -783,13 +783,13 @@ impl FlowSession {
             if let FlowPlayer::StateMachine(machine) = &mut session.player {
                 session
                     .artboard
-                    .prepare_flow_listener_actions(machine, factory, root_view_model.as_ref())
+                    .prepare_host_listener_actions(machine, factory, root_view_model.as_ref())
                     .map_err(|error| {
                         flow_script_error(error.with_context("scripted listener bootstrap failed"))
                     })?;
                 session.listener_binding_baseline = listener_binding_baseline;
             }
-            let commands = session.artboard.drain_flow_host_commands();
+            let commands = session.artboard.drain_host_commands();
             session.append_lua_host_commands(&mut outputs, 0, commands)?;
             (outputs, dirty)
         };
@@ -840,12 +840,12 @@ impl FlowSession {
             if let Some(failure) = self.terminal_failure.as_ref() {
                 return Err(failure.clone());
             }
-            let checkpoint = self.artboard.begin_flow_host_cycle();
+            let checkpoint = self.artboard.begin_host_effect_cycle();
             let sequence_before = self.next_sequence;
             let operation_result = self.perform_inner(operation, Some(factory));
             return match operation_result {
                 Ok(mut result) => {
-                    let commands = self.artboard.drain_flow_host_commands();
+                    let commands = self.artboard.drain_host_commands();
                     if let Err(error) =
                         self.integrate_lua_host_commands(&mut result, sequence_before, commands)
                     {
@@ -862,7 +862,7 @@ impl FlowSession {
                 }
                 Err(error) => {
                     if let Some(checkpoint) = checkpoint {
-                        self.artboard.rollback_flow_host_cycle(checkpoint);
+                        self.artboard.rollback_host_effect_cycle(checkpoint);
                     }
                     Err(error)
                 }
@@ -910,13 +910,13 @@ impl FlowSession {
                                     .filter_map(|index| {
                                         let input = machine.input(index)?;
                                         let value = match input.kind() {
-                                            crate::StateMachineInputKind::Bool => {
+                                            nuxie::StateMachineInputKind::Bool => {
                                                 FlowScalarValue::Bool(input.bool_value()?)
                                             }
-                                            crate::StateMachineInputKind::Number => {
+                                            nuxie::StateMachineInputKind::Number => {
                                                 FlowScalarValue::Number(input.number_value()?)
                                             }
-                                            crate::StateMachineInputKind::Trigger => {
+                                            nuxie::StateMachineInputKind::Trigger => {
                                                 FlowScalarValue::Bool(input.trigger_fired()?)
                                             }
                                         };
@@ -992,10 +992,10 @@ impl FlowSession {
         #[cfg(feature = "scripting")]
         {
             if let Err(error) = draw_result {
-                let _ = self.artboard.drain_flow_host_commands();
+                let _ = self.artboard.drain_host_commands();
                 return Err(self.poison_after_mutation(error));
             }
-            let commands = self.artboard.drain_flow_host_commands();
+            let commands = self.artboard.drain_host_commands();
             if let Err(error) = self.integrate_lua_host_commands(result, sequence_before, commands)
             {
                 return Err(self.poison_after_mutation(error));
@@ -1155,7 +1155,7 @@ impl FlowSession {
         let candidates = graph_sources
             .iter()
             .zip(detached_handles)
-            .map(|((id, _), raw)| (*id, ViewModelInstance { raw }))
+            .map(|((id, _), raw)| (*id, ViewModelInstance::from_raw_handle(raw)))
             .collect::<BTreeMap<_, _>>();
 
         let mut machine_candidate = match &self.player {
@@ -1251,7 +1251,7 @@ impl FlowSession {
             // rehomes them onto the batch's mutated ViewModel graph.
             let flush = self
                 .artboard
-                .apply_flow_listener_action_source_updates(machine);
+                .apply_host_listener_action_source_updates(machine);
             if let Err(error) = flush {
                 return Err(self.poison_after_mutation(flow_script_error(
                     error.with_context("pre-transaction listener binding flush failed"),
@@ -1289,7 +1289,7 @@ impl FlowSession {
                         None => candidate.begin_retained_scripted_object_data_context_rebind(),
                     };
                     if staged_context_bind
-                        && let Err(error) = self.artboard.rehydrate_flow_listener_actions(
+                        && let Err(error) = self.artboard.rehydrate_host_listener_actions(
                             candidate,
                             candidate_root.as_ref(),
                             previous_listener_binding_baseline.as_ref(),
@@ -1299,7 +1299,7 @@ impl FlowSession {
                         return Err(self.poison_after_mutation(flow_script_error(error)));
                     }
                 } else if let Some(active_factory) = factory.as_deref_mut() {
-                    match self.artboard.prepare_flow_scripts(active_factory) {
+                    match self.artboard.prepare_host_scripts(active_factory) {
                         Ok(changed) => result.dirty |= changed,
                         Err(error) => {
                             return Err(self.poison_after_mutation(flow_script_error(
@@ -1307,7 +1307,7 @@ impl FlowSession {
                             )));
                         }
                     }
-                    if let Err(error) = self.artboard.prepare_flow_listener_actions(
+                    if let Err(error) = self.artboard.prepare_host_listener_actions(
                         candidate,
                         active_factory,
                         candidate_root.as_ref(),
@@ -1315,20 +1315,17 @@ impl FlowSession {
                         return Err(self.poison_after_mutation(flow_script_error(error)));
                     }
                 } else {
-                    let prepared =
-                        crate::try_prepare_state_machine_scripted_data_context_without_factory(
-                            self.artboard.file(),
-                            self.artboard.raw(),
-                            candidate,
-                            candidate_root.as_ref(),
-                        );
+                    let prepared = self.artboard.prepare_host_listener_actions_without_factory(
+                        candidate,
+                        candidate_root.as_ref(),
+                    );
                     if let Err(error) = prepared {
                         return Err(self.poison_after_mutation(flow_script_error(error)));
                     }
                 }
                 if let Err(error) = self
                     .artboard
-                    .apply_flow_listener_action_source_updates(candidate)
+                    .apply_host_listener_action_source_updates(candidate)
                 {
                     return Err(self.poison_after_mutation(flow_script_error(error)));
                 }
@@ -1496,7 +1493,7 @@ impl FlowSession {
             if let Some(active_factory) = factory.as_deref_mut() {
                 preparation_changed |=
                     self.artboard
-                        .prepare_flow_scripts(active_factory)
+                        .prepare_host_scripts(active_factory)
                         .map_err(|error| {
                             flow_script_error(
                                 error.with_context("scripted pointer preparation failed"),
@@ -1504,7 +1501,7 @@ impl FlowSession {
                         })?;
                 if let FlowPlayer::StateMachine(machine) = &mut self.player {
                     self.artboard
-                        .prepare_flow_listener_actions(
+                        .prepare_host_listener_actions(
                             machine,
                             active_factory,
                             root_view_model.as_ref(),
@@ -1516,13 +1513,12 @@ impl FlowSession {
                         })?;
                 }
             } else if let FlowPlayer::StateMachine(machine) = &mut self.player {
-                crate::try_prepare_state_machine_scripted_data_context_without_factory(
-                    self.artboard.file(),
-                    self.artboard.raw(),
-                    machine,
-                    root_view_model.as_ref(),
-                )
-                .map_err(flow_script_error)?;
+                self.artboard
+                    .prepare_host_listener_actions_without_factory(
+                        machine,
+                        root_view_model.as_ref(),
+                    )
+                    .map_err(flow_script_error)?;
             }
             let fixed_listener_initialized_now = fixed_listener_initialization_was_pending
                 && matches!(
@@ -1534,7 +1530,7 @@ impl FlowSession {
                 && let FlowPlayer::StateMachine(machine) = &mut self.player
             {
                 self.artboard
-                    .apply_flow_listener_action_source_updates(machine)
+                    .apply_host_listener_action_source_updates(machine)
                     .map_err(|error| {
                         flow_script_error(
                             error.with_context("scripted pointer listener source update failed"),
@@ -1559,7 +1555,7 @@ impl FlowSession {
                     // work budgets at that exact cycle boundary while the
                     // outer operation checkpoint remains responsible for
                     // rolling every effect back on failure.
-                    let _ = self.artboard.begin_flow_host_cycle();
+                    let _ = self.artboard.begin_host_effect_cycle();
                     self.next_sequence
                 };
                 let before = self.bootstrap.values.clone();
@@ -1581,7 +1577,7 @@ impl FlowSession {
                 #[cfg(feature = "scripting")]
                 let cycle_result = {
                     let mut cycle_result = cycle_result;
-                    let commands = self.artboard.drain_flow_host_commands();
+                    let commands = self.artboard.drain_host_commands();
                     self.integrate_lua_host_commands(&mut cycle_result, sequence_before, commands)?;
                     cycle_result
                 };
@@ -2058,11 +2054,11 @@ impl FlowSession {
         &mut self,
         outputs: &mut Vec<FlowOutput>,
         cycle: u64,
-        commands: Vec<LuaHostCommand>,
+        commands: Vec<ScriptHostCommand>,
     ) -> Result<(), FlowSessionError> {
         for command in commands {
             let (name, payload) = match command {
-                LuaHostCommand::Trigger { name, properties } => (
+                ScriptHostCommand::Trigger { name, properties } => (
                     name,
                     FlowHostValue::Object(
                         properties
@@ -2071,7 +2067,7 @@ impl FlowSession {
                             .collect(),
                     ),
                 ),
-                LuaHostCommand::ResponseSet { field, value } => (
+                ScriptHostCommand::ResponseSet { field, value } => (
                     "$response_set".to_owned(),
                     FlowHostValue::Object(BTreeMap::from([
                         ("field".to_owned(), FlowHostValue::String(field)),
@@ -2094,7 +2090,7 @@ impl FlowSession {
         &mut self,
         result: &mut FlowResult,
         sequence_before: u64,
-        commands: Vec<LuaHostCommand>,
+        commands: Vec<ScriptHostCommand>,
     ) -> Result<(), FlowSessionError> {
         if commands.is_empty() {
             return Ok(());
@@ -2161,15 +2157,15 @@ impl FlowSession {
 }
 
 #[cfg(feature = "scripting")]
-fn flow_host_value(value: LuaHostValue) -> FlowHostValue {
+fn flow_host_value(value: ScriptHostValue) -> FlowHostValue {
     match value {
-        LuaHostValue::Bool(value) => FlowHostValue::Bool(value),
-        LuaHostValue::Number(value) => FlowHostValue::Number(value),
-        LuaHostValue::String(value) => FlowHostValue::String(value),
-        LuaHostValue::Array(values) => {
+        ScriptHostValue::Bool(value) => FlowHostValue::Bool(value),
+        ScriptHostValue::Number(value) => FlowHostValue::Number(value),
+        ScriptHostValue::String(value) => FlowHostValue::String(value),
+        ScriptHostValue::Array(values) => {
             FlowHostValue::List(values.into_iter().map(flow_host_value).collect())
         }
-        LuaHostValue::Object(values) => FlowHostValue::Object(
+        ScriptHostValue::Object(values) => FlowHostValue::Object(
             values
                 .into_iter()
                 .map(|(key, value)| (key, flow_host_value(value)))
@@ -2229,7 +2225,7 @@ fn prepare_value_snapshot(
             authored_name: None,
             is_root: false,
         });
-        instances.insert(id, ViewModelInstance { raw: handle });
+        instances.insert(id, ViewModelInstance::from_raw_handle(handle));
     }
     validate_catalog(catalog)?;
     let mut builder = ValueArenaBuilder::new(file);
@@ -2577,7 +2573,7 @@ impl<'a> ValueArenaBuilder<'a> {
     fn snapshot_property(
         &mut self,
         handle: &RuntimeOwnedViewModelHandle,
-        property: &nuxie_binary::RuntimeObject,
+        property: &RuntimeObject,
         path: &str,
         depth: usize,
     ) -> Result<FlowValueId, FlowSessionError> {
@@ -3712,9 +3708,9 @@ fn instantiate_named_view_model(
             "view-model instance could not be created",
         )
     })?;
-    Ok(ViewModelInstance {
-        raw: RuntimeOwnedViewModelHandle::new(raw),
-    })
+    Ok(ViewModelInstance::from_raw_handle(
+        RuntimeOwnedViewModelHandle::new(raw),
+    ))
 }
 
 fn validate_required_id_path(value: &str, label: &str) -> Result<(), FlowSessionError> {
@@ -3776,7 +3772,7 @@ fn prevalidate_and_apply_mutation(
                 )
             })?;
             if machine.input(index).map(|input| input.kind())
-                != Some(crate::StateMachineInputKind::Bool)
+                != Some(nuxie::StateMachineInputKind::Bool)
             {
                 return Err(FlowSessionError::new(
                     FlowSessionErrorKind::InvalidArgument,
@@ -3806,7 +3802,7 @@ fn prevalidate_and_apply_mutation(
                 )
             })?;
             if machine.input(index).map(|input| input.kind())
-                != Some(crate::StateMachineInputKind::Number)
+                != Some(nuxie::StateMachineInputKind::Number)
             {
                 return Err(FlowSessionError::new(
                     FlowSessionErrorKind::InvalidArgument,
@@ -3830,7 +3826,7 @@ fn prevalidate_and_apply_mutation(
                 )
             })?;
             if machine.input(index).map(|input| input.kind())
-                != Some(crate::StateMachineInputKind::Trigger)
+                != Some(nuxie::StateMachineInputKind::Trigger)
             {
                 return Err(FlowSessionError::new(
                     FlowSessionErrorKind::InvalidArgument,
@@ -4514,7 +4510,7 @@ fn validate_optional_selector(value: Option<&str>, label: &str) -> Result<(), Fl
 }
 
 fn select_player(
-    artboard: crate::Artboard<'_>,
+    artboard: nuxie::Artboard<'_>,
     instance: &mut OwnedArtboardInstance,
     explicit: Option<&FlowPlayerSelector>,
 ) -> Result<(FlowPlayerMetadata, FlowPlayer), FlowSessionError> {
@@ -5019,19 +5015,19 @@ fn flow_value_type_for_property(type_name: &str) -> FlowValueType {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, sync::LazyLock};
 
     use super::*;
-    use crate::File;
+    use nuxie::File;
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
 
-    const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
-    const SMI_FIXTURE: &[u8] = include_bytes!("../../../fixtures/animation/smi_test.riv");
-    const TWO_ARTBOARDS_FIXTURE: &[u8] =
-        include_bytes!("../../../fixtures/minimal/two_artboards.riv");
+    static FIXTURE: LazyLock<Vec<u8>> = LazyLock::new(|| external_fixture("dependency_test.riv"));
+    static SMI_FIXTURE: LazyLock<Vec<u8>> = LazyLock::new(|| external_fixture("smi_test.riv"));
+    static TWO_ARTBOARDS_FIXTURE: LazyLock<Vec<u8>> =
+        LazyLock::new(|| external_fixture("two_artboards.riv"));
 
     fn smi_session() -> FlowSession {
-        let file = Arc::new(File::import(SMI_FIXTURE).expect("import SMI fixture"));
+        let file = Arc::new(File::import(SMI_FIXTURE.as_slice()).expect("import SMI fixture"));
         FlowSession::create(
             file,
             FlowSessionConfig {
@@ -5113,7 +5109,7 @@ mod tests {
             ),
         ])
         .expect("build text-run fixture");
-        let file = Arc::new(File::from_runtime(runtime).expect("import text-run fixture"));
+        let file = Arc::new(File::from_runtime_for_test(runtime).expect("import text-run fixture"));
         FlowSession::create(file, FlowSessionConfig::default())
             .expect("create text-run session")
             .0
@@ -5187,7 +5183,8 @@ mod tests {
         ])
         .expect("build authored nested view-model fixture");
         let file = Arc::new(
-            File::from_runtime(runtime).expect("import authored nested view-model fixture"),
+            File::from_runtime_for_test(runtime)
+                .expect("import authored nested view-model fixture"),
         );
         FlowSession::create(file, FlowSessionConfig::default())
             .expect("create authored nested view-model session")
@@ -5478,7 +5475,7 @@ mod tests {
 
     #[test]
     fn explicit_missing_artboard_is_a_typed_not_found_without_fallback() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
 
         let error = FlowSession::create(
             file,
@@ -5585,7 +5582,8 @@ mod tests {
 
     #[test]
     fn fallback_skips_an_uninstantiable_authored_state_machine() {
-        let file = Arc::new(File::import(TWO_ARTBOARDS_FIXTURE).expect("import fixture"));
+        let file =
+            Arc::new(File::import(TWO_ARTBOARDS_FIXTURE.as_slice()).expect("import fixture"));
 
         let (_, bootstrap) = FlowSession::create(
             file,
@@ -5604,7 +5602,8 @@ mod tests {
 
     #[test]
     fn explicit_uninstantiable_state_machine_does_not_fall_back() {
-        let file = Arc::new(File::import(TWO_ARTBOARDS_FIXTURE).expect("import fixture"));
+        let file =
+            Arc::new(File::import(TWO_ARTBOARDS_FIXTURE.as_slice()).expect("import fixture"));
 
         let error = FlowSession::create(
             file,
@@ -5626,7 +5625,7 @@ mod tests {
 
     #[test]
     fn bootstrap_query_returns_creation_snapshot_without_ordered_outputs() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (mut session, bootstrap) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
 
@@ -5940,7 +5939,7 @@ mod tests {
 
     #[test]
     fn advance_uses_required_caller_delta_and_allows_equal_timestamps() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (mut session, _) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
 
@@ -5961,7 +5960,7 @@ mod tests {
 
     #[test]
     fn pointer_batch_limit_is_prevalidated() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (mut session, _) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
         let event = FlowPointerEvent {
@@ -5983,7 +5982,7 @@ mod tests {
 
     #[test]
     fn pointer_timestamps_are_prevalidated_before_any_event_mutates_the_session() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (mut session, _) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
         let before_cycle = session.next_cycle;
@@ -6873,7 +6872,7 @@ mod tests {
 
     #[test]
     fn value_arena_accepts_exact_node_limit_and_rejects_the_next_node() {
-        let file = File::import(FIXTURE).expect("import fixture");
+        let file = File::import(FIXTURE.as_slice()).expect("import fixture");
         let mut builder = ValueArenaBuilder::new(&file);
 
         for _ in 0..MAX_VALUE_NODES {
@@ -7002,7 +7001,7 @@ mod tests {
 
     #[test]
     fn creation_projection_reserves_one_shared_arena_for_bootstrap_and_host_work() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (_, bootstrap) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
         let creation_with_nodes = |node_count: usize| {
@@ -7079,7 +7078,7 @@ mod tests {
 
     #[test]
     fn result_projection_combines_snapshot_and_host_content_into_the_abi_budget() {
-        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let file = Arc::new(File::import(FIXTURE.as_slice()).expect("import fixture"));
         let (_, mut bootstrap) =
             FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
         let snapshot_chunk = "s".repeat(MAX_STRING_BYTES);

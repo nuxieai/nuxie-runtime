@@ -8,11 +8,11 @@ use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     File, OwnedArtboardInstance, PersistentFactory, RecordingFactory, ScriptExecutionLimits,
     ScriptImportCapability,
-    flow_session::{
-        FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
-        FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession,
-        FlowSessionConfig, FlowSessionErrorKind,
-    },
+};
+use nuxie_product::flow_session::{
+    FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
+    FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession, FlowSessionConfig,
+    FlowSessionErrorKind,
 };
 use nuxie_schema::definition_by_name;
 use sha2::{Digest as _, Sha256};

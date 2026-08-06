@@ -32,13 +32,20 @@ use nuxie_runtime::{
 
 pub mod command_queue;
 pub mod command_server;
-pub mod flow_session;
 mod raw_text;
 #[cfg(feature = "scripting")]
 mod script_import;
 
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_interpolator_tests;
+// Temporary test-only include for the baseline scripting lifecycle suite. The
+// shipping `nuxie` package does not expose or compile Flow; UNIV-1634 removes
+// this include after those white-box tests move behind public host interfaces.
+#[cfg(all(test, feature = "scripting"))]
+extern crate self as nuxie;
+#[cfg(all(test, feature = "scripting"))]
+#[path = "../../nuxie-product/src/flow_session.rs"]
+mod flow_session;
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_listener_action_lifecycle_tests;
 
@@ -100,14 +107,31 @@ pub use nuxie_runtime::{
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
-#[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{
-    HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
-};
+/// Product-neutral low-level types needed to compose transactional hosts on
+/// top of this facade. They remain grouped and hidden so product crates do not
+/// add direct dependency edges around `nuxie`.
+#[doc(hidden)]
+pub mod host_interfaces {
+    pub use nuxie_binary::RuntimeObject;
+    pub use nuxie_runtime::{
+        RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+        RuntimeViewModelLinkError, StateMachineReportedEvent,
+    };
+}
+
 #[cfg(feature = "scripting")]
 pub use nuxie_scripting::vm::{
-    LuaScriptInstance, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
+    HostCommand as ScriptHostCommand, HostValue as ScriptHostValue, LuaScriptInstance,
+    ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
 };
+#[cfg(feature = "scripting")]
+use nuxie_scripting::vm::{HostCycleCheckpoint, ScriptProgram};
+
+/// Opaque checkpoint for rolling back script host effects when a higher-level
+/// operation fails atomically.
+#[cfg(feature = "scripting")]
+#[doc(hidden)]
+pub struct ScriptHostCycleCheckpoint(HostCycleCheckpoint);
 
 #[cfg(feature = "scripting")]
 type FileScriptPolicy = Option<ScriptExecutionLimits>;
@@ -481,7 +505,7 @@ impl FileScriptRuntime {
         }
     }
 
-    fn drain_host_commands(&self) -> Vec<LuaHostCommand> {
+    fn drain_host_commands(&self) -> Vec<ScriptHostCommand> {
         self.ready
             .as_ref()
             .map(|ready| ready.vm.drain_host_commands())
@@ -4305,6 +4329,14 @@ impl File {
         )
     }
 
+    /// Construct a facade file from an already-decoded runtime file for
+    /// cross-package conformance tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn from_runtime_for_test(runtime: RuntimeFile) -> Result<Self> {
+        Self::from_runtime(runtime)
+    }
+
     fn from_runtime_with_script_authorization(
         runtime: RuntimeFile,
         authorization: ScriptExecutionAuthorization,
@@ -5573,7 +5605,8 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn prepare_flow_scripts(
+    #[doc(hidden)]
+    pub fn prepare_host_scripts(
         &mut self,
         factory: &mut dyn Factory,
     ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
@@ -5591,7 +5624,8 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn prepare_flow_listener_actions(
+    #[doc(hidden)]
+    pub fn prepare_host_listener_actions(
         &self,
         machine: &mut StateMachineInstance,
         factory: &mut dyn Factory,
@@ -5607,7 +5641,23 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn rehydrate_flow_listener_actions(
+    #[doc(hidden)]
+    pub fn prepare_host_listener_actions_without_factory(
+        &self,
+        machine: &mut StateMachineInstance,
+        root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        try_prepare_state_machine_scripted_data_context_without_factory(
+            &self.file,
+            &self.raw,
+            machine,
+            root_view_model,
+        )
+    }
+
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn rehydrate_host_listener_actions(
         &self,
         machine: &mut StateMachineInstance,
         root_view_model: Option<&ViewModelInstance>,
@@ -5625,7 +5675,8 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn apply_flow_listener_action_source_updates(
+    #[doc(hidden)]
+    pub fn apply_host_listener_action_source_updates(
         &self,
         machine: &mut StateMachineInstance,
     ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
@@ -5638,17 +5689,24 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn begin_flow_host_cycle(&self) -> Option<HostCycleCheckpoint> {
-        self.file.scripts.borrow().begin_host_cycle()
+    #[doc(hidden)]
+    pub fn begin_host_effect_cycle(&self) -> Option<ScriptHostCycleCheckpoint> {
+        self.file
+            .scripts
+            .borrow()
+            .begin_host_cycle()
+            .map(ScriptHostCycleCheckpoint)
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn rollback_flow_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
-        self.file.scripts.borrow().rollback_host_cycle(checkpoint);
+    #[doc(hidden)]
+    pub fn rollback_host_effect_cycle(&self, checkpoint: ScriptHostCycleCheckpoint) {
+        self.file.scripts.borrow().rollback_host_cycle(checkpoint.0);
     }
 
     #[cfg(feature = "scripting")]
-    pub(crate) fn drain_flow_host_commands(&self) -> Vec<LuaHostCommand> {
+    #[doc(hidden)]
+    pub fn drain_host_commands(&self) -> Vec<ScriptHostCommand> {
         self.file.scripts.borrow().drain_host_commands()
     }
 
@@ -6115,6 +6173,15 @@ pub struct ViewModelInstance {
 }
 
 impl ViewModelInstance {
+    /// Construct the facade wrapper around an existing owned runtime handle.
+    ///
+    /// This is an advanced host-composition seam; ordinary callers should
+    /// obtain instances from [`File`] or [`OwnedArtboardInstance`].
+    #[doc(hidden)]
+    pub fn from_raw_handle(raw: RuntimeOwnedViewModelHandle) -> Self {
+        Self { raw }
+    }
+
     /// Low-level immutable access to the owned context.
     pub fn raw(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
         self.raw.borrow()
@@ -8003,7 +8070,7 @@ mod external_image_asset_tests {
         let mut accumulator = 0u32;
         let mut bit_count = 0u8;
         let mut decoded = Vec::new();
-        for byte in include_bytes!("../tests/fixtures/roboto-a.ttf.base64")
+        for byte in include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
             .iter()
             .copied()
             .filter(|byte| !byte.is_ascii_whitespace())

@@ -8,21 +8,18 @@ here is removed. The full per-file disposition audit this was distilled from is
 in git history (`docs/runtime-frame-loop-test-backfill-bc.md`); per-row status
 lives in `test-correspondence-manifest.toml`.
 
-Of the 402 finding-recorded upstream assertions, 5 are literal production
-failures (4 click-sequence sites and 1 fresh-FocusNode site); 397 are blocked
-capability/harness observables retained by linked ignored tests.
-
-### Finding: click up outside
-
-This is a production-behavior failure, not merely a missing harness surface.
-The literal pinned `click_event.riv` port in
-`cpp_probe.rs::upstream_click_event_fixture_reports_exact_group_click_sequence`
-passes through the setup and first click (A1–A8, now active in
-`upstream_click_event_fixture_initial_and_first_click_contract`), then fails
-A9–A12. Upstream `hittest_test.cpp:284–310` requires cumulative event counts
-`[1, 1, 1, 2, 3]`; Rust reports `[1, 2, 2, 3, 4]`, beginning with the
-pointer-down at `(75,75)` and pointer-up at `(300,75)`. The full sequence test
-is ignored exactly as written.
+Of the 420 finding-recorded upstream assertions, 22 were literal production
+failures (4 click-sequence sites, 1 fresh-FocusNode site, and 17 silver
+sites); all 22 were fixed at their root causes in commit `9684cdf7` and their
+pinned tests are active and unweakened
+(`cpp_probe.rs::upstream_click_event_fixture_reports_exact_group_click_sequence`,
+`focus_data.rs::upstream_focus_node_fresh_focusable_defaults_to_null`, and the
+silver-corpus test `upstream_fl_bc_resolved_silver_assertions`); the
+`multi_listeners` silver assertion site is discharged by the
+scripting-capable silver replay
+(`upstream_fl_bc_multi_listener_scripted_action_assertion`, active). The
+remaining 397 are blocked capability/harness observables retained by linked
+ignored tests.
 
 ### Finding: mutable animation quantize
 
@@ -33,21 +30,16 @@ Rust imports and correctly tests the authored `true` value (`160`) but exposes
 retained by
 `cpp_probe.rs::upstream_quantize_toggle_requires_missing_mutable_definition_api`.
 
-### Finding: FocusNode representation
-
-`focus_test.cpp:91` requires a fresh node's Focusable pointer to be null.
-`FocusNode::new()` currently stores `has_focusable = true`; the literal
-assertion therefore fails. Upstream's per-node `isScope()` and `manager()`
-pointer observables are also not represented directly. The ignored test is
-`focus.rs::upstream_focus_node_fresh_focusable_scope_and_manager_defaults`.
-
 ### Finding: focus fixture surface
 
 The exact Focusable pointer/delegation cases and 16 remaining fixture cases
 require bindable-artboard swaps, VM assets, component-list occurrences,
 and repeated focus-tree builds through an occurrence-facing API not exposed by
-the Rust focus test seam. They are retained by
-`focus.rs::upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface`;
+the Rust focus test seam. Upstream's per-node `isScope()` and `manager()`
+pointer observables (`focus_test.cpp:91/93`) are likewise not represented
+per node: scope topology and manager ownership live on `FocusManager`. They
+are retained by
+`focus_data.rs::upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface`;
 generic focus-manager tests are intentionally not claimed as equivalents.
 
 ### Finding: silver hit-test fixtures
@@ -57,8 +49,9 @@ generic focus-manager tests are intentionally not claimed as equivalents.
 layout-computed pointer expressions or long generated loops that the current
 silver action interpreter cannot encode. They are retained by
 `cpp_probe.rs::upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions`.
-The two multitouch silvers and the four hit-test silvers are exact active
-tests in `silver_backfill_cases.rs`.
+Two multitouch silvers are byte-exact active tests; the four hit-test silvers
+that were literal failing findings are fixed and byte-exact in the active
+silver-corpus test `upstream_fl_bc_resolved_silver_assertions`.
 
 ### Finding: state-machine fixture surface
 

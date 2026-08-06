@@ -4,6 +4,8 @@
 renderer and a GPU-free null adapter. The seam owns backend-independent draw
 state, path admission, fill/stroke/feather preparation, clip replay, logical
 resource limits, and the ordered draw/resource plan consumed by each backend.
+MSAA intersection-board scheduling and the draw/resource permutation happen
+when that shared plan is finalized, before either adapter consumes it.
 
 `WgpuFrame` owns a `LogicalFrame`; draw admission appends each draw and its
 resource layout to that object exactly once. `WgpuFrame::finish` validates and
@@ -14,6 +16,12 @@ shadow buffers for diagnostics. `NullLogicalRenderer` consumes the production
 plan into those shadow buffers and stops, without a WGPU context, device,
 queue, encoder, or submission. It is intended for CPU benchmarks and
 differential tests, not as a second renderer implementation.
+
+The diagnostic report fingerprints authored clip rectangles and gradient
+kind, geometry, colors, and stops. It also reports exact shadow bytes, buffer
+write operations, retained allocation growth, and per-flush rewinds. Retained
+capacity is the peak reusable capacity required by any one logical flush, not
+the sum of every flush in the frame.
 
 The null adapter deliberately has a narrow begin/draw/flush API. Add an
 operation to it only when the logical phase must model that operation for both
@@ -35,6 +43,8 @@ without improving CPU measurement fidelity.
 - Logical buffers grow with retained capacity and rewind their written ranges
   after each flush. A later small frame must reuse capacity without retaining
   the previous frame's contents.
+- Both adapters lease stroke-preparation scratch from the same bounded retained
+  pool lifecycle. The null adapter does not allocate fresh scratch per frame.
 
 This trades a small public diagnostic/null API for one meaningful CPU seam.
 The alternative—maintaining a benchmark-only planner—would be easier to call

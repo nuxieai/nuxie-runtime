@@ -1,0 +1,45 @@
+env:
+  CI: "1"
+  RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+  PORT_MANIFEST_RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+  RIVE_RUNTIME_DIR: "rive-runtime"
+
+steps:
+  - label: ":linux: Rust workspace and port contracts"
+    command: |
+      set -euo pipefail
+      git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
+      git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
+      rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      make fixtures
+      make fmt-check check
+      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate microbench-gate
+      make runtime-drawing-port-gate runtime-frame-loop-port-gate
+      make lint-gate feature-compile-gate-portable
+      make test
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: linux
+    timeout_in_minutes: 180
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  - label: ":mac: Apple and C ABI compatibility"
+    command: |
+      set -euo pipefail
+      rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
+      rustup target add --toolchain stable wasm32-unknown-unknown
+      make fixtures
+      make capi-smoke
+      make feature-compile-gate-apple
+      make wasm-perf-test crate-seams-browser-check
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: macos
+    timeout_in_minutes: 120
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1

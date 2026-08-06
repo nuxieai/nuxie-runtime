@@ -22,6 +22,9 @@ mod gr_triangulator;
 mod gradient_pipeline;
 #[allow(dead_code)]
 mod intersection_board;
+mod logical_frame;
+#[cfg(test)]
+use logical_frame::LogicalFlushAllocations;
 mod logical_flush;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod metal;
@@ -302,6 +305,7 @@ struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
+    logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
     device_health: Arc<DeviceHealth>,
     adapter_info: WgpuAdapterInfo,
@@ -594,6 +598,10 @@ pub use gpu_canvas::{
     GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
     GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+};
+pub use logical_frame::{
+    LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalPathPaint, LogicalResourceCounts,
+    NullLogicalRenderer,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
@@ -1010,6 +1018,7 @@ impl WgpuFactory {
                 device,
                 queue,
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
+                logical_resources: logical_frame::LogicalResourceStore::default(),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
                     intersection_board::GroupingType::Disjoint,
                 )),
@@ -1060,22 +1069,24 @@ impl WgpuFactory {
             width: self.width,
             height: self.height,
             clear_color,
-            state: DrawState::default(),
-            stack: Vec::new(),
-            draws: Vec::new(),
+            logical_frame: logical_frame::LogicalFrame::new(self.logical_frame_config()),
             stroke_preparation_scratch: self.context.stroke_preparation_scratch.checkout(),
             draw_calls: 0,
-            logical_flush: logical_flush::LogicalFlush::default(),
-            logical_flush_allocations: LogicalFlushAllocations::default(),
-            logical_flush_starts: vec![0],
-            clips: Vec::new(),
-            next_clip_id: 1,
-            msaa_path_clips: Vec::new(),
-            msaa_path_clip_id: 0,
-            generic_atomic_path_clip_id: 0,
             unsupported: None,
             mode: self.mode,
             work_recorder: work_metrics::FrameWorkRecorder::new(collect_work_metrics),
+        }
+    }
+
+    /// Captures the backend-neutral limits used by both GPU and null logical
+    /// frame adapters. The returned value owns no GPU object.
+    pub fn logical_frame_config(&self) -> LogicalFrameConfig {
+        LogicalFrameConfig {
+            width: self.width,
+            height: self.height,
+            mode: self.mode,
+            max_texture_dimension_2d: self.context.device.limits().max_texture_dimension_2d,
+            msaa_atlas_supports_clip_rect: self.context.msaa_atlas_pipeline.supports_clip_rect(),
         }
     }
 
@@ -1203,7 +1214,7 @@ impl Factory for WgpuFactory {
         fill_rule: FillRule,
     ) -> Box<dyn RenderPath> {
         raw_path.renew_mutation_id();
-        Box::new(WgpuPath {
+        Box::new(LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule,
@@ -1211,7 +1222,7 @@ impl Factory for WgpuFactory {
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
-        Box::new(WgpuPath {
+        Box::new(LogicalPath {
             valid: true,
             raw_path: Arc::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
@@ -1219,7 +1230,7 @@ impl Factory for WgpuFactory {
     }
 
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
-        Box::new(WgpuPaint::default())
+        Box::new(LogicalPaint::default())
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
@@ -1310,7 +1321,7 @@ impl Factory for WgpuFactory {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct WgpuPath {
+struct LogicalPath {
     // Draws and clip snapshots retain paths across scheduling. C++ shares its
     // immutable RiveRenderPath with ref_rcp; Arc/COW gives Rust the same cheap
     // snapshot while preserving the existing detach-on-caller-mutation behavior.
@@ -1319,13 +1330,13 @@ struct WgpuPath {
     valid: bool,
 }
 
-impl WgpuPath {
+impl LogicalPath {
     fn raw_path_mut(&mut self) -> &mut RawPath {
         Arc::make_mut(&mut self.raw_path)
     }
 }
 
-impl RenderPath for WgpuPath {
+impl RenderPath for LogicalPath {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1347,7 +1358,7 @@ impl RenderPath for WgpuPath {
     }
 
     fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D) {
-        let Some(path) = wgpu_path(path) else {
+        let Some(path) = logical_path(path) else {
             self.raw_path_mut().rewind();
             self.valid = false;
             return;
@@ -1361,7 +1372,7 @@ impl RenderPath for WgpuPath {
     }
 
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
-        let Some(path) = wgpu_path(path) else {
+        let Some(path) = logical_path(path) else {
             self.raw_path_mut().rewind();
             self.valid = false;
             return;
@@ -1456,7 +1467,7 @@ impl RenderShader for WgpuShader {
 }
 
 #[derive(Debug, Clone)]
-struct WgpuPaint {
+struct LogicalPaint {
     style: RenderPaintStyle,
     color: ColorInt,
     thickness: f32,
@@ -1478,7 +1489,7 @@ struct AtlasPlacement {
     height: u32,
 }
 
-impl Default for WgpuPaint {
+impl Default for LogicalPaint {
     fn default() -> Self {
         Self {
             style: RenderPaintStyle::Fill,
@@ -1494,7 +1505,7 @@ impl Default for WgpuPaint {
     }
 }
 
-impl WgpuPaint {
+impl LogicalPaint {
     fn effective_stroke(&self) -> Option<(f32, StrokeJoin, StrokeCap)> {
         (self.style == RenderPaintStyle::Stroke).then_some((
             self.thickness,
@@ -1524,7 +1535,7 @@ impl WgpuPaint {
     }
 }
 
-impl RenderPaint for WgpuPaint {
+impl RenderPaint for LogicalPaint {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1661,7 +1672,7 @@ struct ClipRectState {
 
 #[derive(Clone)]
 struct ClipElement {
-    path: WgpuPath,
+    path: LogicalPath,
     matrix: Mat2D,
     pixel_bounds: Option<[i32; 4]>,
     prepared_fill: Arc<PreparedFillGeometry>,
@@ -1671,7 +1682,7 @@ struct ClipElement {
 }
 
 impl ClipElement {
-    fn is_equivalent(&self, matrix: Mat2D, path: &WgpuPath) -> bool {
+    fn is_equivalent(&self, matrix: Mat2D, path: &LogicalPath) -> bool {
         self.matrix == matrix
             && self.path.raw_path.mutation_id() == path.raw_path.mutation_id()
             && self.path.fill_rule == path.fill_rule
@@ -1705,8 +1716,8 @@ impl Default for DrawState {
 
 #[derive(Clone)]
 struct SolidDraw {
-    path: WgpuPath,
-    paint: WgpuPaint,
+    path: LogicalPath,
+    paint: LogicalPaint,
     state: DrawState,
     role: DrawRole,
     image: Option<ImageDraw>,
@@ -1776,7 +1787,7 @@ struct PathTransformKey {
 }
 
 impl PathTransformKey {
-    fn new(path: &WgpuPath, transform: Mat2D) -> Self {
+    fn new(path: &LogicalPath, transform: Mat2D) -> Self {
         Self {
             path_mutation_id: path.raw_path.mutation_id(),
             transform: transform.0.map(f32::to_bits),
@@ -1785,7 +1796,7 @@ impl PathTransformKey {
 }
 
 impl PreparedFillGeometry {
-    fn new(path: &WgpuPath, transform: Mat2D) -> Self {
+    fn new(path: &LogicalPath, transform: Mat2D) -> Self {
         let contour_count = path
             .raw_path
             .verbs()
@@ -1805,7 +1816,7 @@ impl PreparedFillGeometry {
         }
     }
 
-    fn midpoint(&self, path: &WgpuPath, transform: Mat2D) -> Option<&PreparedMidpointGeometry> {
+    fn midpoint(&self, path: &LogicalPath, transform: Mat2D) -> Option<&PreparedMidpointGeometry> {
         self.midpoint
             .get_or_init(|| {
                 draw::build_fill_tessellation(&path.raw_path, transform).map(|tessellation| {
@@ -1825,7 +1836,7 @@ impl PreparedFillGeometry {
 
     fn midpoint_resources(
         &self,
-        path: &WgpuPath,
+        path: &LogicalPath,
         transform: Mat2D,
         draw_pass_count: usize,
     ) -> Option<logical_flush::ResourceCounters> {
@@ -1856,7 +1867,7 @@ impl PreparedFillGeometry {
 
     fn interior_tessellation(
         &self,
-        path: &WgpuPath,
+        path: &LogicalPath,
         transform: Mat2D,
         clockwise_override: bool,
     ) -> Option<&draw::InteriorTessellation> {
@@ -1874,7 +1885,7 @@ impl PreparedFillGeometry {
             .as_deref()
     }
 
-    fn should_use_interior(&self, path: &WgpuPath, transform: Mat2D) -> bool {
+    fn should_use_interior(&self, path: &LogicalPath, transform: Mat2D) -> bool {
         *self
             .should_use_interior
             .get_or_init(|| draw::should_use_interior_tessellation(&path.raw_path, transform))
@@ -1896,7 +1907,7 @@ struct StrokeGeometryKey {
 }
 
 impl StrokeGeometryKey {
-    fn new(path: &WgpuPath, paint: &WgpuPaint, state: DrawState) -> Self {
+    fn new(path: &LogicalPath, paint: &LogicalPaint, state: DrawState) -> Self {
         Self {
             path_mutation_id: path.raw_path.mutation_id(),
             transform: state.transform.0.map(f32::to_bits),
@@ -1909,8 +1920,8 @@ impl StrokeGeometryKey {
 
 impl SolidDraw {
     fn new(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: Option<ImageDraw>,
@@ -1934,8 +1945,8 @@ impl SolidDraw {
     }
 
     fn new_atomic_image_rect(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: ImageRectDraw,
@@ -1954,8 +1965,8 @@ impl SolidDraw {
 
     #[cfg(test)]
     fn new_with_preparation(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: Option<ImageDraw>,
@@ -1974,8 +1985,8 @@ impl SolidDraw {
     }
 
     fn new_with_preparation_using_stroke_scratch(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: Option<ImageDraw>,
@@ -1995,8 +2006,8 @@ impl SolidDraw {
     }
 
     fn new_with_prepared_fill_and_pixel_bounds(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: Option<ImageDraw>,
@@ -2017,8 +2028,8 @@ impl SolidDraw {
     }
 
     fn new_with_prepared_fill_and_pixel_bounds_using_stroke_scratch(
-        path: WgpuPath,
-        paint: WgpuPaint,
+        path: LogicalPath,
+        paint: LogicalPaint,
         state: DrawState,
         role: DrawRole,
         image: Option<ImageDraw>,
@@ -2353,113 +2364,25 @@ pub struct WgpuFrame {
     width: u32,
     height: u32,
     clear_color: ColorInt,
-    state: DrawState,
-    stack: Vec<DrawState>,
-    draws: Vec<SolidDraw>,
+    logical_frame: logical_frame::LogicalFrame,
     stroke_preparation_scratch: StrokePreparationScratchLease,
     draw_calls: u64,
-    logical_flush: logical_flush::LogicalFlush,
-    logical_flush_allocations: LogicalFlushAllocations,
-    logical_flush_starts: Vec<usize>,
-    clips: Vec<ClipElement>,
-    next_clip_id: u32,
-    msaa_path_clips: Vec<ClipElement>,
-    msaa_path_clip_id: u16,
-    generic_atomic_path_clip_id: u16,
     unsupported: Option<&'static str>,
     mode: RenderMode,
     work_recorder: work_metrics::FrameWorkRecorder,
 }
 
-#[derive(Clone, Default)]
-struct LogicalFlushAllocations {
-    simple_gradient_count: usize,
-    complex_gradient_count: usize,
-    atlas_draw_sizes: Vec<(u32, u32)>,
+impl std::ops::Deref for WgpuFrame {
+    type Target = logical_frame::LogicalFrame;
+
+    fn deref(&self) -> &Self::Target {
+        &self.logical_frame
+    }
 }
 
-impl LogicalFlushAllocations {
-    #[cfg(test)]
-    fn with_batch(&self, frame: &WgpuFrame, draws: &[SolidDraw]) -> Result<Self, &'static str> {
-        self.with_draws(frame, draws)
-    }
-
-    fn with_draws<'a>(
-        &self,
-        frame: &WgpuFrame,
-        draws: impl IntoIterator<Item = &'a SolidDraw>,
-    ) -> Result<Self, &'static str> {
-        const MAX_GRADIENT_HEIGHT: usize = 2048;
-        const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
-
-        let mut next = self.clone();
-        for draw in draws {
-            if let Some(gradient) = draw
-                .paint
-                .shader
-                .as_ref()
-                .and_then(|shader| normalize_gradient(shader, draw.state.opacity))
-            {
-                let simple = gradient.stops.len() == 1
-                    || (gradient.stops.len() == 2
-                        && gradient.stops[0] == 0.0
-                        && gradient.stops[1] == 1.0);
-                if simple {
-                    next.simple_gradient_count = next
-                        .simple_gradient_count
-                        .checked_add(1)
-                        .ok_or("logical flush gradient count overflow")?;
-                } else {
-                    next.complex_gradient_count = next
-                        .complex_gradient_count
-                        .checked_add(1)
-                        .ok_or("logical flush gradient count overflow")?;
-                }
-            }
-
-            let uses_feather_atlas = frame.mode == RenderMode::Msaa
-                || (frame.mode == RenderMode::ClockwiseAtomic
-                    && draw::feather_requires_atlas(
-                        draw.paint.feather,
-                        draw.state.transform,
-                        false,
-                    ));
-            if draw.paint.feather != 0.0 && uses_feather_atlas {
-                let placement = feather_atlas_placement(
-                    &draw.path.raw_path,
-                    draw.state.transform,
-                    draw.paint.feather,
-                    draw.paint.effective_stroke(),
-                    frame.width,
-                    frame.height,
-                )
-                .ok_or("draw has invalid feather atlas placement")?;
-                let draw_size = (
-                    placement.width - FEATHER_ATLAS_PADDING * 2,
-                    placement.height - FEATHER_ATLAS_PADDING * 2,
-                );
-                next.atlas_draw_sizes.push(draw_size);
-            }
-        }
-
-        let gradient_height = next
-            .simple_gradient_count
-            .div_ceil(RAMPS_PER_SIMPLE_ROW)
-            .checked_add(next.complex_gradient_count)
-            .ok_or("logical flush gradient height overflow")?;
-        let limits = frame.context.device.limits();
-        if gradient_height > MAX_GRADIENT_HEIGHT.min(limits.max_texture_dimension_2d as usize) {
-            return Err("draw batch exceeds logical flush gradient texture limit");
-        }
-        if !next.atlas_draw_sizes.is_empty() {
-            let atlas_result = pack_logical_feather_atlas_for_cpp(
-                limits.max_texture_dimension_2d,
-                &next.atlas_draw_sizes,
-            );
-            atlas_result
-                .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
-        }
-        Ok(next)
+impl std::ops::DerefMut for WgpuFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.logical_frame
     }
 }
 
@@ -2476,17 +2399,15 @@ struct ClockwiseAtomicCoverageSnapshot {
 
 impl Renderer for WgpuFrame {
     fn save(&mut self) {
-        self.stack.push(self.state);
+        self.logical_frame.logical_state.save();
     }
 
     fn restore(&mut self) {
-        if let Some(state) = self.stack.pop() {
-            self.state = state;
-        }
+        self.logical_frame.logical_state.restore();
     }
 
     fn transform(&mut self, transform: Mat2D) {
-        self.state.transform = multiply(self.state.transform, transform);
+        self.logical_frame.logical_state.transform(transform);
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
@@ -2494,7 +2415,7 @@ impl Renderer for WgpuFrame {
         if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
-        let Some(path) = wgpu_path(path) else {
+        let Some(path) = logical_path(path) else {
             self.unsupported
                 .get_or_insert("path from another renderer backend");
             return;
@@ -2504,7 +2425,7 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("path contains resources from another renderer backend");
             return;
         }
-        let Some(paint) = wgpu_paint(paint) else {
+        let Some(paint) = logical_paint(paint) else {
             self.unsupported
                 .get_or_insert("paint from another renderer backend");
             return;
@@ -2514,93 +2435,42 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("paint shader from another renderer backend");
             return;
         }
-        if !path_draw_has_valid_parameters(path, paint) {
-            return;
-        }
-        let Some(pixel_bounds) = path_draw_pixel_bounds(path, paint, self.state.transform) else {
-            return;
-        };
-        let clipped_pixel_bounds =
-            intersect_pixel_bounds(pixel_bounds, self.state.overall_clip_pixel_bounds);
-        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, self.width, self.height) {
-            return;
-        }
-        let Some(preparation) = prepare_path_draw_with_pixel_bounds(
+        let admitted = match logical_frame::admit_path_draw(
+            self.logical_frame_config(),
+            self.state,
             path,
             paint,
-            self.state,
-            Some(pixel_bounds),
-            self.mode,
-            self.width,
-            self.height,
-        ) else {
-            return;
+        ) {
+            Ok(Some(admitted)) => admitted,
+            Ok(None) => return,
+            Err(reason) => {
+                self.unsupported.get_or_insert(reason);
+                return;
+            }
         };
         let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
-        let content = SolidDraw::new_with_preparation_using_stroke_scratch(
-            path.clone(),
-            paint.clone(),
-            self.state,
-            DrawRole::Content { clip_id },
-            None,
-            preparation,
-            &mut self.stroke_preparation_scratch,
-        );
-        let msaa_feather_atlas = self.mode == RenderMode::Msaa && paint.feather != 0.0;
-        if self.mode == RenderMode::Msaa && paint.feather != 0.0 {
-            if self.state.clip_rect.is_some()
-                && !self.context.msaa_atlas_pipeline.supports_clip_rect()
-            {
-                self.unsupported
-                    .get_or_insert("clip rectangles on msaa feather atlas draws");
+        let content = match admitted.finish(clip_id, &mut self.stroke_preparation_scratch) {
+            Ok(content) => content,
+            Err(reason) => {
+                self.unsupported.get_or_insert(reason);
                 return;
             }
-        }
-        if clip_id != 0 && !msaa_feather_atlas {
-            if !atomic_draw_is_eligible(&content) {
-                self.unsupported
-                    .get_or_insert("non-rectangular clips on fallback draws");
-                return;
-            }
-        }
+        };
         self.push_content_batch(clip_updates, content);
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
-        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
-            return;
-        }
-        let Some(path) = wgpu_path(path) else {
+        let Some(path) = logical_path(path) else {
             self.unsupported
                 .get_or_insert("clip path from another renderer backend");
             return;
         };
-        if !path.valid {
-            self.unsupported
-                .get_or_insert("clip path contains resources from another renderer backend");
-            return;
+        let config = self.logical_frame_config();
+        if let Err(reason) = self.logical_frame.logical_state.clip_path(config, path) {
+            self.unsupported.get_or_insert(reason);
         }
-        if path.raw_path.verbs().is_empty() {
-            self.state.overall_clip_pixel_bounds = [0; 4];
-            return;
-        }
-        // RenderContext::frameSupportsClipRects() only enables clip planes for
-        // MSAA when the C++ backend explicitly advertises them. The WebGPU
-        // backend leaves supportsClipPlanes false, so its MSAA clip stack must
-        // represent rectangles as stencil clips too. Clockwise atomics keep
-        // the generated clip-rectangle shader path.
-        if self.mode != RenderMode::Msaa {
-            if let Some(rect) = path_aabb(&path.raw_path) {
-                if apply_clip_rect(&mut self.state, rect) {
-                    return;
-                }
-                // C++ retains the existing optimized clip rect and falls back
-                // to the ordinary clip stack for an incompatible rectangle.
-            }
-        }
-        self.push_clip_path(path);
     }
 
     fn draw_image(
@@ -2642,9 +2512,9 @@ impl Renderer for WgpuFrame {
             self.state.transform,
             Mat2D([image.width as f32, 0.0, 0.0, image.height as f32, 0.0, 0.0]),
         );
-        let mut paint = WgpuPaint::default();
+        let mut paint = LogicalPaint::default();
         paint.blend_mode = blend_mode;
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
@@ -2788,12 +2658,12 @@ impl Renderer for WgpuFrame {
             return;
         };
         let content = SolidDraw::new(
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
                 fill_rule: FillRule::NonZero,
             },
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             self.state,
             DrawRole::Content { clip_id },
             Some(ImageDraw::Mesh(ImageMeshDraw {
@@ -2816,296 +2686,62 @@ impl Renderer for WgpuFrame {
 }
 
 impl WgpuFrame {
-    fn push_clip_path(&mut self, path: &WgpuPath) {
-        let height = self.state.clip_stack_height;
-        let needs_new_element = self
-            .clips
-            .get(height)
-            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path));
-        let pixel_bounds = if needs_new_element {
-            let Some(pixel_bounds) = draw::path_pixel_bounds(&path.raw_path, self.state.transform)
-            else {
-                self.state.overall_clip_pixel_bounds = [0; 4];
-                return;
-            };
-            pixel_bounds
-        } else {
-            let Some(pixel_bounds) = self.clips[height].pixel_bounds else {
-                self.state.overall_clip_pixel_bounds = [0; 4];
-                return;
-            };
-            pixel_bounds
-        };
-        self.state.overall_clip_pixel_bounds =
-            intersect_pixel_bounds(self.state.overall_clip_pixel_bounds, pixel_bounds);
-        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
-            return;
+    fn logical_frame_config(&self) -> LogicalFrameConfig {
+        LogicalFrameConfig {
+            width: self.width,
+            height: self.height,
+            mode: self.mode,
+            max_texture_dimension_2d: self.context.device.limits().max_texture_dimension_2d,
+            msaa_atlas_supports_clip_rect: self.context.msaa_atlas_pipeline.supports_clip_rect(),
         }
-        if needs_new_element {
-            self.clips.truncate(height);
-            self.clips.push(ClipElement {
-                path: path.clone(),
-                matrix: self.state.transform,
-                pixel_bounds: Some(pixel_bounds),
-                prepared_fill: Arc::new(PreparedFillGeometry::new(path, self.state.transform)),
-                clip_id: 0,
-            });
-        }
-        self.state.clip_stack_height = height + 1;
+    }
+
+    /// Runs the production backend-neutral layout and shadow-buffer write
+    /// phase without encoding or submitting GPU commands.
+    pub fn prepare_logical_frame(&mut self) -> Result<LogicalFrameReport, RendererError> {
+        let config = self.logical_frame_config();
+        debug_assert_eq!(config, self.logical_frame.config);
+        self.context
+            .logical_resources
+            .prepare(&self.logical_frame)
+            .map_err(RendererError::Unsupported)
     }
 
     fn prepare_scheduled_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
-        if self.mode == RenderMode::ClockwiseAtomic {
-            let height = self.state.clip_stack_height;
-            if height == 0 {
-                // C++ leaves getClipContentID() resident while unclipped
-                // content renders, so the same stack can be re-entered later.
-                return Some((Vec::new(), 0));
-            }
-            let active_index = (self.generic_atomic_path_clip_id != 0)
-                .then(|| {
-                    self.clips[..height]
-                        .iter()
-                        .rposition(|clip| clip.clip_id == self.generic_atomic_path_clip_id)
-                })
-                .flatten();
-            let parent_id = active_index
-                .map(|index| self.clips[index].clip_id)
-                .unwrap_or(0);
-            let update_start = active_index.map_or(0, |index| index + 1);
-            let (updates, clip_id) = if update_start == height {
-                (Vec::new(), parent_id)
-            } else {
-                self.prepare_clip_updates_from(update_start, parent_id)?
-            };
-            return Some((updates, clip_id));
-        }
-
-        let height = self.state.clip_stack_height;
-        let current_clips = self.clips[..height].to_vec();
-        let previous_active = self.msaa_path_clips.last().cloned();
-
-        if current_clips.is_empty() {
-            return Some((Vec::new(), 0));
-        }
-
-        // This is RiveRenderer::applyClip's scan for the clip ID currently in
-        // the stencil buffer. A shared path prefix is not enough: if the
-        // resident leaf belongs to a different branch, MSAA must clear it and
-        // replay the current stack from its root.
-        let active_index = if self.msaa_path_clip_id == 0 {
-            None
-        } else {
-            self.clips[..height]
-                .iter()
-                .rposition(|clip| clip.clip_id == self.msaa_path_clip_id)
-        };
-        let parent_id = active_index
-            .map(|index| self.clips[index].clip_id)
-            .unwrap_or(0);
-        let update_start = active_index.map_or(0, |index| index + 1);
-        let (updates, clip_id) = if update_start == height {
-            (Vec::new(), parent_id)
-        } else {
-            self.prepare_clip_updates_from(update_start, parent_id)?
-        };
-
-        let mut scheduled = Vec::with_capacity(updates.len() * 2 + 1);
-        if self.msaa_path_clip_id != 0 && active_index.is_none() {
-            if let Some(active) = previous_active.as_ref() {
-                scheduled
-                    .push(self.msaa_clip_reset_draw(active, MsaaClipResetAction::ClearPrevious));
+        let config = self.logical_frame_config();
+        match self
+            .logical_frame
+            .logical_state
+            .prepare_scheduled_clip_updates(config)
+        {
+            Ok(result) => Some(result),
+            Err(reason) => {
+                self.unsupported.get_or_insert(reason);
+                None
             }
         }
-        for (offset, update) in updates.into_iter().enumerate() {
-            scheduled.push(update);
-            let clip_index = update_start + offset;
-            if clip_index != 0 {
-                let action = match current_clips[clip_index].path.fill_rule {
-                    FillRule::NonZero => MsaaClipResetAction::IntersectPreviousNonZero,
-                    FillRule::EvenOdd => MsaaClipResetAction::IntersectPreviousEvenOdd,
-                    FillRule::Clockwise => MsaaClipResetAction::IntersectPreviousClockwise,
-                };
-                scheduled.push(self.msaa_clip_reset_draw(&current_clips[clip_index - 1], action));
-            }
-        }
-        self.msaa_path_clips = current_clips;
-        self.msaa_path_clip_id = clip_id;
-        Some((scheduled, clip_id))
-    }
-
-    fn begin_logical_flush(&mut self) {
-        debug_assert_ne!(self.logical_flush_starts.last(), Some(&self.draws.len()));
-        self.logical_flush_starts.push(self.draws.len());
-        self.logical_flush.rewind();
-        self.logical_flush_allocations = LogicalFlushAllocations::default();
-        self.next_clip_id = 1;
-        self.msaa_path_clips.clear();
-        self.msaa_path_clip_id = 0;
-        self.generic_atomic_path_clip_id = 0;
     }
 
     fn push_content_batch(&mut self, clip_updates: Vec<SolidDraw>, content: SolidDraw) {
-        let uses_generic_atomic_plane =
-            self.mode == RenderMode::ClockwiseAtomic && atomic_draw_is_eligible(&content);
-        let content_clip_id = match content.role {
-            DrawRole::Content { clip_id } => clip_id,
-            DrawRole::ClipUpdate { .. } | DrawRole::ClipReset { .. } => {
-                unreachable!("content batch must end in a content draw")
-            }
-        };
-        let batch = clip_updates.iter().chain(std::iter::once(&content));
-        if self.try_push_logical_draws(batch).is_ok() {
-            self.draws.extend(clip_updates);
-            self.draws.push(content);
-            self.commit_generic_atomic_path_clip(content_clip_id, uses_generic_atomic_plane);
-            return;
-        }
-        if self.logical_flush_starts.last() == Some(&self.draws.len()) {
-            self.unsupported
-                .get_or_insert("draw batch exceeds logical flush resource limits");
-            return;
-        }
-
-        let mut content = content;
-        self.begin_logical_flush();
-        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
-            return;
-        };
-        match &mut content.role {
-            DrawRole::Content {
-                clip_id: content_clip_id,
-            } => *content_clip_id = clip_id,
-            DrawRole::ClipUpdate { .. } | DrawRole::ClipReset { .. } => {
-                unreachable!("content batch must end in a content draw")
-            }
-        }
-        let batch = clip_updates.iter().chain(std::iter::once(&content));
-        if let Err(reason) = self.try_push_logical_draws(batch) {
+        if let Err(reason) = self.logical_frame.push_content_batch(clip_updates, content) {
             self.unsupported.get_or_insert(reason);
-            return;
         }
-        self.draws.extend(clip_updates);
-        self.draws.push(content);
-        self.commit_generic_atomic_path_clip(clip_id, uses_generic_atomic_plane);
-    }
-
-    fn commit_generic_atomic_path_clip(&mut self, clip_id: u16, uses_generic_atomic_plane: bool) {
-        // applyClip commits getClipContentID only after the clip updates and
-        // content draw have been admitted. Keep the old resident leaf while
-        // rendering unclipped content so a later identical stack can reuse it.
-        if self.mode == RenderMode::ClockwiseAtomic {
-            if !uses_generic_atomic_plane {
-                self.generic_atomic_path_clip_id = 0;
-            } else if clip_id != 0 {
-                self.generic_atomic_path_clip_id = clip_id;
-            }
-        }
-    }
-
-    fn try_push_logical_draws<'a, I>(&mut self, draws: I) -> Result<(), &'static str>
-    where
-        I: Clone + Iterator<Item = &'a SolidDraw>,
-    {
-        let resources =
-            logical_flush_draws_resources(draws.clone(), self.mode, self.width, self.height)
-                .ok_or("draw batch overflows logical flush resource accounting")?;
-        let allocations = self.logical_flush_allocations.with_draws(self, draws)?;
-        if !self.logical_flush.push_draws(resources) {
-            return Err("draw batch exceeds logical flush resource counters");
-        }
-        self.logical_flush_allocations = allocations;
-        Ok(())
-    }
-
-    fn msaa_clip_reset_draw(&self, clip: &ClipElement, action: MsaaClipResetAction) -> SolidDraw {
-        let bounds = clip
-            .pixel_bounds
-            .unwrap_or([0, 0, self.width as i32, self.height as i32]);
-        let [left, top, right, bottom] = bounds;
-        let bounds = [
-            left.clamp(0, self.width as i32) as f32,
-            top.clamp(0, self.height as i32) as f32,
-            right.clamp(0, self.width as i32) as f32,
-            bottom.clamp(0, self.height as i32) as f32,
-        ];
-        SolidDraw::new(
-            clip.path.clone(),
-            WgpuPaint::default(),
-            DrawState::default(),
-            DrawRole::ClipReset { bounds, action },
-            None,
-        )
     }
 
     #[cfg(test)]
     fn prepare_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
-        self.prepare_clip_updates_from(0, 0)
-    }
-
-    fn prepare_clip_updates_from(
-        &mut self,
-        start: usize,
-        initial_parent_id: u16,
-    ) -> Option<(Vec<SolidDraw>, u16)> {
-        let height = self.state.clip_stack_height;
-        if height == 0 {
-            return Some((Vec::new(), 0));
+        let config = self.logical_frame_config();
+        match self
+            .logical_frame
+            .logical_state
+            .prepare_clip_updates_from(config, 0, 0)
+        {
+            Ok(result) => Some(result),
+            Err(reason) => {
+                self.unsupported.get_or_insert(reason);
+                None
+            }
         }
-        debug_assert!(start < height);
-        // C++ RiveRenderer::applyClip generates a new ID whenever a clip is
-        // rendered. Reusing stack depth would accept stale coverage left by an
-        // unrelated clip at the same depth in the storage-backed clip plane.
-        let Ok(update_count) = u32::try_from(height - start) else {
-            self.unsupported
-                .get_or_insert("more than 65535 clip updates in one frame");
-            return None;
-        };
-        let Some(end) = self.next_clip_id.checked_add(update_count) else {
-            self.unsupported
-                .get_or_insert("more than 65535 clip updates in one frame");
-            return None;
-        };
-        if end > u16::MAX as u32 + 1 {
-            self.unsupported
-                .get_or_insert("more than 65535 clip updates in one frame");
-            return None;
-        }
-        let mut updates = Vec::with_capacity(height - start);
-        let mut parent_id = initial_parent_id;
-        for (offset, clip) in self.clips[start..height].iter_mut().enumerate() {
-            let replacement_id = (self.next_clip_id + offset as u32) as u16;
-            clip.clip_id = replacement_id;
-            // C++ clears the precomputed authored bounds when clockwise-atomic
-            // nested clipping inverts the path around its parent content box.
-            // The inverse path has different bounds and must recompute them.
-            let prepared_pixel_bounds =
-                if self.mode == RenderMode::ClockwiseAtomic && parent_id != 0 {
-                    None
-                } else {
-                    clip.pixel_bounds
-                };
-            updates.push(SolidDraw::new_with_prepared_fill_and_pixel_bounds(
-                clip.path.clone(),
-                WgpuPaint::default(),
-                DrawState {
-                    transform: clip.matrix,
-                    clip_rect: None,
-                    clip_stack_height: 0,
-                    ..self.state
-                },
-                DrawRole::ClipUpdate {
-                    replacement_id,
-                    parent_id,
-                },
-                None,
-                Some(Arc::clone(&clip.prepared_fill)),
-                prepared_pixel_bounds,
-            ));
-            parent_id = replacement_id;
-        }
-        self.next_clip_id = end;
-        Some((updates, parent_id))
     }
 
     pub fn metrics(&self) -> WgpuFrameMetrics {
@@ -3240,6 +2876,12 @@ impl WgpuFrame {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
+        // GPU encoding consumes the production LogicalFrame's admitted draws
+        // and cached resource layout directly. The null adapter consumes the
+        // same plan into shadow buffers instead of entering this encoder.
+        self.logical_frame
+            .validate()
+            .map_err(RendererError::Unsupported)?;
         let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
@@ -6489,6 +6131,7 @@ impl WgpuFrame {
                 }
                 Ok(())
             };
+        let logical_flush_starts = self.logical_frame.logical_flush_starts.clone();
         if self.draws.is_empty() {
             encode_fallback_run(&self.draws, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
@@ -6497,9 +6140,8 @@ impl WgpuFrame {
             {
                 let mut clear_target = true;
                 let mut draw_schedule = Vec::new();
-                for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
-                    let flush_end = self
-                        .logical_flush_starts
+                for (flush_index, &flush_start) in logical_flush_starts.iter().enumerate() {
+                    let flush_end = logical_flush_starts
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
@@ -6518,10 +6160,18 @@ impl WgpuFrame {
                             &mut draw_schedule,
                         );
                     }
+                    let scheduled_resources = draw_schedule
+                        .iter()
+                        .map(|entry| {
+                            self.logical_frame.draw_resources[flush_start + entry.authored_order]
+                        })
+                        .collect::<Vec<_>>();
                     apply_msaa_draw_schedule(
-                        &mut self.draws[flush_start..flush_end],
+                        &mut self.logical_frame.draws[flush_start..flush_end],
                         &mut draw_schedule,
                     );
+                    self.logical_frame.draw_resources[flush_start..flush_end]
+                        .copy_from_slice(&scheduled_resources);
                     for chunk_start in (0..draw_schedule.len()).step_by(MAX_DRAWS_PER_SUBMISSION) {
                         let chunk_end =
                             (chunk_start + MAX_DRAWS_PER_SUBMISSION).min(draw_schedule.len());
@@ -6538,12 +6188,10 @@ impl WgpuFrame {
                 }
             } else {
                 let mut draw_schedule = Vec::with_capacity(self.draws.len());
-                let mut scheduled_flush_starts =
-                    Vec::with_capacity(self.logical_flush_starts.len());
-                for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
+                let mut scheduled_flush_starts = Vec::with_capacity(logical_flush_starts.len());
+                for (flush_index, &flush_start) in logical_flush_starts.iter().enumerate() {
                     scheduled_flush_starts.push(draw_schedule.len());
-                    let flush_end = self
-                        .logical_flush_starts
+                    let flush_end = logical_flush_starts
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
@@ -6562,10 +6210,18 @@ impl WgpuFrame {
                             &mut draw_schedule,
                         );
                     }
+                    let scheduled_resources = draw_schedule[schedule_start..]
+                        .iter()
+                        .map(|entry| {
+                            self.logical_frame.draw_resources[flush_start + entry.authored_order]
+                        })
+                        .collect::<Vec<_>>();
                     apply_msaa_draw_schedule(
-                        &mut self.draws[flush_start..flush_end],
+                        &mut self.logical_frame.draws[flush_start..flush_end],
                         &mut draw_schedule[schedule_start..],
                     );
+                    self.logical_frame.draw_resources[flush_start..flush_end]
+                        .copy_from_slice(&scheduled_resources);
                 }
                 debug_assert_eq!(draw_schedule.len(), self.draws.len());
                 encode_fallback_run(
@@ -7667,11 +7323,11 @@ fn gradient_paint_aux(
     aux
 }
 
-fn wgpu_path(path: &dyn RenderPath) -> Option<&WgpuPath> {
+fn logical_path(path: &dyn RenderPath) -> Option<&LogicalPath> {
     path.as_any().downcast_ref()
 }
 
-fn wgpu_paint(paint: &dyn RenderPaint) -> Option<&WgpuPaint> {
+fn logical_paint(paint: &dyn RenderPaint) -> Option<&LogicalPaint> {
     paint.as_any().downcast_ref()
 }
 
@@ -8151,8 +7807,8 @@ fn align_to(value: u32, alignment: u32) -> u32 {
 
 #[cfg(test)]
 fn prepare_path_draw(
-    path: &WgpuPath,
-    paint: &WgpuPaint,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
     transform: Mat2D,
 ) -> Option<PathDrawPreparation> {
     if !path_draw_has_valid_parameters(path, paint) {
@@ -8173,15 +7829,15 @@ fn prepare_path_draw(
     )
 }
 
-fn path_draw_has_valid_parameters(path: &WgpuPath, paint: &WgpuPaint) -> bool {
+fn path_draw_has_valid_parameters(path: &LogicalPath, paint: &LogicalPaint) -> bool {
     !(path.raw_path.verbs().is_empty()
         || (paint.style == RenderPaintStyle::Stroke && !(paint.thickness > 0.0))
         || !(paint.feather >= 0.0))
 }
 
 fn prepare_path_draw_with_pixel_bounds(
-    path: &WgpuPath,
-    paint: &WgpuPaint,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
     state: DrawState,
     pixel_bounds: Option<[i32; 4]>,
     mode: RenderMode,
@@ -8220,14 +7876,14 @@ fn prepare_path_draw_with_pixel_bounds(
 }
 
 #[cfg(test)]
-fn path_draw_is_noop(path: &WgpuPath, paint: &WgpuPaint, transform: Mat2D) -> bool {
+fn path_draw_is_noop(path: &LogicalPath, paint: &LogicalPaint, transform: Mat2D) -> bool {
     prepare_path_draw(path, paint, transform).is_none()
 }
 
 #[cfg(test)]
 fn path_draw_is_outside_frame(
-    path: &WgpuPath,
-    paint: &WgpuPaint,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
     transform: Mat2D,
     width: u32,
     height: u32,
@@ -8293,8 +7949,8 @@ fn transformed_rect_pixel_bounds(clip: ClipRectState) -> Option<[i32; 4]> {
 }
 
 fn path_draw_pixel_bounds(
-    path: &WgpuPath,
-    paint: &WgpuPaint,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
     transform: Mat2D,
 ) -> Option<[i32; 4]> {
     if paint.style == RenderPaintStyle::Stroke || paint.feather != 0.0 {
@@ -8648,44 +8304,6 @@ fn logical_flush_draw_resources(
             draw_pass_count: 1,
             ..Default::default()
         })
-}
-
-fn logical_flush_draws_resources<'a, I>(
-    draws: I,
-    mode: RenderMode,
-    width: u32,
-    height: u32,
-) -> Option<logical_flush::ResourceCounters>
-where
-    I: IntoIterator<Item = &'a SolidDraw>,
-    I::IntoIter: Clone,
-{
-    let mut draws = draws.into_iter();
-    let frame_clockwise_override = mode == RenderMode::ClockwiseAtomic;
-    draws.try_fold(
-        logical_flush::ResourceCounters::default(),
-        |mut total, draw| {
-            let draw =
-                logical_flush_draw_resources(draw, mode, width, height, frame_clockwise_override);
-            total.midpoint_fan_tess_vertex_count = total
-                .midpoint_fan_tess_vertex_count
-                .checked_add(draw.midpoint_fan_tess_vertex_count)?;
-            total.outer_cubic_tess_vertex_count = total
-                .outer_cubic_tess_vertex_count
-                .checked_add(draw.outer_cubic_tess_vertex_count)?;
-            total.path_count = total.path_count.checked_add(draw.path_count)?;
-            total.contour_count = total.contour_count.checked_add(draw.contour_count)?;
-            total.max_tessellated_segment_count = total
-                .max_tessellated_segment_count
-                .checked_add(draw.max_tessellated_segment_count)?;
-            total.max_triangle_vertex_count = total
-                .max_triangle_vertex_count
-                .checked_add(draw.max_triangle_vertex_count)?;
-            total.image_draw_count = total.image_draw_count.checked_add(draw.image_draw_count)?;
-            total.draw_pass_count = total.draw_pass_count.checked_add(draw.draw_pass_count)?;
-            Some(total)
-        },
-    )
 }
 
 fn atomic_paint_fill_rule(source_fill_rule: FillRule, clockwise_override: bool) -> FillRule {
@@ -10064,8 +9682,8 @@ fn draw_requires_clockwise_atomic(
 }
 
 fn fill_requires_clockwise_atomic(
-    path: &WgpuPath,
-    paint: &WgpuPaint,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
     state: DrawState,
     has_complex_fill_topology: bool,
     viewport_width: u32,
@@ -10398,6 +10016,431 @@ mod tests {
         };
 
     #[test]
+    fn wgpu_and_null_adapters_share_fill_rule_aware_logical_flush() {
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(8.0, 8.0);
+        raw_path.line_to(56.0, 8.0);
+        raw_path.line_to(32.0, 56.0);
+        raw_path.close();
+        let path = factory.make_render_path(raw_path.clone(), FillRule::EvenOdd);
+        let paint = factory.make_render_paint();
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(path.as_ref(), paint.as_ref());
+
+        let wgpu = frame.prepare_logical_frame().unwrap();
+        let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        null.begin_frame();
+        null.draw_path(&raw_path, FillRule::EvenOdd, LogicalPathPaint::default())
+            .unwrap();
+        let shadow = null.flush().unwrap();
+
+        assert_eq!(shadow, wgpu);
+        assert_eq!(shadow.draw_count, 1);
+        assert_ne!(shadow.shadow_fingerprint, 0);
+    }
+
+    #[test]
+    fn wgpu_encoder_consumes_one_shared_logical_resource_plan() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let path = LogicalPath {
+            raw_path: Arc::new(logical_triangle()),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&path, &LogicalPaint::default());
+
+        assert_eq!(frame.draws.len(), 1);
+        assert_eq!(frame.draw_resources.len(), frame.draws.len());
+        let report = frame.prepare_logical_frame().unwrap();
+        assert_eq!(report.resource_planning_passes, frame.draws.len());
+        assert_eq!(frame.draw_resources.len(), frame.draws.len());
+
+        // finish_internal validates and encodes these plan-owned draws. It no
+        // longer invokes a second resource-planning/shadow-write traversal.
+        let pixels = frame.finish().unwrap();
+        let center_alpha = pixels[((32 * 64 + 32) * 4 + 3) as usize];
+        assert_ne!(center_alpha, 0);
+    }
+
+    #[derive(Clone)]
+    struct LogicalWorkloadDraw {
+        path: RawPath,
+        fill_rule: FillRule,
+        paint: LogicalPathPaint,
+        transform: Mat2D,
+    }
+
+    fn logical_workload_draw(
+        path: RawPath,
+        fill_rule: FillRule,
+        paint: LogicalPathPaint,
+    ) -> LogicalWorkloadDraw {
+        LogicalWorkloadDraw {
+            path,
+            fill_rule,
+            paint,
+            transform: Mat2D::IDENTITY,
+        }
+    }
+
+    fn logical_triangle() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(8.0, 8.0);
+        path.line_to(56.0, 12.0);
+        path.line_to(30.0, 56.0);
+        path.close();
+        path
+    }
+
+    fn logical_cubic(points: [f32; 8]) -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(points[0], points[1]);
+        path.cubic_to(
+            points[2], points[3], points[4], points[5], points[6], points[7],
+        );
+        path
+    }
+
+    fn logical_workload(name: &str) -> (Vec<LogicalWorkloadDraw>, Option<(RawPath, FillRule)>) {
+        let fill = LogicalPathPaint::default();
+        let stroke = LogicalPathPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 5.0,
+            ..fill
+        };
+        let round_stroke = LogicalPathPaint {
+            join: StrokeJoin::Round,
+            cap: StrokeCap::Round,
+            ..stroke
+        };
+        let feather = LogicalPathPaint {
+            color: 0xff33_77dd,
+            feather: 3.5,
+            ..fill
+        };
+        let clip = || {
+            let mut path = RawPath::new();
+            path.move_to(4.0, 4.0);
+            path.line_to(60.0, 4.0);
+            path.line_to(60.0, 60.0);
+            path.line_to(4.0, 60.0);
+            path.close();
+            (path, FillRule::EvenOdd)
+        };
+
+        match name {
+            "DrawRiveRenderPaths" => (
+                vec![
+                    logical_workload_draw(logical_triangle(), FillRule::NonZero, fill),
+                    logical_workload_draw(
+                        logical_cubic([8.0, 40.0, 16.0, 2.0, 48.0, 62.0, 56.0, 20.0]),
+                        FillRule::EvenOdd,
+                        LogicalPathPaint {
+                            color: 0xffdd_7733,
+                            ..fill
+                        },
+                    ),
+                ],
+                None,
+            ),
+            "DrawRiveRenderPathsAsStrokes" => (
+                vec![logical_workload_draw(
+                    logical_cubic([6.0, 34.0, 14.0, 2.0, 50.0, 62.0, 58.0, 26.0]),
+                    FillRule::Clockwise,
+                    stroke,
+                )],
+                None,
+            ),
+            "DrawRiveRenderPathsAsRoundJoinStrokes" => {
+                let mut zigzag = RawPath::new();
+                zigzag.move_to(6.0, 52.0);
+                zigzag.line_to(20.0, 8.0);
+                zigzag.line_to(34.0, 50.0);
+                zigzag.line_to(58.0, 10.0);
+                (
+                    vec![logical_workload_draw(
+                        zigzag,
+                        FillRule::Clockwise,
+                        round_stroke,
+                    )],
+                    None,
+                )
+            }
+            "DrawFeatheredPaths_paper" => (
+                vec![
+                    logical_workload_draw(logical_triangle(), FillRule::EvenOdd, feather),
+                    logical_workload_draw(
+                        logical_cubic([4.0, 30.0, 18.0, 4.0, 46.0, 60.0, 60.0, 30.0]),
+                        FillRule::NonZero,
+                        LogicalPathPaint {
+                            feather: 5.0,
+                            ..feather
+                        },
+                    ),
+                ],
+                Some(clip()),
+            ),
+            "DrawZeroChopStrokes" => (
+                vec![logical_workload_draw(
+                    logical_cubic([6.0, 32.0, 20.0, 20.0, 44.0, 20.0, 58.0, 32.0]),
+                    FillRule::Clockwise,
+                    stroke,
+                )],
+                None,
+            ),
+            "DrawOneChopStrokes" => (
+                vec![logical_workload_draw(
+                    logical_cubic([6.0, 50.0, 14.0, 4.0, 52.0, 4.0, 58.0, 50.0]),
+                    FillRule::Clockwise,
+                    stroke,
+                )],
+                None,
+            ),
+            "DrawTwoChopStrokes" => (
+                vec![logical_workload_draw(
+                    logical_cubic([6.0, 32.0, 16.0, -8.0, 48.0, 72.0, 58.0, 32.0]),
+                    FillRule::Clockwise,
+                    stroke,
+                )],
+                None,
+            ),
+            "DrawOneCuspStrokes" => (
+                vec![logical_workload_draw(
+                    logical_cubic([8.0, 44.0, 28.0, 8.0, 28.0, 8.0, 52.0, 44.0]),
+                    FillRule::Clockwise,
+                    round_stroke,
+                )],
+                None,
+            ),
+            "DrawTwoCuspStrokes" => {
+                let mut path = logical_cubic([6.0, 46.0, 20.0, 8.0, 20.0, 8.0, 32.0, 34.0]);
+                path.cubic_to(44.0, 60.0, 44.0, 60.0, 58.0, 18.0);
+                (
+                    vec![logical_workload_draw(
+                        path,
+                        FillRule::Clockwise,
+                        round_stroke,
+                    )],
+                    None,
+                )
+            }
+            "DrawCustomFeathers" => {
+                let mut draws = Vec::new();
+                for index in 0..4 {
+                    let inset = index as f32 * 3.0;
+                    let mut path = RawPath::new();
+                    path.move_to(6.0 + inset, 8.0 + inset);
+                    path.cubic_to(
+                        54.0 - inset,
+                        2.0 + inset,
+                        10.0 + inset,
+                        62.0 - inset,
+                        58.0 - inset,
+                        54.0 - inset,
+                    );
+                    path.close();
+                    draws.push(logical_workload_draw(
+                        path,
+                        if index % 2 == 0 {
+                            FillRule::NonZero
+                        } else {
+                            FillRule::EvenOdd
+                        },
+                        LogicalPathPaint {
+                            feather: index as f32 + 1.0,
+                            ..feather
+                        },
+                    ));
+                }
+                (draws, Some(clip()))
+            }
+            _ => panic!("unknown logical workload {name}"),
+        }
+    }
+
+    fn wgpu_logical_workload(
+        config: LogicalFrameConfig,
+        draws: &[LogicalWorkloadDraw],
+        clip: Option<&(RawPath, FillRule)>,
+    ) -> LogicalFrameReport {
+        let factory = WgpuFactory::new_with_mode(config.width, config.height, config.mode).unwrap();
+        let mut frame = factory.begin_frame(0);
+        if let Some((raw_path, fill_rule)) = clip {
+            let path = LogicalPath {
+                raw_path: Arc::new(raw_path.clone()),
+                fill_rule: *fill_rule,
+                valid: true,
+            };
+            frame.clip_path(&path);
+        }
+        for draw in draws {
+            frame.save();
+            frame.transform(draw.transform);
+            let path = LogicalPath {
+                raw_path: Arc::new(draw.path.clone()),
+                fill_rule: draw.fill_rule,
+                valid: true,
+            };
+            frame.draw_path(&path, &draw.paint.into_wgpu());
+            frame.restore();
+        }
+        frame.prepare_logical_frame().unwrap()
+    }
+
+    fn null_logical_workload(
+        config: LogicalFrameConfig,
+        draws: &[LogicalWorkloadDraw],
+        clip: Option<&(RawPath, FillRule)>,
+    ) -> LogicalFrameReport {
+        let mut renderer = NullLogicalRenderer::new(config);
+        renderer.begin_frame();
+        if let Some((raw_path, fill_rule)) = clip {
+            renderer.clip_path(raw_path, *fill_rule).unwrap();
+        }
+        for draw in draws {
+            renderer.save();
+            renderer.transform(draw.transform);
+            renderer
+                .draw_path(&draw.path, draw.fill_rule, draw.paint)
+                .unwrap();
+            renderer.restore();
+        }
+        renderer.flush().unwrap()
+    }
+
+    #[test]
+    fn ten_draw_workload_shapes_match_between_wgpu_and_null_logical_frames() {
+        const WORKLOADS: [&str; 10] = [
+            "DrawRiveRenderPaths",
+            "DrawRiveRenderPathsAsStrokes",
+            "DrawRiveRenderPathsAsRoundJoinStrokes",
+            "DrawFeatheredPaths_paper",
+            "DrawZeroChopStrokes",
+            "DrawOneChopStrokes",
+            "DrawTwoChopStrokes",
+            "DrawOneCuspStrokes",
+            "DrawTwoCuspStrokes",
+            "DrawCustomFeathers",
+        ];
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let config = LogicalFrameConfig {
+                width: 64,
+                height: 64,
+                mode,
+                max_texture_dimension_2d: 8192,
+                msaa_atlas_supports_clip_rect: true,
+            };
+            for name in WORKLOADS {
+                let (draws, clip) = logical_workload(name);
+                let wgpu = wgpu_logical_workload(config, &draws, clip.as_ref());
+                let null = null_logical_workload(config, &draws, clip.as_ref());
+                assert_eq!(null, wgpu, "{name} diverged in {mode:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn logical_reports_preserve_fill_stroke_and_feather_semantics() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let report = |fill_rule, paint| {
+            let draws = [logical_workload_draw(logical_triangle(), fill_rule, paint)];
+            null_logical_workload(config, &draws, None)
+        };
+        let fill = LogicalPathPaint::default();
+        let non_zero = report(FillRule::NonZero, fill);
+        let even_odd = report(FillRule::EvenOdd, fill);
+        let clockwise = report(FillRule::Clockwise, fill);
+        let stroke = report(
+            FillRule::Clockwise,
+            LogicalPathPaint {
+                style: RenderPaintStyle::Stroke,
+                thickness: 6.0,
+                join: StrokeJoin::Round,
+                cap: StrokeCap::Square,
+                ..fill
+            },
+        );
+        let feather = report(
+            FillRule::Clockwise,
+            LogicalPathPaint {
+                feather: 4.0,
+                ..fill
+            },
+        );
+
+        let fingerprints = [
+            non_zero.shadow_fingerprint,
+            even_odd.shadow_fingerprint,
+            clockwise.shadow_fingerprint,
+            stroke.shadow_fingerprint,
+            feather.shadow_fingerprint,
+        ];
+        for (index, fingerprint) in fingerprints.iter().enumerate() {
+            assert!(
+                !fingerprints[..index].contains(fingerprint),
+                "logical semantic variant {index} collapsed to an earlier report"
+            );
+        }
+    }
+
+    #[test]
+    fn null_logical_frames_rewind_writes_and_retain_growth() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut renderer = NullLogicalRenderer::new(config);
+        renderer.begin_frame();
+        for index in 0..20 {
+            let (mut draws, _) = logical_workload("DrawCustomFeathers");
+            for draw in &mut draws {
+                draw.transform = Mat2D([1.0, 0.0, 0.0, 1.0, index as f32 * 0.1, 0.0]);
+                renderer.transform(draw.transform);
+                renderer
+                    .draw_path(&draw.path, draw.fill_rule, draw.paint)
+                    .unwrap();
+            }
+        }
+        let large = renderer.flush().unwrap();
+
+        let (small_draws, _) = logical_workload("DrawRiveRenderPaths");
+        renderer.begin_frame();
+        for draw in &small_draws {
+            renderer
+                .draw_path(&draw.path, draw.fill_rule, draw.paint)
+                .unwrap();
+        }
+        let first_small = renderer.flush().unwrap();
+        renderer.begin_frame();
+        for draw in &small_draws {
+            renderer
+                .draw_path(&draw.path, draw.fill_rule, draw.paint)
+                .unwrap();
+        }
+        let second_small = renderer.flush().unwrap();
+
+        assert_eq!(
+            first_small.shadow_fingerprint,
+            second_small.shadow_fingerprint
+        );
+        assert_eq!(first_small.written, second_small.written);
+        assert_eq!(first_small.retained_capacity, large.retained_capacity);
+        assert_eq!(second_small.retained_capacity, large.retained_capacity);
+        assert_ne!(first_small.written, large.written);
+    }
+
+    #[test]
     fn vertex_storage_polyfill_follows_cpp_capability_threshold() {
         let mut limits = wgpu::Limits::default();
         let mut downlevel = wgpu::DownlevelCapabilities::default();
@@ -10503,12 +10546,12 @@ mod tests {
             raw_path.line_to(56.0, 56.0);
             raw_path.line_to(8.0, 56.0);
             raw_path.close();
-            let path = WgpuPath {
+            let path = LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
             };
-            let paint = WgpuPaint {
+            let paint = LogicalPaint {
                 color: 0xc040_80ff,
                 feather: 8.0,
                 ..Default::default()
@@ -10525,12 +10568,12 @@ mod tests {
             small_raw_path.line_to(3.0, 3.0);
             small_raw_path.line_to(0.0, 3.0);
             small_raw_path.close();
-            let small_path = WgpuPath {
+            let small_path = LogicalPath {
                 valid: true,
                 raw_path: Arc::new(small_raw_path),
                 fill_rule: FillRule::NonZero,
             };
-            let small_paint = WgpuPaint {
+            let small_paint = LogicalPaint {
                 color: 0xff20_c060,
                 ..Default::default()
             };
@@ -10683,12 +10726,12 @@ mod tests {
     #[test]
     fn gradient_batch_packs_simple_ramps_before_complex_rows() {
         let draw = |shader| SolidDraw {
-            path: WgpuPath {
+            path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
                 fill_rule: FillRule::NonZero,
             },
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 shader: Some(shader),
                 ..Default::default()
             },
@@ -10725,12 +10768,12 @@ mod tests {
     #[test]
     fn solid_gradient_batch_keeps_per_draw_table_sparse() {
         let solid_draw = SolidDraw {
-            path: WgpuPath {
+            path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
                 fill_rule: FillRule::NonZero,
             },
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -11195,7 +11238,7 @@ mod tests {
         raw_clip.line_to(56.0, 56.0);
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
@@ -11524,7 +11567,7 @@ mod tests {
         raw_clip.line_to(56.0, 56.0);
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
@@ -11719,7 +11762,7 @@ mod tests {
         compound.line_to(44.0, 44.0);
         compound.line_to(20.0, 44.0);
         compound.close();
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(compound),
             fill_rule: FillRule::NonZero,
@@ -11727,10 +11770,10 @@ mod tests {
 
         let stroke = SolidDraw::new(
             path.clone(),
-            WgpuPaint {
+            LogicalPaint {
                 style: RenderPaintStyle::Stroke,
                 thickness: 4.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
@@ -11744,7 +11787,7 @@ mod tests {
 
         let fill = SolidDraw::new(
             path,
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
             None,
@@ -11763,9 +11806,9 @@ mod tests {
         let mut raw_path = RawPath::new();
         append_oval(&mut raw_path, [20.0, 20.0, 620.0, 620.0]);
         let path = factory.make_render_path(raw_path, FillRule::NonZero);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xff39_529f,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
 
         let mut expected: Option<Vec<u8>> = None;
@@ -12466,7 +12509,7 @@ mod tests {
     fn intersection_board_separates_overlapping_atomic_aa_bounds() {
         let make_draw = |bounds| SolidDraw {
             path: rect_path(bounds, FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -12491,7 +12534,7 @@ mod tests {
     fn atomic_plain_fill_bounds_have_only_the_cpp_grouping_outset() {
         let make_draw = |bounds| SolidDraw {
             path: rect_path(bounds, FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -12517,7 +12560,7 @@ mod tests {
     fn intersection_board_rolls_over_before_group_index_overflow() {
         let draw = SolidDraw {
             path: rect_path([10.0, 10.0, 11.0, 11.0], FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -12549,9 +12592,9 @@ mod tests {
                     [index as f32 * 10.0, 0.0, index as f32 * 10.0 + 2.0, 2.0],
                     FillRule::NonZero,
                 ),
-                paint: WgpuPaint {
+                paint: LogicalPaint {
                     color: index,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
                 state: DrawState::default(),
                 role: DrawRole::Content { clip_id: 0 },
@@ -12580,9 +12623,9 @@ mod tests {
     fn msaa_intersection_board_groups_disjoint_draws_before_overlapping_draws() {
         let make_draw = |bounds, color| SolidDraw {
             path: rect_path(bounds, FillRule::NonZero),
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
@@ -12627,10 +12670,10 @@ mod tests {
     fn msaa_scheduler_runs_opaque_prepasses_before_translucent_subpasses() {
         let make_draw = |color, blend_mode| SolidDraw {
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
                 blend_mode,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
@@ -12663,10 +12706,10 @@ mod tests {
     fn msaa_scheduler_promotes_non_overlapping_opaque_draws_before_destination_reads() {
         let make_draw = |rect, color, blend_mode| SolidDraw {
             path: rect_path(rect, FillRule::NonZero),
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
                 blend_mode,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
@@ -12698,12 +12741,12 @@ mod tests {
     fn flat_msaa_schedule_matches_bucket_reference_and_moves_owned_draws() {
         let make_draw = |bounds, color, fill_rule, style, feather, blend_mode, role| SolidDraw {
             path: rect_path(bounds, fill_rule),
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
                 style,
                 feather,
                 blend_mode,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             state: DrawState::default(),
             role,
@@ -12927,9 +12970,9 @@ mod tests {
 
         let factory =
             WgpuFactory::new_with_mode(WIDTH as u32, HEIGHT as u32, RenderMode::Msaa).unwrap();
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         for index in 0..FIRST_FAILING_DRAW_COUNT {
@@ -12949,13 +12992,13 @@ mod tests {
     fn msaa_split_submission_composites_translucent_src_over() {
         let factory = WgpuFactory::new_with_mode(2, 2, RenderMode::Msaa).unwrap();
         let path = rect_path([0.0, 0.0, 2.0, 2.0], FillRule::NonZero);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let green = WgpuPaint {
+        let green = LogicalPaint {
             color: 0x8000_ff00,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
 
         let mut split = factory.begin_frame(0xff00_0000);
@@ -12975,7 +13018,7 @@ mod tests {
     fn msaa_submission_splitting_requires_independent_direct_source_over_draws() {
         let mut draw = SolidDraw {
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -13008,7 +13051,7 @@ mod tests {
     fn msaa_intersection_board_reserves_cpp_subpass_layers() {
         let mut draw = SolidDraw {
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -13069,9 +13112,9 @@ mod tests {
             ] {
                 frame.draw_path(
                     &rect_path(bounds, FillRule::NonZero),
-                    &WgpuPaint {
+                    &LogicalPaint {
                         color,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
             }
@@ -13102,18 +13145,18 @@ mod tests {
                 raw_path.line_to(theta.cos(), theta.sin());
                 raw_path.line_to(0.0, 0.0);
                 frame.draw_path(
-                    &WgpuPath {
+                    &LogicalPath {
                         valid: true,
                         raw_path: Arc::new(raw_path),
                         fill_rule: FillRule::NonZero,
                     },
-                    &WgpuPaint {
+                    &LogicalPaint {
                         style: RenderPaintStyle::Stroke,
                         color: 0xff80_8080 | index,
                         thickness: 15.0 / 141.5,
                         join: StrokeJoin::Bevel,
                         cap: StrokeCap::Butt,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
             }
@@ -13374,18 +13417,18 @@ mod tests {
         let work = |mode, second_bounds, second_opacity, split_flush| {
             let factory = WgpuFactory::new_with_mode(64, 64, mode).unwrap();
             let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
-            let paint = WgpuPaint {
+            let paint = LogicalPaint {
                 style: RenderPaintStyle::Stroke,
                 color: 0xffff_ffff,
                 thickness: 2.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             };
             frame.draw_path(
                 &rect_path([4.0, 4.0, 20.0, 20.0], FillRule::NonZero),
                 &paint,
             );
             if split_flush {
-                frame.begin_logical_flush();
+                frame.logical_frame.begin_logical_flush();
             }
             frame.state.opacity = second_opacity;
             frame.draw_path(&rect_path(second_bounds, FillRule::NonZero), &paint);
@@ -13412,9 +13455,9 @@ mod tests {
     fn direct_stroke_batching_rejects_pipeline_and_order_boundaries() {
         let draw = SolidDraw {
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
-            paint: WgpuPaint {
+            paint: LogicalPaint {
                 style: RenderPaintStyle::Stroke,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
@@ -13973,17 +14016,17 @@ mod tests {
         raw_path.cubic_to(28.0, -8.0, 36.0, 72.0, 60.0, 60.0);
         raw_path.move_to(8.0, 40.0);
         raw_path.line_to(56.0, 24.0);
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 4.0,
             join: StrokeJoin::Round,
             cap: StrokeCap::Round,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
 
         let mut first = factory.begin_frame(0xff00_0000);
@@ -14093,9 +14136,9 @@ mod tests {
                 let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, false);
                 frame.draw_path(
                     &rect_path([4.0, 4.0, 28.0, 28.0], FillRule::NonZero),
-                    &WgpuPaint {
+                    &LogicalPaint {
                         color: 0xffff_0000,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
                 frame.finish_for_benchmark().unwrap();
@@ -14150,9 +14193,9 @@ mod tests {
             ] {
                 frame.draw_path(
                     &rect_path(bounds, FillRule::NonZero),
-                    &WgpuPaint {
+                    &LogicalPaint {
                         color,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
             }
@@ -14193,7 +14236,7 @@ mod tests {
         );
     }
 
-    fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> WgpuPath {
+    fn rect_path(bounds: [f32; 4], fill_rule: FillRule) -> LogicalPath {
         let [left, top, right, bottom] = bounds;
         let mut raw_path = RawPath::new();
         raw_path.move_to(left, top);
@@ -14201,7 +14244,7 @@ mod tests {
         raw_path.line_to(right, bottom);
         raw_path.line_to(left, bottom);
         raw_path.close();
-        WgpuPath {
+        LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule,
@@ -14325,7 +14368,7 @@ mod tests {
     fn clockwise_atomic_clip_is_inactive_only_with_full_pixel_margin() {
         let make_draw = |clip_rect| SolidDraw {
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::Clockwise),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState {
                 clip_rect,
                 ..DrawState::default()
@@ -14404,7 +14447,7 @@ mod tests {
         let mut raw_path = RawPath::new();
         append_oval(&mut raw_path, [20.0, 20.0, 140.0, 140.0]);
         append_oval(&mut raw_path, [100.0, 20.0, 220.0, 140.0]);
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::EvenOdd,
@@ -14412,9 +14455,9 @@ mod tests {
         let mut frame = factory.begin_frame(0xffff_ffff);
         frame.draw_path(
             &path,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xff44_88cc,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         let pixels = frame.finish().unwrap();
@@ -14430,7 +14473,7 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(256, 256, RenderMode::ClockwiseAtomic).unwrap();
         let mut red_raw_path = RawPath::new();
         append_oval(&mut red_raw_path, [10.0, 10.0, 100.0, 50.0]);
-        let red_path = WgpuPath {
+        let red_path = LogicalPath {
             valid: true,
             raw_path: Arc::new(red_raw_path),
             fill_rule: FillRule::NonZero,
@@ -14440,7 +14483,7 @@ mod tests {
         let mut inner = RawPath::new();
         append_oval(&mut inner, [90.0, 90.0, 180.0, 180.0]);
         ring_raw_path.add_path_backwards(&inner, Mat2D::IDENTITY);
-        let ring_path = WgpuPath {
+        let ring_path = LogicalPath {
             valid: true,
             raw_path: Arc::new(ring_raw_path),
             fill_rule: FillRule::NonZero,
@@ -14448,16 +14491,16 @@ mod tests {
         let mut frame = factory.begin_frame(0xffff_ffff);
         frame.draw_path(
             &red_path,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xffff_0000,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.draw_path(
             &ring_path,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xff00_00ff,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         let pixels = frame.finish().unwrap();
@@ -14493,7 +14536,7 @@ mod tests {
         assert_eq!(pixel(321, 119), [0, 0, 0, 0]);
     }
 
-    fn negative_interior_path() -> WgpuPath {
+    fn negative_interior_path() -> LogicalPath {
         let mut raw_path = RawPath::new();
         raw_path.move_to(1600.0, 0.0);
         raw_path.line_to(0.0, 0.0);
@@ -14505,14 +14548,14 @@ mod tests {
             raw_path.cubic_to(x + 50.0, 0.0, x + 750.0, 0.0, x + 750.0, 640.0);
             raw_path.cubic_to(x + 750.0, 1600.0, x + 50.0, 1600.0, x + 50.0, 640.0);
         }
-        WgpuPath {
+        LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::Clockwise,
         }
     }
 
-    fn negative_interior_checkerboard() -> WgpuPath {
+    fn negative_interior_checkerboard() -> LogicalPath {
         let mut raw_path = RawPath::new();
         for index in 0..50 {
             let offset = index as f32 * 32.0;
@@ -14555,7 +14598,7 @@ mod tests {
                 raw_path.close();
             }
         }
-        WgpuPath {
+        LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::Clockwise,
@@ -14583,13 +14626,13 @@ mod tests {
 
     #[test]
     fn feathered_stroke_uses_effective_round_style_for_direct_and_atlas_tessellation() {
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 18.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         assert_eq!(
             paint.effective_stroke(),
@@ -14648,13 +14691,13 @@ mod tests {
 
     #[test]
     fn feathered_open_stroke_uses_effective_round_caps_for_direct_and_atlas_tessellation() {
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 18.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut path = RawPath::new();
         path.move_to(16.0, 32.0);
@@ -14697,7 +14740,7 @@ mod tests {
 
     #[test]
     fn culls_empty_and_invalid_path_draws_like_cpp() {
-        let empty = WgpuPath {
+        let empty = LogicalPath {
             valid: true,
             raw_path: Arc::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
@@ -14707,7 +14750,7 @@ mod tests {
         path.raw_path_mut().line_to(1.0, 0.0);
         path.raw_path_mut().line_to(0.0, 1.0);
         path.raw_path_mut().close();
-        let mut paint = WgpuPaint::default();
+        let mut paint = LogicalPaint::default();
 
         assert!(path_draw_is_noop(&empty, &paint, Mat2D::IDENTITY));
         assert!(!path_draw_is_noop(&path, &paint, Mat2D::IDENTITY));
@@ -14723,13 +14766,13 @@ mod tests {
 
         let mut move_only = empty.clone();
         move_only.raw_path_mut().move_to(4.0, 4.0);
-        paint = WgpuPaint::default();
+        paint = LogicalPaint::default();
         assert!(path_draw_is_noop(&move_only, &paint, Mat2D::IDENTITY));
     }
 
     #[test]
     fn wgpu_path_clones_share_geometry_until_a_real_mutation() {
-        let mut path = WgpuPath {
+        let mut path = LogicalPath {
             valid: true,
             raw_path: Arc::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
@@ -14753,7 +14796,7 @@ mod tests {
 
     #[test]
     fn batched_raw_path_rebuild_detaches_snapshots_and_invalidates_geometry_keys() {
-        let mut path = WgpuPath {
+        let mut path = LogicalPath {
             valid: true,
             raw_path: Arc::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
@@ -14784,7 +14827,7 @@ mod tests {
 
     #[test]
     fn culls_path_draws_outside_the_cpp_frame_bounds() {
-        let mut path = WgpuPath {
+        let mut path = LogicalPath {
             valid: true,
             raw_path: Arc::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
@@ -14793,7 +14836,7 @@ mod tests {
         path.raw_path_mut().line_to(-10.0, -20.0);
         path.raw_path_mut().line_to(-10.0, -10.0);
         path.raw_path_mut().close();
-        let mut paint = WgpuPaint::default();
+        let mut paint = LogicalPaint::default();
 
         assert!(path_draw_is_outside_frame(
             &path,
@@ -14818,7 +14861,7 @@ mod tests {
     fn frame_admission_culls_before_fill_preparation_and_retains_visible_bounds() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let mut frame = factory.begin_frame(0xff00_0000);
-        let paint = WgpuPaint::default();
+        let paint = LogicalPaint::default();
         let offscreen = rect_path([-200.0, -200.0, -100.0, -100.0], FillRule::NonZero);
 
         draw::reset_fill_tessellation_build_count();
@@ -14839,10 +14882,10 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let mut frame = factory.begin_frame(0xff00_0000);
         let path = rect_path([-20.0, -20.0, -10.0, -10.0], FillRule::NonZero);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 24.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
 
         frame.draw_path(&path, &paint);
@@ -14862,7 +14905,7 @@ mod tests {
             FillRule::NonZero,
         );
         let content = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
-        let paint = WgpuPaint::default();
+        let paint = LogicalPaint::default();
         let mut frame = factory.begin_frame(0xff00_0000);
 
         frame.clip_path(&clip);
@@ -14930,7 +14973,7 @@ mod tests {
 
     #[test]
     fn paint_thickness_matches_cpp_absolute_value_setter() {
-        let mut paint = WgpuPaint::default();
+        let mut paint = LogicalPaint::default();
         RenderPaint::thickness(&mut paint, -3.5);
         assert_eq!(paint.thickness, 3.5);
 
@@ -14940,7 +14983,7 @@ mod tests {
 
     #[test]
     fn paint_feather_matches_cpp_absolute_value_setter() {
-        let mut paint = WgpuPaint::default();
+        let mut paint = LogicalPaint::default();
         RenderPaint::feather(&mut paint, -8.0);
         assert_eq!(paint.feather, 8.0);
 
@@ -14971,12 +15014,12 @@ mod tests {
         raw_path.line_to(0.0, 10.0);
         raw_path.close();
         let draw = SolidDraw {
-            path: WgpuPath {
+            path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
             },
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -14996,7 +15039,7 @@ mod tests {
             raw_path.line_to(624.0, inset);
             raw_path.line_to(inset, 624.0);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -15008,16 +15051,16 @@ mod tests {
             let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
             frame.draw_path(
                 &large_triangle(16.0),
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xffff_0000,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             frame.draw_path(
                 &large_triangle(48.0),
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xff00_ff00,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             if read_pixels {
@@ -15060,7 +15103,7 @@ mod tests {
             raw_path.line_to(624.0, inset);
             raw_path.line_to(inset, 624.0);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -15072,17 +15115,17 @@ mod tests {
             let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
             frame.draw_path(
                 &large_triangle(16.0),
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xffff_0000,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             frame.draw_path(
                 &large_triangle(48.0),
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xff00_ff00,
                     blend_mode: BlendMode::Screen,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             if read_pixels {
@@ -15244,7 +15287,7 @@ mod tests {
             raw_path.line_to(points[1][0], points[1][1]);
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -15308,7 +15351,7 @@ mod tests {
             raw_path.line_to(points[1][0], points[1][1]);
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -15316,9 +15359,9 @@ mod tests {
         };
         let outer = triangle([[32.0, 4.0], [60.0, 60.0], [4.0, 60.0]]);
         let inner = triangle([[32.0, 12.0], [48.0, 48.0], [16.0, 48.0]]);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
 
@@ -15370,15 +15413,15 @@ mod tests {
         raw_clip.line_to(60.0, 60.0);
         raw_clip.line_to(4.0, 60.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
         let content = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
 
@@ -15391,12 +15434,12 @@ mod tests {
         let mut empty_path = RawPath::new();
         empty_path.move_to(0.0, 0.0);
         let fallback = SolidDraw::new(
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(empty_path),
                 fill_rule: FillRule::NonZero,
             },
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
             None,
@@ -15474,9 +15517,9 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -15494,9 +15537,9 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let clip = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::NonZero);
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -15515,10 +15558,10 @@ mod tests {
     fn msaa_direct_fill_reads_destination_for_advanced_blending() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let fill = rect_path([16.0, 16.0, 48.0, 48.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xff00_00ff,
             blend_mode: BlendMode::Multiply,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_ff00);
         frame.draw_path(&fill, &paint);
@@ -15534,14 +15577,14 @@ mod tests {
     fn msaa_direct_fill_samples_the_generated_gradient_ramp() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             shader: Some(WgpuShader::Linear {
                 start: (0.0, 0.0),
                 end: (64.0, 0.0),
                 colors: vec![0xffff_0000, 0xff00_00ff],
                 stops: vec![0.0, 1.0],
             }),
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.draw_path(&fill, &paint);
@@ -15571,7 +15614,7 @@ mod tests {
                 raw_path.move_to(8.0, 32.0);
                 raw_path.line_to(56.0, 32.0);
             }
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -15579,13 +15622,13 @@ mod tests {
         };
         let single = make_path(1);
         let duplicate = make_path(2);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0x80ff_0000,
             style: RenderPaintStyle::Stroke,
             thickness: 16.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let render = |path: &WgpuPath| {
+        let render = |path: &LogicalPath| {
             let mut frame = factory.begin_frame(0xff00_0000);
             frame.draw_path(path, &paint);
             frame.finish().unwrap()
@@ -15606,31 +15649,31 @@ mod tests {
         let mut stroke_path = RawPath::new();
         stroke_path.move_to(8.0, 32.0);
         stroke_path.line_to(56.0, 32.0);
-        let stroke = WgpuPath {
+        let stroke = LogicalPath {
             valid: true,
             raw_path: Arc::new(stroke_path),
             fill_rule: FillRule::NonZero,
         };
-        let base_paint = WgpuPaint {
+        let base_paint = LogicalPaint {
             color: 0xff20_80c0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let multiply_paint = WgpuPaint {
+        let multiply_paint = LogicalPaint {
             color: 0x80c0_4020,
             blend_mode: BlendMode::Multiply,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let luminosity_paint = WgpuPaint {
+        let luminosity_paint = LogicalPaint {
             color: 0xa040_c080,
             blend_mode: BlendMode::Luminosity,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let stroke_paint = WgpuPaint {
+        let stroke_paint = LogicalPaint {
             color: 0x80ff_2000,
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
             blend_mode: BlendMode::Screen,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let render = |factory: &WgpuFactory, include_offscreen| {
             let mut frame = factory.begin_frame(0xff04_080c);
@@ -15695,9 +15738,9 @@ mod tests {
             &rect_path([16.0, 8.0, 112.0, 56.0], FillRule::NonZero).raw_path,
             Mat2D::IDENTITY,
         );
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -15719,14 +15762,14 @@ mod tests {
             &rect_path([36.0, 8.0, 56.0, 56.0], FillRule::NonZero).raw_path,
             Mat2D::IDENTITY,
         );
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             blend_mode: BlendMode::Overlay,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let base_paint = WgpuPaint {
+        let base_paint = LogicalPaint {
             color: 0xff80_4000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xffff_6600);
         frame.clip_path(&clip);
@@ -15749,14 +15792,14 @@ mod tests {
             Mat2D::IDENTITY,
         );
         let simple = rect_path([12.0, 12.0, 52.0, 52.0], FillRule::NonZero);
-        let base = WgpuPaint {
+        let base = LogicalPaint {
             color: 0x9980_4020,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let screen = WgpuPaint {
+        let screen = LogicalPaint {
             color: 0x8040_80c0,
             blend_mode: BlendMode::Screen,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff20_4060);
         frame.draw_path(&compound, &base);
@@ -15774,7 +15817,7 @@ mod tests {
     fn advanced_atomic_segment_plan_reuses_precomputed_eligible_suffixes() {
         let simple = SolidDraw {
             path: rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -15842,11 +15885,11 @@ mod tests {
             BlendMode::Color,
             BlendMode::Luminosity,
         ] {
-            let render = |path: &WgpuPath| {
-                let paint = WgpuPaint {
+            let render = |path: &LogicalPath| {
+                let paint = LogicalPaint {
                     color: 0x80c0_4020,
                     blend_mode,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 };
                 let mut frame = factory.begin_frame(0xff20_80c0);
                 frame.draw_path(path, &paint);
@@ -15874,10 +15917,10 @@ mod tests {
             FillRule::NonZero,
         );
         let fill = rect_path([0.0, 0.0, 1600.0, 1600.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             blend_mode: BlendMode::Overlay,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xffff_6600);
         frame.clip_path(&clip);
@@ -15900,9 +15943,9 @@ mod tests {
             &rect_path([200.0, 200.0, 440.0, 440.0], FillRule::NonZero).raw_path,
             Mat2D::IDENTITY,
         );
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.draw_path(&compound, &red);
@@ -15934,9 +15977,9 @@ mod tests {
             .iter()
             .any(|vertex| vertex.weight_path_id >> 16 > 0));
         let fill = rect_path([0.0, 0.0, 640.0, 640.0], FillRule::Clockwise);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -15959,9 +16002,9 @@ mod tests {
         );
         let inner = rect_path([200.0, 200.0, 440.0, 440.0], FillRule::NonZero);
         let fill = rect_path([0.0, 0.0, 640.0, 640.0], FillRule::Clockwise);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&outer);
@@ -15981,9 +16024,9 @@ mod tests {
         let checkerboard = negative_interior_checkerboard();
         let clip = negative_interior_path();
         let fill = rect_path([0.0, 0.0, 1600.0, 1600.0], FillRule::Clockwise);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_ffff);
         frame.clip_path(&checkerboard);
@@ -16018,15 +16061,15 @@ mod tests {
         clip_path.line_to(56.0, 8.0);
         clip_path.line_to(32.0, 56.0);
         clip_path.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(clip_path),
             fill_rule: FillRule::NonZero,
         };
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -16049,10 +16092,10 @@ mod tests {
             frame.clip_path(&clip);
             frame.draw_path(
                 &fill,
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xffff_ffff,
                     feather: 1.0,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             frame.finish().unwrap()
@@ -16087,20 +16130,20 @@ mod tests {
         clip_path.line_to(56.0, 8.0);
         clip_path.line_to(32.0, 56.0);
         clip_path.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(clip_path),
             fill_rule: FillRule::NonZero,
         };
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             shader: Some(WgpuShader::Linear {
                 start: (0.0, 0.0),
                 end: (64.0, 64.0),
                 colors: vec![0xffff_ffff, 0xff00_0000],
                 stops: vec![0.0, 1.0],
             }),
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -16120,13 +16163,13 @@ mod tests {
 
     #[test]
     fn sequential_root_clips_do_not_reuse_stale_clip_coverage() {
-        fn triangle(points: [[f32; 2]; 3]) -> WgpuPath {
+        fn triangle(points: [[f32; 2]; 3]) -> LogicalPath {
             let mut path = RawPath::new();
             path.move_to(points[0][0], points[0][1]);
             path.line_to(points[1][0], points[1][1]);
             path.line_to(points[2][0], points[2][1]);
             path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(path),
                 fill_rule: FillRule::NonZero,
@@ -16140,9 +16183,9 @@ mod tests {
         frame.clip_path(&triangle([[32.0, 32.0], [60.0, 32.0], [60.0, 60.0]]));
         frame.draw_path(
             &fill,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xffff_0000,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.restore();
@@ -16150,9 +16193,9 @@ mod tests {
         frame.clip_path(&triangle([[4.0, 4.0], [28.0, 4.0], [4.0, 28.0]]));
         frame.draw_path(
             &fill,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xff00_ffff,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.restore();
@@ -16166,14 +16209,14 @@ mod tests {
 
     #[test]
     fn nested_arbitrary_clips_intersect_in_atomic_clip_buffer() {
-        fn diamond(radius: f32) -> WgpuPath {
+        fn diamond(radius: f32) -> LogicalPath {
             let mut path = RawPath::new();
             path.move_to(32.0, 32.0 - radius);
             path.line_to(32.0 + radius, 32.0);
             path.line_to(32.0, 32.0 + radius);
             path.line_to(32.0 - radius, 32.0);
             path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(path),
                 fill_rule: FillRule::NonZero,
@@ -16182,9 +16225,9 @@ mod tests {
 
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&diamond(28.0));
@@ -16200,13 +16243,13 @@ mod tests {
 
     #[test]
     fn arbitrary_clip_stack_reuses_restored_elements() {
-        fn triangle(offset: f32) -> WgpuPath {
+        fn triangle(offset: f32) -> LogicalPath {
             let mut path = RawPath::new();
             path.move_to(offset, offset);
             path.line_to(60.0 - offset, offset);
             path.line_to(32.0, 60.0 - offset);
             path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(path),
                 fill_rule: FillRule::NonZero,
@@ -16238,20 +16281,20 @@ mod tests {
         clip_path.line_to(60.0, 4.0);
         clip_path.line_to(32.0, 60.0);
         clip_path.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(clip_path),
             fill_rule: FillRule::NonZero,
         };
         let full = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
         let inset = rect_path([24.0, 20.0, 40.0, 44.0], FillRule::Clockwise);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let green = WgpuPaint {
+        let green = LogicalPaint {
             color: 0xff00_ff00,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.clip_path(&clip);
@@ -16292,7 +16335,7 @@ mod tests {
         );
         clip_path.line_to(-469_515.0, -10_354_890.0);
         clip_path.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(clip_path),
             fill_rule: FillRule::NonZero,
@@ -16313,7 +16356,7 @@ mod tests {
         let mut frame = factory.begin_frame(0xffff_ffff);
         frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 258.0, 10_365_663.0]));
         frame.clip_path(&clip);
-        frame.draw_path(&fill, &WgpuPaint::default());
+        frame.draw_path(&fill, &LogicalPaint::default());
 
         assert!(frame.finish().is_ok());
     }
@@ -16432,17 +16475,17 @@ mod tests {
     #[test]
     fn atomic_and_fallback_runs_preserve_draw_order() {
         let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::ClockwiseAtomic).unwrap();
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let green = WgpuPaint {
+        let green = LogicalPaint {
             color: 0xff00_ff00,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let blue = WgpuPaint {
+        let blue = LogicalPaint {
             color: 0xff00_00ff,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let background = rect_path([1.0, 1.0, 31.0, 31.0], FillRule::NonZero);
         let mut compound = rect_path([4.0, 4.0, 28.0, 28.0], FillRule::EvenOdd);
@@ -16490,9 +16533,9 @@ mod tests {
 
     #[test]
     fn fully_transparent_overdraw_does_not_dither_the_destination() {
-        let transparent = WgpuPaint {
+        let transparent = LogicalPaint {
             color: 0x0000_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let fill = rect_path([0.0, 0.0, 32.0, 32.0], FillRule::NonZero);
 
@@ -16638,13 +16681,13 @@ mod tests {
     }
 
     fn fixed_feather_atlas_oracle(join: StrokeJoin) -> FixedFeatherAtlasOracle {
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join,
             cap: ATLAS_ORACLE_STROKE_CAP,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut raw_path = RawPath::new();
         raw_path.move_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MIN);
@@ -16656,13 +16699,13 @@ mod tests {
     }
 
     fn fixed_feather_atlas_empty_stroke_oracle() -> FixedFeatherAtlasOracle {
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Round,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut raw_path = RawPath::new();
         let center = (ATLAS_ORACLE_SQUARE_MIN + ATLAS_ORACLE_SQUARE_MAX) * 0.5;
@@ -16672,10 +16715,10 @@ mod tests {
 
     fn fixed_feather_atlas_fill_oracle() -> FixedFeatherAtlasOracle {
         const CONTROL_OFFSET: f32 = 8.83064;
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let min = ATLAS_ORACLE_SQUARE_MIN;
         let max = ATLAS_ORACLE_SQUARE_MAX;
@@ -16719,10 +16762,10 @@ mod tests {
     }
 
     fn fixed_feather_atlas_cusp_oracle() -> FixedFeatherAtlasOracle {
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut raw_path = RawPath::new();
         raw_path.move_to(16.0, 48.0);
@@ -16866,15 +16909,15 @@ mod tests {
         raw_path.move_to(0.0, 100.0);
         raw_path.move_to(0.0, 100.0);
         raw_path.cubic_to(133.635864, 0.0, -33.6358566, 0.0, 100.0, 100.0);
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::Clockwise,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             feather: 1.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let factory = WgpuFactory::new_with_mode(
             ATLAS_ORACLE_FRAME_SIZE,
@@ -17098,7 +17141,7 @@ mod tests {
         );
     }
 
-    fn fixed_degenerate_cubic_draw(selector: &str) -> (WgpuPath, Mat2D, WgpuPaint) {
+    fn fixed_degenerate_cubic_draw(selector: &str) -> (LogicalPath, Mat2D, LogicalPaint) {
         let mut path = RawPath::new();
         let (transform, thickness) = match selector {
             "tricky-path20" => {
@@ -17132,20 +17175,20 @@ mod tests {
             _ => panic!("unknown degenerate cubic selector {selector}"),
         };
         (
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(path),
                 fill_rule: FillRule::Clockwise,
             },
             transform,
-            WgpuPaint {
+            LogicalPaint {
                 color: 0xffff_ffff,
                 style: RenderPaintStyle::Stroke,
                 thickness,
                 join: StrokeJoin::Miter,
                 cap: StrokeCap::Butt,
                 feather: 0.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         )
     }
@@ -17203,7 +17246,7 @@ mod tests {
 
     fn fixed_feather_atlas_oracle_for(
         raw_path: RawPath,
-        paint: WgpuPaint,
+        paint: LogicalPaint,
     ) -> FixedFeatherAtlasOracle {
         let oracle = feather_atlas_oracle_for(
             raw_path,
@@ -17224,7 +17267,7 @@ mod tests {
 
     fn feather_atlas_oracle_for(
         raw_path: RawPath,
-        paint: WgpuPaint,
+        paint: LogicalPaint,
         transform: Mat2D,
         frame_size: [u32; 2],
     ) -> FixedFeatherAtlasOracle {
@@ -17505,25 +17548,25 @@ mod tests {
 
     fn large_feather_atlas_oracle(case: LargeFeatherAtlasCase) -> FixedFeatherAtlasOracle {
         let (raw_path, transform) = large_feather_atlas_spec(case);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             feather: LARGE_FEATHER_RADIUS,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         feather_atlas_oracle_for(raw_path, paint, transform, LARGE_FEATHER_FRAME_SIZE)
     }
 
     fn large_feather_atlas_blit(case: LargeFeatherAtlasCase) -> atlas_blit_oracle::AtlasBlit {
         let (raw_path, transform) = large_feather_atlas_spec(case);
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::Clockwise,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             feather: LARGE_FEATHER_RADIUS,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let factory = WgpuFactory::new_with_mode(
             LARGE_FEATHER_FRAME_SIZE[0],
@@ -17568,19 +17611,19 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join: ATLAS_ORACLE_STROKE_JOIN,
             cap: ATLAS_ORACLE_STROKE_CAP,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         if let Some([left, top, right, bottom]) = clip_rect {
@@ -17590,7 +17633,7 @@ mod tests {
             raw_clip.line_to(right, bottom);
             raw_clip.line_to(left, bottom);
             raw_clip.close();
-            frame.clip_path(&WgpuPath {
+            frame.clip_path(&LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_clip),
                 fill_rule: FillRule::NonZero,
@@ -17602,7 +17645,7 @@ mod tests {
             raw_clip.line_to(48.0, 48.0);
             raw_clip.line_to(16.0, 48.0);
             raw_clip.close();
-            frame.clip_path(&WgpuPath {
+            frame.clip_path(&LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_clip),
                 fill_rule: FillRule::NonZero,
@@ -17632,7 +17675,7 @@ mod tests {
         let center = (ATLAS_ORACLE_SQUARE_MIN + ATLAS_ORACLE_SQUARE_MAX) * 0.5;
         let mut raw_path = RawPath::new();
         raw_path.move_to(center, center);
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
@@ -17644,23 +17687,23 @@ mod tests {
         marker_path.line_to(center + marker_radius, center + marker_radius);
         marker_path.line_to(center - marker_radius, center + marker_radius);
         marker_path.close();
-        let marker_path = WgpuPath {
+        let marker_path = LogicalPath {
             valid: true,
             raw_path: Arc::new(marker_path),
             fill_rule: FillRule::NonZero,
         };
-        let marker_paint = WgpuPaint {
+        let marker_paint = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join: ATLAS_ORACLE_STROKE_JOIN,
             cap: StrokeCap::Round,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.draw_path(&marker_path, &marker_paint);
@@ -17685,17 +17728,17 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::Clockwise,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xc0e0_8040,
             style: RenderPaintStyle::Fill,
             feather: ATLAS_ORACLE_FEATHER,
             blend_mode: BlendMode::ColorDodge,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff20_4080);
         frame.draw_path(&path, &paint);
@@ -17891,7 +17934,7 @@ mod tests {
     }
 
     fn fixed_feather_atlas_blit_with_path_clips(
-        clips: &[WgpuPath],
+        clips: &[LogicalPath],
         fill_content: bool,
     ) -> Result<atlas_blit_oracle::AtlasBlit, RendererError> {
         let factory = WgpuFactory::new_with_mode(
@@ -17906,7 +17949,7 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: if fill_content {
@@ -17915,7 +17958,7 @@ mod tests {
                 FillRule::NonZero
             },
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             style: if fill_content {
                 RenderPaintStyle::Fill
@@ -17926,7 +17969,7 @@ mod tests {
             join: ATLAS_ORACLE_STROKE_JOIN,
             cap: ATLAS_ORACLE_STROKE_CAP,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         for clip in clips {
@@ -17942,13 +17985,13 @@ mod tests {
         .unwrap())
     }
 
-    fn triangle_path(points: [[f32; 2]; 3], fill_rule: FillRule) -> WgpuPath {
+    fn triangle_path(points: [[f32; 2]; 3], fill_rule: FillRule) -> LogicalPath {
         let mut raw_path = RawPath::new();
         raw_path.move_to(points[0][0], points[0][1]);
         raw_path.line_to(points[1][0], points[1][1]);
         raw_path.line_to(points[2][0], points[2][1]);
         raw_path.close();
-        WgpuPath {
+        LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule,
@@ -18014,19 +18057,19 @@ mod tests {
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MAX, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.line_to(ATLAS_ORACLE_SQUARE_MIN, ATLAS_ORACLE_SQUARE_MAX);
         raw_path.close();
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_ffff,
             style: RenderPaintStyle::Stroke,
             thickness: ATLAS_ORACLE_STROKE_THICKNESS,
             join: ATLAS_ORACLE_STROKE_JOIN,
             cap: ATLAS_ORACLE_STROKE_CAP,
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let triangle = |points: [[f32; 2]; 3]| {
             let mut raw_path = RawPath::new();
@@ -18034,7 +18077,7 @@ mod tests {
             raw_path.line_to(points[1][0], points[1][1]);
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -18088,21 +18131,21 @@ mod tests {
             raw_path.line_to(right, 48.0);
             raw_path.line_to(left, 48.0);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
             }
         };
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
             feather: 4.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let blue = WgpuPaint {
+        let blue = LogicalPaint {
             color: 0xff00_00ff,
             feather: 4.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.draw_path(&square(4.0, 36.0), &red);
@@ -18152,14 +18195,14 @@ mod tests {
         raw_clip.line_to(48.0, 48.0);
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.clip_path(&clip);
@@ -18202,7 +18245,7 @@ mod tests {
             raw_path.line_to(points[1][0], points[1][1]);
             raw_path.line_to(points[2][0], points[2][1]);
             raw_path.close();
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
@@ -18210,9 +18253,9 @@ mod tests {
         };
         let outer = triangle([[32.0, 8.0], [56.0, 56.0], [8.0, 56.0]]);
         let inner = triangle([[32.0, 20.0], [44.0, 48.0], [20.0, 48.0]]);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             feather: ATLAS_ORACLE_FEATHER,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.clip_path(&outer);
@@ -18300,15 +18343,15 @@ mod tests {
         raw_clip.line_to(48.0, 48.0);
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
         let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::NonZero);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.clip_path(&clip);
@@ -18331,13 +18374,13 @@ mod tests {
             FillRule::NonZero,
         );
         let content = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::NonZero);
-        let green = WgpuPaint {
+        let green = LogicalPaint {
             color: 0xff00_ff00,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.clip_path(&outer);
@@ -18360,16 +18403,16 @@ mod tests {
         raw_clip.line_to(56.0, 56.0);
         raw_clip.line_to(8.0, 56.0);
         raw_clip.close();
-        let path_clip = WgpuPath {
+        let path_clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
         let clip_rect = rect_path([28.0, 0.0, 40.0, 64.0], FillRule::NonZero);
         let path = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::NonZero);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.clip_path(&path_clip);
@@ -18388,7 +18431,7 @@ mod tests {
     fn msaa_feather_atlas_advanced_gradient_samples_ramp_and_destination() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             feather: 4.0,
             blend_mode: BlendMode::Multiply,
             shader: Some(WgpuShader::Linear {
@@ -18397,7 +18440,7 @@ mod tests {
                 colors: vec![0xffff_0000, 0xff00_00ff],
                 stops: vec![0.0, 1.0],
             }),
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0xff20_80c0);
         frame.draw_path(&path, &paint);
@@ -18414,7 +18457,7 @@ mod tests {
     fn msaa_feather_atlas_gradient_stroke_samples_ramp() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let path = rect_path([8.0, 8.0, 56.0, 56.0], FillRule::Clockwise);
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
             feather: 4.0,
@@ -18424,7 +18467,7 @@ mod tests {
                 colors: vec![0xffff_0000, 0xff00_00ff],
                 stops: vec![0.0, 1.0],
             }),
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let mut frame = factory.begin_frame(0);
         frame.draw_path(&path, &paint);
@@ -18490,11 +18533,11 @@ mod tests {
             BlendMode::Luminosity,
         ] {
             let render = |factory: &WgpuFactory, feather| {
-                let paint = WgpuPaint {
+                let paint = LogicalPaint {
                     color: 0x80c0_4020,
                     feather,
                     blend_mode,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 };
                 let mut frame = factory.begin_frame(0xff20_80c0);
                 frame.draw_path(&path, &paint);
@@ -18527,20 +18570,20 @@ mod tests {
                 let mut frame = factory.begin_frame(0xff20_4080);
                 frame.draw_path(
                     &left,
-                    &WgpuPaint {
+                    &LogicalPaint {
                         color: 0xc0e0_8040,
                         feather: 32.0,
                         blend_mode,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
                 frame.draw_path(
                     &right,
-                    &WgpuPaint {
+                    &LogicalPaint {
                         color: 0xc040_c0e0,
                         feather: 32.0,
                         blend_mode,
-                        ..WgpuPaint::default()
+                        ..LogicalPaint::default()
                     },
                 );
                 frame.finish().unwrap()
@@ -18571,18 +18614,18 @@ mod tests {
         let mut frame = factory.begin_frame(0xff00_0000);
         frame.draw_path(
             &rect_path([0.0, 0.0, 256.0, 192.0], FillRule::NonZero),
-            &WgpuPaint {
+            &LogicalPaint {
                 color: background,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.draw_path(
             &path,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0x8053_5353,
                 feather: 53.0,
                 blend_mode: BlendMode::ColorDodge,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         let pixels = frame.finish().unwrap();
@@ -18600,18 +18643,18 @@ mod tests {
         let mut frame = factory.begin_frame(0xff29_2929);
         frame.draw_path(
             &rect_path([0.0, 0.0, 256.0, 192.0], FillRule::Clockwise),
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xff00_0000,
                 blend_mode: BlendMode::Hue,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.draw_path(
             &rect_path([32.0, 48.0, 224.0, 144.0], FillRule::Clockwise),
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0x8010_070e,
                 feather: 50.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         let pixels = frame.finish().unwrap();
@@ -18633,22 +18676,22 @@ mod tests {
         raw_clip.line_to(48.0, 48.0);
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
-        let first = WgpuPaint {
+        let first = LogicalPaint {
             color: 0x80c0_4020,
             feather: 1.0,
             blend_mode: BlendMode::ColorDodge,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let second = WgpuPaint {
+        let second = LogicalPaint {
             color: 0xa040_c080,
             feather: 1.0,
             blend_mode: BlendMode::Multiply,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let render = |draw_second| {
             let mut frame = factory.begin_frame(0xff20_80c0);
@@ -18679,22 +18722,22 @@ mod tests {
         raw_clip.line_to(48.0, 48.0);
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
-        let first = WgpuPaint {
+        let first = LogicalPaint {
             color: 0x80c0_4020,
             feather: 1.0,
             blend_mode: BlendMode::ColorDodge,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let second = WgpuPaint {
+        let second = LogicalPaint {
             color: 0xa040_c080,
             feather: 1.0,
             blend_mode: BlendMode::Multiply,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let make_frame = |force_rollover: bool| {
             let mut frame = factory.begin_frame(0xff20_80c0);
@@ -18741,13 +18784,13 @@ mod tests {
     fn msaa_logical_flush_resolves_and_reloads_color_samples() {
         let factory = WgpuFactory::new_with_mode(32, 32, RenderMode::Msaa).unwrap();
         let edge = rect_path([0.0, 0.0, 10.5, 32.0], FillRule::NonZero);
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let green = WgpuPaint {
+        let green = LogicalPaint {
             color: 0xff00_ff00,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let render = |force_rollover: bool| {
             let mut frame = factory.begin_frame(0x0000_0000);
@@ -18783,10 +18826,10 @@ mod tests {
     fn real_msaa_stroke_accounting_reaches_the_cpp_path_boundary() {
         let draw = SolidDraw::new(
             rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
-            WgpuPaint {
+            LogicalPaint {
                 style: RenderPaintStyle::Stroke,
                 thickness: 1.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
@@ -18807,10 +18850,10 @@ mod tests {
     fn solid_draw_clones_share_prepared_stroke_geometry() {
         let draw = SolidDraw::new(
             rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
-            WgpuPaint {
+            LogicalPaint {
                 style: RenderPaintStyle::Stroke,
                 thickness: 2.0,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
@@ -18838,19 +18881,19 @@ mod tests {
             let mut raw_path = RawPath::new();
             raw_path.move_to(8.0, y);
             raw_path.line_to(56.0, y);
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
             }
         };
-        let red = WgpuPaint {
+        let red = LogicalPaint {
             color: 0xffff_0000,
             style: RenderPaintStyle::Stroke,
             thickness: 4.0,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
-        let blue = WgpuPaint {
+        let blue = LogicalPaint {
             color: 0xff00_00ff,
             ..red.clone()
         };
@@ -18892,18 +18935,18 @@ mod tests {
         assert_eq!(contour_ids, [2]);
         assert_eq!(tessellation.contours.len(), 1);
 
-        let path = WgpuPath {
+        let path = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0xffff_0000,
             style: RenderPaintStyle::Stroke,
             thickness: 4.0,
             join: StrokeJoin::Round,
             cap: StrokeCap::Butt,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let mut frame = factory.begin_frame(0xffff_ffff);
@@ -18921,7 +18964,7 @@ mod tests {
     #[test]
     fn draw_admission_shares_authored_fill_geometry_through_scheduler_clones() {
         let path = rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero);
-        let paint = WgpuPaint::default();
+        let paint = LogicalPaint::default();
         let preparation = prepare_path_draw(&path, &paint, Mat2D::IDENTITY)
             .expect("valid fill must pass admission");
         let admitted = preparation
@@ -19001,9 +19044,9 @@ mod tests {
         for color in [0xffff_0000, 0xff00_ff00, 0xff00_00ff, 0xff44_88cc] {
             frame.draw_path(
                 &path,
-                &WgpuPaint {
+                &LogicalPaint {
                     color,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
         }
@@ -19030,7 +19073,7 @@ mod tests {
                 raw_path.line_to(left, bottom);
                 raw_path.close();
             }
-            WgpuPath {
+            LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
                 fill_rule,
@@ -19044,9 +19087,9 @@ mod tests {
             let mut frame = factory.begin_frame(0xffff_ffff);
             frame.draw_path(
                 &make_path(fill_rule),
-                &WgpuPaint {
+                &LogicalPaint {
                     color: 0xff44_88cc,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
             );
             let pixels = frame.finish().unwrap();
@@ -19089,16 +19132,16 @@ mod tests {
         let mut frame = factory.begin_frame(0xffff_ffff);
         frame.draw_path(
             &left,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xffff_0000,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         frame.draw_path(
             &right,
-            &WgpuPaint {
+            &LogicalPaint {
                 color: 0xff00_00ff,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
         );
         let pixels = frame.finish().unwrap();
@@ -19148,7 +19191,7 @@ mod tests {
     #[test]
     fn prepared_fill_geometry_reuses_the_frame_override_variant() {
         let path = rect_path([32.0, 32.0, 608.0, 608.0], FillRule::NonZero);
-        let paint = WgpuPaint::default();
+        let paint = LogicalPaint::default();
         draw::reset_interior_tessellation_build_count();
         let preparation = prepare_path_draw_with_pixel_bounds(
             &path,
@@ -19181,7 +19224,7 @@ mod tests {
         );
         let global_clip = SolidDraw::new(
             global_clip_path,
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::ClipUpdate {
                 replacement_id: 1,
@@ -19215,7 +19258,7 @@ mod tests {
         );
         let draw = SolidDraw::new(
             compound,
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::Content { clip_id: 0 },
             None,
@@ -19231,7 +19274,7 @@ mod tests {
     #[test]
     fn clockwise_frame_prepares_global_override_geometry() {
         let path = rect_path([32.0, 32.0, 608.0, 608.0], FillRule::EvenOdd);
-        let paint = WgpuPaint::default();
+        let paint = LogicalPaint::default();
         let preparation = prepare_path_draw_with_pixel_bounds(
             &path,
             &paint,
@@ -19255,7 +19298,7 @@ mod tests {
         let path = rect_path([32.0, 32.0, 608.0, 608.0], FillRule::EvenOdd);
         let draw = SolidDraw::new(
             path,
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::ClipUpdate {
                 replacement_id: 2,
@@ -19283,8 +19326,8 @@ mod tests {
     fn fill_admission_selects_interior_only_for_large_clockwise_atomic_paths() {
         let large = rect_path([32.0, 32.0, 608.0, 608.0], FillRule::NonZero);
         let small = rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero);
-        let paint = WgpuPaint::default();
-        let prepare = |path: &WgpuPath, mode| {
+        let paint = LogicalPaint::default();
+        let prepare = |path: &LogicalPath, mode| {
             prepare_path_draw_with_pixel_bounds(
                 path,
                 &paint,
@@ -19340,12 +19383,12 @@ mod tests {
         let mut complex_raw = RawPath::new();
         append_oval(&mut complex_raw, [32.0, 32.0, 400.0, 608.0]);
         append_oval(&mut complex_raw, [240.0, 32.0, 608.0, 608.0]);
-        let complex = WgpuPath {
+        let complex = LogicalPath {
             valid: true,
             raw_path: Arc::new(complex_raw),
             fill_rule: FillRule::NonZero,
         };
-        let prepare = |path: &WgpuPath, paint: &WgpuPaint, state| {
+        let prepare = |path: &LogicalPath, paint: &LogicalPaint, state| {
             prepare_path_draw_with_pixel_bounds(
                 path,
                 paint,
@@ -19377,7 +19420,7 @@ mod tests {
         draw::reset_interior_tessellation_build_count();
         let clipped = prepare(
             &large,
-            &WgpuPaint::default(),
+            &LogicalPaint::default(),
             DrawState {
                 clip_stack_height: 1,
                 ..DrawState::default()
@@ -19390,7 +19433,7 @@ mod tests {
 
         draw::reset_fill_tessellation_build_count();
         draw::reset_interior_tessellation_build_count();
-        let complex_default = prepare(&complex, &WgpuPaint::default(), DrawState::default());
+        let complex_default = prepare(&complex, &LogicalPaint::default(), DrawState::default());
         assert_variant(&complex_default, true);
         assert_eq!(draw::fill_tessellation_build_count(), 0);
         assert_eq!(draw::interior_tessellation_build_count(), 1);
@@ -19399,9 +19442,9 @@ mod tests {
         draw::reset_interior_tessellation_build_count();
         let complex_advanced = prepare(
             &complex,
-            &WgpuPaint {
+            &LogicalPaint {
                 blend_mode: BlendMode::Multiply,
-                ..WgpuPaint::default()
+                ..LogicalPaint::default()
             },
             DrawState::default(),
         );
@@ -19473,7 +19516,7 @@ mod tests {
         clip_raw.line_to(360.0, 360.0);
         clip_raw.line_to(160.0, 360.0);
         clip_raw.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(clip_raw),
             fill_rule: FillRule::NonZero,
@@ -19481,14 +19524,14 @@ mod tests {
         let mut complex_raw = RawPath::new();
         append_oval(&mut complex_raw, [2.0, 2.0, 330.0, 518.0]);
         append_oval(&mut complex_raw, [190.0, 2.0, 518.0, 518.0]);
-        let complex = WgpuPath {
+        let complex = LogicalPath {
             valid: true,
             raw_path: Arc::new(complex_raw),
             fill_rule: FillRule::NonZero,
         };
-        let blue = WgpuPaint {
+        let blue = LogicalPaint {
             color: 0xff44_88cc,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
 
         draw::reset_fill_tessellation_build_count();
@@ -19524,7 +19567,7 @@ mod tests {
         let mut advanced = factory.begin_frame(0xffff_ffff);
         advanced.draw_path(
             &complex,
-            &WgpuPaint {
+            &LogicalPaint {
                 blend_mode: BlendMode::Multiply,
                 ..blue.clone()
             },
@@ -19544,14 +19587,14 @@ mod tests {
         draw::reset_interior_tessellation_build_count();
         let mut raw_path = RawPath::new();
         raw_path.move_to(8.0, 8.0);
-        let path = WgpuPath {
+        let path = LogicalPath {
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
             valid: true,
         };
         let draw = SolidDraw::new(
             path,
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::ClipUpdate {
                 replacement_id: 1,
@@ -19581,7 +19624,7 @@ mod tests {
         raw_path.move_to(8.0, 8.0);
         raw_path.move_to(608.0, 8.0);
         raw_path.move_to(8.0, 608.0);
-        let path = WgpuPath {
+        let path = LogicalPath {
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
             valid: true,
@@ -19590,9 +19633,9 @@ mod tests {
         draw::reset_interior_tessellation_build_count();
         assert!(prepare_path_draw_with_pixel_bounds(
             &path,
-            &WgpuPaint::default(),
+            &LogicalPaint::default(),
             DrawState::default(),
-            path_draw_pixel_bounds(&path, &WgpuPaint::default(), Mat2D::IDENTITY),
+            path_draw_pixel_bounds(&path, &LogicalPaint::default(), Mat2D::IDENTITY),
             RenderMode::ClockwiseAtomic,
             640,
             640,
@@ -19654,10 +19697,11 @@ mod tests {
     fn logical_flush_allocations_bound_complex_gradient_rows() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let frame = factory.begin_frame(0);
+        let config = frame.logical_frame_config();
         let mut allocations = LogicalFlushAllocations::default();
         let mut draw = SolidDraw {
             path: rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
-            paint: WgpuPaint::default(),
+            paint: LogicalPaint::default(),
             state: DrawState::default(),
             role: DrawRole::Content { clip_id: 0 },
             image: None,
@@ -19673,15 +19717,15 @@ mod tests {
                 stops: vec![0.0, 0.5, 1.0],
             });
             allocations = allocations
-                .with_batch(&frame, std::slice::from_ref(&draw))
+                .with_batch(config, std::slice::from_ref(&draw))
                 .unwrap();
         }
         assert_eq!(allocations.complex_gradient_count, 2048);
         assert!(allocations
-            .with_batch(&frame, std::slice::from_ref(&draw))
+            .with_batch(config, std::slice::from_ref(&draw))
             .is_err());
         assert!(LogicalFlushAllocations::default()
-            .with_batch(&frame, std::slice::from_ref(&draw))
+            .with_batch(config, std::slice::from_ref(&draw))
             .is_ok());
     }
 
@@ -19690,11 +19734,12 @@ mod tests {
         for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
             let atlas_factory = WgpuFactory::new_with_mode(64, 64, mode).unwrap();
             let atlas_frame = atlas_factory.begin_frame(0);
+            let config = atlas_frame.logical_frame_config();
             let atlas_draw = SolidDraw {
                 path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
-                paint: WgpuPaint {
+                paint: LogicalPaint {
                     feather: 32.0,
-                    ..WgpuPaint::default()
+                    ..LogicalPaint::default()
                 },
                 state: DrawState::default(),
                 role: DrawRole::Content { clip_id: 0 },
@@ -19706,8 +19751,7 @@ mod tests {
             let mut atlas = LogicalFlushAllocations::default();
             let atlas_count = (1..10_000)
                 .find(|_| {
-                    let Ok(next) =
-                        atlas.with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                    let Ok(next) = atlas.with_batch(config, std::slice::from_ref(&atlas_draw))
                     else {
                         return true;
                     };
@@ -19717,7 +19761,7 @@ mod tests {
                 .expect("atlas allocation must reach the device texture limit");
             assert!(atlas_count > 1, "{mode:?} rolled before one atlas draw");
             assert!(LogicalFlushAllocations::default()
-                .with_batch(&atlas_frame, std::slice::from_ref(&atlas_draw))
+                .with_batch(config, std::slice::from_ref(&atlas_draw))
                 .is_ok());
         }
     }
@@ -19726,7 +19770,7 @@ mod tests {
     fn nested_clip_resource_counts_are_frame_override_invariant() {
         let draw = SolidDraw::new(
             rect_path([2.0, 2.0, 518.0, 518.0], FillRule::NonZero),
-            WgpuPaint::default(),
+            LogicalPaint::default(),
             DrawState::default(),
             DrawRole::ClipUpdate {
                 replacement_id: 2,
@@ -19793,14 +19837,14 @@ mod tests {
         raw_clip.line_to(48.0, 48.0);
         raw_clip.line_to(16.0, 48.0);
         raw_clip.close();
-        let clip = WgpuPath {
+        let clip = LogicalPath {
             valid: true,
             raw_path: Arc::new(raw_clip),
             fill_rule: FillRule::NonZero,
         };
-        let paint = WgpuPaint {
+        let paint = LogicalPaint {
             color: 0x80ff_0000,
-            ..WgpuPaint::default()
+            ..LogicalPaint::default()
         };
         let render = |force_rollover: bool| {
             let mut frame = factory.begin_frame(0xff20_80c0);

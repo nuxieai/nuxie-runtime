@@ -1566,7 +1566,7 @@ mod tests {
     #[cfg(feature = "perf-counters")]
     #[test]
     fn additional_complex_content_reuses_clockwise_atomic_passes() {
-        use crate::{RenderMode, WgpuFactory, WgpuPaint, WgpuPath};
+        use crate::{LogicalPaint, LogicalPath, RenderMode, WgpuFactory};
         use nuxie_render_api::{FillRule, RawPath, Renderer};
         use std::sync::Arc;
 
@@ -1579,7 +1579,7 @@ mod tests {
                 raw_path.line_to(left, bottom);
                 raw_path.close();
             }
-            WgpuPath {
+            LogicalPath {
                 raw_path: Arc::new(raw_path),
                 fill_rule: FillRule::NonZero,
                 valid: true,
@@ -1588,8 +1588,8 @@ mod tests {
         let left = compound(10.0, 245.0);
         let right = compound(265.0, 500.0);
         let factory = WgpuFactory::new_with_mode(512, 512, RenderMode::ClockwiseAtomic).unwrap();
-        let paint = WgpuPaint::default();
-        let work = |paths: &[&WgpuPath]| {
+        let paint = LogicalPaint::default();
+        let work = |paths: &[&LogicalPath]| {
             let mut frame = factory.begin_frame_for_benchmark(0xffff_ffff, true);
             for path in paths {
                 frame.draw_path(*path, &paint);

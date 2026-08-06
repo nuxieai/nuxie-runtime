@@ -248,6 +248,18 @@ class SourceProvenanceTests(unittest.TestCase):
         ):
             wasm_perf.finalize_run(args)
 
+    def test_finalize_rejects_source_identity_forged_after_seal(self):
+        args, _fixture_ids = self._finalize_fixture_run(fixture_count=1)
+        config = json.loads(args.config.read_text(encoding="utf-8"))
+        config["identity"]["git_sha"] = "forged-repo-sha"
+        config["identity"]["rive_runtime_sha"] = "forged-runtime-sha"
+        args.config.write_text(wasm_perf.canonical_json(config), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "config identity differs from sealed identity"
+        ):
+            wasm_perf.finalize_run(args)
+
     def _finalize_fixture_run(
         self, *, fixture_count: int, mutate_during_native: bool = False
     ) -> tuple[SimpleNamespace, list[str]]:
@@ -305,6 +317,7 @@ class SourceProvenanceTests(unittest.TestCase):
             artifacts={"native_runner": runner},
             fixtures=fixtures,
             measurement={"repeat": 1, "runs": 1, "warmups": 0},
+            run_identity={"build_profile": "release"},
             allowed_outputs=allowed,
         )
         config = generated / "config.json"
@@ -315,12 +328,7 @@ class SourceProvenanceTests(unittest.TestCase):
                     "repeat": 1,
                     "runs": 1,
                     "warmups": 0,
-                    "identity": {
-                        "git_sha": sources["repo_sha"],
-                        "rive_runtime_sha": sources["rive_runtime_sha"],
-                        "browser": "pending",
-                        "build_profile": "release",
-                    },
+                    "identity": wasm_perf.sealed_config_identity(sealed),
                     "provenance": sealed,
                     "fixtures": fixtures,
                 }

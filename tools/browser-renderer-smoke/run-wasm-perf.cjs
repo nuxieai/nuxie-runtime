@@ -74,6 +74,17 @@ if (browserMode === "chrome") {
       schema: "nuxie-wasm-perf-browser-raw-v1",
       browser: browserMode,
       browser_version: browser.version(),
+      measurement: {
+        repeat: config.repeat,
+        runs: config.runs,
+        warmups: config.warmups,
+        fixtures: config.fixtures.map(({ id, bytes, sha256, sample_seconds }) => ({
+          id,
+          bytes,
+          sha256,
+          sample_seconds,
+        })),
+      },
       loaded_fixtures: loadedFixtures,
       fixtures,
     };

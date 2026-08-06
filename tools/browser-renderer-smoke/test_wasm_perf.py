@@ -217,6 +217,37 @@ class SourceProvenanceTests(unittest.TestCase):
         ):
             wasm_perf.finalize_run(args)
 
+    def test_finalize_rejects_native_fixture_redirected_after_seal(self):
+        args, _fixture_ids = self._finalize_fixture_run(fixture_count=1)
+        alternate = args.config.parent / "alternate.riv"
+        alternate_bytes = b"alternate-fixture"
+        alternate.write_bytes(alternate_bytes)
+        config = json.loads(args.config.read_text(encoding="utf-8"))
+        config["fixtures"][0]["staged_path"] = str(alternate)
+        config["fixtures"][0]["bytes"] = len(alternate_bytes)
+        config["fixtures"][0]["sha256"] = hashlib.sha256(alternate_bytes).hexdigest()
+        config["fixtures"][0]["sample_seconds"] = 1.0
+        args.config.write_text(wasm_perf.canonical_json(config), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "config fixture differs from sealed fixture"
+        ):
+            wasm_perf.finalize_run(args)
+
+    def test_finalize_rejects_browser_measurement_changed_after_seal(self):
+        args, _fixture_ids = self._finalize_fixture_run(fixture_count=1)
+        browser = json.loads(args.browser_results.read_text(encoding="utf-8"))
+        browser["measurement"]["fixtures"][0]["sample_seconds"] = 1.0
+        args.browser_results.write_text(
+            wasm_perf.canonical_json(browser), encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError,
+            "browser measurement contract differs from sealed measurement",
+        ):
+            wasm_perf.finalize_run(args)
+
     def _finalize_fixture_run(
         self, *, fixture_count: int, mutate_during_native: bool = False
     ) -> tuple[SimpleNamespace, list[str]]:
@@ -273,6 +304,7 @@ class SourceProvenanceTests(unittest.TestCase):
             self.runtime,
             artifacts={"native_runner": runner},
             fixtures=fixtures,
+            measurement={"repeat": 1, "runs": 1, "warmups": 0},
             allowed_outputs=allowed,
         )
         config = generated / "config.json"
@@ -302,6 +334,23 @@ class SourceProvenanceTests(unittest.TestCase):
                     "schema": "nuxie-wasm-perf-browser-raw-v1",
                     "browser": "chromium",
                     "browser_version": "test",
+                    "measurement": {
+                        "repeat": 1,
+                        "runs": 1,
+                        "warmups": 0,
+                        "fixtures": [
+                            {
+                                key: fixture[key]
+                                for key in (
+                                    "id",
+                                    "bytes",
+                                    "sha256",
+                                    "sample_seconds",
+                                )
+                            }
+                            for fixture in fixtures
+                        ],
+                    },
                     "loaded_fixtures": loaded_fixtures,
                     "fixtures": browser_runs,
                 }

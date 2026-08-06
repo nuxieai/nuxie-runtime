@@ -532,6 +532,9 @@ def _seal_fixture_records(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
             "sha256": expected_identity["sha256"],
             "source_path": source["path"],
             "staged_path": staged["path"],
+            "relative_path": fixture.get("relative_path"),
+            "sample_seconds": fixture.get("sample_seconds"),
+            "url": fixture.get("url"),
         }
     return sealed
 
@@ -543,6 +546,7 @@ def seal_run_provenance(
     *,
     artifacts: dict[str, Path],
     fixtures: list[dict[str, Any]] | None = None,
+    measurement: dict[str, Any] | None = None,
     allowed_outputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     verify_source_provenance(
@@ -557,6 +561,7 @@ def seal_run_provenance(
             name: _artifact_record(path) for name, path in sorted(artifacts.items())
         },
         "fixtures": _seal_fixture_records(fixtures or []),
+        "measurement": measurement,
     }
 
 
@@ -615,6 +620,66 @@ def verify_browser_fixture_identities(
                 f"browser loaded fixture identity mismatch: {fixture_id} "
                 f"expected={expected_identity!r} loaded={loaded!r}"
             )
+
+
+def verify_config_against_seal(
+    config: dict[str, Any], provenance: dict[str, Any]
+) -> None:
+    sealed_measurement = provenance.get("measurement")
+    current_measurement = {
+        key: config.get(key) for key in ("repeat", "runs", "warmups")
+    }
+    if current_measurement != sealed_measurement:
+        raise ContractError(
+            "config measurement differs from sealed measurement: "
+            f"sealed={sealed_measurement!r} current={current_measurement!r}"
+        )
+    fixtures = config.get("fixtures")
+    sealed_fixtures = provenance.get("fixtures")
+    if not isinstance(fixtures, list) or not isinstance(sealed_fixtures, dict):
+        raise ContractError("config omitted sealed fixtures")
+    configured_by_id = {fixture.get("id"): fixture for fixture in fixtures}
+    if len(configured_by_id) != len(fixtures) or set(configured_by_id) != set(
+        sealed_fixtures
+    ):
+        raise ContractError("config fixture identities differ from sealed fixtures")
+    for fixture_id, sealed in sealed_fixtures.items():
+        configured = configured_by_id[fixture_id]
+        current = {
+            "id": fixture_id,
+            "bytes": configured.get("bytes"),
+            "sha256": configured.get("sha256"),
+            "source_path": str(Path(configured["path"]).resolve()),
+            "staged_path": str(Path(configured["staged_path"]).resolve()),
+            "relative_path": configured.get("relative_path"),
+            "sample_seconds": configured.get("sample_seconds"),
+            "url": configured.get("url"),
+        }
+        if current != sealed:
+            raise ContractError(
+                f"config fixture differs from sealed fixture: {fixture_id} "
+                f"sealed={sealed!r} current={current!r}"
+            )
+
+
+def verify_browser_measurement_contract(
+    provenance: dict[str, Any], browser: dict[str, Any]
+) -> None:
+    expected = {
+        **provenance["measurement"],
+        "fixtures": [
+            {
+                key: fixture[key]
+                for key in ("id", "bytes", "sha256", "sample_seconds")
+            }
+            for fixture in provenance["fixtures"].values()
+        ],
+    }
+    if browser.get("measurement") != expected:
+        raise ContractError(
+            "browser measurement contract differs from sealed measurement: "
+            f"sealed={expected!r} browser={browser.get('measurement')!r}"
+        )
 
 
 def prepare_run(args: argparse.Namespace) -> None:
@@ -689,6 +754,7 @@ def seal_run(args: argparse.Namespace) -> None:
             "wasm_bindgen_js": args.wasm_bindgen_js,
         },
         fixtures=config["fixtures"],
+        measurement={key: config[key] for key in ("repeat", "runs", "warmups")},
         allowed_outputs=[path.resolve() for path in args.allowed_output],
     )
     config["provenance"] = sealed
@@ -731,19 +797,22 @@ def audit_run(args: argparse.Namespace) -> None:
     )
 
 
-def _native_runs(config: dict[str, Any], runner: Path) -> dict[str, list[dict[str, Any]]]:
+def _native_runs(
+    config: dict[str, Any], runner: Path, sealed_fixtures: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {}
     for fixture in config["fixtures"]:
+        sealed_fixture = sealed_fixtures[fixture["id"]]
         runs = []
         for run_index in range(config["runs"]):
             command = [
                 str(runner),
                 "--file",
-                fixture["staged_path"],
+                sealed_fixture["staged_path"],
                 "--expected-file-sha256",
-                fixture["sha256"],
+                sealed_fixture["sha256"],
                 "--samples",
-                str(fixture["sample_seconds"]),
+                str(sealed_fixture["sample_seconds"]),
                 "--benchmark",
                 "--benchmark-repeat",
                 str(config["repeat"]),
@@ -834,7 +903,9 @@ def finalize_run(args: argparse.Namespace) -> None:
         args.rive_runtime_dir.resolve(),
         allowed_outputs=allowed_outputs,
     )
+    verify_config_against_seal(config, provenance)
     verify_browser_fixture_identities(provenance["fixtures"], browser)
+    verify_browser_measurement_contract(provenance, browser)
     expected_native = Path(provenance["artifacts"]["native_runner"]["path"])
     if args.native_runner.resolve() != expected_native:
         raise ContractError(
@@ -848,7 +919,7 @@ def finalize_run(args: argparse.Namespace) -> None:
             validate_timing_report(report)
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"browser segment mismatch for {fixture['id']}")
-    native = _native_runs(config, args.native_runner)
+    native = _native_runs(config, args.native_runner, provenance["fixtures"])
     verify_run_provenance(
         provenance,
         args.repo_root.resolve(),

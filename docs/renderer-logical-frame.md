@@ -15,9 +15,16 @@ the renderer's real typed `PathData`, `PaintData`/`PaintAuxData`,
 buffer ring; there is no parallel count-only geometry serialization.
 `WgpuFrame::finish` invokes that writer once, then its encoders consume the exact
 typed paths, paints, contours, tessellation spans, triangles, prepared gradients,
-and retained geometry before GPU upload and submission.
+and retained geometry before GPU upload and submission. Each admitted draw has a
+stable occurrence identity that survives scheduler cloning, chunking, and
+reordering; typed resources are matched by that identity rather than by their
+contents. The diagnostic report counts eligible, exactly-once-consumed, and
+backend-fallback occurrences separately. Its aggregate consumption flag is true
+only when at least one occurrence was eligible and every eligible occurrence was
+consumed exactly once.
 `NullLogicalRenderer` invokes the identical writer and stops, without a WGPU
-context, device, queue, encoder, or submission.
+context, device, queue, encoder, or submission. It marks each eligible occurrence
+as consumed at that same shared-writer boundary.
 
 `NullLogicalRenderer::flush` keeps diagnostic hashing out of benchmark timing;
 `flush_with_diagnostics` fingerprints the exact typed output records. It also
@@ -47,6 +54,9 @@ without improving CPU measurement fidelity.
   compares their complete reports.
 - The null adapter retains typed CPU records that are byte-identical to GPU
   upload inputs, but it must not create or retain GPU resources.
+- Backend-owned operations such as image geometry, clip resets, and nested
+  clockwise-atomic inverse clips must be reported as explicit fallbacks. They
+  cannot satisfy typed-output consumption by merely selecting a frame or chunk.
 - Logical buffers grow with retained capacity and rewind their written ranges
   after each flush. A later small frame must reuse capacity without retaining
   the previous frame's contents.

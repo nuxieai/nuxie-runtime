@@ -727,15 +727,15 @@ note = "Consolidated Rust port for bones."
 
 [[file]]
 upstream = "src/command_queue.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie/src/command_queue.rs"
-note = "P3F/F3F6: faithful equivalents cover 79/83 pinned command_queue_test.cpp cases, including all 13 former F6-gated semantic cases. The four S4-45 blob command/message cases remain WATCH, so this whole-file row stays partial."
+note = "P3F/F3F6/S4-45: faithful equivalents cover all 83 pinned command_queue_test.cpp cases, including the 13 former F6-gated semantic cases and four blob handle/message/view-model cases."
 
 [[file]]
 upstream = "src/command_server.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs"
-note = "P3F/F3F6: semantic command dispatch, diff delivery, and view mapping bring faithful equivalents to 79/83 pinned command_queue_test.cpp cases. The four S4-45 blob cases remain WATCH, so this whole-file row stays partial. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate."
+note = "P3F/F3F6/S4-45: semantic command dispatch, diff delivery, view mapping, and blob handle/message/view-model behavior bring faithful equivalents to all 83 pinned command_queue_test.cpp cases. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate."
 
 [[file]]
 upstream = "src/component.cpp"

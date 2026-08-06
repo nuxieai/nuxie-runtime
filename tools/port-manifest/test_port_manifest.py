@@ -322,7 +322,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/audio/audio_source.cpp": ("ported", "D17"),
             "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
-            "src/command_queue.cpp": ("partial", "P3F"),
+            "src/command_queue.cpp": ("ported", "P3F"),
             "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
             "src/animation/keyboard_listener_group.cpp": ("absent", "F5"),
             "src/semantic/semantic_manager.cpp": ("ported", "FTAIL"),
@@ -431,7 +431,7 @@ class PortManifestCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "register seed drift for src/command_server.cpp: expected status=partial rust_module='crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs'",
+            "register seed drift for src/command_server.cpp: expected status=ported rust_module='crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs'",
             result.stderr,
         )
 
@@ -502,8 +502,8 @@ class PortManifestCliTest(unittest.TestCase):
             "src/text/text_input_text.cpp": ("ported", "FL-E6"),
             "src/text/text_interface.cpp": ("ported", "FL-E6"),
             "src/text/text_selection_path.cpp": ("ported", "FL-E6"),
-            "src/command_queue.cpp": ("partial", "P3F"),
-            "src/command_server.cpp": ("partial", "P3F"),
+            "src/command_queue.cpp": ("ported", "P3F"),
+            "src/command_server.cpp": ("ported", "P3F"),
             "src/constraints/scrolling/clamped_scroll_physics.cpp": ("partial", "F4"),
             "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
             "src/constraints/scrolling/scroll_bar_constraint.cpp": ("absent", "F4"),

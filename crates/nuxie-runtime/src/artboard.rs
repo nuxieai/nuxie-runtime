@@ -90,7 +90,7 @@ use crate::view_model::{
     RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
     set_component_list_item_index,
 };
-use crate::view_model_cell::RuntimeFileViewModelInstanceCatalog;
+use crate::view_model_cell::{RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCellValue};
 use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
@@ -5268,6 +5268,27 @@ impl ArtboardInstance {
         Some((input_index, state_machine.input(input_index)?.kind()))
     }
 
+    /// Read a boolean from the live DataContext retained by one exact nested
+    /// or component-list occurrence.
+    ///
+    /// The source path uses C++ `DataContext::getViewModelProperty` semantics:
+    /// its first segment is the ViewModel id and the remaining segments select
+    /// the nested property. Missing, stale, or wrong-typed targets fail closed.
+    pub fn occurrence_view_model_boolean(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        source_path: &[u32],
+    ) -> Option<bool> {
+        let artboard = self.occurrence_artboard(occurrence)?;
+        let data_context = artboard.artboard_owned_data_context.as_ref()?;
+        let (context, property_path) = data_context.resolved_property_path(source_path)?;
+        let cell = context.borrow().cell_by_property_path(&property_path)?;
+        match cell.value() {
+            RuntimeViewModelCellValue::Boolean(value) => Some(value),
+            _ => None,
+        }
+    }
+
     /// Write a boolean to the selected state machine on one exact retained
     /// nested/component-list occurrence.
     pub fn set_occurrence_state_machine_bool(
@@ -5285,6 +5306,36 @@ impl ArtboardInstance {
             return None;
         }
         Some(state_machine.set_bool(input_index, value))
+    }
+
+    fn occurrence_artboard(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+    ) -> Option<&ArtboardInstance> {
+        let mut artboard = self;
+        for segment in occurrence {
+            artboard = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => artboard
+                    .nested_artboards
+                    .get(&host_local_id)?
+                    .child
+                    .as_ref(),
+                RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id,
+                    item_index,
+                    occurrence_identity,
+                } => {
+                    let item = artboard
+                        .component_list_items(host_local_id)?
+                        .get(item_index)?;
+                    if item.occurrence_identity != occurrence_identity {
+                        return None;
+                    }
+                    item.child.as_ref()
+                }
+            };
+        }
+        (!occurrence.is_empty()).then_some(artboard)
     }
 
     fn occurrence_state_machine(

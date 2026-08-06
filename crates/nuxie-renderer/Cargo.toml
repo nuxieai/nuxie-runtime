@@ -37,5 +37,8 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLCom
 raw-window-handle = "0.6"
 
 [dev-dependencies]
+nuxie-binary = { path = "../nuxie-binary" }
+nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
+nuxie-runtime = { path = "../nuxie-runtime" }
 sha2 = "0.10"

@@ -672,14 +672,14 @@ impl FileScriptRuntime {
         })
     }
 
-    fn begin_host_cycle(&self) -> Option<Box<dyn Any>> {
+    fn begin_cycle(&self) -> Option<Box<dyn Any>> {
         self.ready.as_ref().map(|ready| {
             ready.vm.begin_script_cycle();
             ready.host.begin_cycle()
         })
     }
 
-    fn rollback_host_cycle(&self, checkpoint: Box<dyn Any>) {
+    fn rollback_cycle(&self, checkpoint: Box<dyn Any>) {
         if let Some(ready) = self.ready.as_ref() {
             let _ = ready.host.rollback_cycle(checkpoint);
             ready.vm.end_script_cycle();
@@ -5893,14 +5893,14 @@ impl OwnedArtboardInstance {
         self.file
             .scripts
             .borrow()
-            .begin_host_cycle()
+            .begin_cycle()
             .map(ScriptHostCycleCheckpoint)
     }
 
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
     pub fn rollback_host_effect_cycle(&self, checkpoint: ScriptHostCycleCheckpoint) {
-        self.file.scripts.borrow().rollback_host_cycle(checkpoint.0);
+        self.file.scripts.borrow().rollback_cycle(checkpoint.0);
     }
 
     #[cfg(feature = "scripting")]

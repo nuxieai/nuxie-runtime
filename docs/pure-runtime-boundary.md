@@ -30,6 +30,11 @@ identities, Nux artifact manifests, product host commands, or platform
 presentation lifecycles. A product requirement enters through a small
 baseline-owned interface implemented by an adapter above the boundary.
 
+`nuxie` is the protected, general-purpose facade over this baseline. Its own
+manifest, sources, and first-party dependency closure follow the same downward
+dependency rule as the lower-level runtime crates; the facade is not an
+application-layer exemption.
+
 Luau source compilation/evaluation, source-module registration, deterministic
 critique sampling, raw-WGSL render plans, and direct pixel-readback workflows
 are editor tooling. The baseline accepts compiled ScriptAsset bytecode,
@@ -71,22 +76,27 @@ errors, callbacks, and buffer negotiation. Product operations belong in a
 separately named product ABI. Replay and oracle tools import the baseline
 directly so parity evidence cannot depend on product glue.
 
+The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
+edge rather than migration debt. It reaches only the audited baseline facade:
+the manifest form, local provider, feature behavior, and imported Rust symbols
+are independently constrained. The whole `nuxie` provider graph remains
+protected by the ordinary baseline rules.
+
 ## Current migration debt
 
 The repository is not yet physically split at every ownership boundary. The
 guard therefore ratchets, reports, and only permits these audited debt classes:
 
-- test-support authoring builders in binary/runtime fixture owners;
-- the exact `nux-capi -> nuxie` mixed-facade edge needed by the current
-  portable ABI.
+- test-only authoring builders in exact binary/runtime fixture-owner files.
 
 ProjectDO evaluation is now physically owned by `nuxie-project-data` and enters
 the baseline through the product-neutral external-data seam documented in
 `docs/project-data-runtime-seam.md`; its former runtime debt class is empty.
 
-Each exception names exact files or one exact manifest edge. It may shrink or
-disappear; it may not spread. The UNIV-1621 child issues own the physical
-extractions, so this document does not duplicate their sequencing.
+Each debt exception names exact files. It may shrink or disappear; it may not
+spread. The approved portable-ABI edge is enforced as permanent architecture
+policy and is not included in debt reporting. The UNIV-1621 child issues own
+the physical extractions, so this document does not duplicate their sequencing.
 
 ## Executable ratchet
 
@@ -94,17 +104,21 @@ extractions, so this document does not duplicate their sequencing.
 workspace membership, including in-repository path dependencies Cargo treats
 as implicit members. Product/platform consumers are exempt packages and also
 forbidden upward dependency targets. New workspace packages are protected by
-default.
+default. The dependency-closure guarantee is first-party and in-repository:
+local path providers reachable from a protected package must themselves be in
+the scanned package set rather than escaping through a workspace exclusion.
+Third-party registry and git dependency internals remain the responsibility of
+the repository's lockfile and supply-chain controls.
 
 The manifest check covers dependency, dev-dependency, build-dependency, target,
 optional, default-disabled, measurement, and portable-ABI declarations. It
 resolves package aliases and workspace-inherited specifications using Cargo's
-path and default-feature behavior. The temporary mixed facade is constrained
-to its exact dependency table, key, effective defaults, feature forwarding,
-provider activation/dependency shape, and approved baseline symbols.
-Both sides of the temporary edge are pinned to their audited in-workspace
-providers; registry, git, alias, duplicate, and target-specific substitutions
-are rejected.
+path and default-feature behavior. The approved portable-ABI facade edge is
+constrained to its exact dependency table, key, effective defaults, feature
+forwarding, audited in-workspace provider, and approved baseline symbols.
+Registry, git, alias, duplicate, and target-specific substitutions are
+rejected. Dependencies below `nuxie` are checked by the normal protected-package
+rules instead of by a facade-specific provider-shape exception.
 
 The source check scans every Rust source in each package, including build
 scripts and custom-target module trees outside conventional folders. It

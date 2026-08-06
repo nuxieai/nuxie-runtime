@@ -77,20 +77,35 @@ make microbench-compare \
 `microbench-run` creates unique C++ build and Criterion output namespaces,
 records the Rust and C++ revisions, benchmark-content identity, C++ source
 archive hash, exact build command/cwd/output directory, build log and binary hashes, tool versions,
-settings, inventory hash, and every raw output hash in `run.json`. An existing
+settings, inventory hash, and every raw output hash in `run.json`. The fresh C++
+build receives an allowlisted environment rather than `os.environ`: release,
+gmake2, the default text/layout/canvas Premake flags, the pinned Premake tag,
+run-local HOME/TMPDIR/output paths, fixed system PATH, and resolved CC/CXX are
+explicit; ambient `RIVE_CONFIG`, `RIVE_PREMAKE_ARGS`, `RIVE_OS`, `RIVE_ARCH`,
+`RIVE_VARIANT`, `DEPENDENCIES`, `PREMAKE_PATH`, SDK/compiler flags, and similar
+overrides cannot enter the build. A sealed `cpp-build-inputs.json` records that
+exact environment, the path/size/hash of each required build tool, and content
+identities for the fetched build/test dependency trees. Comparison validates
+the document, current tool bytes, and retained dependency-tree bytes. An existing
 non-empty run directory is rejected. If `CRITERION_HOME` is set, the unique run
 namespace is created below it. If `CARGO_TARGET_DIR` is set, Cargo uses and
 records it; otherwise the repository target directory is recorded. Comparison
-accepts only `run.json`, requires the exact run schema and exact artifact key
-set (the five fixed artifacts plus one `criterion:<case>` entry per inventory
-case), verifies every path and hash, and loads every Criterion sample through
-its sealed artifact entry. The informational `criterion_home` setting cannot
+accepts only `run.json`, requires the exact v5 run schema and exact artifact key
+set (the six fixed artifacts plus one `criterion:<case>` entry per inventory
+case), verifies every path and hash, and reads each C++ output and Criterion
+sample once while hashing it. Comparison parses only those retained validated
+bytes, so replacing a path after validation cannot change the table. The
+informational `criterion_home` setting cannot
 redirect comparison, and mixed-run sample namespaces are rejected. Comparison
 also verifies the current inventory and committed repository content identity.
 That identity hashes the full Git tree except `docs/evidence/`, allowing the
 measured run's evidence-only descendant commit to revalidate while rejecting
 any benchmark, tool, input, production-source, manifest, or other content
 change. Uncommitted changes are also rejected except beneath `docs/evidence/`.
+
+The classification contract names the ten ratio cases and ten directional
+`Draw*` cases explicitly. A label flip is rejected even if the inventory still
+contains ten entries of each allowed classification.
 
 Both harnesses report the minimum observed individually timed invocation. The
 Criterion benches use `iter_custom` to start and stop the clock around every

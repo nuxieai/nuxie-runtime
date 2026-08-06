@@ -66,7 +66,24 @@ async function measureFixture({ createRunner, now, repeat, sampleSeconds }) {
   };
 }
 
-const api = { checkedElapsed, measureFixture };
+async function measureRuns({ measure, warmups, runs }) {
+  if (!Number.isInteger(warmups) || warmups < 0) {
+    throw new Error("warmups must be a non-negative integer");
+  }
+  if (!Number.isInteger(runs) || runs < 2) {
+    throw new Error("runs must be an integer of at least 2");
+  }
+  for (let index = 0; index < warmups; index += 1) {
+    await measure();
+  }
+  const reports = [];
+  for (let index = 0; index < runs; index += 1) {
+    reports.push(await measure());
+  }
+  return reports;
+}
+
+const api = { checkedElapsed, measureFixture, measureRuns };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = api;
 }

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { measureFixture } = require("./wasm-perf-driver-lib.cjs");
+const { measureFixture, measureRuns } = require("./wasm-perf-driver-lib.cjs");
 
 test("measures fresh total and phase passes with setup outside the clock", async () => {
   const events = [];
@@ -74,4 +74,15 @@ test("rejects invalid repeat counts before constructing a runner", async () => {
     }),
     /repeat must be a positive integer/,
   );
+});
+
+test("discards warmups and returns only independent measured runs", async () => {
+  let invocation = 0;
+  const reports = await measureRuns({
+    measure: async () => ++invocation,
+    warmups: 1,
+    runs: 3,
+  });
+
+  assert.deepEqual(reports, [2, 3, 4]);
 });

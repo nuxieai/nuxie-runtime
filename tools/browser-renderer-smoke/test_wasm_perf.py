@@ -184,6 +184,7 @@ segments=10
                 "build_profile": "release",
             },
             repeat=10,
+            warmups=1,
         )
 
         row = report["fixtures"][0]

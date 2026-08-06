@@ -18,6 +18,12 @@
             repeat,
             sampleSeconds,
           });
+        window.measureWasmFixtureRuns = async ({ bytes, repeat, sampleSeconds, warmups, runs }) =>
+          window.WasmPerfDriver.measureRuns({
+            measure: () => window.measureWasmFixture({ bytes, repeat, sampleSeconds }),
+            warmups,
+            runs,
+          });
         document.body.dataset.status = "ready";
       } catch (error) {
         document.body.dataset.status = "failed";

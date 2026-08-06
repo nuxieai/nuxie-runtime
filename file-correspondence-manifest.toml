@@ -3136,7 +3136,7 @@ b6_row_id = "B6-0455"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Cycle S4 faithful layout-participant owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. The host collapse bit is now synchronized in artboard.rs from LayoutParticipant display state, matching pinned syncStyleChanges, so draw.rs retains the upstream O(1) Component::isCollapsed hot path."
+note = "Cycle S4 faithful layout-participant owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. The host collapse bit is synchronized in artboard.rs from LayoutParticipant display state during style sync/initial settlement and re-folded after Solo, ancestor, or LayoutComponent reveal propagation, matching pinned syncStyleChanges transition ordering while draw.rs retains the upstream O(1) Component::isCollapsed hot path."
 
 [[file]]
 upstream = "src/layout/layout_sizing_style.cpp"

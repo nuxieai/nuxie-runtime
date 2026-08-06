@@ -161,9 +161,12 @@ crate-seams-baseline-check:
 
 crate-seams-product-check:
 	cargo check -p nuxie-product --all-targets
-	@if cargo tree --target wasm32-unknown-unknown \
+	@set -e; \
+	feature_tree="$$(cargo tree --target wasm32-unknown-unknown \
 		-p nuxie-product --no-default-features --features scripting \
-		-e normal,build | grep -Eq 'nuxie-(runtime|scripting) feature "js-host-seed"'; then \
+		-e normal,build,features)"; \
+	if printf '%s\n' "$$feature_tree" | \
+		grep -Eq 'nuxie-(runtime|scripting) feature "js-host-seed"'; then \
 		echo "host-free nuxie-product scripting unexpectedly enables js-host-seed" >&2; \
 		exit 1; \
 	fi

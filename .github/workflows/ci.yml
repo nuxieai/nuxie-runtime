@@ -264,6 +264,10 @@ jobs:
 
   renderer-golden:
     name: Renderer pixel golden
+    # Push-only: a warm pass is ~90 minutes, far too slow for PR latency. PRs
+    # run this locally (make renderer-golden) or catch it on the merge's push
+    # run.
+    if: github.event_name != 'pull_request'
     runs-on: macos-14
     # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
     # bootstrap builds from depot_tools and needs the extra headroom.
@@ -496,6 +500,9 @@ jobs:
   # ratio, fails on any checked-in ceiling, and publishes its raw JSON.
   perf-gate:
     name: Hot-loop performance gate
+    # Push-only: release runner builds plus the timing corpus are too slow for
+    # PR latency, and PR-runner load makes ratios noisy anyway.
+    if: github.event_name != 'pull_request'
     runs-on: macos-14
     timeout-minutes: 90
     env:
@@ -541,7 +548,9 @@ jobs:
 
   parity-scorecard:
     name: Five-tier parity scorecard
-    if: ${{ always() }}
+    # Push-only alongside the heavy evidence jobs it aggregates; on PRs the
+    # golden/renderer/perf evidence deliberately does not exist.
+    if: ${{ always() && github.event_name != 'pull_request' }}
     needs:
       # trusted-macos-ci uploads the oracle floor and C ABI evidence.
       - trusted-macos-ci

@@ -27,6 +27,10 @@ jobs:
   # it to put a fork pull request on a persistent Nuxie runner.
   golden-compare:
     name: Golden compare
+    # Push-only: the pinned C++ oracle build plus both compare lanes take ~50+
+    # minutes; PRs run make golden-compare locally and the merge's push run
+    # still enforces it. The C ABI smoke job below stays on PRs.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     # Hang guard at >2x the observed worst case (~51 min hosted). This gate
     # must always end in a real conclusion; see the concurrency note in

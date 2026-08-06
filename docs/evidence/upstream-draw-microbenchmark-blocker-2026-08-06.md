@@ -75,4 +75,7 @@ benchmark into the sealed run directory from the validated clean pinned
 checkout's committed archive, and records the committed Rust source revision, benchmark-content
 identity, pinned C++ revision, build command/log and binary hash, tool versions,
 settings, and every raw sample hash. `make microbench-compare` accepts only that
-sealed run manifest and reports ten direct ratios plus ten directional timings.
+sealed run manifest, requires its exact schema and inventory-derived artifact
+set, validates each artifact path/hash and common Criterion run namespace, and
+loads samples only through the sealed `criterion:<case>` entries. It then
+reports ten direct ratios plus ten directional timings.

@@ -81,12 +81,16 @@ settings, inventory hash, and every raw output hash in `run.json`. An existing
 non-empty run directory is rejected. If `CRITERION_HOME` is set, the unique run
 namespace is created below it. If `CARGO_TARGET_DIR` is set, Cargo uses and
 records it; otherwise the repository target directory is recorded. Comparison
-accepts only `run.json`, verifies every artifact hash, the current inventory,
-and the committed repository content identity. That identity hashes the full
-Git tree except `docs/evidence/`, allowing the measured run's evidence-only
-descendant commit to revalidate while rejecting any benchmark, tool, input,
-production-source, manifest, or other content change. Uncommitted changes are
-also rejected except beneath `docs/evidence/`.
+accepts only `run.json`, requires the exact run schema and exact artifact key
+set (the five fixed artifacts plus one `criterion:<case>` entry per inventory
+case), verifies every path and hash, and loads every Criterion sample through
+its sealed artifact entry. The informational `criterion_home` setting cannot
+redirect comparison, and mixed-run sample namespaces are rejected. Comparison
+also verifies the current inventory and committed repository content identity.
+That identity hashes the full Git tree except `docs/evidence/`, allowing the
+measured run's evidence-only descendant commit to revalidate while rejecting
+any benchmark, tool, input, production-source, manifest, or other content
+change. Uncommitted changes are also rejected except beneath `docs/evidence/`.
 
 Both harnesses report the minimum observed individually timed invocation. The
 Criterion benches use `iter_custom` to start and stop the clock around every

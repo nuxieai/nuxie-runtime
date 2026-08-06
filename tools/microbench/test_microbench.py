@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import importlib.util
 import json
@@ -17,6 +18,74 @@ def load_tool():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def make_sealed_run_fixture(tool, root: pathlib.Path, case_count: int = 1):
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    (root / ".gitignore").write_text("target/\n")
+    manifest = root / "microbenchmarks.toml"
+    manifest.write_text('schema = "fixture"\n')
+    (root / "benchmark.rs").write_text("measured content\n")
+    subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
+
+    inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+    inventory = inventory._replace(cases=inventory.cases[:case_count])
+    run_dir = root / "target" / "run"
+    run_id = "fixture-run"
+    criterion_home = (
+        run_dir
+        / "criterion-root"
+        / "nuxie-upstream-microbenchmarks"
+        / run_id
+    )
+    samples = {}
+    for index, case in enumerate(inventory.cases):
+        sample = criterion_home / case.name / "new" / "sample.json"
+        sample.parent.mkdir(parents=True)
+        sample.write_text(json.dumps({"iters": [1.0], "times": [7.0 + index]}))
+        samples[case.name] = sample
+    files = {
+        "cpp_source_archive": run_dir / "cpp-source.tar",
+        "cpp_binary": run_dir / "cpp-build" / "bench",
+        "cpp_build_log": run_dir / "cpp-build.log",
+        "cpp_output": run_dir / "cpp.txt",
+    }
+    for path in files.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("artifact\n")
+    files["cpp_output"].write_text(
+        "".join(f"1ms {case.name}\n" for case in inventory.cases)
+    )
+    run = {
+        "schema": "nuxie-upstream-microbench-run-v4",
+        "status": "complete",
+        "run_id": run_id,
+        "repo_revision": subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip(),
+        "benchmark_content_sha256": tool.benchmark_content_identity(root),
+        "settings": {"criterion_home": str(criterion_home)},
+        "artifacts": {
+            "inventory": tool.record_artifact(manifest),
+            **{name: tool.record_artifact(path) for name, path in files.items()},
+            **{
+                f"criterion:{name}": tool.record_artifact(sample)
+                for name, sample in samples.items()
+            },
+        },
+    }
+    run_manifest = run_dir / "run.json"
+    run_manifest.write_text(json.dumps(run))
+    return inventory, manifest, run_manifest, run
 
 
 class MicrobenchContractTests(unittest.TestCase):
@@ -69,42 +138,7 @@ class MicrobenchContractTests(unittest.TestCase):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            subprocess.run(["git", "init", "-q", str(root)], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
-            subprocess.run(
-                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
-                check=True,
-            )
-            (root / ".gitignore").write_text("target/\n")
-            manifest = root / "microbenchmarks.toml"
-            manifest.write_text('schema = "fixture"\n')
-            source = root / "benchmark.rs"
-            source.write_text("measured content\n")
-            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
-            measured_revision = subprocess.run(
-                ["git", "-C", str(root), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            run_manifest = root / "target" / "run.json"
-            run_manifest.parent.mkdir()
-            run_manifest.write_text(
-                json.dumps(
-                    {
-                        "status": "complete",
-                        "repo_revision": measured_revision,
-                        "benchmark_content_sha256": tool.benchmark_content_identity(root),
-                        "artifacts": {
-                            "inventory": {
-                                "path": str(manifest),
-                                "sha256": tool.sha256(manifest),
-                            }
-                        },
-                    }
-                )
-            )
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
             evidence = root / "docs" / "evidence" / "run.md"
             evidence.parent.mkdir(parents=True)
             evidence.write_text("results\n")
@@ -112,54 +146,89 @@ class MicrobenchContractTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(root), "commit", "-qm", "evidence"], check=True)
 
             self.assertEqual(
-                tool.load_run(root, manifest, run_manifest)["repo_revision"],
-                measured_revision,
+                tool.load_run(root, manifest, run_manifest, inventory)["repo_revision"],
+                run["repo_revision"],
             )
 
     def test_load_run_rejects_uncommitted_benchmark_content(self):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            subprocess.run(["git", "init", "-q", str(root)], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
-            subprocess.run(
-                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
-                check=True,
-            )
-            (root / ".gitignore").write_text("target/\n")
-            manifest = root / "microbenchmarks.toml"
-            manifest.write_text('schema = "fixture"\n')
-            source = root / "benchmark.rs"
-            source.write_text("measured content\n")
-            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
-            measured_revision = subprocess.run(
-                ["git", "-C", str(root), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            run_manifest = root / "target" / "run.json"
-            run_manifest.parent.mkdir()
-            run_manifest.write_text(
-                json.dumps(
-                    {
-                        "status": "complete",
-                        "repo_revision": measured_revision,
-                        "benchmark_content_sha256": tool.benchmark_content_identity(root),
-                        "artifacts": {
-                            "inventory": {
-                                "path": str(manifest),
-                                "sha256": tool.sha256(manifest),
-                            }
-                        },
-                    }
-                )
-            )
-            source.write_text("dirty benchmark content\n")
+            inventory, manifest, run_manifest, _ = make_sealed_run_fixture(tool, root)
+            (root / "benchmark.rs").write_text("dirty benchmark content\n")
 
             with self.assertRaisesRegex(tool.ContractError, "uncommitted benchmark content"):
-                tool.load_run(root, manifest, run_manifest)
+                tool.load_run(root, manifest, run_manifest, inventory)
+
+    def test_load_run_rejects_wrong_schema_and_non_exact_artifact_sets(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, original = make_sealed_run_fixture(tool, root)
+            fixtures = []
+            wrong_schema = copy.deepcopy(original)
+            wrong_schema["schema"] = "nuxie-upstream-microbench-run-v3"
+            fixtures.append((wrong_schema, "unsupported benchmark run schema"))
+            missing = copy.deepcopy(original)
+            del missing["artifacts"][f"criterion:{inventory.cases[0].name}"]
+            fixtures.append((missing, "artifact set mismatch"))
+            extra = copy.deepcopy(original)
+            extra["artifacts"]["criterion:Extra"] = copy.deepcopy(
+                extra["artifacts"][f"criterion:{inventory.cases[0].name}"]
+            )
+            fixtures.append((extra, "artifact set mismatch"))
+
+            for run, message in fixtures:
+                with self.subTest(message=message):
+                    run_manifest.write_text(json.dumps(run))
+                    with self.assertRaisesRegex(tool.ContractError, message):
+                        tool.load_run(root, manifest, run_manifest, inventory)
+
+    def test_criterion_home_redirection_does_not_redirect_comparison(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+            redirected = root / "target" / "redirected"
+            sample = redirected / inventory.cases[0].name / "new" / "sample.json"
+            sample.parent.mkdir(parents=True)
+            sample.write_text(json.dumps({"iters": [1.0], "times": [999.0]}))
+            run["settings"]["criterion_home"] = str(redirected)
+            run_manifest.write_text(json.dumps(run))
+
+            loaded = tool.load_run(root, manifest, run_manifest, inventory)
+            self.assertEqual(
+                tool.load_sealed_criterion_timings(loaded, inventory),
+                {inventory.cases[0].name: 7.0},
+            )
+
+    def test_load_run_rejects_mixed_run_criterion_sample_paths(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(
+                tool, root, case_count=2
+            )
+            mixed_case = inventory.cases[1]
+            key = f"criterion:{mixed_case.name}"
+            mixed = (
+                root
+                / "target"
+                / "other"
+                / run["run_id"]
+                / mixed_case.name
+                / "new"
+                / "sample.json"
+            )
+            mixed.parent.mkdir(parents=True)
+            mixed.write_text(
+                pathlib.Path(run["artifacts"][key]["path"]).read_text()
+            )
+            run["artifacts"][key] = tool.record_artifact(mixed)
+            run_manifest.write_text(json.dumps(run))
+
+            with self.assertRaisesRegex(tool.ContractError, "mixes run namespaces"):
+                tool.load_run(root, manifest, run_manifest, inventory)
 
     def test_inventory_names_match_pinned_upstream_registry_one_for_one(self):
         tool = load_tool()
@@ -383,15 +452,11 @@ class MicrobenchContractTests(unittest.TestCase):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            artifact = root / "cpp.txt"
-            artifact.write_text("artifact")
-            run = {
-                "status": "complete",
-                "run_id": "test-run",
-                "artifacts": {"cpp_output": {"path": str(artifact), "sha256": "wrong"}},
-            }
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+            run["artifacts"]["cpp_output"]["sha256"] = "0" * 64
+            run_manifest.write_text(json.dumps(run))
             with self.assertRaisesRegex(tool.ContractError, "artifact hash mismatch"):
-                tool.validate_run_artifacts(run)
+                tool.load_run(root, manifest, run_manifest, inventory)
 
 
 if __name__ == "__main__":

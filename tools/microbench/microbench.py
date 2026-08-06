@@ -22,6 +22,16 @@ class ContractError(RuntimeError):
     pass
 
 
+RUN_SCHEMA = "nuxie-upstream-microbench-run-v4"
+FIXED_RUN_ARTIFACTS = {
+    "inventory",
+    "cpp_source_archive",
+    "cpp_binary",
+    "cpp_build_log",
+    "cpp_output",
+}
+
+
 class Case(NamedTuple):
     name: str
     crate: str
@@ -326,14 +336,13 @@ def load_criterion_minimum(sample_path: pathlib.Path) -> float:
     return min(per_iteration)
 
 
-def load_criterion_timings(criterion_dir: pathlib.Path, inventory: Inventory) -> dict[str, float]:
-    timings: dict[str, float] = {}
-    for case in inventory.cases:
-        sample = criterion_dir / case.name / "new" / "sample.json"
-        if not sample.is_file():
-            raise ContractError(f"missing criterion sample for {case.name}: {sample}")
-        timings[case.name] = load_criterion_minimum(sample)
-    return timings
+def load_sealed_criterion_timings(run: dict, inventory: Inventory) -> dict[str, float]:
+    return {
+        case.name: load_criterion_minimum(
+            pathlib.Path(run["artifacts"][f"criterion:{case.name}"]["path"])
+        )
+        for case in inventory.cases
+    }
 
 
 def render_report(
@@ -386,10 +395,93 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def validate_run_artifacts(run: dict) -> None:
+def expected_run_artifact_keys(inventory: Inventory) -> set[str]:
+    return FIXED_RUN_ARTIFACTS | {
+        f"criterion:{case.name}" for case in inventory.cases
+    }
+
+
+def validate_run_artifact_paths(
+    run: dict,
+    inventory: Inventory,
+    run_manifest: pathlib.Path,
+    manifest_path: pathlib.Path,
+) -> None:
+    artifacts = run["artifacts"]
+    run_dir = run_manifest.parent.resolve()
+    expected_fixed_paths = {
+        "inventory": manifest_path.resolve(),
+        "cpp_source_archive": run_dir / "cpp-source.tar",
+        "cpp_binary": run_dir / "cpp-build" / "bench",
+        "cpp_build_log": run_dir / "cpp-build.log",
+        "cpp_output": run_dir / "cpp.txt",
+    }
+    for name, expected in expected_fixed_paths.items():
+        actual = pathlib.Path(artifacts[name]["path"]).resolve()
+        if actual != expected:
+            raise ContractError(
+                f"run artifact path mismatch for {name}: expected {expected}, got {actual}"
+            )
+
+    run_id = run.get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise ContractError("benchmark run has no run ID")
+    criterion_root: pathlib.Path | None = None
+    for case in inventory.cases:
+        name = f"criterion:{case.name}"
+        sample = pathlib.Path(artifacts[name]["path"]).resolve()
+        try:
+            case_root = sample.parents[2]
+        except IndexError as error:
+            raise ContractError(
+                f"Criterion artifact path for {case.name} is invalid: {sample}"
+            ) from error
+        expected = case_root / case.name / "new" / "sample.json"
+        if case_root.name != run_id or sample != expected:
+            raise ContractError(
+                f"Criterion artifact path for {case.name} is outside run {run_id}: {sample}"
+            )
+        if criterion_root is None:
+            criterion_root = case_root
+        elif case_root != criterion_root:
+            raise ContractError(
+                f"Criterion artifact path for {case.name} mixes run namespaces: {sample}"
+            )
+
+
+def validate_run_artifacts(
+    run: dict,
+    inventory: Inventory,
+    run_manifest: pathlib.Path,
+    manifest_path: pathlib.Path,
+) -> None:
+    if run.get("schema") != RUN_SCHEMA:
+        raise ContractError(
+            f"unsupported benchmark run schema: expected {RUN_SCHEMA}, got {run.get('schema')}"
+        )
     if run.get("status") != "complete":
         raise ContractError("benchmark run is not complete")
-    for name, artifact in run.get("artifacts", {}).items():
+    artifacts = run.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ContractError("benchmark run has no artifact map")
+    expected = expected_run_artifact_keys(inventory)
+    actual = set(artifacts)
+    if actual != expected:
+        raise ContractError(
+            "artifact set mismatch: "
+            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+        )
+    for name, artifact in artifacts.items():
+        if not isinstance(artifact, dict) or set(artifact) != {"path", "sha256"}:
+            raise ContractError(f"invalid run artifact entry for {name}")
+        if (
+            not isinstance(artifact["path"], str)
+            or not isinstance(artifact["sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
+        ):
+            raise ContractError(f"invalid run artifact entry for {name}")
+    validate_run_artifact_paths(run, inventory, run_manifest, manifest_path)
+    for name, artifact in artifacts.items():
         path = pathlib.Path(artifact["path"])
         if not path.is_file():
             raise ContractError(f"missing run artifact {name}: {path}")
@@ -511,7 +603,7 @@ def run_benchmarks(
     ):
         raise ContractError("pinned upstream checkout changed during the sealed build")
     run: dict = {
-        "schema": "nuxie-upstream-microbench-run-v4",
+        "schema": RUN_SCHEMA,
         "status": "running",
         "run_id": run_id,
         "repo_revision": revision,
@@ -585,10 +677,13 @@ def run_benchmarks(
 
 
 def load_run(
-    repo_root: pathlib.Path, manifest_path: pathlib.Path, run_manifest: pathlib.Path
+    repo_root: pathlib.Path,
+    manifest_path: pathlib.Path,
+    run_manifest: pathlib.Path,
+    inventory: Inventory,
 ) -> dict:
     run = json.loads(run_manifest.read_text())
-    validate_run_artifacts(run)
+    validate_run_artifacts(run, inventory, run_manifest, manifest_path)
     dirty = uncommitted_benchmark_paths(repo_root)
     if dirty:
         raise ContractError(f"uncommitted benchmark content: {dirty}")
@@ -681,13 +776,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(result)
     elif args.command == "compare":
-        run = load_run(repo_root, manifest, args.run_manifest.resolve())
+        run = load_run(repo_root, manifest, args.run_manifest.resolve(), inventory)
         cpp_output = pathlib.Path(run["artifacts"]["cpp_output"]["path"])
-        criterion_dir = pathlib.Path(run["settings"]["criterion_home"])
         table = render_report(
             inventory,
             load_cpp_timings(cpp_output),
-            load_criterion_timings(criterion_dir, inventory),
+            load_sealed_criterion_timings(run, inventory),
         )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)

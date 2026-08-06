@@ -260,6 +260,18 @@ class SourceProvenanceTests(unittest.TestCase):
         ):
             wasm_perf.finalize_run(args)
 
+    def test_finalize_rejects_provenance_and_identity_forged_together(self):
+        args, _fixture_ids = self._finalize_fixture_run(fixture_count=1)
+        config = json.loads(args.config.read_text(encoding="utf-8"))
+        config["provenance"]["run_identity"]["build_profile"] = "forged-profile"
+        config["identity"] = wasm_perf.sealed_config_identity(config["provenance"])
+        args.config.write_text(wasm_perf.canonical_json(config), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "config provenance differs from anchored seal"
+        ):
+            wasm_perf.finalize_run(args)
+
     def _finalize_fixture_run(
         self, *, fixture_count: int, mutate_during_native: bool = False
     ) -> tuple[SimpleNamespace, list[str]]:
@@ -320,6 +332,8 @@ class SourceProvenanceTests(unittest.TestCase):
             run_identity={"build_profile": "release"},
             allowed_outputs=allowed,
         )
+        seal = generated / "seal.json"
+        seal_sha256 = wasm_perf.write_run_seal(seal, sealed)
         config = generated / "config.json"
         config.write_text(
             wasm_perf.canonical_json(
@@ -342,6 +356,7 @@ class SourceProvenanceTests(unittest.TestCase):
                     "schema": "nuxie-wasm-perf-browser-raw-v1",
                     "browser": "chromium",
                     "browser_version": "test",
+                    "seal_sha256": seal_sha256,
                     "measurement": {
                         "repeat": 1,
                         "runs": 1,
@@ -368,6 +383,8 @@ class SourceProvenanceTests(unittest.TestCase):
         return (
             SimpleNamespace(
                 config=config,
+                seal=seal,
+                expected_seal_sha256=seal_sha256,
                 browser_results=browser_results,
                 native_runner=runner,
                 repo_root=self.repo,

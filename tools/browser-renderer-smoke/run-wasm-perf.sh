@@ -14,6 +14,7 @@ OUTPUT="${WASM_PERF_OUTPUT:-$ROOT/target/wasm-perf.json}"
 MARKDOWN="${WASM_PERF_MARKDOWN:-$ROOT/target/wasm-perf.md}"
 WORK_DIR="$ROOT/target/browser-wasm-perf"
 CONFIG="$WORK_DIR/config.json"
+SEAL="$WORK_DIR/seal.json"
 BROWSER_RESULTS="$WORK_DIR/browser-results.json"
 SERVER_LOG="$WORK_DIR/server.log"
 WASM_ARTIFACT="$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke_bg.wasm"
@@ -72,8 +73,9 @@ cleanup() {
 trap cleanup EXIT
 
 BROWSER_RENDERER_PRODUCTION_ONLY=1 "$ROOT/tools/browser-renderer-smoke/build.sh"
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.py" seal \
+RUN_SEAL_SHA256="$(PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.py" seal \
   --config "$CONFIG" \
+  --seal "$SEAL" \
   --repo-root "$ROOT" \
   --rive-runtime-dir "$RIVE_RUNTIME_DIR" \
   --native-runner "$RUST_GOLDEN_RUNNER" \
@@ -82,7 +84,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.
   --allowed-output "$WORK_DIR" \
   --allowed-output "$OUTPUT" \
   --allowed-output "$MARKDOWN" \
-  --allowed-output "$GENERATED_PKG"
+  --allowed-output "$GENERATED_PKG")"
 python3 -m http.server "$PORT" \
   --bind 127.0.0.1 \
   --directory "$ROOT" \
@@ -104,10 +106,14 @@ NODE_PATH="$PLAYWRIGHT_ROOT/node_modules" \
   node "$ROOT/tools/browser-renderer-smoke/run-wasm-perf.cjs" \
   "http://127.0.0.1:$PORT/tools/browser-renderer-smoke/" \
   "$CONFIG" \
-  "$BROWSER_RESULTS"
+  "$BROWSER_RESULTS" \
+  "$SEAL" \
+  "$RUN_SEAL_SHA256"
 
 PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.py" finalize \
   --config "$CONFIG" \
+  --seal "$SEAL" \
+  --expected-seal-sha256 "$RUN_SEAL_SHA256" \
   --browser-results "$BROWSER_RESULTS" \
   --native-runner "$RUST_GOLDEN_RUNNER" \
   --repo-root "$ROOT" \

@@ -222,7 +222,7 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(content), 32)
         self.assertEqual(content[:16].hex(), "ffffffff020000000300000004000000")
 
-    def test_report_emits_ratios_for_all_twenty_equivalent_boundaries(self):
+    def test_report_emits_ratios_only_for_equivalent_boundaries(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
         cpp = {case.name: index + 1.0 for index, case in enumerate(inventory.cases)}
@@ -232,11 +232,13 @@ class MicrobenchContractTests(unittest.TestCase):
 
         rows = [line for line in table.splitlines() if line.startswith("| `")]
         ratio_rows = [line for line in rows if "2.000x" in line]
-        self.assertEqual(len(ratio_rows), 20)
+        directional_rows = [line for line in rows if "rasterOrdering" in line]
+        self.assertEqual(len(ratio_rows), 10)
+        self.assertEqual(len(directional_rows), 10)
         self.assertTrue(any("| `BuildRawPath` |" in row for row in rows))
         self.assertTrue(any("| `RawPathBounds` |" in row for row in rows))
         self.assertTrue(all("2.000x" in row for row in ratio_rows))
-        self.assertNotIn("Directional timings", table)
+        self.assertIn("Directional timings (not ratio-comparable)", table)
         self.assertNotIn("Blocked equivalence", table)
 
     def test_report_marks_architecture_blockers_without_timing_or_ratio(self):
@@ -255,9 +257,12 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertNotIn("1.000000 ms", table)
         self.assertNotIn("2.000x", table)
 
-    def test_evidence_run_refuses_blocked_equivalence_cases(self):
+    def test_evidence_run_accepts_directional_but_refuses_blocked_cases(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        directional = inventory.cases[0]._replace(comparison="directional")
+        tool.check_runnable_inventory(inventory._replace(cases=[directional]))
+
         blocked = inventory.cases[0]._replace(comparison="blocked")
         fixture = inventory._replace(cases=[blocked, *inventory.cases[1:]])
 
@@ -273,6 +278,77 @@ class MicrobenchContractTests(unittest.TestCase):
             sample.write_text(json.dumps({"iters": [1.0, 2.0, 4.0], "times": [9.0, 12.0, 40.0]}))
 
             self.assertEqual(tool.load_criterion_minimum(sample), 6.0)
+
+    def test_all_criterion_cases_use_individually_timed_iterations(self):
+        tool = load_tool()
+        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+
+        tool.check_bench_sources(REPO_ROOT, inventory)
+
+        for crate in {case.crate for case in inventory.cases}:
+            source = (
+                REPO_ROOT / "crates" / crate / "benches" / "upstream_microbenchmarks.rs"
+            ).read_text()
+            self.assertNotIn("bench.iter(", source)
+            self.assertIn("iter_individual_minimum", source)
+
+    def test_cpp_benchmark_is_built_in_the_sealed_run_directory(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            upstream = root / "upstream"
+            tests = upstream / "tests"
+            build = upstream / "build"
+            tests.mkdir(parents=True)
+            build.mkdir()
+            script = build / "build_rive.sh"
+            script.write_text(
+                "#!/bin/sh\n"
+                "set -eu\n"
+                "mkdir -p \"$RIVE_OUT\"\n"
+                "printf 'pinned binary' > \"$RIVE_OUT/bench\"\n"
+                "chmod +x \"$RIVE_OUT/bench\"\n"
+            )
+            script.chmod(0o755)
+            run_dir = root / "run"
+            run_dir.mkdir()
+
+            binary, log, command = tool.build_cpp_benchmark(upstream, run_dir)
+
+            self.assertEqual(binary, run_dir / "cpp-build" / "bench")
+            self.assertEqual(binary.read_text(), "pinned binary")
+            self.assertTrue(log.is_file())
+            self.assertEqual(command[-3:], ["release", "--", "bench"])
+
+    def test_cpp_source_stage_contains_only_the_pinned_commit(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            upstream = root / "upstream"
+            subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+            subprocess.run(["git", "-C", str(upstream), "config", "user.name", "Test"], check=True)
+            subprocess.run(
+                ["git", "-C", str(upstream), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            (upstream / "tracked.txt").write_text("pinned\n")
+            subprocess.run(["git", "-C", str(upstream), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(upstream), "commit", "-qm", "pinned"], check=True)
+            revision = subprocess.run(
+                ["git", "-C", str(upstream), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            (upstream / "untracked.txt").write_text("contamination\n")
+            run_dir = root / "run"
+            run_dir.mkdir()
+
+            source, archive = tool.stage_upstream_source(upstream, revision, run_dir)
+
+            self.assertEqual((source / "tracked.txt").read_text(), "pinned\n")
+            self.assertFalse((source / "untracked.txt").exists())
+            self.assertTrue(archive.is_file())
 
     def test_run_manifest_rejects_mixed_or_stale_artifacts(self):
         tool = load_tool()

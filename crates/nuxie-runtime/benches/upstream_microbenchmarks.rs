@@ -1,8 +1,11 @@
 //! Criterion mirrors of the pinned C++ geometry/path microbenchmarks.
 
-use std::hint::black_box;
+use std::{
+    hint::black_box,
+    time::{Duration, Instant},
+};
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Bencher, Criterion, criterion_group, criterion_main};
 use nuxie_render_api::{Mat2D as RenderMat2D, PathVerb, RawPath, Vec2D};
 use nuxie_runtime::{
     Mat2D,
@@ -241,32 +244,51 @@ impl MapPointsWorkload {
 fn geometry_benches(criterion: &mut Criterion) {
     let mut build = BuildRawPathWorkload::new();
     criterion.bench_function("BuildRawPath", |bench| {
-        bench.iter(|| black_box(build.run()));
+        iter_individual_minimum(bench, || black_box(build.run()));
     });
 
     let iterate = random_raw_path(100.0, 1_000_000, false);
     criterion.bench_function("IterateRawPath", |bench| {
-        bench.iter(|| black_box(iterate_raw_path(black_box(&iterate))));
+        iter_individual_minimum(bench, || black_box(iterate_raw_path(black_box(&iterate))));
     });
 
     let mut measure = MeasurePathWorkload::new();
     criterion.bench_function("MeasurePath", |bench| {
-        bench.iter(|| black_box(measure.run()));
+        iter_individual_minimum(bench, || black_box(measure.run()));
     });
 
     let bounds = random_raw_path(100.0, 1_000_000, false);
     criterion.bench_function("RawPathBounds", |bench| {
-        bench.iter(|| black_box(bounds.bounds()));
+        iter_individual_minimum(bench, || black_box(bounds.bounds()));
     });
 
     let mut scale_translate = MapPointsWorkload::new(Mat2D([-2.0, 0.0, 0.0, 3.0, -4.0, 5.0]));
     criterion.bench_function("MapPointsScaleTrans", |bench| {
-        bench.iter(|| black_box(scale_translate.run()));
+        iter_individual_minimum(bench, || black_box(scale_translate.run()));
     });
 
     let mut affine = MapPointsWorkload::new(Mat2D([2.0, -3.0, -4.0, 5.0, 6.0, -7.0]));
     criterion.bench_function("MapPointsAffine", |bench| {
-        bench.iter(|| black_box(affine.run()));
+        iter_individual_minimum(bench, || black_box(affine.run()));
+    });
+}
+
+/// Make each Criterion sample represent the minimum individually timed call.
+///
+/// The pinned C++ harness starts and stops its clock around every invocation
+/// and reports the minimum. `iter_custom` still lets Criterion choose the
+/// sample size, while scaling the observed minimum back to its requested
+/// iteration count keeps `sample.json`'s `time / iterations` equal to that
+/// same statistic.
+fn iter_individual_minimum<T>(bench: &mut Bencher<'_>, mut operation: impl FnMut() -> T) {
+    bench.iter_custom(|iterations| {
+        let mut minimum = Duration::MAX;
+        for _ in 0..iterations {
+            let start = Instant::now();
+            black_box(operation());
+            minimum = minimum.min(start.elapsed());
+        }
+        minimum.mul_f64(iterations as f64)
     });
 }
 

@@ -7,12 +7,14 @@ source hashes, comparison classification, fixture hashes, and pinned ref live in
 
 The mirror is diagnostic evidence, not a merge ratchet. Ratios are emitted only
 where both sides use the same input construction, operation boundary,
-repetition count, and minimum-per-iteration statistic. All 20 cases meet that
-requirement.
+repetition count, execution capabilities, and minimum-individual-invocation
+statistic. Ten cases meet that requirement. The ten `Draw*` cases are retained
+as directional timings without ratios because the pinned C++ Null backend and
+Rust Null backend currently negotiate different raster-ordering capabilities.
 
 ## Workload correspondence
 
-All 20 cases have equivalent measured boundaries and receive direct ratios:
+Ten cases have equivalent measured boundaries and receive direct ratios:
 
 - `BuildRawPath`, `IterateRawPath`, `MeasurePath`, and `RawPathBounds`.
 - `MapPointsScaleTrans` and `MapPointsAffine` use the production bulk
@@ -25,11 +27,14 @@ measure directly from the transformed `RawPath`; no Rust-only command adapter is
 inside the timed boundary.
 
 - The ten `Draw*` cases use the production `LogicalFrame` through its retained
-  `NullLogicalRenderer`. Both sides execute ten 1600x1600 clockwise-atomic
-  begin/draw/flush frames, include logical planning and typed shadow-buffer
-  writes, and omit final GPU submission. The
+  `NullLogicalRenderer`. Both sides execute ten 1600x1600 begin/draw/flush
+  frames, include logical planning and typed shadow-buffer writes, and omit
+  final GPU submission. They remain directional, however: pinned C++
+  `RenderContextNULL` advertises `rasterOrdering=false`, while the Rust workload
+  explicitly configures `ClockwiseAtomic`. Equal capability negotiation is
+  tracked by [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727). The
   [dated resolution record](evidence/upstream-draw-microbenchmark-blocker-2026-08-06.md)
-  maps the exact seam and regression coverage.
+  maps the production seam, the remaining mismatch, and regression coverage.
 
 The path coordinates, matrix values, C `srand(0)`/`rand()` inputs, and ten-frame
 draw loops follow the pinned sources. Paper capture preserves authored color,
@@ -47,9 +52,11 @@ checks every benchmark source hash, and checks fixture conversions and hashes.
 
 ## Reproducible run
 
-The local upstream checkout must be at the manifest ref and its release
-`tests/out/release/bench` must be built from that checkout. Evidence runs require
-a clean committed Rust worktree.
+The local upstream checkout and the Rust worktree must both be clean and at
+their declared commits. The evidence runner archives committed source from the
+validated pinned checkout, expands it inside the unique run directory, and
+builds the C++ `bench` target there; it never accepts a prebuilt external
+benchmark binary or uncommitted upstream source.
 
 ```sh
 make microbench-gate RIVE_RUNTIME_DIR=/path/to/rive-runtime
@@ -65,8 +72,9 @@ make microbench-compare \
   MICROBENCH_RUN_MANIFEST=target/microbench/run-001/run.json
 ```
 
-`microbench-run` creates a unique Criterion output namespace, records the Rust
-and C++ revisions, benchmark-content identity, C++ binary hash, tool versions,
+`microbench-run` creates unique C++ build and Criterion output namespaces,
+records the Rust and C++ revisions, benchmark-content identity, C++ source
+archive hash, exact build command/cwd/output directory, build log and binary hashes, tool versions,
 settings, inventory hash, and every raw output hash in `run.json`. An existing
 non-empty run directory is rejected. If `CRITERION_HOME` is set, the unique run
 namespace is created below it. If `CARGO_TARGET_DIR` is set, Cargo uses and
@@ -78,9 +86,11 @@ descendant commit to revalidate while rejecting any benchmark, tool, input,
 production-source, manifest, or other content change. Uncommitted changes are
 also rejected except beneath `docs/evidence/`.
 
-Both harnesses report the minimum observed elapsed time per iteration. For
-Criterion this is calculated from each raw `sample.json` pair of elapsed time
-and iteration count, rather than its median estimate.
+Both harnesses report the minimum observed individually timed invocation. The
+Criterion benches use `iter_custom` to start and stop the clock around every
+operation, then encode each sample's minimum as `elapsed / iterations` in raw
+`sample.json`. Comparison selects the minimum of those per-sample minima rather
+than Criterion's median estimate.
 
 ## Feature-gated support seam
 

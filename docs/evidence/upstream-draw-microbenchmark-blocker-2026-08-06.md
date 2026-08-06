@@ -1,9 +1,11 @@
 # Upstream draw microbenchmark equivalence resolution — 2026-08-06
 
 The production `LogicalFrame` and `NullLogicalRenderer` seam resolves the
-original blocker for the ten `Draw*` cases in
-[UNIV-1688](https://universe.basis.dev/issue/UNIV-1688). The inventory now
-classifies all 20 pinned upstream cases as direct ratios.
+original missing-workload blocker for the ten `Draw*` cases in
+[UNIV-1688](https://universe.basis.dev/issue/UNIV-1688). A capability mismatch
+still prevents direct ratios, so the inventory classifies the ten cases as
+directional timings and links the follow-up
+[UNIV-1727](https://universe.basis.dev/issue/UNIV-1727).
 
 ## Shared operation boundary
 
@@ -16,8 +18,8 @@ Pinned C++ `tests/bench/draw_pls_path.cpp` measures ten repetitions of:
 The C++ null adapter skips only final GPU submission. Production flush still
 performs logical layout, retained allocation growth, shadow-buffer mapping,
 typed path/paint/contour/gradient/tessellation/triangle/draw-list writes,
-rewind, and per-frame teardown. With all clockwise-atomic capabilities
-enabled by `RenderContextNULL`, C++ selects clockwise-atomic interlock mode.
+rewind, and per-frame teardown. The pinned Null backend reports
+`PlatformFeatures::rasterOrdering=false`.
 
 Rust Criterion constructs `NullFrameWorkload` once outside the measured
 closure. Construction captures the same paths, fill rules, authored paint
@@ -34,7 +36,10 @@ exactly ten repetitions of:
 The same Null renderer is retained across Criterion iterations, matching the
 retained C++ context and its allocation-growth behavior. Rust's null adapter
 is the terminal consumer of the production typed resource output and performs
-no WebGPU device, encoder, pipeline, or submission work.
+no WebGPU device, encoder, pipeline, or submission work. It currently runs
+with an explicit `ClockwiseAtomic` configuration. Because that differs from
+the upstream Null backend's capability-selected interlock mode, the two raw
+timings are useful directionally but their quotient is not a valid speed ratio.
 
 ## Production seam evidence
 
@@ -62,8 +67,9 @@ writes, or teardown and must not be substituted for the production Null seam.
 
 `make microbench-gate` verifies the exact 20-case registry, pinned upstream
 source hashes/ref, fixture conversions, and local Criterion registrations.
-`make microbench-run` refuses dirty or blocked inventories and records the
-committed Rust source revision, benchmark-content identity, pinned C++
-revision and binary hash, tool versions, settings, and every raw sample hash.
-`make microbench-compare` accepts only that sealed run manifest and reports all
-20 minimum-per-iteration Rust/C++ ratios.
+`make microbench-run` refuses dirty or blocked inventories, builds the C++
+benchmark into the sealed run directory from the validated clean pinned
+checkout's committed archive, and records the committed Rust source revision, benchmark-content
+identity, pinned C++ revision, build command/log and binary hash, tool versions,
+settings, and every raw sample hash. `make microbench-compare` accepts only that
+sealed run manifest and reports ten direct ratios plus ten directional timings.

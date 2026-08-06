@@ -547,6 +547,7 @@ def seal_run_provenance(
     artifacts: dict[str, Path],
     fixtures: list[dict[str, Any]] | None = None,
     measurement: dict[str, Any] | None = None,
+    run_identity: dict[str, Any] | None = None,
     allowed_outputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     verify_source_provenance(
@@ -562,6 +563,29 @@ def seal_run_provenance(
         },
         "fixtures": _seal_fixture_records(fixtures or []),
         "measurement": measurement,
+        "run_identity": run_identity,
+    }
+
+
+def sealed_config_identity(provenance: dict[str, Any]) -> dict[str, Any]:
+    sources = provenance["sources"]
+    return {
+        "git_sha": sources["repo_sha"],
+        "git_tree_sha": sources["repo_tree_sha"],
+        "rive_runtime_sha": sources["rive_runtime_sha"],
+        "rive_runtime_tree_sha": sources["rive_runtime_tree_sha"],
+        "browser": "pending",
+        **(provenance.get("run_identity") or {}),
+        "artifacts": {
+            name: {key: record[key] for key in ("bytes", "sha256")}
+            for name, record in provenance["artifacts"].items()
+        },
+        "fixtures": {
+            fixture_id: {
+                key: record[key] for key in ("bytes", "sha256")
+            }
+            for fixture_id, record in provenance["fixtures"].items()
+        },
     }
 
 
@@ -625,6 +649,12 @@ def verify_browser_fixture_identities(
 def verify_config_against_seal(
     config: dict[str, Any], provenance: dict[str, Any]
 ) -> None:
+    expected_identity = sealed_config_identity(provenance)
+    if config.get("identity") != expected_identity:
+        raise ContractError(
+            "config identity differs from sealed identity: "
+            f"sealed={expected_identity!r} current={config.get('identity')!r}"
+        )
     sealed_measurement = provenance.get("measurement")
     current_measurement = {
         key: config.get(key) for key in ("repeat", "runs", "warmups")
@@ -767,19 +797,14 @@ def seal_run(args: argparse.Namespace) -> None:
         },
         fixtures=config["fixtures"],
         measurement={key: config[key] for key in ("repeat", "runs", "warmups")},
+        run_identity={
+            key: config["identity"][key]
+            for key in ("build_profile", "host", "timestamp_utc")
+        },
         allowed_outputs=[path.resolve() for path in args.allowed_output],
     )
     config["provenance"] = sealed
-    config["identity"]["artifacts"] = {
-        name: {key: record[key] for key in ("bytes", "sha256")}
-        for name, record in sealed["artifacts"].items()
-    }
-    config["identity"]["fixtures"] = {
-        fixture_id: {
-            key: record[key] for key in ("bytes", "sha256")
-        }
-        for fixture_id, record in sealed["fixtures"].items()
-    }
+    config["identity"] = sealed_config_identity(sealed)
     args.config.write_text(canonical_json(config), encoding="utf-8")
 
 
@@ -939,7 +964,7 @@ def finalize_run(args: argparse.Namespace) -> None:
         allowed_outputs=allowed_outputs,
     )
     identity = {
-        **config["identity"],
+        **sealed_config_identity(provenance),
         "browser": browser["browser"],
         "browser_version": browser["browser_version"],
     }

@@ -53,6 +53,12 @@ def audit_production_boundary(feature_tree: str, source: str) -> None:
     if "File::import(bytes)" not in runner_source or "import_with_unsigned_scripts" in runner_source.split("impl WasmPerfRunner", 1)[-1].split("pub async fn", 1)[0]:
         raise ContractError("WasmPerfRunner must use production File::import")
     runner_impl = runner_source.split("impl WasmPerfRunner", 1)[-1].split("pub async fn", 1)[0]
+    deterministic_mode = runner_impl.find("set_runtime_deterministic_mode(true)")
+    production_import = runner_impl.find("File::import(bytes)")
+    if deterministic_mode < 0 or deterministic_mode > production_import:
+        raise ContractError(
+            "WasmPerfRunner must enable deterministic runtime mode before import"
+        )
     if (
         "instantiate_default_view_model_instance" in runner_impl
         or "instantiate_view_model()" not in runner_impl
@@ -675,8 +681,19 @@ def verify_browser_fixture_identities(
 def verify_browser_artifact_identities(
     sealed_artifacts: dict[str, Any], browser: dict[str, Any]
 ) -> None:
-    measured_names = {"wasm", "wasm_bindgen_js"}
-    expected_names = measured_names.intersection(sealed_artifacts)
+    measured_names = {
+        "wasm",
+        "wasm_bindgen_js",
+        "wasm_perf_driver_js",
+        "wasm_perf_html",
+    }
+    missing_sealed = measured_names.difference(sealed_artifacts)
+    if missing_sealed:
+        raise ContractError(
+            "wasm perf seal omitted browser artifacts: "
+            f"{sorted(missing_sealed)}"
+        )
+    expected_names = measured_names
     loaded_artifacts = browser.get("loaded_artifacts")
     if not isinstance(loaded_artifacts, dict):
         raise ContractError("browser results omitted loaded artifact identities")
@@ -848,6 +865,8 @@ def seal_run(args: argparse.Namespace) -> None:
             "native_runner": args.native_runner,
             "wasm": args.wasm_artifact,
             "wasm_bindgen_js": args.wasm_bindgen_js,
+            "wasm_perf_driver_js": args.wasm_perf_driver_js,
+            "wasm_perf_html": args.wasm_perf_html,
         },
         fixtures=config["fixtures"],
         measurement={key: config[key] for key in ("repeat", "runs", "warmups")},
@@ -1116,6 +1135,8 @@ def _parser() -> argparse.ArgumentParser:
     seal.add_argument("--native-runner", type=Path, required=True)
     seal.add_argument("--wasm-artifact", type=Path, required=True)
     seal.add_argument("--wasm-bindgen-js", type=Path, required=True)
+    seal.add_argument("--wasm-perf-driver-js", type=Path, required=True)
+    seal.add_argument("--wasm-perf-html", type=Path, required=True)
     seal.add_argument("--allowed-output", type=Path, action="append", default=[])
     seal.set_defaults(action=seal_run)
 

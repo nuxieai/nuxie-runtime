@@ -4,15 +4,5 @@
     <meta charset="utf-8" />
     <title>Nuxie wasm perf runner</title>
   </head>
-  <body data-status="loading">
-    <script src="wasm-perf-driver-lib.cjs"></script>
-    <script>
-      try {
-        document.body.dataset.status = "ready";
-      } catch (error) {
-        document.body.dataset.status = "failed";
-        document.body.textContent = error?.stack || String(error);
-      }
-    </script>
-  </body>
+  <body data-status="loading"></body>
 </html>

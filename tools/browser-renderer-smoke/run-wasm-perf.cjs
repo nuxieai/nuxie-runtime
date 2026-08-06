@@ -30,6 +30,32 @@ if (
 ) {
   throw new Error("config provenance differs from anchored seal");
 }
+const browserArtifactNames = [
+  "wasm_perf_html",
+  "wasm_perf_driver_js",
+  "wasm_bindgen_js",
+  "wasm",
+];
+const expectedArtifacts = Object.fromEntries(
+  browserArtifactNames.map((name) => [
+    name,
+    {
+      bytes: seal.provenance.artifacts[name].bytes,
+      sha256: seal.provenance.artifacts[name].sha256,
+    },
+  ]),
+);
+const sealedHarness = Object.fromEntries(
+  ["wasm_perf_html", "wasm_perf_driver_js"].map((name) => {
+    const bytes = fs.readFileSync(seal.provenance.artifacts[name].path);
+    const identity = {
+      bytes: bytes.byteLength,
+      sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    };
+    assertLoadedArtifactIdentity(name, expectedArtifacts[name], identity);
+    return [name, { bytes, identity }];
+  }),
+);
 const browserMode = process.env.BROWSER_RENDERER_BROWSER || "chrome";
 const launchOptions = { headless: true };
 if (browserMode === "chrome") {
@@ -43,27 +69,38 @@ if (browserMode === "chrome") {
   try {
     const page = await browser.newPage();
     page.on("pageerror", (error) => console.error(`browser page error: ${error.stack || error}`));
-    await page.goto(`${baseUrl}wasm-perf.html`, { waitUntil: "networkidle" });
-    await page.waitForFunction(
-      () => ["ready", "failed"].includes(document.body.dataset.status),
-      undefined,
-      { timeout: 180_000 },
+    const harnessUrls = {
+      wasm_perf_html: `${baseUrl}sealed/${expectedArtifacts.wasm_perf_html.sha256}.html`,
+      wasm_perf_driver_js: `${baseUrl}sealed/${expectedArtifacts.wasm_perf_driver_js.sha256}.cjs`,
+    };
+    await page.route(harnessUrls.wasm_perf_html, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        body: sealedHarness.wasm_perf_html.bytes,
+      }),
     );
+    await page.route(harnessUrls.wasm_perf_driver_js, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/javascript; charset=utf-8",
+        body: sealedHarness.wasm_perf_driver_js.bytes,
+      }),
+    );
+    await page.goto(harnessUrls.wasm_perf_html, { waitUntil: "domcontentloaded" });
+    await page.addScriptTag({ url: harnessUrls.wasm_perf_driver_js });
+    await page.evaluate(() => {
+      if (!window.WasmPerfDriver) {
+        throw new Error("sealed wasm perf driver did not install");
+      }
+      document.body.dataset.status = "ready";
+    });
     const status = await page.getAttribute("body", "data-status");
     if (status !== "ready") {
       throw new Error(`wasm perf page failed: ${await page.textContent("body")}`);
     }
 
-    const expectedArtifacts = Object.fromEntries(
-      ["wasm_bindgen_js", "wasm"].map((name) => [
-        name,
-        {
-          bytes: seal.provenance.artifacts[name].bytes,
-          sha256: seal.provenance.artifacts[name].sha256,
-        },
-      ]),
-    );
-    const loadedArtifacts = await page.evaluate(
+    const loadedRuntimeArtifacts = await page.evaluate(
       async ({ jsUrl, wasmUrl, expectedArtifacts: expected }) =>
         window.WasmPerfDriver.installWasmPerfArtifacts({
           jsUrl,
@@ -76,7 +113,12 @@ if (browserMode === "chrome") {
         expectedArtifacts,
       },
     );
-    for (const name of ["wasm_bindgen_js", "wasm"]) {
+    const loadedArtifacts = {
+      wasm_perf_html: sealedHarness.wasm_perf_html.identity,
+      wasm_perf_driver_js: sealedHarness.wasm_perf_driver_js.identity,
+      ...loadedRuntimeArtifacts,
+    };
+    for (const name of browserArtifactNames) {
       assertLoadedArtifactIdentity(name, expectedArtifacts[name], loadedArtifacts[name]);
     }
 

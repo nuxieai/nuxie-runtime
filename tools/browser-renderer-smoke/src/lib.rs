@@ -53,6 +53,7 @@ mod wasm {
     use nuxie_browser_adapter::{BrowserFactory, BrowserResizeError};
     use nuxie_render_api::{NullFactory, NullRenderer};
     use nuxie_render_stream::RenderStream;
+    use nuxie_runtime::set_runtime_deterministic_mode;
     use pixel_compare::{RgbaImage, Tolerance, compare};
     use std::sync::Arc;
     use wasm_bindgen::prelude::*;
@@ -108,6 +109,7 @@ fn fs_main() -> @location(0) vec4<f32> {
     impl WasmPerfRunner {
         #[wasm_bindgen(constructor)]
         pub fn new(bytes: &[u8]) -> Result<WasmPerfRunner, JsValue> {
+            set_runtime_deterministic_mode(true);
             let file = Arc::new(File::import(bytes).map_err(js_error)?);
             let mut instance =
                 OwnedArtboardInstance::instantiate_default(file).map_err(js_error)?;

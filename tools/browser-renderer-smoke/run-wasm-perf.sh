@@ -19,6 +19,8 @@ BROWSER_RESULTS="$WORK_DIR/browser-results.json"
 SERVER_LOG="$WORK_DIR/server.log"
 WASM_ARTIFACT="$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke_bg.wasm"
 WASM_BINDGEN_JS="$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke.js"
+WASM_PERF_DRIVER_JS="$ROOT/tools/browser-renderer-smoke/wasm-perf-driver-lib.cjs"
+WASM_PERF_HTML="$ROOT/tools/browser-renderer-smoke/wasm-perf.html"
 GENERATED_PKG="$ROOT/tools/browser-renderer-smoke/pkg"
 PLAYWRIGHT_VERSION=1.55.0
 PLAYWRIGHT_ROOT="$ROOT/target/browser-tools/playwright"
@@ -81,6 +83,8 @@ RUN_SEAL_SHA256="$(PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-render
   --native-runner "$RUST_GOLDEN_RUNNER" \
   --wasm-artifact "$WASM_ARTIFACT" \
   --wasm-bindgen-js "$WASM_BINDGEN_JS" \
+  --wasm-perf-driver-js "$WASM_PERF_DRIVER_JS" \
+  --wasm-perf-html "$WASM_PERF_HTML" \
   --allowed-output "$WORK_DIR" \
   --allowed-output "$OUTPUT" \
   --allowed-output "$MARKDOWN" \

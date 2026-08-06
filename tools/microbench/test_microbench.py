@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import subprocess
 import tempfile
 import unittest
 
@@ -19,6 +20,147 @@ def load_tool():
 
 
 class MicrobenchContractTests(unittest.TestCase):
+    def test_benchmark_content_identity_ignores_only_evidence_docs(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            (root / "benchmark.rs").write_text("measured content\n")
+            subprocess.run(["git", "-C", str(root), "add", "benchmark.rs"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
+            measured = tool.benchmark_content_identity(root)
+
+            evidence = root / "docs" / "evidence" / "run.md"
+            evidence.parent.mkdir(parents=True)
+            evidence.write_text("results\n")
+            subprocess.run(["git", "-C", str(root), "add", str(evidence)], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "evidence"], check=True)
+
+            self.assertEqual(tool.benchmark_content_identity(root), measured)
+
+    def test_benchmark_content_identity_changes_with_benchmark_content(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            source = root / "benchmark.rs"
+            source.write_text("measured content\n")
+            subprocess.run(["git", "-C", str(root), "add", "benchmark.rs"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
+            measured = tool.benchmark_content_identity(root)
+
+            source.write_text("changed benchmark content\n")
+            subprocess.run(["git", "-C", str(root), "add", "benchmark.rs"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "changed"], check=True)
+
+            self.assertNotEqual(tool.benchmark_content_identity(root), measured)
+
+    def test_load_run_accepts_an_evidence_only_descendant(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            (root / ".gitignore").write_text("target/\n")
+            manifest = root / "microbenchmarks.toml"
+            manifest.write_text('schema = "fixture"\n')
+            source = root / "benchmark.rs"
+            source.write_text("measured content\n")
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
+            measured_revision = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            run_manifest = root / "target" / "run.json"
+            run_manifest.parent.mkdir()
+            run_manifest.write_text(
+                json.dumps(
+                    {
+                        "status": "complete",
+                        "repo_revision": measured_revision,
+                        "benchmark_content_sha256": tool.benchmark_content_identity(root),
+                        "artifacts": {
+                            "inventory": {
+                                "path": str(manifest),
+                                "sha256": tool.sha256(manifest),
+                            }
+                        },
+                    }
+                )
+            )
+            evidence = root / "docs" / "evidence" / "run.md"
+            evidence.parent.mkdir(parents=True)
+            evidence.write_text("results\n")
+            subprocess.run(["git", "-C", str(root), "add", str(evidence)], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "evidence"], check=True)
+
+            self.assertEqual(
+                tool.load_run(root, manifest, run_manifest)["repo_revision"],
+                measured_revision,
+            )
+
+    def test_load_run_rejects_uncommitted_benchmark_content(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "Test"], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+                check=True,
+            )
+            (root / ".gitignore").write_text("target/\n")
+            manifest = root / "microbenchmarks.toml"
+            manifest.write_text('schema = "fixture"\n')
+            source = root / "benchmark.rs"
+            source.write_text("measured content\n")
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "measured"], check=True)
+            measured_revision = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            run_manifest = root / "target" / "run.json"
+            run_manifest.parent.mkdir()
+            run_manifest.write_text(
+                json.dumps(
+                    {
+                        "status": "complete",
+                        "repo_revision": measured_revision,
+                        "benchmark_content_sha256": tool.benchmark_content_identity(root),
+                        "artifacts": {
+                            "inventory": {
+                                "path": str(manifest),
+                                "sha256": tool.sha256(manifest),
+                            }
+                        },
+                    }
+                )
+            )
+            source.write_text("dirty benchmark content\n")
+
+            with self.assertRaisesRegex(tool.ContractError, "uncommitted benchmark content"):
+                tool.load_run(root, manifest, run_manifest)
+
     def test_inventory_names_match_pinned_upstream_registry_one_for_one(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
@@ -80,7 +222,7 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(content), 32)
         self.assertEqual(content[:16].hex(), "ffffffff020000000300000004000000")
 
-    def test_report_emits_direct_ratios_for_all_twenty_equivalent_boundaries(self):
+    def test_report_emits_ratios_only_for_the_ten_equivalent_boundaries(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
         cpp = {case.name: index + 1.0 for index, case in enumerate(inventory.cases)}
@@ -89,11 +231,40 @@ class MicrobenchContractTests(unittest.TestCase):
         table = tool.render_report(inventory, cpp, rust)
 
         rows = [line for line in table.splitlines() if line.startswith("| `")]
-        self.assertEqual(len(rows), 20)
-        self.assertIn("| `BuildRawPath` |", rows[0])
+        ratio_rows = [line for line in rows if "2.000x" in line]
+        blocked_rows = [line for line in rows if "LogicalFrame" in line]
+        self.assertEqual(len(ratio_rows), 10)
+        self.assertEqual(len(blocked_rows), 10)
+        self.assertTrue(any("| `BuildRawPath` |" in row for row in rows))
         self.assertTrue(any("| `RawPathBounds` |" in row for row in rows))
-        self.assertTrue(all("2.000x" in row for row in rows))
+        self.assertTrue(all("2.000x" in row for row in ratio_rows))
         self.assertNotIn("Directional timings", table)
+        self.assertEqual(table.count("requires a production backend-neutral LogicalFrame"), 10)
+
+    def test_report_marks_architecture_blockers_without_timing_or_ratio(self):
+        tool = load_tool()
+        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        blocked = inventory.cases[0]._replace(
+            comparison="blocked",
+            equivalence="requires a production backend-neutral logical frame",
+        )
+        fixture = inventory._replace(cases=[blocked])
+
+        table = tool.render_report(fixture, {blocked.name: 1.0}, {blocked.name: 2.0})
+
+        self.assertIn("## Blocked equivalence", table)
+        self.assertIn("requires a production backend-neutral logical frame", table)
+        self.assertNotIn("1.000000 ms", table)
+        self.assertNotIn("2.000x", table)
+
+    def test_evidence_run_refuses_blocked_equivalence_cases(self):
+        tool = load_tool()
+        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        blocked = inventory.cases[0]._replace(comparison="blocked")
+        fixture = inventory._replace(cases=[blocked, *inventory.cases[1:]])
+
+        with self.assertRaisesRegex(tool.ContractError, blocked.name):
+            tool.check_runnable_inventory(fixture)
 
     def test_criterion_uses_per_iteration_minimum_like_upstream_harness(self):
         tool = load_tool()

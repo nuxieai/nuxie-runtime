@@ -11690,6 +11690,96 @@
     }
 
     #[test]
+    fn occurrence_view_model_boolean_reads_component_list_row_context() {
+        let bytes = synthetic_riv(97021, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyList", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object_with_properties(bytes, "ViewModelPropertyBoolean", |bytes| {
+                push_synthetic_string_property(
+                    bytes,
+                    "ViewModelPropertyBoolean",
+                    "name",
+                    "disabled",
+                );
+            });
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceBoolean",
+                &[("viewModelPropertyId", 0), ("propertyValue", 1)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", 1), ("viewModelInstanceId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+        });
+        let file = read_runtime_file(&bytes).expect("component-list boolean fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("component-list fixture graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("parent artboard instance");
+
+        let list_local_id = graph.artboards[0].component_lists[0].local_id;
+        let row_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("component-list row context"),
+        );
+        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context]));
+        let occurrence_identity = parent.component_list_items(list_local_id).unwrap()[0]
+            .occurrence_identity;
+
+        let occurrence = [RuntimeArtboardOccurrenceSegment::ComponentListItem {
+            host_local_id: list_local_id,
+            item_index: 0,
+            occurrence_identity,
+        }];
+        assert_eq!(
+            parent.occurrence_view_model_boolean(&occurrence, &[1, 0]),
+            Some(true)
+        );
+        assert_eq!(
+            parent.occurrence_view_model_boolean(
+                &[RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id: list_local_id,
+                    item_index: 0,
+                    occurrence_identity: occurrence_identity.wrapping_add(1),
+                }],
+                &[1, 0],
+            ),
+            None,
+            "a stale row identity must not fall back to the current row or root context"
+        );
+
+        assert!(parent.remove_component_list_virtualizable(list_local_id, 0));
+        assert_eq!(
+            parent.occurrence_view_model_boolean(&occurrence, &[1, 0]),
+            None,
+            "an unmounted occurrence must fail closed"
+        );
+        assert!(parent.add_component_list_virtualizable(&file, list_local_id, 0));
+        assert_eq!(
+            parent.occurrence_view_model_boolean(&occurrence, &[1, 0]),
+            Some(true),
+            "pool remount preserves the row identity and its live DataContext"
+        );
+    }
+
+    #[test]
     fn component_list_override_without_mounted_rows_keeps_the_host_clean() {
         let bytes = synthetic_riv(9703, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);

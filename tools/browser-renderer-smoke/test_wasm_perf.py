@@ -114,6 +114,67 @@ class SourceProvenanceTests(unittest.TestCase):
                 allowed_outputs=allowed,
             )
 
+    def test_post_seal_node_coordinator_swap_cannot_fabricate_browser_json(self):
+        coordinator_sources = {}
+        for name, contents in (
+            (
+                "run-wasm-perf.cjs",
+                'require("node:fs").writeFileSync(process.argv[2], '
+                'JSON.stringify({accepted: "sealed"}));\n',
+            ),
+            ("run-wasm-perf.sh", "#!/bin/sh\nexit 0\n"),
+            ("wasm_perf.py", "#!/usr/bin/env python3\n"),
+        ):
+            path = self.repo / name
+            path.write_text(contents, encoding="utf-8")
+            coordinator_sources[name] = path
+        subprocess.run(
+            ["git", "add", *coordinator_sources], cwd=self.repo, check=True
+        )
+        subprocess.run(
+            ["git", "commit", "-qm", "coordinators"], cwd=self.repo, check=True
+        )
+        generated = self.repo / "generated"
+        generated.mkdir()
+        bundle = wasm_perf.stage_coordinator_bundle(
+            coordinator_sources, generated / "coordinators"
+        )
+        sources = wasm_perf.capture_source_provenance(
+            self.repo, self.runtime, allowed_outputs=[generated]
+        )
+        sealed = wasm_perf.seal_run_provenance(
+            sources,
+            self.repo,
+            self.runtime,
+            artifacts={"wasm_perf_node": bundle / "run-wasm-perf.cjs"},
+            allowed_outputs=[generated],
+        )
+
+        node_source = coordinator_sources["run-wasm-perf.cjs"]
+        original = node_source.read_text(encoding="utf-8")
+        node_source.write_text(
+            'require("node:fs").writeFileSync(process.argv[2], '
+            'JSON.stringify({accepted: "fabricated"}));\n',
+            encoding="utf-8",
+        )
+        output = generated / "browser.json"
+        subprocess.run(
+            ["node", str(bundle / "run-wasm-perf.cjs"), str(output)], check=True
+        )
+        node_source.write_text(original, encoding="utf-8")
+
+        self.assertEqual(
+            json.loads(output.read_text(encoding="utf-8")),
+            {"accepted": "sealed"},
+        )
+        self.assertEqual(len(bundle.name), 64)
+        wasm_perf.verify_run_provenance(
+            sealed,
+            self.repo,
+            self.runtime,
+            allowed_outputs=[generated],
+        )
+
     def test_seals_staged_fixture_and_rejects_mutation_after_seal(self):
         generated = self.repo / "generated"
         generated.mkdir()
@@ -313,12 +374,19 @@ class SourceProvenanceTests(unittest.TestCase):
             {
                 "runs": 1,
                 "repeat": 1,
-                "fixtures": [{"id": "fixture"}],
+                "fixtures": [
+                    {
+                        "id": "fixture@0s",
+                        "fixture_id": "fixture",
+                        "sample_index": 0,
+                        "sample_seconds": 0.0,
+                    }
+                ],
             },
             runner,
             {
-                "fixture": {
-                    "id": "fixture",
+                "fixture@0s": {
+                    "id": "fixture@0s",
                     "staged_path": str(fixture),
                     "sha256": fixture_sha256,
                     "sample_seconds": 0.0,
@@ -464,6 +532,8 @@ class SourceProvenanceTests(unittest.TestCase):
             fixtures.append(
                 {
                     "id": fixture_id,
+                    "fixture_id": fixture_id,
+                    "sample_index": 0,
                     **fixture_identity,
                     "path": str(source_fixture),
                     "staged_path": str(staged),
@@ -471,7 +541,9 @@ class SourceProvenanceTests(unittest.TestCase):
                     "sample_seconds": 0.0,
                 }
             )
-            browser_runs[fixture_id] = [timing(2.0, 0.8, 1.0, 1)]
+            browser_runs[fixture_id] = [
+                timing(2.0, 0.8, 1.0, 1, target=fixtures[-1])
+            ]
             loaded_fixtures[fixture_id] = fixture_identity
             fixture_ids.append(fixture_id)
         allowed = [generated]
@@ -494,6 +566,16 @@ class SourceProvenanceTests(unittest.TestCase):
                 "bytes": len(contents),
                 "sha256": hashlib.sha256(contents).hexdigest(),
             }
+        node_path = generated / "wasm_perf_node"
+        node_contents = b"sealed-wasm-perf-node"
+        node_path.write_bytes(node_contents)
+        artifacts["wasm_perf_node"] = node_path
+        coordinator_artifacts = {
+            "wasm_perf_node": {
+                "bytes": len(node_contents),
+                "sha256": hashlib.sha256(node_contents).hexdigest(),
+            }
+        }
         sealed = wasm_perf.seal_run_provenance(
             sources,
             self.repo,
@@ -538,9 +620,11 @@ class SourceProvenanceTests(unittest.TestCase):
                                 key: fixture[key]
                                 for key in (
                                     "id",
+                                    "fixture_id",
+                                    "sample_index",
+                                    "sample_seconds",
                                     "bytes",
                                     "sha256",
-                                    "sample_seconds",
                                 )
                             }
                             for fixture in fixtures
@@ -548,6 +632,7 @@ class SourceProvenanceTests(unittest.TestCase):
                     },
                     "loaded_fixtures": loaded_fixtures,
                     "loaded_artifacts": loaded_artifacts,
+                    "coordinator_artifacts": coordinator_artifacts,
                     "fixtures": browser_runs,
                 }
             ),
@@ -626,14 +711,30 @@ categories = ["largest"]
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def test_selects_largest_supported_and_uses_first_sample(self):
+    def test_selects_largest_supported_and_expands_every_sample_target(self):
         fixtures = wasm_perf.select_fixtures(
             self.perf, self.corpus, self.root, limit=2, requested_ids=[]
         )
 
-        self.assertEqual([fixture["id"] for fixture in fixtures], ["large", "small"])
-        self.assertEqual(fixtures[0]["sample_seconds"], 0.0)
-        self.assertEqual(fixtures[1]["sample_seconds"], 0.25)
+        self.assertEqual(
+            [fixture["id"] for fixture in fixtures],
+            ["large@0s", "large@0.5s", "small@0.25s"],
+        )
+        self.assertEqual(
+            [
+                (
+                    fixture["fixture_id"],
+                    fixture["sample_index"],
+                    fixture["sample_seconds"],
+                )
+                for fixture in fixtures
+            ],
+            [
+                ("large", 0, 0.0),
+                ("large", 1, 0.5),
+                ("small", 0, 0.25),
+            ],
+        )
 
     def test_explicit_unsupported_fixture_fails_closed(self):
         with self.assertRaisesRegex(wasm_perf.ContractError, "scripted semantics"):
@@ -783,19 +884,21 @@ view_model_initialization=schema-default
     def test_builds_report_only_comparison_with_variance(self):
         fixture = {
             "id": "large",
+            "fixture_id": "large",
+            "sample_index": 0,
             "bytes": 100,
             "relative_path": "assets/large.riv",
             "sample_seconds": 0.0,
         }
         wasm_runs = [
-            timing(12.0, 3.0, 8.0, 10),
-            timing(14.0, 4.0, 9.0, 10),
-            timing(13.0, 3.5, 8.5, 10),
+            timing(12.0, 3.0, 8.0, 10, target=fixture),
+            timing(14.0, 4.0, 9.0, 10, target=fixture),
+            timing(13.0, 3.5, 8.5, 10, target=fixture),
         ]
         native_runs = [
-            timing(6.0, 1.0, 4.0, 10),
-            timing(7.0, 1.5, 4.5, 10),
-            timing(6.5, 1.25, 4.25, 10),
+            timing(6.0, 1.0, 4.0, 10, target=fixture),
+            timing(7.0, 1.5, 4.5, 10, target=fixture),
+            timing(6.5, 1.25, 4.25, 10, target=fixture),
         ]
 
         report = wasm_perf.build_comparison_report(
@@ -827,11 +930,13 @@ view_model_initialization=schema-default
     def test_rejects_data_bind_authored_default_against_native_schema_default(self):
         fixture = {
             "id": "data_bind_test_cmdq",
+            "fixture_id": "data_bind_test_cmdq",
+            "sample_index": 0,
             "bytes": 100,
             "relative_path": "assets/data_bind_test_cmdq.riv",
             "sample_seconds": 0.0,
         }
-        wasm = timing(12.0, 3.0, 8.0, 10)
+        wasm = timing(12.0, 3.0, 8.0, 10, target=fixture)
         wasm["workload_identity"] = {
             **workload_identity(),
             "view_model_initialization": "none",
@@ -845,10 +950,40 @@ view_model_initialization=schema-default
                 {"data_bind_test_cmdq": [wasm, wasm]},
                 {
                     "data_bind_test_cmdq": [
-                        timing(6.0, 1.0, 4.0, 10),
-                        timing(7.0, 1.5, 4.5, 10),
+                        timing(6.0, 1.0, 4.0, 10, target=fixture),
+                        timing(7.0, 1.5, 4.5, 10, target=fixture),
                     ]
                 },
+                identity={
+                    "git_sha": "abc123",
+                    "rive_runtime_sha": "def456",
+                    "browser": "chrome",
+                    "build_profile": "release",
+                },
+                repeat=10,
+                warmups=1,
+            )
+
+    def test_rejects_native_and_wasm_runs_for_different_sample_targets(self):
+        fixture = {
+            "id": "large@0.5s",
+            "fixture_id": "large",
+            "sample_index": 1,
+            "sample_seconds": 0.5,
+            "bytes": 100,
+            "relative_path": "assets/large.riv",
+        }
+        native = timing(6.0, 1.0, 4.0, 10, target=fixture)
+        wrong_wasm_target = {**fixture, "sample_index": 0, "sample_seconds": 0.0}
+        wasm = timing(12.0, 3.0, 8.0, 10, target=wrong_wasm_target)
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "wasm sample target identity mismatch"
+        ):
+            wasm_perf.build_comparison_report(
+                [fixture],
+                {fixture["id"]: [wasm, wasm]},
+                {fixture["id"]: [native, native]},
                 identity={
                     "git_sha": "abc123",
                     "rive_runtime_sha": "def456",
@@ -864,9 +999,9 @@ view_model_initialization=schema-default
         self.assertEqual(json.loads(wasm_perf.canonical_json(payload)), payload)
 
 
-def timing(elapsed, advance, draw, segments):
+def timing(elapsed, advance, draw, segments, *, target=None):
     accounted = advance + draw
-    return {
+    report = {
         "schema": "rive-golden-benchmark-v1",
         "elapsed_ms": elapsed,
         "total_ms": elapsed,
@@ -879,6 +1014,9 @@ def timing(elapsed, advance, draw, segments):
         "segments": segments,
         "workload_identity": workload_identity(),
     }
+    if target is not None:
+        report["target_identity"] = wasm_perf._target_identity(target)
+    return report
 
 
 def workload_identity():

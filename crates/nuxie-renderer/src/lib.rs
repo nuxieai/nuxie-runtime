@@ -2824,33 +2824,16 @@ impl WgpuFrame {
             .map_err(RendererError::Unsupported)
     }
 
-    /// Completes the exact production CPU boundary used immediately before
-    /// GPU encoding, but stops before command encoding/submission. This is the
-    /// WGPU side of backend differentials; unlike `prepare_logical_frame`, it
-    /// counts as a production resource write while retaining diagnostics.
+    /// Completes the exact production logical-frame path through command
+    /// encoding and submission, without a pixel readback. This is the WGPU
+    /// side of backend differentials; unlike `prepare_logical_frame`, it proves
+    /// the production encoder consumed the shared typed output while retaining
+    /// diagnostics.
     pub fn finish_logical_frame_for_differential(
-        mut self,
+        self,
     ) -> Result<LogicalFrameReport, RendererError> {
-        if let Some(feature) = self.unsupported {
-            return Err(RendererError::Unsupported(feature));
-        }
-        if let Some(failure) = self.context.device_health.current() {
-            return Err(RendererError::Device(failure.message));
-        }
-        let mut board = self
-            .context
-            .intersection_board
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        self.logical_frame
-            .finalize(&mut board)
-            .map_err(RendererError::Unsupported)?;
-        drop(board);
-        self.context
-            .logical_resources
-            .prepare_for_production_with_diagnostics(&self.logical_frame)
-            .map(|prepared| prepared.into_report())
-            .map_err(RendererError::Unsupported)
+        pollster::block_on(self.finish_internal(false, false, false, true, None))
+            .map(|(_, _, _, _, _, _, _, report)| report)
     }
 
     fn prepare_scheduled_clip_updates(&mut self) -> Option<(Vec<SolidDraw>, u16)> {
@@ -2931,9 +2914,9 @@ impl WgpuFrame {
     /// Submits the frame, waits asynchronously for GPU completion, and returns
     /// the offscreen target as tightly packed RGBA pixels.
     pub async fn finish_async(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, true, None)
+        self.finish_internal(false, false, true, false, None)
             .await
-            .map(|(pixels, _, _, _, _, _, _)| pixels)
+            .map(|(pixels, _, _, _, _, _, _, _)| pixels)
     }
 
     /// Encodes the frame, submits all work, and waits for GPU completion
@@ -2947,24 +2930,25 @@ impl WgpuFrame {
     /// completion without copying the render target back to the CPU.
     pub async fn finish_for_benchmark_async(self) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
-        let (_, _, _, _, _, backend_work, _) =
-            self.finish_internal(false, false, false, None).await?;
+        let (_, _, _, _, _, backend_work, _, _) = self
+            .finish_internal(false, false, false, false, None)
+            .await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, None))
-            .map(|(pixels, _, coverage, _, _, _, _)| (pixels, coverage))
+        pollster::block_on(self.finish_internal(false, true, true, false, None))
+            .map(|(pixels, _, coverage, _, _, _, _, _)| (pixels, coverage))
     }
 
     #[cfg(test)]
     fn finish_with_atomic_planes(
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, None))
-            .map(|(pixels, _, coverage, clips, colors, _, _)| (pixels, coverage, clips, colors))
+        pollster::block_on(self.finish_internal(false, true, true, false, None))
+            .map(|(pixels, _, coverage, clips, colors, _, _, _)| (pixels, coverage, clips, colors))
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -2983,8 +2967,8 @@ impl WgpuFrame {
         presenter: &present_pipeline::PresentPipeline,
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
-        let (_, _, _, _, _, backend_work, _) = self
-            .finish_internal(false, false, false, Some((target, presenter)))
+        let (_, _, _, _, _, backend_work, _, _) = self
+            .finish_internal(false, false, false, false, Some((target, presenter)))
             .await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
@@ -2995,6 +2979,7 @@ impl WgpuFrame {
         capture_clockwise_atomic_coverage: bool,
         capture_atomic_planes: bool,
         read_pixels: bool,
+        logical_diagnostics: bool,
         #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
         presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
         #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
@@ -3008,6 +2993,7 @@ impl WgpuFrame {
             Vec<Vec<u32>>,
             BackendWorkMetrics,
             u64,
+            LogicalFrameReport,
         ),
         RendererError,
     > {
@@ -3029,11 +3015,17 @@ impl WgpuFrame {
         self.logical_frame
             .validate()
             .map_err(RendererError::Unsupported)?;
-        let prepared_logical_resources = self
-            .context
-            .logical_resources
-            .prepare_for_production(&self.logical_frame)
-            .map_err(RendererError::Unsupported)?;
+        let prepared_logical_resources = if logical_diagnostics {
+            self.context
+                .logical_resources
+                .prepare_for_production_with_diagnostics(&self.logical_frame)
+        } else {
+            self.context
+                .logical_resources
+                .prepare_for_production(&self.logical_frame)
+        }
+        .map_err(RendererError::Unsupported)?;
+        let mut logical_report = prepared_logical_resources.report().clone();
         let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
@@ -3189,6 +3181,7 @@ impl WgpuFrame {
                 }
                 let mut clockwise_atomic_coverage_words = 0usize;
                 let gradient_batch = prepared_logical_resources.gradient_batch(draws);
+                let typed_draws = prepared_logical_resources.typed_draws(draws);
                 let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
                 // The compact direct-stroke route can stream immutable prepared geometry into
                 // final flush storage. Decide the complete route before preparation so every
@@ -3343,6 +3336,68 @@ impl WgpuFrame {
                             Vec::new(),
                             ClockwiseAtomicMainTriangles::default(),
                             false,
+                        )
+                    } else if inverse_clip_path.is_none() && borrowed_stroke.is_none() {
+                        let shared = typed_draws
+                            .draw(draw_index)
+                            .expect("admitted atomic path draw must have shared typed resources");
+                        let mut spans = shared.spans.clone();
+                        for span in &mut spans {
+                            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+                            if id != 0 {
+                                span.contour_id_with_flags = (span.contour_id_with_flags
+                                    & !gpu::CONTOUR_ID_MASK)
+                                    | id.saturating_sub(shared.contour_base);
+                            }
+                        }
+                        let patch_index_range = if draw.paint.feather != 0.0
+                            && draw.paint.effective_stroke().is_none()
+                        {
+                            gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                                ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                    as u32
+                        } else {
+                            if shared.uses_interior {
+                                (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                    + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                                    as u32
+                                    ..(gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                                        + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
+                                        + gpu::OUTER_CURVE_PATCH_INDEX_COUNT)
+                                        as u32
+                            } else {
+                                0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
+                            }
+                        };
+                        let triangle_end = shared.triangle_count;
+                        let borrowed_end = triangle_end + shared.borrowed_triangle_count;
+                        let mut triangles = shared.triangles[..triangle_end].to_vec();
+                        let mut borrowed_triangles =
+                            shared.triangles[triangle_end..borrowed_end].to_vec();
+                        let mut main_vertices = shared.triangles[borrowed_end..].to_vec();
+                        for triangle in triangles
+                            .iter_mut()
+                            .chain(&mut borrowed_triangles)
+                            .chain(&mut main_vertices)
+                        {
+                            triangle.weight_path_id =
+                                (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+                        }
+                        (
+                            spans,
+                            shared.path,
+                            shared.contours.clone(),
+                            shared.base_instance,
+                            shared.instance_count,
+                            patch_index_range,
+                            triangles,
+                            borrowed_triangles,
+                            ClockwiseAtomicMainTriangles {
+                                vertices: main_vertices,
+                                batches: shared.main_triangle_batches.clone(),
+                            },
+                            shared.has_interior_triangles,
                         )
                     } else if draw.paint.feather != 0.0 {
                         let stroke = draw.paint.effective_stroke();
@@ -3594,7 +3649,7 @@ impl WgpuFrame {
                         path.coverage_buffer_range.pitch = padded_width;
                     }
                     paths.push(path);
-                    let mut paint = match draw.role {
+                    let backend_specific_paint = || match draw.role {
                         DrawRole::ClipUpdate {
                             replacement_id,
                             parent_id,
@@ -3633,6 +3688,14 @@ impl WgpuFrame {
                             unreachable!("MSAA clip reset escaped atomic preparation")
                         }
                     };
+                    let mut paint = if inverse_clip_path.is_none() && draw.image.is_none() {
+                        typed_draws
+                            .draw(draw_index)
+                            .expect("admitted atomic path draw must have shared typed resources")
+                            .paint
+                    } else {
+                        backend_specific_paint()
+                    };
                     if !use_clockwise_atomic_batch
                         && draw.paint.style == RenderPaintStyle::Fill
                         && clockwise_override
@@ -3643,10 +3706,17 @@ impl WgpuFrame {
                         paint = paint.with_clip_rect();
                     }
                     paints.push(paint);
-                    paint_aux.push(gradient_batch.draw(draw_index).map_or_else(
-                        || clip_rect_paint_aux(draw.state.clip_rect),
-                        |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
-                    ));
+                    paint_aux.push(if inverse_clip_path.is_none() && draw.image.is_none() {
+                        typed_draws
+                            .draw(draw_index)
+                            .expect("admitted atomic path draw must have shared typed resources")
+                            .paint_aux
+                    } else {
+                        gradient_batch.draw(draw_index).map_or_else(
+                            || clip_rect_paint_aux(draw.state.clip_rect),
+                            |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
+                        )
+                    });
                     let contour_start = contours.len();
                     contours.extend(draw_contours);
                     let contour_range = contour_start..contours.len();
@@ -4589,31 +4659,22 @@ impl WgpuFrame {
                     destination_copy_bounds: [u32; 4],
                 }
                 enum PendingPathGeometry {
-                    PreparedFill(Arc<PreparedFillGeometry>),
-                    PreparedStroke(Arc<PreparedStrokeGeometry>),
+                    Shared(draw::FillTessellation),
                     Owned(draw::FillTessellation),
                 }
                 impl PendingPathGeometry {
                     fn tessellation(&self) -> &draw::FillTessellation {
                         match self {
-                            Self::PreparedFill(prepared) => prepared
-                                .cached_midpoint()
-                                .map(|midpoint| &midpoint.tessellation)
-                                .expect("eligible prepared fill lost its tessellation"),
-                            Self::PreparedStroke(prepared) => &prepared.tessellation,
+                            Self::Shared(tessellation) => tessellation,
                             Self::Owned(tessellation) => tessellation,
                         }
                     }
 
                     fn local_contour_ids_are_dense(&self) -> bool {
                         match self {
-                            Self::PreparedFill(prepared) => {
-                                prepared.cached_midpoint().is_some_and(|midpoint| {
-                                    midpoint.tessellation.contours.len()
-                                        <= gpu::CONTOUR_ID_MASK as usize
-                                })
+                            Self::Shared(tessellation) => {
+                                tessellation.contours.len() <= gpu::CONTOUR_ID_MASK as usize
                             }
-                            Self::PreparedStroke(prepared) => prepared.local_contour_ids_are_dense,
                             // Owned fallback geometry can include a stroke with skipped
                             // empty contours, so keep the generic scan/sort path.
                             Self::Owned(_) => false,
@@ -4681,6 +4742,27 @@ impl WgpuFrame {
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
                 let gradient_batch = prepared_logical_resources.gradient_batch(draws);
+                let typed_draws = prepared_logical_resources.typed_draws(draws);
+                let shared_tessellation = |draw_index: usize| {
+                    typed_draws.draw(draw_index).map(|shared| {
+                        let mut spans = shared.spans.clone();
+                        for span in &mut spans {
+                            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+                            if id != 0 {
+                                span.contour_id_with_flags = (span.contour_id_with_flags
+                                    & !gpu::CONTOUR_ID_MASK)
+                                    | id.saturating_sub(shared.contour_base);
+                            }
+                        }
+                        draw::FillTessellation {
+                            spans,
+                            path: shared.path,
+                            contours: shared.contours.clone(),
+                            base_instance: shared.base_instance,
+                            instance_count: shared.instance_count,
+                        }
+                    })
+                };
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
                 if gradient_batch.height() != 0 {
                     gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
@@ -4735,18 +4817,7 @@ impl WgpuFrame {
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
                         let reverse_fill = draw.authored_msaa_fill_requires_reverse();
                         let geometry = if !reverse_fill {
-                            match draw.prepared_fill.as_ref() {
-                                Some(prepared) => prepared
-                                    .midpoint(&draw.path, draw.state.transform)
-                                    .map(|_| {
-                                        PendingPathGeometry::PreparedFill(Arc::clone(prepared))
-                                    }),
-                                None => draw::build_fill_tessellation(
-                                    &draw.path.raw_path,
-                                    draw.state.transform,
-                                )
-                                .map(PendingPathGeometry::Owned),
-                            }
+                            shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
                         } else {
                             draw.prepared_fill()
                                 .and_then(|prepared| {
@@ -4762,8 +4833,10 @@ impl WgpuFrame {
                             path.z_index = z_index;
                             let base_instance = tessellation.base_instance;
                             let instance_count = tessellation.instance_count;
-                            let paint =
-                                gpu::PaintData::solid(0, draw.path.fill_rule, BlendMode::SrcOver);
+                            let shared = typed_draws
+                                .draw(draw_index)
+                                .expect("MSAA clip update must have shared typed resources");
+                            let paint = shared.paint;
                             let path_index = pending_paths.len();
                             pending_paths.push(PendingPathDraw {
                                 geometry,
@@ -4771,7 +4844,7 @@ impl WgpuFrame {
                                 base_instance,
                                 instance_count,
                                 paint,
-                                paint_aux: gpu::PaintAuxData::zeroed(),
+                                paint_aux: shared.paint_aux,
                                 image: None,
                                 // C++ LogicalFlush shares padding across clip and content paths.
                                 compact_midpoint_layout: true,
@@ -4873,17 +4946,15 @@ impl WgpuFrame {
                             stroke.is_some(),
                         );
                         if let (Some(mut tessellation), Some(placement)) = (
-                            draw.prepared_feather(self.mode)
-                                .map(|prepared| prepared.tessellation.clone())
-                                .or_else(|| {
-                                    draw::build_feather_tessellation_with_direction(
-                                        &draw.path.raw_path,
-                                        draw.state.transform,
-                                        draw.paint.feather,
-                                        stroke,
-                                        fill_direction,
-                                    )
-                                }),
+                            shared_tessellation(draw_index).or_else(|| {
+                                draw::build_feather_tessellation_with_direction(
+                                    &draw.path.raw_path,
+                                    draw.state.transform,
+                                    draw.paint.feather,
+                                    stroke,
+                                    fill_direction,
+                                )
+                            }),
                             feather_atlas_placement(
                                 &draw.path.raw_path,
                                 draw.state.transform,
@@ -4897,37 +4968,10 @@ impl WgpuFrame {
                             for contour in &mut tessellation.contours {
                                 contour.path_id = 1;
                             }
-                            let gradient = gradient_batch.draw(draw_index);
-                            let mut paint = if let Some(gradient) = gradient {
-                                if draw.paint.style == RenderPaintStyle::Stroke {
-                                    gpu::PaintData::gradient_stroke(
-                                        gradient.paint_type,
-                                        gradient.texture_y,
-                                        draw.paint.blend_mode,
-                                    )
-                                } else {
-                                    gpu::PaintData::gradient(
-                                        gradient.paint_type,
-                                        gradient.texture_y,
-                                        draw.path.fill_rule,
-                                        draw.paint.blend_mode,
-                                    )
-                                }
-                            } else if draw.paint.style == RenderPaintStyle::Stroke {
-                                gpu::PaintData::solid_stroke(
-                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                    draw.paint.blend_mode,
-                                )
-                            } else {
-                                gpu::PaintData::solid(
-                                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
-                                    draw.path.fill_rule,
-                                    draw.paint.blend_mode,
-                                )
-                            };
-                            if draw.state.clip_rect.is_some() {
-                                paint = paint.with_clip_rect();
-                            }
+                            let shared = typed_draws
+                                .draw(draw_index)
+                                .expect("MSAA feather draw must have shared typed resources");
+                            let paint = shared.paint;
                             let [left, top, right, bottom] = placement.bounds;
                             let vertices = [
                                 gpu::TriangleVertex::new([left, bottom], 1, 1),
@@ -4941,10 +4985,7 @@ impl WgpuFrame {
                             pending_atlas_draws.push(PendingAtlasDraw {
                                 tessellation,
                                 paint,
-                                paint_aux: gradient.map_or_else(
-                                    || clip_rect_paint_aux(draw.state.clip_rect),
-                                    |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
-                                ),
+                                paint_aux: shared.paint_aux,
                                 vertices,
                                 placement,
                                 is_stroke: draw.paint.style == RenderPaintStyle::Stroke,
@@ -5007,20 +5048,17 @@ impl WgpuFrame {
                         let reverse_fill = draw.paint.style == RenderPaintStyle::Fill
                             && draw.authored_msaa_fill_requires_reverse();
                         let geometry = match draw.paint.style {
-                            RenderPaintStyle::Fill if !reverse_fill => {
-                                match draw.prepared_fill.as_ref() {
-                                    Some(prepared) => prepared
-                                        .midpoint(&draw.path, draw.state.transform)
-                                        .map(|_| {
-                                            PendingPathGeometry::PreparedFill(Arc::clone(prepared))
-                                        }),
-                                    None => draw::build_fill_tessellation(
-                                        &draw.path.raw_path,
-                                        draw.state.transform,
-                                    )
-                                    .map(PendingPathGeometry::Owned),
-                                }
+                            RenderPaintStyle::Fill if !reverse_fill && draw.image.is_none() => {
+                                shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
                             }
+                            RenderPaintStyle::Fill if !reverse_fill => draw
+                                .prepared_fill()
+                                .and_then(|prepared| {
+                                    prepared.midpoint(&draw.path, draw.state.transform)
+                                })
+                                .map(|prepared| {
+                                    PendingPathGeometry::Owned(prepared.tessellation.clone())
+                                }),
                             RenderPaintStyle::Fill => draw
                                 .prepared_fill()
                                 .and_then(|prepared| {
@@ -5030,9 +5068,7 @@ impl WgpuFrame {
                                     PendingPathGeometry::Owned(prepared.tessellation.clone())
                                 }),
                             RenderPaintStyle::Stroke => {
-                                draw.prepared_stroke.as_ref().map(|stroke| {
-                                    PendingPathGeometry::PreparedStroke(Arc::clone(stroke))
-                                })
+                                shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
                             }
                         };
                         if let Some(geometry) = geometry {
@@ -5096,6 +5132,14 @@ impl WgpuFrame {
                                 )
                             } else {
                                 clip_rect_paint_aux(draw.state.clip_rect)
+                            };
+                            let (paint, paint_aux) = if image.is_none() {
+                                let shared = typed_draws.draw(draw_index).expect(
+                                    "MSAA direct path draw must have shared typed resources",
+                                );
+                                (shared.paint, shared.paint_aux)
+                            } else {
+                                (paint, paint_aux)
                             };
                             let path_index = pending_paths.len();
                             let compact_midpoint_layout = (draw.paint.style
@@ -6567,6 +6611,8 @@ impl WgpuFrame {
                 }
             }
             let backend_work = self.work_recorder.snapshot();
+            logical_report.production_typed_output_consumed =
+                prepared_logical_resources.typed_encoder_read_count() != 0;
             return Ok((
                 Vec::new(),
                 Vec::new(),
@@ -6575,6 +6621,7 @@ impl WgpuFrame {
                 Vec::new(),
                 backend_work,
                 atomic_strategy_partitions,
+                logical_report,
             ));
         }
 
@@ -6666,6 +6713,8 @@ impl WgpuFrame {
         let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
         tessellation_texture_frame.borrow_mut().recycle();
         let backend_work = self.work_recorder.snapshot();
+        logical_report.production_typed_output_consumed =
+            prepared_logical_resources.typed_encoder_read_count() != 0;
         Ok((
             pixels,
             coverage_snapshots,
@@ -6674,6 +6723,7 @@ impl WgpuFrame {
             atomic_color_snapshots,
             backend_work,
             atomic_strategy_partitions,
+            logical_report,
         ))
     }
 }
@@ -9856,6 +9906,17 @@ mod tests {
             value: 1.0 / 512.0,
         };
 
+    fn assert_reports_match_before_wgpu_encoding(
+        null: &LogicalFrameReport,
+        wgpu: &LogicalFrameReport,
+    ) {
+        assert!(null.production_typed_output_consumed);
+        assert!(!wgpu.production_typed_output_consumed);
+        let mut null = null.clone();
+        null.production_typed_output_consumed = false;
+        assert_eq!(&null, wgpu);
+    }
+
     #[test]
     fn wgpu_and_null_adapters_share_fill_rule_aware_logical_flush() {
         let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
@@ -9869,7 +9930,7 @@ mod tests {
         let mut frame = factory.begin_frame(0);
         frame.draw_path(path.as_ref(), paint.as_ref());
 
-        let wgpu = frame.prepare_logical_frame().unwrap();
+        let wgpu = frame.finish_logical_frame_for_differential().unwrap();
         let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
         let null_path = null.prepare_path(&raw_path, FillRule::EvenOdd);
         null.begin_frame();
@@ -9879,6 +9940,7 @@ mod tests {
 
         assert_eq!(shadow, wgpu);
         assert_eq!(shadow.draw_count, 1);
+        assert!(shadow.production_typed_output_consumed);
         assert_ne!(shadow.shadow_fingerprint, 0);
     }
 
@@ -9914,7 +9976,7 @@ mod tests {
         let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(wgpu.draw_count, 4);
-        assert_eq!(shadow, wgpu);
+        assert_reports_match_before_wgpu_encoding(&shadow, &wgpu);
     }
 
     #[test]
@@ -9959,7 +10021,7 @@ mod tests {
         let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(wgpu.draw_count, 0);
-        assert_eq!(shadow, wgpu);
+        assert_reports_match_before_wgpu_encoding(&shadow, &wgpu);
     }
 
     #[test]
@@ -10334,7 +10396,7 @@ mod tests {
         .unwrap();
         let shadow = null.flush_with_diagnostics().unwrap();
 
-        assert_eq!(shadow, wgpu);
+        assert_reports_match_before_wgpu_encoding(&shadow, &wgpu);
         assert_eq!(shadow.written.gradient_records, 1);
         assert_eq!(shadow.written.gradient_color_records, 3);
         assert_eq!(shadow.written.gradient_stop_records, 3);
@@ -10462,7 +10524,7 @@ mod tests {
             .unwrap();
         }
         let shadow = null.flush_with_diagnostics().unwrap();
-        assert_eq!(shadow, wgpu);
+        assert_reports_match_before_wgpu_encoding(&shadow, &wgpu);
         assert_eq!(shadow.resource_planning_passes, shadow.draw_count);
         assert_eq!(shadow.plan_finalization_passes, 1);
     }
@@ -19444,7 +19506,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_atomic_sparse_stroke_contours_use_owned_compact_fallback() {
+    fn generic_atomic_sparse_stroke_contours_use_shared_owned_compact_fallback() {
         let mut raw_path = RawPath::new();
         raw_path.move_to(4.0, 4.0);
         raw_path.move_to(8.0, 32.0);
@@ -19490,7 +19552,11 @@ mod tests {
 
         let pixels = frame.finish().unwrap();
 
-        assert_eq!(draw::fill_tessellation_clone_count(), 1);
+        assert_eq!(
+            draw::fill_tessellation_clone_count(),
+            0,
+            "the encoder must consume the writer's owned typed output without cloning tessellation"
+        );
         let pixel = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..][..4];
         assert_eq!(pixel(32, 32), [0xff, 0x00, 0x00, 0xff]);
         assert_eq!(pixel(32, 16), [0xff, 0xff, 0xff, 0xff]);

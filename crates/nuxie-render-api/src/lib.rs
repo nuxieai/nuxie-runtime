@@ -4303,7 +4303,7 @@ mod tests {
     #[test]
     fn p3g_factory_font_helper_validates_and_owns_the_encoded_font() {
         let mut factory = NullFactory::new();
-        let encoded = include_bytes!("../../nuxie/tests/fixtures/roboto-a.ttf.base64")
+        let encoded = include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
             .iter()
             .copied()
             .filter(|byte| !byte.is_ascii_whitespace())

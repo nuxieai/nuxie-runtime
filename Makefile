@@ -161,6 +161,24 @@ crate-seams-baseline-check:
 
 crate-seams-product-check:
 	cargo check -p nuxie-product --all-targets
+	@$(MAKE) --no-print-directory crate-seams-product-host-free-check \
+		PRODUCT_FEATURES=scripting
+	@if $(MAKE) --no-print-directory crate-seams-product-host-free-check \
+		PRODUCT_FEATURES=scripting,js-host-seed >/dev/null 2>&1; then \
+		echo "host-free feature ratchet missed its js-host-seed positive control" >&2; \
+		exit 1; \
+	fi
+
+crate-seams-product-host-free-check:
+	@set -e; \
+	feature_tree="$$(cargo tree --target wasm32-unknown-unknown \
+		-p nuxie-product --no-default-features --features "$(PRODUCT_FEATURES)" \
+		-e normal,build --format '{p} [{f}]')"; \
+	if printf '%s\n' "$$feature_tree" | \
+		grep -Eq 'nuxie-(runtime|scripting) v.*\[.*js-host-seed'; then \
+		echo "host-free nuxie-product scripting unexpectedly enables js-host-seed" >&2; \
+		exit 1; \
+	fi
 
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \

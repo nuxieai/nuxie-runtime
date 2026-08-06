@@ -59,9 +59,12 @@ make crate-seams-apple-check
 make crate-seams-full-check
 ```
 
-The browser selector targets `wasm32-unknown-unknown` so it cannot pass by
-compiling away wasm-only code. The Apple selector is run in the macOS CI tier.
-The full selector is the ordinary whole-workspace build.
+The product selector also checks that `nuxie-product --no-default-features
+--features scripting` does not recover `js-host-seed` through a transitive
+dependency; this is the self-contained publisher-wasm profile. The browser
+selector targets `wasm32-unknown-unknown` so it cannot pass by compiling away
+wasm-only code. The Apple selector is run in the macOS CI tier. The full
+selector is the ordinary whole-workspace build.
 
 ## Temporary compatibility paths
 

@@ -6,9 +6,15 @@
   "correctness_followup_commit": "bd6fd1f7",
   "pinned_cpp_commit": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
   "runner": {
+    "source_digest_kind": "golden-runner digest_state",
     "source_digest": "4f6d045fe2c9a6a93dddf2529a3e8a8b8a181ef7aea32d7e4915e1512420d4e3",
     "binary_sha256": "9f87bbc6648a532b1be04f7cfc4ac7f7c539a74cc4a8227ac3e2129e46c60a32",
-    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)"
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)",
+    "reproduction": {
+      "checkout_commit": "74e8fbeb",
+      "command": "make scripted-rust-golden-runner",
+      "stamp": "target/golden-gate/scripted-release.json"
+    }
   },
   "measurement": {
     "frames": 100,
@@ -70,6 +76,12 @@
       }
     }
   ],
+  "sampled_stack_provenance": {
+    "status": "transcribed-host-specific-diagnostic",
+    "raw_profile_tracked": false,
+    "independently_reproducible": false,
+    "required_for_authoritative_closeout": false
+  },
   "sampled_stack_summary": {
     "car_widgets_v01": {
       "before": {

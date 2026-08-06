@@ -30,8 +30,10 @@ The following passed with only pre-existing generated/vendor warnings:
   order coverage for Solo switches plus ancestor/LayoutComponent reveals.
 - Per-VM/per-type userdata registration reuse, distinct instance field values,
   VM teardown without a strong-handle cycle, and cached field dispatch from a
-  borrowed coroutine state.
-- The `luaur-rt` `send` feature branch.
+  borrowed coroutine state via
+  `cargo test -p luaur-rt-test-harness --test userdata_metatable_cache`.
+- The `luaur-rt` `send` store through the same supported workspace harness via
+  `cargo test -p luaur-rt-test-harness --features send --test userdata_metatable_cache`.
 - The actual `nuxie-scripting` renderer integration test.
 - `cargo check -p nuxie-runtime -p nuxie-scripting`.
 - `make b6-audit-check` and the perf corpus/pinned-runtime checks.
@@ -62,12 +64,20 @@ no mechanism in this change is attributed to an uncaptured script profile.
 ## Timing status
 
 All runs used scripting-enabled release runners, 100 sequential frames at
-60 Hz, five iterations, no warmups, median aggregation, and C++ first. The
-release Rust runner provenance record was:
+60 Hz, five iterations, no warmups, and median aggregation. The three after
+captures used C++ first; the local before controls deliberately used both
+C++-first and Rust-first orders. The release Rust runner provenance record was:
 
 - source digest: `4f6d045fe2c9a6a93dddf2529a3e8a8b8a181ef7aea32d7e4915e1512420d4e3`
 - binary SHA-256: `9f87bbc6648a532b1be04f7cfc4ac7f7c539a74cc4a8227ac3e2129e46c60a32`
 - compiler: `rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)`
+
+Here `source digest` is the provenance script's `digest_state`: the SHA-256 of
+the sorted workspace/member content-digest record. It and the runner hash can
+be reproduced by checking out `74e8fbeb`, running
+`make scripted-rust-golden-runner`, and reading
+`target/golden-gate/scripted-release.json`. Reproduction also requires the
+recorded Rust compiler because the digest state includes `rustc --version`.
 
 The repository quiet gate waited its complete 900-second bound, from 13:12:28
 to 13:27:28 America/Los_Angeles. The one-minute load was 24 at expiry versus a
@@ -103,7 +113,9 @@ The compact timing and sampled-stack summary is tracked in
 `docs/evidence/univ-1684-extreme-outliers-summary.json`. It records the exact
 before/after totals, ratios, capture conditions, runner identity, and relevant
 stack counts used above. Host-specific raw `sample` output is intentionally not
-claimed as durable repository evidence.
+claimed as durable repository evidence. The stack counts are transcribed local
+diagnostics, not independently reproducible evidence; authoritative closeout
+does not depend on them and requires a fresh final-tip capture below.
 
 The summary is bound to candidate commit `74e8fbeb`. A later adversarial review
 found a transition-order collapse bug, corrected in `bd6fd1f7`. These

@@ -75,6 +75,81 @@ function assertLoadedFixtureIdentity(fixtureId, expected, loaded) {
   }
 }
 
+function assertLoadedArtifactIdentity(artifactName, expected, loaded) {
+  assertExactKeys(loaded, ["bytes", "sha256"], "browser loaded artifact identity");
+  const expectedIdentity = {
+    bytes: expected.bytes,
+    sha256: expected.sha256,
+  };
+  if (loaded.bytes !== expectedIdentity.bytes || loaded.sha256 !== expectedIdentity.sha256) {
+    throw new Error(
+      `browser loaded artifact identity mismatch for ${artifactName}: ` +
+        `expected=${JSON.stringify(expectedIdentity)} loaded=${JSON.stringify(loaded)}`,
+    );
+  }
+}
+
+async function artifactIdentity(bytes) {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return {
+    bytes: bytes.byteLength,
+    sha256: Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join(""),
+  };
+}
+
+async function fetchArtifactBytes(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`artifact fetch failed ${response.status} ${url}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+async function installWasmPerfArtifacts({ jsUrl, wasmUrl, expectedArtifacts }) {
+  const [jsBytes, wasmBytes] = await Promise.all([
+    fetchArtifactBytes(jsUrl),
+    fetchArtifactBytes(wasmUrl),
+  ]);
+  const loadedArtifacts = {
+    wasm_bindgen_js: await artifactIdentity(jsBytes),
+    wasm: await artifactIdentity(wasmBytes),
+  };
+  assertLoadedArtifactIdentity(
+    "wasm_bindgen_js",
+    expectedArtifacts.wasm_bindgen_js,
+    loadedArtifacts.wasm_bindgen_js,
+  );
+  assertLoadedArtifactIdentity("wasm", expectedArtifacts.wasm, loadedArtifacts.wasm);
+
+  // Import and initialize the exact buffers whose identities were checked
+  // above. No second URL read can substitute different bytes at execution.
+  const moduleUrl = URL.createObjectURL(new Blob([jsBytes], { type: "text/javascript" }));
+  let module;
+  try {
+    module = await import(moduleUrl);
+  } finally {
+    URL.revokeObjectURL(moduleUrl);
+  }
+  await module.default({ module_or_path: wasmBytes });
+  const { WasmPerfRunner } = module;
+  globalThis.measureWasmFixture = async ({ bytes, repeat, sampleSeconds }) =>
+    measureFixture({
+      createRunner: async () => new WasmPerfRunner(bytes),
+      now: () => performance.now(),
+      repeat,
+      sampleSeconds,
+    });
+  globalThis.measureWasmFixtureRuns = async ({ bytes, repeat, sampleSeconds, warmups, runs }) =>
+    measureRuns({
+      measure: () => globalThis.measureWasmFixture({ bytes, repeat, sampleSeconds }),
+      warmups,
+      runs,
+    });
+  return loadedArtifacts;
+}
+
 async function measureFixture({ createRunner, now, repeat, sampleSeconds }) {
   if (!Number.isInteger(repeat) || repeat <= 0) {
     throw new Error("repeat must be a positive integer");
@@ -149,7 +224,14 @@ async function measureRuns({ measure, warmups, runs }) {
   return reports;
 }
 
-const api = { assertLoadedFixtureIdentity, checkedElapsed, measureFixture, measureRuns };
+const api = {
+  assertLoadedArtifactIdentity,
+  assertLoadedFixtureIdentity,
+  checkedElapsed,
+  installWasmPerfArtifacts,
+  measureFixture,
+  measureRuns,
+};
 if (typeof module !== "undefined" && module.exports) {
   module.exports = api;
 }

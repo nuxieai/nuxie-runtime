@@ -1167,6 +1167,7 @@ dependencies = [
  "nuxie",
  "nuxie-binary",
  "nuxie-graph",
+ "nuxie-product-scripting",
  "nuxie-render-api",
  "nuxie-render-stream",
  "nuxie-renderer",

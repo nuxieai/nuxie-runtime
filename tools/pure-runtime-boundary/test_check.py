@@ -69,14 +69,14 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.write_workspace()
         return package
 
-    def create_mixed_facade_provider(self) -> None:
+    def create_portable_abi_facade(self) -> None:
         renderer = self.create_package(
             "crates/nuxie-renderer",
             "nuxie-renderer",
             "",
         )
         (renderer / "src/lib.rs").write_text("// portable renderer facade\n")
-        self.create_package(
+        facade = self.create_package(
             "crates/nuxie",
             "nuxie",
             """
@@ -87,6 +87,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             nuxie-renderer = { path = "../nuxie-renderer", optional = true }
             """,
         )
+        (facade / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
 
     def write_manifest(self, body: str) -> None:
         (self.package / "Cargo.toml").write_text(
@@ -122,7 +123,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pure-runtime boundary check passed", result.stdout)
 
-    def test_rejects_mixed_facade_dependency(self) -> None:
+    def test_rejects_portable_abi_facade_dependency_from_runtime(self) -> None:
         self.write_manifest(
             """
             [dependencies]
@@ -810,7 +811,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("browser-renderer-smoke", result.stderr)
 
-    def test_rejects_product_dependency_from_portable_c_abi(self) -> None:
+    def test_rejects_product_dependency_from_portable_abi(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -826,8 +827,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("crates/nux-capi/Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
 
-    def test_allows_exact_portable_c_abi_mixed_facade_debt(self) -> None:
-        self.create_mixed_facade_provider()
+    def test_allows_exact_portable_abi_facade_edge_without_debt_report(self) -> None:
+        self.create_portable_abi_facade()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -840,9 +841,188 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("portable-c-abi-mixed-facade=1", result.stdout)
+        self.assertNotIn("portable-c-abi-mixed-facade", result.stdout)
+        self.assertNotIn("mixed-facade", result.stdout)
 
-    def test_rejects_expansion_of_portable_c_abi_mixed_facade_debt(self) -> None:
+    def test_rejects_direct_product_dependency_from_nuxie(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package("crates/nuxie-product", "nuxie-product", "")
+        (self.root / "crates/nuxie/Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "nuxie"
+                version = "0.0.0"
+
+                [features]
+                renderer = ["dep:nuxie-renderer"]
+
+                [dependencies]
+                nuxie-renderer = { path = "../nuxie-renderer", optional = true }
+                nuxie-product = { path = "../nuxie-product" }
+                """
+            )
+        )
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nuxie/Cargo.toml", result.stderr)
+        self.assertIn("nuxie-product", result.stderr)
+
+    def test_rejects_transitive_product_dependency_from_nuxie(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = { path = "../helper" }
+            """,
+        )
+        self.create_package(
+            "crates/helper",
+            "helper",
+            """
+            [dependencies]
+            nuxie-product = { path = "../nuxie-product" }
+            """,
+        )
+        self.create_package("crates/nuxie-product", "nuxie-product", "")
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/helper/Cargo.toml", result.stderr)
+        self.assertIn("nuxie-product", result.stderr)
+
+    def test_rejects_product_source_from_nuxie(self) -> None:
+        package = self.create_package("crates/nuxie", "nuxie", "")
+        (package / "src/lib.rs").write_text(
+            "use nuxie_product::flow_session::FlowSession;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nuxie/src/lib.rs", result.stderr)
+        self.assertIn("product/authoring module", result.stderr)
+
+    def test_rejects_target_workspace_aliased_product_dependency_from_nuxie(
+        self,
+    ) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [target.'cfg(target_os = "ios")'.dependencies]
+            bridge.workspace = true
+            """,
+        )
+        self.write_workspace(
+            """
+            [workspace.dependencies]
+            bridge = { package = "nuxie-product", path = "crates/nuxie-product" }
+            """
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nuxie/Cargo.toml", result.stderr)
+        self.assertIn("package 'nuxie-product'", result.stderr)
+        self.assertIn("target.cfg(target_os = \"ios\").dependencies", result.stderr)
+
+    def test_allows_exact_nuxie_self_test_support_dependency(self) -> None:
+        facade = self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [features]
+            test-support = []
+
+            [dev-dependencies]
+            nuxie = { path = ".", default-features = false, features = ["test-support"] }
+            """,
+        )
+        (facade / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_expansion_of_nuxie_self_test_support_dependency(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [features]
+            renderer = []
+            test-support = []
+
+            [dev-dependencies]
+            nuxie = { path = ".", default-features = false, features = ["test-support", "renderer"] }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("nuxie self edge", result.stderr)
+        self.assertIn("only the test-support feature", result.stderr)
+
+    def test_rejects_product_dependency_through_excluded_in_repo_helper(
+        self,
+    ) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = { path = "../helper" }
+            """,
+        )
+        helper = self.root / "crates/helper"
+        (helper / "src").mkdir(parents=True)
+        (helper / "src/lib.rs").write_text("// excluded helper\n")
+        (helper / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "helper"
+                version = "0.0.0"
+
+                [dependencies]
+                nuxie-product = { path = "../nuxie-product" }
+                """
+            )
+        )
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [workspace]
+                members = ["crates/nuxie-runtime", "crates/nuxie"]
+                exclude = ["crates/helper"]
+                resolver = "3"
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nuxie/Cargo.toml", result.stderr)
+        self.assertIn("in-repo path dependency", result.stderr)
+        self.assertIn("outside the protected workspace scan", result.stderr)
+
+    def test_rejects_expansion_of_portable_abi_facade_edge(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -855,9 +1035,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed-facade debt edge expanded", result.stderr)
+        self.assertIn("portable ABI facade edge", result.stderr)
 
-    def test_rejects_duplicate_alias_of_portable_c_abi_debt(self) -> None:
+    def test_rejects_duplicate_alias_of_portable_abi_facade(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -871,9 +1051,12 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed-facade debt edge must use dependency key 'nuxie'", result.stderr)
+        self.assertIn("portable ABI facade edge", result.stderr)
+        self.assertIn("dependency key 'nuxie'", result.stderr)
 
-    def test_rejects_product_feature_forwarding_over_mixed_facade_debt(self) -> None:
+    def test_rejects_product_feature_forwarding_over_portable_abi_facade(
+        self,
+    ) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -889,7 +1072,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("forwards forbidden mixed-facade feature 'scripting'", result.stderr)
+        self.assertIn(
+            "forwards forbidden portable ABI facade feature 'scripting'",
+            result.stderr,
+        )
 
     def test_rejects_indirect_product_feature_forwarding(self) -> None:
         self.create_package(
@@ -911,7 +1097,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("feature 'helper' forwards forbidden", result.stderr)
 
     def test_allows_current_renderer_feature_forwarding(self) -> None:
-        self.create_mixed_facade_provider()
+        self.create_portable_abi_facade()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -947,7 +1133,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("package 'nuxie-product'", result.stderr)
 
-    def test_rejects_features_added_to_workspace_inherited_mixed_facade(self) -> None:
+    def test_rejects_features_added_to_workspace_inherited_portable_abi_facade(
+        self,
+    ) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -966,9 +1154,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("expanded with dependency features", result.stderr)
+        self.assertIn("cannot enable dependency features", result.stderr)
 
-    def test_rejects_nonlocal_portable_c_abi_mixed_facade_provider(self) -> None:
+    def test_rejects_nonlocal_portable_abi_facade(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -983,7 +1171,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must resolve to local crates/nuxie", result.stderr)
 
-    def test_rejects_excluded_local_mixed_facade_provider(self) -> None:
+    def test_rejects_excluded_local_portable_abi_facade(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -992,10 +1180,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             nuxie = { path = "../nuxie", default-features = false }
             """,
         )
-        provider = self.root / "crates/nuxie"
-        (provider / "src").mkdir(parents=True)
-        (provider / "src/lib.rs").write_text("// excluded product provider\n")
-        (provider / "Cargo.toml").write_text(
+        facade = self.root / "crates/nuxie"
+        (facade / "src").mkdir(parents=True)
+        (facade / "src/lib.rs").write_text("// excluded portable ABI facade\n")
+        (facade / "Cargo.toml").write_text(
             textwrap.dedent(
                 """
                 [package]
@@ -1017,9 +1205,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("provider 'nuxie' must remain an in-workspace package", result.stderr)
+        self.assertIn("in-repo path dependency", result.stderr)
+        self.assertIn("outside the protected workspace scan", result.stderr)
 
-    def test_workspace_inheritance_cannot_disable_provider_default_features(self) -> None:
+    def test_workspace_inheritance_cannot_disable_facade_default_features(self) -> None:
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
@@ -1038,135 +1227,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("enabling default features", result.stderr)
-
-    def test_rejects_expansion_of_allowed_renderer_provider_feature(self) -> None:
-        self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [dependencies]
-            nuxie = { path = "../nuxie", default-features = false }
-            """,
-        )
-        self.create_package(
-            "crates/nuxie",
-            "nuxie",
-            """
-            [features]
-            renderer = ["dep:nuxie-renderer", "scripting"]
-            scripting = []
-
-            [dependencies]
-            nuxie-renderer = { version = "1", optional = true }
-            """,
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed facade feature 'renderer' activations changed", result.stderr)
-
-    def test_rejects_mutation_of_allowed_renderer_provider_dependency(self) -> None:
-        self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [dependencies]
-            nuxie = { path = "../nuxie", default-features = false }
-            """,
-        )
-        self.create_package(
-            "crates/nuxie",
-            "nuxie",
-            """
-            [features]
-            renderer = ["dep:nuxie-renderer"]
-
-            [dependencies]
-            nuxie-renderer = { package = "nuxie-product", version = "1", optional = true, default-features = false, features = ["trust"] }
-            """,
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("resolves to 'nuxie-product'", result.stderr)
-        self.assertIn("default features and no explicit features", result.stderr)
-
-    def test_rejects_target_specific_renderer_provider_expansion(self) -> None:
-        self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [dependencies]
-            nuxie = { path = "../nuxie", default-features = false }
-            """,
-        )
-        self.create_package(
-            "crates/nuxie-renderer",
-            "nuxie-renderer",
-            "",
-        )
-        self.create_package(
-            "crates/nuxie",
-            "nuxie",
-            """
-            [features]
-            renderer = ["dep:nuxie-renderer"]
-
-            [dependencies]
-            nuxie-renderer = { path = "../nuxie-renderer", optional = true }
-
-            [target.'cfg(target_os = "ios")'.dependencies]
-            nuxie-renderer = { path = "../nuxie-renderer", optional = true, features = ["product-presentation"] }
-            """,
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must have exactly one declaration at [dependencies]", result.stderr)
-
-    def test_rejects_workspace_inherited_target_renderer_alias(self) -> None:
-        self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [dependencies]
-            nuxie = { path = "../nuxie", default-features = false }
-            """,
-        )
-        self.create_package(
-            "crates/nuxie-renderer",
-            "nuxie-renderer",
-            "",
-        )
-        self.create_package(
-            "crates/nuxie",
-            "nuxie",
-            """
-            [features]
-            renderer = ["dep:nuxie-renderer"]
-
-            [dependencies]
-            nuxie-renderer = { path = "../nuxie-renderer", optional = true }
-
-            [target.'cfg(target_os = "ios")'.dependencies]
-            renderer-alias.workspace = true
-            """,
-        )
-        self.write_workspace(
-            """
-            [workspace.dependencies]
-            renderer-alias = { package = "nuxie-renderer", path = "crates/nuxie-renderer", features = ["product-presentation"] }
-            """
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("target.cfg(target_os = \"ios\").dependencies:renderer-alias", result.stderr)
+        self.assertIn("must disable default features", result.stderr)
 
     def test_rejects_explicit_product_module_path(self) -> None:
         self.write_manifest("")
@@ -1212,16 +1273,35 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_rejects_root_scene_reexport_from_portable_c_abi(self) -> None:
+    def test_allows_approved_portable_abi_facade_symbols_and_file_import(
+        self,
+    ) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/approved.rs").write_text(
+            "use nuxie::{File, StateMachineInstance};\n"
+            "fn import(bytes: &[u8], _: &StateMachineInstance) {\n"
+            "    let _ = File::import(bytes);\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_root_scene_reexport_from_portable_abi(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_scene.rs").write_text("use nuxie::Scene;\n")
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed facade symbol 'Scene' is not approved", result.stderr)
+        self.assertIn(
+            "portable ABI facade symbol 'Scene' is not approved", result.stderr
+        )
 
-    def test_rejects_product_method_on_approved_mixed_facade_type(self) -> None:
+    def test_rejects_product_method_on_approved_portable_abi_facade_type(
+        self,
+    ) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_flow.rs").write_text(
             "fn leak(file: &nuxie::File) { file.prepare_flow_player(); }\n"
@@ -1230,7 +1310,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed facade product method", result.stderr)
+        self.assertIn("portable ABI facade product method", result.stderr)
 
     def test_rejects_product_trust_constructor_on_approved_file_type(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
@@ -1253,12 +1333,12 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         for method in methods:
             with self.subTest(method=method):
-                errors = BOUNDARY_TOOL.mixed_facade_source_errors(
+                errors = BOUNDARY_TOOL.portable_abi_facade_source_errors(
                     "crates/nux-capi/src/trust.rs", f"Self::{method}(bytes);"
                 )
                 self.assertTrue(errors, method)
 
-    def test_rejects_mixed_facade_crate_alias(self) -> None:
+    def test_rejects_portable_abi_facade_crate_alias(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_alias.rs").write_text(
             "use nuxie as facade;\nfn leak(_: facade::Scene) {}\n"
@@ -1267,9 +1347,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed facade use tree", result.stderr)
+        self.assertIn("portable ABI facade use tree", result.stderr)
 
-    def test_rejects_mixed_facade_wildcard_import(self) -> None:
+    def test_rejects_portable_abi_facade_wildcard_import(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_glob.rs").write_text(
             "use nuxie::*;\nfn leak(_: Scene) {}\n"
@@ -1278,9 +1358,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mixed facade use tree", result.stderr)
+        self.assertIn("portable ABI facade use tree", result.stderr)
 
-    def test_rejects_other_mixed_facade_alias_forms(self) -> None:
+    def test_rejects_other_portable_abi_facade_alias_forms(self) -> None:
         sources = (
             "extern crate nuxie as facade;",
             "use nuxie::File as FacadeFile;",
@@ -1295,7 +1375,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         for source in sources:
             with self.subTest(source=source):
-                errors = BOUNDARY_TOOL.mixed_facade_source_errors(
+                errors = BOUNDARY_TOOL.portable_abi_facade_source_errors(
                     "crates/nux-capi/src/alias.rs", source
                 )
                 self.assertTrue(errors, source)
@@ -1317,7 +1397,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("impls targeting mixed facade symbols", result.stderr)
+        self.assertIn("impls targeting portable ABI facade symbols", result.stderr)
 
     def test_rejects_local_authoring_module(self) -> None:
         self.write_manifest("")
@@ -1454,12 +1534,24 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
-    def test_rejects_product_host_cycle_method_in_new_file(self) -> None:
+    def test_allows_neutral_host_cycle_transaction_method(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
         (package / "src/new_host_cycle.rs").write_text(
             "fn cycle(vm: &Vm) { vm.begin_host_cycle(); }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_product_host_command_drain_method_in_new_file(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        (package / "src/new_host_commands.rs").write_text(
+            "fn drain(vm: &Vm) { vm.drain_host_commands(); }\n"
         )
 
         result = self.run_check()

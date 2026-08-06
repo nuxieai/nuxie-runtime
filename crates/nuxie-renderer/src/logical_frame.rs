@@ -1762,6 +1762,7 @@ pub(crate) fn admit_path_draw(
 struct NullFrame {
     logical: LogicalFrame,
     scratch: super::StrokePreparationScratchLease,
+    error: Option<&'static str>,
 }
 
 impl std::ops::Deref for NullFrame {
@@ -1806,6 +1807,7 @@ impl NullLogicalRenderer {
         self.frame = Some(NullFrame {
             logical: LogicalFrame::new(self.config),
             scratch,
+            error: None,
         });
     }
 
@@ -1814,22 +1816,37 @@ impl NullLogicalRenderer {
     }
 
     pub fn save(&mut self) {
-        self.active_frame().logical_state.save();
+        let frame = self.active_frame();
+        if frame.error.is_none() {
+            frame.logical_state.save();
+        }
     }
 
     pub fn restore(&mut self) {
-        self.active_frame().logical_state.restore();
+        let frame = self.active_frame();
+        if frame.error.is_none() {
+            frame.logical_state.restore();
+        }
     }
 
     pub fn transform(&mut self, transform: nuxie_render_api::Mat2D) {
-        self.active_frame().logical_state.transform(transform);
+        let frame = self.active_frame();
+        if frame.error.is_none() {
+            frame.logical_state.transform(transform);
+        }
     }
 
     pub fn clip_path(&mut self, path: &LogicalPathHandle) -> Result<(), &'static str> {
         let config = self.config;
-        self.active_frame()
-            .logical_state
-            .clip_path(config, &path.path)
+        let frame = self.active_frame();
+        if let Some(error) = frame.error {
+            return Err(error);
+        }
+        let result = frame.logical_state.clip_path(config, &path.path);
+        if let Err(error) = result {
+            frame.error = Some(error);
+        }
+        result
     }
 
     pub fn draw_path(
@@ -1857,19 +1874,29 @@ impl NullLogicalRenderer {
     ) -> Result<(), &'static str> {
         let config = self.config;
         let frame = self.active_frame();
+        if let Some(error) = frame.error {
+            return Err(error);
+        }
         if pixel_bounds_are_empty(frame.logical_state.state.overall_clip_pixel_bounds) {
             return Ok(());
         }
-        let mut paint = paint.into_wgpu();
-        paint.shader = gradient.map(LogicalGradient::into_wgpu);
-        let Some(admitted) =
-            admit_path_draw(config, frame.logical_state.state, &path.path, &paint)?
-        else {
-            return Ok(());
-        };
-        let (clip_updates, clip_id) = frame.logical_state.prepare_scheduled_clip_updates(config)?;
-        let content = admitted.finish(clip_id, &mut frame.scratch)?;
-        frame.logical.push_content_batch(clip_updates, content)
+        let result = (|| {
+            let mut paint = paint.into_wgpu();
+            paint.shader = gradient.map(LogicalGradient::into_wgpu);
+            let Some(admitted) =
+                admit_path_draw(config, frame.logical_state.state, &path.path, &paint)?
+            else {
+                return Ok(());
+            };
+            let (clip_updates, clip_id) =
+                frame.logical_state.prepare_scheduled_clip_updates(config)?;
+            let content = admitted.finish(clip_id, &mut frame.scratch)?;
+            frame.logical.push_content_batch(clip_updates, content)
+        })();
+        if let Err(error) = result {
+            frame.error = Some(error);
+        }
+        result
     }
 
     pub fn flush(&mut self) -> Result<LogicalFrameReport, &'static str> {
@@ -1877,6 +1904,9 @@ impl NullLogicalRenderer {
             .frame
             .take()
             .expect("null logical frame must begin before flush");
+        if let Some(error) = frame.error {
+            return Err(error);
+        }
         frame.logical.finalize(&mut self.intersection_board)?;
         let report = self.resources.prepare(&frame.logical)?;
         drop(frame);

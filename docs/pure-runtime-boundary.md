@@ -76,10 +76,13 @@ directly so parity evidence cannot depend on product glue.
 The repository is not yet physically split at every ownership boundary. The
 guard therefore ratchets, reports, and only permits these audited debt classes:
 
-- ProjectDO implementation and re-exports in runtime/data-binding files;
 - test-support authoring builders in binary/runtime fixture owners;
 - the exact `nux-capi -> nuxie` mixed-facade edge needed by the current
   portable ABI.
+
+ProjectDO evaluation is now physically owned by `nuxie-project-data` and enters
+the baseline through the product-neutral external-data seam documented in
+`docs/project-data-runtime-seam.md`; its former runtime debt class is empty.
 
 Each exception names exact files or one exact manifest edge. It may shrink or
 disappear; it may not spread. The UNIV-1621 child issues own the physical

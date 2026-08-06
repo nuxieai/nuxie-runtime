@@ -1735,31 +1735,29 @@ impl<'a> RuntimeDataContext<'a> {
             .data_context_relative_view_model_property_for_instance_chain(&chain, path)
     }
 
-    /// Resolve legacy ProjectDO relative paths whose ids are FNV-1a hashes of
+    /// Resolve legacy authoring relative paths whose ids are FNV-1a hashes of
     /// UTF-8 property names rather than Rive manifest-name ordinals.
     ///
     /// A hash that names more than one property is deliberately unresolved:
     /// hash-only input cannot safely recover the original property identity.
-    pub(crate) fn project_relative_property_by_name_hash_path(
+    pub(crate) fn relative_property_by_name_hash_path(
         &self,
         path: &[u32],
     ) -> Option<&'a RuntimeObject> {
-        self.project_relative_property_by_name_segments(path, |name_hash, name| {
+        self.relative_property_by_name_segments(path, |name_hash, name| {
             runtime_project_name_hash(name) == *name_hash
         })
     }
 
-    /// Resolve ProjectDO relative paths by their exact UTF-8 property names.
-    pub(crate) fn project_relative_property_by_name_path(
+    /// Resolve authoring relative paths by their exact UTF-8 property names.
+    pub(crate) fn relative_property_by_name_path(
         &self,
         path: &[String],
     ) -> Option<&'a RuntimeObject> {
-        self.project_relative_property_by_name_segments(path, |property_name, name| {
-            property_name == name
-        })
+        self.relative_property_by_name_segments(path, |property_name, name| property_name == name)
     }
 
-    fn project_relative_property_by_name_segments<T>(
+    fn relative_property_by_name_segments<T>(
         &self,
         path: &[T],
         matches_name: impl Fn(&T, &str) -> bool,

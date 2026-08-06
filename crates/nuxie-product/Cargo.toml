@@ -16,6 +16,7 @@ threading = ["nuxie/threading"]
 [dependencies]
 anyhow = "1"
 nuxie = { path = "../nuxie", default-features = false }
+nuxie-project-data = { path = "../nuxie-project-data" }
 nuxie-product-scripting = { path = "../nuxie-product-scripting", optional = true }
 
 [dev-dependencies]

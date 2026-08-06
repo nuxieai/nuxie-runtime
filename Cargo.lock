@@ -1268,6 +1268,7 @@ dependencies = [
  "nuxie",
  "nuxie-binary",
  "nuxie-product-scripting",
+ "nuxie-project-data",
  "nuxie-render-stream",
  "nuxie-schema",
  "serde_json",
@@ -1289,6 +1290,15 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "nuxie-project-data"
+version = "0.1.0"
+dependencies = [
+ "nuxie-runtime",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

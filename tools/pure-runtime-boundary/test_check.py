@@ -29,7 +29,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.package = self.create_package(
             "crates/nuxie-runtime", "nuxie-runtime", ""
         )
-        (self.package / "src/lib.rs").write_text("mod project_data_converter;\n")
+        (self.package / "src/lib.rs").write_text("// parity baseline\n")
 
     def write_workspace(self, workspace_dependencies: str = "") -> None:
         members = ",\n".join(f'    "{member}"' for member in self.members)
@@ -1398,14 +1398,14 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("project-data boundary debt spread", result.stderr)
 
-    def test_current_grandfathered_file_is_a_ratchet_exception(self) -> None:
+    def test_project_data_debt_has_no_grandfathered_files(self) -> None:
         self.write_manifest("")
         (self.package / "src/lib.rs").write_text("mod project_data_converter;\n")
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("project-data=1 grandfathered file(s)", result.stdout)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("project-data boundary debt spread", result.stderr)
 
     def test_rejects_glob_imported_product_host_limit_in_new_file(self) -> None:
         package = self.create_package(
@@ -1449,14 +1449,14 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_rejects_stale_internal_debt_exception(self) -> None:
         self.write_manifest("")
-        (self.package / "src/project_data_converter.rs").write_text(
+        (self.package / "src/draw.rs").write_text(
             "// debt was removed from this still-allowlisted file\n"
         )
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("stale project-data boundary debt exception", result.stderr)
+        self.assertIn("stale binary-authoring boundary debt exception", result.stderr)
 
     def test_deleted_internal_debt_exception_fails_in_repository(self) -> None:
         (self.root / ".git").write_text("gitdir: fixture\n")
@@ -1583,7 +1583,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
     def test_comments_do_not_create_false_imports(self) -> None:
         self.write_manifest("")
         (self.package / "src/lib.rs").write_text(
-            "mod project_data_converter;\n"
+            "pub struct NeutralBaseline;\n"
             "// do not import nuxie::scene or ProjectDataConverterProgram\n"
         )
 

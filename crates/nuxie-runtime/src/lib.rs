@@ -99,6 +99,7 @@ mod draw;
 mod draw_rules;
 mod draw_target;
 mod event;
+mod external_data_converter;
 #[path = "assets/file_asset_loader.rs"]
 mod file_asset_loader;
 mod focus;
@@ -130,7 +131,6 @@ mod nested_trigger;
 mod objects;
 mod parent_traversal;
 mod profiler;
-mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
 mod scene;
@@ -212,6 +212,13 @@ pub use draw::{
     RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
     runtime_path_commands_from_raw_path,
 };
+pub use external_data_converter::{
+    RuntimeExternalDataContext, RuntimeExternalDataOutputType, RuntimeExternalDataProgram,
+    RuntimeExternalDataProgramHandle, RuntimeExternalDataRegistry, RuntimeExternalDataResolver,
+    RuntimeExternalDataReverseResult, RuntimeExternalDataState, RuntimeExternalDataValue,
+    RuntimeExternalDataValuePath, RuntimeExternalViewModelReference,
+    register_runtime_external_data_registry, runtime_external_data_payload_is_claimed,
+};
 pub use file_asset_loader::{
     RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeFileAssetOwners,
 };
@@ -236,17 +243,6 @@ pub use profiler::{
     ProfileCapture, ProfileCaptureEvent, ProfileCaptureFrame, ProfileCaptureMetadata,
     ProfileCaptureTimer, ProfilePathSegment, RiveProfile, TransitionFlushCallback,
     TransitionRecord, with_rive_profile,
-};
-pub use project_data_converter::{
-    ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
-    ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
-    ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,
-    ProjectDataConverterProgram, ProjectDataConverterProgramError, ProjectDataConverterRangeClamp,
-    ProjectDataConverterResolver, ProjectDataConverterReverseResult,
-    ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
-    ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
-    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath,
-    ProjectDataViewModelReference,
 };
 pub use scene::RuntimeArtboardDefaultScene;
 #[doc(hidden)]

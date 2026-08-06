@@ -4,6 +4,8 @@
 //! accounting, retained shadow-buffer growth, typed writes, and rewind live
 //! behind it so a backend cannot accidentally benchmark a shallower seam.
 
+use std::borrow::Cow;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -25,11 +27,17 @@ use super::{
 #[cfg(test)]
 thread_local! {
     static PATH_DRAW_ADMISSION_EVALUATIONS: Cell<usize> = const { Cell::new(0) };
+    static GRADIENT_BATCH_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
 #[cfg(test)]
 pub(crate) fn take_path_draw_admission_evaluations() -> usize {
     PATH_DRAW_ADMISSION_EVALUATIONS.with(|evaluations| evaluations.replace(0))
+}
+
+#[cfg(test)]
+pub(crate) fn take_gradient_batch_preparations() -> usize {
+    GRADIENT_BATCH_PREPARATIONS.with(|preparations| preparations.replace(0))
 }
 
 #[derive(Clone)]
@@ -48,6 +56,7 @@ pub(crate) struct PreparedGradient {
     pub(crate) texture_span: [f32; 2],
 }
 
+#[derive(Clone)]
 pub(crate) struct GradientBatch {
     pub(crate) spans: Vec<gpu::GradientSpan>,
     pub(crate) height: u32,
@@ -1087,16 +1096,74 @@ fn reserve_records(buffer: &mut Vec<u8>, records: usize, stride: usize) {
 #[derive(Clone, Default)]
 pub(crate) struct LogicalResourceStore {
     buffers: Arc<Mutex<ShadowBuffers>>,
+    production_frame_writes: Arc<AtomicUsize>,
+}
+
+pub(crate) struct PreparedLogicalFrameResources {
+    report: LogicalFrameReport,
+    gradient_flushes: Vec<PreparedGradientFlush>,
+}
+
+struct PreparedGradientFlush {
+    address: usize,
+    draw_count: usize,
+    inputs: Vec<u64>,
+    batch: GradientBatch,
+}
+
+impl PreparedLogicalFrameResources {
+    pub(crate) fn into_report(self) -> LogicalFrameReport {
+        self.report
+    }
+
+    pub(crate) fn gradient_batch<'a>(&'a self, draws: &[SolidDraw]) -> Cow<'a, GradientBatch> {
+        let address = draws.as_ptr() as usize;
+        let copied_inputs = || {
+            draws
+                .iter()
+                .map(gradient_input_fingerprint)
+                .collect::<Vec<_>>()
+        };
+        let mut inputs = None;
+        self.gradient_flushes
+            .iter()
+            .find(|flush| {
+                flush.draw_count == draws.len()
+                    && (flush.address == address
+                        || flush.inputs == *inputs.get_or_insert_with(copied_inputs))
+            })
+            .map_or_else(
+                || Cow::Owned(prepare_gradient_batch(draws)),
+                |flush| Cow::Borrowed(&flush.batch),
+            )
+    }
 }
 
 impl LogicalResourceStore {
-    /// Prepares the backend-neutral CPU resources consumed by both GPU
-    /// encoding and the null adapter's shadow writes.
-    pub(crate) fn prepare_batch(&self, draws: &[SolidDraw]) -> GradientBatch {
-        prepare_gradient_batch(draws)
+    pub(crate) fn prepare(&self, frame: &LogicalFrame) -> Result<LogicalFrameReport, &'static str> {
+        self.prepare_frame(frame, false)
+            .map(|prepared| prepared.report)
     }
 
-    pub(crate) fn prepare(&self, frame: &LogicalFrame) -> Result<LogicalFrameReport, &'static str> {
+    pub(crate) fn prepare_for_production(
+        &self,
+        frame: &LogicalFrame,
+    ) -> Result<PreparedLogicalFrameResources, &'static str> {
+        let prepared = self.prepare_frame(frame, true)?;
+        self.production_frame_writes.fetch_add(1, Ordering::Relaxed);
+        Ok(prepared)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn production_frame_write_count(&self) -> usize {
+        self.production_frame_writes.load(Ordering::Relaxed)
+    }
+
+    fn prepare_frame(
+        &self,
+        frame: &LogicalFrame,
+        production: bool,
+    ) -> Result<PreparedLogicalFrameResources, &'static str> {
         frame.validate()?;
         let config = frame.config;
         let mut flushes = Vec::with_capacity(frame.logical_flush_starts.len().max(1));
@@ -1130,6 +1197,7 @@ impl LogicalResourceStore {
         let mut buffer_write_operations = 0;
         let mut written_bytes = 0;
         let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
+        let mut gradient_flushes = Vec::with_capacity(flushes.len());
         for (flush_index, (&start, counts)) in starts.iter().zip(&flushes).enumerate() {
             let end = starts
                 .get(flush_index + 1)
@@ -1137,7 +1205,7 @@ impl LogicalResourceStore {
                 .unwrap_or(frame.draws.len());
             let before_capacities = buffers.buffer_capacities();
             buffers.grow(*counts);
-            let gradient_batch = self.prepare_batch(&frame.draws[start..end]);
+            let gradient_batch = prepare_gradient_batch(&frame.draws[start..end]);
             write_resources(
                 &mut buffers,
                 config,
@@ -1154,7 +1222,21 @@ impl LogicalResourceStore {
                 .zip(buffers.buffer_capacities())
                 .filter(|(before, after)| before != after)
                 .count();
-            fingerprint = buffers.fingerprint_into(fingerprint);
+            // Fingerprinting is a correctness diagnostic, not production CPU
+            // resource preparation. Keep it out of Null benchmark timings and
+            // WGPU finish while retaining the exact same typed writes.
+            if !production {
+                fingerprint = buffers.fingerprint_into(fingerprint);
+            }
+            gradient_flushes.push(PreparedGradientFlush {
+                address: frame.draws[start..end].as_ptr() as usize,
+                draw_count: end - start,
+                inputs: frame.draws[start..end]
+                    .iter()
+                    .map(gradient_input_fingerprint)
+                    .collect(),
+                batch: gradient_batch,
+            });
             buffers.rewind();
         }
         let report = LogicalFrameReport {
@@ -1168,13 +1250,69 @@ impl LogicalResourceStore {
             buffer_write_operations,
             buffer_rewinds: starts.len(),
             written_bytes,
-            shadow_fingerprint: fingerprint,
+            shadow_fingerprint: (!production).then_some(fingerprint).unwrap_or(0),
         };
-        Ok(report)
+        Ok(PreparedLogicalFrameResources {
+            report,
+            gradient_flushes,
+        })
     }
 }
 
+fn gradient_input_fingerprint(draw: &SolidDraw) -> u64 {
+    fn write(hash: &mut u64, bytes: &[u8]) {
+        for &byte in bytes {
+            *hash ^= u64::from(byte);
+            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    write(&mut hash, &draw.state.opacity.to_bits().to_le_bytes());
+    match draw.paint.shader.as_ref() {
+        None => write(&mut hash, &[0]),
+        Some(super::WgpuShader::Linear {
+            start,
+            end,
+            colors,
+            stops,
+        }) => {
+            write(&mut hash, &[1]);
+            for value in [start.0, start.1, end.0, end.1] {
+                write(&mut hash, &value.to_bits().to_le_bytes());
+            }
+            for color in colors {
+                write(&mut hash, &color.to_le_bytes());
+            }
+            for stop in stops {
+                write(&mut hash, &stop.to_bits().to_le_bytes());
+            }
+        }
+        Some(super::WgpuShader::Radial {
+            center,
+            radius,
+            colors,
+            stops,
+        }) => {
+            write(&mut hash, &[2]);
+            for value in [center.0, center.1, *radius] {
+                write(&mut hash, &value.to_bits().to_le_bytes());
+            }
+            for color in colors {
+                write(&mut hash, &color.to_le_bytes());
+            }
+            for stop in stops {
+                write(&mut hash, &stop.to_bits().to_le_bytes());
+            }
+        }
+    }
+    hash
+}
+
 pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
+    #[cfg(test)]
+    GRADIENT_BATCH_PREPARATIONS.with(|preparations| preparations.set(preparations.get() + 1));
+
     const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
     const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
     const LEFT_BORDER: u32 = 0x8000_0000;
@@ -1900,6 +2038,17 @@ impl NullLogicalRenderer {
     }
 
     pub fn flush(&mut self) -> Result<LogicalFrameReport, &'static str> {
+        self.flush_internal(false)
+    }
+
+    /// Flushes the production CPU path and additionally fingerprints every
+    /// retained buffer for differential diagnostics. Do not use this method
+    /// for benchmark timing.
+    pub fn flush_with_diagnostics(&mut self) -> Result<LogicalFrameReport, &'static str> {
+        self.flush_internal(true)
+    }
+
+    fn flush_internal(&mut self, diagnostics: bool) -> Result<LogicalFrameReport, &'static str> {
         let mut frame = self
             .frame
             .take()
@@ -1908,7 +2057,13 @@ impl NullLogicalRenderer {
             return Err(error);
         }
         frame.logical.finalize(&mut self.intersection_board)?;
-        let report = self.resources.prepare(&frame.logical)?;
+        let report = if diagnostics {
+            self.resources.prepare(&frame.logical)?
+        } else {
+            self.resources
+                .prepare_for_production(&frame.logical)?
+                .into_report()
+        };
         drop(frame);
         Ok(report)
     }

@@ -1,6 +1,6 @@
 # Product crate seams
 
-Status: transitional package contract. No runtime behavior moves in this step.
+Status: physical package contract. Scene authoring now lives in nuxie-dev.
 
 UNIV-1623 gives each upper layer an explicit Cargo package before code moves
 across packages or repositories. The packages expose the current types without
@@ -8,25 +8,26 @@ wrappers, so the new and legacy paths have identical type identity, ordering,
 errors, and behavior.
 
 ```text
-nuxie-authoring --------+
-nuxie-product ----------+----> nuxie mixed facade ----> baseline crates
+nuxie-dev authoring ----+----> nuxie baseline facade ----> baseline crates
+nuxie-product ----------+
                         |
 nuxie-browser-adapter --+----> nuxie-renderer
 nuxie-apple-adapter ----+----> nuxie-renderer
 ```
 
-This is a migration shape, not the final dependency graph. `nuxie` is still a
-mixed compatibility facade while Scene and Flow live there. The pure-runtime
-ratchet already classifies it as migration debt and prevents protected baseline,
-portable-ABI, replay, oracle, fuzz, golden, and performance packages from adding
-an upward dependency on any package in this document.
+`nuxie` remains mixed only while Flow lives there. Scene/SceneTx, generated
+authoring vocabulary, lowering, transactions, export, remounting, stable
+identity, and authored observations are owned by nuxie-dev's
+`nuxie-authoring` crate. Protected baseline, portable-ABI, replay, oracle,
+fuzz, golden, and performance packages may not add an upward dependency on an
+authoring or product package.
 
 ## Package ownership and interface
 
 | Package | Owns during migration | Direct workspace dependency | Deliberately does not expose |
 |---|---|---|---|
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
-| `nuxie-authoring` | Scene/SceneTx as one deep authoring module | `nuxie` with defaults disabled | A second runtime scene facade or product host policy |
+| nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
 
@@ -56,12 +57,14 @@ The full selector is the ordinary whole-workspace build.
 Existing callers continue to compile during the migration:
 
 - `nuxie::flow_session::*` is identical to `nuxie_product::*` until UNIV-1630;
-- `nuxie::*` Scene exports and `nuxie::authoring::*` are identical to
-  `nuxie_authoring::*` until UNIV-1627;
+This is a temporary re-export, not a duplicate adapter. Later tickets move the
+Flow implementation once and remove the lower compatibility path after all
+callers have switched.
 
-These are temporary re-exports, not duplicate adapters. Later tickets move the
-implementation once and remove the lower compatibility path after all callers
-have switched.
+UNIV-1627 completed the authoring cut: the runtime workspace no longer owns an
+authoring package or exports Scene symbols. `nuxie-binary` exposes authored
+record construction only through its non-default `test-support` feature; its
+default shipping interface remains byte-import only.
 
 UNIV-1625 completed the browser cut: `BrowserFactory`, `BrowserFrame`, and
 `BrowserResizeError` are owned only by `nuxie-browser-adapter`. The renderer

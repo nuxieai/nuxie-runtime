@@ -129,20 +129,12 @@ path = "crates/nuxie/src/flow_session.rs"
 category = "product-host"
 
 [[addition]]
-path = "crates/nuxie/src/scene.rs"
-category = "product-authoring"
-
-[[addition]]
 path = "crates/nuxie/src/script_import.rs"
 category = "product-trust"
 
 [[addition]]
 path = "crates/nuxie-product/src/lib.rs"
 category = "product-host"
-
-[[addition]]
-path = "crates/nuxie-authoring/src/lib.rs"
-category = "product-authoring"
 
 [[addition]]
 path = "crates/nuxie-browser-adapter/src/lib.rs"

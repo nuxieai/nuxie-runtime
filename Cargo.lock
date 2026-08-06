@@ -1203,13 +1203,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nuxie-authoring"
-version = "0.1.0"
-dependencies = [
- "nuxie",
-]
-
-[[package]]
 name = "nuxie-binary"
 version = "0.1.0"
 dependencies = [

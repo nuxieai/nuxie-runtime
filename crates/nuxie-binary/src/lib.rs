@@ -4,10 +4,12 @@ mod binary_writer;
 
 pub use binary_data_reader::BinaryDataReader;
 pub use binary_writer::{BinaryStream, BinaryWriter};
+#[cfg(any(test, feature = "test-support"))]
+use nuxie_schema::UintStorage;
 use nuxie_schema::{
     BitmaskPassthrough, CoreRegistryFieldKind, Definition, FieldKind, Property,
-    StoredFieldInitializer, UintStorage, core_registry_field_kind_by_property_key,
-    definition_by_name, definition_by_type_key, object_supports_property,
+    StoredFieldInitializer, core_registry_field_kind_by_property_key, definition_by_name,
+    definition_by_type_key, object_supports_property,
 };
 use serde::Serialize;
 use std::{
@@ -463,18 +465,21 @@ pub struct RuntimeFile {
     pub file_asset_object_ids: Vec<usize>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AuthoringRecord {
     pub type_key: u16,
     pub properties: Vec<AuthoringProperty>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AuthoringProperty {
     pub key: u16,
     pub value: AuthoringValue,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum AuthoringValue {
@@ -488,6 +493,7 @@ pub enum AuthoringValue {
 }
 
 impl RuntimeFile {
+    #[cfg(any(test, feature = "test-support"))]
     pub fn from_authoring_records(records: Vec<AuthoringRecord>) -> Result<Self> {
         let mut property_field_ids = BTreeMap::new();
         let objects = records
@@ -7886,6 +7892,7 @@ fn read_runtime_file_with_profile_and_limits(
     Ok(file)
 }
 
+#[cfg(any(test, feature = "test-support"))]
 fn authoring_record_to_runtime_object(
     id: usize,
     record: AuthoringRecord,
@@ -7996,6 +8003,7 @@ fn authoring_record_to_runtime_object(
     })
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl AuthoringValue {
     fn matches_field_kind(&self, kind: FieldKind) -> bool {
         matches!(
@@ -8041,6 +8049,7 @@ impl AuthoringValue {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 fn header_field_kind_for_property(
     key: u16,
     property: &Property,
@@ -8103,6 +8112,7 @@ fn imported_file_asset_object_ids(
         .collect()
 }
 
+#[cfg(any(test, feature = "test-support"))]
 fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
     for (id, (object, status)) in file
         .objects
@@ -8134,6 +8144,7 @@ fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(test, feature = "test-support"))]
 fn validate_authoring_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
     for range in runtime_artboard_ranges(&file.objects, &file.import_statuses) {
         let original_slots =

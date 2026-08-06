@@ -6,9 +6,8 @@ use anyhow::Result;
 use ed25519_dalek::{Signer as _, SigningKey};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
-    ArtboardSpec, DrawError, File, NodeSpec, OwnedArtboardInstance, Parent, PersistentFactory,
-    RecordingFactory, Scene, SceneEvent, ScriptAssetSpec, ScriptExecutionLimits,
-    ScriptImportCapability, ScriptedDrawableSpec,
+    File, OwnedArtboardInstance, PersistentFactory, RecordingFactory, ScriptExecutionLimits,
+    ScriptImportCapability,
     flow_session::{
         FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
         FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession,
@@ -325,68 +324,25 @@ fn authenticated_capability(bytes: &[u8]) -> ScriptImportCapability {
     .expect("exact signed artifact authenticates")
 }
 
-fn scripted_scene() -> Result<(Scene, nuxie::ArtboardId)> {
-    let mut scene = Scene::new();
-    let artboard = scene
-        .edit(|tx| {
-            // Protocol is deliberately declared first. File bootstrap must
-            // register every module before executing any protocol chunk.
-            let protocol = tx.create_script_asset(ScriptAssetSpec {
-                name: "VectorDrawable".into(),
-                is_module: false,
-                bytes: compile_luau(include_bytes!("fixtures/vector-scripted-drawable.luau")),
-            })?;
-            tx.create_script_asset(ScriptAssetSpec {
-                name: "Palette".into(),
-                is_module: true,
-                bytes: compile_luau(include_bytes!("fixtures/vector-scripted-module.luau")),
-            })?;
-            let artboard = tx.create_artboard(ArtboardSpec {
-                layout_style: None,
-                name: "Scripted vector".into(),
-                width: 160.0,
-                height: 100.0,
-            })?;
-            tx.create(
-                Parent::Artboard(artboard),
-                NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
-                    name: "Triangle".into(),
-                    x: 0.0,
-                    y: 0.0,
-                    opacity: 1.0,
-                    rotation: 0.0,
-                    scale_x: 1.0,
-                    scale_y: 1.0,
-                    script: protocol,
-                }),
-            )?;
-            Ok(artboard)
-        })?
-        .0;
-    Ok((scene, artboard))
+fn scripted_instances() -> Result<(OwnedArtboardInstance, OwnedArtboardInstance)> {
+    let bytes = imported_scripted_file();
+    let capability = authenticated_capability(&bytes);
+    let file = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    Ok((
+        OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?,
+        OwnedArtboardInstance::instantiate(file, 0)?,
+    ))
 }
 
-fn draw(
-    scene: &mut Scene,
-    instance: nuxie::InstanceId,
-    factory: &mut ScriptFactory,
-) -> std::result::Result<String, DrawError> {
-    let mut cache = scene
-        .new_draw_token(instance)
-        .map_err(|_| DrawError::UnknownInstance)?;
+fn draw(instance: &mut OwnedArtboardInstance, factory: &mut ScriptFactory) -> Result<String> {
     let mut renderer = factory.borrow().make_renderer();
-    scene
-        .frame()
-        .draw(instance, factory, &mut renderer, &mut cache)?;
+    instance.draw(factory, &mut renderer)?;
     Ok(factory.borrow().stream())
 }
 
 #[test]
 fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() -> Result<()> {
-    let (mut scene, artboard) = scripted_scene()?;
-    let first = scene.instantiate(artboard)?;
-    let second = scene.instantiate(artboard)?;
-    let mut events = Vec::<SceneEvent>::new();
+    let (mut first, mut second) = scripted_instances()?;
     let mut factory = script_factory();
 
     // C++ advances the live ScriptedDrawable directly in its retained
@@ -395,12 +351,8 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     // `scripted_drawable.cpp:376-398`). Keep the factory context active for
     // the first authored occurrence while Rust's persistent VM render-context
     // owner remains tracked separately by FL-G09.
-    assert!(
-        scene
-            .frame()
-            .try_advance_with_factory(first, 0.1, &mut events, &mut factory)?
-    );
-    let first_stream = draw(&mut scene, first, &mut factory)?;
+    assert!(first.try_advance_with_factory(&mut factory, 0.1)?);
+    let first_stream = draw(&mut first, &mut factory)?;
     assert!(
         first_stream.contains("transform matrix=[1,0,0,1,103,2]"),
         "the exact pre-first-draw advance must run before update: {first_stream}"
@@ -409,20 +361,16 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     assert!(first_stream.contains("drawPath "), "{first_stream}");
 
     let before_second = factory.borrow().stream().len();
-    let second_stream = draw(&mut scene, second, &mut factory)?;
+    let second_stream = draw(&mut second, &mut factory)?;
     let second_frame = second_stream.get(before_second..).unwrap_or_default();
     assert!(
         second_frame.contains("transform matrix=[1,0,0,1,100,2]"),
         "the protocol chunk runs once per File while each occurrence starts with fresh state: {second_frame}"
     );
 
-    assert!(
-        scene
-            .frame()
-            .try_advance_with_factory(second, 0.1, &mut events, &mut factory)?
-    );
+    assert!(second.try_advance_with_factory(&mut factory, 0.1)?);
     let before_advanced_second = factory.borrow().stream().len();
-    let second_stream = draw(&mut scene, second, &mut factory)?;
+    let second_stream = draw(&mut second, &mut factory)?;
     let advanced_second = second_stream
         .get(before_advanced_second..)
         .unwrap_or_default();
@@ -432,9 +380,12 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     );
 
     let mut different_factory = script_factory();
-    let error = draw(&mut scene, first, &mut different_factory)
+    let error = draw(&mut first, &mut different_factory)
         .expect_err("a distinct Factory object is a distinct script resource domain");
-    assert_eq!(error, DrawError::RuntimeRejected);
+    assert!(
+        format!("{error:#}").contains("different renderer Factory domain"),
+        "{error:#}"
+    );
     Ok(())
 }
 

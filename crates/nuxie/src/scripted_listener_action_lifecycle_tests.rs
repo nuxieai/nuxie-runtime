@@ -1,12 +1,100 @@
 use super::*;
 
 use luaur_compiler::functions::luau_compile::luau_compile;
+use nuxie_product_scripting::HostCommand as ScriptHostCommand;
 use nuxie_schema::definition_by_name;
 
 type ScriptFactory = PersistentFactory<RecordingFactory>;
 
 fn script_factory() -> ScriptFactory {
     PersistentFactory::new(RecordingFactory::new())
+}
+
+/// Adapter that installs the product `require("nuxie")` host into this
+/// test crate. `nuxie_product_scripting::NuxieScriptHostExtension` implements
+/// the extension traits of the externally built `nuxie` library, which is a
+/// distinct crate from this `#[cfg(test)]` build, so the suite delegates to
+/// the public `NuxieScriptHost` surface through this local shim instead.
+#[derive(Debug)]
+struct ProductScriptHostExtension;
+
+struct ProductScriptHostInstance(nuxie_product_scripting::NuxieScriptHost);
+
+impl std::fmt::Debug for ProductScriptHostInstance {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ProductScriptHostInstance")
+    }
+}
+
+impl ScriptHostExtension for ProductScriptHostExtension {
+    fn install(
+        &self,
+        vm: &ScriptVm,
+    ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError> {
+        nuxie_product_scripting::NuxieScriptHost::install(vm)
+            .map(|host| {
+                Box::new(ProductScriptHostInstance(host)) as Box<dyn ScriptHostExtensionInstance>
+            })
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
+    }
+}
+
+impl ScriptHostExtensionInstance for ProductScriptHostInstance {
+    fn begin_cycle(&self) -> Box<dyn std::any::Any> {
+        Box::new(self.0.begin_cycle())
+    }
+
+    fn rollback_cycle(
+        &self,
+        checkpoint: Box<dyn std::any::Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        let checkpoint = checkpoint
+            .downcast::<nuxie_product_scripting::HostCycleCheckpoint>()
+            .map_err(|_| {
+                nuxie_runtime::ScriptError::new(
+                    "script host cycle checkpoint belongs to another extension",
+                )
+            })?;
+        self.0.rollback_cycle(*checkpoint);
+        Ok(())
+    }
+
+    fn checkpoint_effects(&self) -> Box<dyn std::any::Any> {
+        Box::new(self.0.checkpoint_effects())
+    }
+
+    fn rollback_effects(
+        &self,
+        checkpoint: Box<dyn std::any::Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        let checkpoint = checkpoint
+            .downcast::<nuxie_product_scripting::HostEffectCheckpoint>()
+            .map_err(|_| {
+                nuxie_runtime::ScriptError::new(
+                    "script host effect checkpoint belongs to another extension",
+                )
+            })?;
+        self.0.rollback_effects(*checkpoint);
+        Ok(())
+    }
+
+    fn drain_effects(&self) -> Box<dyn std::any::Any> {
+        Box::new(self.0.drain())
+    }
+}
+
+/// Pre-UNIV-1632, `File::from_runtime` executed embedded scripts with the
+/// built-in `require("nuxie")` host module. That module now lives in the
+/// product scripting extension, so this suite mints the product capability the
+/// extraction introduced for locally assembled runtimes.
+fn file_from_locally_authored_runtime(runtime: RuntimeFile) -> Result<File> {
+    // SAFETY: every runtime in this suite is assembled in-process by the test.
+    let capability = unsafe {
+        ScriptExecutionCapability::for_locally_authored_runtime_unchecked(Arc::new(
+            ProductScriptHostExtension,
+        ))
+    };
+    File::from_runtime_with_execution_capability(runtime, capability, ScriptExecutionLimits::new())
 }
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
@@ -1042,7 +1130,9 @@ fn prepared_machine(
 ) {
     let bytes = scripted_listener_file(protocol_source, action_count);
     let runtime = read_runtime_file_for_facade(&bytes).expect("import scripted listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build scripted listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build scripted listener file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate scripted listener artboard");
     let machine = instance
@@ -1065,7 +1155,9 @@ fn public_machine_construction_synchronously_prepares_scripted_data_without_bloc
         1,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import public construction fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build public construction file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build public construction file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(file)
         .expect("instantiate public construction artboard");
     let mut factory = script_factory();
@@ -1149,8 +1241,9 @@ fn public_machine_construction_retains_preparation_failure_without_dropping_the_
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import failed public construction fixture");
-    let file =
-        Arc::new(File::from_runtime(runtime).expect("build failed public construction file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build failed public construction file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(file)
         .expect("instantiate failed public construction artboard");
     let mut factory = script_factory();
@@ -1224,7 +1317,9 @@ fn listener_init_uses_the_generator_context_once_before_first_perform() {
         1,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import scripted listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build scripted listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build scripted listener file"),
+    );
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -1370,7 +1465,9 @@ fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
 
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import unbound scripted-listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build unbound scripted-listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build unbound scripted-listener file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate unbound scripted-listener artboard");
     let mut machine = instance
@@ -1429,7 +1526,9 @@ fn no_factory_state_change_defers_listener_until_factory_pointer_uses_latest_sou
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import deferred listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build deferred listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build deferred listener file"),
+    );
     let (mut session, bootstrap) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create the no-Factory flow session");
@@ -1522,7 +1621,8 @@ fn first_factory_state_batch_builds_file_vm_and_applies_latest_listener_sources(
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import cold StateBatch fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build cold StateBatch file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build cold StateBatch file"));
     let (mut session, bootstrap) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create the cold no-Factory session");
@@ -1665,7 +1765,7 @@ fn foldered_listener_protocol_uses_resolved_asset_identity_not_display_name() {
         |_, _| {},
     );
     let file = Arc::new(
-        File::from_runtime(
+        file_from_locally_authored_runtime(
             read_runtime_file_for_facade(&bytes).expect("import foldered listener fixture"),
         )
         .expect("build foldered listener file"),
@@ -1714,7 +1814,8 @@ fn concrete_scripted_child_advance_forces_zero_keep_going_without_consuming_supp
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import child trigger fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build child trigger file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build child trigger file"));
     let mut owning_artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate owning artboard");
     let mut factory = script_factory();
@@ -1775,7 +1876,8 @@ fn flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position() 
         1,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import pointer callback fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build pointer callback file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build pointer callback file"));
     let mut factory = script_factory();
     let (mut session, _) = flow_session::FlowSession::create_with_factory(
         file,
@@ -1907,7 +2009,8 @@ fn listener_authored_inputs_are_hydrated_before_init() {
         },
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import authored-input fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build authored-input file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build authored-input file"));
     let mut factory = script_factory();
     let (_session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -1964,7 +2067,8 @@ fn listener_bound_context_inputs_rehydrate_and_fire_trigger_edges() {
     "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import bound-input fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build bound-input file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build bound-input file"));
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -2033,7 +2137,8 @@ fn repeated_bound_trigger_edges_reset_and_invoke_once_per_frame() {
     );
 
     let runtime = read_runtime_file_for_facade(&bytes).expect("import repeated-trigger fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build repeated-trigger file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build repeated-trigger file"));
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -2125,7 +2230,9 @@ fn scripted_listener_name_based_bind_uses_the_persistent_manifest_resolver() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import manifest listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build manifest listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build manifest listener file"),
+    );
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -2237,7 +2344,9 @@ fn scripted_converter_custom_inputs_hydrate_before_init_then_bind_before_convert
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import converted-listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build converted-listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build converted-listener file"),
+    );
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -2393,7 +2502,9 @@ fn scripted_converter_name_based_child_bind_uses_the_persistent_manifest_resolve
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import manifest converter fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build manifest converter file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build manifest converter file"),
+    );
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -2483,7 +2594,8 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import public-advance fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build public-advance file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build public-advance file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate artboard");
     let mut machine = instance
@@ -2503,7 +2615,8 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         )
         .expect("public factory advance");
     let first = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("public_converter_") => {
@@ -2532,7 +2645,8 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         .expect("steady public factory advance");
     assert!(
         instance
-            .drain_host_commands()
+            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .unwrap_or_default()
             .into_iter()
             .all(|command| !matches!(
                 command,
@@ -2660,7 +2774,9 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import ordinary-converter fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build ordinary-converter file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build ordinary-converter file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate artboard");
     let mut machine = instance
@@ -2700,7 +2816,8 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         "each concrete ordinary DataBind occurrence owns a live table"
     );
     let first = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. }
@@ -2739,7 +2856,8 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         .expect("steady ordinary-converter advance");
     assert!(
         instance
-            .drain_host_commands()
+            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .unwrap_or_default()
             .into_iter()
             .all(|command| !matches!(
                 command,
@@ -2776,8 +2894,10 @@ fn ordinary_converter_replacement_is_visible_to_the_next_authored_bind_same_fram
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import nested replacement ordering fixture");
-    let file =
-        Arc::new(File::from_runtime(runtime).expect("build nested replacement ordering file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime)
+            .expect("build nested replacement ordering file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate nested replacement ordering artboard");
     let mut machine = instance
@@ -2827,7 +2947,8 @@ fn ordinary_converter_replacement_is_visible_to_the_next_authored_bind_same_fram
     );
     assert_eq!(
         instance
-            .drain_host_commands()
+            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .unwrap_or_default()
             .into_iter()
             .filter_map(|command| match command {
                 ScriptHostCommand::Trigger { name, .. } if name.starts_with("replacement_") => {
@@ -2899,7 +3020,8 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import root-rebind fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build root-rebind file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build root-rebind file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate artboard");
     let mut machine = instance
@@ -2923,7 +3045,8 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("mount the first-root occurrence");
     let first = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => {
@@ -2954,7 +3077,8 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("rebind the retained occurrences to the second root");
     let rebound = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("root_rebind_") => {
@@ -3060,7 +3184,9 @@ fn direct_runtime_callbacks_wait_for_same_root_structural_rebind() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import structural-rebind fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build structural-rebind file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build structural-rebind file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate structural-rebind artboard");
     let mut machine = instance
@@ -3170,7 +3296,8 @@ fn scripted_converter_init_bit_disabled_skips_live_init_but_still_converts() {
         Some(DATA_CONVERT),
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import method-mask fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build method-mask file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build method-mask file"));
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -3256,7 +3383,8 @@ fn scripted_converter_failed_init_recreates_only_at_the_next_explicit_rebind() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import converter-retry fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build converter-retry file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build converter-retry file"));
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -3372,7 +3500,8 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import atomic-hydration fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build atomic-hydration file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build atomic-hydration file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate atomic-hydration artboard");
     let mut machine = instance
@@ -3400,7 +3529,8 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("retain converter table through the machine-owned scoped context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let creation_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
@@ -3457,7 +3587,8 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("rehydrate the retained converter table without a facade root fallback");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let rebind_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_atomic_") => {
@@ -3512,7 +3643,8 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import retry-preflight fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build retry-preflight file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build retry-preflight file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate retry-preflight artboard");
     let mut machine = instance
@@ -3545,7 +3677,8 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("first converter lifetime reaches its rejecting init");
     let first_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
@@ -3581,7 +3714,8 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     rehydrate_script_listener_actions(&file, &mut machine, None, None, &mut factory_option)
         .expect("ordinary missing-input preflight remains inert");
     let unresolved_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
@@ -3616,7 +3750,8 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
         .expect("the regenerated table completes hydration and init");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let recovered_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("converter_preflight_") => {
@@ -3675,7 +3810,8 @@ fn state_batch_commits_the_pre_callback_binding_source() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import callback-write fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build callback-write file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build callback-write file"));
     let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
@@ -3772,7 +3908,8 @@ fn pointer_listener_actions_precede_one_exact_binding_flush() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import pointer-trigger fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build pointer-trigger file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build pointer-trigger file"));
     let mut factory = script_factory();
     let (mut session, _) = flow_session::FlowSession::create_with_factory(
         file,
@@ -3855,7 +3992,9 @@ fn first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback() {
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import lazy pointer binding fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build lazy pointer binding file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build lazy pointer binding file"),
+    );
     let (mut session, _) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create a cold session without renderer authority");
@@ -3911,7 +4050,9 @@ fn first_factory_advance_initializes_against_the_session_root() {
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import lazy advance binding fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build lazy advance binding file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build lazy advance binding file"),
+    );
     let (mut session, _) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create a cold session without renderer authority");
@@ -3988,7 +4129,8 @@ fn move_and_exit_binding_edges_wait_for_the_next_run_cycle() {
         let runtime = read_runtime_file_for_facade(&bytes)
             .expect("import non-advancing pointer-trigger fixture");
         let file = Arc::new(
-            File::from_runtime(runtime).expect("build non-advancing pointer-trigger file"),
+            file_from_locally_authored_runtime(runtime)
+                .expect("build non-advancing pointer-trigger file"),
         );
         let mut factory = script_factory();
         let (mut session, _) = flow_session::FlowSession::create_with_factory(
@@ -4120,7 +4262,8 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import cold-generator fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build cold-generator file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build cold-generator file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate cold-generator artboard");
     let root = instance
@@ -4138,7 +4281,8 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run cold then live listener initialization");
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name == "listener_cold_then_live" => {
@@ -4183,7 +4327,8 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import cold-table fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build cold-table file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build cold-table file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate cold-table artboard");
     let root = instance
@@ -4201,7 +4346,8 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("retain cold table through live ViewModel hydration");
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name == "listener_cold_table_live_init" => {
@@ -4251,7 +4397,9 @@ fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import constructor-order fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build constructor-order file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build constructor-order file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate constructor-order artboard");
     let root = instance
@@ -4270,7 +4418,8 @@ fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run the complete constructor lifecycle");
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. }
@@ -4325,7 +4474,7 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import post-bind fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build post-bind file"));
+    let file = Arc::new(file_from_locally_authored_runtime(runtime).expect("build post-bind file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate post-bind artboard");
     let mut machine = instance
@@ -4347,7 +4496,8 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run explicit-bind lifecycle");
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. }
@@ -4395,7 +4545,8 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import empty-listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build empty-listener file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build empty-listener file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate empty-listener artboard");
     let mut machine = instance
@@ -4416,7 +4567,8 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, Some(&root))
         .expect("empty owned context keeps the listener unresolved");
     let cold_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
@@ -4440,7 +4592,8 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     rehydrate_script_listener_actions(&file, &mut machine, None, None, &mut factory_option)
         .expect("the same table hydrates after its owned context becomes live");
     let live_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_listener_") => {
@@ -4494,7 +4647,8 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import empty-converter fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build empty-converter file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build empty-converter file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate empty-converter artboard");
     let mut machine = instance
@@ -4526,7 +4680,8 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, Some(&root))
         .expect("empty owned context keeps the converter unresolved");
     let cold_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
@@ -4551,7 +4706,8 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("the same converter table hydrates from its owned context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let live_commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("empty_converter_") => {
@@ -4595,7 +4751,8 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         "#,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import failed-hydration fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build failed-hydration file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build failed-hydration file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate failed-hydration artboard");
     let mut machine = instance
@@ -4626,13 +4783,19 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         machine.pointer_down(&mut instance.raw, 50.0, 50.0, 1),
         "the pending listener still owns its C++ m_self table"
     );
-    assert!(instance.drain_host_commands().iter().any(|command| {
-        matches!(
-            command,
-            ScriptHostCommand::Trigger { name, .. }
-                if name == "pending_listener_performed"
-        )
-    }));
+    assert!(
+        instance
+            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .unwrap_or_default()
+            .iter()
+            .any(|command| {
+                matches!(
+                    command,
+                    ScriptHostCommand::Trigger { name, .. }
+                        if name == "pending_listener_performed"
+                )
+            })
+    );
 
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4645,13 +4808,19 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
             .scripted_listener_action_user_init_pending(action_id)
             .expect("completed deferred init state")
     );
-    assert!(instance.drain_host_commands().iter().any(|command| {
-        matches!(
-            command,
-            ScriptHostCommand::Trigger { name, .. }
-                if name == "deferred_listener_initialized"
-        )
-    }));
+    assert!(
+        instance
+            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .unwrap_or_default()
+            .iter()
+            .any(|command| {
+                matches!(
+                    command,
+                    ScriptHostCommand::Trigger { name, .. }
+                        if name == "deferred_listener_initialized"
+                )
+            })
+    );
 }
 
 #[test]
@@ -4675,7 +4844,9 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import factoryless listener fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build factoryless listener file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build factoryless listener file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate factoryless listener artboard");
     let mut machine = instance
@@ -4691,7 +4862,8 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
         .expect("generator/init are scripting-VM operations");
 
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. }
@@ -4735,7 +4907,9 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
         1,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import factoryless retry fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build factoryless retry file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build factoryless retry file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate factoryless retry artboard");
     let mut machine = instance
@@ -4753,7 +4927,8 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
         .expect("factoryless retry recreates and initializes");
 
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. } if name.starts_with("factoryless_retry_") => {
@@ -4808,7 +4983,9 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
     );
     let runtime =
         read_runtime_file_for_facade(&bytes).expect("import factoryless converter fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build factoryless converter file"));
+    let file = Arc::new(
+        file_from_locally_authored_runtime(runtime).expect("build factoryless converter file"),
+    );
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate factoryless converter artboard");
     let mut machine = instance
@@ -4840,7 +5017,8 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
     .expect("factoryless converter retry recreates and initializes");
 
     let commands = instance
-        .drain_host_commands()
+        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
             ScriptHostCommand::Trigger { name, .. }
@@ -4878,7 +5056,8 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
         DATA_BIND_TO_SOURCE,
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import public-update fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build public-update file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build public-update file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate public-update artboard");
     let mut machine = instance
@@ -4922,7 +5101,8 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
 fn failed_module_registration_attempt_rolls_back_only_its_host_effects() {
     let bytes = module_retry_listener_file();
     let runtime = read_runtime_file_for_facade(&bytes).expect("import module-retry fixture");
-    let file = Arc::new(File::from_runtime(runtime).expect("build module-retry file"));
+    let file =
+        Arc::new(file_from_locally_authored_runtime(runtime).expect("build module-retry file"));
     let mut factory = script_factory();
     let (_session, creation) = flow_session::FlowSession::create_with_factory(
         file,

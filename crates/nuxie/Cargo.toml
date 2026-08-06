@@ -32,7 +32,15 @@ sha2 = "0.10"
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Self dev-dependency: integration tests build the library without cfg(test),
+# so the test-support feature must be enabled for the test-only import surface
+# (e.g. `File::import_with_unsigned_scripts`) to remain visible to them.
+nuxie = { path = ".", default-features = false, features = ["test-support"] }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
+# Dev-only cycle: the temporary flow_session.rs test include (see lib.rs,
+# removed by UNIV-1634) and the lifecycle suite exercise the product scripting
+# host that UNIV-1632 extracted out of this crate.
+nuxie-product-scripting = { path = "../nuxie-product-scripting" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"

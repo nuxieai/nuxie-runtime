@@ -305,6 +305,7 @@ class MicrobenchContractTests(unittest.TestCase):
             script.write_text(
                 "#!/bin/sh\n"
                 "set -eu\n"
+                "case \"$RIVE_OUT\" in /*) exit 2;; esac\n"
                 "test ! -e \"$RIVE_OUT\"\n"
                 "mkdir -p \"$RIVE_OUT\"\n"
                 "printf 'pinned binary' > \"$RIVE_OUT/bench\"\n"

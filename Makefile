@@ -3,10 +3,13 @@
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 MICROBENCH_CPP ?= $(RIVE_RUNTIME_DIR)/tests/out/release/bench
-MICROBENCH_CPP_OUTPUT ?= $(CURDIR)/target/microbench/cpp.txt
+MICROBENCH_RUN_DIR ?= $(CURDIR)/target/microbench/run
+MICROBENCH_RUN_MANIFEST ?= $(MICROBENCH_RUN_DIR)/run.json
 MICROBENCH_REPORT ?= $(CURDIR)/target/microbench/comparison.md
 MICROBENCH_CPP_DURATION ?= 5
-MICROBENCH_CRITERION_ARGS ?=
+MICROBENCH_WARM_UP ?= 3
+MICROBENCH_MEASUREMENT ?= 10
+MICROBENCH_SAMPLE_SIZE ?= 20
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
 PORT_MANIFEST ?= $(CURDIR)/port-manifest.toml
 PORT_MANIFEST_TOOL ?= $(CURDIR)/tools/port-manifest/port_manifest.py
@@ -246,7 +249,7 @@ pure-runtime-boundary-gate:
 		"workspace dependency and source debt check" "$(MAKE) --no-print-directory pure-runtime-boundary-check"
 
 # --- Pinned upstream microbenchmark mirror ----------------------------------
-.PHONY: microbench-test microbench-check microbench-upstream-check microbench-gate microbench-extract microbench-build microbench-rust microbench-cpp microbench-compare
+.PHONY: microbench-test microbench-check microbench-upstream-check microbench-gate microbench-extract microbench-build microbench-run microbench-compare
 microbench-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/microbench -p 'test_*.py' -v
 
@@ -260,24 +263,20 @@ microbench-gate:
 	@tools/report-all.sh "upstream-microbenchmarks" \
 		"microbenchmark tool unit tests" "$(MAKE) --no-print-directory microbench-test" \
 		"20-case Rust registry and fixture hashes" "$(MAKE) --no-print-directory microbench-check" \
-		"pinned upstream fixture provenance" "$(MAKE) --no-print-directory microbench-upstream-check"
+		"pinned upstream registry, sources, and fixture provenance" "$(MAKE) --no-print-directory microbench-upstream-check"
 
 microbench-extract:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" extract --upstream "$(RIVE_RUNTIME_DIR)"
 
 microbench-build:
-	cargo build -p nuxie-runtime --bench upstream_microbenchmarks
+	cargo build -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks
 	cargo build -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks
 
-microbench-rust:
-	cargo bench -p nuxie-runtime --bench upstream_microbenchmarks -- $(MICROBENCH_CRITERION_ARGS)
-	cargo bench -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks -- $(MICROBENCH_CRITERION_ARGS)
-
-microbench-cpp:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" run-cpp --cpp-bench "$(MICROBENCH_CPP)" --duration "$(MICROBENCH_CPP_DURATION)" --output "$(MICROBENCH_CPP_OUTPUT)"
+microbench-run:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" run --upstream "$(RIVE_RUNTIME_DIR)" --cpp-bench "$(MICROBENCH_CPP)" --run-dir "$(MICROBENCH_RUN_DIR)" --duration "$(MICROBENCH_CPP_DURATION)" --warm-up "$(MICROBENCH_WARM_UP)" --measurement "$(MICROBENCH_MEASUREMENT)" --sample-size "$(MICROBENCH_SAMPLE_SIZE)"
 
 microbench-compare:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" compare --cpp-output "$(MICROBENCH_CPP_OUTPUT)" --output "$(MICROBENCH_REPORT)"
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" compare --run-manifest "$(MICROBENCH_RUN_MANIFEST)" --output "$(MICROBENCH_REPORT)"
 
 b6-audit-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py
@@ -383,7 +382,7 @@ feature-compile-gate-portable:
 		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --test cpp_probe" \
 		"nuxie-renderer --features perf-diagnostics" "cargo check -p nuxie-renderer --features perf-diagnostics --lib" \
 		"nuxie-renderer --features perf-counters" "cargo check -p nuxie-renderer --features perf-counters --lib" \
-		"nuxie-runtime upstream microbenchmarks" "cargo check -p nuxie-runtime --bench upstream_microbenchmarks" \
+		"nuxie-runtime upstream microbenchmarks" "cargo check -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks" \
 		"nuxie-renderer upstream microbenchmarks" "cargo check -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks" \
 		"renderer-replay --features perf-diagnostics" "cargo check -p renderer-replay --features perf-diagnostics --bins" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \

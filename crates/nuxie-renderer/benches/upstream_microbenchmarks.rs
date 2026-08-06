@@ -1,10 +1,7 @@
 //! Criterion mirrors of the pinned C++ renderer microbenchmarks.
 //!
-//! The private renderer modules are compiled directly into this bench target.
-//! This exercises the shipping algorithms without widening the public API just
-//! for measurement.
-
-#![allow(dead_code, unused_imports)]
+//! The opt-in support seam calls production-compiled algorithms without
+//! bringing `cfg(test)` instrumentation into the timed binary.
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -21,97 +18,16 @@ use nuxie_render_api::{
     RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
     RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
+use nuxie_renderer::upstream_microbenchmarks::{
+    prepare_paths, CapturedPathPaint, IntersectionBoardWorkload, IntersectionTileWorkload,
+    Preparation,
+};
 use nuxie_runtime::ArtboardInstance;
-
-#[path = "../src/draw.rs"]
-mod draw;
-#[path = "../src/gpu.rs"]
-mod gpu;
-#[path = "../src/gr_triangulator.rs"]
-mod gr_triangulator;
-#[path = "../src/intersection_board.rs"]
-mod intersection_board;
-
-use intersection_board::{FindResult, GroupingType, IntersectionBoard, IntersectionTile, Rect};
 
 const PAPER_BBOXES: &[u8] = include_bytes!("../../../benchmarks/data/paper_bboxes_6_copies.i32le");
 const MARTY_BBOXES: &[u8] =
     include_bytes!("../../../benchmarks/data/marty_bboxes_187_copies.i32le");
 const PAPER_RIV: &[u8] = include_bytes!("../../../benchmarks/data/paper.riv");
-
-fn reset_cpp_rand() {
-    // SAFETY: C's process-global PRNG accepts every unsigned seed. Criterion
-    // executes these benchmark closures serially.
-    unsafe { libc::srand(0) };
-}
-
-fn cpp_rand() -> i32 {
-    // SAFETY: `rand` has no preconditions. Benchmark execution is serial.
-    unsafe { libc::rand() }
-}
-
-fn bbox_rows(bytes: &[u8]) -> Vec<Rect> {
-    bytes
-        .chunks_exact(16)
-        .map(|row| {
-            let value = |offset| i32::from_le_bytes(row[offset..offset + 4].try_into().unwrap());
-            Rect::new(value(0), value(4), value(8), value(12))
-        })
-        .collect()
-}
-
-fn run_intersection_tile(grouping_type: GroupingType, tile: &mut IntersectionTile) -> i16 {
-    reset_cpp_rand();
-    tile.reset(0, 0, 0, 0);
-    let mut result = 0;
-    for _ in 0..10_000 {
-        let values = [cpp_rand(), cpp_rand(), cpp_rand(), cpp_rand()].map(|value| value & 0xff);
-        let left = values[0].min(values[2]).min(254);
-        let top = values[1].min(values[3]).min(254);
-        let right = values[0].max(values[2]).min(254) + 1;
-        let bottom = values[1].max(values[3]).min(254) + 1;
-        let rect = Rect::new(left, top, right, bottom);
-        let found =
-            tile.find_max_intersecting_group_index(grouping_type, rect, FindResult::default());
-        result = found.max_group_indices.into_iter().max().unwrap_or(0) + 1;
-        tile.add_rectangle(grouping_type, rect, result, 0);
-    }
-    result
-}
-
-struct BoardWorkload {
-    board: IntersectionBoard,
-    boxes: Vec<Rect>,
-}
-
-impl BoardWorkload {
-    fn new(boxes: &[u8]) -> Self {
-        let mut workload = Self {
-            board: IntersectionBoard::new(GroupingType::Disjoint),
-            boxes: bbox_rows(boxes),
-        };
-        workload.run();
-        workload
-    }
-
-    fn run(&mut self) -> i16 {
-        self.board.resize_and_reset(3456, 2102);
-        self.boxes.iter().fold(0, |maximum, &rect| {
-            maximum.max(self.board.add_rectangle(rect, 1))
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-struct CapturedPathPaint {
-    path: RawPath,
-    fill_rule: FillRule,
-    style: RenderPaintStyle,
-    thickness: f32,
-    join: StrokeJoin,
-    cap: StrokeCap,
-    feather: f32,
-}
 
 struct CapturePath {
     path: RawPath,
@@ -405,95 +321,23 @@ fn custom_paths(mut setup: impl FnMut(&mut RawPath)) -> Vec<CapturedPathPaint> {
         .collect()
 }
 
-#[derive(Clone, Copy)]
-enum Preparation {
-    Authored,
-    Strokes(StrokeJoin),
-    Feather(f32),
-}
-
-fn prepare_paths(paths: &[CapturedPathPaint], preparation: Preparation) -> usize {
-    let mut result = 0usize;
-    let mut scratch = draw::StrokePreparationScratch::default();
-    for _ in 0..10 {
-        for path in paths {
-            let prepared = match preparation {
-                Preparation::Authored if path.feather != 0.0 => draw::build_feather_tessellation(
-                    &path.path,
-                    Mat2D::IDENTITY,
-                    path.feather,
-                    (path.style == RenderPaintStyle::Stroke).then_some((
-                        path.thickness,
-                        path.join,
-                        path.cap,
-                    )),
-                ),
-                Preparation::Authored if path.style == RenderPaintStyle::Stroke => {
-                    draw::build_stroke_tessellation_with_layout_using_scratch(
-                        &path.path,
-                        Mat2D::IDENTITY,
-                        path.thickness,
-                        path.join,
-                        path.cap,
-                        &mut scratch,
-                    )
-                    .map(|value| value.tessellation)
-                }
-                Preparation::Authored => draw::build_fill_tessellation(&path.path, Mat2D::IDENTITY),
-                Preparation::Strokes(join) => {
-                    draw::build_stroke_tessellation_with_layout_using_scratch(
-                        &path.path,
-                        Mat2D::IDENTITY,
-                        2.0,
-                        join,
-                        StrokeCap::Butt,
-                        &mut scratch,
-                    )
-                    .map(|value| value.tessellation)
-                }
-                Preparation::Feather(feather) => draw::build_feather_tessellation(
-                    &path.path,
-                    Mat2D::IDENTITY,
-                    feather,
-                    (path.style == RenderPaintStyle::Stroke).then_some((
-                        path.thickness,
-                        path.join,
-                        path.cap,
-                    )),
-                ),
-            };
-            if let Some(prepared) = prepared {
-                result = result.wrapping_add(prepared.spans.len());
-            }
-        }
-    }
-    result
-}
-
 fn renderer_benches(criterion: &mut Criterion) {
-    let mut tile = IntersectionTile::default();
-    run_intersection_tile(GroupingType::Disjoint, &mut tile);
+    let mut tile = IntersectionTileWorkload::disjoint();
     criterion.bench_function("IntersectionTileBench", |bench| {
-        bench.iter(|| black_box(run_intersection_tile(GroupingType::Disjoint, &mut tile)));
+        bench.iter(|| black_box(tile.run()));
     });
 
-    let mut overlap_tile = IntersectionTile::default();
-    run_intersection_tile(GroupingType::OverlapAllowed, &mut overlap_tile);
+    let mut overlap_tile = IntersectionTileWorkload::overlap_allowed();
     criterion.bench_function("IntersectionTileBenchWithOverlap", |bench| {
-        bench.iter(|| {
-            black_box(run_intersection_tile(
-                GroupingType::OverlapAllowed,
-                &mut overlap_tile,
-            ))
-        });
+        bench.iter(|| black_box(overlap_tile.run()));
     });
 
-    let mut paper_board = BoardWorkload::new(PAPER_BBOXES);
+    let mut paper_board = IntersectionBoardWorkload::from_i32le(PAPER_BBOXES);
     criterion.bench_function("IntersectionBoardBench_paper", |bench| {
         bench.iter(|| black_box(paper_board.run()));
     });
 
-    let mut marty_board = BoardWorkload::new(MARTY_BBOXES);
+    let mut marty_board = IntersectionBoardWorkload::from_i32le(MARTY_BBOXES);
     criterion.bench_function("IntersectionBoardBench_marty", |bench| {
         bench.iter(|| black_box(marty_board.run()));
     });

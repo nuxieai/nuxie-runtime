@@ -10,15 +10,17 @@ default = []
 decode-oracle = []
 perf-diagnostics = []
 perf-counters = []
-# Compiles the Criterion target's direct, crate-private source mirrors. This is
-# deliberately opt-in so the benchmark harness never widens the shipped API.
-upstream-microbenchmarks = []
+# Exposes a deliberately narrow, doc-hidden seam into production-compiled
+# algorithms for Criterion. It is opt-in, but must be maintained with those
+# internals; this avoids test-only instrumentation and copied private modules.
+upstream-microbenchmarks = ["dep:libc"]
 
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
 futures-channel = "0.3"
 image-webp = "0.2.4"
 jpeg-decoder = { version = "0.3", default-features = false }
+libc = { version = "0.2", optional = true }
 moxcms = "0.8.1"
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
@@ -41,7 +43,6 @@ raw-window-handle = "0.6"
 
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
-libc = "0.2"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }

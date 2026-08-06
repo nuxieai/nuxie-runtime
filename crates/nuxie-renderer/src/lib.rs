@@ -43,6 +43,9 @@ mod storage_texture;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
+#[cfg(feature = "upstream-microbenchmarks")]
+#[doc(hidden)]
+pub mod upstream_microbenchmarks;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};

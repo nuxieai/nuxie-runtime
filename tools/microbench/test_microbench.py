@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import pathlib
 import tempfile
 import unittest
@@ -18,40 +19,25 @@ def load_tool():
 
 
 class MicrobenchContractTests(unittest.TestCase):
-    def test_inventory_names_match_upstream_registry_one_for_one(self):
+    def test_inventory_names_match_pinned_upstream_registry_one_for_one(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        with tempfile.TemporaryDirectory() as directory:
+            upstream = pathlib.Path(directory)
+            for source in {case.source for case in inventory.cases}:
+                target = upstream / source
+                target.parent.mkdir(parents=True, exist_ok=True)
+                names = [case.name for case in inventory.cases if case.source == source]
+                target.write_text("\n".join(f"REGISTER_BENCH({name});" for name in names))
+            self.assertEqual(
+                tool.discover_upstream_cases(upstream, inventory),
+                {case.name for case in inventory.cases},
+            )
 
-        self.assertEqual(
-            [case.name for case in inventory.cases],
-            [
-                "BuildRawPath",
-                "DrawCustomFeathers",
-                "DrawFeatheredPaths_paper",
-                "DrawOneChopStrokes",
-                "DrawOneCuspStrokes",
-                "DrawRiveRenderPaths",
-                "DrawRiveRenderPathsAsRoundJoinStrokes",
-                "DrawRiveRenderPathsAsStrokes",
-                "DrawTwoChopStrokes",
-                "DrawTwoCuspStrokes",
-                "DrawZeroChopStrokes",
-                "IntersectionBoardBench_marty",
-                "IntersectionBoardBench_paper",
-                "IntersectionTileBench",
-                "IntersectionTileBenchWithOverlap",
-                "IterateRawPath",
-                "MapPointsAffine",
-                "MapPointsScaleTrans",
-                "MeasurePath",
-                "RawPathBounds",
-            ],
-        )
-        self.assertEqual(len({case.name for case in inventory.cases}), 20)
-        self.assertEqual(
-            {case.crate for case in inventory.cases},
-            {"nuxie-runtime", "nuxie-renderer"},
-        )
+            first_source = upstream / inventory.cases[0].source
+            first_source.write_text(first_source.read_text().replace("REGISTER_BENCH", "RENAMED"))
+            with self.assertRaisesRegex(tool.ContractError, "upstream registry mismatch"):
+                tool.check_upstream_case_contract(upstream, inventory)
 
     def test_checked_in_datasets_match_declared_hashes_and_shapes(self):
         tool = load_tool()
@@ -94,19 +80,46 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(content), 32)
         self.assertEqual(content[:16].hex(), "ffffffff020000000300000004000000")
 
-    def test_ratio_table_preserves_inventory_order(self):
+    def test_report_only_emits_ratios_for_equivalent_cases(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
         cpp = {case.name: index + 1.0 for index, case in enumerate(inventory.cases)}
         rust = {case.name: (index + 1.0) * 2.0 for index, case in enumerate(inventory.cases)}
 
-        table = tool.render_ratio_table(inventory, cpp, rust)
+        table = tool.render_report(inventory, cpp, rust)
 
         rows = [line for line in table.splitlines() if line.startswith("| `")]
         self.assertEqual(len(rows), 20)
         self.assertIn("| `BuildRawPath` |", rows[0])
-        self.assertIn("| `RawPathBounds` |", rows[-1])
-        self.assertTrue(all("2.000x" in row for row in rows))
+        self.assertTrue(any("| `RawPathBounds` |" in row for row in rows))
+        ratio_rows = [row for row in rows if "2.000x" in row]
+        self.assertEqual(len(ratio_rows), 8)
+        self.assertNotIn("2.000x", next(row for row in rows if "MapPointsAffine" in row))
+        self.assertNotIn("2.000x", next(row for row in rows if "DrawRiveRenderPaths" in row))
+
+    def test_criterion_uses_per_iteration_minimum_like_upstream_harness(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            criterion = pathlib.Path(directory)
+            sample = criterion / "BuildRawPath" / "new" / "sample.json"
+            sample.parent.mkdir(parents=True)
+            sample.write_text(json.dumps({"iters": [1.0, 2.0, 4.0], "times": [9.0, 12.0, 40.0]}))
+
+            self.assertEqual(tool.load_criterion_minimum(sample), 6.0)
+
+    def test_run_manifest_rejects_mixed_or_stale_artifacts(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            artifact = root / "cpp.txt"
+            artifact.write_text("artifact")
+            run = {
+                "status": "complete",
+                "run_id": "test-run",
+                "artifacts": {"cpp_output": {"path": str(artifact), "sha256": "wrong"}},
+            }
+            with self.assertRaisesRegex(tool.ContractError, "artifact hash mismatch"):
+                tool.validate_run_artifacts(run)
 
 
 if __name__ == "__main__":

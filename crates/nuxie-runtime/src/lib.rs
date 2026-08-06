@@ -165,6 +165,9 @@ mod text_style_owner;
 mod text_style_paint_owner;
 #[path = "text/text_value_run.rs"]
 mod text_value_run_owner;
+#[cfg(feature = "upstream-microbenchmarks")]
+#[doc(hidden)]
+pub mod upstream_microbenchmarks;
 mod view_model;
 mod work_pool;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while

@@ -36,98 +36,158 @@ count = 2403906
 name = "BuildRawPath"
 crate = "nuxie-runtime"
 source = "tests/bench/build_raw_path.cpp"
+source_sha256 = "e0239234e13551dcec9dc6d9f73c35d654a481116c2436c8b0962f60a149d382"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "DrawCustomFeathers"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawFeatheredPaths_paper"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawOneChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawOneCuspStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawRiveRenderPaths"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawRiveRenderPathsAsRoundJoinStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawRiveRenderPathsAsStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawTwoChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawTwoCuspStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "DrawZeroChopStrokes"
 crate = "nuxie-renderer"
 source = "tests/bench/draw_pls_path.cpp"
+source_sha256 = "2382167eca5310d8af7d25f39cec3c2446f89a6253760bf2db2599e7a438520f"
+comparison = "directional"
+equivalence = "C++ null-renderer frame/draw/flush versus Rust CPU tessellation primitive; timings are directional only"
 
 [[case]]
 name = "IntersectionBoardBench_marty"
 crate = "nuxie-renderer"
 source = "tests/bench/intersection_board_bench.cpp"
+source_sha256 = "637709c071f3e6eea0baaa0124e5c86d8e47570f42c3d4bab830c904a7133112"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "IntersectionBoardBench_paper"
 crate = "nuxie-renderer"
 source = "tests/bench/intersection_board_bench.cpp"
+source_sha256 = "637709c071f3e6eea0baaa0124e5c86d8e47570f42c3d4bab830c904a7133112"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "IntersectionTileBench"
 crate = "nuxie-renderer"
 source = "tests/bench/intersection_board_bench.cpp"
+source_sha256 = "637709c071f3e6eea0baaa0124e5c86d8e47570f42c3d4bab830c904a7133112"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "IntersectionTileBenchWithOverlap"
 crate = "nuxie-renderer"
 source = "tests/bench/intersection_board_bench.cpp"
+source_sha256 = "637709c071f3e6eea0baaa0124e5c86d8e47570f42c3d4bab830c904a7133112"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "IterateRawPath"
 crate = "nuxie-runtime"
 source = "tests/bench/iterate_raw_path.cpp"
+source_sha256 = "b5fe8e6cb300ec853756f650f532a110608c43fd6e9f7b5217d085a5ccd06a22"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"
 
 [[case]]
 name = "MapPointsAffine"
 crate = "nuxie-runtime"
 source = "tests/bench/map_points.cpp"
+source_sha256 = "c4dfb829e0473ee5c66510d331585b44b7b5c7f5293b67de6ec0b71f6fadf36d"
+comparison = "directional"
+equivalence = "C++ bulk SIMD mapPoints API versus Rust scalar map_point loop; timings are directional only"
 
 [[case]]
 name = "MapPointsScaleTrans"
 crate = "nuxie-runtime"
 source = "tests/bench/map_points.cpp"
+source_sha256 = "c4dfb829e0473ee5c66510d331585b44b7b5c7f5293b67de6ec0b71f6fadf36d"
+comparison = "directional"
+equivalence = "C++ bulk SIMD mapPoints API versus Rust scalar map_point loop; timings are directional only"
 
 [[case]]
 name = "MeasurePath"
 crate = "nuxie-runtime"
 source = "tests/bench/measure_path.cpp"
+source_sha256 = "9ab327ea2a1f0b27c0a13a8c6e4e5b85bacf39125afd06a27837d1b331365313"
+comparison = "ratio"
+equivalence = "same generated RawPath, transform, contour measurement, and minimum statistic"
 
 [[case]]
 name = "RawPathBounds"
 crate = "nuxie-runtime"
 source = "tests/bench/raw_path_bounds.cpp"
+source_sha256 = "6507670c56674a3849fdfb4fd2a4c5b2d9bbcd62cfbbedd4d6e54414e16085b7"
+comparison = "ratio"
+equivalence = "same input construction, operation boundary, repetition count, and minimum statistic"

@@ -1263,7 +1263,17 @@ dependencies = [
 name = "nuxie-product"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "ed25519-dalek",
+ "luaur-common",
+ "luaur-compiler",
  "nuxie",
+ "nuxie-binary",
+ "nuxie-render-stream",
+ "nuxie-schema",
+ "serde_json",
+ "sha2",
+ "silver-corpus",
 ]
 
 [[package]]

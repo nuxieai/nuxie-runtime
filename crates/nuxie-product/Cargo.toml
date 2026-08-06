@@ -14,4 +14,17 @@ scripting = ["nuxie/scripting"]
 threading = ["nuxie/threading"]
 
 [dependencies]
+anyhow = "1"
 nuxie = { path = "../nuxie", default-features = false }
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"
+nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
+nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
+nuxie-render-stream = { path = "../nuxie-render-stream" }
+nuxie-schema = { path = "../nuxie-schema" }
+serde_json = "1"
+sha2 = "0.10"
+silver-corpus = { path = "../../tools/silver-corpus" }

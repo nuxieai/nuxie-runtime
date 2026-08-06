@@ -8,7 +8,7 @@
 
 use nuxie_binary::read_runtime_file;
 use nuxie_graph::GraphFile;
-use nuxie_runtime::{ArtboardInstance, ProjectDataValue, ScriptCoreString};
+use nuxie_runtime::{ArtboardInstance, ScriptCoreString};
 use std::mem::size_of_val;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -79,19 +79,8 @@ fn vec_builder_and_reset_preserve_only_initialized_values() {
     let mut resettable = vec![1_u32, 2, 3];
     resettable = Vec::with_capacity(4);
     resettable.extend([3, 2]);
-    let reset = ProjectDataValue::List(
-        resettable
-            .into_iter()
-            .map(|value| ProjectDataValue::Number(f64::from(value)))
-            .collect(),
-    );
-    assert_eq!(
-        reset,
-        ProjectDataValue::List(vec![
-            ProjectDataValue::Number(3.0),
-            ProjectDataValue::Number(2.0),
-        ])
-    );
+    let reset = resettable.into_iter().map(f64::from).collect::<Vec<_>>();
+    assert_eq!(reset, [3.0, 2.0]);
 }
 
 #[test]
@@ -100,36 +89,15 @@ fn nested_owned_storage_moves_without_aliasing_payloads() {
     // `builder arrays of arrays work`; allocation counts are inapplicable.
     let mut numbers_a = vec![33.0, 22.0, 44.0, 66.0];
     let mut numbers_b = vec![1.0, 2.0, 3.0];
-    let nested = ProjectDataValue::List(vec![
-        ProjectDataValue::List(
-            std::mem::take(&mut numbers_a)
-                .into_iter()
-                .map(ProjectDataValue::Number)
-                .collect(),
-        ),
-        ProjectDataValue::List(
-            std::mem::take(&mut numbers_b)
-                .into_iter()
-                .map(ProjectDataValue::Number)
-                .collect(),
-        ),
-    ]);
+    let nested = vec![
+        std::mem::take(&mut numbers_a),
+        std::mem::take(&mut numbers_b),
+    ];
 
     assert!(numbers_a.is_empty());
     assert!(numbers_b.is_empty());
-    let ProjectDataValue::List(rows) = nested else {
-        unreachable!("constructed a list")
-    };
-    assert_eq!(rows.len(), 2);
-    assert_eq!(
-        rows[0],
-        ProjectDataValue::List(vec![
-            ProjectDataValue::Number(33.0),
-            ProjectDataValue::Number(22.0),
-            ProjectDataValue::Number(44.0),
-            ProjectDataValue::Number(66.0),
-        ])
-    );
+    assert_eq!(nested.len(), 2);
+    assert_eq!(nested[0], [33.0, 22.0, 44.0, 66.0]);
 
     // Exercise a production Arc<Vec<T>> owner and its borrowed-slice view.
     // A clone must retain the exact immutable definition allocation.
@@ -155,15 +123,13 @@ fn fallible_growth_rejects_overflow_and_leaves_storage_composable() {
     assert!(failed.is_empty());
     assert_eq!(failed.iter().count(), 0);
 
-    let moved = ProjectDataValue::List(
-        failed
-            .into_iter()
-            .map(|value| ProjectDataValue::Number(value as f64))
-            .collect(),
-    );
-    assert_eq!(moved, ProjectDataValue::List(Vec::new()));
+    let moved = failed
+        .into_iter()
+        .map(|value| value as f64)
+        .collect::<Vec<_>>();
+    assert!(moved.is_empty());
     let copied = moved.clone();
-    assert_eq!(copied, ProjectDataValue::List(Vec::new()));
+    assert!(copied.is_empty());
 
     // `ctor still works for normal sizes after overflow guard`.
     let normal = ScriptCoreString::from_bytes(vec![0_u8; 8]);

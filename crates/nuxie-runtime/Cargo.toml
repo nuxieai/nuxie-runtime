@@ -28,8 +28,6 @@ nuxie-graph = { path = "../nuxie-graph" }
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 skrifa = "0.45.1"
 taffy = "0.12.1"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
@@ -42,6 +40,8 @@ nuxie-schema = { path = "../nuxie-schema" }
 [dev-dependencies]
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]

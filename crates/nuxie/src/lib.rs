@@ -18,9 +18,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-// The facade always retains ScriptAsset contents because pure-Rust ProjectDO
-// converter envelopes use that standard Rive asset carrier. Retention does
-// not grant script execution: arbitrary bytecode remains gated by the
+// The facade always retains ScriptAsset contents so an installed external
+// converter registry can claim its standard Rive asset carrier. Retention
+// does not grant script execution: arbitrary bytecode remains gated by the
 // `scripting` feature and an explicitly bounded trusted-script import.
 use nuxie_binary::{
     RuntimeFile, RuntimeImportStatus,
@@ -80,22 +80,14 @@ pub use nuxie_runtime::{
     AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
     AudioSound, AudioSource, ExternalFontAssetError, GAMEPAD_BATCH_MAX_AXES,
     GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance, NoopScriptHost,
-    ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
-    ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
-    ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,
-    ProjectDataConverterProgram, ProjectDataConverterProgramError, ProjectDataConverterRangeClamp,
-    ProjectDataConverterResolver, ProjectDataConverterReverseResult,
-    ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
-    ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
-    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath, RuntimeBlobAsset,
-    RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState,
-    RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput,
-    ScriptCoreString, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptValue, ScriptingVm, SemanticActionType, SemanticBounds,
-    SemanticDrainError, SemanticRole, SemanticState, SemanticTrait, SemanticsBoundsUpdate,
-    SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode, StateMachineInputInstance,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent, has_semantic_state,
-    has_semantic_trait,
+    RuntimeBlobAsset, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
+    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot,
+    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
+    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm, SemanticActionType,
+    SemanticBounds, SemanticDrainError, SemanticRole, SemanticState, SemanticTrait,
+    SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
@@ -351,7 +343,7 @@ struct FileScriptAsset {
     is_module: bool,
     serialized_implemented_methods: u32,
     payload: Option<Vec<u8>>,
-    is_project_data_converter: bool,
+    is_external_data_converter: bool,
 }
 
 #[cfg(feature = "scripting")]
@@ -421,10 +413,10 @@ impl FileScriptRuntime {
                         .uint_property("serializedImplementedMethods")
                         .unwrap_or((1 << 21) - 1)
                         as u32,
-                    is_project_data_converter: entry.asset.type_name == "ScriptAsset"
+                    is_external_data_converter: entry.asset.type_name == "ScriptAsset"
                         && payload
                             .as_deref()
-                            .is_some_and(ProjectDataConverterProgram::is_envelope),
+                            .is_some_and(nuxie_runtime::runtime_external_data_payload_is_claimed),
                     payload,
                 }
             })
@@ -452,10 +444,10 @@ impl FileScriptRuntime {
         self.capability.is_some() && self.execution_limits.is_some()
     }
 
-    fn is_project_data_converter_asset(&self, ordinal: usize) -> bool {
+    fn is_external_data_converter_asset(&self, ordinal: usize) -> bool {
         self.assets
             .get(ordinal)
-            .is_some_and(|asset| asset.is_project_data_converter)
+            .is_some_and(|asset| asset.is_external_data_converter)
     }
 
     fn build_candidate(
@@ -508,7 +500,7 @@ impl FileScriptRuntime {
             .filter(|asset| {
                 asset.type_name == "ScriptAsset"
                     && asset.is_module
-                    && !asset.is_project_data_converter
+                    && !asset.is_external_data_converter
             })
             .collect::<Vec<_>>();
 
@@ -545,7 +537,9 @@ impl FileScriptRuntime {
 
         let mut programs = BTreeMap::new();
         for asset in assets.iter().filter(|asset| {
-            asset.type_name == "ScriptAsset" && !asset.is_module && !asset.is_project_data_converter
+            asset.type_name == "ScriptAsset"
+                && !asset.is_module
+                && !asset.is_external_data_converter
         }) {
             let payload = required_script_payload(asset, "protocol registration")?;
             match vm.register_protocol_script_with_factory(&asset.name, payload, factory) {
@@ -578,7 +572,7 @@ impl FileScriptRuntime {
     fn has_executable_script_assets(&self) -> bool {
         self.assets
             .iter()
-            .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_project_data_converter)
+            .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_external_data_converter)
     }
 
     fn configure_candidate_assets(
@@ -1699,7 +1693,7 @@ fn state_machine_script_lifecycle_waits_for_ready_file_vm(
         scripts.assets.get(ordinal).is_some_and(|asset| {
             asset.type_name == "ScriptAsset"
                 && !asset.is_module
-                && !asset.is_project_data_converter
+                && !asset.is_external_data_converter
                 && asset.payload.is_some()
         })
     };
@@ -3187,11 +3181,11 @@ fn script_mount_group(
         let Some(converter) = runtime.object(global_id as usize) else {
             continue;
         };
-        let is_project_converter = converter
+        let is_external_converter = converter
             .uint_property("scriptAssetId")
             .and_then(|value| usize::try_from(value).ok())
-            .is_some_and(|ordinal| scripts.is_project_data_converter_asset(ordinal));
-        if is_project_converter {
+            .is_some_and(|ordinal| scripts.is_external_data_converter_asset(ordinal));
+        if is_external_converter {
             continue;
         }
         has_script_target = true;
@@ -3535,7 +3529,7 @@ fn mount_scripted_artboard_tree(
             || !scripts
                 .assets
                 .iter()
-                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_project_data_converter)
+                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_external_data_converter)
         {
             return Ok(false);
         }
@@ -4314,7 +4308,7 @@ impl File {
 
     /// Whether this file contains at least one executable ScriptAsset.
     ///
-    /// Pure-Rust project-data-converter envelopes use the same binary carrier
+    /// Product-provided external converter envelopes use the same binary carrier
     /// but are intentionally not registered with the Luau VM.
     #[cfg(feature = "scripting")]
     pub fn has_script_assets(&self) -> bool {
@@ -6894,14 +6888,36 @@ mod inert_script_import_tests {
     }
 
     #[test]
-    fn project_converter_classification_is_retained_by_dense_asset_ordinal() {
-        let bytes = imported_script_assets_bytes(&[b"ordinary script", b"NUXPCV1\0{}"]);
+    fn external_converter_classification_is_retained_by_dense_asset_ordinal() {
+        #[derive(Debug)]
+        struct ClassificationRegistry;
+
+        impl nuxie_runtime::RuntimeExternalDataRegistry for ClassificationRegistry {
+            fn registry_id(&self) -> &'static str {
+                "nuxie-classification-test"
+            }
+
+            fn recognizes(&self, bytes: &[u8]) -> bool {
+                bytes.ends_with(b"external data")
+            }
+
+            fn decode(
+                &self,
+                _bytes: &[u8],
+            ) -> Result<Option<nuxie_runtime::RuntimeExternalDataProgramHandle>, String>
+            {
+                Err("classification-only registry".to_owned())
+            }
+        }
+
+        nuxie_runtime::register_runtime_external_data_registry(Arc::new(ClassificationRegistry));
+        let bytes = imported_script_assets_bytes(&[b"ordinary script", b"external data"]);
         let file = File::import(&bytes).expect("script asset catalog imports");
         let scripts = file.scripts.borrow();
 
-        assert!(!scripts.is_project_data_converter_asset(0));
-        assert!(scripts.is_project_data_converter_asset(1));
-        assert!(!scripts.is_project_data_converter_asset(2));
+        assert!(!scripts.is_external_data_converter_asset(0));
+        assert!(scripts.is_external_data_converter_asset(1));
+        assert!(!scripts.is_external_data_converter_asset(2));
     }
 
     #[test]
@@ -6929,7 +6945,7 @@ mod inert_script_import_tests {
                 .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
                 .map(|asset| {
                     assert!(
-                        !asset.is_project_data_converter,
+                        !asset.is_external_data_converter,
                         "{fixture} protocol asset {} was diverted into the PR 144 product envelope path",
                         asset.ordinal
                     );

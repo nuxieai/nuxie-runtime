@@ -5,6 +5,25 @@
 
 pub mod flow_session;
 
+/// ProjectDO value model, program compiler, evaluator, and runtime adapter.
+pub mod project_data {
+    pub use nuxie_project_data::*;
+}
+
+/// Import a product artifact with product data converters enabled and scripts inert.
+pub fn import_file(bytes: &[u8]) -> anyhow::Result<nuxie::File> {
+    project_data::install_runtime_adapter();
+    nuxie::File::import(bytes)
+}
+
+/// Adopt a locally assembled runtime with product data converters enabled and scripts inert.
+pub fn file_from_locally_authored_runtime(
+    runtime: nuxie::host_interfaces::RuntimeFile,
+) -> anyhow::Result<nuxie::File> {
+    project_data::install_runtime_adapter();
+    nuxie::File::from_decoded_runtime(runtime)
+}
+
 #[cfg(feature = "scripting")]
 pub mod scripting {
     pub use nuxie_product_scripting::*;
@@ -19,6 +38,7 @@ pub mod scripting {
         bytes: &[u8],
         limits: ScriptExecutionLimits,
     ) -> anyhow::Result<File> {
+        crate::project_data::install_runtime_adapter();
         // SAFETY: upheld by this function's caller contract.
         let capability = unsafe { execution_capability_for_locally_authored_artifact(bytes)? };
         File::import_with_execution_capability(bytes, capability, limits)
@@ -32,6 +52,7 @@ pub mod scripting {
         runtime: RuntimeFile,
         limits: ScriptExecutionLimits,
     ) -> anyhow::Result<File> {
+        crate::project_data::install_runtime_adapter();
         // SAFETY: upheld by this function's caller contract.
         let capability = unsafe { execution_capability_for_locally_authored_runtime() };
         File::from_runtime_with_execution_capability(runtime, capability, limits)
@@ -44,6 +65,7 @@ pub mod scripting {
         capability: ScriptImportCapability,
         limits: ScriptExecutionLimits,
     ) -> anyhow::Result<File> {
+        crate::project_data::install_runtime_adapter();
         match capability.execution_capability_for(bytes)? {
             Some(capability) => File::import_with_execution_capability(bytes, capability, limits),
             None => File::import(bytes),

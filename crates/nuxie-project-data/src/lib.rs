@@ -1,4 +1,4 @@
-//! ProjectDO converter semantics, executed directly by the Rust runtime.
+//! Product-owned ProjectDO converter model, compiler, and evaluator.
 //!
 //! These types deliberately model the durable ProjectDO vocabulary instead
 //! of translating it into Rive-native converter records. A catalog is
@@ -6,8 +6,10 @@
 //! a small [`ProjectDataConverterState`] for stateful interpolation and list
 //! materialization.
 
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -2682,5 +2684,429 @@ impl<'a> FormulaParser<'a> {
             function,
             arguments,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProductConverterState(ProjectDataConverterState);
+
+impl nuxie_runtime::RuntimeExternalDataState for ProductConverterState {
+    fn clone_box(&self) -> Box<dyn nuxie_runtime::RuntimeExternalDataState> {
+        Box::new(self.clone())
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    fn is_active(&self) -> bool {
+        self.0.is_interpolating()
+    }
+}
+
+#[derive(Debug)]
+struct ProductConverterProgram(ProjectDataConverterProgram);
+
+impl nuxie_runtime::RuntimeExternalDataProgram for ProductConverterProgram {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn equals(&self, other: &dyn nuxie_runtime::RuntimeExternalDataProgram) -> bool {
+        other
+            .as_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|other| self.0 == other.0)
+    }
+
+    fn output_type(&self) -> Option<nuxie_runtime::RuntimeExternalDataOutputType> {
+        self.0.output_type().map(runtime_output_type)
+    }
+
+    fn is_stateful(&self) -> bool {
+        self.0.is_stateful()
+    }
+
+    fn is_reversible(&self) -> bool {
+        self.0.is_reversible()
+    }
+
+    fn value_paths(&self) -> Vec<nuxie_runtime::RuntimeExternalDataValuePath> {
+        self.0
+            .value_paths()
+            .into_iter()
+            .map(runtime_value_path)
+            .collect()
+    }
+
+    fn runtime_view_model_index(&self, id: &str) -> Option<usize> {
+        self.0.runtime_view_model_index(id)
+    }
+
+    fn number_to_list_output_view_model_index(&self) -> Option<usize> {
+        self.0.number_to_list_output_view_model_index()
+    }
+
+    fn new_state(&self) -> Box<dyn nuxie_runtime::RuntimeExternalDataState> {
+        Box::new(ProductConverterState(ProjectDataConverterState::default()))
+    }
+
+    fn convert(
+        &self,
+        state: &mut dyn nuxie_runtime::RuntimeExternalDataState,
+        value: nuxie_runtime::RuntimeExternalDataValue,
+        context: &mut nuxie_runtime::RuntimeExternalDataContext<'_>,
+    ) -> Result<nuxie_runtime::RuntimeExternalDataValue, String> {
+        let state = product_state(state)?;
+        let now_ms = context.now_ms;
+        let mut resolver = context.resolver().map(ProductResolver);
+        let mut product_context = ProjectDataConverterContext {
+            now_ms,
+            resolver: resolver
+                .as_mut()
+                .map(|resolver| resolver as &mut dyn ProjectDataConverterResolver),
+        };
+        self.0
+            .convert(&mut state.0, product_value(value), &mut product_context)
+            .map(runtime_value)
+            .map_err(|error| error.to_string())
+    }
+
+    fn reverse_convert(
+        &self,
+        state: &mut dyn nuxie_runtime::RuntimeExternalDataState,
+        value: nuxie_runtime::RuntimeExternalDataValue,
+        context: &mut nuxie_runtime::RuntimeExternalDataContext<'_>,
+    ) -> Result<nuxie_runtime::RuntimeExternalDataReverseResult, String> {
+        let state = product_state(state)?;
+        let now_ms = context.now_ms;
+        let mut resolver = context.resolver().map(ProductResolver);
+        let mut product_context = ProjectDataConverterContext {
+            now_ms,
+            resolver: resolver
+                .as_mut()
+                .map(|resolver| resolver as &mut dyn ProjectDataConverterResolver),
+        };
+        self.0
+            .reverse_convert(&mut state.0, product_value(value), &mut product_context)
+            .map(|result| nuxie_runtime::RuntimeExternalDataReverseResult {
+                ok: result.ok,
+                value: runtime_value(result.value),
+            })
+            .map_err(|error| error.to_string())
+    }
+}
+
+fn product_state(
+    state: &mut dyn nuxie_runtime::RuntimeExternalDataState,
+) -> Result<&mut ProductConverterState, String> {
+    state
+        .as_any_mut()
+        .downcast_mut::<ProductConverterState>()
+        .ok_or_else(|| "external converter state does not belong to nuxie-project-data".to_owned())
+}
+
+struct ProductResolver<'a>(&'a mut dyn nuxie_runtime::RuntimeExternalDataResolver);
+
+impl ProjectDataConverterResolver for ProductResolver<'_> {
+    fn resolve_value(&mut self, path: &ProjectDataValuePath) -> Option<ProjectDataValue> {
+        self.0
+            .resolve_value(&runtime_value_path(path.clone()))
+            .map(product_value)
+    }
+
+    fn create_blank_view_model_instance(
+        &mut self,
+        view_model_id: &str,
+    ) -> Option<ProjectDataValue> {
+        self.0
+            .create_blank_view_model_instance(view_model_id)
+            .map(product_value)
+    }
+}
+
+#[derive(Debug)]
+struct ProductConverterRegistry;
+
+impl nuxie_runtime::RuntimeExternalDataRegistry for ProductConverterRegistry {
+    fn registry_id(&self) -> &'static str {
+        "nuxie-project-data-v1"
+    }
+
+    fn recognizes(&self, bytes: &[u8]) -> bool {
+        ProjectDataConverterProgram::is_envelope(bytes)
+    }
+
+    fn decode(
+        &self,
+        bytes: &[u8],
+    ) -> Result<Option<nuxie_runtime::RuntimeExternalDataProgramHandle>, String> {
+        ProjectDataConverterProgram::decode(bytes)
+            .map(|program| {
+                program.map(|program| {
+                    nuxie_runtime::RuntimeExternalDataProgramHandle::new(Arc::new(
+                        ProductConverterProgram(program),
+                    ))
+                })
+            })
+            .map_err(|error| error.to_string())
+    }
+}
+
+/// Install the ProjectDO converter implementation behind the baseline's
+/// product-neutral registry. Repeated calls are idempotent.
+pub fn install_runtime_adapter() {
+    nuxie_runtime::register_runtime_external_data_registry(Arc::new(ProductConverterRegistry));
+}
+
+fn runtime_output_type(
+    output: ProjectDataConverterOutputType,
+) -> nuxie_runtime::RuntimeExternalDataOutputType {
+    use nuxie_runtime::RuntimeExternalDataOutputType as Runtime;
+    match output {
+        ProjectDataConverterOutputType::String => Runtime::String,
+        ProjectDataConverterOutputType::Number => Runtime::Number,
+        ProjectDataConverterOutputType::Boolean => Runtime::Boolean,
+        ProjectDataConverterOutputType::Color => Runtime::Color,
+        ProjectDataConverterOutputType::Enum => Runtime::Enum,
+        ProjectDataConverterOutputType::List => Runtime::List,
+        ProjectDataConverterOutputType::ListIndex => Runtime::ListIndex,
+        ProjectDataConverterOutputType::Object => Runtime::Object,
+        ProjectDataConverterOutputType::Image => Runtime::Image,
+        ProjectDataConverterOutputType::Trigger => Runtime::Trigger,
+        ProjectDataConverterOutputType::ViewModel => Runtime::ViewModel,
+    }
+}
+
+fn runtime_value_path(path: ProjectDataValuePath) -> nuxie_runtime::RuntimeExternalDataValuePath {
+    match path {
+        ProjectDataValuePath::Ids {
+            path_ids,
+            is_relative,
+            name_based,
+        } => nuxie_runtime::RuntimeExternalDataValuePath::Ids {
+            path_ids,
+            is_relative,
+            name_based,
+        },
+        ProjectDataValuePath::Path {
+            path,
+            view_model_name,
+            is_relative,
+        } => nuxie_runtime::RuntimeExternalDataValuePath::Path {
+            path,
+            view_model_name,
+            is_relative,
+        },
+    }
+}
+
+fn product_value(value: nuxie_runtime::RuntimeExternalDataValue) -> ProjectDataValue {
+    use nuxie_runtime::RuntimeExternalDataValue as Runtime;
+    match value {
+        Runtime::Null => ProjectDataValue::Null,
+        Runtime::Boolean(value) => ProjectDataValue::Boolean(value),
+        Runtime::Number(value) => ProjectDataValue::Number(value),
+        Runtime::String(value) => ProjectDataValue::String(value),
+        Runtime::List(values) => {
+            ProjectDataValue::List(values.into_iter().map(product_value).collect())
+        }
+        Runtime::Object(values) => ProjectDataValue::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| (key, product_value(value)))
+                .collect(),
+        ),
+        Runtime::Color(value) => ProjectDataValue::Color(value),
+        Runtime::Enum(value) => ProjectDataValue::Enum(value),
+        Runtime::ListIndex(value) => ProjectDataValue::ListIndex(value),
+        Runtime::Trigger(value) => ProjectDataValue::Trigger(value),
+        Runtime::Image(value) => ProjectDataValue::Image(value),
+        Runtime::ViewModel(value) => ProjectDataValue::ViewModel(product_view_model(value)),
+    }
+}
+
+fn runtime_value(value: ProjectDataValue) -> nuxie_runtime::RuntimeExternalDataValue {
+    use nuxie_runtime::RuntimeExternalDataValue as Runtime;
+    match value {
+        ProjectDataValue::Null => Runtime::Null,
+        ProjectDataValue::Boolean(value) => Runtime::Boolean(value),
+        ProjectDataValue::Number(value) => Runtime::Number(value),
+        ProjectDataValue::String(value) => Runtime::String(value),
+        ProjectDataValue::List(values) => {
+            Runtime::List(values.into_iter().map(runtime_value).collect())
+        }
+        ProjectDataValue::Object(values) => Runtime::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| (key, runtime_value(value)))
+                .collect(),
+        ),
+        ProjectDataValue::Color(value) => Runtime::Color(value),
+        ProjectDataValue::Enum(value) => Runtime::Enum(value),
+        ProjectDataValue::ListIndex(value) => Runtime::ListIndex(value),
+        ProjectDataValue::Trigger(value) => Runtime::Trigger(value),
+        ProjectDataValue::Image(value) => Runtime::Image(value),
+        ProjectDataValue::ViewModel(value) => Runtime::ViewModel(runtime_view_model(value)),
+    }
+}
+
+fn product_view_model(
+    value: nuxie_runtime::RuntimeExternalViewModelReference,
+) -> ProjectDataViewModelReference {
+    use nuxie_runtime::RuntimeExternalViewModelReference as Runtime;
+    match value {
+        Runtime::Null => ProjectDataViewModelReference::Null,
+        Runtime::DataContextRoot => ProjectDataViewModelReference::DataContextRoot,
+        Runtime::Retained {
+            allocation_identity,
+        } => ProjectDataViewModelReference::Retained {
+            allocation_identity,
+        },
+        Runtime::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        } => ProjectDataViewModelReference::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        },
+        Runtime::Imported { object_id } => ProjectDataViewModelReference::Imported { object_id },
+    }
+}
+
+fn runtime_view_model(
+    value: ProjectDataViewModelReference,
+) -> nuxie_runtime::RuntimeExternalViewModelReference {
+    use nuxie_runtime::RuntimeExternalViewModelReference as Runtime;
+    match value {
+        ProjectDataViewModelReference::Null => Runtime::Null,
+        ProjectDataViewModelReference::DataContextRoot => Runtime::DataContextRoot,
+        ProjectDataViewModelReference::Retained {
+            allocation_identity,
+        } => Runtime::Retained {
+            allocation_identity,
+        },
+        ProjectDataViewModelReference::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        } => Runtime::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        },
+        ProjectDataViewModelReference::Imported { object_id } => Runtime::Imported { object_id },
+    }
+}
+
+#[cfg(test)]
+mod runtime_adapter_tests {
+    use super::*;
+
+    fn interpolation_program() -> Vec<u8> {
+        ProjectDataConverterCatalog::compile([ProjectDataConverterDefinition {
+            id: "interpolate".to_owned(),
+            spec: ProjectDataConverterSpec {
+                output_type: Some(ProjectDataConverterOutputType::Number),
+                kind: ProjectDataConverterKind::Interpolate {
+                    duration_ms: 100.0,
+                    easing: ProjectDataConverterEasing::Linear,
+                },
+            },
+        }])
+        .expect("valid interpolation catalog")
+        .encode_program("interpolate")
+        .expect("interpolation program encodes")
+    }
+
+    #[test]
+    fn registry_adapter_preserves_program_identity_and_occurrence_state() {
+        let bytes = interpolation_program();
+        let program =
+            nuxie_runtime::RuntimeExternalDataRegistry::decode(&ProductConverterRegistry, &bytes)
+                .expect("registry decode succeeds")
+                .expect("registry claims ProjectData payload");
+        assert_eq!(
+            program.output_type(),
+            Some(nuxie_runtime::RuntimeExternalDataOutputType::Number)
+        );
+
+        let mut state = program.new_state();
+        let mut context = nuxie_runtime::RuntimeExternalDataContext::new();
+        context.now_ms = Some(0.0);
+        assert_eq!(
+            program
+                .convert(
+                    state.as_mut(),
+                    nuxie_runtime::RuntimeExternalDataValue::Number(0.0),
+                    &mut context,
+                )
+                .expect("initial conversion"),
+            nuxie_runtime::RuntimeExternalDataValue::Number(0.0)
+        );
+        program
+            .convert(
+                state.as_mut(),
+                nuxie_runtime::RuntimeExternalDataValue::Number(10.0),
+                &mut context,
+            )
+            .expect("target conversion");
+        assert!(state.is_active());
+
+        let mut cloned_state = state.clone();
+        context.now_ms = Some(50.0);
+        let expected = nuxie_runtime::RuntimeExternalDataValue::Number(5.0);
+        assert_eq!(
+            program
+                .convert(
+                    state.as_mut(),
+                    nuxie_runtime::RuntimeExternalDataValue::Number(10.0),
+                    &mut context,
+                )
+                .expect("retained conversion"),
+            expected
+        );
+        assert_eq!(
+            program
+                .convert(
+                    cloned_state.as_mut(),
+                    nuxie_runtime::RuntimeExternalDataValue::Number(10.0),
+                    &mut context,
+                )
+                .expect("cloned retained conversion"),
+            expected
+        );
+
+        state.clear();
+        assert!(!state.is_active());
+    }
+
+    #[test]
+    fn claimed_invalid_payload_surfaces_an_error_instead_of_falling_through() {
+        let bytes = b"NUXPCV1\0{";
+        assert!(nuxie_runtime::RuntimeExternalDataRegistry::recognizes(
+            &ProductConverterRegistry,
+            bytes,
+        ));
+        assert!(
+            nuxie_runtime::RuntimeExternalDataRegistry::decode(&ProductConverterRegistry, bytes,)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn installing_the_adapter_registers_the_product_envelope_idempotently() {
+        let bytes = interpolation_program();
+        install_runtime_adapter();
+        install_runtime_adapter();
+        assert!(nuxie_runtime::runtime_external_data_payload_is_claimed(
+            &bytes
+        ));
     }
 }

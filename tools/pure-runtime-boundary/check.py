@@ -163,15 +163,7 @@ INTERNAL_DEBT_FILES = {
         "tools/nuxie-codegen/src/main.rs",
     },
     "browser-presentation": set(),
-    "project-data": {
-        "crates/nuxie-runtime/src/project_data_converter.rs",
-        "crates/nuxie-runtime/src/lib.rs",
-        "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
-        "crates/nuxie-runtime/src/data_bind/converters/data_converter_number_to_list.rs",
-        "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
-        "crates/nuxie-runtime/tests/project_data_converter.rs",
-        "crates/nuxie-runtime/tests/simple_array_adaptation.rs",
-    },
+    "project-data": set(),
     "product-host-commands": set(),
 }
 INTERNAL_DEBT_MARKERS = {

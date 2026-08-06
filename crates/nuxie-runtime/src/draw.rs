@@ -754,7 +754,7 @@ impl ArtboardInstance {
     ///
     /// Paths and repeated-item occurrences remain runtime-local here. The
     /// editor application consumes them inside Rust to recover durable
-    /// ProjectDO identities; callers must not persist or expose these ids.
+    /// Legacy authoring identities; callers must not persist or expose these ids.
     pub fn geometry_path_segments_with_bounds(
         &mut self,
         cache: &mut RuntimeGeometryState,

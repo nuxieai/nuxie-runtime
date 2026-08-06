@@ -58,14 +58,17 @@ impl RuntimeOwnedViewModelAdvanceContext {
                 RuntimeOwnedViewModelValueKind::Trigger => {
                     if let Some(trigger) = instance.triggers.get(occurrence.slot_index) {
                         self.entries
-                            .push(RuntimeOwnedViewModelAdvanceEntry::Trigger(trigger.cell.clone()));
+                            .push(RuntimeOwnedViewModelAdvanceEntry::Trigger(
+                                trigger.cell.clone(),
+                            ));
                     }
                 }
                 RuntimeOwnedViewModelValueKind::List => {
                     if let Some(list) = instance.lists.get(occurrence.slot_index) {
-                        self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List(Rc::clone(
-                            &list.value,
-                        )));
+                        self.entries
+                            .push(RuntimeOwnedViewModelAdvanceEntry::List(Rc::clone(
+                                &list.value,
+                            )));
                     }
                 }
                 RuntimeOwnedViewModelValueKind::ViewModel => {
@@ -91,9 +94,10 @@ impl RuntimeOwnedViewModelAdvanceContext {
                     match occurrence.kind {
                         RuntimeOwnedViewModelValueKind::Trigger => {
                             if let Some(trigger) = child.triggers.get(occurrence.slot_index) {
-                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::Trigger(
-                                    trigger.cell.clone(),
-                                ));
+                                self.entries
+                                    .push(RuntimeOwnedViewModelAdvanceEntry::Trigger(
+                                        trigger.cell.clone(),
+                                    ));
                             }
                         }
                         RuntimeOwnedViewModelValueKind::List => {
@@ -121,9 +125,10 @@ impl RuntimeOwnedViewModelAdvanceContext {
                                 .get(&object_id)
                                 .and_then(|values| values.get(occurrence.slot_index))
                             {
-                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::Trigger(
-                                    trigger.cell.clone(),
-                                ));
+                                self.entries
+                                    .push(RuntimeOwnedViewModelAdvanceEntry::Trigger(
+                                        trigger.cell.clone(),
+                                    ));
                             }
                         }
                         RuntimeOwnedViewModelValueKind::List => {
@@ -577,11 +582,7 @@ impl RuntimeOwnedViewModelHandle {
         let Ok(mut instance) = self.instance.try_borrow_mut() else {
             return false;
         };
-        instance.insert_runtime_list_item_by_property_path_unchecked(
-            property_path,
-            index,
-            item,
-        )
+        instance.insert_runtime_list_item_by_property_path_unchecked(property_path, index, item)
     }
 }
 
@@ -1219,7 +1220,8 @@ mod upstream_viewmodel_instance_contract_tests {
     #[test]
     fn generated_custom_enum_occurrence_can_be_removed() {
         let file = generated_custom_enum_file();
-        let mut instance = RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated instance");
+        let mut instance =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated instance");
 
         assert_eq!(
             instance.value_order,
@@ -3436,11 +3438,7 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_handle_by_property_path(property_path) else {
             return false;
         };
-        if !list
-            .value
-            .borrow_mut()
-            .insert_runtime_instance(index, item)
-        {
+        if !list.value.borrow_mut().insert_runtime_instance(index, item) {
             return false;
         }
         list.notify_value_changed();
@@ -4246,8 +4244,7 @@ impl RuntimeOwnedViewModelInstance {
         let (mut view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
         let property_index = view_model.property_index_by_name(asset_name)?;
-        view_model
-            .active_blob_asset_value_by_property_index(property_index)?;
+        view_model.active_blob_asset_value_by_property_index(property_index)?;
         view_model_path.push(property_index);
         Some(view_model_path)
     }
@@ -5126,11 +5123,9 @@ impl RuntimeOwnedViewModelInstance {
             RuntimeOwnedViewModelValueKind::Trigger => {
                 self.triggers.get(occurrence.slot_index)?.cell.clone()
             }
-            RuntimeOwnedViewModelValueKind::ViewModel => self
-                .view_models
-                .get(occurrence.slot_index)?
-                .endpoint
-                .cell(),
+            RuntimeOwnedViewModelValueKind::ViewModel => {
+                self.view_models.get(occurrence.slot_index)?.endpoint.cell()
+            }
         })
     }
 
@@ -5222,7 +5217,7 @@ impl RuntimeOwnedViewModelInstance {
         self.cell_by_scoped_property_path(context_path, view_model_index, &property_path)
     }
 
-    pub(crate) fn project_relative_cell_by_context_name_hash_path(
+    pub(crate) fn relative_cell_by_context_name_hash_path(
         &self,
         context_path: &[usize],
         source_path: &[u32],
@@ -5255,7 +5250,7 @@ impl RuntimeOwnedViewModelInstance {
             .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_))))
     }
 
-    pub(crate) fn project_relative_cell_by_context_name_path(
+    pub(crate) fn relative_cell_by_context_name_path(
         &self,
         context_path: &[usize],
         source_path: &[String],

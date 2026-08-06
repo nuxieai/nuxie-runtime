@@ -2158,7 +2158,7 @@ fn script_input_converter_is_stateless(converter: &RuntimeDataBindGraphConverter
             converters.iter().all(script_input_converter_is_stateless)
         }
         RuntimeDataBindGraphConverter::Scripted { .. }
-        | RuntimeDataBindGraphConverter::Project { .. }
+        | RuntimeDataBindGraphConverter::External { .. }
         | RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
         | RuntimeDataBindGraphConverter::Formula { .. }

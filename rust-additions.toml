@@ -65,8 +65,12 @@ path = "crates/nuxie-runtime/src/objects.rs"
 category = "codegen"
 
 [[addition]]
-path = "crates/nuxie-runtime/src/project_data_converter.rs"
+path = "crates/nuxie-project-data/src/lib.rs"
 category = "product-data"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/external_data_converter.rs"
+category = "baseline-adaptation"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/properties.rs"

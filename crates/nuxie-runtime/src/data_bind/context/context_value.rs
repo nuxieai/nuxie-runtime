@@ -17,7 +17,6 @@ use crate::artboard_data_bind::{
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
 use crate::data_converter::RuntimeDataConverterDataBindState;
 use crate::data_converter_interpolator::RuntimeDataConverterInterpolatorState;
-use crate::project_data_converter::PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS;
 use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::{
     RuntimeScriptInstanceHandle, ScriptCoreString, ScriptDataConverterMethod, ScriptError,
@@ -31,9 +30,9 @@ use crate::view_model_cell::{
     RuntimeViewModelInstanceCells,
 };
 use crate::{
-    ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
-    ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
-    ProjectDataValuePath, ProjectDataViewModelReference, RuntimeDataContext,
+    RuntimeDataContext, RuntimeExternalDataContext, RuntimeExternalDataOutputType,
+    RuntimeExternalDataProgramHandle, RuntimeExternalDataResolver, RuntimeExternalDataState,
+    RuntimeExternalDataValue, RuntimeExternalDataValuePath, RuntimeExternalViewModelReference,
     RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
     RuntimeTransitionInterpolator, RuntimeViewModelPointer, StateMachineBindableArtboardInstance,
     StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
@@ -48,6 +47,7 @@ use crate::{
 pub(crate) const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
 pub(crate) const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
 pub(crate) const DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST: u64 = 1 << 3;
+const RUNTIME_EXTERNAL_DATA_MAX_LIST_ITEMS: usize = 10_000;
 
 pub(crate) fn data_bind_flags_apply_source_to_target(flags: u64) -> bool {
     flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0
@@ -594,15 +594,15 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         definition: crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition,
         instance: Option<RuntimeScriptInstanceHandle>,
     },
-    Project {
+    External {
         global_id: u32,
-        program: Arc<ProjectDataConverterProgram>,
-        resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
-        default_resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
+        program: Arc<RuntimeExternalDataProgramHandle>,
+        resolved_values: Vec<(RuntimeExternalDataValuePath, RuntimeExternalDataValue)>,
+        default_resolved_values: Vec<(RuntimeExternalDataValuePath, RuntimeExternalDataValue)>,
         /// Owned contexts retain the exact input cells. The durable
         /// `resolved_values` vector remains only for default/imported
         /// contexts, whose serialized values are not cell-backed yet.
-        retained_resolved_values: Vec<(ProjectDataValuePath, RuntimeViewModelCell)>,
+        retained_resolved_values: Vec<(RuntimeExternalDataValuePath, RuntimeViewModelCell)>,
         retained_values_bound: bool,
     },
     BooleanNegate,
@@ -694,7 +694,7 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_global_id(
             global_id: candidate,
             ..
         }
-        | RuntimeDataBindGraphConverter::Project {
+        | RuntimeDataBindGraphConverter::External {
             global_id: candidate,
             ..
         }
@@ -810,18 +810,18 @@ impl RuntimeDataBindGraphConverter {
             | Self::RangeMapper { .. }
             | Self::Formula { .. } => RuntimeDataType::Number,
             Self::Scripted { .. } => RuntimeDataType::Any,
-            Self::Project { program, .. } => match program.output_type() {
-                Some(ProjectDataConverterOutputType::String) => RuntimeDataType::String,
-                Some(ProjectDataConverterOutputType::Number) => RuntimeDataType::Number,
-                Some(ProjectDataConverterOutputType::Boolean) => RuntimeDataType::Boolean,
-                Some(ProjectDataConverterOutputType::Color) => RuntimeDataType::Color,
-                Some(ProjectDataConverterOutputType::Enum) => RuntimeDataType::EnumType,
-                Some(ProjectDataConverterOutputType::List) => RuntimeDataType::List,
-                Some(ProjectDataConverterOutputType::ListIndex) => RuntimeDataType::SymbolListIndex,
-                Some(ProjectDataConverterOutputType::Image) => RuntimeDataType::AssetImage,
-                Some(ProjectDataConverterOutputType::Trigger) => RuntimeDataType::Trigger,
-                Some(ProjectDataConverterOutputType::ViewModel) => RuntimeDataType::ViewModel,
-                Some(ProjectDataConverterOutputType::Object) => RuntimeDataType::Any,
+            Self::External { program, .. } => match program.output_type() {
+                Some(RuntimeExternalDataOutputType::String) => RuntimeDataType::String,
+                Some(RuntimeExternalDataOutputType::Number) => RuntimeDataType::Number,
+                Some(RuntimeExternalDataOutputType::Boolean) => RuntimeDataType::Boolean,
+                Some(RuntimeExternalDataOutputType::Color) => RuntimeDataType::Color,
+                Some(RuntimeExternalDataOutputType::Enum) => RuntimeDataType::EnumType,
+                Some(RuntimeExternalDataOutputType::List) => RuntimeDataType::List,
+                Some(RuntimeExternalDataOutputType::ListIndex) => RuntimeDataType::SymbolListIndex,
+                Some(RuntimeExternalDataOutputType::Image) => RuntimeDataType::AssetImage,
+                Some(RuntimeExternalDataOutputType::Trigger) => RuntimeDataType::Trigger,
+                Some(RuntimeExternalDataOutputType::ViewModel) => RuntimeDataType::ViewModel,
+                Some(RuntimeExternalDataOutputType::Object) => RuntimeDataType::Any,
                 None => RuntimeDataType::None,
             },
             Self::BooleanNegate => RuntimeDataType::Boolean,
@@ -848,7 +848,7 @@ impl RuntimeDataBindGraphConverter {
     /// its children. It walks backward and returns the first child's output
     /// that is not `DataType::input`; an all-interpolator group falls back to
     /// the group's concrete `DataType::none`. Keeping that three-way result
-    /// prevents an early scripted/project converter from making a later
+    /// prevents an early scripted/external converter from making a later
     /// concrete converter look dynamically typed
     /// (`data_converter_group.hpp:17-32`; `data_bind.cpp:165-173`).
     fn cpp_output_kind(&self) -> RuntimeDataBindGraphConverterOutputKind {
@@ -857,11 +857,11 @@ impl RuntimeDataBindGraphConverter {
             // topology. Its authored input type does not constrain the value
             // its script will return.
             Self::Scripted { .. } => RuntimeDataBindGraphConverterOutputKind::Deferred,
-            // Project converters can depend on the mounted data context. The
+            // External converters can depend on the mounted data context. The
             // context is not hydrated while static property bindings are
             // built, so a failed conversion of the serialized default does
             // not disprove the program's declared (or inferred) output type.
-            Self::Project { program, .. } if program.output_type().is_some() => {
+            Self::External { program, .. } if program.output_type().is_some() => {
                 RuntimeDataBindGraphConverterOutputKind::Deferred
             }
             Self::Interpolator { .. } => RuntimeDataBindGraphConverterOutputKind::Input,
@@ -1240,7 +1240,7 @@ impl RuntimeDataBindGraphConverter {
             RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. } => {
                 Some(*view_model_id)
             }
-            RuntimeDataBindGraphConverter::Project { program, .. } => program
+            RuntimeDataBindGraphConverter::External { program, .. } => program
                 .number_to_list_output_view_model_index()
                 .and_then(|view_model_id| u64::try_from(view_model_id).ok()),
             RuntimeDataBindGraphConverter::Group(converters) => converters
@@ -1260,7 +1260,7 @@ impl RuntimeDataBindGraphConverter {
                 retained_operation_value: Some(cell),
                 ..
             } => cells.push(cell.clone()),
-            Self::Project {
+            Self::External {
                 retained_resolved_values,
                 retained_values_bound: true,
                 ..
@@ -1301,7 +1301,7 @@ impl RuntimeDataBindGraphConverter {
             } => {
                 *retained_operation_value = None;
             }
-            Self::Project {
+            Self::External {
                 retained_resolved_values,
                 retained_values_bound,
                 ..
@@ -1344,7 +1344,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
     match converter {
         RuntimeDataBindGraphConverter::PassThrough
         | RuntimeDataBindGraphConverter::Scripted { .. }
-        | RuntimeDataBindGraphConverter::Project { .. }
+        | RuntimeDataBindGraphConverter::External { .. }
         | RuntimeDataBindGraphConverter::BooleanNegate
         | RuntimeDataBindGraphConverter::TriggerIncrement
         | RuntimeDataBindGraphConverter::ToNumber
@@ -1837,15 +1837,15 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_conver
             *default_operation_value = value;
             true
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             resolved_values,
             default_resolved_values,
             retained_values_bound: false,
             ..
         } => {
-            let value = ProjectDataValue::Number(f64::from(value));
-            update_runtime_project_resolved_value(resolved_values, path, &value)
-                | update_runtime_project_resolved_value(default_resolved_values, path, &value)
+            let value = RuntimeExternalDataValue::Number(f64::from(value));
+            update_runtime_external_resolved_value(resolved_values, path, &value)
+                | update_runtime_external_resolved_value(default_resolved_values, path, &value)
         }
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
@@ -1879,14 +1879,14 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imp
             *operation_value = value;
             true
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             resolved_values,
             retained_values_bound: false,
             ..
-        } => update_runtime_project_resolved_value(
+        } => update_runtime_external_resolved_value(
             resolved_values,
             path,
-            &ProjectDataValue::Number(f64::from(value)),
+            &RuntimeExternalDataValue::Number(f64::from(value)),
         ),
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
@@ -1915,7 +1915,7 @@ fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
             *retained_operation_value = None;
             true
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             resolved_values,
             default_resolved_values,
             retained_resolved_values,
@@ -1965,11 +1965,11 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
             *operation_value = value;
             true
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             program,
             resolved_values,
             ..
-        } => refresh_runtime_project_resolved_values_for_imported_context(
+        } => refresh_runtime_external_resolved_values_for_imported_context(
             file,
             program,
             resolved_values,
@@ -2049,7 +2049,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_own_operation_view_model_converter
             *retained_operation_value = retained;
             changed
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             program,
             resolved_values,
             retained_resolved_values,
@@ -2058,7 +2058,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_own_operation_view_model_converter
         } => {
             let mut retained = Vec::new();
             for path in program.value_paths() {
-                let Some(source_path) = runtime_project_data_value_path(&path) else {
+                let Some(source_path) = runtime_external_data_value_path(&path) else {
                     continue;
                 };
                 let Some(cell) = source_path.owned_number_cell(context, context_chain) else {
@@ -2131,7 +2131,7 @@ pub(crate) fn runtime_data_bind_graph_bind_own_converter_operands_for_data_conte
             *retained_operation_value = retained;
             changed
         }
-        RuntimeDataBindGraphConverter::Project {
+        RuntimeDataBindGraphConverter::External {
             program,
             resolved_values,
             retained_resolved_values,
@@ -2140,7 +2140,7 @@ pub(crate) fn runtime_data_bind_graph_bind_own_converter_operands_for_data_conte
         } => {
             let mut retained = Vec::new();
             for path in program.value_paths() {
-                let Some(source_path) = runtime_project_data_value_path(&path) else {
+                let Some(source_path) = runtime_external_data_value_path(&path) else {
                     continue;
                 };
                 let cell = data_context.resolve_instance(&mut |_, context, scope_path| {
@@ -2160,13 +2160,13 @@ pub(crate) fn runtime_data_bind_graph_bind_own_converter_operands_for_data_conte
     }
 }
 
-fn update_runtime_project_resolved_value(
-    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+fn update_runtime_external_resolved_value(
+    resolved_values: &mut Vec<(RuntimeExternalDataValuePath, RuntimeExternalDataValue)>,
     path: &[u32],
-    value: &ProjectDataValue,
+    value: &RuntimeExternalDataValue,
 ) -> bool {
     let Some((_, current)) = resolved_values.iter_mut().find(|(candidate, _)| {
-        runtime_project_data_value_path(candidate)
+        runtime_external_data_value_path(candidate)
             .is_some_and(|candidate| candidate.matches_absolute_ids(path))
     }) else {
         return false;
@@ -2178,15 +2178,15 @@ fn update_runtime_project_resolved_value(
     true
 }
 
-fn refresh_runtime_project_resolved_values_for_imported_context(
+fn refresh_runtime_external_resolved_values_for_imported_context(
     file: &RuntimeFile,
-    program: &ProjectDataConverterProgram,
-    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    program: &RuntimeExternalDataProgramHandle,
+    resolved_values: &mut Vec<(RuntimeExternalDataValuePath, RuntimeExternalDataValue)>,
     context: &RuntimeDataContext<'_>,
 ) -> bool {
     let mut next = Vec::new();
     for path in program.value_paths() {
-        let Some(source_path) = runtime_project_data_value_path(&path) else {
+        let Some(source_path) = runtime_external_data_value_path(&path) else {
             continue;
         };
         let source = source_path.imported_property(context);
@@ -2195,7 +2195,7 @@ fn refresh_runtime_project_resolved_values_for_imported_context(
         else {
             continue;
         };
-        next.push((path, ProjectDataValue::Number(f64::from(value))));
+        next.push((path, RuntimeExternalDataValue::Number(f64::from(value))));
     }
     if *resolved_values == next {
         return false;
@@ -2317,144 +2317,158 @@ fn runtime_owned_view_model_property_path_from_source_path(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum RuntimeProjectDataBridgeError {
-    ArtboardHasNoProjectRepresentation,
+enum RuntimeExternalDataBridgeError {
+    ArtboardHasNoExternalRepresentation,
     NullHasNoRiveRepresentation,
     ObjectHasNoRiveRepresentation,
     RuntimeExecutionFailed,
     ReverseConversionUnsupported,
     OutputTypeMismatch {
-        output: Option<ProjectDataConverterOutputType>,
+        output: Option<RuntimeExternalDataOutputType>,
         value: &'static str,
     },
 }
 
-fn runtime_data_bind_graph_value_to_project(
+fn runtime_data_bind_graph_value_to_external(
     value: &RuntimeDataBindGraphValue,
-) -> Result<ProjectDataValue, RuntimeProjectDataBridgeError> {
+) -> Result<RuntimeExternalDataValue, RuntimeExternalDataBridgeError> {
     match value {
         RuntimeDataBindGraphValue::Untyped => {
-            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+            Err(RuntimeExternalDataBridgeError::ObjectHasNoRiveRepresentation)
         }
-        RuntimeDataBindGraphValue::Number(value) => Ok(ProjectDataValue::Number(f64::from(*value))),
-        RuntimeDataBindGraphValue::Boolean(value) => Ok(ProjectDataValue::Boolean(*value)),
-        RuntimeDataBindGraphValue::String(value) => Ok(ProjectDataValue::String(
+        RuntimeDataBindGraphValue::Number(value) => {
+            Ok(RuntimeExternalDataValue::Number(f64::from(*value)))
+        }
+        RuntimeDataBindGraphValue::Boolean(value) => Ok(RuntimeExternalDataValue::Boolean(*value)),
+        RuntimeDataBindGraphValue::String(value) => Ok(RuntimeExternalDataValue::String(
             String::from_utf8_lossy(value).into_owned(),
         )),
-        RuntimeDataBindGraphValue::Color(value) => Ok(ProjectDataValue::Color(*value)),
-        RuntimeDataBindGraphValue::Enum(value) => Ok(ProjectDataValue::Enum(*value)),
-        RuntimeDataBindGraphValue::Integer(value) => Ok(ProjectDataValue::ListIndex(*value)),
-        RuntimeDataBindGraphValue::SymbolListIndex(value) => {
-            Ok(ProjectDataValue::ListIndex(*value))
+        RuntimeDataBindGraphValue::Color(value) => Ok(RuntimeExternalDataValue::Color(*value)),
+        RuntimeDataBindGraphValue::Enum(value) => Ok(RuntimeExternalDataValue::Enum(*value)),
+        RuntimeDataBindGraphValue::Integer(value) => {
+            Ok(RuntimeExternalDataValue::ListIndex(*value))
         }
-        RuntimeDataBindGraphValue::Trigger(value) => Ok(ProjectDataValue::Trigger(*value)),
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => {
+            Ok(RuntimeExternalDataValue::ListIndex(*value))
+        }
+        RuntimeDataBindGraphValue::Trigger(value) => Ok(RuntimeExternalDataValue::Trigger(*value)),
         RuntimeDataBindGraphValue::List { item_count }
         | RuntimeDataBindGraphValue::ListLength(item_count) => {
-            let item_count = (*item_count).min(PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS);
-            Ok(ProjectDataValue::List(
-                std::iter::repeat_n(ProjectDataValue::Null, item_count).collect(),
+            let item_count = (*item_count).min(RUNTIME_EXTERNAL_DATA_MAX_LIST_ITEMS);
+            Ok(RuntimeExternalDataValue::List(
+                std::iter::repeat_n(RuntimeExternalDataValue::Null, item_count).collect(),
             ))
         }
-        RuntimeDataBindGraphValue::Asset(value) => Ok(ProjectDataValue::Image(*value)),
+        RuntimeDataBindGraphValue::Asset(value) => Ok(RuntimeExternalDataValue::Image(*value)),
         RuntimeDataBindGraphValue::AssetBlob(_) => {
-            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+            Err(RuntimeExternalDataBridgeError::ObjectHasNoRiveRepresentation)
         }
-        RuntimeDataBindGraphValue::ViewModel(value) => Ok(ProjectDataValue::ViewModel(
-            project_view_model_reference_from_runtime(*value),
+        RuntimeDataBindGraphValue::ViewModel(value) => Ok(RuntimeExternalDataValue::ViewModel(
+            external_view_model_reference_from_runtime(*value),
         )),
         RuntimeDataBindGraphValue::Artboard(_) => {
-            Err(RuntimeProjectDataBridgeError::ArtboardHasNoProjectRepresentation)
+            Err(RuntimeExternalDataBridgeError::ArtboardHasNoExternalRepresentation)
         }
     }
 }
 
-fn project_data_value_to_runtime(
-    value: ProjectDataValue,
-    output: Option<ProjectDataConverterOutputType>,
-) -> Result<RuntimeDataBindGraphValue, RuntimeProjectDataBridgeError> {
+fn external_data_value_to_runtime(
+    value: RuntimeExternalDataValue,
+    output: Option<RuntimeExternalDataOutputType>,
+) -> Result<RuntimeDataBindGraphValue, RuntimeExternalDataBridgeError> {
     match output {
-        Some(ProjectDataConverterOutputType::String) => match value {
-            ProjectDataValue::String(value) => {
+        Some(RuntimeExternalDataOutputType::String) => match value {
+            RuntimeExternalDataValue::String(value) => {
                 Ok(RuntimeDataBindGraphValue::String(value.into_bytes()))
             }
-            value => Err(project_output_mismatch(output, &value)),
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::Number) => match value {
-            ProjectDataValue::Number(value) => Ok(RuntimeDataBindGraphValue::Number(value as f32)),
-            value => Err(project_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::Number) => match value {
+            RuntimeExternalDataValue::Number(value) => {
+                Ok(RuntimeDataBindGraphValue::Number(value as f32))
+            }
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::Boolean) => match value {
-            ProjectDataValue::Boolean(value) => Ok(RuntimeDataBindGraphValue::Boolean(value)),
-            value => Err(project_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::Boolean) => match value {
+            RuntimeExternalDataValue::Boolean(value) => {
+                Ok(RuntimeDataBindGraphValue::Boolean(value))
+            }
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::Color) => project_data_value_to_u64(&value)
+        Some(RuntimeExternalDataOutputType::Color) => external_data_value_to_u64(&value)
             .and_then(|value| u32::try_from(value).ok())
             .map(RuntimeDataBindGraphValue::Color)
-            .ok_or_else(|| project_output_mismatch(output, &value)),
-        Some(ProjectDataConverterOutputType::Enum) => project_data_value_to_u64(&value)
+            .ok_or_else(|| external_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::Enum) => external_data_value_to_u64(&value)
             .map(RuntimeDataBindGraphValue::Enum)
-            .ok_or_else(|| project_output_mismatch(output, &value)),
-        Some(ProjectDataConverterOutputType::ListIndex) => project_data_value_to_u64(&value)
+            .ok_or_else(|| external_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::ListIndex) => external_data_value_to_u64(&value)
             .map(RuntimeDataBindGraphValue::SymbolListIndex)
-            .ok_or_else(|| project_output_mismatch(output, &value)),
-        Some(ProjectDataConverterOutputType::Trigger) => project_data_value_to_u64(&value)
+            .ok_or_else(|| external_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::Trigger) => external_data_value_to_u64(&value)
             .map(RuntimeDataBindGraphValue::Trigger)
-            .ok_or_else(|| project_output_mismatch(output, &value)),
-        Some(ProjectDataConverterOutputType::List) => match value {
-            ProjectDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
+            .ok_or_else(|| external_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::List) => match value {
+            RuntimeExternalDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
                 item_count: items.len(),
             }),
-            value => Err(project_output_mismatch(output, &value)),
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::Image) => match value {
-            ProjectDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
-            value => Err(project_output_mismatch(output, &value)),
+        Some(RuntimeExternalDataOutputType::Image) => match value {
+            RuntimeExternalDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::ViewModel) => match value {
-            ProjectDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
-                runtime_view_model_pointer_from_project(value),
+        Some(RuntimeExternalDataOutputType::ViewModel) => match value {
+            RuntimeExternalDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
+                runtime_view_model_pointer_from_external(value),
             )),
-            value => Err(project_output_mismatch(output, &value)),
+            value => Err(external_output_mismatch(output, &value)),
         },
-        Some(ProjectDataConverterOutputType::Object) => {
-            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+        Some(RuntimeExternalDataOutputType::Object) => {
+            Err(RuntimeExternalDataBridgeError::ObjectHasNoRiveRepresentation)
         }
         None => match value {
-            ProjectDataValue::Null => {
-                Err(RuntimeProjectDataBridgeError::NullHasNoRiveRepresentation)
+            RuntimeExternalDataValue::Null => {
+                Err(RuntimeExternalDataBridgeError::NullHasNoRiveRepresentation)
             }
-            ProjectDataValue::Boolean(value) => Ok(RuntimeDataBindGraphValue::Boolean(value)),
-            ProjectDataValue::Number(value) => Ok(RuntimeDataBindGraphValue::Number(value as f32)),
-            ProjectDataValue::String(value) => {
+            RuntimeExternalDataValue::Boolean(value) => {
+                Ok(RuntimeDataBindGraphValue::Boolean(value))
+            }
+            RuntimeExternalDataValue::Number(value) => {
+                Ok(RuntimeDataBindGraphValue::Number(value as f32))
+            }
+            RuntimeExternalDataValue::String(value) => {
                 Ok(RuntimeDataBindGraphValue::String(value.into_bytes()))
             }
-            ProjectDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
+            RuntimeExternalDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
                 item_count: items.len(),
             }),
-            ProjectDataValue::Object(_) => {
-                Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+            RuntimeExternalDataValue::Object(_) => {
+                Err(RuntimeExternalDataBridgeError::ObjectHasNoRiveRepresentation)
             }
-            ProjectDataValue::Color(value) => Ok(RuntimeDataBindGraphValue::Color(value)),
-            ProjectDataValue::Enum(value) => Ok(RuntimeDataBindGraphValue::Enum(value)),
-            ProjectDataValue::ListIndex(value) => {
+            RuntimeExternalDataValue::Color(value) => Ok(RuntimeDataBindGraphValue::Color(value)),
+            RuntimeExternalDataValue::Enum(value) => Ok(RuntimeDataBindGraphValue::Enum(value)),
+            RuntimeExternalDataValue::ListIndex(value) => {
                 Ok(RuntimeDataBindGraphValue::SymbolListIndex(value))
             }
-            ProjectDataValue::Trigger(value) => Ok(RuntimeDataBindGraphValue::Trigger(value)),
-            ProjectDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
-            ProjectDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
-                runtime_view_model_pointer_from_project(value),
+            RuntimeExternalDataValue::Trigger(value) => {
+                Ok(RuntimeDataBindGraphValue::Trigger(value))
+            }
+            RuntimeExternalDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
+            RuntimeExternalDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
+                runtime_view_model_pointer_from_external(value),
             )),
         },
     }
 }
 
-fn project_data_value_to_u64(value: &ProjectDataValue) -> Option<u64> {
+fn external_data_value_to_u64(value: &RuntimeExternalDataValue) -> Option<u64> {
     match value {
-        ProjectDataValue::Color(value) => Some(u64::from(*value)),
-        ProjectDataValue::Enum(value)
-        | ProjectDataValue::ListIndex(value)
-        | ProjectDataValue::Trigger(value) => Some(*value),
-        ProjectDataValue::Number(value)
+        RuntimeExternalDataValue::Color(value) => Some(u64::from(*value)),
+        RuntimeExternalDataValue::Enum(value)
+        | RuntimeExternalDataValue::ListIndex(value)
+        | RuntimeExternalDataValue::Trigger(value) => Some(*value),
+        RuntimeExternalDataValue::Number(value)
             if value.is_finite() && *value >= 0.0 && value.fract() == 0.0 =>
         {
             let converted = *value as u64;
@@ -2464,71 +2478,75 @@ fn project_data_value_to_u64(value: &ProjectDataValue) -> Option<u64> {
     }
 }
 
-fn project_output_mismatch(
-    output: Option<ProjectDataConverterOutputType>,
-    value: &ProjectDataValue,
-) -> RuntimeProjectDataBridgeError {
-    RuntimeProjectDataBridgeError::OutputTypeMismatch {
+fn external_output_mismatch(
+    output: Option<RuntimeExternalDataOutputType>,
+    value: &RuntimeExternalDataValue,
+) -> RuntimeExternalDataBridgeError {
+    RuntimeExternalDataBridgeError::OutputTypeMismatch {
         output,
-        value: project_data_value_kind(value),
+        value: external_data_value_kind(value),
     }
 }
 
-fn project_data_value_kind(value: &ProjectDataValue) -> &'static str {
+fn external_data_value_kind(value: &RuntimeExternalDataValue) -> &'static str {
     match value {
-        ProjectDataValue::Null => "null",
-        ProjectDataValue::Boolean(_) => "boolean",
-        ProjectDataValue::Number(_) => "number",
-        ProjectDataValue::String(_) => "string",
-        ProjectDataValue::List(_) => "list",
-        ProjectDataValue::Object(_) => "object",
-        ProjectDataValue::Color(_) => "color",
-        ProjectDataValue::Enum(_) => "enum",
-        ProjectDataValue::ListIndex(_) => "list_index",
-        ProjectDataValue::Trigger(_) => "trigger",
-        ProjectDataValue::Image(_) => "image",
-        ProjectDataValue::ViewModel(_) => "view_model",
+        RuntimeExternalDataValue::Null => "null",
+        RuntimeExternalDataValue::Boolean(_) => "boolean",
+        RuntimeExternalDataValue::Number(_) => "number",
+        RuntimeExternalDataValue::String(_) => "string",
+        RuntimeExternalDataValue::List(_) => "list",
+        RuntimeExternalDataValue::Object(_) => "object",
+        RuntimeExternalDataValue::Color(_) => "color",
+        RuntimeExternalDataValue::Enum(_) => "enum",
+        RuntimeExternalDataValue::ListIndex(_) => "list_index",
+        RuntimeExternalDataValue::Trigger(_) => "trigger",
+        RuntimeExternalDataValue::Image(_) => "image",
+        RuntimeExternalDataValue::ViewModel(_) => "view_model",
     }
 }
 
-fn project_view_model_reference_from_runtime(
+fn external_view_model_reference_from_runtime(
     value: RuntimeViewModelPointer,
-) -> ProjectDataViewModelReference {
+) -> RuntimeExternalViewModelReference {
     match value {
-        RuntimeViewModelPointer::Null => ProjectDataViewModelReference::Null,
-        RuntimeViewModelPointer::DataContextRoot => ProjectDataViewModelReference::DataContextRoot,
+        RuntimeViewModelPointer::Null => RuntimeExternalViewModelReference::Null,
+        RuntimeViewModelPointer::DataContextRoot => {
+            RuntimeExternalViewModelReference::DataContextRoot
+        }
         RuntimeViewModelPointer::Retained {
             allocation_identity,
-        } => ProjectDataViewModelReference::Retained {
+        } => RuntimeExternalViewModelReference::Retained {
             allocation_identity,
         },
         RuntimeViewModelPointer::OwnedGenerated {
             view_model_index,
             property_index,
             path_key,
-        } => ProjectDataViewModelReference::OwnedGenerated {
+        } => RuntimeExternalViewModelReference::OwnedGenerated {
             view_model_index,
             property_index,
             path_key,
         },
         RuntimeViewModelPointer::Imported { object_id } => {
-            ProjectDataViewModelReference::Imported { object_id }
+            RuntimeExternalViewModelReference::Imported { object_id }
         }
     }
 }
 
-fn runtime_view_model_pointer_from_project(
-    value: ProjectDataViewModelReference,
+fn runtime_view_model_pointer_from_external(
+    value: RuntimeExternalViewModelReference,
 ) -> RuntimeViewModelPointer {
     match value {
-        ProjectDataViewModelReference::Null => RuntimeViewModelPointer::Null,
-        ProjectDataViewModelReference::DataContextRoot => RuntimeViewModelPointer::DataContextRoot,
-        ProjectDataViewModelReference::Retained {
+        RuntimeExternalViewModelReference::Null => RuntimeViewModelPointer::Null,
+        RuntimeExternalViewModelReference::DataContextRoot => {
+            RuntimeViewModelPointer::DataContextRoot
+        }
+        RuntimeExternalViewModelReference::Retained {
             allocation_identity,
         } => RuntimeViewModelPointer::Retained {
             allocation_identity,
         },
-        ProjectDataViewModelReference::OwnedGenerated {
+        RuntimeExternalViewModelReference::OwnedGenerated {
             view_model_index,
             property_index,
             path_key,
@@ -2537,21 +2555,24 @@ fn runtime_view_model_pointer_from_project(
             property_index,
             path_key,
         },
-        ProjectDataViewModelReference::Imported { object_id } => {
+        RuntimeExternalViewModelReference::Imported { object_id } => {
             RuntimeViewModelPointer::Imported { object_id }
         }
     }
 }
 
-struct RuntimeProjectDataConverterResolver<'a> {
-    values: &'a [(ProjectDataValuePath, ProjectDataValue)],
-    retained_values: &'a [(ProjectDataValuePath, RuntimeViewModelCell)],
+struct RuntimeExternalDataResolverBridge<'a> {
+    values: &'a [(RuntimeExternalDataValuePath, RuntimeExternalDataValue)],
+    retained_values: &'a [(RuntimeExternalDataValuePath, RuntimeViewModelCell)],
     retained_values_bound: bool,
-    program: &'a ProjectDataConverterProgram,
+    program: &'a RuntimeExternalDataProgramHandle,
 }
 
-impl ProjectDataConverterResolver for RuntimeProjectDataConverterResolver<'_> {
-    fn resolve_value(&mut self, path: &ProjectDataValuePath) -> Option<ProjectDataValue> {
+impl RuntimeExternalDataResolver for RuntimeExternalDataResolverBridge<'_> {
+    fn resolve_value(
+        &mut self,
+        path: &RuntimeExternalDataValuePath,
+    ) -> Option<RuntimeExternalDataValue> {
         if self.retained_values_bound {
             return self.retained_values.iter().find_map(|(candidate, cell)| {
                 if candidate != path {
@@ -2559,7 +2580,7 @@ impl ProjectDataConverterResolver for RuntimeProjectDataConverterResolver<'_> {
                 }
                 match cell.value() {
                     RuntimeViewModelCellValue::Number(value) => {
-                        Some(ProjectDataValue::Number(f64::from(value)))
+                        Some(RuntimeExternalDataValue::Number(f64::from(value)))
                     }
                     _ => None,
                 }
@@ -2573,24 +2594,24 @@ impl ProjectDataConverterResolver for RuntimeProjectDataConverterResolver<'_> {
     fn create_blank_view_model_instance(
         &mut self,
         view_model_id: &str,
-    ) -> Option<ProjectDataValue> {
+    ) -> Option<RuntimeExternalDataValue> {
         self.program
             .runtime_view_model_index(view_model_id)
-            .map(|_| ProjectDataValue::Object(BTreeMap::new()))
+            .map(|_| RuntimeExternalDataValue::Object(BTreeMap::new()))
     }
 }
 
-fn runtime_data_bind_graph_project_convert(
-    program: &ProjectDataConverterProgram,
-    state: &mut ProjectDataConverterState,
+fn runtime_data_bind_graph_external_convert(
+    program: &RuntimeExternalDataProgramHandle,
+    state: &mut dyn RuntimeExternalDataState,
     now_ms: f64,
-    resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
-    retained_values: &[(ProjectDataValuePath, RuntimeViewModelCell)],
+    resolved_values: &[(RuntimeExternalDataValuePath, RuntimeExternalDataValue)],
+    retained_values: &[(RuntimeExternalDataValuePath, RuntimeViewModelCell)],
     retained_values_bound: bool,
     value: &RuntimeDataBindGraphValue,
     reverse: bool,
 ) -> Option<RuntimeDataBindGraphValue> {
-    runtime_data_bind_graph_project_convert_result(
+    runtime_data_bind_graph_external_convert_result(
         program,
         state,
         now_ms,
@@ -2603,41 +2624,41 @@ fn runtime_data_bind_graph_project_convert(
     .ok()
 }
 
-fn runtime_data_bind_graph_project_convert_result(
-    program: &ProjectDataConverterProgram,
-    state: &mut ProjectDataConverterState,
+fn runtime_data_bind_graph_external_convert_result(
+    program: &RuntimeExternalDataProgramHandle,
+    state: &mut dyn RuntimeExternalDataState,
     now_ms: f64,
-    resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
-    retained_values: &[(ProjectDataValuePath, RuntimeViewModelCell)],
+    resolved_values: &[(RuntimeExternalDataValuePath, RuntimeExternalDataValue)],
+    retained_values: &[(RuntimeExternalDataValuePath, RuntimeViewModelCell)],
     retained_values_bound: bool,
     value: &RuntimeDataBindGraphValue,
     reverse: bool,
-) -> Result<RuntimeDataBindGraphValue, RuntimeProjectDataBridgeError> {
-    let value = runtime_data_bind_graph_value_to_project(value)?;
-    let mut resolver = RuntimeProjectDataConverterResolver {
+) -> Result<RuntimeDataBindGraphValue, RuntimeExternalDataBridgeError> {
+    let value = runtime_data_bind_graph_value_to_external(value)?;
+    let mut resolver = RuntimeExternalDataResolverBridge {
         values: resolved_values,
         retained_values,
         retained_values_bound,
         program,
     };
-    let mut context = ProjectDataConverterContext {
+    let mut context = RuntimeExternalDataContext {
         now_ms: Some(now_ms),
         resolver: Some(&mut resolver),
     };
     let value = if reverse {
         let result = program
             .reverse_convert(state, value, &mut context)
-            .map_err(|_| RuntimeProjectDataBridgeError::RuntimeExecutionFailed)?;
+            .map_err(|_| RuntimeExternalDataBridgeError::RuntimeExecutionFailed)?;
         if !result.ok {
-            return Err(RuntimeProjectDataBridgeError::ReverseConversionUnsupported);
+            return Err(RuntimeExternalDataBridgeError::ReverseConversionUnsupported);
         }
         result.value
     } else {
         program
             .convert(state, value, &mut context)
-            .map_err(|_| RuntimeProjectDataBridgeError::RuntimeExecutionFailed)?
+            .map_err(|_| RuntimeExternalDataBridgeError::RuntimeExecutionFailed)?
     };
-    project_data_value_to_runtime(value, program.output_type())
+    external_data_value_to_runtime(value, program.output_type())
 }
 
 pub(crate) fn runtime_data_bind_graph_convert_value(
@@ -2663,7 +2684,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             .ok()
             .flatten(),
         (
-            RuntimeDataBindGraphConverter::Project {
+            RuntimeDataBindGraphConverter::External {
                 program,
                 resolved_values,
                 retained_resolved_values,
@@ -2671,16 +2692,19 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 ..
             },
             value,
-        ) => runtime_data_bind_graph_project_convert(
-            program,
-            &mut ProjectDataConverterState::default(),
-            0.0,
-            resolved_values,
-            retained_resolved_values,
-            *retained_values_bound,
-            value,
-            false,
-        ),
+        ) => {
+            let mut state = program.new_state();
+            runtime_data_bind_graph_external_convert(
+                program,
+                state.as_mut(),
+                0.0,
+                resolved_values,
+                retained_resolved_values,
+                *retained_values_bound,
+                value,
+                false,
+            )
+        }
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -2998,7 +3022,7 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             .ok()
             .flatten(),
         (
-            RuntimeDataBindGraphConverter::Project {
+            RuntimeDataBindGraphConverter::External {
                 program,
                 resolved_values,
                 retained_resolved_values,
@@ -3006,16 +3030,19 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
                 ..
             },
             value,
-        ) => runtime_data_bind_graph_project_convert(
-            program,
-            &mut ProjectDataConverterState::default(),
-            0.0,
-            resolved_values,
-            retained_resolved_values,
-            *retained_values_bound,
-            value,
-            true,
-        ),
+        ) => {
+            let mut state = program.new_state();
+            runtime_data_bind_graph_external_convert(
+                program,
+                state.as_mut(),
+                0.0,
+                resolved_values,
+                retained_resolved_values,
+                *retained_values_bound,
+                value,
+                true,
+            )
+        }
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -3494,19 +3521,19 @@ fn runtime_data_bind_graph_system_operation_value_converter(
 pub(crate) struct RuntimeDataBindGraphConverterBuildCache<'a> {
     scripting_asset_contents: Option<BTreeMap<u32, Option<&'a [u8]>>>,
     converter_assets: BTreeMap<u32, Option<u32>>,
-    project_programs: BTreeMap<u32, Result<Option<Arc<ProjectDataConverterProgram>>, ()>>,
+    external_programs: BTreeMap<u32, Result<Option<Arc<RuntimeExternalDataProgramHandle>>, ()>>,
     #[cfg(test)]
     scripting_catalog_builds: usize,
     #[cfg(test)]
-    project_program_decodes: usize,
+    external_program_decodes: usize,
 }
 
 impl<'a> RuntimeDataBindGraphConverterBuildCache<'a> {
-    fn project_program(
+    fn external_program(
         &mut self,
         file: &'a RuntimeFile,
         converter: &RuntimeObject,
-    ) -> Result<Option<Arc<ProjectDataConverterProgram>>, ()> {
+    ) -> Result<Option<Arc<RuntimeExternalDataProgramHandle>>, ()> {
         let asset_global = match self.converter_assets.get(&converter.id) {
             Some(asset_global) => *asset_global,
             None => {
@@ -3520,7 +3547,7 @@ impl<'a> RuntimeDataBindGraphConverterBuildCache<'a> {
         let Some(asset_global) = asset_global else {
             return Ok(None);
         };
-        if let Some(program) = self.project_programs.get(&asset_global) {
+        if let Some(program) = self.external_programs.get(&asset_global) {
             return program.clone();
         }
 
@@ -3538,58 +3565,56 @@ impl<'a> RuntimeDataBindGraphConverterBuildCache<'a> {
             Some(bytes) => {
                 #[cfg(test)]
                 {
-                    self.project_program_decodes += 1;
+                    self.external_program_decodes += 1;
                 }
-                ProjectDataConverterProgram::decode(bytes)
+                crate::external_data_converter::decode_runtime_external_data_program(bytes)
                     .map(|program| program.map(Arc::new))
                     .map_err(|_| ())
             }
             None => Ok(None),
         };
-        self.project_programs.insert(asset_global, result.clone());
+        self.external_programs.insert(asset_global, result.clone());
         result
     }
 }
 
-fn runtime_project_data_converter_program<'a>(
+fn runtime_external_data_converter_program<'a>(
     file: &'a RuntimeFile,
     converter: &RuntimeObject,
     cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
-) -> Result<Option<Arc<ProjectDataConverterProgram>>, ()> {
-    cache.project_program(file, converter)
+) -> Result<Option<Arc<RuntimeExternalDataProgramHandle>>, ()> {
+    cache.external_program(file, converter)
 }
 
-enum RuntimeProjectDataValuePathSegments {
+enum RuntimeExternalDataPathSegments {
     Ids(Vec<u32>),
     Names(Vec<String>),
 }
 
-struct RuntimeProjectDataValuePath {
-    segments: RuntimeProjectDataValuePathSegments,
+struct RuntimeExternalDataPath {
+    segments: RuntimeExternalDataPathSegments,
     is_relative: bool,
 }
 
-impl RuntimeProjectDataValuePath {
+impl RuntimeExternalDataPath {
     fn matches_absolute_ids(&self, path: &[u32]) -> bool {
         !self.is_relative
             && matches!(
                 &self.segments,
-                RuntimeProjectDataValuePathSegments::Ids(ids) if ids.as_slice() == path
+                RuntimeExternalDataPathSegments::Ids(ids) if ids.as_slice() == path
             )
     }
 
     fn imported_property<'a>(&self, context: &RuntimeDataContext<'a>) -> Option<&'a RuntimeObject> {
         match (&self.segments, self.is_relative) {
-            (RuntimeProjectDataValuePathSegments::Ids(path), true) => {
-                context.project_relative_property_by_name_hash_path(path)
+            (RuntimeExternalDataPathSegments::Ids(path), true) => {
+                context.relative_property_by_name_hash_path(path)
             }
-            (RuntimeProjectDataValuePathSegments::Ids(path), false) => {
-                context.absolute_property(path)
+            (RuntimeExternalDataPathSegments::Ids(path), false) => context.absolute_property(path),
+            (RuntimeExternalDataPathSegments::Names(path), true) => {
+                context.relative_property_by_name_path(path)
             }
-            (RuntimeProjectDataValuePathSegments::Names(path), true) => {
-                context.project_relative_property_by_name_path(path)
-            }
-            (RuntimeProjectDataValuePathSegments::Names(_), false) => None,
+            (RuntimeExternalDataPathSegments::Names(_), false) => None,
         }
     }
 
@@ -3599,11 +3624,9 @@ impl RuntimeProjectDataValuePath {
         context_chain: &[&[usize]],
     ) -> Option<RuntimeViewModelCell> {
         match (&self.segments, self.is_relative) {
-            (RuntimeProjectDataValuePathSegments::Ids(path), true) => {
+            (RuntimeExternalDataPathSegments::Ids(path), true) => {
                 for context_path in context_chain {
-                    match context
-                        .project_relative_cell_by_context_name_hash_path(context_path, path)
-                    {
+                    match context.relative_cell_by_context_name_hash_path(context_path, path) {
                         Ok(Some(cell)) => return Some(cell),
                         Ok(None) => {}
                         Err(_) => return None,
@@ -3611,12 +3634,12 @@ impl RuntimeProjectDataValuePath {
                 }
                 None
             }
-            (RuntimeProjectDataValuePathSegments::Ids(path), false) => context
+            (RuntimeExternalDataPathSegments::Ids(path), false) => context
                 .cell_for_source_path(path)
                 .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_))),
-            (RuntimeProjectDataValuePathSegments::Names(path), true) => {
+            (RuntimeExternalDataPathSegments::Names(path), true) => {
                 for context_path in context_chain {
-                    match context.project_relative_cell_by_context_name_path(context_path, path) {
+                    match context.relative_cell_by_context_name_path(context_path, path) {
                         Ok(Some(cell)) => return Some(cell),
                         Ok(None) => {}
                         Err(_) => return None,
@@ -3624,16 +3647,16 @@ impl RuntimeProjectDataValuePath {
                 }
                 None
             }
-            (RuntimeProjectDataValuePathSegments::Names(_), false) => None,
+            (RuntimeExternalDataPathSegments::Names(_), false) => None,
         }
     }
 }
 
-fn runtime_project_data_value_path(
-    path: &ProjectDataValuePath,
-) -> Option<RuntimeProjectDataValuePath> {
+fn runtime_external_data_value_path(
+    path: &RuntimeExternalDataValuePath,
+) -> Option<RuntimeExternalDataPath> {
     match path {
-        ProjectDataValuePath::Ids {
+        RuntimeExternalDataValuePath::Ids {
             path_ids,
             is_relative,
             ..
@@ -3649,31 +3672,31 @@ fn runtime_project_data_value_path(
                         .filter(|converted| f64::from(*converted) == *value)
                 })
                 .collect::<Option<Vec<_>>>()?;
-            Some(RuntimeProjectDataValuePath {
-                segments: RuntimeProjectDataValuePathSegments::Ids(path),
+            Some(RuntimeExternalDataPath {
+                segments: RuntimeExternalDataPathSegments::Ids(path),
                 is_relative: *is_relative,
             })
         }
-        ProjectDataValuePath::Path {
+        RuntimeExternalDataValuePath::Path {
             path,
             view_model_name,
             is_relative,
         } if *is_relative || view_model_name.is_none() => {
-            let path = runtime_project_named_property_path(path)?;
-            Some(RuntimeProjectDataValuePath {
-                segments: RuntimeProjectDataValuePathSegments::Names(path),
+            let path = runtime_external_named_property_path(path)?;
+            Some(RuntimeExternalDataPath {
+                segments: RuntimeExternalDataPathSegments::Names(path),
                 // A name-less path inherits the active/default binding
-                // context in ProjectDO even when its serialized isRelative
+                // context in the product model even when its serialized isRelative
                 // bit is false. Explicitly model-qualified paths are lowered
                 // to absolute Rive ordinals by Scene authoring instead.
                 is_relative: true,
             })
         }
-        ProjectDataValuePath::Path { .. } => None,
+        RuntimeExternalDataValuePath::Path { .. } => None,
     }
 }
 
-fn runtime_project_named_property_path(path: &str) -> Option<Vec<String>> {
+fn runtime_external_named_property_path(path: &str) -> Option<Vec<String>> {
     let input = path.trim();
     if input.is_empty() {
         return None;
@@ -3747,10 +3770,10 @@ fn runtime_project_named_property_path(path: &str) -> Option<Vec<String>> {
     (!names.is_empty()).then_some(names)
 }
 
-fn runtime_project_default_resolved_values(
+fn runtime_external_default_resolved_values(
     file: &RuntimeFile,
-    program: &ProjectDataConverterProgram,
-) -> Vec<(ProjectDataValuePath, ProjectDataValue)> {
+    program: &RuntimeExternalDataProgramHandle,
+) -> Vec<(RuntimeExternalDataValuePath, RuntimeExternalDataValue)> {
     let default_context = file
         .view_model_default_instance(0)
         .and_then(|instance| RuntimeDataContext::from_instance_reference(file, instance));
@@ -3758,12 +3781,12 @@ fn runtime_project_default_resolved_values(
         .value_paths()
         .into_iter()
         .filter_map(|path| {
-            let source_path = runtime_project_data_value_path(&path)?;
+            let source_path = runtime_external_data_value_path(&path)?;
             let context = default_context.as_ref()?;
             let source = source_path.imported_property(context);
             let value = source
                 .and_then(|source| file.view_model_instance_number_value_for_object(source))?;
-            Some((path, ProjectDataValue::Number(f64::from(value))))
+            Some((path, RuntimeExternalDataValue::Number(f64::from(value))))
         })
         .collect()
 }
@@ -3805,10 +3828,10 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
         ),
         "DataConverterOperation" => RuntimeDataBindGraphConverter::PassThrough,
         "ScriptedDataConverter" => {
-            match runtime_project_data_converter_program(file, converter, cache) {
+            match runtime_external_data_converter_program(file, converter, cache) {
                 Ok(Some(program)) => {
-                    let resolved_values = runtime_project_default_resolved_values(file, &program);
-                    RuntimeDataBindGraphConverter::Project {
+                    let resolved_values = runtime_external_default_resolved_values(file, &program);
+                    RuntimeDataBindGraphConverter::External {
                         global_id: converter.id,
                         program,
                         default_resolved_values: resolved_values.clone(),
@@ -3837,7 +3860,7 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
                     definition: runtime_scripted_data_converter_input_definitions(file, converter),
                     instance: None,
                 },
-                // A payload carrying the reserved Project envelope prefix may not
+                // A payload claimed by an extension registry may not
                 // silently fall back to ordinary script execution or passthrough.
                 Err(()) => RuntimeDataBindGraphConverter::Unsupported,
             }
@@ -4136,8 +4159,8 @@ pub(crate) enum RuntimeDataBindGraphConverterState {
     Scripted(crate::scripted_data_converter::RuntimeScriptedDataConverterState),
     Formula(RuntimeDataBindGraphFormulaState),
     Interpolator(RuntimeDataConverterInterpolatorState),
-    Project {
-        state: ProjectDataConverterState,
+    External {
+        state: Box<dyn RuntimeExternalDataState>,
         now_ms: f64,
     },
     Group(Vec<RuntimeDataBindGraphConverterState>),
@@ -4157,8 +4180,8 @@ impl RuntimeDataBindGraphConverterState {
             Some(RuntimeDataBindGraphConverter::Interpolator { .. }) => {
                 Self::Interpolator(RuntimeDataConverterInterpolatorState::new())
             }
-            Some(RuntimeDataBindGraphConverter::Project { .. }) => Self::Project {
-                state: ProjectDataConverterState::default(),
+            Some(RuntimeDataBindGraphConverter::External { program, .. }) => Self::External {
+                state: program.new_state(),
                 now_ms: 0.0,
             },
             Some(RuntimeDataBindGraphConverter::Group(converters)) => Self::Group(
@@ -4191,7 +4214,7 @@ impl RuntimeDataBindGraphConverterState {
                     state.set_scripted_converter_parent_wake(wake.clone());
                 }
             }
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::Project { .. } => {}
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
         }
     }
 
@@ -4203,13 +4226,13 @@ impl RuntimeDataBindGraphConverterState {
                     state.unbind_scripted_converter_sources();
                 }
             }
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::Project { .. } => {}
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
         }
     }
 
     /// A fresh Rust state-machine snapshot cannot copy a Lua table. Reset only
     /// scripted occurrence state while preserving unrelated Formula,
-    /// Interpolator, and Project converter state in the snapshot.
+    /// Interpolator, and External converter state in the snapshot.
     fn reset_scripted_occurrences_for_fresh_clone(
         &mut self,
         converter: &RuntimeDataBindGraphConverter,
@@ -4682,17 +4705,17 @@ impl RuntimeDataBindGraphConverterState {
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
             (
-                RuntimeDataBindGraphConverter::Project {
+                RuntimeDataBindGraphConverter::External {
                     program,
                     resolved_values,
                     retained_resolved_values,
                     retained_values_bound,
                     ..
                 },
-                Self::Project { state, now_ms },
-            ) => runtime_data_bind_graph_project_convert(
+                Self::External { state, now_ms },
+            ) => runtime_data_bind_graph_external_convert(
                 program,
-                state,
+                state.as_mut(),
                 *now_ms,
                 resolved_values,
                 retained_resolved_values,
@@ -4898,17 +4921,17 @@ impl RuntimeDataBindGraphConverterState {
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
             (
-                RuntimeDataBindGraphConverter::Project {
+                RuntimeDataBindGraphConverter::External {
                     program,
                     resolved_values,
                     retained_resolved_values,
                     retained_values_bound,
                     ..
                 },
-                Self::Project { state, now_ms },
-            ) => runtime_data_bind_graph_project_convert(
+                Self::External { state, now_ms },
+            ) => runtime_data_bind_graph_external_convert(
                 program,
-                state,
+                state.as_mut(),
                 *now_ms,
                 resolved_values,
                 retained_resolved_values,
@@ -4948,10 +4971,10 @@ impl RuntimeDataBindGraphConverterState {
                 Self::Interpolator(state),
             ) => state.advance(*duration, *interpolator, elapsed_seconds),
             (
-                Some(RuntimeDataBindGraphConverter::Project { program, .. }),
-                Self::Project { state, now_ms },
+                Some(RuntimeDataBindGraphConverter::External { program, .. }),
+                Self::External { state, now_ms },
             ) if program.is_stateful() => {
-                let was_interpolating = state.is_interpolating();
+                let was_interpolating = state.is_active();
                 *now_ms += f64::from(elapsed_seconds.max(0.0)) * 1000.0;
                 RuntimeDataBindGraphStatefulAdvance {
                     changed: was_interpolating,
@@ -5029,7 +5052,7 @@ impl RuntimeDataBindGraphConverterState {
     pub(crate) fn is_initialized_stateful(&self) -> bool {
         match self {
             Self::Interpolator(state) => state.is_initialized(),
-            Self::Project { state, .. } => state.is_interpolating(),
+            Self::External { state, .. } => state.is_active(),
             Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
             Self::Formula(_) | Self::Scripted(_) | Self::None => false,
         }
@@ -5043,7 +5066,7 @@ impl RuntimeDataBindGraphConverterState {
                     state.reset_formula_randoms();
                 }
             }
-            Self::Interpolator(_) | Self::Project { .. } | Self::Scripted(_) | Self::None => {}
+            Self::Interpolator(_) | Self::External { .. } | Self::Scripted(_) | Self::None => {}
         }
     }
 
@@ -5082,15 +5105,18 @@ impl RuntimeDataBindGraphConverterState {
     ///
     /// Pinned C++ resets interpolators (including those nested in groups) but
     /// the base converter and formula converter have no reset implementation.
-    /// Project converters are Rust's compiled equivalent of a scripted
+    /// External converters are Rust's compiled equivalent of a scripted
     /// converter lifetime and therefore restart with the newly bound source.
     pub(crate) fn reset_for_data_bind_rebind(&mut self, converter: &RuntimeDataBindGraphConverter) {
         match (converter, self) {
             (RuntimeDataBindGraphConverter::Interpolator { .. }, Self::Interpolator(state)) => {
                 *state = RuntimeDataConverterInterpolatorState::new()
             }
-            (RuntimeDataBindGraphConverter::Project { .. }, Self::Project { state, now_ms }) => {
-                *state = ProjectDataConverterState::default();
+            (
+                RuntimeDataBindGraphConverter::External { program, .. },
+                Self::External { state, now_ms },
+            ) => {
+                *state = program.new_state();
                 *now_ms = 0.0;
             }
             (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
@@ -11559,15 +11585,225 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
 mod tests {
     use super::*;
     use crate::{
+        RuntimeExternalDataProgram, RuntimeExternalDataRegistry, RuntimeExternalDataReverseResult,
         ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod,
-        ScriptValue,
+        ScriptValue, register_runtime_external_data_registry,
+        runtime_external_data_payload_is_claimed,
     };
     use nuxie_binary::read_runtime_file_with_scripting;
     use nuxie_schema::definition_by_name;
+    use std::any::Any;
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     struct DoublingConverter;
+
+    #[derive(Debug, Clone, Default)]
+    struct TestExternalState {
+        conversions: usize,
+    }
+
+    impl RuntimeExternalDataState for TestExternalState {
+        fn clone_box(&self) -> Box<dyn RuntimeExternalDataState> {
+            Box::new(self.clone())
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self
+        }
+
+        fn clear(&mut self) {
+            *self = Self::default();
+        }
+
+        fn is_active(&self) -> bool {
+            self.conversions != 0
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum TestExternalBehavior {
+        Identity,
+        Multiply(RuntimeExternalDataValuePath),
+        NumberToList,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestExternalProgram {
+        output_type: Option<RuntimeExternalDataOutputType>,
+        behavior: TestExternalBehavior,
+    }
+
+    impl TestExternalProgram {
+        fn identity(
+            output_type: RuntimeExternalDataOutputType,
+        ) -> RuntimeExternalDataProgramHandle {
+            RuntimeExternalDataProgramHandle::new(Arc::new(Self {
+                output_type: Some(output_type),
+                behavior: TestExternalBehavior::Identity,
+            }))
+        }
+    }
+
+    impl RuntimeExternalDataProgram for TestExternalProgram {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn equals(&self, other: &dyn RuntimeExternalDataProgram) -> bool {
+            other.as_any().downcast_ref::<Self>() == Some(self)
+        }
+
+        fn output_type(&self) -> Option<RuntimeExternalDataOutputType> {
+            self.output_type
+        }
+
+        fn is_stateful(&self) -> bool {
+            true
+        }
+
+        fn is_reversible(&self) -> bool {
+            matches!(self.behavior, TestExternalBehavior::Identity)
+        }
+
+        fn value_paths(&self) -> Vec<RuntimeExternalDataValuePath> {
+            match &self.behavior {
+                TestExternalBehavior::Multiply(path) => vec![path.clone()],
+                _ => Vec::new(),
+            }
+        }
+
+        fn runtime_view_model_index(&self, id: &str) -> Option<usize> {
+            (id == "item").then_some(3)
+        }
+
+        fn number_to_list_output_view_model_index(&self) -> Option<usize> {
+            matches!(self.behavior, TestExternalBehavior::NumberToList).then_some(3)
+        }
+
+        fn new_state(&self) -> Box<dyn RuntimeExternalDataState> {
+            Box::new(TestExternalState::default())
+        }
+
+        fn convert(
+            &self,
+            state: &mut dyn RuntimeExternalDataState,
+            value: RuntimeExternalDataValue,
+            context: &mut RuntimeExternalDataContext<'_>,
+        ) -> Result<RuntimeExternalDataValue, String> {
+            let state = state
+                .as_any_mut()
+                .downcast_mut::<TestExternalState>()
+                .ok_or_else(|| "wrong test state".to_owned())?;
+            state.conversions += 1;
+            match &self.behavior {
+                TestExternalBehavior::Identity => Ok(value),
+                TestExternalBehavior::Multiply(path) => {
+                    let RuntimeExternalDataValue::Number(value) = value else {
+                        return Err("expected number".to_owned());
+                    };
+                    let RuntimeExternalDataValue::Number(operand) = context
+                        .resolver()
+                        .and_then(|resolver| resolver.resolve_value(path))
+                        .ok_or_else(|| "missing operand".to_owned())?
+                    else {
+                        return Err("expected numeric operand".to_owned());
+                    };
+                    Ok(RuntimeExternalDataValue::Number(value * operand))
+                }
+                TestExternalBehavior::NumberToList => {
+                    let RuntimeExternalDataValue::Number(value) = value else {
+                        return Err("expected number".to_owned());
+                    };
+                    let count = if value.is_finite() && value > 0.0 {
+                        (value.floor() as usize).min(RUNTIME_EXTERNAL_DATA_MAX_LIST_ITEMS)
+                    } else {
+                        0
+                    };
+                    Ok(RuntimeExternalDataValue::List(vec![
+                        RuntimeExternalDataValue::Null;
+                        count
+                    ]))
+                }
+            }
+        }
+
+        fn reverse_convert(
+            &self,
+            state: &mut dyn RuntimeExternalDataState,
+            value: RuntimeExternalDataValue,
+            _context: &mut RuntimeExternalDataContext<'_>,
+        ) -> Result<RuntimeExternalDataReverseResult, String> {
+            let state = state
+                .as_any_mut()
+                .downcast_mut::<TestExternalState>()
+                .ok_or_else(|| "wrong test state".to_owned())?;
+            state.conversions += 1;
+            Ok(RuntimeExternalDataReverseResult {
+                ok: self.is_reversible(),
+                value,
+            })
+        }
+    }
+
+    const TEST_EXTERNAL_PREFIX: &[u8] = b"\0NUX-EXT-TEST\0";
+
+    #[derive(Debug)]
+    struct TestExternalRegistry;
+
+    impl RuntimeExternalDataRegistry for TestExternalRegistry {
+        fn registry_id(&self) -> &'static str {
+            "nuxie-runtime-external-data-test"
+        }
+
+        fn recognizes(&self, bytes: &[u8]) -> bool {
+            bytes.starts_with(TEST_EXTERNAL_PREFIX)
+        }
+
+        fn decode(&self, bytes: &[u8]) -> Result<Option<RuntimeExternalDataProgramHandle>, String> {
+            if !self.recognizes(bytes) {
+                return Ok(None);
+            }
+            let output_type = match bytes.get(TEST_EXTERNAL_PREFIX.len()) {
+                Some(0) => RuntimeExternalDataOutputType::Number,
+                Some(1) => RuntimeExternalDataOutputType::Color,
+                Some(2) => RuntimeExternalDataOutputType::Enum,
+                Some(3) => RuntimeExternalDataOutputType::ListIndex,
+                Some(4) => RuntimeExternalDataOutputType::Trigger,
+                Some(5) => RuntimeExternalDataOutputType::List,
+                Some(6) => RuntimeExternalDataOutputType::Image,
+                Some(7) => RuntimeExternalDataOutputType::ViewModel,
+                Some(8) => RuntimeExternalDataOutputType::Object,
+                _ => return Err("invalid test extension payload".to_owned()),
+            };
+            Ok(Some(TestExternalProgram::identity(output_type)))
+        }
+    }
+
+    fn install_test_external_registry() {
+        register_runtime_external_data_registry(Arc::new(TestExternalRegistry));
+    }
+
+    fn test_external_payload(output_type: RuntimeExternalDataOutputType) -> Vec<u8> {
+        install_test_external_registry();
+        let tag = match output_type {
+            RuntimeExternalDataOutputType::Number => 0,
+            RuntimeExternalDataOutputType::Color => 1,
+            RuntimeExternalDataOutputType::Enum => 2,
+            RuntimeExternalDataOutputType::ListIndex => 3,
+            RuntimeExternalDataOutputType::Trigger => 4,
+            RuntimeExternalDataOutputType::List => 5,
+            RuntimeExternalDataOutputType::Image => 6,
+            RuntimeExternalDataOutputType::ViewModel => 7,
+            RuntimeExternalDataOutputType::Object => 8,
+            RuntimeExternalDataOutputType::String | RuntimeExternalDataOutputType::Boolean => {
+                panic!("test payload tag not needed for {output_type:?}")
+            }
+        };
+        let mut payload = TEST_EXTERNAL_PREFIX.to_vec();
+        payload.push(tag);
+        payload
+    }
 
     fn graph_with_number_binding(flags: u64) -> RuntimeDataBindGraph {
         let mut sources = Vec::new();
@@ -12441,43 +12677,27 @@ mod tests {
         );
     }
 
-    /// #RB-1 f10: Project converter value paths are the same converter-owned
+    /// #RB-1 f10: External converter value paths are the same converter-owned
     /// dependency shape as operation-ViewModel operands. Owned conversion
     /// reads the retained Number cell on demand; serialized snapshots remain
     /// only for default/imported contexts.
     #[test]
-    fn retained_project_operand_reads_live_cell_and_pushes_owning_bind_dirt() {
+    fn retained_external_operand_reads_live_cell_and_pushes_owning_bind_dirt() {
         use crate::view_model_cell::RuntimeViewModelCell;
 
-        let value_path = crate::ProjectDataValuePath::Path {
+        let value_path = crate::RuntimeExternalDataValuePath::Path {
             path: "operand".to_owned(),
             view_model_name: None,
             is_relative: true,
         };
-        let catalog =
-            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
-                id: "multiply".to_owned(),
-                spec: crate::ProjectDataConverterSpec {
-                    output_type: Some(crate::ProjectDataConverterOutputType::Number),
-                    kind: crate::ProjectDataConverterKind::Math {
-                        operation: crate::ProjectDataConverterMathOperation::Multiply,
-                        value: None,
-                        value_path: Some(value_path.clone()),
-                    },
-                },
-            }])
-            .expect("valid Project converter");
-        let program = crate::ProjectDataConverterProgram::decode(
-            &catalog
-                .encode_program("multiply")
-                .expect("Project program encodes"),
-        )
-        .expect("Project program decodes")
-        .expect("Project envelope");
+        let program = RuntimeExternalDataProgramHandle::new(Arc::new(TestExternalProgram {
+            output_type: Some(RuntimeExternalDataOutputType::Number),
+            behavior: TestExternalBehavior::Multiply(value_path.clone()),
+        }));
         let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
         let mut graph = graph_with_number_binding(0);
         graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
-        graph.sources[0].converter = Some(RuntimeDataBindGraphConverter::Project {
+        graph.sources[0].converter = Some(RuntimeDataBindGraphConverter::External {
             global_id: 17,
             program: Arc::new(program),
             resolved_values: Vec::new(),
@@ -13049,7 +13269,7 @@ mod tests {
             });
         }
 
-        read_runtime_file_with_scripting(&bytes).expect("exact Project .riv import")
+        read_runtime_file_with_scripting(&bytes).expect("exact external-converter .riv import")
     }
 
     #[derive(Clone, Copy)]
@@ -13144,7 +13364,7 @@ mod tests {
 
     fn exact_scripted_converter_for_payload(payload: &[u8]) -> RuntimeDataBindGraphConverter {
         let file = exact_scripted_converter_file(payload, 1);
-        let converter = file.data_converter(0).expect("exact Project converter");
+        let converter = file.data_converter(0).expect("exact External converter");
         assert_eq!(converter.uint_property("scriptAssetId"), Some(0));
         assert_eq!(
             file.file_assets()
@@ -13155,14 +13375,14 @@ mod tests {
         );
         let asset = file
             .resolved_file_asset_for_referencer(converter)
-            .expect("exact Project converter resolves its ScriptAsset");
+            .expect("exact External converter resolves its ScriptAsset");
         let payload = file
             .scripting_file_assets_with_contents()
             .into_iter()
             .find(|entry| entry.asset.id == asset.id)
             .and_then(|entry| entry.contents)
-            .expect("exact Project converter resolves its framed ScriptAsset contents");
-        assert!(ProjectDataConverterProgram::is_envelope(payload));
+            .expect("exact External converter resolves its framed ScriptAsset contents");
+        assert!(runtime_external_data_payload_is_claimed(payload));
         let mut cache = RuntimeDataBindGraphConverterBuildCache::default();
         runtime_data_bind_graph_converter_for_object(
             &file,
@@ -13175,40 +13395,21 @@ mod tests {
         .expect("scripted converter graph")
     }
 
-    fn exact_project_identity_payload(output_type: ProjectDataConverterOutputType) -> Vec<u8> {
-        let catalog =
-            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
-                id: "identity".into(),
-                spec: crate::ProjectDataConverterSpec {
-                    output_type: Some(output_type),
-                    kind: crate::ProjectDataConverterKind::Group { items: Vec::new() },
-                },
-            }])
-            .expect("typed identity catalog");
-        let mut payload = vec![0];
-        payload.extend(
-            catalog
-                .encode_program("identity")
-                .expect("typed identity program"),
-        );
-        payload
-    }
-
-    fn exact_project_identity_converter(
-        output_type: ProjectDataConverterOutputType,
+    fn exact_external_identity_converter(
+        output_type: RuntimeExternalDataOutputType,
     ) -> RuntimeDataBindGraphConverter {
-        let payload = exact_project_identity_payload(output_type);
+        let payload = test_external_payload(output_type);
         let converter = exact_scripted_converter_for_payload(&payload);
         assert!(matches!(
             converter,
-            RuntimeDataBindGraphConverter::Project { .. }
+            RuntimeDataBindGraphConverter::External { .. }
         ));
         converter
     }
 
     #[test]
-    fn repeated_project_converter_references_share_one_catalog_and_program_decode() {
-        let payload = exact_project_identity_payload(ProjectDataConverterOutputType::Number);
+    fn repeated_external_converter_references_share_one_catalog_and_program_decode() {
+        let payload = test_external_payload(RuntimeExternalDataOutputType::Number);
         let file = exact_scripted_converter_file(&payload, 2);
         let first = file.data_converter(0).expect("first scripted converter");
         let second = file.data_converter(1).expect("second scripted converter");
@@ -13233,29 +13434,30 @@ mod tests {
         )
         .expect("second converter graph");
         let (
-            RuntimeDataBindGraphConverter::Project {
+            RuntimeDataBindGraphConverter::External {
                 program: first_program,
                 ..
             },
-            RuntimeDataBindGraphConverter::Project {
+            RuntimeDataBindGraphConverter::External {
                 program: second_program,
                 ..
             },
         ) = (first, second)
         else {
-            panic!("both shared-asset converters must use the Project runtime");
+            panic!("both shared-asset converters must use the extension runtime");
         };
 
         assert!(Arc::ptr_eq(&first_program, &second_program));
         assert_eq!(cache.scripting_catalog_builds, 1);
-        assert_eq!(cache.project_program_decodes, 1);
+        assert_eq!(cache.external_program_decodes, 1);
         assert_eq!(cache.converter_assets.len(), 2);
-        assert_eq!(cache.project_programs.len(), 1);
+        assert_eq!(cache.external_programs.len(), 1);
     }
 
     #[test]
-    fn malformed_reserved_project_program_never_falls_back_to_an_ordinary_script() {
-        let converter = exact_scripted_converter_for_payload(b"\0NUXPCV1\0{");
+    fn malformed_claimed_external_program_never_falls_back_to_an_ordinary_script() {
+        install_test_external_registry();
+        let converter = exact_scripted_converter_for_payload(TEST_EXTERNAL_PREFIX);
         assert!(matches!(
             converter,
             RuntimeDataBindGraphConverter::Unsupported
@@ -13263,34 +13465,34 @@ mod tests {
     }
 
     #[test]
-    fn exact_project_program_preserves_every_representable_typed_value_forward_and_reverse() {
+    fn exact_external_program_preserves_every_representable_typed_value_forward_and_reverse() {
         let values = [
             (
-                ProjectDataConverterOutputType::Color,
+                RuntimeExternalDataOutputType::Color,
                 RuntimeDataBindGraphValue::Color(0xffab_cdef),
             ),
             (
-                ProjectDataConverterOutputType::Enum,
+                RuntimeExternalDataOutputType::Enum,
                 RuntimeDataBindGraphValue::Enum(9_007_199_254_740_993),
             ),
             (
-                ProjectDataConverterOutputType::ListIndex,
+                RuntimeExternalDataOutputType::ListIndex,
                 RuntimeDataBindGraphValue::SymbolListIndex(9_007_199_254_740_995),
             ),
             (
-                ProjectDataConverterOutputType::Trigger,
+                RuntimeExternalDataOutputType::Trigger,
                 RuntimeDataBindGraphValue::Trigger(9_007_199_254_740_997),
             ),
             (
-                ProjectDataConverterOutputType::List,
+                RuntimeExternalDataOutputType::List,
                 RuntimeDataBindGraphValue::List { item_count: 3 },
             ),
             (
-                ProjectDataConverterOutputType::Image,
+                RuntimeExternalDataOutputType::Image,
                 RuntimeDataBindGraphValue::Asset(9_007_199_254_740_999),
             ),
             (
-                ProjectDataConverterOutputType::ViewModel,
+                RuntimeExternalDataOutputType::ViewModel,
                 RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
                     object_id: 73,
                 }),
@@ -13298,7 +13500,7 @@ mod tests {
         ];
 
         for (output_type, value) in values {
-            let converter = exact_project_identity_converter(output_type);
+            let converter = exact_external_identity_converter(output_type);
             assert_eq!(
                 runtime_data_bind_graph_convert_value(&converter, &value),
                 Some(value.clone()),
@@ -13313,20 +13515,20 @@ mod tests {
     }
 
     #[test]
-    fn exact_project_object_output_reports_the_unrepresentable_rive_boundary() {
-        let converter = exact_project_identity_converter(ProjectDataConverterOutputType::Object);
-        let RuntimeDataBindGraphConverter::Project {
+    fn exact_external_object_output_reports_the_unrepresentable_rive_boundary() {
+        let converter = exact_external_identity_converter(RuntimeExternalDataOutputType::Object);
+        let RuntimeDataBindGraphConverter::External {
             program,
             resolved_values,
             ..
         } = converter
         else {
-            panic!("exact Project converter")
+            panic!("exact External converter")
         };
         assert_eq!(
-            runtime_data_bind_graph_project_convert_result(
+            runtime_data_bind_graph_external_convert_result(
                 &program,
-                &mut ProjectDataConverterState::default(),
+                program.new_state().as_mut(),
                 0.0,
                 &resolved_values,
                 &[],
@@ -13334,29 +13536,29 @@ mod tests {
                 &RuntimeDataBindGraphValue::Number(1.0),
                 false,
             ),
-            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+            Err(RuntimeExternalDataBridgeError::ObjectHasNoRiveRepresentation)
         );
     }
 
     #[test]
-    fn project_bridge_bounds_compact_runtime_lists_before_materializing_them() {
+    fn external_bridge_bounds_compact_runtime_lists_before_materializing_them() {
         for value in [
             RuntimeDataBindGraphValue::List {
                 item_count: usize::MAX,
             },
             RuntimeDataBindGraphValue::ListLength(usize::MAX),
         ] {
-            let ProjectDataValue::List(items) =
-                runtime_data_bind_graph_value_to_project(&value).expect("list is representable")
+            let RuntimeExternalDataValue::List(items) =
+                runtime_data_bind_graph_value_to_external(&value).expect("list is representable")
             else {
-                panic!("runtime list must bridge to a project list")
+                panic!("runtime list must bridge to an external list")
             };
-            assert_eq!(items.len(), PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS);
+            assert_eq!(items.len(), RUNTIME_EXTERNAL_DATA_MAX_LIST_ITEMS);
         }
     }
 
     #[test]
-    fn number_to_list_and_group_paths_share_the_project_list_budget() {
+    fn number_to_list_and_group_paths_share_the_external_list_budget() {
         let number_to_list = RuntimeDataBindGraphConverter::NumberToList {
             global_id: 7,
             view_model_id: 0,
@@ -13364,7 +13566,7 @@ mod tests {
         };
         let group = RuntimeDataBindGraphConverter::Group(vec![
             number_to_list.clone(),
-            exact_project_identity_converter(ProjectDataConverterOutputType::List),
+            exact_external_identity_converter(RuntimeExternalDataOutputType::List),
         ]);
 
         for converter in [&number_to_list, &group] {
@@ -13374,7 +13576,7 @@ mod tests {
                     &RuntimeDataBindGraphValue::Number(f32::MAX),
                 ),
                 Some(RuntimeDataBindGraphValue::List {
-                    item_count: PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS,
+                    item_count: RUNTIME_EXTERNAL_DATA_MAX_LIST_ITEMS,
                 }),
                 "huge finite lengths clamp before any durable-list materialization"
             );
@@ -13392,28 +13594,12 @@ mod tests {
     }
 
     #[test]
-    fn project_number_to_list_materializes_count_when_its_durable_model_is_lowered() {
-        let catalog =
-            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
-                id: "items".to_owned(),
-                spec: crate::ProjectDataConverterSpec {
-                    output_type: None,
-                    kind: crate::ProjectDataConverterKind::NumberToList {
-                        view_model_id: "vm-item".to_owned(),
-                    },
-                },
-            }])
-            .expect("valid Project NumberToList");
-        let bytes = catalog
-            .encode_program_with_runtime_view_models(
-                "items",
-                BTreeMap::from([("vm-item".to_owned(), 3)]),
-            )
-            .expect("program encodes");
-        let program = ProjectDataConverterProgram::decode(&bytes)
-            .expect("program decodes")
-            .expect("recognized Project envelope");
-        let converter = RuntimeDataBindGraphConverter::Project {
+    fn external_number_to_list_materializes_count_when_lowered() {
+        let program = RuntimeExternalDataProgramHandle::new(Arc::new(TestExternalProgram {
+            output_type: Some(RuntimeExternalDataOutputType::List),
+            behavior: TestExternalBehavior::NumberToList,
+        }));
+        let converter = RuntimeDataBindGraphConverter::External {
             global_id: 7,
             program: Arc::new(program),
             resolved_values: Vec::new(),

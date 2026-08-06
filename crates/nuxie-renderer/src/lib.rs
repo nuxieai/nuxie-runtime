@@ -23,8 +23,9 @@ mod gradient_pipeline;
 #[allow(dead_code)]
 mod intersection_board;
 mod logical_frame;
+use logical_frame::PreparedGradient;
 #[cfg(test)]
-use logical_frame::LogicalFlushAllocations;
+use logical_frame::{normalize_gradient, prepare_gradient_batch, LogicalFlushAllocations};
 mod logical_flush;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod metal;
@@ -608,8 +609,8 @@ pub use gpu_canvas::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 pub use logical_frame::{
-    LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalGradient, LogicalPathPaint,
-    LogicalResourceCounts, NullLogicalRenderer,
+    LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalGradient, LogicalPathHandle,
+    LogicalPathPaint, LogicalResourceCounts, NullLogicalRenderer,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
@@ -1430,42 +1431,6 @@ enum WgpuShader {
         colors: Vec<ColorInt>,
         stops: Vec<f32>,
     },
-}
-
-#[derive(Clone)]
-struct GradientDefinition {
-    paint_type: gpu::PaintType,
-    colors: Vec<ColorInt>,
-    stops: Vec<f32>,
-    coeffs: [f32; 3],
-}
-
-#[derive(Clone, Copy)]
-struct PreparedGradient {
-    paint_type: gpu::PaintType,
-    texture_y: f32,
-    matrix: Mat2D,
-    texture_span: [f32; 2],
-}
-
-struct GradientBatch {
-    spans: Vec<gpu::GradientSpan>,
-    height: u32,
-    draws: Vec<Option<PreparedGradient>>,
-}
-
-impl GradientBatch {
-    fn draw(&self, index: usize) -> Option<PreparedGradient> {
-        if self.draws.is_empty() {
-            None
-        } else {
-            self.draws[index]
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.height == 0
-    }
 }
 
 impl RenderShader for WgpuShader {
@@ -2707,6 +2672,17 @@ impl WgpuFrame {
     /// Runs the production backend-neutral layout and shadow-buffer write
     /// phase without encoding or submitting GPU commands.
     pub fn prepare_logical_frame(&mut self) -> Result<LogicalFrameReport, RendererError> {
+        if let Some(feature) = self.unsupported {
+            return Err(RendererError::Unsupported(feature));
+        }
+        if self.logical_frame.is_finalized() {
+            return Err(RendererError::Unsupported(
+                "logical frame has already been prepared",
+            ));
+        }
+        if let Some(failure) = self.context.device_health.current() {
+            return Err(RendererError::Device(failure.message));
+        }
         let config = self.logical_frame_config();
         debug_assert_eq!(config, self.logical_frame.config);
         {
@@ -3055,7 +3031,7 @@ impl WgpuFrame {
                     ));
                 }
                 let mut clockwise_atomic_coverage_words = 0usize;
-                let gradient_batch = prepare_gradient_batch(draws);
+                let gradient_batch = self.context.logical_resources.prepare_batch(draws);
                 let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
                 // The compact direct-stroke route can stream immutable prepared geometry into
                 // final flush storage. Decide the complete route before preparation so every
@@ -4549,7 +4525,7 @@ impl WgpuFrame {
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
-                let gradient_batch = prepare_gradient_batch(draws);
+                let gradient_batch = self.context.logical_resources.prepare_batch(draws);
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
                 if gradient_batch.height != 0 {
                     gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
@@ -7005,269 +6981,6 @@ fn image_texture_lod(inverse_transform: Mat2D, width: u32, height: u32) -> f32 {
     let dvdy = yy * height;
     let max_scale_factor_pow2 = (dudx * dudx + dvdx * dvdx).max(dudy * dudy + dvdy * dvdy);
     max_scale_factor_pow2.max(1.0).log2() * 0.5 + gpu::MIP_MAP_LOD_BIAS
-}
-
-fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
-    const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
-    const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
-    const LEFT_BORDER: u32 = 0x8000_0000;
-    const RIGHT_BORDER: u32 = 0x4000_0000;
-    const COMPLEX_BORDER: u32 = 0x2000_0000;
-
-    // Most frames contain only solid paints. C++ keeps its pending gradient
-    // tables empty in that case; preserve the same sparse shape instead of
-    // allocating two draw-sized Option arrays that only contain None. Build
-    // the table lazily so gradient-bearing frames still need just one scan.
-    let mut definitions = Vec::new();
-    for (draw_index, draw) in draws.iter().enumerate() {
-        let shader = draw.paint.shader.as_ref();
-        if definitions.is_empty() {
-            let Some(shader) = shader else {
-                continue;
-            };
-            definitions.reserve(draws.len());
-            definitions.resize_with(draw_index, || None);
-            definitions.push(normalize_gradient(shader, draw.state.opacity));
-        } else {
-            definitions
-                .push(shader.and_then(|shader| normalize_gradient(shader, draw.state.opacity)));
-        }
-    }
-    if definitions.is_empty() {
-        return GradientBatch {
-            spans: Vec::new(),
-            height: 0,
-            draws: Vec::new(),
-        };
-    }
-    let is_simple = |gradient: &GradientDefinition| {
-        gradient.stops.len() == 1
-            || (gradient.stops.len() == 2 && gradient.stops[0] == 0.0 && gradient.stops[1] == 1.0)
-    };
-    let simple_count = definitions
-        .iter()
-        .flatten()
-        .filter(|gradient| is_simple(gradient))
-        .count();
-    let complex_count = definitions
-        .iter()
-        .flatten()
-        .filter(|gradient| !is_simple(gradient))
-        .count();
-    let simple_height = simple_count.div_ceil(RAMPS_PER_SIMPLE_ROW) as u32;
-    let height = simple_height + complex_count as u32;
-    let mut simple_index = 0usize;
-    let mut complex_index = 0u32;
-    let mut spans = Vec::new();
-    let mut prepared = Vec::with_capacity(draws.len());
-    for (draw, gradient) in draws.iter().zip(definitions) {
-        let Some(gradient) = gradient else {
-            prepared.push(None);
-            continue;
-        };
-        let (row, texture_span) = if is_simple(&gradient) {
-            let row = (simple_index / RAMPS_PER_SIMPLE_ROW) as u32;
-            let left = ((simple_index % RAMPS_PER_SIMPLE_ROW) * 2) as u32;
-            let center_fixed = (left + 1) * ONE_TEXEL_FIXED;
-            let color0 = gradient.colors[0];
-            let color1 = gradient.colors.get(1).copied().unwrap_or(color0);
-            spans.push(gpu::GradientSpan::new(
-                center_fixed,
-                center_fixed,
-                row,
-                LEFT_BORDER | RIGHT_BORDER,
-                color0,
-                color1,
-            ));
-            simple_index += 1;
-            (
-                row,
-                [
-                    1.0 / gradient_pipeline::TEXTURE_WIDTH as f32,
-                    (left as f32 + 0.5) / gradient_pipeline::TEXTURE_WIDTH as f32,
-                ],
-            )
-        } else {
-            let row = simple_height + complex_index;
-            let scale = (gradient_pipeline::TEXTURE_WIDTH - 1) as f32 * ONE_TEXEL_FIXED as f32;
-            let bias = 0.5 * ONE_TEXEL_FIXED as f32;
-            let mut last_x = (gradient.stops[0] * scale + bias) as u32;
-            let mut last_color = gradient.colors[0];
-            for index in 1..gradient.stops.len() {
-                let x = (gradient.stops[index] * scale + bias) as u32;
-                let mut flags = COMPLEX_BORDER;
-                if index == 1 {
-                    flags |= LEFT_BORDER;
-                }
-                if index + 1 == gradient.stops.len() {
-                    flags |= RIGHT_BORDER;
-                }
-                spans.push(gpu::GradientSpan::new(
-                    last_x,
-                    x,
-                    row,
-                    flags,
-                    last_color,
-                    gradient.colors[index],
-                ));
-                last_x = x;
-                last_color = gradient.colors[index];
-            }
-            complex_index += 1;
-            (
-                row,
-                [
-                    (gradient_pipeline::TEXTURE_WIDTH - 1) as f32
-                        / gradient_pipeline::TEXTURE_WIDTH as f32,
-                    0.5 / gradient_pipeline::TEXTURE_WIDTH as f32,
-                ],
-            )
-        };
-        let inverse = invert(draw.state.transform).unwrap_or(Mat2D([0.0; 6]));
-        let gradient_matrix = match gradient.paint_type {
-            gpu::PaintType::LinearGradient => Mat2D([
-                gradient.coeffs[0],
-                0.0,
-                gradient.coeffs[1],
-                0.0,
-                gradient.coeffs[2],
-                0.0,
-            ]),
-            gpu::PaintType::RadialGradient => {
-                let inverse_radius = gradient.coeffs[2].recip();
-                Mat2D([
-                    inverse_radius,
-                    0.0,
-                    0.0,
-                    inverse_radius,
-                    -gradient.coeffs[0] * inverse_radius,
-                    -gradient.coeffs[1] * inverse_radius,
-                ])
-            }
-            _ => unreachable!(),
-        };
-        prepared.push(Some(PreparedGradient {
-            paint_type: gradient.paint_type,
-            texture_y: (row as f32 + 0.5) / height as f32,
-            matrix: multiply(gradient_matrix, inverse),
-            texture_span,
-        }));
-    }
-    GradientBatch {
-        spans,
-        height,
-        draws: prepared,
-    }
-}
-
-fn normalize_gradient(shader: &WgpuShader, opacity: f32) -> Option<GradientDefinition> {
-    const EPSILON: f32 = 1.0 / 4096.0;
-    let (paint_type, mut colors, stops, coeffs) = match shader {
-        WgpuShader::Linear {
-            start,
-            end,
-            colors,
-            stops,
-        } => {
-            let mut start = *start;
-            let mut end = *end;
-            let mut stops = stops.clone();
-            validate_gradient(colors, &stops)?;
-            let first = stops[0];
-            let last = *stops.last()?;
-            if (first != 0.0 || last != 1.0) && last - first > EPSILON {
-                let original_start = start;
-                let original_end = end;
-                start = (
-                    original_start.0 + (original_end.0 - original_start.0) * first,
-                    original_start.1 + (original_end.1 - original_start.1) * first,
-                );
-                end = (
-                    original_start.0 + (original_end.0 - original_start.0) * last,
-                    original_start.1 + (original_end.1 - original_start.1) * last,
-                );
-                let inverse_range = (last - first).recip();
-                for stop in &mut stops {
-                    *stop = (*stop - first) * inverse_range;
-                }
-                stops[0] = 0.0;
-                *stops.last_mut().unwrap() = 1.0;
-                let final_index = stops.len() - 1;
-                for index in 1..final_index {
-                    stops[index] = stops[index].max(stops[index - 1]);
-                }
-                for index in (1..final_index).rev() {
-                    stops[index] = stops[index].min(stops[index + 1]);
-                }
-            }
-            let dx = end.0 - start.0;
-            let dy = end.1 - start.1;
-            let inverse_length_squared = (dx * dx + dy * dy).recip();
-            let vx = dx * inverse_length_squared;
-            let vy = dy * inverse_length_squared;
-            (
-                gpu::PaintType::LinearGradient,
-                colors.clone(),
-                stops,
-                [vx, vy, -(vx * start.0 + vy * start.1)],
-            )
-        }
-        WgpuShader::Radial {
-            center,
-            radius,
-            colors,
-            stops,
-        } => {
-            let mut radius = *radius;
-            let mut stops = stops.clone();
-            validate_gradient(colors, &stops)?;
-            let last = *stops.last()?;
-            if last != 1.0 && last > EPSILON {
-                radius *= last;
-                let inverse_last = last.recip();
-                let final_index = stops.len() - 1;
-                for stop in &mut stops[..final_index] {
-                    *stop *= inverse_last;
-                }
-                *stops.last_mut().unwrap() = 1.0;
-                stops[0] = stops[0].max(0.0);
-                for index in 1..final_index {
-                    stops[index] = stops[index].max(stops[index - 1]);
-                }
-                for index in (0..final_index).rev() {
-                    stops[index] = stops[index].min(stops[index + 1]);
-                }
-            }
-            (
-                gpu::PaintType::RadialGradient,
-                colors.clone(),
-                stops,
-                [center.0, center.1, radius],
-            )
-        }
-    };
-    for color in &mut colors {
-        *color = modulate_color_alpha(*color, opacity);
-    }
-    Some(GradientDefinition {
-        paint_type,
-        colors,
-        stops,
-        coeffs,
-    })
-}
-
-fn validate_gradient(colors: &[ColorInt], stops: &[f32]) -> Option<()> {
-    if colors.len() != stops.len()
-        || stops.is_empty()
-        || stops
-            .iter()
-            .any(|stop| !stop.is_finite() || !(0.0..=1.0).contains(stop))
-        || stops.windows(2).any(|pair| pair[0] > pair[1])
-    {
-        return None;
-    }
-    Some(())
 }
 
 fn gradient_paint_aux(
@@ -9987,8 +9700,9 @@ mod tests {
 
         let wgpu = frame.prepare_logical_frame().unwrap();
         let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        let null_path = null.prepare_path(&raw_path, FillRule::EvenOdd);
         null.begin_frame();
-        null.draw_path(&raw_path, FillRule::EvenOdd, LogicalPathPaint::default())
+        null.draw_path(&null_path, LogicalPathPaint::default())
             .unwrap();
         let shadow = null.flush().unwrap();
 
@@ -10140,18 +9854,22 @@ mod tests {
         let draw = logical_triangle();
         let report = |clip: Option<[f32; 4]>| {
             let mut renderer = NullLogicalRenderer::new(config);
-            renderer.begin_frame();
-            if let Some([left, top, right, bottom]) = clip {
+            let draw = renderer.prepare_path(&draw, FillRule::NonZero);
+            let clip = clip.map(|[left, top, right, bottom]| {
                 let mut path = RawPath::new();
                 path.move_to(left, top);
                 path.line_to(right, top);
                 path.line_to(right, bottom);
                 path.line_to(left, bottom);
                 path.close();
-                renderer.clip_path(&path, FillRule::NonZero).unwrap();
+                renderer.prepare_path(&path, FillRule::NonZero)
+            });
+            renderer.begin_frame();
+            if let Some(path) = &clip {
+                renderer.clip_path(path).unwrap();
             }
             renderer
-                .draw_path(&draw, FillRule::NonZero, LogicalPathPaint::default())
+                .draw_path(&draw, LogicalPathPaint::default())
                 .unwrap();
             renderer.flush().unwrap()
         };
@@ -10160,6 +9878,81 @@ mod tests {
         let clipped = report(Some([12.0, 12.0, 52.0, 52.0]));
         assert_eq!(unclipped.draw_count, clipped.draw_count);
         assert_ne!(unclipped.shadow_fingerprint, clipped.shadow_fingerprint);
+    }
+
+    #[test]
+    fn clip_reset_shadow_serializes_action_bounds_transform_and_fill_rule() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::Msaa,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let fingerprint = |bounds: [f32; 4],
+                           action: MsaaClipResetAction,
+                           transform: Mat2D,
+                           fill_rule: FillRule| {
+            let draw = SolidDraw::new(
+                LogicalPath {
+                    raw_path: Arc::new(logical_triangle()),
+                    fill_rule,
+                    valid: true,
+                },
+                LogicalPaint::default(),
+                DrawState {
+                    transform,
+                    ..Default::default()
+                },
+                DrawRole::ClipReset { bounds, action },
+                None,
+            );
+            let mut frame = logical_frame::LogicalFrame::new(config);
+            frame.draws.push(draw);
+            frame
+                .draw_resources
+                .push(logical_flush::ResourceCounters::default());
+            frame.resource_planning_evaluations = 1;
+            logical_frame::LogicalResourceStore::default()
+                .prepare(&frame)
+                .unwrap()
+                .shadow_fingerprint
+        };
+
+        let baseline = fingerprint(
+            [1.0, 2.0, 31.0, 42.0],
+            MsaaClipResetAction::ClearPrevious,
+            Mat2D::IDENTITY,
+            FillRule::NonZero,
+        );
+        for variant in [
+            fingerprint(
+                [1.0, 2.0, 32.0, 42.0],
+                MsaaClipResetAction::ClearPrevious,
+                Mat2D::IDENTITY,
+                FillRule::NonZero,
+            ),
+            fingerprint(
+                [1.0, 2.0, 31.0, 42.0],
+                MsaaClipResetAction::IntersectPreviousEvenOdd,
+                Mat2D::IDENTITY,
+                FillRule::NonZero,
+            ),
+            fingerprint(
+                [1.0, 2.0, 31.0, 42.0],
+                MsaaClipResetAction::ClearPrevious,
+                Mat2D([1.0, 0.0, 0.0, 1.0, 3.0, 4.0]),
+                FillRule::NonZero,
+            ),
+            fingerprint(
+                [1.0, 2.0, 31.0, 42.0],
+                MsaaClipResetAction::ClearPrevious,
+                Mat2D::IDENTITY,
+                FillRule::Clockwise,
+            ),
+        ] {
+            assert_ne!(variant, baseline);
+        }
     }
 
     #[test]
@@ -10185,10 +9978,10 @@ mod tests {
         let wgpu = frame.prepare_logical_frame().unwrap();
 
         let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        let null_path = null.prepare_path(&raw_path, FillRule::NonZero);
         null.begin_frame();
         null.draw_path_with_gradient(
-            &raw_path,
-            FillRule::NonZero,
+            &null_path,
             LogicalPathPaint::default(),
             LogicalGradient::Linear {
                 start: (8.0, 8.0),
@@ -10206,11 +9999,11 @@ mod tests {
         assert_eq!(shadow.written.gradient_stop_records, 3);
 
         let mut radial = NullLogicalRenderer::new(factory.logical_frame_config());
+        let radial_path = radial.prepare_path(&raw_path, FillRule::NonZero);
         radial.begin_frame();
         radial
             .draw_path_with_gradient(
-                &raw_path,
-                FillRule::NonZero,
+                &radial_path,
                 LogicalPathPaint::default(),
                 LogicalGradient::Radial {
                     center: (32.0, 32.0),
@@ -10236,11 +10029,15 @@ mod tests {
             msaa_atlas_supports_clip_rect: true,
         };
         let mut renderer = NullLogicalRenderer::new(config);
+        let cubic = renderer.prepare_path(
+            &logical_cubic([4.0, 32.0, 16.0, -8.0, 48.0, 72.0, 60.0, 32.0]),
+            FillRule::Clockwise,
+        );
+        let triangle = renderer.prepare_path(&logical_triangle(), FillRule::NonZero);
         renderer.begin_frame();
         renderer
             .draw_path(
-                &logical_cubic([4.0, 32.0, 16.0, -8.0, 48.0, 72.0, 60.0, 32.0]),
-                FillRule::Clockwise,
+                &cubic,
                 LogicalPathPaint {
                     style: RenderPaintStyle::Stroke,
                     thickness: 7.0,
@@ -10257,11 +10054,7 @@ mod tests {
 
         renderer.begin_frame();
         renderer
-            .draw_path(
-                &logical_triangle(),
-                FillRule::NonZero,
-                LogicalPathPaint::default(),
-            )
+            .draw_path(&triangle, LogicalPathPaint::default())
             .unwrap();
         renderer.flush().unwrap();
         assert_eq!(renderer.retained_scratch_slots(), 1);
@@ -10302,14 +10095,15 @@ mod tests {
             [0xff00_0003, 0xff00_0002, 0xff00_0001,]
         );
         assert_eq!(wgpu.plan_finalization_passes, 1);
-        let prepared_again = frame.prepare_logical_frame().unwrap();
-        assert_eq!(prepared_again.shadow_fingerprint, wgpu.shadow_fingerprint);
-        assert_eq!(prepared_again.logical_flushes, wgpu.logical_flushes);
-        assert_eq!(prepared_again.written, wgpu.written);
-        assert_eq!(prepared_again.plan_finalization_passes, 1);
-        assert_eq!(prepared_again.allocation_growths, 0);
+        assert!(matches!(
+            frame.prepare_logical_frame(),
+            Err(RendererError::Unsupported(
+                "logical frame has already been prepared"
+            ))
+        ));
 
         let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        let null_path = null.prepare_path(&raw_path, FillRule::NonZero);
         null.begin_frame();
         for (color, blend_mode) in [
             (0xff00_0001, BlendMode::Difference),
@@ -10317,8 +10111,7 @@ mod tests {
             (0xff00_0003, BlendMode::SrcOver),
         ] {
             null.draw_path(
-                &raw_path,
-                FillRule::NonZero,
+                &null_path,
                 LogicalPathPaint {
                     color,
                     blend_mode,
@@ -10331,6 +10124,52 @@ mod tests {
         assert_eq!(shadow, wgpu);
         assert_eq!(shadow.resource_planning_passes, shadow.draw_count);
         assert_eq!(shadow.plan_finalization_passes, 1);
+    }
+
+    #[test]
+    fn logical_frame_preparation_rejects_preexisting_unsupported_state() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.unsupported = Some("test unsupported logical feature");
+
+        assert!(matches!(
+            frame.prepare_logical_frame(),
+            Err(RendererError::Unsupported(
+                "test unsupported logical feature"
+            ))
+        ));
+        assert!(!frame.logical_frame.is_finalized());
+    }
+
+    #[test]
+    fn logical_frame_preparation_rejects_a_prepared_terminal_frame() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame(0);
+
+        frame.prepare_logical_frame().unwrap();
+        assert!(frame.logical_frame.is_finalized());
+        assert!(matches!(
+            frame.prepare_logical_frame(),
+            Err(RendererError::Unsupported(
+                "logical frame has already been prepared"
+            ))
+        ));
+    }
+
+    #[test]
+    fn logical_frame_preparation_rejects_terminal_device_health() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame(0);
+        frame.context.device_health.record(WgpuDeviceFailure {
+            kind: WgpuDeviceFailureKind::DeviceLost,
+            message: "test terminal device loss".to_owned(),
+        });
+
+        assert!(matches!(
+            frame.prepare_logical_frame(),
+            Err(RendererError::Device(message)) if message == "test terminal device loss"
+        ));
+        assert!(!frame.logical_frame.is_finalized());
     }
 
     #[derive(Clone)]
@@ -10564,16 +10403,19 @@ mod tests {
         clip: Option<&(RawPath, FillRule)>,
     ) -> LogicalFrameReport {
         let mut renderer = NullLogicalRenderer::new(config);
+        let paths = draws
+            .iter()
+            .map(|draw| renderer.prepare_path(&draw.path, draw.fill_rule))
+            .collect::<Vec<_>>();
+        let clip = clip.map(|(path, fill_rule)| renderer.prepare_path(path, *fill_rule));
         renderer.begin_frame();
-        if let Some((raw_path, fill_rule)) = clip {
-            renderer.clip_path(raw_path, *fill_rule).unwrap();
+        if let Some(path) = &clip {
+            renderer.clip_path(path).unwrap();
         }
-        for draw in draws {
+        for (draw, path) in draws.iter().zip(&paths) {
             renderer.save();
             renderer.transform(draw.transform);
-            renderer
-                .draw_path(&draw.path, draw.fill_rule, draw.paint)
-                .unwrap();
+            renderer.draw_path(path, draw.paint).unwrap();
             renderer.restore();
         }
         renderer.flush().unwrap()
@@ -10670,32 +10512,40 @@ mod tests {
             msaa_atlas_supports_clip_rect: true,
         };
         let mut renderer = NullLogicalRenderer::new(config);
-        renderer.begin_frame();
+        let mut large_batches = Vec::new();
         for index in 0..20 {
             let (mut draws, _) = logical_workload("DrawCustomFeathers");
             for draw in &mut draws {
                 draw.transform = Mat2D([1.0, 0.0, 0.0, 1.0, index as f32 * 0.1, 0.0]);
+            }
+            let paths = draws
+                .iter()
+                .map(|draw| renderer.prepare_path(&draw.path, draw.fill_rule))
+                .collect::<Vec<_>>();
+            large_batches.push((draws, paths));
+        }
+        renderer.begin_frame();
+        for (draws, paths) in &large_batches {
+            for (draw, path) in draws.iter().zip(paths) {
                 renderer.transform(draw.transform);
-                renderer
-                    .draw_path(&draw.path, draw.fill_rule, draw.paint)
-                    .unwrap();
+                renderer.draw_path(path, draw.paint).unwrap();
             }
         }
         let large = renderer.flush().unwrap();
 
         let (small_draws, _) = logical_workload("DrawRiveRenderPaths");
+        let small_paths = small_draws
+            .iter()
+            .map(|draw| renderer.prepare_path(&draw.path, draw.fill_rule))
+            .collect::<Vec<_>>();
         renderer.begin_frame();
-        for draw in &small_draws {
-            renderer
-                .draw_path(&draw.path, draw.fill_rule, draw.paint)
-                .unwrap();
+        for (draw, path) in small_draws.iter().zip(&small_paths) {
+            renderer.draw_path(path, draw.paint).unwrap();
         }
         let first_small = renderer.flush().unwrap();
         renderer.begin_frame();
-        for draw in &small_draws {
-            renderer
-                .draw_path(&draw.path, draw.fill_rule, draw.paint)
-                .unwrap();
+        for (draw, path) in small_draws.iter().zip(&small_paths) {
+            renderer.draw_path(path, draw.paint).unwrap();
         }
         let second_small = renderer.flush().unwrap();
 

@@ -2880,6 +2880,11 @@ impl WgpuFrame {
         self.logical_frame
             .validate()
             .map_err(RendererError::Unsupported)?;
+        let prepared_logical_resources = self
+            .context
+            .logical_resources
+            .prepare_for_production(&self.logical_frame)
+            .map_err(RendererError::Unsupported)?;
         let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
@@ -3034,7 +3039,7 @@ impl WgpuFrame {
                     ));
                 }
                 let mut clockwise_atomic_coverage_words = 0usize;
-                let gradient_batch = self.context.logical_resources.prepare_batch(draws);
+                let gradient_batch = prepared_logical_resources.gradient_batch(draws);
                 let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
                 // The compact direct-stroke route can stream immutable prepared geometry into
                 // final flush storage. Decide the complete route before preparation so every
@@ -4528,7 +4533,7 @@ impl WgpuFrame {
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
-                let gradient_batch = self.context.logical_resources.prepare_batch(draws);
+                let gradient_batch = prepared_logical_resources.gradient_batch(draws);
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
                 if gradient_batch.height != 0 {
                     gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
@@ -9707,7 +9712,7 @@ mod tests {
         null.begin_frame();
         null.draw_path(&null_path, LogicalPathPaint::default())
             .unwrap();
-        let shadow = null.flush().unwrap();
+        let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(shadow, wgpu);
         assert_eq!(shadow.draw_count, 1);
@@ -9743,7 +9748,7 @@ mod tests {
                 .unwrap();
             null.restore();
         }
-        let shadow = null.flush().unwrap();
+        let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(wgpu.draw_count, 4);
         assert_eq!(shadow, wgpu);
@@ -9788,7 +9793,7 @@ mod tests {
             0,
             "Null must not inspect path bounds after the clip becomes empty"
         );
-        let shadow = null.flush().unwrap();
+        let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(wgpu.draw_count, 0);
         assert_eq!(shadow, wgpu);
@@ -9839,16 +9844,41 @@ mod tests {
         };
         let mut frame = factory.begin_frame(0);
         frame.draw_path(&path, &LogicalPaint::default());
+        let production_writes = factory
+            .context
+            .logical_resources
+            .production_frame_write_count();
 
         assert_eq!(frame.draws.len(), 1);
         assert_eq!(frame.draw_resources.len(), frame.draws.len());
         let report = frame.prepare_logical_frame().unwrap();
         assert_eq!(report.resource_planning_passes, frame.draws.len());
         assert_eq!(frame.draw_resources.len(), frame.draws.len());
+        assert_eq!(
+            factory
+                .context
+                .logical_resources
+                .production_frame_write_count(),
+            production_writes,
+            "diagnostic preparation must not count as production work"
+        );
+        let _ = logical_frame::take_gradient_batch_preparations();
 
-        // finish_internal validates and encodes these plan-owned draws. It no
-        // longer invokes a second resource-planning/shadow-write traversal.
+        // finish_internal performs exactly one production resource write and
+        // its encoders consume the resulting prepared gradient records.
         let pixels = frame.finish().unwrap();
+        assert_eq!(
+            factory
+                .context
+                .logical_resources
+                .production_frame_write_count(),
+            production_writes + 1
+        );
+        assert_eq!(
+            logical_frame::take_gradient_batch_preparations(),
+            1,
+            "the encoder must reuse the production writer's prepared batch"
+        );
         let center_alpha = pixels[((32 * 64 + 32) * 4 + 3) as usize];
         assert_ne!(center_alpha, 0);
     }
@@ -9989,7 +10019,7 @@ mod tests {
             renderer
                 .draw_path(&draw, LogicalPathPaint::default())
                 .unwrap();
-            renderer.flush().unwrap()
+            renderer.flush_with_diagnostics().unwrap()
         };
 
         let unclipped = report(None);
@@ -10109,7 +10139,7 @@ mod tests {
             },
         )
         .unwrap();
-        let shadow = null.flush().unwrap();
+        let shadow = null.flush_with_diagnostics().unwrap();
 
         assert_eq!(shadow, wgpu);
         assert_eq!(shadow.written.gradient_records, 1);
@@ -10133,7 +10163,7 @@ mod tests {
             .unwrap();
         assert_ne!(
             shadow.shadow_fingerprint,
-            radial.flush().unwrap().shadow_fingerprint
+            radial.flush_with_diagnostics().unwrap().shadow_fingerprint
         );
     }
 
@@ -10238,7 +10268,7 @@ mod tests {
             )
             .unwrap();
         }
-        let shadow = null.flush().unwrap();
+        let shadow = null.flush_with_diagnostics().unwrap();
         assert_eq!(shadow, wgpu);
         assert_eq!(shadow.resource_planning_passes, shadow.draw_count);
         assert_eq!(shadow.plan_finalization_passes, 1);
@@ -10329,11 +10359,57 @@ mod tests {
         path
     }
 
+    fn pinned_custom_workload(name: &str, paint: LogicalPathPaint) -> Vec<LogicalWorkloadDraw> {
+        // Exact shapes from rive-runtime tests/bench/draw_pls_path.cpp at
+        // 4ac7b32798da0482e441ef09304dc3b480ed3ee5. The paper.riv-backed cases
+        // are intentionally excluded from the pinned test below because this
+        // crate does not vendor either that binary fixture or a .riv parser.
+        (0..1_000)
+            .map(|_| {
+                let mut path = RawPath::new();
+                if name == "DrawZeroChopStrokes" {
+                    path.move_to(199.0, 1225.0);
+                } else if name == "DrawTwoChopStrokes" {
+                    path.move_to(460.0, 1060.0);
+                }
+                for _ in 0..50 {
+                    match name {
+                        "DrawZeroChopStrokes" => {
+                            path.cubic_to(197.0, 943.0, 349.0, 607.0, 549.0, 427.0);
+                            path.cubic_to(349.0, 607.0, 197.0, 943.0, 199.0, 1225.0);
+                        }
+                        "DrawOneChopStrokes" => {
+                            path.cubic_to(100.0, 0.0, 50.0, 100.0, 100.0, 100.0);
+                            path.cubic_to(0.0, -100.0, 200.0, 100.0, 0.0, 0.0);
+                        }
+                        "DrawTwoChopStrokes" => {
+                            path.cubic_to(403.0, -320.0, 60.0, 660.0, 1181.0, 634.0);
+                            path.cubic_to(60.0, 660.0, 403.0, -320.0, 460.0, 1060.0);
+                        }
+                        "DrawOneCuspStrokes" => {
+                            path.cubic_to(100.0, 100.0, 100.0, 0.0, 0.0, 100.0);
+                            path.cubic_to(100.0, 0.0, 100.0, 100.0, 0.0, 0.0);
+                        }
+                        "DrawTwoCuspStrokes" => {
+                            path.cubic_to(100.0, 0.0, 50.0, 0.0, 150.0, 0.0);
+                            path.cubic_to(50.0, 0.0, 100.0, 0.0, 0.0, 0.0);
+                        }
+                        "DrawCustomFeathers" => {
+                            path.cubic_to(-800.0, 1600.0, 2400.0, 1600.0, 1600.0, 0.0);
+                        }
+                        _ => unreachable!("unknown pinned custom workload {name}"),
+                    }
+                }
+                logical_workload_draw(path, FillRule::Clockwise, paint)
+            })
+            .collect()
+    }
+
     fn logical_workload(name: &str) -> (Vec<LogicalWorkloadDraw>, Option<(RawPath, FillRule)>) {
         let fill = LogicalPathPaint::default();
         let stroke = LogicalPathPaint {
             style: RenderPaintStyle::Stroke,
-            thickness: 5.0,
+            thickness: 2.0,
             ..fill
         };
         let round_stroke = LogicalPathPaint {
@@ -10343,19 +10419,9 @@ mod tests {
         };
         let feather = LogicalPathPaint {
             color: 0xff33_77dd,
-            feather: 3.5,
+            feather: 100.0,
             ..fill
         };
-        let clip = || {
-            let mut path = RawPath::new();
-            path.move_to(4.0, 4.0);
-            path.line_to(60.0, 4.0);
-            path.line_to(60.0, 60.0);
-            path.line_to(4.0, 60.0);
-            path.close();
-            (path, FillRule::EvenOdd)
-        };
-
         match name {
             "DrawRiveRenderPaths" => (
                 vec![
@@ -10396,92 +10462,31 @@ mod tests {
             }
             "DrawFeatheredPaths_paper" => (
                 vec![
-                    logical_workload_draw(logical_triangle(), FillRule::EvenOdd, feather),
+                    logical_workload_draw(logical_triangle(), FillRule::Clockwise, feather),
                     logical_workload_draw(
                         logical_cubic([4.0, 30.0, 18.0, 4.0, 46.0, 60.0, 60.0, 30.0]),
-                        FillRule::NonZero,
-                        LogicalPathPaint {
-                            feather: 5.0,
-                            ..feather
-                        },
+                        FillRule::Clockwise,
+                        feather,
                     ),
                 ],
-                Some(clip()),
-            ),
-            "DrawZeroChopStrokes" => (
-                vec![logical_workload_draw(
-                    logical_cubic([6.0, 32.0, 20.0, 20.0, 44.0, 20.0, 58.0, 32.0]),
-                    FillRule::Clockwise,
-                    stroke,
-                )],
                 None,
             ),
-            "DrawOneChopStrokes" => (
-                vec![logical_workload_draw(
-                    logical_cubic([6.0, 50.0, 14.0, 4.0, 52.0, 4.0, 58.0, 50.0]),
-                    FillRule::Clockwise,
-                    stroke,
-                )],
+            "DrawZeroChopStrokes"
+            | "DrawOneChopStrokes"
+            | "DrawTwoChopStrokes"
+            | "DrawOneCuspStrokes"
+            | "DrawTwoCuspStrokes" => (pinned_custom_workload(name, stroke), None),
+            "DrawCustomFeathers" => (
+                pinned_custom_workload(
+                    name,
+                    LogicalPathPaint {
+                        style: RenderPaintStyle::Fill,
+                        feather: 85.0,
+                        ..fill
+                    },
+                ),
                 None,
             ),
-            "DrawTwoChopStrokes" => (
-                vec![logical_workload_draw(
-                    logical_cubic([6.0, 32.0, 16.0, -8.0, 48.0, 72.0, 58.0, 32.0]),
-                    FillRule::Clockwise,
-                    stroke,
-                )],
-                None,
-            ),
-            "DrawOneCuspStrokes" => (
-                vec![logical_workload_draw(
-                    logical_cubic([8.0, 44.0, 28.0, 8.0, 28.0, 8.0, 52.0, 44.0]),
-                    FillRule::Clockwise,
-                    round_stroke,
-                )],
-                None,
-            ),
-            "DrawTwoCuspStrokes" => {
-                let mut path = logical_cubic([6.0, 46.0, 20.0, 8.0, 20.0, 8.0, 32.0, 34.0]);
-                path.cubic_to(44.0, 60.0, 44.0, 60.0, 58.0, 18.0);
-                (
-                    vec![logical_workload_draw(
-                        path,
-                        FillRule::Clockwise,
-                        round_stroke,
-                    )],
-                    None,
-                )
-            }
-            "DrawCustomFeathers" => {
-                let mut draws = Vec::new();
-                for index in 0..4 {
-                    let inset = index as f32 * 3.0;
-                    let mut path = RawPath::new();
-                    path.move_to(6.0 + inset, 8.0 + inset);
-                    path.cubic_to(
-                        54.0 - inset,
-                        2.0 + inset,
-                        10.0 + inset,
-                        62.0 - inset,
-                        58.0 - inset,
-                        54.0 - inset,
-                    );
-                    path.close();
-                    draws.push(logical_workload_draw(
-                        path,
-                        if index % 2 == 0 {
-                            FillRule::NonZero
-                        } else {
-                            FillRule::EvenOdd
-                        },
-                        LogicalPathPaint {
-                            feather: index as f32 + 1.0,
-                            ..feather
-                        },
-                    ));
-                }
-                (draws, Some(clip()))
-            }
             _ => panic!("unknown logical workload {name}"),
         }
     }
@@ -10536,16 +10541,12 @@ mod tests {
             renderer.draw_path(path, draw.paint).unwrap();
             renderer.restore();
         }
-        renderer.flush().unwrap()
+        renderer.flush_with_diagnostics().unwrap()
     }
 
     #[test]
-    fn ten_draw_workload_shapes_match_between_wgpu_and_null_logical_frames() {
-        const WORKLOADS: [&str; 10] = [
-            "DrawRiveRenderPaths",
-            "DrawRiveRenderPathsAsStrokes",
-            "DrawRiveRenderPathsAsRoundJoinStrokes",
-            "DrawFeatheredPaths_paper",
+    fn pinned_draw_pls_path_custom_workloads_match_between_wgpu_and_null_logical_frames() {
+        const WORKLOADS: [&str; 6] = [
             "DrawZeroChopStrokes",
             "DrawOneChopStrokes",
             "DrawTwoChopStrokes",
@@ -10555,17 +10556,24 @@ mod tests {
         ];
         for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
             let config = LogicalFrameConfig {
-                width: 64,
-                height: 64,
+                width: 1600,
+                height: 1600,
                 mode,
                 max_texture_dimension_2d: 8192,
                 msaa_atlas_supports_clip_rect: true,
             };
             for name in WORKLOADS {
                 let (draws, clip) = logical_workload(name);
+                assert_eq!(draws.len(), 1_000, "{name} cardinality drifted");
                 let wgpu = wgpu_logical_workload(config, &draws, clip.as_ref());
                 let null = null_logical_workload(config, &draws, clip.as_ref());
                 assert_eq!(null, wgpu, "{name} diverged in {mode:?}");
+                if mode == RenderMode::Msaa && name == "DrawTwoChopStrokes" {
+                    assert_eq!(wgpu.logical_flushes.len(), 3);
+                }
+                if mode == RenderMode::Msaa && name == "DrawCustomFeathers" {
+                    assert_eq!(wgpu.logical_flushes.len(), 11);
+                }
             }
         }
     }
@@ -10660,12 +10668,12 @@ mod tests {
         for (draw, path) in small_draws.iter().zip(&small_paths) {
             renderer.draw_path(path, draw.paint).unwrap();
         }
-        let first_small = renderer.flush().unwrap();
+        let first_small = renderer.flush_with_diagnostics().unwrap();
         renderer.begin_frame();
         for (draw, path) in small_draws.iter().zip(&small_paths) {
             renderer.draw_path(path, draw.paint).unwrap();
         }
-        let second_small = renderer.flush().unwrap();
+        let second_small = renderer.flush_with_diagnostics().unwrap();
 
         assert_eq!(
             first_small.shadow_fingerprint,

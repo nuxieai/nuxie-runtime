@@ -8,16 +8,17 @@ MSAA intersection-board scheduling and the draw/resource permutation happen
 when that shared plan is finalized, before either adapter consumes it.
 
 `WgpuFrame` owns a `LogicalFrame`; draw admission appends each draw and its
-resource layout to that object exactly once. `WgpuFrame::finish` validates and
-encodes those plan-owned inputs directly, then performs the backend-specific
-GPU writes and submission. It does not run a parallel shadow traversal.
-`WgpuFrame::prepare_logical_frame` can explicitly materialize the same plan in
-shadow buffers for diagnostics. `NullLogicalRenderer` consumes the production
-plan into those shadow buffers and stops, without a WGPU context, device,
-queue, encoder, or submission. It is intended for CPU benchmarks and
+resource layout to that object exactly once. `WgpuFrame::finish` invokes the
+shared production resource writer once, then its encoders consume the prepared
+gradient records and plan-owned geometry before performing backend-specific GPU
+uploads and submission. `WgpuFrame::prepare_logical_frame` explicitly runs the
+same retained-buffer writes with diagnostic fingerprinting. `NullLogicalRenderer`
+consumes the production resource writer and stops, without a WGPU context,
+device, queue, encoder, or submission. It is intended for CPU benchmarks and
 differential tests, not as a second renderer implementation.
 
-The diagnostic report fingerprints authored clip rectangles and gradient
+`NullLogicalRenderer::flush` keeps diagnostic hashing out of benchmark timing;
+`flush_with_diagnostics` fingerprints authored clip rectangles and gradient
 kind, geometry, colors, and stops. It also reports exact shadow bytes, buffer
 write operations, retained allocation growth, and per-flush rewinds. Retained
 capacity is the peak reusable capacity required by any one logical flush, not

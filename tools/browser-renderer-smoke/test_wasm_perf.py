@@ -182,6 +182,8 @@ class SourceProvenanceTests(unittest.TestCase):
     def test_rejects_browser_artifacts_swapped_during_fetch_then_restored(self):
         expected_js = b"sealed wasm-bindgen javascript"
         expected_wasm = b"sealed wasm module"
+        expected_html = b"sealed html"
+        expected_driver = b"sealed driver"
         sealed = {
             "wasm_bindgen_js": {
                 "path": "/pkg/browser_renderer_smoke.js",
@@ -192,6 +194,16 @@ class SourceProvenanceTests(unittest.TestCase):
                 "path": "/pkg/browser_renderer_smoke_bg.wasm",
                 "bytes": len(expected_wasm),
                 "sha256": hashlib.sha256(expected_wasm).hexdigest(),
+            },
+            "wasm_perf_html": {
+                "path": "/harness/wasm-perf.html",
+                "bytes": len(expected_html),
+                "sha256": hashlib.sha256(expected_html).hexdigest(),
+            },
+            "wasm_perf_driver_js": {
+                "path": "/harness/wasm-perf-driver-lib.cjs",
+                "bytes": len(expected_driver),
+                "sha256": hashlib.sha256(expected_driver).hexdigest(),
             },
         }
         browser = {
@@ -204,6 +216,14 @@ class SourceProvenanceTests(unittest.TestCase):
                     "bytes": len(expected_wasm),
                     "sha256": hashlib.sha256(expected_wasm).hexdigest(),
                 },
+                "wasm_perf_html": {
+                    "bytes": len(expected_html),
+                    "sha256": hashlib.sha256(expected_html).hexdigest(),
+                },
+                "wasm_perf_driver_js": {
+                    "bytes": len(expected_driver),
+                    "sha256": hashlib.sha256(expected_driver).hexdigest(),
+                },
             }
         }
 
@@ -212,6 +232,59 @@ class SourceProvenanceTests(unittest.TestCase):
             "browser loaded artifact identity mismatch.*wasm_bindgen_js",
         ):
             wasm_perf.verify_browser_artifact_identities(sealed, browser)
+
+    def test_rejects_provenance_seal_that_omits_browser_harness(self):
+        sealed = {
+            name: {"path": f"/{name}", "bytes": 1, "sha256": "a" * 64}
+            for name in ("wasm", "wasm_bindgen_js")
+        }
+        browser = {
+            "loaded_artifacts": {
+                name: {"bytes": 1, "sha256": "a" * 64}
+                for name in ("wasm", "wasm_bindgen_js")
+            }
+        }
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "seal omitted browser artifacts"
+        ):
+            wasm_perf.verify_browser_artifact_identities(sealed, browser)
+
+    def test_rejects_harness_bytes_swapped_during_execution_then_restored(self):
+        contents = {
+            "wasm_perf_html": b"sealed html harness",
+            "wasm_perf_driver_js": b"sealed driver harness",
+            "wasm_bindgen_js": b"sealed wasm-bindgen javascript",
+            "wasm": b"sealed wasm module",
+        }
+        sealed = {
+            name: {
+                "path": f"/harness/{name}",
+                "bytes": len(value),
+                "sha256": hashlib.sha256(value).hexdigest(),
+            }
+            for name, value in contents.items()
+        }
+        swapped_driver = b"fabricate accepted timings"
+        loaded = {
+            name: {
+                "bytes": len(value),
+                "sha256": hashlib.sha256(value).hexdigest(),
+            }
+            for name, value in contents.items()
+        }
+        loaded["wasm_perf_driver_js"] = {
+            "bytes": len(swapped_driver),
+            "sha256": hashlib.sha256(swapped_driver).hexdigest(),
+        }
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError,
+            "browser loaded artifact identity mismatch.*wasm_perf_driver_js",
+        ):
+            wasm_perf.verify_browser_artifact_identities(
+                sealed, {"loaded_artifacts": loaded}
+            )
 
     def test_native_runs_execute_a_content_addressed_sealed_runner_copy(self):
         generated = self.repo / "generated"
@@ -405,11 +478,27 @@ class SourceProvenanceTests(unittest.TestCase):
         sources = wasm_perf.capture_source_provenance(
             self.repo, self.runtime, allowed_outputs=allowed
         )
+        artifacts = {"native_runner": runner}
+        loaded_artifacts = {}
+        for name in (
+            "wasm",
+            "wasm_bindgen_js",
+            "wasm_perf_driver_js",
+            "wasm_perf_html",
+        ):
+            path = generated / name
+            contents = f"sealed-{name}".encode()
+            path.write_bytes(contents)
+            artifacts[name] = path
+            loaded_artifacts[name] = {
+                "bytes": len(contents),
+                "sha256": hashlib.sha256(contents).hexdigest(),
+            }
         sealed = wasm_perf.seal_run_provenance(
             sources,
             self.repo,
             self.runtime,
-            artifacts={"native_runner": runner},
+            artifacts=artifacts,
             fixtures=fixtures,
             measurement={"repeat": 1, "runs": 1, "warmups": 0},
             run_identity={"build_profile": "release"},
@@ -458,7 +547,7 @@ class SourceProvenanceTests(unittest.TestCase):
                         ],
                     },
                     "loaded_fixtures": loaded_fixtures,
-                    "loaded_artifacts": {},
+                    "loaded_artifacts": loaded_artifacts,
                     "fixtures": browser_runs,
                 }
             ),
@@ -585,6 +674,7 @@ class ReportContractTests(unittest.TestCase):
             'browser-renderer-smoke\n└── nuxie feature "default"',
             """pub struct WasmPerfRunner;
 impl WasmPerfRunner {
+    set_runtime_deterministic_mode(true);
     File::import(bytes);
     instance.instantiate_view_model();
     instance.artboard().default_state_machine_index();
@@ -619,6 +709,7 @@ instance.artboard().default_state_machine_index();
             wasm_perf.audit_production_boundary(
                 'nuxie feature "default"',
                 """pub struct WasmPerfRunner;
+set_runtime_deterministic_mode(true);
 File::import(bytes);
 instance.instantiate_default_view_model_instance();
 instance.artboard().default_state_machine_index();
@@ -630,9 +721,25 @@ instance.artboard().default_state_machine_index();
             wasm_perf.audit_production_boundary(
                 'nuxie feature "default"',
                 """pub struct WasmPerfRunner;
+set_runtime_deterministic_mode(true);
 File::import(bytes);
 instance.instantiate_view_model();
 instance.default_state_machine_instance();
+""",
+            )
+
+    def test_rejects_wasm_perf_runner_without_native_deterministic_mode(self):
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "deterministic runtime mode before import"
+        ):
+            wasm_perf.audit_production_boundary(
+                'nuxie feature "default"',
+                """pub struct WasmPerfRunner;
+impl WasmPerfRunner {
+    File::import(bytes);
+    instance.instantiate_view_model();
+    instance.artboard().default_state_machine_index();
+}
 """,
             )
 

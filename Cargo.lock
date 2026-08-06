@@ -189,6 +189,7 @@ dependencies = [
  "nuxie-browser-adapter",
  "nuxie-render-api",
  "nuxie-render-stream",
+ "nuxie-runtime",
  "nuxie-schema",
  "pixel-compare",
  "wasm-bindgen",

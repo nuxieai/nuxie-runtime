@@ -230,14 +230,9 @@ impl MapPointsWorkload {
     }
 
     fn run(&mut self) -> f32 {
-        for (destination, &(x, y)) in self.destination.iter_mut().zip(&self.points) {
-            *destination = self.matrix.map_point(x, y);
-        }
+        self.matrix.map_points(&mut self.destination, &self.points);
         for _ in 1..4096 {
-            for index in 0..self.destination.len() {
-                let (x, y) = self.destination[index];
-                self.destination[index] = self.matrix.map_point(x, y);
-            }
+            self.matrix.map_points_in_place(&mut self.destination);
         }
         self.destination.last().map_or(0.0, |point| point.0)
     }

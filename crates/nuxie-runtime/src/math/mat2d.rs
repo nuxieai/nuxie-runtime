@@ -111,6 +111,41 @@ impl Mat2D {
         }
     }
 
+    /// Maps a contiguous point buffer using the same affine specialization as
+    /// [`Self::map_point`]. The slice boundary gives the optimizer the bulk
+    /// operation shape used by Rive's `Mat2D::mapPoints`.
+    pub fn map_points(self, destination: &mut [(f32, f32)], source: &[(f32, f32)]) {
+        assert_eq!(destination.len(), source.len());
+        let [a, b, c, d, e, f] = self.0;
+        if b == 0.0 && c == 0.0 {
+            for (destination, &(x, y)) in destination.iter_mut().zip(source) {
+                *destination = (a.mul_add(x, e), d.mul_add(y, f));
+            }
+        } else {
+            for (destination, &(x, y)) in destination.iter_mut().zip(source) {
+                *destination = (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)));
+            }
+        }
+    }
+
+    /// In-place form of [`Self::map_points`], equivalent to C++ `mapPoints`
+    /// with the same source and destination pointer.
+    pub fn map_points_in_place(self, points: &mut [(f32, f32)]) {
+        let [a, b, c, d, e, f] = self.0;
+        if b == 0.0 && c == 0.0 {
+            for (x, y) in points {
+                (*x, *y) = (a.mul_add(*x, e), d.mul_add(*y, f));
+            }
+        } else {
+            for (x, y) in points {
+                (*x, *y) = (
+                    a.mul_add(*x, c.mul_add(*y, e)),
+                    d.mul_add(*y, b.mul_add(*x, f)),
+                );
+            }
+        }
+    }
+
     pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {
         (self.0[0] * x + self.0[2] * y, self.0[1] * x + self.0[3] * y)
     }
@@ -125,6 +160,20 @@ impl Default for Mat2D {
 #[cfg(test)]
 mod tests {
     use super::Mat2D;
+
+    #[test]
+    fn bulk_map_matches_scalar_for_distinct_and_in_place_buffers() {
+        let matrix = Mat2D([2.0, -3.0, -4.0, 5.0, 6.0, -7.0]);
+        let source = [(1.0, 2.0), (-3.0, 4.0), (0.0, 0.0)];
+        let expected = source.map(|(x, y)| matrix.map_point(x, y));
+        let mut destination = [(0.0, 0.0); 3];
+
+        matrix.map_points(&mut destination, &source);
+        assert_eq!(destination, expected);
+
+        matrix.map_points_in_place(&mut destination);
+        assert_eq!(destination, expected.map(|(x, y)| matrix.map_point(x, y)));
+    }
 
     #[test]
     fn inverse_and_multiply_match_cpp_contraction_order() {

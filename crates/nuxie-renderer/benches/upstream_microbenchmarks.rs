@@ -19,7 +19,7 @@ use nuxie_render_api::{
     RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
 use nuxie_renderer::upstream_microbenchmarks::{
-    prepare_paths, CapturedPathPaint, IntersectionBoardWorkload, IntersectionTileWorkload,
+    CapturedPathPaint, IntersectionBoardWorkload, IntersectionTileWorkload, NullFrameWorkload,
     Preparation,
 };
 use nuxie_runtime::ArtboardInstance;
@@ -343,27 +343,23 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
 
     let paper = paper_paths();
+    let mut authored_paper = NullFrameWorkload::new(paper.clone(), Preparation::Authored);
     criterion.bench_function("DrawRiveRenderPaths", |bench| {
-        bench.iter(|| black_box(prepare_paths(&paper, Preparation::Authored)));
+        bench.iter(|| black_box(authored_paper.run()));
     });
+    let mut stroke_paper =
+        NullFrameWorkload::new(paper.clone(), Preparation::Strokes(StrokeJoin::Bevel));
     criterion.bench_function("DrawRiveRenderPathsAsStrokes", |bench| {
-        bench.iter(|| {
-            black_box(prepare_paths(
-                &paper,
-                Preparation::Strokes(StrokeJoin::Bevel),
-            ))
-        });
+        bench.iter(|| black_box(stroke_paper.run()));
     });
+    let mut round_stroke_paper =
+        NullFrameWorkload::new(paper.clone(), Preparation::Strokes(StrokeJoin::Round));
     criterion.bench_function("DrawRiveRenderPathsAsRoundJoinStrokes", |bench| {
-        bench.iter(|| {
-            black_box(prepare_paths(
-                &paper,
-                Preparation::Strokes(StrokeJoin::Round),
-            ))
-        });
+        bench.iter(|| black_box(round_stroke_paper.run()));
     });
+    let mut feathered_paper = NullFrameWorkload::new(paper, Preparation::Feather(100.0));
     criterion.bench_function("DrawFeatheredPaths_paper", |bench| {
-        bench.iter(|| black_box(prepare_paths(&paper, Preparation::Feather(100.0))));
+        bench.iter(|| black_box(feathered_paper.run()));
     });
 
     let zero_chop = custom_paths(|path| {
@@ -373,8 +369,9 @@ fn renderer_benches(criterion: &mut Criterion) {
             path.cubic_to(349.0, 607.0, 197.0, 943.0, 199.0, 1225.0);
         }
     });
+    let mut zero_chop = NullFrameWorkload::new(zero_chop, Preparation::Authored);
     criterion.bench_function("DrawZeroChopStrokes", |bench| {
-        bench.iter(|| black_box(prepare_paths(&zero_chop, Preparation::Authored)));
+        bench.iter(|| black_box(zero_chop.run()));
     });
 
     let one_chop = custom_paths(|path| {
@@ -383,8 +380,9 @@ fn renderer_benches(criterion: &mut Criterion) {
             path.cubic_to(0.0, -100.0, 200.0, 100.0, 0.0, 0.0);
         }
     });
+    let mut one_chop = NullFrameWorkload::new(one_chop, Preparation::Authored);
     criterion.bench_function("DrawOneChopStrokes", |bench| {
-        bench.iter(|| black_box(prepare_paths(&one_chop, Preparation::Authored)));
+        bench.iter(|| black_box(one_chop.run()));
     });
 
     let two_chop = custom_paths(|path| {
@@ -394,8 +392,9 @@ fn renderer_benches(criterion: &mut Criterion) {
             path.cubic_to(60.0, 660.0, 403.0, -320.0, 460.0, 1060.0);
         }
     });
+    let mut two_chop = NullFrameWorkload::new(two_chop, Preparation::Authored);
     criterion.bench_function("DrawTwoChopStrokes", |bench| {
-        bench.iter(|| black_box(prepare_paths(&two_chop, Preparation::Authored)));
+        bench.iter(|| black_box(two_chop.run()));
     });
 
     let one_cusp = custom_paths(|path| {
@@ -404,8 +403,9 @@ fn renderer_benches(criterion: &mut Criterion) {
             path.cubic_to(100.0, 0.0, 100.0, 100.0, 0.0, 0.0);
         }
     });
+    let mut one_cusp = NullFrameWorkload::new(one_cusp, Preparation::Authored);
     criterion.bench_function("DrawOneCuspStrokes", |bench| {
-        bench.iter(|| black_box(prepare_paths(&one_cusp, Preparation::Authored)));
+        bench.iter(|| black_box(one_cusp.run()));
     });
 
     let two_cusp = custom_paths(|path| {
@@ -414,8 +414,9 @@ fn renderer_benches(criterion: &mut Criterion) {
             path.cubic_to(50.0, 0.0, 100.0, 0.0, 0.0, 0.0);
         }
     });
+    let mut two_cusp = NullFrameWorkload::new(two_cusp, Preparation::Authored);
     criterion.bench_function("DrawTwoCuspStrokes", |bench| {
-        bench.iter(|| black_box(prepare_paths(&two_cusp, Preparation::Authored)));
+        bench.iter(|| black_box(two_cusp.run()));
     });
 
     let mut custom_feathers = custom_paths(|path| {
@@ -427,8 +428,9 @@ fn renderer_benches(criterion: &mut Criterion) {
         path.style = RenderPaintStyle::Fill;
         path.feather = 85.0;
     }
+    let mut custom_feathers = NullFrameWorkload::new(custom_feathers, Preparation::Authored);
     criterion.bench_function("DrawCustomFeathers", |bench| {
-        bench.iter(|| black_box(prepare_paths(&custom_feathers, Preparation::Authored)));
+        bench.iter(|| black_box(custom_feathers.run()));
     });
 }
 

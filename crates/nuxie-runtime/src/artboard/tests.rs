@@ -8500,6 +8500,103 @@
     }
 
     #[test]
+    fn filthy_children_run_artboard_maintenance_only_for_the_root() {
+        // C++ base Component::update is empty. The DrawOrder and Clipping
+        // tails belong to the concrete Artboard::update override, even though
+        // every freshly cloned child begins FILTHY with both bits set
+        // (`src/component.cpp:71`; `src/artboard.cpp:1159-1170`).
+        let mut root = synthetic_component_for_type(0, "Artboard");
+        root.dirt = ComponentDirt::FILTHY;
+        let mut first = synthetic_component_for_type(1, "Shape");
+        first.dirt = ComponentDirt::FILTHY;
+        let mut second = synthetic_component_for_type(2, "Shape");
+        second.dirt = ComponentDirt::FILTHY;
+        let mut instance = synthetic_instance(vec![root, first, second], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 0);
+        instance
+            .runtime_drawables
+            .reset_artboard_maintenance_call_counts();
+
+        let report = instance.update_components();
+
+        assert_eq!(report.updated_locals, vec![0, 1, 2]);
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .artboard_maintenance_call_counts(),
+            (1, 2),
+            "the root sorts once; sorting clears clipping once and the root Clipping tail clears once"
+        );
+    }
+
+    #[test]
+    fn non_root_draw_order_and_clipping_dirt_skip_artboard_maintenance() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let child = synthetic_component_for_type(1, "Shape");
+        let mut instance = synthetic_instance(vec![root, child], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance
+            .runtime_drawables
+            .reset_artboard_maintenance_call_counts();
+        let child = instance.component_handle(1).expect("child handle");
+
+        instance.update_component(
+            child,
+            ComponentDirt::DRAW_ORDER | ComponentDirt::CLIPPING,
+        );
+
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .artboard_maintenance_call_counts(),
+            (0, 0),
+            "ordinary Component subclasses do not dispatch Artboard::update tails"
+        );
+    }
+
+    #[test]
+    fn nested_child_filthy_traversal_runs_its_artboard_maintenance_once() {
+        let mut child_root = synthetic_component_for_type(0, "Artboard");
+        child_root.dirt = ComponentDirt::FILTHY;
+        let mut first = synthetic_component_for_type(1, "Shape");
+        first.dirt = ComponentDirt::FILTHY;
+        let mut second = synthetic_component_for_type(2, "Shape");
+        second.dirt = ComponentDirt::FILTHY;
+        let mut child = synthetic_instance(vec![child_root, first, second], vec![0, 1, 2]);
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_link_parent(&mut child, 2, 0);
+        child
+            .runtime_drawables
+            .reset_artboard_maintenance_call_counts();
+
+        let parent_root = synthetic_component_for_type(0, "Artboard");
+        let mut host = synthetic_component_for_type(1, "NestedArtboard");
+        host.dirt = ComponentDirt::COMPONENTS;
+        let mut parent = synthetic_instance(vec![parent_root, host], vec![0, 1]);
+        synthetic_link_parent(&mut parent, 1, 0);
+        let mut nested = synthetic_nested_artboard_instance(1);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(1, nested);
+        parent.nested_artboard_locals.push(1);
+
+        assert!(parent.update_pass());
+
+        let child = &parent
+            .nested_artboards
+            .get(&1)
+            .expect("nested occurrence")
+            .child;
+        assert_eq!(
+            child
+                .runtime_drawables
+                .artboard_maintenance_call_counts(),
+            (1, 2),
+            "mounting changes traversal ownership, not Artboard::update dispatch"
+        );
+    }
+
+    #[test]
     fn occurrence_schedule_keeps_embedded_path_composer_identity_exact() {
         let bytes = include_bytes!("../../../../fixtures/graph/clipping_and_draw_order.riv");
         let file = read_runtime_file(bytes).expect("fixture should import");

@@ -4,6 +4,50 @@
   "status": "diagnostic-only-contention",
   "candidate_commit": "74e8fbeb",
   "correctness_followup_commit": "bd6fd1f7",
+  "corrected_tip_profile": {
+    "commit": "e2dd811814d291db303f5b34951d6020df66eebe",
+    "status": "diagnostic-only-contention",
+    "runner": {
+      "source_digest_kind": "golden-runner digest_state",
+      "source_digest": "9af483becc5ed50cb0c00f4133d70474e8e2fbbf00efc0ae9f7166524d5fc79e",
+      "binary_sha256": "16a97d0538105926a5b314eb4d59aeb2aa4585ecae7f3836dcd4a498f4e1a8d9",
+      "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)"
+    },
+    "measurement": {
+      "frames": 100,
+      "hz": 60,
+      "iterations": 5,
+      "warmups": 0,
+      "runner_order": "cpp-first",
+      "load": 41.42,
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 4.59, "rust_total_ms": 184.512235, "ratio": 40.198744 },
+        "gamepad_test": { "cpp_total_ms": 0.725004, "rust_total_ms": 4.875103, "ratio": 6.724243 },
+        "script_create_text_runs": { "cpp_total_ms": 0.82899, "rust_total_ms": 15.038542, "ratio": 18.1408 }
+      }
+    },
+    "car_direct_advance_ms": {
+      "rust": { "frames_1": 40.962, "frames_2": 39.782, "frames_100": 43.559 },
+      "cpp": { "frames_1": 1.637, "frames_2": 0.771, "frames_100": 1.135 }
+    },
+    "time_profile": {
+      "advance_scene_to_samples": 53,
+      "state_machine_settlement_samples": 47,
+      "nested_artboard_host_dirt_samples": 45,
+      "sort_draw_order_direct_samples": 11,
+      "sort_draw_order_allocation_or_proxy_samples": 5,
+      "clear_redundant_operations_samples": 4,
+      "root_cause": "Artboard DrawOrder and Clipping update tails dispatched for every FILTHY child instead of only the root Artboard",
+      "expected_initial_call_counts_per_artboard": { "sort_draw_order": 1, "clear_redundant_operations": 2 }
+    },
+    "external_capture_sha256": {
+      "time_profile_xml": "94a23ee88df78890e5deb67112a7f6eca6069f238a5ea0ce6ca3a733385d3107",
+      "time_sample_xml": "9435ed52eeb52311db0ec8cf4313becaa2e239ee05c5fe0345f164d0e86f0ef1",
+      "trace_toc_xml": "be8f313575266c289473bf1a13397db7015d6b8eb45b38b75de8dfe7fac1f891",
+      "launch_output": "78306351ab1e22e5e4873471a3fadabb4bb5f10fe6ce95c55684213bcdbc476e",
+      "timing_json": "21ae1c5eac0c06ad17f31fe0cdae28cab3449fb33c093fb21097555922006979"
+    }
+  },
   "pinned_cpp_commit": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
   "runner": {
     "source_digest_kind": "golden-runner digest_state",

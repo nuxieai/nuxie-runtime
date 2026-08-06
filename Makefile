@@ -2,7 +2,6 @@
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
-MICROBENCH_CPP ?= $(RIVE_RUNTIME_DIR)/tests/out/release/bench
 MICROBENCH_RUN_DIR ?= $(CURDIR)/target/microbench/run
 MICROBENCH_RUN_MANIFEST ?= $(MICROBENCH_RUN_DIR)/run.json
 MICROBENCH_REPORT ?= $(CURDIR)/target/microbench/comparison.md
@@ -273,7 +272,7 @@ microbench-build:
 	cargo build -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks
 
 microbench-run:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" run --upstream "$(RIVE_RUNTIME_DIR)" --cpp-bench "$(MICROBENCH_CPP)" --run-dir "$(MICROBENCH_RUN_DIR)" --duration "$(MICROBENCH_CPP_DURATION)" --warm-up "$(MICROBENCH_WARM_UP)" --measurement "$(MICROBENCH_MEASUREMENT)" --sample-size "$(MICROBENCH_SAMPLE_SIZE)"
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" run --upstream "$(RIVE_RUNTIME_DIR)" --run-dir "$(MICROBENCH_RUN_DIR)" --duration "$(MICROBENCH_CPP_DURATION)" --warm-up "$(MICROBENCH_WARM_UP)" --measurement "$(MICROBENCH_MEASUREMENT)" --sample-size "$(MICROBENCH_SAMPLE_SIZE)"
 
 microbench-compare:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" compare --run-manifest "$(MICROBENCH_RUN_MANIFEST)" --output "$(MICROBENCH_REPORT)"

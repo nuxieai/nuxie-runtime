@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use nuxie_binary::read_runtime_file;
 use nuxie_graph::GraphFile;
 use nuxie_render_api::{
@@ -367,42 +368,42 @@ fn custom_paths(mut setup: impl FnMut(&mut RawPath)) -> Vec<CapturedPathPaint> {
 fn renderer_benches(criterion: &mut Criterion) {
     let mut tile = IntersectionTileWorkload::disjoint();
     criterion.bench_function("IntersectionTileBench", |bench| {
-        bench.iter(|| black_box(tile.run()));
+        iter_individual_minimum(bench, || black_box(tile.run()));
     });
 
     let mut overlap_tile = IntersectionTileWorkload::overlap_allowed();
     criterion.bench_function("IntersectionTileBenchWithOverlap", |bench| {
-        bench.iter(|| black_box(overlap_tile.run()));
+        iter_individual_minimum(bench, || black_box(overlap_tile.run()));
     });
 
     let mut paper_board = IntersectionBoardWorkload::from_i32le(PAPER_BBOXES);
     criterion.bench_function("IntersectionBoardBench_paper", |bench| {
-        bench.iter(|| black_box(paper_board.run()));
+        iter_individual_minimum(bench, || black_box(paper_board.run()));
     });
 
     let mut marty_board = IntersectionBoardWorkload::from_i32le(MARTY_BBOXES);
     criterion.bench_function("IntersectionBoardBench_marty", |bench| {
-        bench.iter(|| black_box(marty_board.run()));
+        iter_individual_minimum(bench, || black_box(marty_board.run()));
     });
 
     let paper = paper_paths();
     let mut authored_paper = NullFrameWorkload::new(paper.clone(), Preparation::Authored);
     criterion.bench_function("DrawRiveRenderPaths", |bench| {
-        bench.iter(|| black_box(authored_paper.run()));
+        iter_individual_minimum(bench, || black_box(authored_paper.run()));
     });
     let mut stroke_paper =
         NullFrameWorkload::new(paper.clone(), Preparation::Strokes(StrokeJoin::Bevel));
     criterion.bench_function("DrawRiveRenderPathsAsStrokes", |bench| {
-        bench.iter(|| black_box(stroke_paper.run()));
+        iter_individual_minimum(bench, || black_box(stroke_paper.run()));
     });
     let mut round_stroke_paper =
         NullFrameWorkload::new(paper.clone(), Preparation::Strokes(StrokeJoin::Round));
     criterion.bench_function("DrawRiveRenderPathsAsRoundJoinStrokes", |bench| {
-        bench.iter(|| black_box(round_stroke_paper.run()));
+        iter_individual_minimum(bench, || black_box(round_stroke_paper.run()));
     });
     let mut feathered_paper = NullFrameWorkload::new(paper, Preparation::Feather(100.0));
     criterion.bench_function("DrawFeatheredPaths_paper", |bench| {
-        bench.iter(|| black_box(feathered_paper.run()));
+        iter_individual_minimum(bench, || black_box(feathered_paper.run()));
     });
 
     let zero_chop = custom_paths(|path| {
@@ -414,7 +415,7 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
     let mut zero_chop = NullFrameWorkload::new(zero_chop, Preparation::Authored);
     criterion.bench_function("DrawZeroChopStrokes", |bench| {
-        bench.iter(|| black_box(zero_chop.run()));
+        iter_individual_minimum(bench, || black_box(zero_chop.run()));
     });
 
     let one_chop = custom_paths(|path| {
@@ -425,7 +426,7 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
     let mut one_chop = NullFrameWorkload::new(one_chop, Preparation::Authored);
     criterion.bench_function("DrawOneChopStrokes", |bench| {
-        bench.iter(|| black_box(one_chop.run()));
+        iter_individual_minimum(bench, || black_box(one_chop.run()));
     });
 
     let two_chop = custom_paths(|path| {
@@ -437,7 +438,7 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
     let mut two_chop = NullFrameWorkload::new(two_chop, Preparation::Authored);
     criterion.bench_function("DrawTwoChopStrokes", |bench| {
-        bench.iter(|| black_box(two_chop.run()));
+        iter_individual_minimum(bench, || black_box(two_chop.run()));
     });
 
     let one_cusp = custom_paths(|path| {
@@ -448,7 +449,7 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
     let mut one_cusp = NullFrameWorkload::new(one_cusp, Preparation::Authored);
     criterion.bench_function("DrawOneCuspStrokes", |bench| {
-        bench.iter(|| black_box(one_cusp.run()));
+        iter_individual_minimum(bench, || black_box(one_cusp.run()));
     });
 
     let two_cusp = custom_paths(|path| {
@@ -459,7 +460,7 @@ fn renderer_benches(criterion: &mut Criterion) {
     });
     let mut two_cusp = NullFrameWorkload::new(two_cusp, Preparation::Authored);
     criterion.bench_function("DrawTwoCuspStrokes", |bench| {
-        bench.iter(|| black_box(two_cusp.run()));
+        iter_individual_minimum(bench, || black_box(two_cusp.run()));
     });
 
     let mut custom_feathers = custom_paths(|path| {
@@ -473,7 +474,20 @@ fn renderer_benches(criterion: &mut Criterion) {
     }
     let mut custom_feathers = NullFrameWorkload::new(custom_feathers, Preparation::Authored);
     criterion.bench_function("DrawCustomFeathers", |bench| {
-        bench.iter(|| black_box(custom_feathers.run()));
+        iter_individual_minimum(bench, || black_box(custom_feathers.run()));
+    });
+}
+
+/// Make each Criterion sample represent the minimum individually timed call.
+fn iter_individual_minimum<T>(bench: &mut Bencher<'_>, mut operation: impl FnMut() -> T) {
+    bench.iter_custom(|iterations| {
+        let mut minimum = Duration::MAX;
+        for _ in 0..iterations {
+            let start = Instant::now();
+            black_box(operation());
+            minimum = minimum.min(start.elapsed());
+        }
+        minimum.mul_f64(iterations as f64)
     });
 }
 

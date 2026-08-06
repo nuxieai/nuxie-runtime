@@ -13,6 +13,7 @@ import re
 import struct
 import subprocess
 import sys
+import tarfile
 import tomllib
 from typing import NamedTuple
 
@@ -159,13 +160,23 @@ def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
         missing = sorted(expected - registered)
         extra = sorted(registered - expected)
         raise ContractError(f"criterion registry mismatch: missing={missing}, extra={extra}")
+    comparisons = {case.comparison for case in inventory.cases}
+    if not comparisons <= {"ratio", "directional", "blocked"}:
+        raise ContractError(f"unsupported comparison classifications: {sorted(comparisons)}")
 
 
 def check_runnable_inventory(inventory: Inventory) -> None:
-    blocked = [case.name for case in inventory.cases if case.comparison != "ratio"]
+    unknown = [
+        case.name
+        for case in inventory.cases
+        if case.comparison not in {"ratio", "directional", "blocked"}
+    ]
+    if unknown:
+        raise ContractError(f"unsupported comparison classification for {unknown}")
+    blocked = [case.name for case in inventory.cases if case.comparison == "blocked"]
     if blocked:
         raise ContractError(
-            "benchmark evidence requires equivalent direct-ratio boundaries; "
+            "benchmark evidence requires runnable ratio or directional boundaries; "
             f"blocked={blocked}"
         )
 
@@ -372,12 +383,59 @@ def record_artifact(path: pathlib.Path) -> dict[str, str]:
     return {"path": str(path.resolve()), "sha256": sha256(path)}
 
 
+def build_cpp_benchmark(
+    upstream: pathlib.Path, run_dir: pathlib.Path
+) -> tuple[pathlib.Path, pathlib.Path, list[str]]:
+    """Build the pinned C++ benchmark into the sealed run namespace."""
+    build_dir = run_dir / "cpp-build"
+    build_dir.mkdir(parents=True, exist_ok=False)
+    log = run_dir / "cpp-build.log"
+    command = [str((upstream / "build" / "build_rive.sh").resolve()), "release", "--", "bench"]
+    environment = os.environ.copy()
+    environment["RIVE_OUT"] = str(build_dir)
+    result = subprocess.run(
+        command,
+        cwd=upstream / "tests",
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    log.write_text(result.stdout)
+    if result.returncode != 0:
+        raise ContractError(
+            f"pinned C++ benchmark build failed with status {result.returncode}; see {log}"
+        )
+    binary = build_dir / "bench"
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise ContractError(f"pinned C++ build did not produce executable {binary}")
+    return binary, log, command
+
+
+def stage_upstream_source(
+    upstream: pathlib.Path, revision: str, run_dir: pathlib.Path
+) -> tuple[pathlib.Path, pathlib.Path]:
+    """Materialize only committed pinned source inside the sealed run directory."""
+    archive = run_dir / "cpp-source.tar"
+    archived = subprocess.run(
+        ["git", "archive", "--format=tar", revision],
+        cwd=upstream,
+        check=True,
+        capture_output=True,
+    ).stdout
+    archive.write_bytes(archived)
+    source_dir = run_dir / "cpp-source"
+    source_dir.mkdir()
+    with tarfile.open(archive) as source:
+        source.extractall(source_dir, filter="data")
+    return source_dir, archive
+
+
 def run_benchmarks(
     repo_root: pathlib.Path,
     manifest_path: pathlib.Path,
     inventory: Inventory,
     upstream: pathlib.Path,
-    cpp_bench: pathlib.Path,
     run_dir: pathlib.Path,
     duration: int,
     warm_up: int,
@@ -392,6 +450,11 @@ def run_benchmarks(
     check_upstream_ref(upstream, inventory)
     check_upstream_case_contract(upstream, inventory)
     check_upstream_datasets(repo_root, upstream, inventory)
+    upstream_status = command_output(
+        ["git", "status", "--porcelain", "--untracked-files=all"], upstream
+    )
+    if upstream_status:
+        raise ContractError("pinned upstream checkout must be clean before the sealed build")
 
     revision = command_output(["git", "rev-parse", "HEAD"], repo_root)
     timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -407,8 +470,17 @@ def run_benchmarks(
     ).resolve()
     cpp_output = run_dir / "cpp.txt"
     run_manifest = run_dir / "run.json"
+    cpp_source, cpp_source_archive = stage_upstream_source(
+        upstream, inventory.upstream_ref, run_dir
+    )
+    cpp_bench, cpp_build_log, cpp_build_command = build_cpp_benchmark(cpp_source, run_dir)
+    check_upstream_datasets(repo_root, upstream, inventory)
+    if command_output(
+        ["git", "status", "--porcelain", "--untracked-files=all"], upstream
+    ):
+        raise ContractError("pinned upstream checkout changed during the sealed build")
     run: dict = {
-        "schema": "nuxie-upstream-microbench-run-v3",
+        "schema": "nuxie-upstream-microbench-run-v4",
         "status": "running",
         "run_id": run_id,
         "repo_revision": revision,
@@ -419,18 +491,24 @@ def run_benchmarks(
             "criterion_warm_up_seconds": warm_up,
             "criterion_measurement_seconds": measurement,
             "criterion_sample_size": sample_size,
-            "statistic": "minimum elapsed nanoseconds per iteration",
+            "statistic": "minimum individually timed invocation",
             "criterion_home": str(criterion_dir),
             "cargo_target_dir": str(cargo_target_dir),
+            "cpp_build_cwd": str((cpp_source / "tests").resolve()),
+            "cpp_build_output_dir": str((run_dir / "cpp-build").resolve()),
+            "cpp_build_command": cpp_build_command,
         },
         "tools": {
             "rustc": command_output(["rustc", "--version"]),
             "cargo": command_output(["cargo", "--version"]),
+            "cxx": command_output(["c++", "--version"]),
             "platform": command_output(["uname", "-a"]),
         },
         "artifacts": {
             "inventory": record_artifact(manifest_path),
+            "cpp_source_archive": record_artifact(cpp_source_archive),
             "cpp_binary": record_artifact(cpp_bench),
+            "cpp_build_log": record_artifact(cpp_build_log),
         },
     }
     run_manifest.write_text(json.dumps(run, indent=2) + "\n")
@@ -528,7 +606,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     cpp.add_argument("--output", type=pathlib.Path, required=True)
     run = commands.add_parser("run")
     run.add_argument("--upstream", type=pathlib.Path, required=True)
-    run.add_argument("--cpp-bench", type=pathlib.Path, required=True)
     run.add_argument("--run-dir", type=pathlib.Path, required=True)
     run.add_argument("--duration", type=int, default=5)
     run.add_argument("--warm-up", type=int, default=3)
@@ -565,7 +642,6 @@ def main(argv: list[str] | None = None) -> int:
             manifest,
             inventory,
             args.upstream.resolve(),
-            args.cpp_bench.resolve(),
             args.run_dir.resolve(),
             args.duration,
             args.warm_up,

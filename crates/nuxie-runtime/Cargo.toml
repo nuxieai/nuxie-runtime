@@ -38,11 +38,16 @@ unicode-script = "0.5.8"
 nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 png = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+
+[[bench]]
+name = "upstream_microbenchmarks"
+harness = false
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"

@@ -2069,7 +2069,7 @@ fn recursive_edge_intersection(
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "upstream-microbenchmarks")))]
 mod tests {
     use super::*;
     use crate::work_metrics::{CountedDeviceExt, CountedQueueExt};

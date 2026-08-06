@@ -10,6 +10,9 @@ default = []
 decode-oracle = []
 perf-diagnostics = []
 perf-counters = []
+# Compiles the Criterion target's direct, crate-private source mirrors. This is
+# deliberately opt-in so the benchmark harness never widens the shipped API.
+upstream-microbenchmarks = []
 
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
@@ -37,8 +40,15 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLCom
 raw-window-handle = "0.6"
 
 [dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+libc = "0.2"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 sha2 = "0.10"
+
+[[bench]]
+name = "upstream_microbenchmarks"
+harness = false
+required-features = ["upstream-microbenchmarks"]

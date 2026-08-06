@@ -1,0 +1,133 @@
+schema = "nuxie-upstream-microbench-v1"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+
+[[dataset]]
+name = "paper_bboxes_6_copies"
+kind = "i32-ltrb"
+path = "benchmarks/data/paper_bboxes_6_copies.i32le"
+source = "tests/bench/paper_bboxes_6_copies.hpp"
+source_sha256 = "8161e63bddab47f84da7997109474e71ee08e83299aa3b62e6c825e2b7f17f1b"
+sha256 = "18366be26a592fbe40c9f1eb31779acc37410beb9e415b8527aa51c0a734be04"
+count = 19305
+width = 3456
+height = 2102
+
+[[dataset]]
+name = "marty_bboxes_187_copies"
+kind = "i32-ltrb"
+path = "benchmarks/data/marty_bboxes_187_copies.i32le"
+source = "tests/bench/marty_bboxes_187_copies.hpp"
+source_sha256 = "c1d2ca35d97473bfc49928fa14a4c0714651dd767425eaccfa21f73554d3fbb0"
+sha256 = "52da9d35f5ea888b9131d4671e17216a0f16c71d7e6c948d053aee77c1fec91e"
+count = 12377
+width = 3456
+height = 2102
+
+[[dataset]]
+name = "paper_riv"
+kind = "rive-bytes"
+path = "benchmarks/data/paper.riv"
+source = "tests/unit_tests/assets/paper.riv.cpp"
+source_sha256 = "a373fe17fc5de01aac9ec203b34e1274c1d15b2212c18d2a07c20e3a948e876c"
+sha256 = "79b9fef67b397ad0eb5895a7857d38ca9b7e1ea51bde8ad9a50964ab674c4ee0"
+count = 2403906
+
+[[case]]
+name = "BuildRawPath"
+crate = "nuxie-runtime"
+source = "tests/bench/build_raw_path.cpp"
+
+[[case]]
+name = "DrawCustomFeathers"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawFeatheredPaths_paper"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawOneChopStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawOneCuspStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawRiveRenderPaths"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawRiveRenderPathsAsRoundJoinStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawRiveRenderPathsAsStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawTwoChopStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawTwoCuspStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "DrawZeroChopStrokes"
+crate = "nuxie-renderer"
+source = "tests/bench/draw_pls_path.cpp"
+
+[[case]]
+name = "IntersectionBoardBench_marty"
+crate = "nuxie-renderer"
+source = "tests/bench/intersection_board_bench.cpp"
+
+[[case]]
+name = "IntersectionBoardBench_paper"
+crate = "nuxie-renderer"
+source = "tests/bench/intersection_board_bench.cpp"
+
+[[case]]
+name = "IntersectionTileBench"
+crate = "nuxie-renderer"
+source = "tests/bench/intersection_board_bench.cpp"
+
+[[case]]
+name = "IntersectionTileBenchWithOverlap"
+crate = "nuxie-renderer"
+source = "tests/bench/intersection_board_bench.cpp"
+
+[[case]]
+name = "IterateRawPath"
+crate = "nuxie-runtime"
+source = "tests/bench/iterate_raw_path.cpp"
+
+[[case]]
+name = "MapPointsAffine"
+crate = "nuxie-runtime"
+source = "tests/bench/map_points.cpp"
+
+[[case]]
+name = "MapPointsScaleTrans"
+crate = "nuxie-runtime"
+source = "tests/bench/map_points.cpp"
+
+[[case]]
+name = "MeasurePath"
+crate = "nuxie-runtime"
+source = "tests/bench/measure_path.cpp"
+
+[[case]]
+name = "RawPathBounds"
+crate = "nuxie-runtime"
+source = "tests/bench/raw_path_bounds.cpp"

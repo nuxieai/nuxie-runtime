@@ -6,24 +6,8 @@
   </head>
   <body data-status="loading">
     <script src="wasm-perf-driver-lib.cjs"></script>
-    <script type="module">
-      import init, { WasmPerfRunner } from "./pkg/browser_renderer_smoke.js";
-
+    <script>
       try {
-        await init();
-        window.measureWasmFixture = async ({ bytes, repeat, sampleSeconds }) =>
-          window.WasmPerfDriver.measureFixture({
-            createRunner: async () => new WasmPerfRunner(bytes),
-            now: () => performance.now(),
-            repeat,
-            sampleSeconds,
-          });
-        window.measureWasmFixtureRuns = async ({ bytes, repeat, sampleSeconds, warmups, runs }) =>
-          window.WasmPerfDriver.measureRuns({
-            measure: () => window.measureWasmFixture({ bytes, repeat, sampleSeconds }),
-            warmups,
-            runs,
-          });
         document.body.dataset.status = "ready";
       } catch (error) {
         document.body.dataset.status = "failed";

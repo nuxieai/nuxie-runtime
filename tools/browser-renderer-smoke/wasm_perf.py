@@ -13,6 +13,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -671,6 +672,34 @@ def verify_browser_fixture_identities(
             )
 
 
+def verify_browser_artifact_identities(
+    sealed_artifacts: dict[str, Any], browser: dict[str, Any]
+) -> None:
+    measured_names = {"wasm", "wasm_bindgen_js"}
+    expected_names = measured_names.intersection(sealed_artifacts)
+    loaded_artifacts = browser.get("loaded_artifacts")
+    if not isinstance(loaded_artifacts, dict):
+        raise ContractError("browser results omitted loaded artifact identities")
+    if set(loaded_artifacts) != expected_names:
+        raise ContractError(
+            "browser loaded artifact identities do not match sealed artifacts: "
+            f"sealed={sorted(expected_names)} loaded={sorted(loaded_artifacts)}"
+        )
+    for name in sorted(expected_names):
+        expected = sealed_artifacts[name]
+        loaded = loaded_artifacts[name]
+        if not isinstance(loaded, dict) or set(loaded) != {"bytes", "sha256"}:
+            raise ContractError(
+                f"browser loaded artifact identity is invalid: {name} {loaded!r}"
+            )
+        expected_identity = {key: expected[key] for key in ("bytes", "sha256")}
+        if loaded != expected_identity:
+            raise ContractError(
+                f"browser loaded artifact identity mismatch: {name} "
+                f"expected={expected_identity!r} loaded={loaded!r}"
+            )
+
+
 def verify_config_against_seal(
     config: dict[str, Any], provenance: dict[str, Any]
 ) -> None:
@@ -861,7 +890,7 @@ def audit_run(args: argparse.Namespace) -> None:
     )
 
 
-def _native_runs(
+def _native_runs_with_runner(
     config: dict[str, Any], runner: Path, sealed_fixtures: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {}
@@ -898,6 +927,43 @@ def _native_runs(
             )
         result[fixture["id"]] = runs
     return result
+
+
+def _native_runs(
+    config: dict[str, Any],
+    runner: Path,
+    sealed_fixtures: dict[str, Any],
+    sealed_runner: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    runner_bytes = runner.read_bytes()
+    runner_identity = {
+        "bytes": len(runner_bytes),
+        "sha256": hashlib.sha256(runner_bytes).hexdigest(),
+    }
+    expected_identity = {
+        key: sealed_runner[key] for key in ("bytes", "sha256")
+    }
+    if runner_identity != expected_identity:
+        raise ContractError(
+            "native runner changed before execution: "
+            f"expected={expected_identity!r} current={runner_identity!r}"
+        )
+
+    # Never execute the mutable build output itself. The exact bytes captured
+    # above are written once to a private, content-addressed path; swaps of the
+    # original runner after this point cannot alter the measured executable.
+    with tempfile.TemporaryDirectory(prefix="nuxie-wasm-perf-native-") as temp_dir:
+        sealed_copy = Path(temp_dir) / runner_identity["sha256"]
+        with sealed_copy.open("xb") as output:
+            output.write(runner_bytes)
+            output.flush()
+        sealed_copy.chmod(0o500)
+        if _artifact_record(sealed_copy) != {
+            "path": str(sealed_copy.resolve()),
+            **runner_identity,
+        }:
+            raise ContractError("content-addressed native runner copy changed before execution")
+        return _native_runs_with_runner(config, sealed_copy, sealed_fixtures)
 
 
 def _ratio(value: float | None) -> str:
@@ -968,6 +1034,7 @@ def finalize_run(args: argparse.Namespace) -> None:
         allowed_outputs=allowed_outputs,
     )
     verify_config_against_seal(config, provenance)
+    verify_browser_artifact_identities(provenance["artifacts"], browser)
     verify_browser_fixture_identities(provenance["fixtures"], browser)
     verify_browser_measurement_contract(provenance, browser)
     expected_native = Path(provenance["artifacts"]["native_runner"]["path"])
@@ -983,7 +1050,12 @@ def finalize_run(args: argparse.Namespace) -> None:
             validate_timing_report(report)
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"browser segment mismatch for {fixture['id']}")
-    native = _native_runs(config, args.native_runner, provenance["fixtures"])
+    native = _native_runs(
+        config,
+        args.native_runner,
+        provenance["fixtures"],
+        provenance["artifacts"]["native_runner"],
+    )
     if load_run_seal(args.seal, args.expected_seal_sha256) != provenance:
         raise ContractError("run seal changed during measurement")
     verify_run_provenance(

@@ -4,7 +4,10 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
 const { chromium } = require("playwright");
-const { assertLoadedFixtureIdentity } = require("./wasm-perf-driver-lib.cjs");
+const {
+  assertLoadedArtifactIdentity,
+  assertLoadedFixtureIdentity,
+} = require("./wasm-perf-driver-lib.cjs");
 
 const [baseUrl, configPath, outputPath, sealPath, expectedSealSha256] = process.argv.slice(2);
 if (!baseUrl || !configPath || !outputPath || !sealPath || !expectedSealSha256) {
@@ -49,6 +52,32 @@ if (browserMode === "chrome") {
     const status = await page.getAttribute("body", "data-status");
     if (status !== "ready") {
       throw new Error(`wasm perf page failed: ${await page.textContent("body")}`);
+    }
+
+    const expectedArtifacts = Object.fromEntries(
+      ["wasm_bindgen_js", "wasm"].map((name) => [
+        name,
+        {
+          bytes: seal.provenance.artifacts[name].bytes,
+          sha256: seal.provenance.artifacts[name].sha256,
+        },
+      ]),
+    );
+    const loadedArtifacts = await page.evaluate(
+      async ({ jsUrl, wasmUrl, expectedArtifacts: expected }) =>
+        window.WasmPerfDriver.installWasmPerfArtifacts({
+          jsUrl,
+          wasmUrl,
+          expectedArtifacts: expected,
+        }),
+      {
+        jsUrl: `${baseUrl}pkg/browser_renderer_smoke.js`,
+        wasmUrl: `${baseUrl}pkg/browser_renderer_smoke_bg.wasm`,
+        expectedArtifacts,
+      },
+    );
+    for (const name of ["wasm_bindgen_js", "wasm"]) {
+      assertLoadedArtifactIdentity(name, expectedArtifacts[name], loadedArtifacts[name]);
     }
 
     const fixtures = {};
@@ -104,6 +133,7 @@ if (browserMode === "chrome") {
           sample_seconds,
         })),
       },
+      loaded_artifacts: loadedArtifacts,
       loaded_fixtures: loadedFixtures,
       fixtures,
     };

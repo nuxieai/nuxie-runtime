@@ -2,10 +2,23 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  assertLoadedArtifactIdentity,
   assertLoadedFixtureIdentity,
   measureFixture,
   measureRuns,
 } = require("./wasm-perf-driver-lib.cjs");
+
+test("rejects fetched wasm-bindgen bytes changed before browser execution", () => {
+  assert.throws(
+    () =>
+      assertLoadedArtifactIdentity(
+        "wasm_bindgen_js",
+        { bytes: 10, sha256: "expected" },
+        { bytes: 11, sha256: "swapped" },
+      ),
+    /browser loaded artifact identity mismatch.*wasm_bindgen_js/,
+  );
+});
 
 test("rejects fixture bytes changed before browser measurement", () => {
   assert.throws(

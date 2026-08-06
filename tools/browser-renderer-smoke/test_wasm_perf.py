@@ -179,6 +179,89 @@ class SourceProvenanceTests(unittest.TestCase):
         ):
             wasm_perf.verify_browser_fixture_identities(expected, browser)
 
+    def test_rejects_browser_artifacts_swapped_during_fetch_then_restored(self):
+        expected_js = b"sealed wasm-bindgen javascript"
+        expected_wasm = b"sealed wasm module"
+        sealed = {
+            "wasm_bindgen_js": {
+                "path": "/pkg/browser_renderer_smoke.js",
+                "bytes": len(expected_js),
+                "sha256": hashlib.sha256(expected_js).hexdigest(),
+            },
+            "wasm": {
+                "path": "/pkg/browser_renderer_smoke_bg.wasm",
+                "bytes": len(expected_wasm),
+                "sha256": hashlib.sha256(expected_wasm).hexdigest(),
+            },
+        }
+        browser = {
+            "loaded_artifacts": {
+                "wasm_bindgen_js": {
+                    "bytes": len(b"swapped javascript"),
+                    "sha256": hashlib.sha256(b"swapped javascript").hexdigest(),
+                },
+                "wasm": {
+                    "bytes": len(expected_wasm),
+                    "sha256": hashlib.sha256(expected_wasm).hexdigest(),
+                },
+            }
+        }
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError,
+            "browser loaded artifact identity mismatch.*wasm_bindgen_js",
+        ):
+            wasm_perf.verify_browser_artifact_identities(sealed, browser)
+
+    def test_native_runs_execute_a_content_addressed_sealed_runner_copy(self):
+        generated = self.repo / "generated"
+        generated.mkdir()
+        marker = generated / "executed-path.txt"
+        runner = generated / "native-runner"
+        runner.write_text(
+            "#!/bin/sh\n"
+            "set -eu\n"
+            f"printf '%s' \"$0\" > '{marker}'\n"
+            "printf 'rive-golden-benchmark-v1\\n"
+            "elapsed_ms=1\\ntotal_ms=1\\nadvance_ms=0.4\\ninput_ms=0\\n"
+            "prepare_ms=0\\ndraw_ms=0.5\\nbookkeeping_ms=0.1\\nsegments=1\\n"
+            "scene_kind=state_machine\\ndefault_state_machine_id=0\\n"
+            "view_model_initialization=schema-default\\n'\n",
+            encoding="utf-8",
+        )
+        runner.chmod(0o755)
+        fixture = generated / "fixture.riv"
+        fixture.write_bytes(b"sealed fixture")
+        fixture_sha256 = hashlib.sha256(fixture.read_bytes()).hexdigest()
+        runner_bytes = runner.read_bytes()
+        runner_sha256 = hashlib.sha256(runner_bytes).hexdigest()
+
+        wasm_perf._native_runs(
+            {
+                "runs": 1,
+                "repeat": 1,
+                "fixtures": [{"id": "fixture"}],
+            },
+            runner,
+            {
+                "fixture": {
+                    "id": "fixture",
+                    "staged_path": str(fixture),
+                    "sha256": fixture_sha256,
+                    "sample_seconds": 0.0,
+                }
+            },
+            {
+                "path": str(runner),
+                "bytes": len(runner_bytes),
+                "sha256": runner_sha256,
+            },
+        )
+
+        executed_path = Path(marker.read_text(encoding="utf-8"))
+        self.assertNotEqual(executed_path, runner)
+        self.assertEqual(executed_path.name, runner_sha256)
+
     def test_accepts_multiple_browser_fixtures_with_exact_sealed_identities(self):
         sealed = {}
         loaded = {}
@@ -375,6 +458,7 @@ class SourceProvenanceTests(unittest.TestCase):
                         ],
                     },
                     "loaded_fixtures": loaded_fixtures,
+                    "loaded_artifacts": {},
                     "fixtures": browser_runs,
                 }
             ),

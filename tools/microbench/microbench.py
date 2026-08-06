@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
+import os
 import pathlib
 import re
 import struct
@@ -23,6 +25,9 @@ class Case(NamedTuple):
     name: str
     crate: str
     source: str
+    source_sha256: str
+    comparison: str
+    equivalence: str
 
 
 class Dataset(NamedTuple):
@@ -113,6 +118,32 @@ def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
         raise ContractError(f"criterion registry mismatch: missing={missing}, extra={extra}")
 
 
+def discover_upstream_cases(upstream: pathlib.Path, inventory: Inventory) -> set[str]:
+    registered: set[str] = set()
+    for source in {case.source for case in inventory.cases}:
+        path = upstream / source
+        if not path.is_file():
+            raise ContractError(f"missing pinned upstream benchmark source: {source}")
+        registered.update(re.findall(r"REGISTER_BENCH\(\s*([A-Za-z0-9_]+)\s*\)", path.read_text()))
+    return registered
+
+
+def check_upstream_case_contract(upstream: pathlib.Path, inventory: Inventory) -> None:
+    expected = {case.name for case in inventory.cases}
+    registered = discover_upstream_cases(upstream, inventory)
+    if registered != expected:
+        raise ContractError(
+            "upstream registry mismatch: "
+            f"missing={sorted(expected - registered)}, extra={sorted(registered - expected)}"
+        )
+    for case in inventory.cases:
+        actual = sha256(upstream / case.source)
+        if actual != case.source_sha256:
+            raise ContractError(
+                f"{case.source} sha256 mismatch: expected {case.source_sha256}, got {actual}"
+            )
+
+
 def parse_bbox_header(path: pathlib.Path, expected_count: int) -> bytes:
     text = path.read_text()
     rows = re.findall(
@@ -167,6 +198,7 @@ def check_upstream_datasets(
     repo_root: pathlib.Path, upstream: pathlib.Path, inventory: Inventory
 ) -> None:
     check_upstream_ref(upstream, inventory)
+    check_upstream_case_contract(upstream, inventory)
     for dataset in inventory.datasets:
         source = upstream / dataset.source
         content = converted_dataset_content(source, dataset)
@@ -196,25 +228,36 @@ def load_cpp_timings(path: pathlib.Path) -> dict[str, float]:
     return timings
 
 
+def load_criterion_minimum(sample_path: pathlib.Path) -> float:
+    raw = json.loads(sample_path.read_text())
+    per_iteration = [float(elapsed) / float(iters) for iters, elapsed in zip(raw["iters"], raw["times"])]
+    if not per_iteration:
+        raise ContractError(f"empty criterion sample: {sample_path}")
+    return min(per_iteration)
+
+
 def load_criterion_timings(criterion_dir: pathlib.Path, inventory: Inventory) -> dict[str, float]:
     timings: dict[str, float] = {}
     for case in inventory.cases:
-        estimates = criterion_dir / case.name / "new" / "estimates.json"
-        if not estimates.is_file():
-            raise ContractError(f"missing criterion estimate for {case.name}: {estimates}")
-        raw = json.loads(estimates.read_text())
-        timings[case.name] = float(raw["median"]["point_estimate"])
+        sample = criterion_dir / case.name / "new" / "sample.json"
+        if not sample.is_file():
+            raise ContractError(f"missing criterion sample for {case.name}: {sample}")
+        timings[case.name] = load_criterion_minimum(sample)
     return timings
 
 
-def render_ratio_table(
+def render_report(
     inventory: Inventory, cpp_nanoseconds: dict[str, float], rust_nanoseconds: dict[str, float]
 ) -> str:
     lines = [
+        "## Equivalent boundaries (minimum sample versus minimum sample)",
+        "",
         "| Benchmark | C++ | Rust | Rust/C++ |",
         "|---|---:|---:|---:|",
     ]
     for case in inventory.cases:
+        if case.comparison != "ratio":
+            continue
         if case.name not in cpp_nanoseconds or case.name not in rust_nanoseconds:
             raise ContractError(f"missing timing for {case.name}")
         cpp = cpp_nanoseconds[case.name]
@@ -223,7 +266,163 @@ def render_ratio_table(
             f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
             f"{rust / 1_000_000:.6f} ms | {rust / cpp:.3f}x |"
         )
+    lines.extend([
+        "",
+        "## Directional timings (not ratio-comparable)",
+        "",
+        "| Benchmark | C++ workload | Rust primitive | Why no ratio |",
+        "|---|---:|---:|---|",
+    ])
+    for case in inventory.cases:
+        if case.comparison != "directional":
+            continue
+        cpp = cpp_nanoseconds[case.name]
+        rust = rust_nanoseconds[case.name]
+        lines.append(
+            f"| `{case.name}` | {cpp / 1_000_000:.6f} ms | "
+            f"{rust / 1_000_000:.6f} ms | {case.equivalence} |"
+        )
     return "\n".join(lines) + "\n"
+
+
+def validate_run_artifacts(run: dict) -> None:
+    if run.get("status") != "complete":
+        raise ContractError("benchmark run is not complete")
+    for name, artifact in run.get("artifacts", {}).items():
+        path = pathlib.Path(artifact["path"])
+        if not path.is_file():
+            raise ContractError(f"missing run artifact {name}: {path}")
+        actual = sha256(path)
+        if actual != artifact["sha256"]:
+            raise ContractError(
+                f"artifact hash mismatch for {name}: expected {artifact['sha256']}, got {actual}"
+            )
+
+
+def command_output(command: list[str], cwd: pathlib.Path | None = None) -> str:
+    return subprocess.run(
+        command, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def record_artifact(path: pathlib.Path) -> dict[str, str]:
+    return {"path": str(path.resolve()), "sha256": sha256(path)}
+
+
+def run_benchmarks(
+    repo_root: pathlib.Path,
+    manifest_path: pathlib.Path,
+    inventory: Inventory,
+    upstream: pathlib.Path,
+    cpp_bench: pathlib.Path,
+    run_dir: pathlib.Path,
+    duration: int,
+    warm_up: int,
+    measurement: int,
+    sample_size: int,
+) -> pathlib.Path:
+    if run_dir.exists() and any(run_dir.iterdir()):
+        raise ContractError(f"run directory must be absent or empty: {run_dir}")
+    if command_output(["git", "status", "--porcelain"], repo_root):
+        raise ContractError("benchmark evidence requires a clean committed worktree")
+    check_upstream_ref(upstream, inventory)
+    check_upstream_case_contract(upstream, inventory)
+    check_upstream_datasets(repo_root, upstream, inventory)
+
+    revision = command_output(["git", "rev-parse", "HEAD"], repo_root)
+    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+    run_id = f"{timestamp}-{revision[:12]}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    criterion_base = pathlib.Path(os.environ.get("CRITERION_HOME", run_dir / "criterion-root"))
+    criterion_dir = (criterion_base / "nuxie-upstream-microbenchmarks" / run_id).resolve()
+    if criterion_dir.exists():
+        raise ContractError(f"Criterion run directory already exists: {criterion_dir}")
+    criterion_dir.mkdir(parents=True)
+    cargo_target_dir = pathlib.Path(
+        os.environ.get("CARGO_TARGET_DIR", repo_root / "target")
+    ).resolve()
+    cpp_output = run_dir / "cpp.txt"
+    run_manifest = run_dir / "run.json"
+    run: dict = {
+        "schema": "nuxie-upstream-microbench-run-v2",
+        "status": "running",
+        "run_id": run_id,
+        "repo_revision": revision,
+        "upstream_revision": inventory.upstream_ref,
+        "settings": {
+            "cpp_duration_seconds": duration,
+            "criterion_warm_up_seconds": warm_up,
+            "criterion_measurement_seconds": measurement,
+            "criterion_sample_size": sample_size,
+            "statistic": "minimum elapsed nanoseconds per iteration",
+            "criterion_home": str(criterion_dir),
+            "cargo_target_dir": str(cargo_target_dir),
+        },
+        "tools": {
+            "rustc": command_output(["rustc", "--version"]),
+            "cargo": command_output(["cargo", "--version"]),
+            "platform": command_output(["uname", "-a"]),
+        },
+        "artifacts": {
+            "inventory": record_artifact(manifest_path),
+            "cpp_binary": record_artifact(cpp_bench),
+        },
+    }
+    run_manifest.write_text(json.dumps(run, indent=2) + "\n")
+    environment = os.environ.copy()
+    environment["CRITERION_HOME"] = str(criterion_dir)
+    environment["CARGO_TARGET_DIR"] = str(cargo_target_dir)
+    criterion_args = [
+        "--",
+        "--warm-up-time",
+        str(warm_up),
+        "--measurement-time",
+        str(measurement),
+        "--sample-size",
+        str(sample_size),
+    ]
+    for package in ("nuxie-runtime", "nuxie-renderer"):
+        subprocess.run(
+            [
+                "cargo",
+                "bench",
+                "-p",
+                package,
+                "--features",
+                "upstream-microbenchmarks",
+                "--bench",
+                "upstream_microbenchmarks",
+                *criterion_args,
+            ],
+            cwd=repo_root,
+            env=environment,
+            check=True,
+        )
+    run_cpp(cpp_bench, inventory, duration, cpp_output)
+    run["artifacts"]["cpp_output"] = record_artifact(cpp_output)
+    for case in inventory.cases:
+        sample = criterion_dir / case.name / "new" / "sample.json"
+        if not sample.is_file():
+            raise ContractError(f"missing run-scoped Criterion sample for {case.name}: {sample}")
+        run["artifacts"][f"criterion:{case.name}"] = record_artifact(sample)
+    run["status"] = "complete"
+    run_manifest.write_text(json.dumps(run, indent=2) + "\n")
+    return run_manifest
+
+
+def load_run(
+    repo_root: pathlib.Path, manifest_path: pathlib.Path, run_manifest: pathlib.Path
+) -> dict:
+    run = json.loads(run_manifest.read_text())
+    validate_run_artifacts(run)
+    revision = command_output(["git", "rev-parse", "HEAD"], repo_root)
+    if run.get("repo_revision") != revision:
+        raise ContractError(
+            f"stale run revision: expected current {revision}, got {run.get('repo_revision')}"
+        )
+    if run["artifacts"]["inventory"]["sha256"] != sha256(manifest_path):
+        raise ContractError("stale run inventory hash")
+    return run
 
 
 def run_cpp(cpp_bench: pathlib.Path, inventory: Inventory, duration: int, output: pathlib.Path) -> None:
@@ -255,9 +454,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     cpp.add_argument("--cpp-bench", type=pathlib.Path, required=True)
     cpp.add_argument("--duration", type=int, default=5)
     cpp.add_argument("--output", type=pathlib.Path, required=True)
+    run = commands.add_parser("run")
+    run.add_argument("--upstream", type=pathlib.Path, required=True)
+    run.add_argument("--cpp-bench", type=pathlib.Path, required=True)
+    run.add_argument("--run-dir", type=pathlib.Path, required=True)
+    run.add_argument("--duration", type=int, default=5)
+    run.add_argument("--warm-up", type=int, default=3)
+    run.add_argument("--measurement", type=int, default=10)
+    run.add_argument("--sample-size", type=int, default=20)
     compare = commands.add_parser("compare")
-    compare.add_argument("--cpp-output", type=pathlib.Path, required=True)
-    compare.add_argument("--criterion-dir", type=pathlib.Path, default=pathlib.Path("target/criterion"))
+    compare.add_argument("--run-manifest", type=pathlib.Path, required=True)
     compare.add_argument("--output", type=pathlib.Path)
     return parser.parse_args(argv)
 
@@ -281,12 +487,29 @@ def main(argv: list[str] | None = None) -> int:
         extract_datasets(repo_root, args.upstream.resolve(), inventory)
     elif args.command == "run-cpp":
         run_cpp(args.cpp_bench.resolve(), inventory, args.duration, args.output)
+    elif args.command == "run":
+        result = run_benchmarks(
+            repo_root,
+            manifest,
+            inventory,
+            args.upstream.resolve(),
+            args.cpp_bench.resolve(),
+            args.run_dir.resolve(),
+            args.duration,
+            args.warm_up,
+            args.measurement,
+            args.sample_size,
+        )
+        print(result)
     elif args.command == "compare":
-        cpp = load_cpp_timings(args.cpp_output)
-        criterion_dir = args.criterion_dir
-        if not criterion_dir.is_absolute():
-            criterion_dir = repo_root / criterion_dir
-        table = render_ratio_table(inventory, cpp, load_criterion_timings(criterion_dir, inventory))
+        run = load_run(repo_root, manifest, args.run_manifest.resolve())
+        cpp_output = pathlib.Path(run["artifacts"]["cpp_output"]["path"])
+        criterion_dir = pathlib.Path(run["settings"]["criterion_home"])
+        table = render_report(
+            inventory,
+            load_cpp_timings(cpp_output),
+            load_criterion_timings(criterion_dir, inventory),
+        )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(table)

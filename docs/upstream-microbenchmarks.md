@@ -2,86 +2,92 @@
 
 This repository mirrors the 20 benchmarks registered by the pinned C++
 runtime at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. The authoritative inventory,
-source correspondence, fixture hashes, and pinned ref live in
+source hashes, comparison classification, fixture hashes, and pinned ref live in
 `microbenchmarks.toml`.
 
-The mirror is diagnostic evidence, not a merge ratchet. A ratio can identify a
-primitive worth investigating, but it must not block a change until repeated
-measurements establish a stable threshold and the two implementations are
-confirmed to measure equivalent work.
+The mirror is diagnostic evidence, not a merge ratchet. Ratios are emitted only
+where both sides use the same input construction, operation boundary,
+repetition count, and minimum-per-iteration statistic.
 
 ## Workload correspondence
 
-| Rust target | Cases | Pinned C++ source |
-|---|---|---|
-| `nuxie-runtime` | `BuildRawPath`, `IterateRawPath`, `MeasurePath`, `RawPathBounds`, `MapPointsScaleTrans`, `MapPointsAffine` | `tests/bench/build_raw_path.cpp`, `iterate_raw_path.cpp`, `measure_path.cpp`, `raw_path_bounds.cpp`, `map_points.cpp` |
-| `nuxie-renderer` | four intersection cases | `tests/bench/intersection_board_bench.cpp` |
-| `nuxie-renderer` | ten `Draw*` cases | `tests/bench/draw_pls_path.cpp` |
+Eight cases have equivalent measured boundaries and receive ratios:
 
-The iteration counts, path coordinates, matrix values, C `srand(0)`/`rand()`
-inputs, and ten-frame draw loops follow the pinned sources. The two bbox arrays
-and `paper.riv` are deterministic byte conversions of the upstream generated
-headers; `make microbench-gate` checks both the committed hashes and a fresh
-conversion from the pinned checkout.
+- `BuildRawPath`, `IterateRawPath`, `MeasurePath`, and `RawPathBounds`.
+- The four `Intersection*` cases.
 
-The Rust cases exercise the closest current production primitive. This makes
-some ratios directional rather than instruction-for-instruction comparisons:
+`MeasurePath` uses the opt-in runtime support seam to construct the production
+measure directly from the transformed `RawPath`; no Rust-only command adapter is
+inside the timed boundary.
 
-- The C++ draw cases use `RiveRenderer` with a null render context. Rust has no
-  equivalent public null-renderer seam, so the mirror captures the same paths
-  and paints and times the crate-private CPU fill, stroke, and feather
-  preparation used by the renderer.
-- C++ `mapPoints` uses its vectorized bulk implementation. Rust currently
-  exposes scalar `Mat2D::map_point`, which the mirror applies to the identical
-  4,096-point working set and iteration count.
-- Rust `MeasurePath` must transform `RawPath`, convert it into runtime path
-  commands, and then construct `RuntimePathMeasure`; that adapter work is part
-  of the result because there is no direct raw-path measure entry point.
-- `BuildRawPath` intentionally calls the normal `RawPath` mutators. Using the
-  scoped `rebuild` builder would avoid current mutation/contour bookkeeping and
-  conceal the production-path cost this benchmark is intended to reveal.
+Twelve cases are directional and never receive ratios:
 
-## Commands
+- The ten C++ `Draw*` cases time `RiveRenderer` begin-frame, draw-path, and flush
+  against a null render context. The Rust cases time the deepest currently
+  accessible production CPU fill, stroke, or feather preparation primitive.
+- The two C++ `MapPoints*` cases use a vectorized bulk API. Rust currently
+  exposes only scalar `Mat2D::map_point`, applied to the same 4,096-point set and
+  iteration count.
 
-The local upstream checkout must be at the ref declared in
-`microbenchmarks.toml`, and its release `tests/out/release/bench` target must be
-built from that checkout.
+The report keeps these directional timings in a separate table and states the
+boundary gap. They are useful within each implementation, not as cross-runtime
+speed ratios.
+
+The path coordinates, matrix values, C `srand(0)`/`rand()` inputs, and ten-frame
+draw loops follow the pinned sources. Random point normalization uses the host C
+library's supported `RAND_MAX` contract: 32,767 on Windows and 2,147,483,647 on
+the Apple/Linux targets used by the upstream suite. Forced paper feathering
+uses Round joins and Round caps, matching upstream and production Rust rather
+than the authored paint styles.
+
+The two bbox arrays and `paper.riv` are deterministic byte conversions of the
+upstream generated headers. `make microbench-gate` parses `REGISTER_BENCH`
+directly from the pinned C++ sources, requires exactly the declared 20 cases,
+checks every benchmark source hash, and checks fixture conversions and hashes.
+
+## Reproducible run
+
+The local upstream checkout must be at the manifest ref and its release
+`tests/out/release/bench` must be built from that checkout. Evidence runs require
+a clean committed Rust worktree.
 
 ```sh
 make microbench-gate RIVE_RUNTIME_DIR=/path/to/rive-runtime
 make microbench-build
-make microbench-rust
-make microbench-cpp RIVE_RUNTIME_DIR=/path/to/rive-runtime
-make microbench-compare
+make microbench-run \
+  RIVE_RUNTIME_DIR=/path/to/rive-runtime \
+  MICROBENCH_RUN_DIR=target/microbench/run-001 \
+  MICROBENCH_CPP_DURATION=5 \
+  MICROBENCH_WARM_UP=3 \
+  MICROBENCH_MEASUREMENT=10 \
+  MICROBENCH_SAMPLE_SIZE=20
+make microbench-compare \
+  MICROBENCH_RUN_MANIFEST=target/microbench/run-001/run.json
 ```
 
-Criterion accepts filters and measurement arguments after the Cargo separator,
-for example:
+`microbench-run` creates a unique Criterion output namespace, records the Rust
+and C++ revisions, C++ binary hash, tool versions, settings, inventory hash,
+and every raw output hash in `run.json`. An existing non-empty run directory is
+rejected. If `CRITERION_HOME` is set, the unique run namespace is created below
+it. If `CARGO_TARGET_DIR` is set, Cargo uses and records it; otherwise the
+repository target directory is recorded. Comparison accepts only `run.json`,
+verifies every artifact hash, the current Rust commit, and the current inventory
+hash, and rejects stale or mixed results.
 
-```sh
-make microbench-rust \
-  MICROBENCH_CRITERION_ARGS='--warm-up-time 1 --measurement-time 5 --sample-size 50'
-```
+Both harnesses report the minimum observed elapsed time per iteration. For
+Criterion this is calculated from each raw `sample.json` pair of elapsed time
+and iteration count, rather than its median estimate.
 
-The comparison tool reads C++ milliseconds and Criterion's median point
-estimate, then emits a 20-row `Rust/C++` table in manifest order. The upstream
-harness reports its best run over the selected duration, whereas Criterion
-reports a sampled median. Always record those settings, the machine, both
-source revisions, and ambient system load with a committed table.
+## Feature-gated support seam
 
-## Private renderer visibility
+The timed binaries call production-compiled code through doc-hidden
+`upstream-microbenchmarks` modules in `nuxie-runtime` and `nuxie-renderer`.
+These opt-in public symbols are not in default builds, but they are a permanent
+API and maintenance tradeoff: refactors of the measured internals must keep the
+narrow seam current. This is preferable to copying private source modules into
+the bench target, which compiles `cfg(test)` counters and statistics into timed
+code and can suppress real tests under `--all-features`.
 
-The renderer benchmark uses `#[path]` to compile the existing private
-`draw`, `gpu`, `gr_triangulator`, and `intersection_board` modules into the
-bench executable. Cargo enables `cfg(test)` for bench targets, which would also
-compile `gr_triangulator`'s GPU oracle tests; those tests depend on helpers that
-exist only at the renderer library root. The opt-in
-`upstream-microbenchmarks` feature suppresses that test module only while this
-non-test harness is built. It adds no exported production symbol and is covered
-by the portable feature-compile gate.
-
-Criterion and its dependency closure are dev-only dependencies of the two
-measured crates. Default features are disabled and only
-`cargo_bench_support` is enabled, avoiding the unused Plotters and Rayon
-closures. The remaining Criterion packages appear in `Cargo.lock` so benchmark
-builds are reproducible, but are not linked into shipped library targets.
+Criterion remains a dev-only dependency. Renderer's optional `libc` dependency
+is enabled only by the benchmark-support feature for the upstream C PRNG input
+stream.

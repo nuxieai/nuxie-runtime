@@ -2,11 +2,12 @@
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use nuxie_render_api::{Mat2D as RenderMat2D, PathVerb, RawPath, Vec2D};
-use nuxie_runtime::{runtime_path_commands_from_raw_path, Mat2D, RuntimePathMeasure};
-
-const RAND_MAX: f32 = i32::MAX as f32;
+use nuxie_runtime::{
+    Mat2D,
+    upstream_microbenchmarks::{c_rand_max, measure_raw_path},
+};
 
 fn reset_cpp_rand() {
     // SAFETY: C's process-global PRNG accepts every unsigned seed. Benchmarks
@@ -21,8 +22,8 @@ fn cpp_rand() -> i32 {
 
 fn random_point(scale: f32) -> Vec2D {
     Vec2D::new(
-        cpp_rand() as f32 * scale / RAND_MAX,
-        cpp_rand() as f32 * scale / RAND_MAX,
+        cpp_rand() as f32 * scale / c_rand_max(),
+        cpp_rand() as f32 * scale / c_rand_max(),
     )
 }
 
@@ -202,8 +203,7 @@ impl MeasurePathWorkload {
         self.matrix.0.swap(4, 5);
         let mut transformed = RawPath::new();
         transformed.add_path(&self.path, self.matrix);
-        let commands = runtime_path_commands_from_raw_path(&transformed);
-        RuntimePathMeasure::from_commands(&commands).length()
+        measure_raw_path(&transformed)
     }
 }
 

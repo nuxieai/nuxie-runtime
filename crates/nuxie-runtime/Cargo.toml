@@ -8,6 +8,9 @@ repository.workspace = true
 [features]
 tools = []
 threading = []
+# Exposes a deliberately narrow, doc-hidden seam into production-compiled path
+# measurement for Criterion. The opt-in API is a permanent maintenance cost.
+upstream-microbenchmarks = []
 # The pinned C++ browser build seeds nondeterministic randomness from
 # performance.now() through a JS host. Host-free wasm embedders (the cold
 # publisher) must stay import-free, so the JS seed is a default-on feature.
@@ -48,6 +51,7 @@ sha2 = "0.10"
 [[bench]]
 name = "upstream_microbenchmarks"
 harness = false
+required-features = ["upstream-microbenchmarks"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"

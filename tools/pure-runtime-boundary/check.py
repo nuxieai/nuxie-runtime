@@ -122,6 +122,25 @@ PORTABLE_ABI_FACADE_TYPE_ALIAS = re.compile(
 )
 PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
 
+# Exact third-party path providers intentionally excluded from the root Cargo
+# workspace. New entries require an architecture-policy review; a blanket
+# vendor/ prefix would let first-party helpers hide from the protected scan.
+AUDITED_UNSCANNED_THIRD_PARTY_PATHS = {
+    "vendor/luaur-ast-0.1.8",
+    "vendor/luaur-bytecode-0.1.8",
+    "vendor/luaur-common-0.1.8",
+    "vendor/luaur-compiler-0.1.8",
+    "vendor/luaur-rt-0.1.8",
+    "vendor/luaur-vm-0.1.8",
+    "vendor/wgpu-30.0.0",
+    "vendor/wgpu-core-30.0.0",
+    "vendor/wgpu-core-deps-apple-30.0.0",
+    "vendor/wgpu-core-deps-emscripten-30.0.0",
+    "vendor/wgpu-core-deps-wasm-30.0.0",
+    "vendor/wgpu-core-deps-windows-linux-android-30.0.0",
+    "vendor/wgpu-hal-30.0.0",
+}
+
 # These are file-level ratchet exceptions, not compliant dependencies. A new
 # file containing either marker family fails. Deleting entries is allowed and
 # should happen as the migration in docs/pure-runtime-boundary.md proceeds.
@@ -187,7 +206,7 @@ INTERNAL_DEBT_MARKERS = {
     "project-data": re.compile(r"\bProjectData|\bproject_data_converter\b"),
     "product-host-commands": re.compile(
         r"\bhost_commands\b|\bHost(?:Command|Value|CycleCheckpoint|EffectCheckpoint)\b|"
-        r"\b(?:checkpoint|rollback)_host_effects\b|"
+        r"\b(?:begin|rollback)_host_cycle\b|\b(?:checkpoint|rollback)_host_effects\b|"
         r"\bdrain_(?:flow_)?host_commands\b|\bhost_cycle_active\b|"
         r"\b(?:HostIdentifier|HostString|HostDepth|HostNodes|HostEdges|HostValueBytes|"
         r"Commands|CommandContent)\b|"
@@ -216,6 +235,10 @@ RUST_INCLUDE_SOURCE_EDGE = re.compile(
 )
 RUST_INCLUDE_INVOCATION = re.compile(r"\binclude\s*!\s*[\(\[\{]")
 RUST_PATH_ASSIGNMENT = re.compile(r"\bpath\s*=")
+CFG_TEST_MODULE = re.compile(
+    r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*"
+    r"(?:pub(?:\([^)]*\))?\s+)?mod\s+[A-Za-z_][A-Za-z0-9_]*\s*\{"
+)
 ALLOWED_DYNAMIC_INCLUDES = {
     "crates/nuxie-runtime/src/objects.rs": re.compile(
         r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
@@ -542,6 +565,40 @@ def strip_rust_non_code(source: str) -> str:
             continue
         index += 1
     return "".join(characters)
+
+
+def cfg_test_module_ranges(source: str) -> list[tuple[int, int]]:
+    """Return byte ranges owned by top-level `#[cfg(test)] mod ...` blocks."""
+
+    ranges = []
+    for match in CFG_TEST_MODULE.finditer(source):
+        opening_brace = source.find("{", match.start(), match.end())
+        if opening_brace < 0:
+            continue
+        depth = 0
+        for index in range(opening_brace, len(source)):
+            character = source[index]
+            if character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    ranges.append((match.start(), index + 1))
+                    break
+    return ranges
+
+
+def debt_match_is_within_approved_scope(
+    family: str,
+    relative: str,
+    match: re.Match[str],
+    test_module_ranges: list[tuple[int, int]],
+) -> bool:
+    if family != "binary-authoring" or relative != "crates/nuxie/src/lib.rs":
+        return True
+    return any(
+        start <= match.start() < end for start, end in test_module_ranges
+    )
 
 
 def portable_abi_facade_feature_errors(
@@ -973,9 +1030,7 @@ def check_repository(
                     resolved_path is not None
                     and (repo_root / resolved_path / "Cargo.toml").is_file()
                     and resolved_path not in package_paths
-                    # Explicit vendor/ packages are third-party inputs, not
-                    # first-party packages whose dependency closure we own.
-                    and not resolved_path.startswith("vendor/")
+                    and resolved_path not in AUDITED_UNSCANNED_THIRD_PARTY_PATHS
                 ):
                     errors.append(
                         f"{package}/Cargo.toml: in-repo path dependency "
@@ -1049,6 +1104,7 @@ def check_repository(
             source = strip_rust_non_code(raw_source)
             if package_name == PORTABLE_ABI_FACADE_EDGE[0]:
                 errors.extend(portable_abi_facade_source_errors(relative, source))
+            test_module_ranges = cfg_test_module_ranges(source)
             lines = source.splitlines()
             for line_number, line in enumerate(lines, 1):
                 if EXPLICIT_PRODUCT_PATH.search(line) or LOCAL_PRODUCT_MODULE.search(line):
@@ -1057,17 +1113,35 @@ def check_repository(
                         f"product/authoring module: {line.strip()}"
                     )
             for family, marker in INTERNAL_DEBT_MARKERS.items():
-                match = marker.search(source)
-                if match is None:
+                matches = list(marker.finditer(source))
+                if not matches:
                     continue
                 observed_debt[family].add(relative)
                 spread = (family, relative)
+                out_of_scope = next(
+                    (
+                        match
+                        for match in matches
+                        if not debt_match_is_within_approved_scope(
+                            family, relative, match, test_module_ranges
+                        )
+                    ),
+                    None,
+                )
+                if out_of_scope is not None and spread not in reported_debt_spread:
+                    reported_debt_spread.add(spread)
+                    line_number = source.count("\n", 0, out_of_scope.start()) + 1
+                    errors.append(
+                        f"{relative}:{line_number}: {family} test-only boundary debt "
+                        "escaped its #[cfg(test)] module"
+                    )
+                    continue
                 if (
                     relative not in INTERNAL_DEBT_FILES[family]
                     and spread not in reported_debt_spread
                 ):
                     reported_debt_spread.add(spread)
-                    line_number = source.count("\n", 0, match.start()) + 1
+                    line_number = source.count("\n", 0, matches[0].start()) + 1
                     errors.append(
                         f"{relative}:{line_number}: {family} boundary debt spread "
                         "outside its grandfathered files"

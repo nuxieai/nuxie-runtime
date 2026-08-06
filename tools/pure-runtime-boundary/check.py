@@ -412,6 +412,16 @@ def workspace_packages(
                 continue
             member_paths.add(relative)
 
+    replacements = workspace_manifest.get("replace", {})
+    if not isinstance(replacements, dict):
+        errors.append("Cargo.toml: [replace] must be a table")
+    else:
+        for replacement_name in replacements:
+            errors.append(
+                f"Cargo.toml: deprecated [replace] override {replacement_name!r} "
+                "is not allowed; use an audited [patch] or workspace dependency"
+            )
+
     for member in members:
         matches = (
             sorted(repo_root.glob(member))

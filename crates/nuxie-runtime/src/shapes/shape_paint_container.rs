@@ -2,6 +2,13 @@
 
 use nuxie_graph::{ArtboardGraph, ShapePaintContainerNode};
 
+#[cfg(test)]
+thread_local! {
+    static OPACITY_OWNER_RESOLUTION_COUNT: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
 pub(crate) const PATH_FLAG_LOCAL: u64 = 1 << 1;
 pub(crate) const PATH_FLAG_WORLD: u64 = 1 << 2;
 pub(crate) const PATH_FLAG_LOCAL_CLOCKWISE: u64 = 1 << 6;
@@ -125,6 +132,8 @@ pub(crate) fn propagate_opacity<'a, T>(
 /// `ShapePaintContainer::propagateOpacity`. Non-transform mixin branches such
 /// as TextStylePaint walk to their retained parent exactly once here.
 pub(crate) fn opacity_owner_local(graph: &ArtboardGraph, container_local: usize) -> usize {
+    #[cfg(test)]
+    OPACITY_OWNER_RESOLUTION_COUNT.with(|count| count.set(count.get() + 1));
     let mut current = Some(container_local);
     while let Some(local_id) = current {
         let Some(component) = graph
@@ -140,6 +149,16 @@ pub(crate) fn opacity_owner_local(graph: &ArtboardGraph, container_local: usize)
         current = component.parent_local;
     }
     container_local
+}
+
+#[cfg(test)]
+pub(crate) fn reset_opacity_owner_resolution_count() {
+    OPACITY_OWNER_RESOLUTION_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn opacity_owner_resolution_count() -> usize {
+    OPACITY_OWNER_RESOLUTION_COUNT.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

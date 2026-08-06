@@ -10,8 +10,9 @@ commit `948538f2c4a9ba70a95fdb0a69ba0dbdf1023101`.
 ## Mechanisms
 
 - `LayoutParticipant::displayValue` is folded into its host's retained collapse
-  bit when the style changes and during initial lifecycle settlement. Draw-time
-  collapse checks are therefore O(1), matching pinned
+  bit when the style changes, during initial lifecycle settlement, and after
+  Solo, ancestor, or LayoutComponent reveal propagation. Draw-time collapse
+  checks are therefore O(1), matching pinned
   `LayoutParticipant::syncStyleChanges` and `Component::isCollapsed`, instead
   of searching each owner's children for a participant on every draw.
 - `luaur-rt` registers one userdata metatable per VM and Rust `TypeId`, matching
@@ -25,7 +26,8 @@ commit `948538f2c4a9ba70a95fdb0a69ba0dbdf1023101`.
 The following passed with only pre-existing generated/vendor warnings:
 
 - Layout-participant display folding, parent-collapse preservation, inactive
-  Solo preservation, and imported `display:none` initial lifecycle tests.
+  Solo preservation, imported `display:none` initial lifecycle, and transition-
+  order coverage for Solo switches plus ancestor/LayoutComponent reveals.
 - Per-VM/per-type userdata registration reuse, distinct instance field values,
   VM teardown without a strong-handle cycle, and cached field dispatch from a
   borrowed coroutine state.
@@ -50,6 +52,12 @@ The before `gamepad_test` hot sample repeatedly enters
 `create_callback_function` and metatable registration have zero samples. One
 `create_userdata<ScriptedMat2D>` payload-allocation sample remains, which is
 the intended per-instance `lua_newrive` equivalent.
+
+`script_create_text_runs` is an acceptance control in this slice, not a claimed
+new stack attribution. It was already below the issue threshold in the clean CI
+baseline at 8.343x, while `car_widgets_v01` and `gamepad_test` were the two
+residual outliers. It remains in every timing and required scripted-golden run;
+no mechanism in this change is attributed to an uncaptured script profile.
 
 ## Timing status
 
@@ -89,23 +97,19 @@ under-10x acceptance target. `perf-corpus.toml` is deliberately unchanged:
 ratcheting requires an authoritative quiet run, and these local numbers must
 not widen or tighten a ceiling.
 
-## Retained local artifacts
+## Durable diagnostic summary
 
-The timing JSON and sampled stacks remain ignored under `target/`; hashes make
-the evidence exact without committing host-specific profiles:
+The compact timing and sampled-stack summary is tracked in
+`docs/evidence/univ-1684-extreme-outliers-summary.json`. It records the exact
+before/after totals, ratios, capture conditions, runner identity, and relevant
+stack counts used above. Host-specific raw `sample` output is intentionally not
+claimed as durable repository evidence.
 
-| Artifact | SHA-256 |
-|---|---|
-| `target/univ-1684-baseline.json` | `f4c3a6f6e6214ae27f9d03ae2b96452cceb31600b1b364c7793c7c6feed5bf07` |
-| `target/univ-1684-baseline-rust-first.json` | `daad44d88dcd48a6138f335ed6b82be1427d38522781bce58c09c2c9b094034c` |
-| `target/univ-1684-after-1.json` | `6f4558d918f2709dce40f658429c2de5c489dc0f43a3b2859dde6278aaea3ef9` |
-| `target/univ-1684-after-2.json` | `13e51e66f81030cecaae899c63a9969b62355229eb8607d65deb1b1f30dcf5f7` |
-| `target/univ-1684-after-3.json` | `8c78096090f130b19696aae2a30d5dccfc7a9411dc27c7ee290c3c2ff75890d7` |
-| `target/univ-1684-car.sample` | `f11302b668ef8d9b4fb0e6f5099c15b6d4e538c8802ae809d2ae43f11a2cf17d` |
-| `target/univ-1684-car-after.sample.txt` | `41e27f68735b44f03358eeea5c7140aba869da926d4893e6d32b409d4cf6f33f` |
-| `target/univ-1684-gamepad.sample` | `67230f7731c390e6b1fb9530654bd3b8ee59f52e2059613689155c997caf7cfb` |
-| `target/univ-1684-gamepad-hot.sample` | `a7dbc23a165cde72c21d077d26dcc3ab6195d0202bc8581effb8640d6ed01cef` |
-| `target/univ-1684-gamepad-after.sample.txt` | `254e5cab9cb9c999956984c9303b4de415dcde6cc39469d7ccf19830aa8c29f9` |
+The summary is bound to candidate commit `74e8fbeb`. A later adversarial review
+found a transition-order collapse bug, corrected in `bd6fd1f7`. These
+diagnostics therefore do not describe the final runtime source tree. They
+remain useful attribution evidence, but the corrected tip requires fresh
+authoritative golden and performance capture.
 
 ## Required authoritative closeout
 

@@ -393,7 +393,10 @@ def build_cpp_benchmark(
     log = run_dir / "cpp-build.log"
     command = [str((upstream / "build" / "build_rive.sh").resolve()), "release", "--", "bench"]
     environment = os.environ.copy()
-    environment["RIVE_OUT"] = str(build_dir)
+    # Upstream Premake treats an absolute --out path as relative by stripping
+    # its leading separator. Keep the output run-scoped with an explicit path
+    # relative to the build script's tests working directory.
+    environment["RIVE_OUT"] = os.path.relpath(build_dir, upstream / "tests")
     result = subprocess.run(
         command,
         cwd=upstream / "tests",

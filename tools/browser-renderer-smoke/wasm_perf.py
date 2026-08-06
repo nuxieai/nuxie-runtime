@@ -79,6 +79,8 @@ def audit_python_coordinator_shell(source: str) -> None:
     required = (
         'exec 9<"$PYTHON_COORDINATOR"',
         'PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"',
+        "os.lseek(9, 0, os.SEEK_SET)",
+        'python3 -c "$PYTHON_COORDINATOR_LOADER" "$@"',
     )
     missing = [marker for marker in required if marker not in source]
     if missing:
@@ -89,8 +91,8 @@ def audit_python_coordinator_shell(source: str) -> None:
         raise ContractError(
             "wasm perf shell must not reopen mutable Python coordinator paths"
         )
-    descriptor_invocation = 'python3 "$PYTHON_COORDINATOR_FD_PATH"'
-    if source.count(descriptor_invocation) != 4:
+    descriptor_invocation = "run_python_coordinator"
+    if source.count(descriptor_invocation) != 5:
         raise ContractError(
             "wasm perf shell must run audit, prepare, seal, and finalize "
             "through one Python coordinator descriptor"

@@ -264,6 +264,19 @@ class SourceProvenanceTests(unittest.TestCase):
         bundled_python = bundle / python_source.name
         descriptor = os.open(bundled_python, os.O_RDONLY)
         try:
+            loader = (
+                f"import os; os.lseek({descriptor}, 0, os.SEEK_SET); "
+                f'source = b"".join(iter(lambda: os.read({descriptor}, 1048576), b"")); '
+                'exec(compile(source, "<sealed-wasm-perf-coordinator>", "exec"), '
+                '{"__name__": "__main__", '
+                '"__file__": "<sealed-wasm-perf-coordinator>"})'
+            )
+            before_swap = generated / "python-result-before-swap.txt"
+            subprocess.run(
+                [sys.executable, "-c", loader, str(before_swap)],
+                pass_fds=(descriptor,),
+                check=True,
+            )
             bundled_python.unlink()
             bundled_python.write_text(
                 'from pathlib import Path\nPath(__import__("sys").argv[1]).write_text("fabricated")\n',
@@ -271,13 +284,14 @@ class SourceProvenanceTests(unittest.TestCase):
             )
             output = generated / "python-result.txt"
             subprocess.run(
-                [sys.executable, f"/dev/fd/{descriptor}", str(output)],
+                [sys.executable, "-c", loader, str(output)],
                 pass_fds=(descriptor,),
                 check=True,
             )
         finally:
             os.close(descriptor)
 
+        self.assertEqual(before_swap.read_text(encoding="utf-8"), "sealed")
         self.assertEqual(output.read_text(encoding="utf-8"), "sealed")
         wasm_perf.audit_python_coordinator_shell(
             Path(__file__).with_name("run-wasm-perf.sh").read_text(encoding="utf-8")

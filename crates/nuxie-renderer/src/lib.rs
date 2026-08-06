@@ -4734,7 +4734,41 @@ impl WgpuFrame {
                     Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
-                let gradient_batch = prepared_logical_resources.gradient_batch(draws);
+                struct PreparedMsaaGradientFlush<'a> {
+                    start: usize,
+                    batch: logical_frame::PreparedGradientSelection<'a>,
+                    texture: Option<gradient_pipeline::GradientTexture>,
+                }
+
+                let logical_flush_count = logical_flush_starts.len().max(1);
+                let mut gradient_flushes = Vec::with_capacity(logical_flush_count);
+                for logical_flush in 0..logical_flush_count {
+                    let start = logical_flush_starts
+                        .get(logical_flush)
+                        .copied()
+                        .unwrap_or(0);
+                    let end = logical_flush_starts
+                        .get(logical_flush + 1)
+                        .copied()
+                        .unwrap_or(draws.len());
+                    let batch = prepared_logical_resources.gradient_batch(&draws[start..end]);
+                    let mut uniforms = analytic_uniforms(self.width, self.height, 1);
+                    if batch.height() != 0 {
+                        uniforms.inverse_viewports[0] = -2.0 / batch.height() as f32;
+                    }
+                    let texture = self.context.gradient_pipeline.encode(
+                        &self.context.device,
+                        encoder,
+                        &uniforms,
+                        batch.spans(),
+                        batch.height(),
+                    );
+                    gradient_flushes.push(PreparedMsaaGradientFlush {
+                        start,
+                        batch,
+                        texture,
+                    });
+                }
                 let typed_draws = prepared_logical_resources.typed_draws(draws);
                 let shared_tessellation = |shared: &logical_frame::PreparedTypedDrawResources| {
                     let mut spans = shared.spans.clone();
@@ -4754,17 +4788,6 @@ impl WgpuFrame {
                         instance_count: shared.instance_count,
                     }
                 };
-                let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
-                if gradient_batch.height() != 0 {
-                    gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
-                }
-                let gradient_texture = self.context.gradient_pipeline.encode(
-                    &self.context.device,
-                    encoder,
-                    &gradient_uniforms,
-                    gradient_batch.spans(),
-                    gradient_batch.height(),
-                );
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::with_capacity(draws.len());
                 let mut pending_atlas_draws = Vec::new();
@@ -4793,6 +4816,8 @@ impl WgpuFrame {
                         authored_order: scheduled
                             .map_or(draw_index, |schedule| schedule.authored_order),
                     };
+                    let gradient_flush = &gradient_flushes[schedule.logical_flush];
+                    let gradient = gradient_flush.batch.draw(draw_index - gradient_flush.start);
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
                         pending_draws.push(PendingDraw::ClipReset(
@@ -5012,10 +5037,10 @@ impl WgpuFrame {
                                 && !advanced_blend
                                 && msaa_draw_has_opaque_paint(draw)
                                 && draw.image.is_none()
-                                && gradient_batch.draw(draw_index).is_none(),
+                                && gradient.is_none(),
                             batchable_direct_stroke: direct_stroke_can_batch(
                                 draw,
-                                gradient_batch.draw(draw_index).is_some(),
+                                gradient.is_some(),
                             ),
                             destination_copy_bounds: msaa_destination_copy_bounds(
                                 draw,
@@ -5062,7 +5087,6 @@ impl WgpuFrame {
                                     )
                                 }
                             });
-                            let gradient = gradient_batch.draw(draw_index);
                             let mut paint = if let Some(gradient) = gradient {
                                 if draw.paint.style == RenderPaintStyle::Stroke {
                                     gpu::PaintData::gradient_stroke(
@@ -5206,7 +5230,6 @@ impl WgpuFrame {
                         atlas: LogicalFeatherAtlasLayout,
                     }
 
-                    let logical_flush_count = logical_flush_starts.len().max(1);
                     let max_atlas_dimension = self.context.device.limits().max_texture_dimension_2d;
                     let mut packed_flushes = Vec::new();
                     let mut max_content_size = [1, 1];
@@ -5248,6 +5271,12 @@ impl WgpuFrame {
                     );
 
                     for packed in packed_flushes {
+                        let logical_flush = pending_atlas_draws[*packed
+                            .indices
+                            .first()
+                            .expect("packed atlas flush must contain a draw")]
+                        .logical_flush;
+                        let gradient_flush = &gradient_flushes[logical_flush];
                         let atlas_content_size = packed.atlas.extent();
                         let atlas_texture =
                             self.context
@@ -5311,9 +5340,9 @@ impl WgpuFrame {
                                 draw::tessellation_texture_height(&draw.tessellation.spans);
                             let mut uniforms =
                                 analytic_uniforms(self.width, self.height, tessellation_height);
-                            if gradient_batch.height() != 0 {
+                            if gradient_flush.batch.height() != 0 {
                                 uniforms.inverse_viewports[0] =
-                                    -2.0 / gradient_batch.height() as f32;
+                                    -2.0 / gradient_flush.batch.height() as f32;
                             }
                             uniforms.atlas_texture_inverse_size = [
                                 1.0 / atlas_physical_size[0] as f32,
@@ -5367,7 +5396,7 @@ impl WgpuFrame {
                                     encoder,
                                     &tessellation_view,
                                     &self.context.feather_lut.view,
-                                    gradient_texture.as_ref().map(|texture| &texture.view),
+                                    gradient_flush.texture.as_ref().map(|texture| &texture.view),
                                     &atlas_view,
                                     &uniforms,
                                     &paths,
@@ -5385,7 +5414,6 @@ impl WgpuFrame {
                         }
                     }
                 }
-                let logical_flush_count = logical_flush_starts.len().max(1);
                 for logical_flush in 0..logical_flush_count {
                     let path_start =
                         pending_paths.partition_point(|path| path.logical_flush < logical_flush);
@@ -5601,8 +5629,9 @@ impl WgpuFrame {
                     }
                     let mut uniforms =
                         analytic_uniforms(self.width, self.height, tessellation_height);
-                    if gradient_batch.height() != 0 {
-                        uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
+                    let gradient_flush = &gradient_flushes[logical_flush];
+                    if gradient_flush.batch.height() != 0 {
+                        uniforms.inverse_viewports[0] = -2.0 / gradient_flush.batch.height() as f32;
                     }
                     uniforms.max_path_id =
                         u32::try_from(paths.len() - 1).expect("MSAA path ID overflow");
@@ -5641,7 +5670,7 @@ impl WgpuFrame {
                         &uploaded_paints,
                         &tessellation_view,
                         &self.context.feather_lut.view,
-                        gradient_texture.as_ref().map(|texture| &texture.view),
+                        gradient_flush.texture.as_ref().map(|texture| &texture.view),
                         destination_view.as_ref(),
                         &tessellation.flush_resources,
                     );
@@ -11400,7 +11429,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_gradients_are_reused_for_encoder_subsets_and_reorders() {
+    fn prepared_gradients_are_owned_by_exact_flushes_and_reused_for_encoder_views() {
         let gradient = || WgpuShader::Linear {
             start: (0.0, 0.0),
             end: (10.0, 0.0),
@@ -11436,20 +11465,29 @@ mod tests {
             max_texture_dimension_2d: 8192,
             msaa_atlas_supports_clip_rect: true,
         });
-        frame.draws = vec![draw(0.0), draw(12.0)];
-        frame.draw_resources = vec![logical_flush::ResourceCounters::default(); 2];
-        frame.logical_flush_starts = vec![0, 1];
+        frame.draws = vec![draw(0.0), draw(12.0), draw(24.0), draw(36.0)];
+        frame.draw_resources = vec![logical_flush::ResourceCounters::default(); 4];
+        frame.logical_flush_starts = vec![0, 2];
         let mut board =
             intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
         frame.finalize(&mut board).unwrap();
         let resources = logical_frame::LogicalResourceStore::default();
         let _ = logical_frame::take_gradient_batch_preparations();
         let prepared = resources.prepare_for_production(&frame).unwrap();
-        assert_eq!(logical_frame::take_gradient_batch_preparations(), 1);
-        let baseline = prepared.gradient_batch(&frame.draws);
-        let first = baseline.draw(0).unwrap();
-        let second = baseline.draw(1).unwrap();
-        drop(baseline);
+        assert_eq!(logical_frame::take_gradient_batch_preparations(), 2);
+        let first_flush = prepared.gradient_batch(&frame.draws[..2]);
+        let first = first_flush.draw(0).unwrap();
+        let second = first_flush.draw(1).unwrap();
+        assert_eq!(first_flush.height(), 1);
+        assert_eq!(first_flush.spans().len(), 2);
+        drop(first_flush);
+
+        let second_flush = prepared.gradient_batch(&frame.draws[2..]);
+        let third = second_flush.draw(0).unwrap();
+        let fourth = second_flush.draw(1).unwrap();
+        assert_eq!(second_flush.height(), 1);
+        assert_eq!(second_flush.spans().len(), 2);
+        drop(second_flush);
 
         let reordered = vec![frame.draws[1].clone(), frame.draws[0].clone()];
         let reordered_batch = prepared.gradient_batch(&reordered);
@@ -11466,11 +11504,127 @@ mod tests {
         assert_eq!(subset.matrix, second.matrix);
         assert_eq!(subset.texture_y, second.texture_y);
         assert_eq!(subset.texture_span, second.texture_span);
+
+        let reordered_second_flush = vec![frame.draws[3].clone(), frame.draws[2].clone()];
+        let reordered_second_batch = prepared.gradient_batch(&reordered_second_flush);
+        assert_eq!(
+            reordered_second_batch.draw(0).unwrap().matrix,
+            fourth.matrix
+        );
+        assert_eq!(reordered_second_batch.draw(1).unwrap().matrix, third.matrix);
+
+        let crossing_flushes = vec![frame.draws[0].clone(), frame.draws[2].clone()];
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            prepared.gradient_batch(&crossing_flushes)
+        }))
+        .is_err());
+        let mut unknown_occurrence = frame.draws[0].clone();
+        unknown_occurrence.logical_occurrence_id = u64::MAX;
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            prepared.gradient_batch(std::slice::from_ref(&unknown_occurrence))
+        }))
+        .is_err());
         assert_eq!(
             logical_frame::take_gradient_batch_preparations(),
             0,
             "encoder views must not repeat gradient normalization or packing"
         );
+    }
+
+    #[test]
+    fn complex_gradient_rollover_prepares_and_accounts_once_per_bounded_flush() {
+        fn prepare_frame(
+            max_texture_dimension_2d: u32,
+            draw_count: usize,
+        ) -> (
+            logical_frame::LogicalFrame,
+            logical_frame::PreparedLogicalFrameResources,
+        ) {
+            let config = LogicalFrameConfig {
+                width: 64,
+                height: 64,
+                mode: RenderMode::ClockwiseAtomic,
+                max_texture_dimension_2d,
+                msaa_atlas_supports_clip_rect: true,
+            };
+            let prototype = SolidDraw::new(
+                LogicalPath {
+                    valid: true,
+                    raw_path: Arc::new(logical_triangle()),
+                    fill_rule: FillRule::NonZero,
+                },
+                LogicalPaint {
+                    shader: Some(WgpuShader::Linear {
+                        start: (0.0, 0.0),
+                        end: (64.0, 0.0),
+                        colors: vec![0xff00_0000, 0xff00_ff00, 0xffff_ffff],
+                        stops: vec![0.0, 0.5, 1.0],
+                    }),
+                    ..Default::default()
+                },
+                DrawState::default(),
+                DrawRole::Content { clip_id: 0 },
+                None,
+            );
+            let mut frame = logical_frame::LogicalFrame::new(config);
+            for _ in 0..draw_count {
+                frame
+                    .push_content_batch(Vec::new(), prototype.clone())
+                    .unwrap();
+            }
+            let mut board = intersection_board::IntersectionBoard::new(
+                intersection_board::GroupingType::Disjoint,
+            );
+            frame.finalize(&mut board).unwrap();
+            let prepared = logical_frame::LogicalResourceStore::default()
+                .prepare_for_production(&frame)
+                .unwrap();
+            (frame, prepared)
+        }
+
+        for (max_texture_dimension_2d, draw_count, expected_flush_sizes) in
+            [(2, 5, vec![2, 2, 1]), (8_192, 2_049, vec![2_048, 1])]
+        {
+            let _ = logical_frame::take_gradient_batch_preparations();
+            let (frame, prepared) = prepare_frame(max_texture_dimension_2d, draw_count);
+            assert_eq!(
+                logical_frame::take_gradient_batch_preparations(),
+                expected_flush_sizes.len(),
+                "gradient packing must run once per finalized logical flush"
+            );
+            assert_eq!(frame.logical_flush_starts.len(), expected_flush_sizes.len());
+
+            for (flush_index, expected_draws) in expected_flush_sizes.iter().copied().enumerate() {
+                let start = frame.logical_flush_starts[flush_index];
+                let end = frame
+                    .logical_flush_starts
+                    .get(flush_index + 1)
+                    .copied()
+                    .unwrap_or(frame.draws.len());
+                assert_eq!(end - start, expected_draws);
+                let batch = prepared.gradient_batch(&frame.draws[start..end]);
+                assert_eq!(batch.height(), expected_draws as u32);
+                assert!(
+                    batch.height() <= 2_048_u32.min(max_texture_dimension_2d),
+                    "flush {flush_index} recombined gradients past its planned limit"
+                );
+                assert_eq!(batch.spans().len(), expected_draws * 2);
+            }
+
+            let report = prepared.report_with_consumption();
+            assert_eq!(
+                report
+                    .logical_flushes
+                    .iter()
+                    .map(|flush| flush.gradient_records)
+                    .collect::<Vec<_>>(),
+                expected_flush_sizes
+            );
+            assert_eq!(report.written.gradient_records, draw_count);
+            assert_eq!(report.written.gradient_color_records, draw_count * 3);
+            assert_eq!(report.written.gradient_stop_records, draw_count * 3);
+            assert_eq!(report.buffer_rewinds, expected_flush_sizes.len());
+        }
     }
 
     #[test]
@@ -16351,6 +16505,50 @@ mod tests {
             center[0] > 64 && center[2] > 64,
             "center sample: {center:?}"
         );
+    }
+
+    #[test]
+    fn renderer_modes_bind_the_gradient_batch_for_each_logical_flush() {
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let factory = WgpuFactory::new_with_mode(64, 64, mode).unwrap();
+            let left = rect_path([0.0, 0.0, 32.0, 64.0], FillRule::Clockwise);
+            let right = rect_path([32.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
+            let left_paint = LogicalPaint {
+                shader: Some(WgpuShader::Linear {
+                    start: (0.0, 0.0),
+                    end: (32.0, 0.0),
+                    colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+                    stops: vec![0.0, 0.5, 1.0],
+                }),
+                ..LogicalPaint::default()
+            };
+            let right_paint = LogicalPaint {
+                shader: Some(WgpuShader::Linear {
+                    start: (32.0, 0.0),
+                    end: (64.0, 0.0),
+                    colors: vec![0xff00_00ff, 0xffff_ffff, 0xffff_0000],
+                    stops: vec![0.0, 0.5, 1.0],
+                }),
+                ..LogicalPaint::default()
+            };
+            let render = |split_logical_flush: bool| {
+                let mut frame = factory.begin_frame(0xff00_0000);
+                frame.draw_path(&left, &left_paint);
+                if split_logical_flush {
+                    frame.logical_frame.begin_logical_flush();
+                }
+                frame.draw_path(&right, &right_paint);
+                let _ = logical_frame::take_gradient_batch_preparations();
+                let pixels = frame.finish().unwrap();
+                (pixels, logical_frame::take_gradient_batch_preparations())
+            };
+
+            let (one_flush, one_flush_preparations) = render(false);
+            let (two_flushes, two_flush_preparations) = render(true);
+            assert_eq!(one_flush_preparations, 1, "{mode:?}");
+            assert_eq!(two_flush_preparations, 2, "{mode:?}");
+            assert_eq!(two_flushes, one_flush, "{mode:?}");
+        }
     }
 
     #[test]

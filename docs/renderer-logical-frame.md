@@ -13,8 +13,9 @@ interior, and mode-specific feather tessellations. The production writer emits
 the renderer's real typed `PathData`, `PaintData`/`PaintAuxData`,
 `ContourData`, `TessVertexSpan`, and `TriangleVertex` records into a retained
 buffer ring; there is no parallel count-only geometry serialization.
-`WgpuFrame::finish` invokes that writer once, then its encoders consume the same
-prepared gradients and retained geometry before GPU upload and submission.
+`WgpuFrame::finish` invokes that writer once, then its encoders consume the exact
+typed paths, paints, contours, tessellation spans, triangles, prepared gradients,
+and retained geometry before GPU upload and submission.
 `NullLogicalRenderer` invokes the identical writer and stops, without a WGPU
 context, device, queue, encoder, or submission.
 
@@ -24,9 +25,10 @@ reports exact shadow bytes, buffer write operations, retained allocation
 growth, and per-flush rewinds. Retained capacity is the peak reusable capacity
 required by any one logical flush, not the sum of every flush in the frame.
 `WgpuFrame::finish_logical_frame_for_differential` crosses the production CPU
-boundary and retains the same diagnostics while intentionally stopping before
-GPU encoding; differential tests use that method, not the diagnostic-only
-planning helper.
+boundary, runs the real command encoder and submission path without pixel
+readback, and records that the encoder consumed the shared typed output.
+Differential tests use that method, not the diagnostic-only planning helper, so
+a writer-only shadow implementation cannot falsely pass.
 
 The null adapter deliberately has a narrow begin/draw/flush API. Add an
 operation to it only when the logical phase must model that operation for both

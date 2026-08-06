@@ -275,6 +275,7 @@ pub struct LogicalFrameReport {
     pub buffer_rewinds: usize,
     pub written_bytes: usize,
     pub shadow_fingerprint: u64,
+    pub production_typed_output_consumed: bool,
 }
 
 pub struct LogicalFrame {
@@ -1155,6 +1156,39 @@ pub(crate) struct LogicalResourceStore {
 pub(crate) struct PreparedLogicalFrameResources {
     report: LogicalFrameReport,
     gradient_flushes: Vec<PreparedGradientFlush>,
+    typed_address: usize,
+    typed_inputs: Vec<u64>,
+    typed_draws: Vec<Option<PreparedTypedDrawResources>>,
+    typed_encoder_reads: Arc<AtomicUsize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PreparedTypedDrawResources {
+    pub(crate) contour_base: u32,
+    pub(crate) path: gpu::PathData,
+    pub(crate) paint: gpu::PaintData,
+    pub(crate) paint_aux: gpu::PaintAuxData,
+    pub(crate) spans: Vec<gpu::TessVertexSpan>,
+    pub(crate) contours: Vec<gpu::ContourData>,
+    pub(crate) triangles: Vec<gpu::TriangleVertex>,
+    pub(crate) base_instance: u32,
+    pub(crate) instance_count: u32,
+    pub(crate) triangle_count: usize,
+    pub(crate) borrowed_triangle_count: usize,
+    pub(crate) main_triangle_batches:
+        Vec<super::clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>,
+    pub(crate) has_interior_triangles: bool,
+    pub(crate) uses_interior: bool,
+}
+
+pub(crate) struct PreparedTypedDrawSelection<'a> {
+    draws: Vec<Option<&'a PreparedTypedDrawResources>>,
+}
+
+impl PreparedTypedDrawSelection<'_> {
+    pub(crate) fn draw(&self, index: usize) -> Option<&PreparedTypedDrawResources> {
+        self.draws[index]
+    }
 }
 
 pub(crate) struct PreparedGradientSelection<'a> {
@@ -1190,6 +1224,10 @@ struct PreparedGradientFlush {
 }
 
 impl PreparedLogicalFrameResources {
+    pub(crate) fn report(&self) -> &LogicalFrameReport {
+        &self.report
+    }
+
     pub(crate) fn into_report(self) -> LogicalFrameReport {
         self.report
     }
@@ -1250,6 +1288,39 @@ impl PreparedLogicalFrameResources {
             "encoder requested gradient inputs outside the finalized logical frame; \
              production gradient normalization must run exactly once"
         )
+    }
+
+    pub(crate) fn typed_draws<'a>(&'a self, draws: &[SolidDraw]) -> PreparedTypedDrawSelection<'a> {
+        self.typed_encoder_reads.fetch_add(1, Ordering::Relaxed);
+        if draws.as_ptr() as usize == self.typed_address && draws.len() == self.typed_draws.len() {
+            return PreparedTypedDrawSelection {
+                draws: self.typed_draws.iter().map(Option::as_ref).collect(),
+            };
+        }
+
+        let requested = draws
+            .iter()
+            .map(logical_draw_fingerprint)
+            .collect::<Vec<_>>();
+        let mut available = vec![true; self.typed_inputs.len()];
+        let mut mapped = Vec::with_capacity(requested.len());
+        for input in requested {
+            let index = self
+                .typed_inputs
+                .iter()
+                .enumerate()
+                .find_map(|(index, candidate)| {
+                    (available[index] && *candidate == input).then_some(index)
+                })
+                .expect("encoder requested typed resources outside the finalized logical frame");
+            available[index] = false;
+            mapped.push(self.typed_draws[index].as_ref());
+        }
+        PreparedTypedDrawSelection { draws: mapped }
+    }
+
+    pub(crate) fn typed_encoder_read_count(&self) -> usize {
+        self.typed_encoder_reads.load(Ordering::Relaxed)
     }
 }
 
@@ -1322,6 +1393,7 @@ impl LogicalResourceStore {
         let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
         let gradient_batch = prepare_gradient_batch(&frame.draws);
         let atomic_batch_flags = production_atomic_batch_flags(frame);
+        let mut typed_draws = Vec::with_capacity(frame.draws.len());
         for (flush_index, (&start, counts)) in starts.iter().zip(&flushes).enumerate() {
             let end = starts
                 .get(flush_index + 1)
@@ -1337,7 +1409,7 @@ impl LogicalResourceStore {
                         .collect()
                 }),
             };
-            write_resources(
+            typed_draws.extend(write_resources(
                 &mut buffers,
                 config,
                 flush_index,
@@ -1346,7 +1418,7 @@ impl LogicalResourceStore {
                 &frame.draw_resources[start..end],
                 &atomic_batch_flags[start..end],
                 &gradient_selection,
-            );
+            ));
             written_bytes += buffers.written_bytes();
             buffer_write_operations += buffers.nonempty_buffer_count();
             allocation_growths += before_capacities
@@ -1374,6 +1446,7 @@ impl LogicalResourceStore {
             buffer_rewinds: starts.len(),
             written_bytes,
             shadow_fingerprint: (!production).then_some(fingerprint).unwrap_or(0),
+            production_typed_output_consumed: false,
         };
         Ok(PreparedLogicalFrameResources {
             report,
@@ -1383,8 +1456,70 @@ impl LogicalResourceStore {
                 inputs: frame.draws.iter().map(gradient_input_fingerprint).collect(),
                 batch: gradient_batch,
             }],
+            typed_address: frame.draws.as_ptr() as usize,
+            typed_inputs: frame.draws.iter().map(logical_draw_fingerprint).collect(),
+            typed_draws,
+            typed_encoder_reads: Arc::new(AtomicUsize::new(0)),
         })
     }
+}
+
+fn logical_draw_fingerprint(draw: &SolidDraw) -> u64 {
+    fn write(hash: &mut u64, bytes: &[u8]) {
+        for &byte in bytes {
+            *hash ^= u64::from(byte);
+            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+
+    let mut hash = gradient_input_fingerprint(draw);
+    write(&mut hash, &draw.path.raw_path.mutation_id().to_le_bytes());
+    write(
+        &mut hash,
+        &[draw.path.fill_rule as u8, draw.paint.style as u8],
+    );
+    write(&mut hash, &draw.paint.color.to_le_bytes());
+    for value in [draw.paint.thickness, draw.paint.feather] {
+        write(&mut hash, &value.to_bits().to_le_bytes());
+    }
+    write(
+        &mut hash,
+        &[
+            draw.paint.join as u8,
+            draw.paint.cap as u8,
+            draw.paint.blend_mode as u8,
+        ],
+    );
+    write(&mut hash, &draw.state.clip_stack_height.to_le_bytes());
+    if let Some(rect) = draw.state.clip_rect {
+        write(&mut hash, &[1]);
+        for value in rect.rect.into_iter().chain(rect.matrix.0) {
+            write(&mut hash, &value.to_bits().to_le_bytes());
+        }
+    } else {
+        write(&mut hash, &[0]);
+    }
+    match draw.role {
+        DrawRole::Content { clip_id } => {
+            write(&mut hash, &[0]);
+            write(&mut hash, &clip_id.to_le_bytes());
+        }
+        DrawRole::ClipUpdate {
+            replacement_id,
+            parent_id,
+        } => {
+            write(&mut hash, &[1]);
+            write(&mut hash, &replacement_id.to_le_bytes());
+            write(&mut hash, &parent_id.to_le_bytes());
+        }
+        DrawRole::ClipReset { bounds, action } => {
+            write(&mut hash, &[2, clip_reset_action_tag(action)]);
+            for value in bounds {
+                write(&mut hash, &value.to_bits().to_le_bytes());
+            }
+        }
+    }
+    hash
 }
 
 fn gradient_input_fingerprint(draw: &SolidDraw) -> u64 {
@@ -1758,7 +1893,7 @@ fn write_resources(
     draw_resources: &[logical_flush::ResourceCounters],
     atomic_batch_flags: &[bool],
     gradient_batch: &PreparedGradientSelection<'_>,
-) {
+) -> Vec<Option<PreparedTypedDrawResources>> {
     let _ = (flush_index, counts);
     push_u32(&mut buffers.gradients, gradient_batch.height());
     push_usize(&mut buffers.gradients, gradient_batch.spans().len());
@@ -1772,12 +1907,18 @@ fn write_resources(
             push_u32(&mut buffers.gradients, value);
         }
     }
+    let mut prepared = Vec::with_capacity(draws.len());
     for (draw_index, ((draw, resources), &use_clockwise_atomic_batch)) in draws
         .iter()
         .zip(draw_resources)
         .zip(atomic_batch_flags)
         .enumerate()
     {
+        let path_start = buffers.paths.len();
+        let paint_start = buffers.paints.len();
+        let contour_start = buffers.contours.len();
+        let tessellation_start = buffers.tessellations.len();
+        let triangle_start = buffers.triangles.len();
         write_typed_draw_resources(
             buffers,
             config,
@@ -1786,6 +1927,28 @@ fn write_resources(
             use_clockwise_atomic_batch,
             gradient_batch,
         );
+        prepared.push((buffers.paths.len() != path_start).then(|| {
+            debug_assert_eq!(buffers.paths.len(), path_start + 1);
+            debug_assert_eq!(buffers.paints.len(), paint_start + 1);
+            let paint = buffers.paints[paint_start];
+            let metadata = typed_draw_metadata(draw, config, use_clockwise_atomic_batch);
+            PreparedTypedDrawResources {
+                contour_base: u32::try_from(contour_start).expect("contour base overflow"),
+                path: buffers.paths[path_start],
+                paint: paint.paint,
+                paint_aux: paint.aux,
+                spans: buffers.tessellations[tessellation_start..].to_vec(),
+                contours: buffers.contours[contour_start..].to_vec(),
+                triangles: buffers.triangles[triangle_start..].to_vec(),
+                base_instance: metadata.base_instance,
+                instance_count: metadata.instance_count,
+                triangle_count: metadata.triangle_count,
+                borrowed_triangle_count: metadata.borrowed_triangle_count,
+                main_triangle_batches: metadata.main_triangle_batches,
+                has_interior_triangles: metadata.has_interior_triangles,
+                uses_interior: metadata.uses_interior,
+            }
+        }));
         match gradient_batch.draw(draw_index) {
             None => push_u8(&mut buffers.gradients, 0),
             Some(gradient) => {
@@ -1824,6 +1987,105 @@ fn write_resources(
                 FillRule::Clockwise => 2,
             },
         });
+    }
+    prepared
+}
+
+struct TypedDrawMetadata {
+    base_instance: u32,
+    instance_count: u32,
+    triangle_count: usize,
+    borrowed_triangle_count: usize,
+    main_triangle_batches: Vec<super::clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>,
+    has_interior_triangles: bool,
+    uses_interior: bool,
+}
+
+fn typed_draw_metadata(
+    draw: &SolidDraw,
+    config: LogicalFrameConfig,
+    use_clockwise_atomic_batch: bool,
+) -> TypedDrawMetadata {
+    if config.mode == RenderMode::ClockwiseAtomic
+        && draw.paint.style == RenderPaintStyle::Fill
+        && draw.paint.feather == 0.0
+        && draw.authored_should_use_interior()
+    {
+        let clockwise_override = atomic_fill_clockwise_override(draw, true);
+        if let Some(prepared) = draw.authored_atomic_interior_geometry(
+            clockwise_override,
+            use_clockwise_atomic_batch,
+            use_clockwise_atomic_batch
+                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                && super::clockwise_atomic_clip_is_inactive(draw),
+            1,
+        ) {
+            return TypedDrawMetadata {
+                base_instance: prepared.base_instance,
+                instance_count: prepared.instance_count,
+                triangle_count: prepared.triangles.len(),
+                borrowed_triangle_count: prepared.borrowed_triangles.len(),
+                main_triangle_batches: prepared.main_triangles.batches,
+                has_interior_triangles: prepared.has_interior_triangles,
+                uses_interior: true,
+            };
+        }
+    }
+
+    if config.mode == RenderMode::ClockwiseAtomic
+        && draw.paint.style == RenderPaintStyle::Fill
+        && draw.paint.feather == 0.0
+    {
+        if let Some(mut tessellation) = draw.authored_fill_tessellation() {
+            let clockwise_override = atomic_fill_clockwise_override(draw, true);
+            tessellation.make_double_sided_with_direction(
+                draw.authored_clockwise_atomic_negate_coverage(
+                    draw.path.fill_rule,
+                    clockwise_override,
+                ),
+            );
+            return TypedDrawMetadata {
+                base_instance: tessellation.base_instance,
+                instance_count: tessellation.instance_count,
+                triangle_count: 0,
+                borrowed_triangle_count: 0,
+                main_triangle_batches: Vec::new(),
+                has_interior_triangles: false,
+                uses_interior: false,
+            };
+        }
+    }
+
+    let tessellation = if draw.paint.feather != 0.0 {
+        draw.prepared_feather(config.mode)
+            .map(|prepared| &prepared.tessellation)
+    } else if draw.paint.style == RenderPaintStyle::Stroke {
+        draw.prepared_stroke()
+            .map(|prepared| &prepared.tessellation)
+    } else if config.mode == RenderMode::Msaa && draw.authored_msaa_fill_requires_reverse() {
+        draw.prepared_fill().and_then(|prepared| {
+            prepared
+                .reversed_midpoint(&draw.path, draw.state.transform)
+                .map(|prepared| &prepared.tessellation)
+        })
+    } else {
+        draw.prepared_fill().and_then(|prepared| {
+            prepared
+                .midpoint(&draw.path, draw.state.transform)
+                .map(|prepared| &prepared.tessellation)
+        })
+    };
+    let (base_instance, instance_count) = tessellation.map_or((1, 0), |tessellation| {
+        (tessellation.base_instance, tessellation.instance_count)
+    });
+    TypedDrawMetadata {
+        base_instance,
+        instance_count,
+        triangle_count: 0,
+        borrowed_triangle_count: 0,
+        main_triangle_batches: Vec::new(),
+        has_interior_triangles: false,
+        uses_interior: false,
     }
 }
 
@@ -1953,7 +2215,13 @@ fn write_typed_draw_resources(
         DrawRole::ClipUpdate {
             replacement_id,
             parent_id,
-        } => gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule),
+        } => {
+            if config.mode == RenderMode::Msaa {
+                gpu::PaintData::solid(0, draw.path.fill_rule, BlendMode::SrcOver)
+            } else {
+                gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule)
+            }
+        }
         DrawRole::Content { clip_id } => {
             let paint = if let Some(gradient) = gradient {
                 if draw.paint.style == RenderPaintStyle::Stroke {
@@ -1988,6 +2256,13 @@ fn write_typed_draw_resources(
     };
     if draw.state.clip_rect.is_some() {
         paint = paint.with_clip_rect();
+    }
+    if config.mode == RenderMode::ClockwiseAtomic
+        && !use_clockwise_atomic_batch
+        && draw.paint.style == RenderPaintStyle::Fill
+        && clockwise_override
+    {
+        paint = paint.with_generic_clockwise_fill();
     }
     let aux = gradient.map_or_else(
         || clip_rect_paint_aux(draw.state.clip_rect),
@@ -2267,13 +2542,14 @@ impl NullLogicalRenderer {
             return Err(error);
         }
         frame.logical.finalize(&mut self.intersection_board)?;
-        let report = if diagnostics {
+        let mut report = if diagnostics {
             self.resources.prepare(&frame.logical)?
         } else {
             self.resources
                 .prepare_for_production(&frame.logical)?
                 .into_report()
         };
+        report.production_typed_output_consumed = true;
         drop(frame);
         Ok(report)
     }

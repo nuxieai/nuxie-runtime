@@ -455,6 +455,11 @@ fn assert_report_is_meaningful(
         "{} produced empty diagnostic resources in {mode:?}",
         workload.name()
     );
+    assert!(
+        report.production_typed_output_consumed,
+        "{} did not feed shared typed output to the production encoder in {mode:?}",
+        workload.name()
+    );
 }
 
 #[test]

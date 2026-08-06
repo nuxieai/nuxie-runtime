@@ -9,6 +9,7 @@ LIMIT="${WASM_PERF_LIMIT:-5}"
 IDS="${WASM_PERF_IDS:-}"
 REPEAT="${WASM_PERF_REPEAT:-100}"
 RUNS="${WASM_PERF_RUNS:-5}"
+WARMUPS="${WASM_PERF_WARMUPS:-1}"
 OUTPUT="${WASM_PERF_OUTPUT:-$ROOT/target/wasm-perf.json}"
 MARKDOWN="${WASM_PERF_MARKDOWN:-$ROOT/target/wasm-perf.md}"
 WORK_DIR="$ROOT/target/browser-wasm-perf"
@@ -39,7 +40,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.
   --limit "$LIMIT" \
   --ids "$IDS" \
   --repeat "$REPEAT" \
-  --runs "$RUNS"
+  --runs "$RUNS" \
+  --warmups "$WARMUPS"
 
 installed_version="$(
   node -p "try { require('$PLAYWRIGHT_ROOT/node_modules/playwright/package.json').version } catch (_) { '' }"

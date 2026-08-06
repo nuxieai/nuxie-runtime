@@ -74,6 +74,8 @@ def select_fixtures(
     exact_by_id = {row.get("id"): row for row in corpus_rows if isinstance(row, dict)}
     perf_by_id = {row.get("id"): row for row in perf_rows if isinstance(row, dict)}
     if requested_ids:
+        if len(set(requested_ids)) != len(requested_ids):
+            raise ContractError("requested perf fixture IDs must be unique")
         unknown = [fixture_id for fixture_id in requested_ids if fixture_id not in perf_by_id]
         if unknown:
             raise ContractError(f"unknown perf fixture(s): {', '.join(unknown)}")
@@ -85,6 +87,7 @@ def select_fixtures(
             reverse=True,
         )
 
+    target_count = len(requested_ids) if requested_ids else limit
     selected: list[dict[str, Any]] = []
     rejected: list[str] = []
     for perf_row in candidates:
@@ -92,6 +95,12 @@ def select_fixtures(
         exact = exact_by_id.get(fixture_id)
         if exact is None:
             message = f"fixture {fixture_id!r} is absent from exact corpus {corpus_manifest}"
+            if requested_ids:
+                raise ContractError(message)
+            rejected.append(message)
+            continue
+        if exact.get("status") not in (None, "exact"):
+            message = f"fixture {fixture_id!r} is not exact in {corpus_manifest}"
             if requested_ids:
                 raise ContractError(message)
             rejected.append(message)
@@ -152,10 +161,10 @@ def select_fixtures(
                 "sample_seconds": float(samples[0]),
             }
         )
-        if len(selected) == limit:
+        if len(selected) == target_count:
             break
 
-    if len(selected) < min(limit, len(requested_ids) if requested_ids else limit):
+    if len(selected) < target_count:
         detail = "; ".join(rejected) or "no eligible rows"
         raise ContractError(f"only selected {len(selected)} supported fixtures: {detail}")
     return selected
@@ -241,6 +250,7 @@ def build_comparison_report(
     *,
     identity: dict[str, str],
     repeat: int,
+    warmups: int,
 ) -> dict[str, Any]:
     required_identity = ("git_sha", "rive_runtime_sha", "browser", "build_profile")
     missing_identity = [key for key in required_identity if not identity.get(key)]
@@ -283,6 +293,7 @@ def build_comparison_report(
             "clock": "browser performance.now()",
             "lifecycle": "fresh total and phase instances, retained topology primed before clocks",
             "repeat": repeat,
+            "browser_warmups": warmups,
         },
         "fixtures": rows,
     }
@@ -335,6 +346,7 @@ def prepare_run(args: argparse.Namespace) -> None:
         "schema": "nuxie-wasm-perf-config-v1",
         "repeat": args.repeat,
         "runs": args.runs,
+        "warmups": args.warmups,
         "identity": identity,
         "fixtures": staged_fixtures,
     }
@@ -414,7 +426,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"Git `{report['identity']['git_sha']}`; rive-runtime `{report['identity']['rive_runtime_sha']}`; "
         f"browser `{report['identity']['browser']} {report['identity'].get('browser_version', '')}`; "
-        f"{report['measurement']['repeat']} segments/run.",
+        f"{report['measurement']['repeat']} segments/run; "
+        f"{report['measurement']['browser_warmups']} discarded browser warmup(s).",
         "",
         "| Fixture | Size | Wasm median (CV) | Native Rust median (CV) | Wasm/native | Advance | Draw |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -464,6 +477,7 @@ def finalize_run(args: argparse.Namespace) -> None:
         native,
         identity=identity,
         repeat=config["repeat"],
+        warmups=config["warmups"],
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(canonical_json(report), encoding="utf-8")
@@ -486,6 +500,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--ids", default="")
     prepare.add_argument("--repeat", type=int, default=100)
     prepare.add_argument("--runs", type=int, default=5)
+    prepare.add_argument("--warmups", type=int, default=1)
     prepare.set_defaults(action=prepare_run)
 
     audit = subparsers.add_parser("audit")
@@ -507,8 +522,10 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     try:
         args = _parser().parse_args()
-        if hasattr(args, "repeat") and (args.repeat <= 0 or args.runs < 2):
-            raise ContractError("repeat must be positive and runs must be at least 2")
+        if hasattr(args, "repeat") and (args.repeat <= 0 or args.runs < 2 or args.warmups < 0):
+            raise ContractError(
+                "repeat must be positive, runs must be at least 2, and warmups cannot be negative"
+            )
         args.action(args)
         return 0
     except (ContractError, OSError, json.JSONDecodeError) as error:

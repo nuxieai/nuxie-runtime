@@ -40,14 +40,18 @@ if (browserMode === "chrome") {
         if (!response.ok) throw new Error(`fixture fetch failed ${response.status} ${url}`);
         return new Uint8Array(await response.arrayBuffer());
       }, fixture.url);
-      const runs = [];
-      for (let run = 0; run < config.runs; run += 1) {
-        const report = await page.evaluate(
-          async ({ bytes, repeat, sampleSeconds }) =>
-            window.measureWasmFixture({ bytes, repeat, sampleSeconds }),
-          { bytes, repeat: config.repeat, sampleSeconds: fixture.sample_seconds },
-        );
-        runs.push(report);
+      const runs = await page.evaluate(
+        async ({ bytes, repeat, sampleSeconds, warmups, runs }) =>
+          window.measureWasmFixtureRuns({ bytes, repeat, sampleSeconds, warmups, runs }),
+        {
+          bytes,
+          repeat: config.repeat,
+          sampleSeconds: fixture.sample_seconds,
+          warmups: config.warmups,
+          runs: config.runs,
+        },
+      );
+      for (const [run, report] of runs.entries()) {
         console.log(
           `wasm ${fixture.id} run ${run + 1}/${config.runs}: ${report.elapsed_ms.toFixed(3)} ms`,
         );

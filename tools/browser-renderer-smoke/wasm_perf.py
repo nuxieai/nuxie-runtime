@@ -111,6 +111,7 @@ def select_fixtures(
 
     target_count = len(requested_ids) if requested_ids else limit
     selected: list[dict[str, Any]] = []
+    selected_fixture_count = 0
     rejected: list[str] = []
     for perf_row in candidates:
         fixture_id = perf_row.get("id")
@@ -171,24 +172,47 @@ def select_fixtures(
             raise ContractError(
                 f"fixture {fixture_id!r} size drifted: manifest={declared_bytes} actual={actual_bytes}"
             )
-        selected.append(
-            {
-                "id": fixture_id,
-                "bytes": actual_bytes,
-                "relative_path": relative_path,
-                "path": str(fixture_path.resolve()),
-                "sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
-                # Repeat reports intentionally use one absolute sample, matching
-                # rust-golden-runner's repeat-mode contract.
-                "sample_seconds": float(samples[0]),
-            }
-        )
-        if len(selected) == target_count:
+        fixture_identity = {
+            "fixture_id": fixture_id,
+            "bytes": actual_bytes,
+            "relative_path": relative_path,
+            "path": str(fixture_path.resolve()),
+            "sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+        }
+        seen_samples: set[float] = set()
+        for sample_index, raw_sample in enumerate(samples):
+            if isinstance(raw_sample, bool) or not isinstance(raw_sample, (int, float)):
+                raise ContractError(
+                    f"fixture {fixture_id!r} has invalid timing sample {raw_sample!r}"
+                )
+            sample_seconds = float(raw_sample)
+            if not math.isfinite(sample_seconds) or sample_seconds < 0:
+                raise ContractError(
+                    f"fixture {fixture_id!r} has invalid timing sample {raw_sample!r}"
+                )
+            if sample_seconds in seen_samples:
+                raise ContractError(
+                    f"fixture {fixture_id!r} repeats timing sample {sample_seconds}"
+                )
+            seen_samples.add(sample_seconds)
+            sample_label = format(sample_seconds, ".9g")
+            selected.append(
+                {
+                    "id": f"{fixture_id}@{sample_label}s",
+                    **fixture_identity,
+                    "sample_index": sample_index,
+                    "sample_seconds": sample_seconds,
+                }
+            )
+        selected_fixture_count += 1
+        if selected_fixture_count == target_count:
             break
 
-    if len(selected) < target_count:
+    if selected_fixture_count < target_count:
         detail = "; ".join(rejected) or "no eligible rows"
-        raise ContractError(f"only selected {len(selected)} supported fixtures: {detail}")
+        raise ContractError(
+            f"only selected {selected_fixture_count} supported fixtures: {detail}"
+        )
     return selected
 
 
@@ -329,6 +353,7 @@ def build_comparison_report(
         fixture_id = fixture["id"]
         raw_wasm_runs = wasm_runs.get(fixture_id, [])
         raw_native_runs = native_runs.get(fixture_id, [])
+        _matching_target_identity(fixture, raw_wasm_runs, raw_native_runs)
         workload_identity = _matching_workload_identity(
             fixture_id, raw_wasm_runs, raw_native_runs
         )
@@ -348,7 +373,15 @@ def build_comparison_report(
             {
                 **{
                     key: fixture[key]
-                    for key in ("id", "bytes", "sha256", "relative_path", "sample_seconds")
+                    for key in (
+                        "id",
+                        "fixture_id",
+                        "sample_index",
+                        "sample_seconds",
+                        "bytes",
+                        "sha256",
+                        "relative_path",
+                    )
                     if key in fixture
                 },
                 "segments_per_run": repeat,
@@ -400,8 +433,85 @@ def _matching_workload_identity(
     return expected
 
 
+def _target_identity(fixture: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": fixture["id"],
+        "fixture_id": fixture.get("fixture_id", fixture["id"]),
+        "sample_index": fixture.get("sample_index", 0),
+        "sample_seconds": fixture["sample_seconds"],
+    }
+
+
+def _matching_target_identity(
+    fixture: dict[str, Any],
+    wasm_runs: list[dict[str, Any]],
+    native_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    expected = _target_identity(fixture)
+    for label, runs in (("wasm", wasm_runs), ("native", native_runs)):
+        if not runs:
+            raise ContractError(f"{fixture['id']} cannot compare empty run sets")
+        for run in runs:
+            if run.get("target_identity") != expected:
+                raise ContractError(
+                    f"{fixture['id']} {label} sample target identity mismatch: "
+                    f"expected={expected!r} current={run.get('target_identity')!r}"
+                )
+    return expected
+
+
 def canonical_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+
+def stage_coordinator_bundle(
+    sources: dict[str, Path], output_root: Path
+) -> Path:
+    if not sources:
+        raise ContractError("coordinator bundle cannot be empty")
+    records: dict[str, dict[str, Any]] = {}
+    for name, path in sorted(sources.items()):
+        if not name or Path(name).name != name:
+            raise ContractError(f"invalid coordinator bundle name: {name!r}")
+        record = _artifact_record(path)
+        records[name] = {key: record[key] for key in ("bytes", "sha256")}
+    manifest = {
+        "schema": "nuxie-wasm-perf-coordinator-bundle-v1",
+        "files": records,
+    }
+    bundle_sha256 = hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest()
+    output_root.mkdir(parents=True, exist_ok=True)
+    destination = output_root / bundle_sha256
+    if not destination.exists():
+        with tempfile.TemporaryDirectory(
+            prefix=".coordinator-", dir=output_root
+        ) as temporary:
+            staged = Path(temporary)
+            for name, source in sources.items():
+                shutil.copyfile(source, staged / name)
+                (staged / name).chmod(0o500 if name.endswith(".sh") else 0o400)
+            (staged / "manifest.json").write_text(
+                canonical_json(manifest), encoding="utf-8"
+            )
+            (staged / "manifest.json").chmod(0o400)
+            try:
+                staged.rename(destination)
+            except FileExistsError:
+                pass
+    expected_names = set(records) | {"manifest.json"}
+    if not destination.is_dir() or {
+        path.name for path in destination.iterdir()
+    } != expected_names:
+        raise ContractError(f"invalid content-addressed coordinator bundle: {destination}")
+    for name, expected in records.items():
+        current = _artifact_record(destination / name)
+        current_identity = {key: current[key] for key in ("bytes", "sha256")}
+        if current_identity != expected:
+            raise ContractError(
+                f"content-addressed coordinator changed: {name} "
+                f"expected={expected!r} current={current_identity!r}"
+            )
+    return destination
 
 
 def _git_output(directory: Path, *args: str) -> str:
@@ -535,6 +645,8 @@ def _seal_fixture_records(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
                 )
         sealed[fixture_id] = {
             "id": fixture_id,
+            "fixture_id": fixture.get("fixture_id", fixture_id),
+            "sample_index": fixture.get("sample_index", 0),
             "bytes": expected_identity["bytes"],
             "sha256": expected_identity["sha256"],
             "source_path": source["path"],
@@ -717,6 +829,24 @@ def verify_browser_artifact_identities(
             )
 
 
+def verify_browser_coordinator_identity(
+    sealed_artifacts: dict[str, Any], browser: dict[str, Any]
+) -> None:
+    name = "wasm_perf_node"
+    expected = sealed_artifacts.get(name)
+    loaded = browser.get("coordinator_artifacts", {}).get(name)
+    if not isinstance(expected, dict):
+        raise ContractError("wasm perf seal omitted Node coordinator")
+    if not isinstance(loaded, dict) or set(loaded) != {"bytes", "sha256"}:
+        raise ContractError("browser results omitted executed Node coordinator identity")
+    expected_identity = {key: expected[key] for key in ("bytes", "sha256")}
+    if loaded != expected_identity:
+        raise ContractError(
+            "executed Node coordinator identity mismatch: "
+            f"expected={expected_identity!r} loaded={loaded!r}"
+        )
+
+
 def verify_config_against_seal(
     config: dict[str, Any], provenance: dict[str, Any]
 ) -> None:
@@ -748,6 +878,8 @@ def verify_config_against_seal(
         configured = configured_by_id[fixture_id]
         current = {
             "id": fixture_id,
+            "fixture_id": configured.get("fixture_id", fixture_id),
+            "sample_index": configured.get("sample_index", 0),
             "bytes": configured.get("bytes"),
             "sha256": configured.get("sha256"),
             "source_path": str(Path(configured["path"]).resolve()),
@@ -784,7 +916,14 @@ def verify_browser_measurement_contract(
     expected_by_id = {
         fixture_id: {
             key: fixture[key]
-            for key in ("id", "bytes", "sha256", "sample_seconds")
+            for key in (
+                "id",
+                "fixture_id",
+                "sample_index",
+                "sample_seconds",
+                "bytes",
+                "sha256",
+            )
         }
         for fixture_id, fixture in provenance["fixtures"].items()
     }
@@ -814,7 +953,7 @@ def prepare_run(args: argparse.Namespace) -> None:
     args.staging_dir.mkdir(parents=True, exist_ok=True)
     staged_fixtures = []
     for fixture in fixtures:
-        staged_path = args.staging_dir / f"{fixture['id']}.riv"
+        staged_path = args.staging_dir / f"{fixture['fixture_id']}.riv"
         shutil.copyfile(fixture["path"], staged_path)
         try:
             url_path = staged_path.resolve().relative_to(repo_root)
@@ -867,6 +1006,9 @@ def seal_run(args: argparse.Namespace) -> None:
             "wasm_bindgen_js": args.wasm_bindgen_js,
             "wasm_perf_driver_js": args.wasm_perf_driver_js,
             "wasm_perf_html": args.wasm_perf_html,
+            "wasm_perf_node": args.wasm_perf_node,
+            "wasm_perf_python": args.wasm_perf_python,
+            "wasm_perf_shell": args.wasm_perf_shell,
         },
         fixtures=config["fixtures"],
         measurement={key: config[key] for key in ("repeat", "runs", "warmups")},
@@ -909,6 +1051,20 @@ def audit_run(args: argparse.Namespace) -> None:
     )
 
 
+def stage_coordinator_run(args: argparse.Namespace) -> None:
+    sources: dict[str, Path] = {}
+    for value in args.coordinator:
+        name, separator, raw_path = value.partition("=")
+        if not separator:
+            raise ContractError(
+                f"coordinator must use name=path syntax: {value!r}"
+            )
+        if name in sources:
+            raise ContractError(f"duplicate coordinator bundle name: {name}")
+        sources[name] = Path(raw_path)
+    print(stage_coordinator_bundle(sources, args.output_root.resolve()))
+
+
 def _native_runs_with_runner(
     config: dict[str, Any], runner: Path, sealed_fixtures: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -936,6 +1092,7 @@ def _native_runs_with_runner(
                     f"{completed.stderr.strip() or completed.stdout.strip()}"
                 )
             report = parse_native_report(completed.stdout)
+            report["target_identity"] = _target_identity(fixture)
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"native runner segment mismatch for {fixture['id']}")
             runs.append(report)
@@ -1010,14 +1167,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"{report['measurement']['repeat']} segments/run; "
         f"{report['measurement']['browser_warmups']} discarded browser warmup(s).",
         "",
-        "| Fixture | Workload identity | Size | Wasm median (CV) | Native Rust median (CV) | Wasm/native | Advance | Draw |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Fixture | Sample | Workload identity | Size | Wasm median (CV) | Native Rust median (CV) | Wasm/native | Advance | Draw |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report["fixtures"]:
         wasm = row["wasm"]["elapsed_ms"]
         native = row["native_rust"]["elapsed_ms"]
         lines.append(
-            f"| `{row['id']}` | {_workload_label(row['workload_identity'])} | {row['bytes']:,} | {wasm['median']:.3f} ms ({wasm['coefficient_of_variation']:.1%}) "
+            f"| `{row['fixture_id']}` | `{row['sample_seconds']:.9g}s` | {_workload_label(row['workload_identity'])} | {row['bytes']:,} | {wasm['median']:.3f} ms ({wasm['coefficient_of_variation']:.1%}) "
             f"| {native['median']:.3f} ms ({native['coefficient_of_variation']:.1%}) "
             f"| {_ratio(row['ratio']['elapsed'])} | {_ratio(row['ratio']['advance'])} | {_ratio(row['ratio']['draw'])} |"
         )
@@ -1054,6 +1211,7 @@ def finalize_run(args: argparse.Namespace) -> None:
     )
     verify_config_against_seal(config, provenance)
     verify_browser_artifact_identities(provenance["artifacts"], browser)
+    verify_browser_coordinator_identity(provenance["artifacts"], browser)
     verify_browser_fixture_identities(provenance["fixtures"], browser)
     verify_browser_measurement_contract(provenance, browser)
     expected_native = Path(provenance["artifacts"]["native_runner"]["path"])
@@ -1067,6 +1225,10 @@ def finalize_run(args: argparse.Namespace) -> None:
             raise ContractError(f"browser run count mismatch for {fixture['id']}")
         for report in runs:
             validate_timing_report(report)
+            if report.get("target_identity") != _target_identity(fixture):
+                raise ContractError(
+                    f"browser sample target identity mismatch for {fixture['id']}"
+                )
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"browser segment mismatch for {fixture['id']}")
     native = _native_runs(
@@ -1127,6 +1289,13 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("--source", type=Path, required=True)
     audit.set_defaults(action=audit_run)
 
+    stage_coordinator = subparsers.add_parser("stage-coordinator")
+    stage_coordinator.add_argument("--output-root", type=Path, required=True)
+    stage_coordinator.add_argument(
+        "--coordinator", action="append", required=True, default=[]
+    )
+    stage_coordinator.set_defaults(action=stage_coordinator_run)
+
     seal = subparsers.add_parser("seal")
     seal.add_argument("--config", type=Path, required=True)
     seal.add_argument("--seal", type=Path, required=True)
@@ -1137,6 +1306,9 @@ def _parser() -> argparse.ArgumentParser:
     seal.add_argument("--wasm-bindgen-js", type=Path, required=True)
     seal.add_argument("--wasm-perf-driver-js", type=Path, required=True)
     seal.add_argument("--wasm-perf-html", type=Path, required=True)
+    seal.add_argument("--wasm-perf-node", type=Path, required=True)
+    seal.add_argument("--wasm-perf-python", type=Path, required=True)
+    seal.add_argument("--wasm-perf-shell", type=Path, required=True)
     seal.add_argument("--allowed-output", type=Path, action="append", default=[])
     seal.set_defaults(action=seal_run)
 

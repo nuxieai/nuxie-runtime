@@ -45,6 +45,16 @@ const expectedArtifacts = Object.fromEntries(
     },
   ]),
 );
+const nodeCoordinatorBytes = fs.readFileSync(__filename);
+const nodeCoordinatorIdentity = {
+  bytes: nodeCoordinatorBytes.byteLength,
+  sha256: crypto.createHash("sha256").update(nodeCoordinatorBytes).digest("hex"),
+};
+assertLoadedArtifactIdentity(
+  "wasm_perf_node",
+  seal.provenance.artifacts.wasm_perf_node,
+  nodeCoordinatorIdentity,
+);
 const sealedHarness = Object.fromEntries(
   ["wasm_perf_html", "wasm_perf_driver_js"].map((name) => {
     const bytes = fs.readFileSync(seal.provenance.artifacts[name].path);
@@ -152,7 +162,14 @@ if (browserMode === "chrome") {
           runs: config.runs,
         },
       );
+      const targetIdentity = {
+        id: fixture.id,
+        fixture_id: fixture.fixture_id,
+        sample_index: fixture.sample_index,
+        sample_seconds: fixture.sample_seconds,
+      };
       for (const [run, report] of runs.entries()) {
+        report.target_identity = targetIdentity;
         console.log(
           `wasm ${fixture.id} run ${run + 1}/${config.runs}: ${report.elapsed_ms.toFixed(3)} ms`,
         );
@@ -168,13 +185,18 @@ if (browserMode === "chrome") {
         repeat: config.repeat,
         runs: config.runs,
         warmups: config.warmups,
-        fixtures: config.fixtures.map(({ id, bytes, sha256, sample_seconds }) => ({
-          id,
-          bytes,
-          sha256,
-          sample_seconds,
-        })),
+        fixtures: config.fixtures.map(
+          ({ id, fixture_id, sample_index, sample_seconds, bytes, sha256 }) => ({
+            id,
+            fixture_id,
+            sample_index,
+            sample_seconds,
+            bytes,
+            sha256,
+          }),
+        ),
       },
+      coordinator_artifacts: { wasm_perf_node: nodeCoordinatorIdentity },
       loaded_artifacts: loadedArtifacts,
       loaded_fixtures: loadedFixtures,
       fixtures,

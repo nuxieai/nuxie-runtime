@@ -5,10 +5,16 @@
 //! this seam stable is a permanent maintenance cost, but it avoids compiling
 //! test-only counters or copied private modules into benchmark binaries.
 
-use nuxie_render_api::{FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin};
+use nuxie_render_api::{
+    BlendMode, ColorInt, FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin,
+};
 
 use crate::intersection_board::{
     FindResult, GroupingType, IntersectionBoard, IntersectionTile, Rect,
+};
+use crate::{
+    LogicalFrameConfig, LogicalGradient, LogicalPathHandle, LogicalPathPaint, NullLogicalRenderer,
+    RenderMode,
 };
 
 pub struct IntersectionTileWorkload {
@@ -98,6 +104,9 @@ pub struct CapturedPathPaint {
     pub join: StrokeJoin,
     pub cap: StrokeCap,
     pub feather: f32,
+    pub color: ColorInt,
+    pub blend_mode: BlendMode,
+    pub gradient: Option<LogicalGradient>,
 }
 
 #[derive(Clone, Copy)]
@@ -107,28 +116,87 @@ pub enum Preparation {
     Feather(f32),
 }
 
-#[cfg(test)]
-fn forced_feather_stroke_style() -> (StrokeJoin, StrokeCap) {
-    (StrokeJoin::Round, StrokeCap::Round)
+struct PreparedPathPaint {
+    path: LogicalPathHandle,
+    paint: LogicalPathPaint,
+    gradient: Option<LogicalGradient>,
 }
 
 pub struct NullFrameWorkload {
-    _paths: Vec<CapturedPathPaint>,
-    _preparation: Preparation,
+    renderer: NullLogicalRenderer,
+    draws: Vec<PreparedPathPaint>,
+    completed_frames: u64,
 }
 
 impl NullFrameWorkload {
-    pub fn new(paths: Vec<CapturedPathPaint>, preparation: Preparation) -> Self {
+    pub fn new(mut paths: Vec<CapturedPathPaint>, preparation: Preparation) -> Self {
+        for draw in &mut paths {
+            match preparation {
+                Preparation::Authored => {}
+                Preparation::Strokes(join) => {
+                    draw.style = RenderPaintStyle::Stroke;
+                    draw.thickness = 2.0;
+                    draw.join = join;
+                }
+                Preparation::Feather(feather) => {
+                    draw.feather = feather;
+                    draw.fill_rule = FillRule::Clockwise;
+                }
+            }
+        }
+        let renderer = NullLogicalRenderer::new(LogicalFrameConfig {
+            width: 1600,
+            height: 1600,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        });
+        let draws = paths
+            .into_iter()
+            .map(|draw| PreparedPathPaint {
+                path: renderer.prepare_path(&draw.path, draw.fill_rule),
+                paint: LogicalPathPaint {
+                    style: draw.style,
+                    color: draw.color,
+                    thickness: draw.thickness,
+                    join: draw.join,
+                    cap: draw.cap,
+                    feather: draw.feather,
+                    blend_mode: draw.blend_mode,
+                },
+                gradient: draw.gradient,
+            })
+            .collect();
         Self {
-            _paths: paths,
-            _preparation: preparation,
+            renderer,
+            draws,
+            completed_frames: 0,
         }
     }
 
     pub fn run(&mut self) -> usize {
-        panic!(
-            "backend-neutral logical frame is not implemented; refusing to time direct tessellation"
-        )
+        let mut written_bytes = 0usize;
+        for _ in 0..10 {
+            self.renderer.begin_frame();
+            for draw in &self.draws {
+                match &draw.gradient {
+                    Some(gradient) => self.renderer.draw_path_with_gradient(
+                        &draw.path,
+                        draw.paint,
+                        gradient.clone(),
+                    ),
+                    None => self.renderer.draw_path(&draw.path, draw.paint),
+                }
+                .expect("pinned upstream path is supported by the production logical frame");
+            }
+            let report = self
+                .renderer
+                .flush()
+                .expect("pinned upstream logical frame flushes through the null adapter");
+            written_bytes = written_bytes.wrapping_add(report.written_bytes);
+            self.completed_frames = self.completed_frames.saturating_add(1);
+        }
+        written_bytes
     }
 }
 
@@ -145,19 +213,10 @@ fn cpp_rand() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use nuxie_render_api::{FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin};
+    use nuxie_render_api::{BlendMode, FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin};
 
     #[test]
-    fn forced_feather_uses_upstream_round_stroke_style() {
-        assert_eq!(
-            super::forced_feather_stroke_style(),
-            (StrokeJoin::Round, StrokeCap::Round)
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "backend-neutral logical frame is not implemented")]
-    fn draw_workload_refuses_to_time_tessellation_without_logical_flush() {
+    fn draw_workload_runs_ten_production_logical_frames() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
         path.line_to(10.0, 10.0);
@@ -170,10 +229,16 @@ mod tests {
                 join: StrokeJoin::Miter,
                 cap: StrokeCap::Butt,
                 feather: 0.0,
+                color: 0xff00_0000,
+                blend_mode: BlendMode::SrcOver,
+                gradient: None,
             }],
             super::Preparation::Authored,
         );
 
-        workload.run();
+        let written_bytes = workload.run();
+
+        assert!(written_bytes > 0);
+        assert_eq!(workload.completed_frames, 10);
     }
 }

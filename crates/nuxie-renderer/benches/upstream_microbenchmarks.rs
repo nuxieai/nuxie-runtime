@@ -22,6 +22,7 @@ use nuxie_renderer::upstream_microbenchmarks::{
     CapturedPathPaint, IntersectionBoardWorkload, IntersectionTileWorkload, NullFrameWorkload,
     Preparation,
 };
+use nuxie_renderer::LogicalGradient;
 use nuxie_runtime::ArtboardInstance;
 
 const PAPER_BBOXES: &[u8] = include_bytes!("../../../benchmarks/data/paper_bboxes_6_copies.i32le");
@@ -88,6 +89,9 @@ struct CapturePaint {
     join: StrokeJoin,
     cap: StrokeCap,
     feather: f32,
+    color: ColorInt,
+    blend_mode: BlendMode,
+    gradient: Option<LogicalGradient>,
 }
 
 impl Default for CapturePaint {
@@ -98,6 +102,9 @@ impl Default for CapturePaint {
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 0.0,
+            color: 0xff00_0000,
+            blend_mode: BlendMode::SrcOver,
+            gradient: None,
         }
     }
 }
@@ -111,7 +118,9 @@ impl RenderPaint for CapturePaint {
         self.style = style;
     }
 
-    fn color(&mut self, _value: ColorInt) {}
+    fn color(&mut self, value: ColorInt) {
+        self.color = value;
+    }
 
     fn thickness(&mut self, value: f32) {
         self.thickness = value.abs();
@@ -129,9 +138,29 @@ impl RenderPaint for CapturePaint {
         self.feather = value.abs();
     }
 
-    fn blend_mode(&mut self, _value: BlendMode) {}
-    fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
+    fn blend_mode(&mut self, value: BlendMode) {
+        self.blend_mode = value;
+    }
+
+    fn shader(&mut self, shader: Option<&dyn RenderShader>) {
+        self.gradient = shader.map(|shader| {
+            shader
+                .as_any()
+                .downcast_ref::<CaptureShader>()
+                .expect("capture shader")
+                .0
+                .clone()
+        });
+    }
     fn invalidate_stroke(&mut self) {}
+}
+
+struct CaptureShader(LogicalGradient);
+
+impl RenderShader for CaptureShader {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 struct CaptureFactory {
@@ -166,8 +195,12 @@ impl Factory for CaptureFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.null
-            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        Box::new(CaptureShader(LogicalGradient::Linear {
+            start: (sx, sy),
+            end: (ex, ey),
+            colors: colors.to_vec(),
+            stops: stops.to_vec(),
+        }))
     }
 
     fn make_radial_gradient(
@@ -178,8 +211,12 @@ impl Factory for CaptureFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.null
-            .make_radial_gradient(cx, cy, radius, colors, stops)
+        Box::new(CaptureShader(LogicalGradient::Radial {
+            center: (cx, cy),
+            radius,
+            colors: colors.to_vec(),
+            stops: stops.to_vec(),
+        }))
     }
 
     fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -228,6 +265,9 @@ impl Renderer for CaptureRenderer {
             join: paint.join,
             cap: paint.cap,
             feather: paint.feather,
+            color: paint.color,
+            blend_mode: paint.blend_mode,
+            gradient: paint.gradient.clone(),
         });
     }
 
@@ -316,6 +356,9 @@ fn custom_paths(mut setup: impl FnMut(&mut RawPath)) -> Vec<CapturedPathPaint> {
                 join: StrokeJoin::Miter,
                 cap: StrokeCap::Butt,
                 feather: 0.0,
+                color: 0xff00_0000,
+                blend_mode: BlendMode::SrcOver,
+                gradient: None,
             }
         })
         .collect()

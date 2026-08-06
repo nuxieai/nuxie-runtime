@@ -1,99 +1,69 @@
-# Upstream draw microbenchmark equivalence blocker — 2026-08-06
+# Upstream draw microbenchmark equivalence resolution — 2026-08-06
 
-The ten `Draw*` cases in [UNIV-1688](https://universe.basis.dev/issue/UNIV-1688)
-do not currently have a direct Rust comparison. The earlier direct-tessellation
-prototype did not execute the same operation boundary and its recorded ratios
-have been removed.
+The production `LogicalFrame` and `NullLogicalRenderer` seam resolves the
+original blocker for the ten `Draw*` cases in
+[UNIV-1688](https://universe.basis.dev/issue/UNIV-1688). The inventory now
+classifies all 20 pinned upstream cases as direct ratios.
 
-## Upstream lifecycle
+## Shared operation boundary
 
-`tests/bench/draw_pls_path.cpp` measures ten repetitions of:
+Pinned C++ `tests/bench/draw_pls_path.cpp` measures ten repetitions of:
 
-1. `RenderContext::beginFrame()` for a 1600x1600 target.
-2. `RiveRenderer::drawPath()` for every captured path and paint.
-3. `RenderContext::flush()`.
+1. `RenderContext::beginFrame()` for a 1600x1600 target;
+2. `RiveRenderer::drawPath()` for every captured path and paint;
+3. `RenderContext::flush()` through `RenderContextNULL`.
 
-`RenderContextNULL::flush()` is only the final backend submission no-op. The
-production `RenderContext::flush()` still performs all of the following first:
+The C++ null adapter skips only final GPU submission. Production flush still
+performs logical layout, retained allocation growth, shadow-buffer mapping,
+typed path/paint/contour/gradient/tessellation/triangle/draw-list writes,
+rewind, and per-frame teardown. With all clockwise-atomic capabilities
+enabled by `RenderContextNULL`, C++ selects clockwise-atomic interlock mode.
 
-- every `LogicalFlush::layoutResources()` pass;
-- frame-wide resource requirement calculation and retained allocation growth;
-- mapping the null backend's real shadow-buffer rings;
-- every `LogicalFlush::writeResources()` path, paint, contour, gradient,
-  tessellation, triangle, and draw-list write;
-- buffer unmapping and backend dispatch;
-- logical-flush rewind, per-frame allocator teardown, frame descriptor reset,
-  and optional container trimming.
+Rust Criterion constructs `NullFrameWorkload` once outside the measured
+closure. Construction captures the same paths, fill rules, authored paint
+style, width, join, cap, feather, color, blend mode, and linear/radial
+gradients; applies the pinned forced-stroke or forced-feather mutations; and
+prepares immutable `LogicalPathHandle`s. Each measured `run()` then performs
+exactly ten repetitions of:
 
-The path fill rule is carried through `RiveRenderer::drawPath()` into
-`PathDraw::Make()` and affects fill planning and encoded paint data.
+1. `NullLogicalRenderer::begin_frame()` with a 1600x1600
+   `ClockwiseAtomic` configuration;
+2. `draw_path()` or `draw_path_with_gradient()` for every prepared input;
+3. `flush()` through the production logical resource writer.
 
-The relevant pinned source boundaries are concrete:
+The same Null renderer is retained across Criterion iterations, matching the
+retained C++ context and its allocation-growth behavior. Rust's null adapter
+is the terminal consumer of the production typed resource output and performs
+no WebGPU device, encoder, pipeline, or submission work.
 
-- `tests/bench/draw_pls_path.cpp:25-39` owns the ten-frame
-  `beginFrame`/`drawPath`/`flush` loop.
-- `renderer/src/rive_renderer.cpp:121-187` routes a path and paint through
-  `PathDraw::Make`; `renderer/src/draw.cpp:420-615` builds the logical path
-  draw, including the fill-rule-dependent path flags.
-- `renderer/src/render_context.cpp:760-1032` lays out every logical flush,
-  calculates and grows retained resource allocations, maps buffers, calls
-  `writeResources`, unmaps, dispatches, rewinds, and tears the frame down.
-- `renderer/src/render_context.cpp:1104-1380` and `:1412-2395` implement the
-  logical layout and typed resource writes respectively.
-- `tests/common/render_context_null.cpp:28-38` maps each `BufferRingNULL` to
-  its CPU shadow buffer, while `tests/common/render_context_null.hpp:60` makes
-  only the final backend `flush(const FlushDescriptor&)` call a no-op.
+## Production seam evidence
 
-## Rust dependency evidence
+- `crates/nuxie-renderer/src/logical_frame.rs` owns draw admission,
+  fill-rule-aware logical planning, flush partitioning, retained resource
+  allocation, typed CPU buffer writes, consumption accounting, and teardown.
+- `WgpuFrame` delegates its logical work to that same `LogicalFrame` and
+  consumes the shared typed output in the production GPU encoder.
+- `NullLogicalRenderer` exposes the intentionally small
+  `begin_frame`/`draw_path`/`flush` interface and consumes the identical typed
+  output into retained shadow buffers without GPU submission.
+- `crates/nuxie-renderer/tests/paper_riv_logical_differential.rs` proves all
+  four pinned `paper.riv` preparation modes preserve authored paint/gradient
+  inputs and produce the same logical reports through Wgpu and Null.
+- Renderer unit tests cover all six pinned custom `Draw*` workloads through
+  both modes and assert Wgpu/Null logical-report parity.
+- The feature-gated microbenchmark test proves one public workload call
+  completes ten production Null frames with non-empty typed resource writes.
 
-The Rust renderer has no backend-neutral counterpart to C++ `RenderContext`:
+Direct tessellation helpers remain outside this protocol. They do not include
+the upstream frame lifecycle, retained allocation policy, typed resource
+writes, or teardown and must not be substituted for the production Null seam.
 
-- `WgpuFrame` owns a concrete `Arc<Context>`, and `Context` owns the WebGPU
-  device, queue, tessellator, path/atlas/gradient pipelines, and retained GPU
-  resources.
-- `WgpuFactory::begin_frame()` checks out concrete GPU frame attachments.
-- `WgpuFrame::finish_internal()` creates a WebGPU command encoder,
-  tessellation upload state, texture leases, and atomic backing before logical
-  draw preparation.
-- MSAA and atomic logical planning are interleaved with concrete pipeline
-  `prepare_*`/`encode` calls, device limits, GPU buffer creation, atlas texture
-  creation, submission splitting, and resource lease completion.
+## Evidence contract
 
-These dependencies are visible at the following production symbols:
-
-- `crates/nuxie-renderer/src/lib.rs:300-327` defines `Context` with the
-  concrete device, queue, tessellator, pipelines, and retained resources;
-  `:2353-2375` stores that `Arc<Context>` directly in `WgpuFrame`.
-- `crates/nuxie-renderer/src/lib.rs:1048-1078` has
-  `WgpuFactory::begin_frame*` check out a concrete frame attachment lease.
-- `crates/nuxie-renderer/src/lib.rs:3221-3304` starts `finish_internal()` by
-  cloning GPU attachments, creating the command encoder, and acquiring
-  tessellation textures/uploads and atomic backing.
-- The same `finish_internal()` then calls concrete pipeline preparation and
-  encoding throughout (`path_pipeline.prepare_resources`/`prepare_draw` near
-  `:5826-5842`, for example), and its submission closure uses the WebGPU queue
-  and device directly near `:3268-3304`.
-- `crates/nuxie-renderer/src/logical_flush.rs:71-95` contains only one piece
-  of logical accounting. It is not a frame planner and has no buffer-writing
-  or teardown interface that a null backend can invoke.
-
-Consequently, a feature-only adapter cannot execute the production logical
-flush without also executing WebGPU work. Calling `build_fill_tessellation`,
-`build_stroke_tessellation`, or `build_feather_tessellation` directly skips the
-resource layout, allocation, buffer-writing, scheduling, and teardown measured
-by C++ and is not an equivalent substitute.
-
-## Required production seam
-
-Direct ratios require a production refactor that extracts a backend-neutral
-`LogicalFrame` module from `WgpuFrame`. Its small interface must cover
-`begin_frame`, `draw_path`, and `flush`; its implementation must own draw
-admission, fill-rule-aware logical layout and scheduling, retained resource
-allocation policy, typed CPU buffer writes, and frame teardown. WebGPU must use
-that same module through a GPU backend adapter, and the benchmark must use it
-through a shadow-buffer null adapter.
-
-Until that module exists, the inventory marks all ten `Draw*` cases `blocked`,
-the report emits no timings or ratios for them, and `microbench-run` refuses to
-create a supposedly complete evidence run. This is intentionally not a
-directional comparison.
+`make microbench-gate` verifies the exact 20-case registry, pinned upstream
+source hashes/ref, fixture conversions, and local Criterion registrations.
+`make microbench-run` refuses dirty or blocked inventories and records the
+committed Rust source revision, benchmark-content identity, pinned C++
+revision and binary hash, tool versions, settings, and every raw sample hash.
+`make microbench-compare` accepts only that sealed run manifest and reports all
+20 minimum-per-iteration Rust/C++ ratios.

@@ -1105,6 +1105,92 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("vendor/helper", result.stderr)
         self.assertIn("outside the protected workspace scan", result.stderr)
 
+    def test_rejects_excluded_local_provider_hidden_behind_cargo_patch(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = "1"
+            """,
+        )
+        self.create_package("crates/nuxie-product", "nuxie-product", "")
+        helper = self.root / "vendor/helper"
+        (helper / "src").mkdir(parents=True)
+        (helper / "src/lib.rs").write_text("// patched first-party helper\n")
+        (helper / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "helper"
+                version = "1.0.0"
+
+                [dependencies]
+                nuxie-product = { path = "../../crates/nuxie-product" }
+                """
+            )
+        )
+        members = ",\n".join(f'    "{member}"' for member in self.members)
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                f"""
+                [workspace]
+                members = [
+                {members}
+                ]
+                exclude = ["vendor/helper"]
+                resolver = "3"
+
+                [patch.crates-io]
+                helper = {{ path = "vendor/helper" }}
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("path patch 'helper'", result.stderr)
+        self.assertIn("outside the protected workspace scan", result.stderr)
+
+    def test_scans_nonexcluded_local_cargo_patch_provider(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = "1"
+            """,
+        )
+        self.create_package("crates/nuxie-product", "nuxie-product", "")
+        helper = self.root / "helpers/helper"
+        (helper / "src").mkdir(parents=True)
+        (helper / "src/lib.rs").write_text("// patched helper\n")
+        (helper / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "helper"
+                version = "1.0.0"
+
+                [dependencies]
+                nuxie-product = { path = "../../crates/nuxie-product" }
+                """
+            )
+        )
+        self.write_workspace(
+            """
+            [patch.crates-io]
+            helper = { path = "helpers/helper" }
+            """
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("helpers/helper/Cargo.toml", result.stderr)
+        self.assertIn("nuxie-product", result.stderr)
+
     def test_rejects_expansion_of_portable_abi_facade_edge(self) -> None:
         self.create_package(
             "crates/nux-capi",

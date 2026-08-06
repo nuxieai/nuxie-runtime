@@ -87,6 +87,7 @@ impl Drop for LuaInner {
             crate::serde::clear_sentinels(self.state);
             crate::interrupt::clear_interrupt(self.state);
             crate::luau_ext::clear_vm_state(self.state);
+            crate::userdata::clear_metatable_cache(self.state);
             // The memory map is keyed by the global-state pointer and must be
             // dropped AFTER `lua_close` (the allocator `MemoryControl` handed to
             // the VM as `ud` is used throughout close to free every object), so

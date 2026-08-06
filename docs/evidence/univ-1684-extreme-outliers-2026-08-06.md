@@ -211,6 +211,43 @@ The post-gate external diagnostics are content-addressed as follows:
 - trace table-of-contents SHA-256:
   `dfc0c09753d02cad1b133854d895115a3a830e07c44eadd636de60c935851dbe`
 
+## Retained opacity-owner result
+
+Commit `aaa7efb4e7a68f0ac673e5a1bc7e84ee723fddc2` retains each paint
+container's fixed opacity owner on its runtime shape during the existing
+container-index construction pass. Live inherited blend reads now follow that
+O(1) retained index instead of reopening the immutable component graph and
+walking static ancestry. Focused coverage proves that every supported paint
+container and its clone retain the same owner as the prior static resolver, and
+that a live inherited blend update performs zero ancestry resolutions.
+
+The scripting-enabled release runner SHA-256 for that commit is
+`37639c25c77fbff5681a4dcc622daa3bb2b8e376682c6cab192027e3adf43d9a`.
+The bounded quiet gate expired after 60 seconds at load 25 versus threshold 9,
+so the car-only comparator remains diagnostic: C++ median 7.510 ms, Rust median
+178.345 ms, and 23.748x. The acceptance target therefore remains open and the
+corpus ceiling is unchanged.
+
+The exact 100-frame post-change profile provides the structural result despite
+the noisy timing environment. `opacity_owner_local` has zero inclusive and
+zero leaf samples. `runtime_live_owned_shape_paint_blend_mode_value` fell from
+31 inclusive/30 leaf samples in the immediately preceding exact profile to
+1/1. `runtime_shape_paint_commands` remains separately visible at 55
+inclusive/42 leaf samples and was not changed in this slice. The earlier
+Artboard dispatch roots also remain absent: both `sort_draw_order` and
+`clear_redundant_operations` have zero samples.
+
+The post-owner external diagnostics are content-addressed as follows:
+
+- timing JSON SHA-256:
+  `6195b70a7832287606fb9a9a2d792ac4f7e6ed583110b578b9546f7a97d21386`
+- Time Profiler export SHA-256:
+  `a3a1f76400a9c599101fa2080e76de93c300a2ce6675cd4e8880a77554068cd9`
+- Time Sample export SHA-256:
+  `dff5a9894d5dba1e570e2bb221bb1a835338177afe4b5c1c8cef257df6629720`
+- trace table-of-contents SHA-256:
+  `5f4913ae1bcf13ea32d42ea58d844a5d62c94af97b89b56b580ba643343cd7b7`
+
 ## Required authoritative closeout
 
 After the PR is open, run the clean, serialized performance lane with the

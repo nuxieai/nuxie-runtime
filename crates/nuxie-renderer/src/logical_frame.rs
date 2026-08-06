@@ -6,6 +6,9 @@
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use nuxie_render_api::{
     BlendMode, ColorInt, FillRule, Mat2D, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin,
 };
@@ -18,6 +21,16 @@ use super::{
     DrawState, LogicalPaint, LogicalPath, MsaaClipResetAction, PathDrawPreparation,
     PreparedFillGeometry, RenderMode, SolidDraw, FEATHER_ATLAS_PADDING,
 };
+
+#[cfg(test)]
+thread_local! {
+    static PATH_DRAW_ADMISSION_EVALUATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_path_draw_admission_evaluations() -> usize {
+    PATH_DRAW_ADMISSION_EVALUATIONS.with(|evaluations| evaluations.replace(0))
+}
 
 #[derive(Clone)]
 pub(crate) struct GradientDefinition {
@@ -1707,6 +1720,10 @@ pub(crate) fn admit_path_draw(
     path: &LogicalPath,
     paint: &LogicalPaint,
 ) -> Result<Option<AdmittedPathDraw>, &'static str> {
+    #[cfg(test)]
+    PATH_DRAW_ADMISSION_EVALUATIONS.with(|evaluations| {
+        evaluations.set(evaluations.get().saturating_add(1));
+    });
     if !path_draw_has_valid_parameters(path, paint) {
         return Ok(None);
     }
@@ -1840,6 +1857,9 @@ impl NullLogicalRenderer {
     ) -> Result<(), &'static str> {
         let config = self.config;
         let frame = self.active_frame();
+        if pixel_bounds_are_empty(frame.logical_state.state.overall_clip_pixel_bounds) {
+            return Ok(());
+        }
         let mut paint = paint.into_wgpu();
         paint.shader = gradient.map(LogicalGradient::into_wgpu);
         let Some(admitted) =

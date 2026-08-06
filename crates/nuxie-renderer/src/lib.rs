@@ -9747,6 +9747,51 @@ mod tests {
     }
 
     #[test]
+    fn fully_clipped_null_draw_skips_expensive_path_admission_like_wgpu() {
+        let mut expensive_path = RawPath::new();
+        expensive_path.move_to(0.0, 0.0);
+        for index in 0..16_384 {
+            let x = (index % 128) as f32;
+            let y = (index / 128) as f32;
+            expensive_path.line_to(x, y);
+        }
+        expensive_path.close();
+
+        let mut factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let empty_clip = factory.make_render_path(RawPath::new(), FillRule::NonZero);
+        let wgpu_path = factory.make_render_path(expensive_path.clone(), FillRule::NonZero);
+        let paint = factory.make_render_paint();
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(empty_clip.as_ref());
+        let _ = logical_frame::take_path_draw_admission_evaluations();
+        frame.draw_path(wgpu_path.as_ref(), paint.as_ref());
+        assert_eq!(
+            logical_frame::take_path_draw_admission_evaluations(),
+            0,
+            "WGPU must not inspect path bounds after the clip becomes empty"
+        );
+        let wgpu = frame.prepare_logical_frame().unwrap();
+
+        let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        let empty_clip = null.prepare_path(&RawPath::new(), FillRule::NonZero);
+        let null_path = null.prepare_path(&expensive_path, FillRule::NonZero);
+        null.begin_frame();
+        null.clip_path(&empty_clip).unwrap();
+        let _ = logical_frame::take_path_draw_admission_evaluations();
+        null.draw_path(&null_path, LogicalPathPaint::default())
+            .unwrap();
+        assert_eq!(
+            logical_frame::take_path_draw_admission_evaluations(),
+            0,
+            "Null must not inspect path bounds after the clip becomes empty"
+        );
+        let shadow = null.flush().unwrap();
+
+        assert_eq!(wgpu.draw_count, 0);
+        assert_eq!(shadow, wgpu);
+    }
+
+    #[test]
     fn wgpu_encoder_consumes_one_shared_logical_resource_plan() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let path = LogicalPath {

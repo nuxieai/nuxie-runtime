@@ -1,24 +1,24 @@
 # Upstream C++/Rust microbenchmark evidence — 2026-08-06
 
 This evidence measures exact committed Rust source
-`ee4f4b5744e517f9acafc57bb9665770161a9b3a` against pinned rive-runtime
+`eb972bfdd7a93d56c64b444b6699aed51f5434f8` against pinned rive-runtime
 `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 
-- Run ID: `20260806T181452Z-ee4f4b5744e5`
+- Run ID: `20260806T184136Z-eb972bfdd7a9`
 - Benchmark-content SHA-256:
-  `5d575e311f22483b9331516447cf7bd7e93b03e7161c916a86e1c0c239f66158`
+  `d84602a58d4ec781497fbedca7430eea0658f8e7110a976f380ca36cf8a03f4a`
 - Inventory SHA-256:
   `666f97fc3da7e2452954ca22e6a80acbc151d0daf4a471db39d7c2189388c8ac`
 - Pinned committed C++ source archive SHA-256:
   `7e4706ec5e02fc9da5a16ad36dd93bdad52a96a3edb037c0fa8a3b2a800b2d5a`
 - Sealed C++ build-input record SHA-256:
-  `7f91c4e06020a25125cc3e74f7f5cfaf4ee3feed9cd167afad998091cb8fa4d4`
+  `35169c63ab66d688bc1d0493e8661094c5031951ba2e0d3e8e33204967699b17`
 - Run-scoped C++ release benchmark binary SHA-256:
   `5908ee2cfd8359c5773349525113469b0042fea220bbb903ab55e41917726d92`
 - C++ build log SHA-256:
-  `d2e58fc1fe3c0e0ac4bd4d394a1d16c8372e1d9f939741c5c3fb159f141b6411`
+  `e3b5217616aed5f4f286401a1d58b6ace3076eb26c99e871882c8334ad1a59ef`
 - Raw C++ output SHA-256:
-  `5eaf331bdd2c5aef6d11a8c741054168ddb3a12da581aa795bf659580050ed95`
+  `ef8d819d022282a9433141359c65e1eb21a7e5e859f93beda90b8f99074e363a`
 - Toolchain: `rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)`,
   `cargo 1.97.1 (c980f4866 2026-06-30) (Homebrew)`, and Apple clang 21.0.0
 - Host: macOS Darwin 25.5.0, arm64
@@ -46,9 +46,9 @@ binaries (including the effective Xcode compiler, linker, archive, make,
 Metal, and metallib tools rather than only `/usr/bin` dispatcher shims), and
 deterministic identities for
 `build/dependencies` (3,878 entries,
-`87fd70a643c8078b74dbc60a4894bb6941f390a0e17022cbdd58f2ca6fa582aa`)
+`5cf6eaa27df9eb036cc4d50dce0f2d5df0f425149e3a8133c60f44c3907c6275`)
 and `tests/dependencies` (7,143 entries,
-`ab9ae198b7147117cde7a9bfef16d4d7103f5b37899560bfb4b41e7523aa6e12`).
+`7b34a3fc872cef03df2eb6ff53a210047afa473d869724bc293caacbed6fa56c`).
 
 The sealed manifest has the exact v6 schema and exact 26-artifact set:
 inventory, committed C++ source archive, C++ build-input record, build log,
@@ -78,28 +78,28 @@ and exactly ten named directional cases (`DrawCustomFeathers`,
 
 | Benchmark | C++ | Rust | Rust/C++ |
 |---|---:|---:|---:|
-| `BuildRawPath` | 2.232000 ms | 3561.358250 ms | 1595.591x |
-| `IntersectionBoardBench_marty` | 0.721500 ms | 0.926209 ms | 1.284x |
-| `IntersectionBoardBench_paper` | 0.289200 ms | 0.313208 ms | 1.083x |
-| `IntersectionTileBench` | 3.136000 ms | 4.151458 ms | 1.324x |
-| `IntersectionTileBenchWithOverlap` | 3.420000 ms | 217.660750 ms | 63.643x |
-| `IterateRawPath` | 3.006000 ms | 3.055667 ms | 1.017x |
-| `MapPointsAffine` | 2.083000 ms | 2.466209 ms | 1.184x |
-| `MapPointsScaleTrans` | 1.993000 ms | 2.465750 ms | 1.237x |
-| `MeasurePath` | 54.840000 ms | 241.910291 ms | 4.411x |
-| `RawPathBounds` | 0.443500 ms | 0.297666 ms | 0.671x |
+| `BuildRawPath` | 2.257000 ms | 3780.039334 ms | 1674.807x |
+| `IntersectionBoardBench_marty` | 0.721000 ms | 0.919041 ms | 1.275x |
+| `IntersectionBoardBench_paper` | 0.291900 ms | 0.315875 ms | 1.082x |
+| `IntersectionTileBench` | 3.280000 ms | 4.049084 ms | 1.234x |
+| `IntersectionTileBenchWithOverlap` | 3.352000 ms | 212.076042 ms | 63.269x |
+| `IterateRawPath` | 3.151000 ms | 3.082167 ms | 0.978x |
+| `MapPointsAffine` | 2.038000 ms | 2.476542 ms | 1.215x |
+| `MapPointsScaleTrans` | 1.971000 ms | 2.466167 ms | 1.251x |
+| `MeasurePath` | 46.410000 ms | 231.822917 ms | 4.995x |
+| `RawPathBounds` | 0.435700 ms | 0.297000 ms | 0.682x |
 
 ## Directional timings (not ratio-comparable)
 
 | Benchmark | C++ workload | Rust primitive | Why no ratio |
 |---|---:|---:|---|
-| `DrawCustomFeathers` | 187.000000 ms | 854.596125 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawFeatheredPaths_paper` | 69.770000 ms | 7128.833500 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawOneChopStrokes` | 25.080000 ms | 84.653250 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawOneCuspStrokes` | 58.670000 ms | 137.709458 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawRiveRenderPaths` | 11.380000 ms | 70.165708 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawRiveRenderPathsAsRoundJoinStrokes` | 22.830000 ms | 71.873625 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawRiveRenderPathsAsStrokes` | 16.260000 ms | 60.747833 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawTwoChopStrokes` | 35.900000 ms | 124.498334 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawTwoCuspStrokes` | 91.250000 ms | 172.502125 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
-| `DrawZeroChopStrokes` | 10.460000 ms | 47.428458 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawCustomFeathers` | 191.300000 ms | 773.629083 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawFeatheredPaths_paper` | 80.730000 ms | 7277.044833 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawOneChopStrokes` | 26.070000 ms | 82.819500 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawOneCuspStrokes` | 44.330000 ms | 139.387750 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawRiveRenderPaths` | 7.649000 ms | 67.240458 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawRiveRenderPathsAsRoundJoinStrokes` | 14.520000 ms | 60.319625 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawRiveRenderPathsAsStrokes` | 14.420000 ms | 63.837291 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawTwoChopStrokes` | 34.260000 ms | 118.748708 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawTwoCuspStrokes` | 92.570000 ms | 170.321792 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |
+| `DrawZeroChopStrokes` | 11.550000 ms | 46.391000 ms | upstream RenderContextNULL selects RasterOrdering while Rust exercises ClockwiseAtomic; track equal interlock mode in [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727) |

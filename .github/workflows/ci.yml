@@ -94,6 +94,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: make pure-runtime-boundary-gate
 
+      # Pins the exact 20-name registry and verifies every checked-in input is
+      # the deterministic conversion of the pinned upstream source bytes.
+      - name: Verify upstream microbenchmark mirror
+        if: ${{ !cancelled() }}
+        run: make microbench-gate
+
   # Pure-Python ledger checks over checked-in correspondence manifests. These
   # rotted while nothing ran them (see docs/README.md migration cleanup); this
   # job is what keeps them green. Each -gate target runs the tool's unit tests

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nuxie wasm perf runner</title>
+  </head>
+  <body data-status="loading">
+    <script src="wasm-perf-driver-lib.cjs"></script>
+    <script type="module">
+      import init, { WasmPerfRunner } from "./pkg/browser_renderer_smoke.js";
+
+      try {
+        await init();
+        window.measureWasmFixture = async ({ bytes, repeat, sampleSeconds }) =>
+          window.WasmPerfDriver.measureFixture({
+            createRunner: async () => new WasmPerfRunner(bytes),
+            now: () => performance.now(),
+            repeat,
+            sampleSeconds,
+          });
+        document.body.dataset.status = "ready";
+      } catch (error) {
+        document.body.dataset.status = "failed";
+        document.body.textContent = error?.stack || String(error);
+      }
+    </script>
+  </body>
+</html>

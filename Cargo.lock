@@ -187,6 +187,7 @@ dependencies = [
  "luaur-compiler",
  "nuxie",
  "nuxie-browser-adapter",
+ "nuxie-render-api",
  "nuxie-render-stream",
  "nuxie-schema",
  "pixel-compare",

@@ -39,6 +39,51 @@ pub struct LogicalPathPaint {
     pub blend_mode: BlendMode,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum LogicalGradient {
+    Linear {
+        start: (f32, f32),
+        end: (f32, f32),
+        colors: Vec<ColorInt>,
+        stops: Vec<f32>,
+    },
+    Radial {
+        center: (f32, f32),
+        radius: f32,
+        colors: Vec<ColorInt>,
+        stops: Vec<f32>,
+    },
+}
+
+impl LogicalGradient {
+    fn into_wgpu(self) -> super::WgpuShader {
+        match self {
+            Self::Linear {
+                start,
+                end,
+                colors,
+                stops,
+            } => super::WgpuShader::Linear {
+                start,
+                end,
+                colors,
+                stops,
+            },
+            Self::Radial {
+                center,
+                radius,
+                colors,
+                stops,
+            } => super::WgpuShader::Radial {
+                center,
+                radius,
+                colors,
+                stops,
+            },
+        }
+    }
+}
+
 impl Default for LogicalPathPaint {
     fn default() -> Self {
         Self {
@@ -77,10 +122,25 @@ pub struct LogicalResourceCounts {
     pub triangle_records: usize,
     pub image_records: usize,
     pub draw_records: usize,
+    pub gradient_records: usize,
+    pub gradient_color_records: usize,
+    pub gradient_stop_records: usize,
 }
 
 impl LogicalResourceCounts {
-    fn from_counters(counters: logical_flush::ResourceCounters) -> Self {
+    fn from_flush(counters: logical_flush::ResourceCounters, draws: &[SolidDraw]) -> Self {
+        let mut gradient_records = 0usize;
+        let mut gradient_color_records = 0usize;
+        let mut gradient_stop_records = 0usize;
+        for shader in draws.iter().filter_map(|draw| draw.paint.shader.as_ref()) {
+            let (colors, stops) = match shader {
+                super::WgpuShader::Linear { colors, stops, .. }
+                | super::WgpuShader::Radial { colors, stops, .. } => (colors, stops),
+            };
+            gradient_records = gradient_records.saturating_add(1);
+            gradient_color_records = gradient_color_records.saturating_add(colors.len());
+            gradient_stop_records = gradient_stop_records.saturating_add(stops.len());
+        }
         Self {
             path_records: counters.path_count,
             paint_records: counters.path_count,
@@ -91,6 +151,9 @@ impl LogicalResourceCounts {
             triangle_records: counters.max_triangle_vertex_count,
             image_records: counters.image_draw_count,
             draw_records: counters.draw_pass_count,
+            gradient_records,
+            gradient_color_records,
+            gradient_stop_records,
         }
     }
 
@@ -105,6 +168,13 @@ impl LogicalResourceCounts {
             triangle_records: self.triangle_records.checked_add(rhs.triangle_records)?,
             image_records: self.image_records.checked_add(rhs.image_records)?,
             draw_records: self.draw_records.checked_add(rhs.draw_records)?,
+            gradient_records: self.gradient_records.checked_add(rhs.gradient_records)?,
+            gradient_color_records: self
+                .gradient_color_records
+                .checked_add(rhs.gradient_color_records)?,
+            gradient_stop_records: self
+                .gradient_stop_records
+                .checked_add(rhs.gradient_stop_records)?,
         })
     }
 }
@@ -113,9 +183,14 @@ impl LogicalResourceCounts {
 pub struct LogicalFrameReport {
     pub draw_count: usize,
     pub resource_planning_passes: usize,
+    pub plan_finalization_passes: usize,
     pub logical_flushes: Vec<LogicalResourceCounts>,
     pub retained_capacity: LogicalResourceCounts,
     pub written: LogicalResourceCounts,
+    pub allocation_growths: usize,
+    pub buffer_write_operations: usize,
+    pub buffer_rewinds: usize,
+    pub written_bytes: usize,
     pub shadow_fingerprint: u64,
 }
 
@@ -128,6 +203,15 @@ pub struct LogicalFrame {
     pub(crate) logical_flush: logical_flush::LogicalFlush,
     pub(crate) logical_flush_allocations: LogicalFlushAllocations,
     pub(crate) logical_flush_starts: Vec<usize>,
+    pub(crate) msaa_schedule: Vec<super::MsaaDrawSchedule>,
+    pub(crate) msaa_schedule_flush_starts: Vec<usize>,
+    finalized: bool,
+    finalization_passes: usize,
+}
+
+struct PlannedDrawBatch {
+    draws: Vec<logical_flush::ResourceCounters>,
+    total: logical_flush::ResourceCounters,
 }
 
 impl LogicalFrame {
@@ -141,7 +225,54 @@ impl LogicalFrame {
             logical_flush: logical_flush::LogicalFlush::default(),
             logical_flush_allocations: LogicalFlushAllocations::default(),
             logical_flush_starts: vec![0],
+            msaa_schedule: Vec::new(),
+            msaa_schedule_flush_starts: Vec::new(),
+            finalized: false,
+            finalization_passes: 0,
         }
+    }
+
+    pub(crate) fn finalize(
+        &mut self,
+        board: &mut super::intersection_board::IntersectionBoard,
+    ) -> Result<(), &'static str> {
+        if self.finalized {
+            return self.validate();
+        }
+        self.validate()?;
+        if self.config.mode == RenderMode::Msaa {
+            self.msaa_schedule.reserve(self.draws.len());
+            self.msaa_schedule_flush_starts
+                .reserve(self.logical_flush_starts.len());
+            for (flush_index, &flush_start) in self.logical_flush_starts.iter().enumerate() {
+                let flush_end = self
+                    .logical_flush_starts
+                    .get(flush_index + 1)
+                    .copied()
+                    .unwrap_or(self.draws.len());
+                let schedule_start = self.msaa_schedule.len();
+                self.msaa_schedule_flush_starts.push(schedule_start);
+                super::ordered_msaa_draws_with_board(
+                    &self.draws[flush_start..flush_end],
+                    self.config.width,
+                    self.config.height,
+                    board,
+                    &mut self.msaa_schedule,
+                );
+                let scheduled_resources = self.msaa_schedule[schedule_start..]
+                    .iter()
+                    .map(|entry| self.draw_resources[flush_start + entry.authored_order])
+                    .collect::<Vec<_>>();
+                super::apply_msaa_draw_schedule(
+                    &mut self.draws[flush_start..flush_end],
+                    &mut self.msaa_schedule[schedule_start..],
+                );
+                self.draw_resources[flush_start..flush_end].copy_from_slice(&scheduled_resources);
+            }
+        }
+        self.finalized = true;
+        self.finalization_passes = self.finalization_passes.saturating_add(1);
+        self.validate()
     }
 
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
@@ -155,13 +286,20 @@ impl LogicalFrame {
         {
             return Err("logical frame flush layout exceeds draw plan");
         }
+        if self.finalized
+            && self.config.mode == RenderMode::Msaa
+            && (self.msaa_schedule.len() != self.draws.len()
+                || self.msaa_schedule_flush_starts.len() != self.logical_flush_starts.len())
+        {
+            return Err("finalized MSAA frame schedule does not match draw plan");
+        }
         Ok(())
     }
 
-    pub(crate) fn try_plan_draws<'a>(
+    fn plan_draws<'a>(
         &mut self,
         draws: impl Clone + Iterator<Item = &'a SolidDraw>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<PlannedDrawBatch, &'static str> {
         let config = self.config;
         let planned = draws
             .clone()
@@ -178,19 +316,69 @@ impl LogicalFrame {
         self.resource_planning_evaluations = self
             .resource_planning_evaluations
             .saturating_add(planned.len());
-        let resources = planned
+        let total = planned
             .iter()
             .try_fold(logical_flush::ResourceCounters::default(), |total, draw| {
                 total.checked_add(*draw)
             })
             .ok_or("draw batch overflows logical flush resource accounting")?;
+        Ok(PlannedDrawBatch {
+            draws: planned,
+            total,
+        })
+    }
+
+    fn try_commit_planned_draws<'a>(
+        &mut self,
+        planned: &PlannedDrawBatch,
+        draws: impl IntoIterator<Item = &'a SolidDraw>,
+    ) -> Result<(), &'static str> {
+        let config = self.config;
         let allocations = self.logical_flush_allocations.with_draws(config, draws)?;
-        if !self.logical_flush.push_draws(resources) {
+        if !self.logical_flush.push_draws(planned.total) {
             return Err("draw batch exceeds logical flush resource counters");
         }
         self.logical_flush_allocations = allocations;
-        self.draw_resources.extend(planned);
+        self.draw_resources.extend_from_slice(&planned.draws);
         Ok(())
+    }
+
+    fn rollover_plan(
+        &mut self,
+        original_updates: &[SolidDraw],
+        original: &PlannedDrawBatch,
+        updates: &[SolidDraw],
+    ) -> Result<PlannedDrawBatch, &'static str> {
+        let mut reused = vec![false; original_updates.len()];
+        let mut draws = Vec::with_capacity(updates.len() + 1);
+        for update in updates {
+            let cached = original_updates
+                .iter()
+                .enumerate()
+                .find_map(|(index, candidate)| {
+                    (!reused[index] && draw_resource_shape_is_equivalent(candidate, update))
+                        .then_some(index)
+                });
+            if let Some(index) = cached {
+                reused[index] = true;
+                draws.push(original.draws[index]);
+            } else {
+                draws.push(self.plan_draws(std::iter::once(update))?.draws[0]);
+            }
+        }
+        draws.push(
+            *original
+                .draws
+                .last()
+                .expect("content resource plan must contain its content draw"),
+        );
+        let total = draws
+            .iter()
+            .try_fold(logical_flush::ResourceCounters::default(), |total, draw| {
+                total.checked_add(*draw)
+            })
+            .ok_or("draw batch overflows logical flush resource accounting")?;
+        Ok(PlannedDrawBatch { draws, total })
     }
 
     pub(crate) fn begin_logical_flush(&mut self) {
@@ -203,9 +391,12 @@ impl LogicalFrame {
 
     pub(crate) fn push_content_batch(
         &mut self,
-        clip_updates: Vec<SolidDraw>,
+        initial_clip_updates: Vec<SolidDraw>,
         content: SolidDraw,
     ) -> Result<(), &'static str> {
+        if self.finalized {
+            return Err("cannot append draws after logical frame finalization");
+        }
         let config = self.config;
         let uses_generic_atomic_plane =
             config.mode == RenderMode::ClockwiseAtomic && super::atomic_draw_is_eligible(&content);
@@ -215,9 +406,10 @@ impl LogicalFrame {
                 unreachable!("content batch must end in a content draw")
             }
         };
-        let batch = clip_updates.iter().chain(std::iter::once(&content));
-        if self.try_plan_draws(batch).is_ok() {
-            self.draws.extend(clip_updates);
+        let batch = initial_clip_updates.iter().chain(std::iter::once(&content));
+        let planned = self.plan_draws(batch.clone())?;
+        if self.try_commit_planned_draws(&planned, batch).is_ok() {
+            self.draws.extend(initial_clip_updates);
             self.draws.push(content);
             self.logical_state.commit_generic_atomic_path_clip(
                 config,
@@ -239,8 +431,9 @@ impl LogicalFrame {
                 unreachable!("content batch must end in a content draw")
             }
         }
+        let rollover_plan = self.rollover_plan(&initial_clip_updates, &planned, &clip_updates)?;
         let batch = clip_updates.iter().chain(std::iter::once(&content));
-        self.try_plan_draws(batch)?;
+        self.try_commit_planned_draws(&rollover_plan, batch)?;
         self.draws.extend(clip_updates);
         self.draws.push(content);
         self.logical_state.commit_generic_atomic_path_clip(
@@ -249,6 +442,31 @@ impl LogicalFrame {
             uses_generic_atomic_plane,
         );
         Ok(())
+    }
+}
+
+fn draw_resource_shape_is_equivalent(left: &SolidDraw, right: &SolidDraw) -> bool {
+    match (left.role, right.role) {
+        (DrawRole::ClipReset { .. }, DrawRole::ClipReset { .. }) => true,
+        (
+            DrawRole::ClipUpdate {
+                parent_id: left_parent,
+                ..
+            },
+            DrawRole::ClipUpdate {
+                parent_id: right_parent,
+                ..
+            },
+        ) => {
+            (left_parent == 0) == (right_parent == 0)
+                && Arc::ptr_eq(&left.path.raw_path, &right.path.raw_path)
+                && left.path.fill_rule == right.path.fill_rule
+                && left.paint.style == right.paint.style
+                && left.paint.feather == right.paint.feather
+                && left.state.transform == right.state.transform
+                && left.prepared_pixel_bounds == right.prepared_pixel_bounds
+        }
+        _ => false,
     }
 }
 
@@ -656,6 +874,7 @@ struct ShadowBuffers {
     triangles: Vec<u8>,
     images: Vec<u8>,
     draws: Vec<u8>,
+    gradients: Vec<u8>,
     capacity: LogicalResourceCounts,
 }
 
@@ -672,6 +891,15 @@ impl ShadowBuffers {
             triangle_records: grow_count(self.capacity.triangle_records, required.triangle_records),
             image_records: grow_count(self.capacity.image_records, required.image_records),
             draw_records: grow_count(self.capacity.draw_records, required.draw_records),
+            gradient_records: grow_count(self.capacity.gradient_records, required.gradient_records),
+            gradient_color_records: grow_count(
+                self.capacity.gradient_color_records,
+                required.gradient_color_records,
+            ),
+            gradient_stop_records: grow_count(
+                self.capacity.gradient_stop_records,
+                required.gradient_stop_records,
+            ),
         };
         reserve_records(&mut self.paths, self.capacity.path_records, 64);
         reserve_records(&mut self.paints, self.capacity.paint_records, 32);
@@ -684,6 +912,26 @@ impl ShadowBuffers {
         reserve_records(&mut self.triangles, self.capacity.triangle_records, 8);
         reserve_records(&mut self.images, self.capacity.image_records, 16);
         reserve_records(&mut self.draws, self.capacity.draw_records, 16);
+        let gradient_values = self
+            .capacity
+            .gradient_records
+            .saturating_mul(6)
+            .saturating_add(self.capacity.gradient_color_records)
+            .saturating_add(self.capacity.gradient_stop_records);
+        reserve_records(&mut self.gradients, gradient_values, 4);
+    }
+
+    fn buffer_capacities(&self) -> [usize; 8] {
+        [
+            self.paths.capacity(),
+            self.paints.capacity(),
+            self.contours.capacity(),
+            self.tessellations.capacity(),
+            self.triangles.capacity(),
+            self.images.capacity(),
+            self.draws.capacity(),
+            self.gradients.capacity(),
+        ]
     }
 
     fn rewind(&mut self) {
@@ -694,10 +942,10 @@ impl ShadowBuffers {
         self.triangles.clear();
         self.images.clear();
         self.draws.clear();
+        self.gradients.clear();
     }
 
-    fn fingerprint(&self) -> u64 {
-        let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    fn fingerprint_into(&self, mut hash: u64) -> u64 {
         for bytes in [
             self.paths.as_slice(),
             self.paints.as_slice(),
@@ -706,6 +954,7 @@ impl ShadowBuffers {
             self.triangles.as_slice(),
             self.images.as_slice(),
             self.draws.as_slice(),
+            self.gradients.as_slice(),
         ] {
             for &byte in bytes {
                 hash ^= u64::from(byte);
@@ -713,6 +962,33 @@ impl ShadowBuffers {
             }
         }
         hash
+    }
+
+    fn written_bytes(&self) -> usize {
+        self.paths.len()
+            + self.paints.len()
+            + self.contours.len()
+            + self.tessellations.len()
+            + self.triangles.len()
+            + self.images.len()
+            + self.draws.len()
+            + self.gradients.len()
+    }
+
+    fn nonempty_buffer_count(&self) -> usize {
+        [
+            self.paths.is_empty(),
+            self.paints.is_empty(),
+            self.contours.is_empty(),
+            self.tessellations.is_empty(),
+            self.triangles.is_empty(),
+            self.images.is_empty(),
+            self.draws.is_empty(),
+            self.gradients.is_empty(),
+        ]
+        .into_iter()
+        .filter(|is_empty| !*is_empty)
+        .count()
     }
 }
 
@@ -749,7 +1025,7 @@ impl LogicalResourceStore {
         } else {
             &frame.logical_flush_starts
         };
-        let mut required = LogicalResourceCounts::default();
+        let mut written = LogicalResourceCounts::default();
         for (index, &start) in starts.iter().enumerate() {
             let end = starts.get(index + 1).copied().unwrap_or(frame.draws.len());
             let counters = frame.draw_resources[start..end]
@@ -758,8 +1034,8 @@ impl LogicalResourceStore {
                     total.checked_add(*draw)
                 })
                 .ok_or("logical frame resource accounting overflow")?;
-            let counts = LogicalResourceCounts::from_counters(counters);
-            required = required
+            let counts = LogicalResourceCounts::from_flush(counters, &frame.draws[start..end]);
+            written = written
                 .checked_add(counts)
                 .ok_or("logical frame resource layout overflow")?;
             flushes.push(counts);
@@ -770,23 +1046,48 @@ impl LogicalResourceStore {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         buffers.rewind();
-        buffers.grow(required);
-        write_resources(
-            &mut buffers,
-            config,
-            &frame.draws,
-            &frame.draw_resources,
-            &flushes,
-        );
+        let mut allocation_growths = 0;
+        let mut buffer_write_operations = 0;
+        let mut written_bytes = 0;
+        let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
+        for (flush_index, (&start, counts)) in starts.iter().zip(&flushes).enumerate() {
+            let end = starts
+                .get(flush_index + 1)
+                .copied()
+                .unwrap_or(frame.draws.len());
+            let before_capacities = buffers.buffer_capacities();
+            buffers.grow(*counts);
+            write_resources(
+                &mut buffers,
+                config,
+                flush_index,
+                *counts,
+                &frame.draws[start..end],
+                &frame.draw_resources[start..end],
+            );
+            written_bytes += buffers.written_bytes();
+            buffer_write_operations += buffers.nonempty_buffer_count();
+            allocation_growths += before_capacities
+                .into_iter()
+                .zip(buffers.buffer_capacities())
+                .filter(|(before, after)| before != after)
+                .count();
+            fingerprint = buffers.fingerprint_into(fingerprint);
+            buffers.rewind();
+        }
         let report = LogicalFrameReport {
             draw_count: frame.draws.len(),
             resource_planning_passes: frame.resource_planning_evaluations,
+            plan_finalization_passes: frame.finalization_passes,
             logical_flushes: flushes,
             retained_capacity: buffers.capacity,
-            written: required,
-            shadow_fingerprint: buffers.fingerprint(),
+            written,
+            allocation_growths,
+            buffer_write_operations,
+            buffer_rewinds: starts.len(),
+            written_bytes,
+            shadow_fingerprint: fingerprint,
         };
-        buffers.rewind();
         Ok(report)
     }
 }
@@ -794,30 +1095,45 @@ impl LogicalResourceStore {
 fn write_resources(
     buffers: &mut ShadowBuffers,
     config: LogicalFrameConfig,
+    flush_index: usize,
+    counts: LogicalResourceCounts,
     draws: &[SolidDraw],
     draw_resources: &[logical_flush::ResourceCounters],
-    flushes: &[LogicalResourceCounts],
 ) {
     push_u32(&mut buffers.draws, config.width);
     push_u32(&mut buffers.draws, config.height);
     push_u8(&mut buffers.draws, mode_tag(config.mode));
-    for counts in flushes {
-        for value in [
-            counts.path_records,
-            counts.paint_records,
-            counts.contour_records,
-            counts.tessellation_records,
-            counts.triangle_records,
-            counts.image_records,
-            counts.draw_records,
-        ] {
-            push_usize(&mut buffers.draws, value);
-        }
+    push_usize(&mut buffers.draws, flush_index);
+    for value in [
+        counts.path_records,
+        counts.paint_records,
+        counts.contour_records,
+        counts.tessellation_records,
+        counts.triangle_records,
+        counts.image_records,
+        counts.draw_records,
+        counts.gradient_records,
+        counts.gradient_color_records,
+        counts.gradient_stop_records,
+    ] {
+        push_usize(&mut buffers.draws, value);
     }
     for (draw, resources) in draws.iter().zip(draw_resources) {
         push_u8(&mut buffers.paths, fill_rule_tag(draw.path.fill_rule));
         for value in draw.state.transform.0 {
             push_u32(&mut buffers.paths, value.to_bits());
+        }
+        match draw.state.clip_rect {
+            None => push_u8(&mut buffers.paths, 0),
+            Some(clip) => {
+                push_u8(&mut buffers.paths, 1);
+                for value in clip.rect.into_iter().chain(clip.matrix.0) {
+                    push_u32(&mut buffers.paths, value.to_bits());
+                }
+            }
+        }
+        for value in draw.state.overall_clip_pixel_bounds {
+            push_u32(&mut buffers.paths, value as u32);
         }
         for verb in draw.path.raw_path.verbs() {
             push_u8(&mut buffers.paths, path_verb_tag(*verb));
@@ -835,6 +1151,33 @@ fn write_resources(
         push_u32(&mut buffers.paints, draw.paint.feather.to_bits());
         push_u32(&mut buffers.paints, draw.state.opacity.to_bits());
         push_u8(&mut buffers.paints, draw.paint.blend_mode as u8);
+        match draw.paint.shader.as_ref() {
+            None => push_u8(&mut buffers.gradients, 0),
+            Some(super::WgpuShader::Linear {
+                start,
+                end,
+                colors,
+                stops,
+            }) => {
+                push_u8(&mut buffers.gradients, 1);
+                for value in [start.0, start.1, end.0, end.1] {
+                    push_u32(&mut buffers.gradients, value.to_bits());
+                }
+                write_gradient_values(&mut buffers.gradients, colors, stops);
+            }
+            Some(super::WgpuShader::Radial {
+                center,
+                radius,
+                colors,
+                stops,
+            }) => {
+                push_u8(&mut buffers.gradients, 2);
+                for value in [center.0, center.1, *radius] {
+                    push_u32(&mut buffers.gradients, value.to_bits());
+                }
+                write_gradient_values(&mut buffers.gradients, colors, stops);
+            }
+        }
         for value in [
             resources.path_count,
             resources.contour_count,
@@ -864,6 +1207,17 @@ fn write_resources(
             }
             DrawRole::ClipReset { .. } => push_u8(&mut buffers.draws, 2),
         }
+    }
+}
+
+fn write_gradient_values(buffer: &mut Vec<u8>, colors: &[ColorInt], stops: &[f32]) {
+    push_usize(buffer, colors.len());
+    for color in colors {
+        push_u32(buffer, *color);
+    }
+    push_usize(buffer, stops.len());
+    for stop in stops {
+        push_u32(buffer, stop.to_bits());
     }
 }
 
@@ -1004,7 +1358,7 @@ pub(crate) fn admit_path_draw(
 
 struct NullFrame {
     logical: LogicalFrame,
-    scratch: super::draw::StrokePreparationScratch,
+    scratch: super::StrokePreparationScratchLease,
 }
 
 impl std::ops::Deref for NullFrame {
@@ -1025,6 +1379,8 @@ impl std::ops::DerefMut for NullFrame {
 pub struct NullLogicalRenderer {
     config: LogicalFrameConfig,
     resources: LogicalResourceStore,
+    intersection_board: super::intersection_board::IntersectionBoard,
+    scratch_pool: Arc<super::StrokePreparationScratchPool>,
     frame: Option<NullFrame>,
 }
 
@@ -1033,15 +1389,20 @@ impl NullLogicalRenderer {
         Self {
             config,
             resources: LogicalResourceStore::default(),
+            intersection_board: super::intersection_board::IntersectionBoard::new(
+                super::intersection_board::GroupingType::Disjoint,
+            ),
+            scratch_pool: Arc::new(super::StrokePreparationScratchPool::default()),
             frame: None,
         }
     }
 
     pub fn begin_frame(&mut self) {
         assert!(self.frame.is_none(), "null logical frame already active");
+        let scratch = self.scratch_pool.checkout();
         self.frame = Some(NullFrame {
             logical: LogicalFrame::new(self.config),
-            scratch: super::draw::StrokePreparationScratch::default(),
+            scratch,
         });
     }
 
@@ -1077,6 +1438,26 @@ impl NullLogicalRenderer {
         fill_rule: FillRule,
         paint: LogicalPathPaint,
     ) -> Result<(), &'static str> {
+        self.draw_path_internal(raw_path, fill_rule, paint, None)
+    }
+
+    pub fn draw_path_with_gradient(
+        &mut self,
+        raw_path: &RawPath,
+        fill_rule: FillRule,
+        paint: LogicalPathPaint,
+        gradient: LogicalGradient,
+    ) -> Result<(), &'static str> {
+        self.draw_path_internal(raw_path, fill_rule, paint, Some(gradient))
+    }
+
+    fn draw_path_internal(
+        &mut self,
+        raw_path: &RawPath,
+        fill_rule: FillRule,
+        paint: LogicalPathPaint,
+        gradient: Option<LogicalGradient>,
+    ) -> Result<(), &'static str> {
         let config = self.config;
         let frame = self.active_frame();
         let path = LogicalPath {
@@ -1084,7 +1465,8 @@ impl NullLogicalRenderer {
             fill_rule,
             valid: true,
         };
-        let paint = paint.into_wgpu();
+        let mut paint = paint.into_wgpu();
+        paint.shader = gradient.map(LogicalGradient::into_wgpu);
         let Some(admitted) = admit_path_draw(config, frame.logical_state.state, &path, &paint)?
         else {
             return Ok(());
@@ -1099,11 +1481,18 @@ impl NullLogicalRenderer {
             .frame
             .take()
             .expect("null logical frame must begin before flush");
+        frame.logical.finalize(&mut self.intersection_board)?;
         let report = self.resources.prepare(&frame.logical)?;
-        frame.draws.clear();
-        frame.logical_flush_starts.clear();
-        frame.scratch.reset_for_reuse();
+        drop(frame);
         Ok(report)
+    }
+
+    pub fn retained_scratch_slots(&self) -> usize {
+        self.scratch_pool.cached_len()
+    }
+
+    pub fn retained_scratch_capacity_bytes(&self) -> usize {
+        self.scratch_pool.retained_capacity_bytes()
     }
 
     fn active_frame(&mut self) -> &mut NullFrame {

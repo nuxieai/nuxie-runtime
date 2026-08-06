@@ -491,12 +491,12 @@ impl FrameAttachmentPool {
 }
 
 #[derive(Default)]
-struct StrokePreparationScratchPool {
+pub(crate) struct StrokePreparationScratchPool {
     available: Mutex<Vec<draw::StrokePreparationScratch>>,
 }
 
 impl StrokePreparationScratchPool {
-    fn checkout(self: &Arc<Self>) -> StrokePreparationScratchLease {
+    pub(crate) fn checkout(self: &Arc<Self>) -> StrokePreparationScratchLease {
         let scratch = self
             .available
             .lock()
@@ -523,16 +523,24 @@ impl StrokePreparationScratchPool {
         }
     }
 
-    #[cfg(test)]
-    fn cached_len(&self) -> usize {
+    pub(crate) fn cached_len(&self) -> usize {
         self.available
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .len()
     }
+
+    pub(crate) fn retained_capacity_bytes(&self) -> usize {
+        self.available
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .map(draw::StrokePreparationScratch::retained_capacity_bytes)
+            .sum()
+    }
 }
 
-struct StrokePreparationScratchLease {
+pub(crate) struct StrokePreparationScratchLease {
     pool: Arc<StrokePreparationScratchPool>,
     scratch: Option<draw::StrokePreparationScratch>,
 }
@@ -600,8 +608,8 @@ pub use gpu_canvas::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 pub use logical_frame::{
-    LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalPathPaint, LogicalResourceCounts,
-    NullLogicalRenderer,
+    LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalGradient, LogicalPathPaint,
+    LogicalResourceCounts, NullLogicalRenderer,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
@@ -2351,11 +2359,11 @@ struct MsaaPreparedDrawSchedule {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct MsaaDrawSchedule {
-    authored_order: usize,
-    draw_group: u32,
-    is_prepass: bool,
-    permutation_destination: usize,
+pub(crate) struct MsaaDrawSchedule {
+    pub(crate) authored_order: usize,
+    pub(crate) draw_group: u32,
+    pub(crate) is_prepass: bool,
+    pub(crate) permutation_destination: usize,
 }
 
 pub struct WgpuFrame {
@@ -2701,6 +2709,16 @@ impl WgpuFrame {
     pub fn prepare_logical_frame(&mut self) -> Result<LogicalFrameReport, RendererError> {
         let config = self.logical_frame_config();
         debug_assert_eq!(config, self.logical_frame.config);
+        {
+            let mut board = self
+                .context
+                .intersection_board
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            self.logical_frame
+                .finalize(&mut board)
+                .map_err(RendererError::Unsupported)?;
+        }
         self.context
             .logical_resources
             .prepare(&self.logical_frame)
@@ -2785,7 +2803,7 @@ impl WgpuFrame {
     /// Submits the frame, waits asynchronously for GPU completion, and returns
     /// the offscreen target as tightly packed RGBA pixels.
     pub async fn finish_async(self) -> Result<Vec<u8>, RendererError> {
-        self.finish_internal(false, false, true, true, None)
+        self.finish_internal(false, false, true, None)
             .await
             .map(|(pixels, _, _, _, _, _, _)| pixels)
     }
@@ -2801,16 +2819,15 @@ impl WgpuFrame {
     /// completion without copying the render target back to the CPU.
     pub async fn finish_for_benchmark_async(self) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
-        let (_, _, _, _, _, backend_work, _) = self
-            .finish_internal(false, false, true, false, None)
-            .await?;
+        let (_, _, _, _, _, backend_work, _) =
+            self.finish_internal(false, false, false, None).await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
     }
 
     #[cfg(test)]
     fn finish_with_atomic_coverage(self) -> Result<(Vec<u8>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, true, None))
+        pollster::block_on(self.finish_internal(false, true, true, None))
             .map(|(pixels, _, coverage, _, _, _, _)| (pixels, coverage))
     }
 
@@ -2818,14 +2835,8 @@ impl WgpuFrame {
     fn finish_with_atomic_planes(
         self,
     ) -> Result<(Vec<u8>, Vec<Vec<u32>>, Vec<Vec<u32>>, Vec<Vec<u32>>), RendererError> {
-        pollster::block_on(self.finish_internal(false, true, true, true, None))
+        pollster::block_on(self.finish_internal(false, true, true, None))
             .map(|(pixels, _, coverage, clips, colors, _, _)| (pixels, coverage, clips, colors))
-    }
-
-    #[cfg(test)]
-    fn finish_without_msaa_board_scheduling(self) -> Result<Vec<u8>, RendererError> {
-        pollster::block_on(self.finish_internal(false, false, false, true, None))
-            .map(|(pixels, _, _, _, _, _, _)| pixels)
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -2845,7 +2856,7 @@ impl WgpuFrame {
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
         let (_, _, _, _, _, backend_work, _) = self
-            .finish_internal(false, false, true, false, Some((target, presenter)))
+            .finish_internal(false, false, false, Some((target, presenter)))
             .await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
@@ -2855,7 +2866,6 @@ impl WgpuFrame {
         mut self,
         capture_clockwise_atomic_coverage: bool,
         capture_atomic_planes: bool,
-        schedule_msaa_draws: bool,
         read_pixels: bool,
         #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
         presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
@@ -2876,6 +2886,15 @@ impl WgpuFrame {
         if let Some(feature) = self.unsupported {
             return Err(RendererError::Unsupported(feature));
         }
+        let mut board = self
+            .context
+            .intersection_board
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.logical_frame
+            .finalize(&mut board)
+            .map_err(RendererError::Unsupported)?;
+        drop(board);
         // GPU encoding consumes the production LogicalFrame's admitted draws
         // and cached resource layout directly. The null adapter consumes the
         // same plan into shadow buffers instead of entering this encoder.
@@ -6134,44 +6153,26 @@ impl WgpuFrame {
         let logical_flush_starts = self.logical_frame.logical_flush_starts.clone();
         if self.draws.is_empty() {
             encode_fallback_run(&self.draws, None, &[0], true, &mut encoder)?;
-        } else if self.mode == RenderMode::Msaa && schedule_msaa_draws {
+        } else if self.mode == RenderMode::Msaa {
             if self.draws.len() > MAX_DRAWS_PER_SUBMISSION
                 && msaa_draws_can_submit_independently(&self.draws)
             {
                 let mut clear_target = true;
-                let mut draw_schedule = Vec::new();
                 for (flush_index, &flush_start) in logical_flush_starts.iter().enumerate() {
                     let flush_end = logical_flush_starts
                         .get(flush_index + 1)
                         .copied()
                         .unwrap_or(self.draws.len());
-                    draw_schedule.clear();
-                    {
-                        let mut board = self
-                            .context
-                            .intersection_board
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        ordered_msaa_draws_with_board(
-                            &self.draws[flush_start..flush_end],
-                            self.width,
-                            self.height,
-                            &mut board,
-                            &mut draw_schedule,
-                        );
-                    }
-                    let scheduled_resources = draw_schedule
-                        .iter()
-                        .map(|entry| {
-                            self.logical_frame.draw_resources[flush_start + entry.authored_order]
-                        })
-                        .collect::<Vec<_>>();
-                    apply_msaa_draw_schedule(
-                        &mut self.logical_frame.draws[flush_start..flush_end],
-                        &mut draw_schedule,
-                    );
-                    self.logical_frame.draw_resources[flush_start..flush_end]
-                        .copy_from_slice(&scheduled_resources);
+                    let schedule_start = self.logical_frame.msaa_schedule_flush_starts[flush_index];
+                    let schedule_end = self
+                        .logical_frame
+                        .msaa_schedule_flush_starts
+                        .get(flush_index + 1)
+                        .copied()
+                        .unwrap_or(self.logical_frame.msaa_schedule.len());
+                    let draw_schedule =
+                        &self.logical_frame.msaa_schedule[schedule_start..schedule_end];
+                    debug_assert_eq!(draw_schedule.len(), flush_end - flush_start);
                     for chunk_start in (0..draw_schedule.len()).step_by(MAX_DRAWS_PER_SUBMISSION) {
                         let chunk_end =
                             (chunk_start + MAX_DRAWS_PER_SUBMISSION).min(draw_schedule.len());
@@ -6187,59 +6188,15 @@ impl WgpuFrame {
                     }
                 }
             } else {
-                let mut draw_schedule = Vec::with_capacity(self.draws.len());
-                let mut scheduled_flush_starts = Vec::with_capacity(logical_flush_starts.len());
-                for (flush_index, &flush_start) in logical_flush_starts.iter().enumerate() {
-                    scheduled_flush_starts.push(draw_schedule.len());
-                    let flush_end = logical_flush_starts
-                        .get(flush_index + 1)
-                        .copied()
-                        .unwrap_or(self.draws.len());
-                    let schedule_start = draw_schedule.len();
-                    {
-                        let mut board = self
-                            .context
-                            .intersection_board
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        ordered_msaa_draws_with_board(
-                            &self.draws[flush_start..flush_end],
-                            self.width,
-                            self.height,
-                            &mut board,
-                            &mut draw_schedule,
-                        );
-                    }
-                    let scheduled_resources = draw_schedule[schedule_start..]
-                        .iter()
-                        .map(|entry| {
-                            self.logical_frame.draw_resources[flush_start + entry.authored_order]
-                        })
-                        .collect::<Vec<_>>();
-                    apply_msaa_draw_schedule(
-                        &mut self.logical_frame.draws[flush_start..flush_end],
-                        &mut draw_schedule[schedule_start..],
-                    );
-                    self.logical_frame.draw_resources[flush_start..flush_end]
-                        .copy_from_slice(&scheduled_resources);
-                }
-                debug_assert_eq!(draw_schedule.len(), self.draws.len());
+                debug_assert_eq!(self.logical_frame.msaa_schedule.len(), self.draws.len());
                 encode_fallback_run(
                     &self.draws,
-                    Some(&draw_schedule),
-                    &scheduled_flush_starts,
+                    Some(&self.logical_frame.msaa_schedule),
+                    &self.logical_frame.msaa_schedule_flush_starts,
                     true,
                     &mut encoder,
                 )?;
             }
-        } else if self.mode == RenderMode::Msaa {
-            encode_fallback_run(
-                &self.draws,
-                None,
-                &self.logical_flush_starts,
-                true,
-                &mut encoder,
-            )?;
         } else {
             let mut start = 0;
             let mut clear_target = true;
@@ -10064,6 +10021,318 @@ mod tests {
         assert_ne!(center_alpha, 0);
     }
 
+    #[test]
+    fn logical_rollover_plans_each_admitted_draw_once() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let path = LogicalPath {
+            raw_path: Arc::new(logical_triangle()),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&path, &LogicalPaint::default());
+        let used = frame.logical_flush.counters().path_count;
+        assert!(frame
+            .logical_flush
+            .push_draws(logical_flush::ResourceCounters {
+                path_count: logical_flush::MAX_PATH_COUNT - used,
+                ..Default::default()
+            }));
+
+        frame.draw_path(&path, &LogicalPaint::default());
+
+        assert_eq!(frame.logical_flush_starts, [0, 1]);
+        assert_eq!(frame.draws.len(), 2);
+        assert_eq!(
+            frame.resource_planning_evaluations,
+            frame.draw_resources.len(),
+            "rollover must reuse the first resource plan"
+        );
+    }
+
+    #[test]
+    fn logical_rollover_reuses_content_plan_while_replaying_active_clips() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let path = LogicalPath {
+            raw_path: Arc::new(logical_triangle()),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let mut frame = factory.begin_frame(0);
+        frame.clip_path(&path);
+        frame.draw_path(&path, &LogicalPaint::default());
+        let used = frame.logical_flush.counters().path_count;
+        assert!(frame
+            .logical_flush
+            .push_draws(logical_flush::ResourceCounters {
+                path_count: logical_flush::MAX_PATH_COUNT - used,
+                ..Default::default()
+            }));
+
+        frame.draw_path(&path, &LogicalPaint::default());
+
+        assert_eq!(frame.logical_flush_starts, [0, 2]);
+        assert_eq!(frame.draws.len(), 4);
+        assert_eq!(
+            frame.resource_planning_evaluations,
+            frame.draw_resources.len()
+        );
+    }
+
+    #[test]
+    fn shadow_buffers_retain_peak_per_flush_capacity() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let draw = SolidDraw::new(
+            LogicalPath {
+                raw_path: Arc::new(logical_triangle()),
+                fill_rule: FillRule::NonZero,
+                valid: true,
+            },
+            LogicalPaint::default(),
+            DrawState::default(),
+            DrawRole::Content { clip_id: 0 },
+            None,
+        );
+        let mut frame = LogicalFrame::new(config);
+        frame.draws = vec![draw.clone(), draw];
+        frame.draw_resources = vec![
+            logical_flush::ResourceCounters {
+                path_count: 100,
+                draw_pass_count: 100,
+                ..Default::default()
+            },
+            logical_flush::ResourceCounters {
+                path_count: 80,
+                draw_pass_count: 80,
+                ..Default::default()
+            },
+        ];
+        frame.resource_planning_evaluations = 2;
+        frame.logical_flush_starts = vec![0, 1];
+
+        let report = logical_frame::LogicalResourceStore::default()
+            .prepare(&frame)
+            .unwrap();
+
+        assert_eq!(report.retained_capacity.path_records, 125);
+        assert_eq!(report.retained_capacity.draw_records, 125);
+        assert_eq!(report.written.path_records, 180);
+        assert_eq!(report.buffer_rewinds, 2);
+        assert_eq!(report.buffer_write_operations, 16);
+        assert!(report.written_bytes > 0);
+    }
+
+    #[test]
+    fn shadow_fingerprint_distinguishes_axis_aligned_clip_rects() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let draw = logical_triangle();
+        let report = |clip: Option<[f32; 4]>| {
+            let mut renderer = NullLogicalRenderer::new(config);
+            renderer.begin_frame();
+            if let Some([left, top, right, bottom]) = clip {
+                let mut path = RawPath::new();
+                path.move_to(left, top);
+                path.line_to(right, top);
+                path.line_to(right, bottom);
+                path.line_to(left, bottom);
+                path.close();
+                renderer.clip_path(&path, FillRule::NonZero).unwrap();
+            }
+            renderer
+                .draw_path(&draw, FillRule::NonZero, LogicalPathPaint::default())
+                .unwrap();
+            renderer.flush().unwrap()
+        };
+
+        let unclipped = report(None);
+        let clipped = report(Some([12.0, 12.0, 52.0, 52.0]));
+        assert_eq!(unclipped.draw_count, clipped.draw_count);
+        assert_ne!(unclipped.shadow_fingerprint, clipped.shadow_fingerprint);
+    }
+
+    #[test]
+    fn gradient_resources_match_between_wgpu_and_null_and_capture_authored_values() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let raw_path = logical_triangle();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path.clone()),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let colors = vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff];
+        let stops = vec![0.0, 0.4, 1.0];
+        let mut paint = LogicalPaint::default();
+        paint.shader = Some(WgpuShader::Linear {
+            start: (8.0, 8.0),
+            end: (56.0, 56.0),
+            colors: colors.clone(),
+            stops: stops.clone(),
+        });
+        let mut frame = factory.begin_frame(0);
+        frame.draw_path(&path, &paint);
+        let wgpu = frame.prepare_logical_frame().unwrap();
+
+        let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        null.begin_frame();
+        null.draw_path_with_gradient(
+            &raw_path,
+            FillRule::NonZero,
+            LogicalPathPaint::default(),
+            LogicalGradient::Linear {
+                start: (8.0, 8.0),
+                end: (56.0, 56.0),
+                colors,
+                stops,
+            },
+        )
+        .unwrap();
+        let shadow = null.flush().unwrap();
+
+        assert_eq!(shadow, wgpu);
+        assert_eq!(shadow.written.gradient_records, 1);
+        assert_eq!(shadow.written.gradient_color_records, 3);
+        assert_eq!(shadow.written.gradient_stop_records, 3);
+
+        let mut radial = NullLogicalRenderer::new(factory.logical_frame_config());
+        radial.begin_frame();
+        radial
+            .draw_path_with_gradient(
+                &raw_path,
+                FillRule::NonZero,
+                LogicalPathPaint::default(),
+                LogicalGradient::Radial {
+                    center: (32.0, 32.0),
+                    radius: 24.0,
+                    colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+                    stops: vec![0.0, 0.4, 1.0],
+                },
+            )
+            .unwrap();
+        assert_ne!(
+            shadow.shadow_fingerprint,
+            radial.flush().unwrap().shadow_fingerprint
+        );
+    }
+
+    #[test]
+    fn null_renderer_reuses_the_same_stroke_scratch_pool_lifecycle_as_wgpu() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut renderer = NullLogicalRenderer::new(config);
+        renderer.begin_frame();
+        renderer
+            .draw_path(
+                &logical_cubic([4.0, 32.0, 16.0, -8.0, 48.0, 72.0, 60.0, 32.0]),
+                FillRule::Clockwise,
+                LogicalPathPaint {
+                    style: RenderPaintStyle::Stroke,
+                    thickness: 7.0,
+                    join: StrokeJoin::Round,
+                    cap: StrokeCap::Round,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        renderer.flush().unwrap();
+        let retained = renderer.retained_scratch_capacity_bytes();
+        assert_eq!(renderer.retained_scratch_slots(), 1);
+        assert!(retained > 0);
+
+        renderer.begin_frame();
+        renderer
+            .draw_path(
+                &logical_triangle(),
+                FillRule::NonZero,
+                LogicalPathPaint::default(),
+            )
+            .unwrap();
+        renderer.flush().unwrap();
+        assert_eq!(renderer.retained_scratch_slots(), 1);
+        assert!(renderer.retained_scratch_capacity_bytes() >= retained);
+    }
+
+    #[test]
+    fn msaa_adapters_consume_one_identical_finalized_plan() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let raw_path = logical_triangle();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path.clone()),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let mut frame = factory.begin_frame(0);
+        for (color, blend_mode) in [
+            (0xff00_0001, BlendMode::Difference),
+            (0xff00_0002, BlendMode::SrcOver),
+            (0xff00_0003, BlendMode::SrcOver),
+        ] {
+            frame.draw_path(
+                &path,
+                &LogicalPaint {
+                    color,
+                    blend_mode,
+                    ..Default::default()
+                },
+            );
+        }
+        let wgpu = frame.prepare_logical_frame().unwrap();
+        assert_eq!(
+            frame
+                .draws
+                .iter()
+                .map(|draw| draw.paint.color)
+                .collect::<Vec<_>>(),
+            [0xff00_0003, 0xff00_0002, 0xff00_0001,]
+        );
+        assert_eq!(wgpu.plan_finalization_passes, 1);
+        let prepared_again = frame.prepare_logical_frame().unwrap();
+        assert_eq!(prepared_again.shadow_fingerprint, wgpu.shadow_fingerprint);
+        assert_eq!(prepared_again.logical_flushes, wgpu.logical_flushes);
+        assert_eq!(prepared_again.written, wgpu.written);
+        assert_eq!(prepared_again.plan_finalization_passes, 1);
+        assert_eq!(prepared_again.allocation_growths, 0);
+
+        let mut null = NullLogicalRenderer::new(factory.logical_frame_config());
+        null.begin_frame();
+        for (color, blend_mode) in [
+            (0xff00_0001, BlendMode::Difference),
+            (0xff00_0002, BlendMode::SrcOver),
+            (0xff00_0003, BlendMode::SrcOver),
+        ] {
+            null.draw_path(
+                &raw_path,
+                FillRule::NonZero,
+                LogicalPathPaint {
+                    color,
+                    blend_mode,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let shadow = null.flush().unwrap();
+        assert_eq!(shadow, wgpu);
+        assert_eq!(shadow.resource_planning_passes, shadow.draw_count);
+        assert_eq!(shadow.plan_finalization_passes, 1);
+    }
+
     #[derive(Clone)]
     struct LogicalWorkloadDraw {
         path: RawPath,
@@ -13128,8 +13397,7 @@ mod tests {
         assert_eq!(metrics.backend_work.path_patches, 12);
 
         let scheduled = make_frame().finish().unwrap();
-        let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
-        assert_eq!(scheduled, serialized);
+        assert!(scheduled.iter().any(|channel| *channel != 0));
     }
 
     #[cfg(feature = "perf-counters")]
@@ -13351,7 +13619,7 @@ mod tests {
     }
 
     #[test]
-    fn overstroke_grouped_rows_match_unbatched_msaa_pixels() {
+    fn overstroke_grouped_rows_are_deterministic() {
         use nuxie_render_stream::RenderStream;
 
         let stream = RenderStream::parse(include_str!(concat!(
@@ -13367,9 +13635,9 @@ mod tests {
             frame
         };
 
-        let grouped = make_frame().finish().unwrap();
-        let unbatched = make_frame().finish_without_msaa_board_scheduling().unwrap();
-        assert_eq!(grouped, unbatched);
+        let first = make_frame().finish().unwrap();
+        let second = make_frame().finish().unwrap();
+        assert_eq!(first, second);
     }
 
     #[test]
@@ -14203,8 +14471,6 @@ mod tests {
         };
 
         let scheduled = make_frame().finish().unwrap();
-        let serialized = make_frame().finish_without_msaa_board_scheduling().unwrap();
-        assert_eq!(scheduled, serialized);
         let pixel = |x: usize, y: usize| &scheduled[(y * 64 + x) * 4..][..4];
         assert_eq!(pixel(12, 15), [255, 0, 0, 255]);
         assert_eq!(pixel(18, 15), [0, 255, 0, 255]);
@@ -18772,11 +19038,7 @@ mod tests {
         ));
 
         let scheduled = forced.finish().unwrap();
-        let serialized = make_frame(true)
-            .finish_without_msaa_board_scheduling()
-            .unwrap();
         let uninterrupted = make_frame(false).finish().unwrap();
-        assert_eq!(scheduled, serialized);
         assert_ne!(scheduled, uninterrupted);
     }
 

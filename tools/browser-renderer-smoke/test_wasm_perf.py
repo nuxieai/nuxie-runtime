@@ -136,8 +136,13 @@ class SourceProvenanceTests(unittest.TestCase):
         )
         generated = self.repo / "generated"
         generated.mkdir()
-        bundle = wasm_perf.stage_coordinator_bundle(
-            coordinator_sources, generated / "coordinators"
+        bundle = wasm_perf.stage_coordinator_bundle_from_git(
+            self.repo,
+            {
+                name: path.relative_to(self.repo).as_posix()
+                for name, path in coordinator_sources.items()
+            },
+            generated / "coordinators",
         )
         sources = wasm_perf.capture_source_provenance(
             self.repo, self.runtime, allowed_outputs=[generated]
@@ -173,6 +178,48 @@ class SourceProvenanceTests(unittest.TestCase):
             self.repo,
             self.runtime,
             allowed_outputs=[generated],
+        )
+
+    def test_rejects_pre_stage_node_coordinator_swap_then_restore(self):
+        node = self.repo / "run-wasm-perf.cjs"
+        committed = (
+            'require("node:fs").writeFileSync(process.argv[2], '
+            'JSON.stringify({accepted: "sealed"}));\n'
+        )
+        node.write_text(committed, encoding="utf-8")
+        subprocess.run(["git", "add", node.name], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "coordinator"], cwd=self.repo, check=True
+        )
+        node.write_text(
+            'require("node:fs").writeFileSync(process.argv[2], '
+            'JSON.stringify({accepted: "fabricated"}));\n',
+            encoding="utf-8",
+        )
+
+        output_root = self.repo / "generated" / "coordinators"
+        try:
+            with self.assertRaisesRegex(
+                wasm_perf.ContractError, "coordinator source checkout is dirty"
+            ):
+                wasm_perf.stage_coordinator_bundle_from_git(
+                    self.repo,
+                    {node.name: node.name},
+                    output_root,
+                )
+        finally:
+            node.write_text(committed, encoding="utf-8")
+
+        self.assertFalse(output_root.exists())
+        self.assertEqual(
+            subprocess.run(
+                ["git", "status", "--porcelain=v1"],
+                cwd=self.repo,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout,
+            "",
         )
 
     def test_seals_staged_fixture_and_rejects_mutation_after_seal(self):

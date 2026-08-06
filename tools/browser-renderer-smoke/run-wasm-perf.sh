@@ -6,13 +6,40 @@ SOURCE_COORDINATOR_DIR="$SOURCE_ROOT/tools/browser-renderer-smoke"
 SOURCE_WORK_DIR="$SOURCE_ROOT/target/browser-wasm-perf"
 
 if [[ -z "${WASM_PERF_SEALED_COORDINATOR_BUNDLE:-}" ]]; then
-  mkdir -p "$SOURCE_WORK_DIR"
-  COORDINATOR_BUNDLE="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SOURCE_COORDINATOR_DIR/wasm_perf.py" stage-coordinator \
+  BOOTSTRAP_STATUS="$(git -C "$SOURCE_ROOT" status --porcelain=v1 --untracked-files=no)"
+  if [[ -n "$BOOTSTRAP_STATUS" ]]; then
+    echo "wasm perf coordinator source checkout is dirty: ${BOOTSTRAP_STATUS%%$'\n'*}" >&2
+    exit 1
+  fi
+  BOOTSTRAP_REPO_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
+  BOOTSTRAP_REPO_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse 'HEAD^{tree}')"
+  mkdir -p "$SOURCE_WORK_DIR/coordinators"
+  BOOTSTRAP_DIR="$(mktemp -d "$SOURCE_WORK_DIR/coordinators/.bootstrap.XXXXXX")"
+  BOOTSTRAP_PYTHON="$BOOTSTRAP_DIR/wasm_perf.py"
+  git -C "$SOURCE_ROOT" show \
+    "$BOOTSTRAP_REPO_SHA:tools/browser-renderer-smoke/wasm_perf.py" \
+    >"$BOOTSTRAP_PYTHON"
+  chmod 400 "$BOOTSTRAP_PYTHON"
+  COORDINATOR_BUNDLE="$(PYTHONDONTWRITEBYTECODE=1 python3 "$BOOTSTRAP_PYTHON" stage-coordinator \
+    --repo-root "$SOURCE_ROOT" \
+    --expected-repo-sha "$BOOTSTRAP_REPO_SHA" \
+    --expected-repo-tree-sha "$BOOTSTRAP_REPO_TREE_SHA" \
     --output-root "$SOURCE_WORK_DIR/coordinators" \
-    --coordinator "run-wasm-perf.sh=$SOURCE_COORDINATOR_DIR/run-wasm-perf.sh" \
-    --coordinator "run-wasm-perf.cjs=$SOURCE_COORDINATOR_DIR/run-wasm-perf.cjs" \
-    --coordinator "wasm_perf.py=$SOURCE_COORDINATOR_DIR/wasm_perf.py" \
-    --coordinator "wasm-perf-driver-lib.cjs=$SOURCE_COORDINATOR_DIR/wasm-perf-driver-lib.cjs")"
+    --coordinator "run-wasm-perf.sh=tools/browser-renderer-smoke/run-wasm-perf.sh" \
+    --coordinator "run-wasm-perf.cjs=tools/browser-renderer-smoke/run-wasm-perf.cjs" \
+    --coordinator "wasm_perf.py=tools/browser-renderer-smoke/wasm_perf.py" \
+    --coordinator "wasm-perf-driver-lib.cjs=tools/browser-renderer-smoke/wasm-perf-driver-lib.cjs")"
+  rm "$BOOTSTRAP_PYTHON"
+  rmdir "$BOOTSTRAP_DIR"
+  CURRENT_BOOTSTRAP_STATUS="$(git -C "$SOURCE_ROOT" status --porcelain=v1 --untracked-files=no)"
+  CURRENT_BOOTSTRAP_REPO_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
+  CURRENT_BOOTSTRAP_REPO_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse 'HEAD^{tree}')"
+  if [[ -n "$CURRENT_BOOTSTRAP_STATUS" \
+    || "$CURRENT_BOOTSTRAP_REPO_SHA" != "$BOOTSTRAP_REPO_SHA" \
+    || "$CURRENT_BOOTSTRAP_REPO_TREE_SHA" != "$BOOTSTRAP_REPO_TREE_SHA" ]]; then
+    echo "wasm perf coordinator source changed during Git-blob staging" >&2
+    exit 1
+  fi
   exec env \
     WASM_PERF_SOURCE_ROOT="$SOURCE_ROOT" \
     WASM_PERF_SEALED_COORDINATOR_BUNDLE="$COORDINATOR_BUNDLE" \

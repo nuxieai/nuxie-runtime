@@ -464,19 +464,25 @@ def canonical_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
-def stage_coordinator_bundle(
-    sources: dict[str, Path], output_root: Path
+def _write_coordinator_bundle(
+    contents: dict[str, bytes],
+    output_root: Path,
+    *,
+    source_identity: dict[str, str] | None = None,
 ) -> Path:
-    if not sources:
+    if not contents:
         raise ContractError("coordinator bundle cannot be empty")
     records: dict[str, dict[str, Any]] = {}
-    for name, path in sorted(sources.items()):
+    for name, value in sorted(contents.items()):
         if not name or Path(name).name != name:
             raise ContractError(f"invalid coordinator bundle name: {name!r}")
-        record = _artifact_record(path)
-        records[name] = {key: record[key] for key in ("bytes", "sha256")}
+        records[name] = {
+            "bytes": len(value),
+            "sha256": hashlib.sha256(value).hexdigest(),
+        }
     manifest = {
         "schema": "nuxie-wasm-perf-coordinator-bundle-v1",
+        "source": source_identity,
         "files": records,
     }
     bundle_sha256 = hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest()
@@ -487,8 +493,8 @@ def stage_coordinator_bundle(
             prefix=".coordinator-", dir=output_root
         ) as temporary:
             staged = Path(temporary)
-            for name, source in sources.items():
-                shutil.copyfile(source, staged / name)
+            for name, value in contents.items():
+                (staged / name).write_bytes(value)
                 (staged / name).chmod(0o500 if name.endswith(".sh") else 0o400)
             (staged / "manifest.json").write_text(
                 canonical_json(manifest), encoding="utf-8"
@@ -514,6 +520,66 @@ def stage_coordinator_bundle(
     return destination
 
 
+def stage_coordinator_bundle_from_git(
+    repo_root: Path,
+    tracked_sources: dict[str, str],
+    output_root: Path,
+    *,
+    expected_source_identity: dict[str, str] | None = None,
+) -> Path:
+    repo_root = repo_root.resolve()
+    output_root = output_root.resolve()
+    _assert_clean_checkout(
+        "coordinator", repo_root, allowed_outputs=[output_root]
+    )
+    source_identity = {
+        "repo_sha": _git_output(repo_root, "rev-parse", "HEAD"),
+        "repo_tree_sha": _git_output(repo_root, "rev-parse", "HEAD^{tree}"),
+    }
+    if (
+        expected_source_identity is not None
+        and source_identity != expected_source_identity
+    ):
+        raise ContractError(
+            "coordinator source differs from bootstrap capture: "
+            f"expected={expected_source_identity!r} current={source_identity!r}"
+        )
+    contents: dict[str, bytes] = {}
+    for name, relative_path in tracked_sources.items():
+        relative = Path(relative_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ContractError(
+                f"coordinator source must be a tracked repo-relative path: {relative_path!r}"
+            )
+        normalized = relative.as_posix()
+        tracked = _git_output(
+            repo_root, "ls-files", "--error-unmatch", "--", normalized
+        )
+        if tracked != normalized:
+            raise ContractError(f"coordinator source is not tracked: {normalized}")
+        contents[name] = _git_bytes(
+            repo_root, "show", f"{source_identity['repo_sha']}:{normalized}"
+        )
+    destination = _write_coordinator_bundle(
+        contents,
+        output_root,
+        source_identity=source_identity,
+    )
+    _assert_clean_checkout(
+        "coordinator", repo_root, allowed_outputs=[output_root]
+    )
+    current_identity = {
+        "repo_sha": _git_output(repo_root, "rev-parse", "HEAD"),
+        "repo_tree_sha": _git_output(repo_root, "rev-parse", "HEAD^{tree}"),
+    }
+    if current_identity != source_identity:
+        raise ContractError(
+            "coordinator source changed during Git-blob staging: "
+            f"expected={source_identity!r} current={current_identity!r}"
+        )
+    return destination
+
+
 def _git_output(directory: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(directory), *args],
@@ -526,6 +592,21 @@ def _git_output(directory: Path, *args: str) -> str:
             f"cannot inspect git checkout {directory}: {result.stderr.strip()}"
         )
     return result.stdout.strip()
+
+
+def _git_bytes(directory: Path, *args: str) -> bytes:
+    result = subprocess.run(
+        ["git", "-C", str(directory), *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ContractError(
+            f"cannot read git object in {directory}: "
+            f"{result.stderr.decode('utf-8', errors='replace').strip()}"
+        )
+    return result.stdout
 
 
 def _allowed_untracked_paths(
@@ -1052,7 +1133,7 @@ def audit_run(args: argparse.Namespace) -> None:
 
 
 def stage_coordinator_run(args: argparse.Namespace) -> None:
-    sources: dict[str, Path] = {}
+    sources: dict[str, str] = {}
     for value in args.coordinator:
         name, separator, raw_path = value.partition("=")
         if not separator:
@@ -1061,8 +1142,18 @@ def stage_coordinator_run(args: argparse.Namespace) -> None:
             )
         if name in sources:
             raise ContractError(f"duplicate coordinator bundle name: {name}")
-        sources[name] = Path(raw_path)
-    print(stage_coordinator_bundle(sources, args.output_root.resolve()))
+        sources[name] = raw_path
+    print(
+        stage_coordinator_bundle_from_git(
+            args.repo_root,
+            sources,
+            args.output_root,
+            expected_source_identity={
+                "repo_sha": args.expected_repo_sha,
+                "repo_tree_sha": args.expected_repo_tree_sha,
+            },
+        )
+    )
 
 
 def _native_runs_with_runner(
@@ -1290,6 +1381,9 @@ def _parser() -> argparse.ArgumentParser:
     audit.set_defaults(action=audit_run)
 
     stage_coordinator = subparsers.add_parser("stage-coordinator")
+    stage_coordinator.add_argument("--repo-root", type=Path, required=True)
+    stage_coordinator.add_argument("--expected-repo-sha", required=True)
+    stage_coordinator.add_argument("--expected-repo-tree-sha", required=True)
     stage_coordinator.add_argument("--output-root", type=Path, required=True)
     stage_coordinator.add_argument(
         "--coordinator", action="append", required=True, default=[]

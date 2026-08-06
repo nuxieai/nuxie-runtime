@@ -2,12 +2,12 @@ env:
   CI: "1"
   RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
   PORT_MANIFEST_RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-  RIVE_RUNTIME_DIR: "rive-runtime"
 
 steps:
   - label: ":linux: Rust workspace and port contracts"
     command: |
       set -euo pipefail
+      export RIVE_RUNTIME_DIR="$$PWD/rive-runtime"
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
       git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
       rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
@@ -29,6 +29,9 @@ steps:
   - label: ":mac: Apple and C ABI compatibility"
     command: |
       set -euo pipefail
+      export RIVE_RUNTIME_DIR="$$PWD/rive-runtime"
+      git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
+      git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
       rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
       rustup target add --toolchain stable wasm32-unknown-unknown
       make fixtures

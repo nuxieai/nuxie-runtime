@@ -5,30 +5,14 @@ use luaur_rt::{Error, Function, Lua, MultiValue, Result, Table, Value};
 
 const MEMORY_EXHAUSTED: &str = "not enough memory";
 const MEMORY_LIMIT_ERROR: &str = "script VM exceeded its 16 MiB memory ceiling";
-const HOST_IDENTIFIER_LIMIT_ERROR: &str = "host identifier exceeds maximum size 4096 bytes";
-const HOST_STRING_LIMIT_ERROR: &str = "host string exceeds maximum size 1048576 bytes";
-const HOST_DEPTH_LIMIT_ERROR: &str = "host value exceeds maximum depth 32";
-const HOST_NODE_LIMIT_ERROR: &str = "host value exceeds maximum node count 4096";
-const HOST_EDGE_LIMIT_ERROR: &str = "host value exceeds maximum edge count 16384";
-const HOST_VALUE_BYTES_LIMIT_ERROR: &str =
-    "host value exceeds maximum aggregate size 4194304 bytes";
-const COMMAND_LIMIT_ERROR: &str = "script cycle exceeds 256 host commands";
-const COMMAND_CONTENT_LIMIT_ERROR: &str =
-    "script cycle exceeds 4194304 bytes of host-command content";
 const SAFEPOINT_LIMIT_ERROR: &str = "script cycle exceeds 100000 script safepoints";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptResourceLimit {
     Memory,
-    HostIdentifier,
-    HostString,
-    HostDepth,
-    HostNodes,
-    HostEdges,
-    HostValueBytes,
-    Commands,
-    CommandContent,
     Safepoints,
+    /// A terminal resource identity supplied by an embedding-host module.
+    Extension(&'static str),
 }
 
 impl ScriptResourceLimit {
@@ -36,16 +20,33 @@ impl ScriptResourceLimit {
     pub const fn code(self) -> &'static str {
         match self {
             Self::Memory => "script.resource.memory",
-            Self::HostIdentifier => "script.resource.host_identifier",
-            Self::HostString => "script.resource.host_string",
-            Self::HostDepth => "script.resource.host_depth",
-            Self::HostNodes => "script.resource.host_nodes",
-            Self::HostEdges => "script.resource.host_edges",
-            Self::HostValueBytes => "script.resource.host_value_bytes",
-            Self::Commands => "script.resource.host_commands",
-            Self::CommandContent => "script.resource.host_command_content",
             Self::Safepoints => "script.resource.safepoints",
+            Self::Extension(code) => code,
         }
+    }
+}
+
+/// Cloneable access to the VM's terminal resource-exhaustion side channel.
+///
+/// Product hosts can make their own limits survive Luau protected calls
+/// without teaching the baseline VM their vocabulary or resource policy.
+#[derive(Clone)]
+pub struct ScriptResourceGuard {
+    tracker: ResourceLimitTracker,
+}
+
+impl ScriptResourceGuard {
+    pub(super) fn new(tracker: ResourceLimitTracker) -> Self {
+        Self { tracker }
+    }
+
+    pub fn reject_if_tripped(&self) -> Result<()> {
+        self.tracker.reject_if_tripped()
+    }
+
+    pub fn fail(&self, code: &'static str, message: impl Into<String>) -> Error {
+        self.tracker
+            .fail_with_message(ScriptResourceLimit::Extension(code), message)
     }
 }
 
@@ -205,14 +206,7 @@ pub(super) fn install_protected_call_guards(
 fn resource_limit_error(limit: ScriptResourceLimit) -> Error {
     match limit {
         ScriptResourceLimit::Memory => Error::MemoryError(MEMORY_LIMIT_ERROR.to_owned()),
-        ScriptResourceLimit::HostIdentifier => Error::runtime(HOST_IDENTIFIER_LIMIT_ERROR),
-        ScriptResourceLimit::HostString => Error::runtime(HOST_STRING_LIMIT_ERROR),
-        ScriptResourceLimit::HostDepth => Error::runtime(HOST_DEPTH_LIMIT_ERROR),
-        ScriptResourceLimit::HostNodes => Error::runtime(HOST_NODE_LIMIT_ERROR),
-        ScriptResourceLimit::HostEdges => Error::runtime(HOST_EDGE_LIMIT_ERROR),
-        ScriptResourceLimit::HostValueBytes => Error::runtime(HOST_VALUE_BYTES_LIMIT_ERROR),
-        ScriptResourceLimit::Commands => Error::runtime(COMMAND_LIMIT_ERROR),
-        ScriptResourceLimit::CommandContent => Error::runtime(COMMAND_CONTENT_LIMIT_ERROR),
         ScriptResourceLimit::Safepoints => Error::runtime(SAFEPOINT_LIMIT_ERROR),
+        ScriptResourceLimit::Extension(code) => Error::runtime(code),
     }
 }

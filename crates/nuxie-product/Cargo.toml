@@ -10,12 +10,13 @@ publish = false
 default = ["js-host-seed"]
 js-host-seed = ["nuxie/js-host-seed"]
 renderer = ["nuxie/renderer"]
-scripting = ["nuxie/scripting"]
+scripting = ["nuxie/scripting", "dep:nuxie-product-scripting"]
 threading = ["nuxie/threading"]
 
 [dependencies]
 anyhow = "1"
 nuxie = { path = "../nuxie", default-features = false }
+nuxie-product-scripting = { path = "../nuxie-product-scripting", optional = true }
 
 [dev-dependencies]
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }

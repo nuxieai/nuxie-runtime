@@ -11,6 +11,7 @@ members = [
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nuxie-product",
+    "crates/nuxie-product-scripting",
     "crates/nuxie-browser-adapter",
     "crates/nuxie-apple-adapter",
     "crates/nux-capi",

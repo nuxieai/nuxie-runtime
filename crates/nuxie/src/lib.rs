@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[cfg(feature = "scripting")]
+use std::any::Any;
+
+#[cfg(feature = "scripting")]
 use std::{
     cell::RefCell,
     collections::{BTreeSet, VecDeque},
@@ -33,9 +36,6 @@ use nuxie_runtime::{
 pub mod command_queue;
 pub mod command_server;
 mod raw_text;
-#[cfg(feature = "scripting")]
-mod script_import;
-
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_interpolator_tests;
 // Temporary test-only include for the baseline scripting lifecycle suite. The
@@ -52,14 +52,6 @@ mod scripted_listener_action_lifecycle_tests;
 pub use raw_text::{
     RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,
 };
-#[cfg(feature = "scripting")]
-pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScriptExecutionAuthorization {
-    VisualOnly,
-    Authenticated,
-}
 
 pub use nuxie_render_api::{
     Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasAttachmentView, GpuCanvasBlendState,
@@ -112,7 +104,7 @@ use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelIn
 /// add direct dependency edges around `nuxie`.
 #[doc(hidden)]
 pub mod host_interfaces {
-    pub use nuxie_binary::RuntimeObject;
+    pub use nuxie_binary::{RuntimeFile, RuntimeObject};
     pub use nuxie_runtime::{
         RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
         RuntimeViewModelLinkError, StateMachineReportedEvent,
@@ -120,23 +112,219 @@ pub mod host_interfaces {
 }
 
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{
-    HostCommand as ScriptHostCommand, HostValue as ScriptHostValue, LuaScriptInstance,
-    ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
-};
+use nuxie_scripting::vm::ScriptProgram;
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{HostCycleCheckpoint, ScriptProgram};
+pub use nuxie_scripting::vm::{
+    LuaScriptInstance, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
+};
+
+/// Baseline-owned injection point for product-specific VM modules and effects.
+#[cfg(feature = "scripting")]
+pub trait ScriptHostExtension: std::fmt::Debug {
+    fn install(
+        &self,
+        vm: &ScriptVm,
+    ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError>;
+}
+
+/// One installed host extension associated with a single script VM.
+#[cfg(feature = "scripting")]
+pub trait ScriptHostExtensionInstance: std::fmt::Debug {
+    fn begin_cycle(&self) -> Box<dyn Any>;
+    fn rollback_cycle(
+        &self,
+        checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError>;
+    fn checkpoint_effects(&self) -> Box<dyn Any>;
+    fn rollback_effects(
+        &self,
+        checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError>;
+    fn drain_effects(&self) -> Box<dyn Any>;
+}
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+#[derive(Debug)]
+struct TestNoopScriptHostExtension;
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+#[derive(Debug)]
+struct TestNoopScriptHostExtensionInstance;
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+impl ScriptHostExtension for TestNoopScriptHostExtension {
+    fn install(
+        &self,
+        _vm: &ScriptVm,
+    ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError> {
+        Ok(Box::new(TestNoopScriptHostExtensionInstance))
+    }
+}
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+impl ScriptHostExtensionInstance for TestNoopScriptHostExtensionInstance {
+    fn begin_cycle(&self) -> Box<dyn Any> {
+        Box::new(())
+    }
+
+    fn rollback_cycle(
+        &self,
+        _checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        Ok(())
+    }
+
+    fn checkpoint_effects(&self) -> Box<dyn Any> {
+        Box::new(())
+    }
+
+    fn rollback_effects(
+        &self,
+        _checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        Ok(())
+    }
+
+    fn drain_effects(&self) -> Box<dyn Any> {
+        Box::new(())
+    }
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ScriptExecutionBinding {
+    ExactArtifact {
+        artifact_size: u64,
+        artifact_sha256: [u8; 32],
+    },
+    LocallyAuthoredRuntime,
+}
+
+/// Opaque authority to execute imported scripts with an injected host.
+///
+/// Safe baseline APIs can consume but cannot mint this value. Product policy
+/// must authenticate exact bytes, or establish a trusted local-authoring
+/// boundary, before using one of the unsafe constructors.
+#[cfg(feature = "scripting")]
+#[derive(Clone)]
+pub struct ScriptExecutionCapability {
+    binding: ScriptExecutionBinding,
+    extension: Arc<dyn ScriptHostExtension>,
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for ScriptExecutionCapability {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ScriptExecutionCapability")
+            .field("binding", &self.binding)
+            .field("extension", &self.extension)
+            .finish()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptExecutionCapability {
+    /// Mint authority for exact bytes after an upper layer verifies them.
+    ///
+    /// # Safety
+    ///
+    /// The caller must have authenticated `artifact_bytes` according to its
+    /// product trust policy and must provide only the intended host extension.
+    #[doc(hidden)]
+    pub unsafe fn for_verified_artifact_unchecked(
+        artifact_bytes: &[u8],
+        extension: Arc<dyn ScriptHostExtension>,
+    ) -> Result<Self> {
+        use sha2::{Digest as _, Sha256};
+
+        Ok(Self {
+            binding: ScriptExecutionBinding::ExactArtifact {
+                artifact_size: u64::try_from(artifact_bytes.len())
+                    .context("script artifact length does not fit in u64")?,
+                artifact_sha256: Sha256::digest(artifact_bytes).into(),
+            },
+            extension,
+        })
+    }
+
+    /// Mint authority for a decoded runtime created inside a trusted authoring process.
+    ///
+    /// # Safety
+    ///
+    /// The caller must prove by construction that the runtime was locally
+    /// authored and did not originate from unverified external input.
+    #[doc(hidden)]
+    pub unsafe fn for_locally_authored_runtime_unchecked(
+        extension: Arc<dyn ScriptHostExtension>,
+    ) -> Self {
+        Self {
+            binding: ScriptExecutionBinding::LocallyAuthoredRuntime,
+            extension,
+        }
+    }
+
+    fn authorizes(&self, artifact_bytes: &[u8]) -> bool {
+        use sha2::{Digest as _, Sha256};
+
+        let ScriptExecutionBinding::ExactArtifact {
+            artifact_size,
+            artifact_sha256,
+        } = self.binding
+        else {
+            return false;
+        };
+        u64::try_from(artifact_bytes.len()) == Ok(artifact_size)
+            && <[u8; 32]>::from(Sha256::digest(artifact_bytes)) == artifact_sha256
+    }
+
+    fn authorizes_locally_authored_runtime(&self) -> bool {
+        matches!(self.binding, ScriptExecutionBinding::LocallyAuthoredRuntime)
+    }
+}
 
 /// Opaque checkpoint for rolling back script host effects when a higher-level
 /// operation fails atomically.
 #[cfg(feature = "scripting")]
 #[doc(hidden)]
-pub struct ScriptHostCycleCheckpoint(HostCycleCheckpoint);
+pub struct ScriptHostCycleCheckpoint(Box<dyn Any>);
 
 #[cfg(feature = "scripting")]
 type FileScriptPolicy = Option<ScriptExecutionLimits>;
 #[cfg(not(feature = "scripting"))]
 type FileScriptPolicy = ();
+
+#[cfg(feature = "scripting")]
+type FileScriptCapability = Option<ScriptExecutionCapability>;
+#[cfg(not(feature = "scripting"))]
+type FileScriptCapability = ();
+
+#[cfg(feature = "scripting")]
+fn inert_script_capability() -> FileScriptCapability {
+    None
+}
+#[cfg(not(feature = "scripting"))]
+fn inert_script_capability() -> FileScriptCapability {}
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+fn decoded_test_script_capability() -> FileScriptCapability {
+    // SAFETY: this path only exists for baseline conformance fixtures assembled
+    // in-process and installs a neutral host with no product module or effects.
+    Some(unsafe {
+        ScriptExecutionCapability::for_locally_authored_runtime_unchecked(Arc::new(
+            TestNoopScriptHostExtension,
+        ))
+    })
+}
+#[cfg(all(not(feature = "scripting"), any(test, feature = "test-support")))]
+fn decoded_test_script_capability() -> FileScriptCapability {}
+
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+fn script_policy_for_capability(capability: &FileScriptCapability) -> FileScriptPolicy {
+    trusted_script_policy(capability.is_some())
+}
+#[cfg(all(not(feature = "scripting"), any(test, feature = "test-support")))]
+fn script_policy_for_capability(_capability: &FileScriptCapability) -> FileScriptPolicy {}
 
 #[cfg(feature = "scripting")]
 fn inert_script_policy() -> FileScriptPolicy {
@@ -145,11 +333,11 @@ fn inert_script_policy() -> FileScriptPolicy {
 #[cfg(not(feature = "scripting"))]
 fn inert_script_policy() -> FileScriptPolicy {}
 
-#[cfg(feature = "scripting")]
+#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
 fn trusted_script_policy(enabled: bool) -> FileScriptPolicy {
     enabled.then(ScriptExecutionLimits::new)
 }
-#[cfg(not(feature = "scripting"))]
+#[cfg(all(not(feature = "scripting"), any(test, feature = "test-support")))]
 fn trusted_script_policy(_enabled: bool) -> FileScriptPolicy {}
 
 #[cfg(feature = "scripting")]
@@ -171,6 +359,7 @@ struct ReadyFileScripts {
     // Programs contain VM-owned function handles, so they must drop before VM.
     programs: BTreeMap<usize, ScriptProgram>,
     vm: ScriptVm,
+    host: Box<dyn ScriptHostExtensionInstance>,
     factory_domain: usize,
     default_context_initialized: bool,
 }
@@ -178,7 +367,7 @@ struct ReadyFileScripts {
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
     assets: Arc<[FileScriptAsset]>,
-    authorization: ScriptExecutionAuthorization,
+    capability: Option<ScriptExecutionCapability>,
     execution_limits: Option<ScriptExecutionLimits>,
     log_sink: Option<ScriptingLogSink>,
     ready: Option<ReadyFileScripts>,
@@ -190,7 +379,7 @@ impl std::fmt::Debug for FileScriptRuntime {
         formatter
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
-            .field("authorization", &self.authorization)
+            .field("capability", &self.capability)
             .field("execution_limits", &self.execution_limits)
             .field("has_log_sink", &self.log_sink.is_some())
             .field("ready", &self.ready.is_some())
@@ -202,7 +391,7 @@ impl std::fmt::Debug for FileScriptRuntime {
 impl FileScriptRuntime {
     fn import(
         runtime: &RuntimeFile,
-        authorization: ScriptExecutionAuthorization,
+        capability: Option<ScriptExecutionCapability>,
         execution_limits: Option<ScriptExecutionLimits>,
     ) -> Self {
         let entries = runtime.scripting_file_assets_with_contents();
@@ -241,18 +430,18 @@ impl FileScriptRuntime {
             })
             .collect::<Vec<_>>()
             .into();
-        Self::new(assets, authorization, execution_limits, None)
+        Self::new(assets, capability, execution_limits, None)
     }
 
     fn new(
         assets: Arc<[FileScriptAsset]>,
-        authorization: ScriptExecutionAuthorization,
+        capability: Option<ScriptExecutionCapability>,
         execution_limits: Option<ScriptExecutionLimits>,
         log_sink: Option<ScriptingLogSink>,
     ) -> Self {
         Self {
             assets,
-            authorization,
+            capability,
             execution_limits,
             log_sink,
             ready: None,
@@ -260,8 +449,7 @@ impl FileScriptRuntime {
     }
 
     fn scripts_are_authenticated(&self) -> bool {
-        self.authorization == ScriptExecutionAuthorization::Authenticated
-            && self.execution_limits.is_some()
+        self.capability.is_some() && self.execution_limits.is_some()
     }
 
     fn is_project_data_converter_asset(&self, ordinal: usize) -> bool {
@@ -286,6 +474,10 @@ impl FileScriptRuntime {
             vm.set_log_sink(move |level, line| sink(level, line));
         }
         vm.install_render_factory(factory)?;
+        let capability = self.capability.as_ref().ok_or_else(|| {
+            nuxie_runtime::ScriptError::new("script host extension is unavailable")
+        })?;
+        let host = capability.extension.install(&vm)?;
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         for asset in self
             .assets
@@ -325,9 +517,9 @@ impl FileScriptRuntime {
             let mut failures = Vec::new();
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
-                let effect_checkpoint = vm.checkpoint_host_effects();
+                let effect_checkpoint = host.checkpoint_effects();
                 if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
-                    vm.rollback_host_effects(effect_checkpoint);
+                    host.rollback_effects(effect_checkpoint)?;
                     failures.push((asset, error));
                 }
             }
@@ -377,6 +569,7 @@ impl FileScriptRuntime {
         Ok(ReadyFileScripts {
             programs,
             vm,
+            host,
             factory_domain: render_factory_domain(factory),
             default_context_initialized: false,
         })
@@ -495,21 +688,26 @@ impl FileScriptRuntime {
         })
     }
 
-    fn begin_host_cycle(&self) -> Option<HostCycleCheckpoint> {
-        self.ready.as_ref().map(|ready| ready.vm.begin_host_cycle())
+    fn begin_host_cycle(&self) -> Option<Box<dyn Any>> {
+        self.ready.as_ref().map(|ready| {
+            ready.vm.begin_script_cycle();
+            ready.host.begin_cycle()
+        })
     }
 
-    fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
+    fn rollback_host_cycle(&self, checkpoint: Box<dyn Any>) {
         if let Some(ready) = self.ready.as_ref() {
-            ready.vm.rollback_host_cycle(checkpoint);
+            let _ = ready.host.rollback_cycle(checkpoint);
+            ready.vm.end_script_cycle();
         }
     }
 
-    fn drain_host_commands(&self) -> Vec<ScriptHostCommand> {
-        self.ready
-            .as_ref()
-            .map(|ready| ready.vm.drain_host_commands())
-            .unwrap_or_default()
+    fn drain_host_effects(&self) -> Option<Box<dyn Any>> {
+        self.ready.as_ref().map(|ready| {
+            let effects = ready.host.drain_effects();
+            ready.vm.end_script_cycle();
+            effects
+        })
     }
 }
 
@@ -4080,7 +4278,7 @@ impl Clone for File {
             let scripts = self.scripts.borrow();
             Rc::new(RefCell::new(FileScriptRuntime::new(
                 Arc::clone(&scripts.assets),
-                scripts.authorization,
+                scripts.capability.clone(),
                 scripts.execution_limits,
                 scripts.log_sink.clone(),
             )))
@@ -4101,6 +4299,19 @@ impl Clone for File {
 }
 
 impl File {
+    /// Construct a facade from an already-decoded baseline runtime. Embedded
+    /// product scripts remain inert unless a product capability is supplied.
+    #[doc(hidden)]
+    pub fn from_decoded_runtime(runtime: RuntimeFile) -> Result<Self> {
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            inert_script_capability(),
+            inert_script_policy(),
+            FileImportLimits::new(),
+            true,
+        )
+    }
+
     /// Whether this file contains at least one executable ScriptAsset.
     ///
     /// Pure-Rust project-data-converter envelopes use the same binary carrier
@@ -4199,7 +4410,7 @@ impl File {
             .context("failed to import Rive file")?;
         Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            ScriptExecutionAuthorization::VisualOnly,
+            inert_script_capability(),
             inert_script_policy(),
             limits,
             true,
@@ -4229,7 +4440,7 @@ impl File {
         ));
         let mut file = Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            ScriptExecutionAuthorization::VisualOnly,
+            inert_script_capability(),
             inert_script_policy(),
             limits,
             false,
@@ -4240,7 +4451,7 @@ impl File {
 
     /// Import host-authenticated `.riv` bytes with explicit, non-zero Luau
     /// memory and per-callback interrupt ceilings.
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     pub fn import_with_trusted_scripts(
         bytes: &[u8],
         execution_limits: ScriptExecutionLimits,
@@ -4254,7 +4465,7 @@ impl File {
 
     /// Apply both binary-import allocation limits and trusted Luau execution
     /// limits before the File can enter its lazy script bootstrap path.
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     pub fn import_with_trusted_scripts_and_limits(
         bytes: &[u8],
         import_limits: FileImportLimits,
@@ -4266,37 +4477,76 @@ impl File {
         import_limits.validate_input(bytes)?;
         let runtime = read_runtime_file_for_facade_with_limits(bytes, import_limits)
             .context("failed to import Rive file")?;
+        // SAFETY: this compatibility path is test-support only and installs a
+        // neutral host with no product module or effects.
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_artifact_unchecked(
+                bytes,
+                Arc::new(TestNoopScriptHostExtension),
+            )?
+        };
         Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            ScriptExecutionAuthorization::Authenticated,
+            Some(capability),
             Some(execution_limits),
             import_limits,
             true,
         )
     }
 
-    /// Import `.riv` bytes using cryptographically bound script authority.
+    /// Import exact bytes under an opaque product execution capability.
     ///
-    /// [`ScriptImportCapability::visual_only`] keeps scripts inert. Executable
-    /// authority can only be minted by authenticating a signed manifest that
-    /// binds these exact artifact bytes.
+    /// Product adapters mint this capability after signed-package verification
+    /// or inside a trusted local authoring process. The baseline facade never
+    /// accepts a forgeable authentication boolean.
     #[cfg(feature = "scripting")]
-    pub fn import_with_script_capability(
+    #[doc(hidden)]
+    pub fn import_with_execution_capability(
         bytes: &[u8],
-        capability: ScriptImportCapability,
+        capability: ScriptExecutionCapability,
+        execution_limits: ScriptExecutionLimits,
     ) -> Result<Self> {
+        anyhow::ensure!(
+            capability.authorizes(bytes),
+            "script execution capability does not match the exact artifact bytes"
+        );
+        execution_limits
+            .validate()
+            .context("invalid trusted script execution limits")?;
         let import_limits = FileImportLimits::new();
         import_limits.validate_input(bytes)?;
-        let authorization = capability
-            .execution_authorization_for(bytes)
-            .context("script import capability does not match the artifact")?;
         let runtime = read_runtime_file_for_facade_with_limits(bytes, import_limits)
             .context("failed to import Rive file")?;
         Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            authorization,
-            trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
+            Some(capability),
+            Some(execution_limits),
             import_limits,
+            true,
+        )
+    }
+
+    /// Construct a facade from a decoded runtime assembled by a trusted local
+    /// product authoring process.
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn from_runtime_with_execution_capability(
+        runtime: RuntimeFile,
+        capability: ScriptExecutionCapability,
+        execution_limits: ScriptExecutionLimits,
+    ) -> Result<Self> {
+        anyhow::ensure!(
+            capability.authorizes_locally_authored_runtime(),
+            "script execution capability does not authorize a decoded runtime"
+        );
+        execution_limits
+            .validate()
+            .context("invalid trusted script execution limits")?;
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            Some(capability),
+            Some(execution_limits),
+            FileImportLimits::new(),
             true,
         )
     }
@@ -4308,25 +4558,14 @@ impl File {
     /// This compatibility wrapper applies [`ScriptExecutionLimits::new`]. New
     /// callers should prefer [`Self::import_with_trusted_scripts`] so the trust
     /// decision and resource policy remain visible at the call site.
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     pub fn import_with_unsigned_scripts(bytes: &[u8]) -> Result<Self> {
         Self::import_with_trusted_scripts(bytes, ScriptExecutionLimits::new())
     }
 
-    /// Finalize an already decoded, trusted runtime file.
-    ///
-    /// This is the non-byte counterpart to the trusted import path. Callers
-    /// must only pass runtime files produced from authenticated or locally
-    /// constructed content because unsigned script execution is enabled.
-    pub fn from_trusted_runtime(runtime: RuntimeFile) -> Result<Self> {
-        Self::from_runtime(runtime)
-    }
-
+    #[cfg(any(test, feature = "test-support"))]
     fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
-        Self::from_runtime_with_script_authorization(
-            runtime,
-            ScriptExecutionAuthorization::Authenticated,
-        )
+        Self::from_runtime_with_script_capability(runtime, decoded_test_script_capability())
     }
 
     /// Construct a facade file from an already-decoded runtime file for
@@ -4337,14 +4576,15 @@ impl File {
         Self::from_runtime(runtime)
     }
 
-    fn from_runtime_with_script_authorization(
+    #[cfg(any(test, feature = "test-support"))]
+    fn from_runtime_with_script_capability(
         runtime: RuntimeFile,
-        authorization: ScriptExecutionAuthorization,
+        capability: FileScriptCapability,
     ) -> Result<Self> {
         Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            authorization,
-            trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
+            capability.clone(),
+            script_policy_for_capability(&capability),
             FileImportLimits::new(),
             true,
         )
@@ -4352,13 +4592,13 @@ impl File {
 
     fn from_runtime_with_script_policy_and_limits(
         runtime: RuntimeFile,
-        authorization: ScriptExecutionAuthorization,
+        capability: FileScriptCapability,
         execution_limits: FileScriptPolicy,
         limits: FileImportLimits,
         validate_embedded_fonts: bool,
     ) -> Result<Self> {
         #[cfg(not(feature = "scripting"))]
-        let _ = (authorization, execution_limits);
+        let _ = (capability, execution_limits);
         if let Some(maximum) = limits.max_runtime_objects()
             && runtime.objects.len() > maximum
         {
@@ -4419,7 +4659,7 @@ impl File {
             #[cfg(feature = "scripting")]
             scripts: Rc::new(RefCell::new(FileScriptRuntime::import(
                 &runtime,
-                authorization,
+                capability,
                 execution_limits,
             ))),
             runtime: Arc::new(runtime),
@@ -5706,8 +5946,14 @@ impl OwnedArtboardInstance {
 
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
-    pub fn drain_host_commands(&self) -> Vec<ScriptHostCommand> {
-        self.file.scripts.borrow().drain_host_commands()
+    pub fn drain_script_host_effects<T: 'static>(&self) -> Option<T> {
+        self.file
+            .scripts
+            .borrow()
+            .drain_host_effects()?
+            .downcast::<T>()
+            .ok()
+            .map(|effects| *effects)
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
@@ -6599,10 +6845,7 @@ mod inert_script_import_tests {
         let inert = File::import(&bytes).expect("ordinary import remains available");
         let inert_assets = {
             let scripts = inert.scripts.borrow();
-            assert_eq!(
-                scripts.authorization,
-                ScriptExecutionAuthorization::VisualOnly
-            );
+            assert!(scripts.capability.is_none());
             assert!(scripts.execution_limits.is_none());
             assert!(scripts.ready.is_none());
             assert_eq!(scripts.assets.len(), 1);
@@ -6614,10 +6857,7 @@ mod inert_script_import_tests {
         let trusted =
             File::import_with_unsigned_scripts(&bytes).expect("explicitly trusted import succeeds");
         let scripts = trusted.scripts.borrow();
-        assert_eq!(
-            scripts.authorization,
-            ScriptExecutionAuthorization::Authenticated
-        );
+        assert!(scripts.capability.is_some());
         assert!(scripts.execution_limits.is_some());
         let assets = scripts.assets.as_ref();
         assert_eq!(assets.len(), 1);
@@ -7934,7 +8174,7 @@ mod owned_instance_tests {
 
         let scripts = FileScriptRuntime::import(
             &runtime,
-            ScriptExecutionAuthorization::Authenticated,
+            decoded_test_script_capability(),
             Some(ScriptExecutionLimits::new()),
         );
         let mesh = scripts
@@ -7955,7 +8195,7 @@ mod owned_instance_tests {
         let runtime = read_runtime_file_for_facade(&bytes).expect("scope probe imports");
         let scripts = FileScriptRuntime::import(
             &runtime,
-            ScriptExecutionAuthorization::Authenticated,
+            decoded_test_script_capability(),
             Some(ScriptExecutionLimits::new()),
         );
         let mut factory = script_factory();
@@ -7991,7 +8231,7 @@ mod owned_instance_tests {
         let runtime = read_runtime_file_for_facade(&bytes).expect("fixture imports");
         let scripts = FileScriptRuntime::import(
             &runtime,
-            ScriptExecutionAuthorization::Authenticated,
+            decoded_test_script_capability(),
             Some(ScriptExecutionLimits::new()),
         );
         let model_name = nuxie_runtime::script_view_models(&runtime)

@@ -96,6 +96,20 @@ fn rive_globals_are_installed_before_sandboxing() {
 }
 
 #[test]
+fn ordinary_vm_does_not_install_the_product_nuxie_module() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let error = vm
+        .eval::<Value>(r#"return require("nuxie")"#)
+        .expect_err("baseline VM must not install product modules");
+    assert!(
+        format!("{error}").contains("require could not find a script named nuxie"),
+        "got: {error}"
+    );
+}
+
+#[test]
 fn rive_vector_math_uses_all_three_components() {
     let vm = ScriptVm::new();
     vm.install_rive_globals().unwrap();

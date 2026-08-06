@@ -1434,7 +1434,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
-    def test_current_product_host_resource_limits_file_is_an_exception(self) -> None:
+    def test_product_host_resource_limits_are_no_longer_an_exception(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
@@ -1444,8 +1444,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("product-host-commands=1", result.stdout)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
     def test_rejects_stale_internal_debt_exception(self) -> None:
         self.write_manifest("")

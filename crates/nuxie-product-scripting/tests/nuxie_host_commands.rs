@@ -1,10 +1,134 @@
-#![cfg(feature = "luau")]
-
 use std::collections::BTreeMap;
 
-use nuxie_scripting::vm::{
-    HostCommand, HostValue, ScriptExecutionLimits, ScriptResourceLimit, ScriptVm,
+use nuxie_product_scripting::{
+    HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue, NuxieScriptHost,
 };
+use nuxie_scripting::vm::{
+    ScriptExecutionLimits, ScriptResourceLimit as BaselineResourceLimit,
+    ScriptVm as BaselineScriptVm,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScriptResourceLimit {
+    Memory,
+    HostIdentifier,
+    HostString,
+    HostDepth,
+    HostNodes,
+    HostEdges,
+    HostValueBytes,
+    Commands,
+    CommandContent,
+    Safepoints,
+}
+
+impl ScriptResourceLimit {
+    fn code(self) -> &'static str {
+        match self {
+            Self::Memory => "script.resource.memory",
+            Self::HostIdentifier => "script.resource.host_identifier",
+            Self::HostString => "script.resource.host_string",
+            Self::HostDepth => "script.resource.host_depth",
+            Self::HostNodes => "script.resource.host_nodes",
+            Self::HostEdges => "script.resource.host_edges",
+            Self::HostValueBytes => "script.resource.host_value_bytes",
+            Self::Commands => "script.resource.host_commands",
+            Self::CommandContent => "script.resource.host_command_content",
+            Self::Safepoints => "script.resource.safepoints",
+        }
+    }
+}
+
+struct ScriptVm {
+    baseline: BaselineScriptVm,
+    host: NuxieScriptHost,
+}
+
+impl ScriptVm {
+    fn new() -> Self {
+        Self::from_baseline(BaselineScriptVm::new())
+    }
+
+    fn new_with_execution_limits(limits: ScriptExecutionLimits) -> luaur_rt::Result<Self> {
+        Ok(Self::from_baseline(
+            BaselineScriptVm::new_with_execution_limits(limits)?,
+        ))
+    }
+
+    fn from_baseline(baseline: BaselineScriptVm) -> Self {
+        baseline
+            .install_rive_globals()
+            .expect("Rive globals install");
+        let host = NuxieScriptHost::install(&baseline).expect("Nuxie module install");
+        Self { baseline, host }
+    }
+
+    fn begin_host_cycle(&self) -> HostCycleCheckpoint {
+        self.baseline.begin_script_cycle();
+        self.host.begin_cycle()
+    }
+
+    fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
+        self.host.rollback_cycle(checkpoint);
+        self.baseline.end_script_cycle();
+    }
+
+    fn checkpoint_host_effects(&self) -> HostEffectCheckpoint {
+        self.host.checkpoint_effects()
+    }
+
+    fn rollback_host_effects(&self, checkpoint: HostEffectCheckpoint) {
+        self.host.rollback_effects(checkpoint);
+    }
+
+    fn drain_host_commands(&self) -> Vec<HostCommand> {
+        let commands = self.host.drain();
+        self.baseline.end_script_cycle();
+        commands
+    }
+
+    fn terminal_resource_limit(&self) -> Option<ScriptResourceLimit> {
+        self.baseline
+            .terminal_resource_limit()
+            .map(|limit| match limit {
+                BaselineResourceLimit::Memory => ScriptResourceLimit::Memory,
+                BaselineResourceLimit::Safepoints => ScriptResourceLimit::Safepoints,
+                BaselineResourceLimit::Extension("script.resource.host_identifier") => {
+                    ScriptResourceLimit::HostIdentifier
+                }
+                BaselineResourceLimit::Extension("script.resource.host_string") => {
+                    ScriptResourceLimit::HostString
+                }
+                BaselineResourceLimit::Extension("script.resource.host_depth") => {
+                    ScriptResourceLimit::HostDepth
+                }
+                BaselineResourceLimit::Extension("script.resource.host_nodes") => {
+                    ScriptResourceLimit::HostNodes
+                }
+                BaselineResourceLimit::Extension("script.resource.host_edges") => {
+                    ScriptResourceLimit::HostEdges
+                }
+                BaselineResourceLimit::Extension("script.resource.host_value_bytes") => {
+                    ScriptResourceLimit::HostValueBytes
+                }
+                BaselineResourceLimit::Extension("script.resource.host_commands") => {
+                    ScriptResourceLimit::Commands
+                }
+                BaselineResourceLimit::Extension("script.resource.host_command_content") => {
+                    ScriptResourceLimit::CommandContent
+                }
+                BaselineResourceLimit::Extension(code) => panic!("unknown product resource {code}"),
+            })
+    }
+}
+
+impl std::ops::Deref for ScriptVm {
+    type Target = BaselineScriptVm;
+
+    fn deref(&self) -> &Self::Target {
+        &self.baseline
+    }
+}
 
 #[test]
 fn nuxie_trigger_normalizes_a_scalar_payload_and_queues_it() {

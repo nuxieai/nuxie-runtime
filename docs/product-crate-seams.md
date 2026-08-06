@@ -10,13 +10,18 @@ errors, and behavior.
 ```text
 nuxie-dev authoring ----+----> nuxie baseline facade ----> baseline crates
 nuxie-product ----------+
+nuxie-product-scripting-+
                         |
 nuxie-browser-adapter --+----> nuxie-renderer
 nuxie-apple-adapter ----+----> nuxie-renderer
 ```
 
-Flow now lives in `nuxie-product`; the shipping `nuxie` facade contains no Flow
-module or product dependency. Scene/SceneTx, generated authoring vocabulary,
+Flow now lives in `nuxie-product`; Nux artifact trust, the private Nuxie Luau
+module, ordered host effects, and their quotas live in
+`nuxie-product-scripting`. The shipping `nuxie` facade contains no Flow module
+or product dependency; it owns the neutral host-extension interface and an
+opaque exact-byte capability consumed during baseline VM setup.
+Scene/SceneTx, generated authoring vocabulary,
 lowering, transactions, export, remounting, stable identity, and authored
 observations are owned by nuxie-dev's `nuxie-authoring` crate. Protected
 baseline, portable-ABI, replay, oracle, fuzz, golden, and performance packages
@@ -27,6 +32,7 @@ may not add an upward dependency on an authoring or product package.
 | Package | Owns during migration | Direct workspace dependency | Deliberately does not expose |
 |---|---|---|---|
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
+| `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |

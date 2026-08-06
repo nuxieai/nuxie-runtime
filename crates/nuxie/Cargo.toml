@@ -13,19 +13,12 @@ renderer = ["dep:nuxie-renderer"]
 threading = ["nuxie-runtime/threading"]
 test-support = []
 scripting = [
-    "dep:ed25519-dalek",
-    "dep:nux-container",
     "dep:nuxie-scripting",
     "nuxie-scripting?/luau",
-    "dep:serde",
-    "dep:serde_json",
-    "dep:sha2",
 ]
 
 [dependencies]
 anyhow = "1"
-ed25519-dalek = { version = "2", default-features = false, features = ["std"], optional = true }
-nux-container = { path = "../nux-container", optional = true }
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }
@@ -33,9 +26,7 @@ nuxie-renderer = { path = "../nuxie-renderer", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true, default-features = false }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-sha2 = { version = "0.10", optional = true }
+sha2 = "0.10"
 
 [dev-dependencies]
 luaur-common = "=0.1.8"
@@ -45,7 +36,6 @@ nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"
-sha2 = "0.10"
 silver-corpus = { path = "../../tools/silver-corpus" }
 
 # This crate is fully CLEAN on the workspace panic-freedom clippy lints (see

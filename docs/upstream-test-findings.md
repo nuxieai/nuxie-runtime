@@ -14,11 +14,12 @@ sites); all 22 were fixed at their root causes in commit `9684cdf7` and their
 pinned tests are active and unweakened
 (`cpp_probe.rs::upstream_click_event_fixture_reports_exact_group_click_sequence`,
 `focus_data.rs::upstream_focus_node_fresh_focusable_defaults_to_null`, and the
-silver-corpus test `upstream_fl_bc_resolved_silver_assertions`). The remaining
-398 are blocked capability/harness observables retained by linked ignored
-tests — including one silver assertion site
-(`multi_listeners`) whose replay needs a scripting-capable silver runner, not
-a runtime change.
+silver-corpus test `upstream_fl_bc_resolved_silver_assertions`); the
+`multi_listeners` silver assertion site is discharged by the
+scripting-capable silver replay
+(`upstream_fl_bc_multi_listener_scripted_action_assertion`, active). The
+remaining 397 are blocked capability/harness observables retained by linked
+ignored tests.
 
 ### Finding: mutable animation quantize
 
@@ -51,26 +52,6 @@ silver action interpreter cannot encode. They are retained by
 Two multitouch silvers are byte-exact active tests; the four hit-test silvers
 that were literal failing findings are fixed and byte-exact in the active
 silver-corpus test `upstream_fl_bc_resolved_silver_assertions`.
-
-### Finding: silver scripted-listener harness gap
-
-Upstream `state_machine_test.cpp:600` ("Listeners with multiple types of
-events") terminates in `silver.matches("multi_listeners")` — one assertion
-site. `multi_listeners.riv` carries five `ScriptAsset`/`ScriptedListenerAction`
-pairs; upstream's `File` import auto-creates the scripting VM when script
-assets are present (`src/file.cpp:688-694`) and
-`ScriptedListenerAction::performStateful` runs the script on dispatch
-(`src/animation/scripted_listener_action.cpp`). The silver runner's
-`Execution::run` builds raw `nuxie-runtime` instances with no
-`nuxie-scripting` VM and never attaches the fixture's `ScriptAsset`
-occurrences, so the scripted action is inert and the replay diverges at
-frame 2/op 253 (expected `makeRenderPath`, got `drawPath`). This is a silver
-harness capability, not a runtime divergence: the same fixture is `exact` in
-the scripted golden lane (`corpus.toml` `multi_listeners`, samples 0/0.5/1),
-where both runners execute scripting. Retained by the silver-corpus test
-`silver_backfill_cases.rs::upstream_fl_bc_multi_listener_scripted_action_assertion`;
-the other nine formerly-divergent streams (17 assertion sites) are active in
-`upstream_fl_bc_resolved_silver_assertions`.
 
 ### Finding: state-machine fixture surface
 

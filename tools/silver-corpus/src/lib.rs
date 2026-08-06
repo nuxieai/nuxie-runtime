@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod action;
+mod scripting;
 pub use action::{
     Action, ActionTarget, Execution, GamepadInputKind, GamepadMapping, GamepadRecord,
     PointerCoordinate,

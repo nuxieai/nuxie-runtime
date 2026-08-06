@@ -1,8 +1,12 @@
+use crate::scripting::{
+    RegisteredScriptFile, initialize_renderer_and_register_scripts,
+    initialize_state_machine_scripted_objects, rebind_state_machine_scripted_objects_after_artboard,
+};
 use crate::{ActionTarget::*, Case};
 use anyhow::{Context, bail};
-use nuxie_binary::{RuntimeFile, read_runtime_file};
+use nuxie_binary::{RuntimeFile, read_runtime_file_with_scripting};
 use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_render_api::SerializingFactory;
+use nuxie_render_api::{Factory as RenderFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::{
     ArtboardInstance, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, StateMachineInstance,
@@ -277,33 +281,50 @@ impl Execution {
             .join(&case.source);
         let fixture_bytes = std::fs::read(&fixture)
             .with_context(|| format!("failed to read fixture {}", fixture.display()))?;
-        let runtime = read_runtime_file(&fixture_bytes).context("failed to import runtime file")?;
+        // The pinned silvers come from the upstream scripting-enabled test
+        // build, so the replay imports with the scripting FileAsset profile
+        // and registers the fixture's File VM during renderer initialization.
+        let runtime = read_runtime_file_with_scripting(&fixture_bytes)
+            .context("failed to import runtime file")?;
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
         let (artboard_index, artboard) = select_artboard(&graph, &case.artboard)?;
         let mut instance =
             ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
                 .context("failed to instantiate artboard")?;
-        let mut factory = SerializingFactory::new();
+        // The scripting VM retains its factory through a persistent context,
+        // so the serializing stream lives behind the same `PersistentFactory`
+        // wrapper the golden runner uses.
+        let mut factory = PersistentFactory::new(SerializingFactory::new());
         let external_images = BTreeMap::<u32, Arc<[u8]>>::new();
-        instance
-            .initialize_artboard_renderer(
-                &runtime,
-                artboard,
-                &graph.artboards,
-                &external_images,
-                &mut factory,
-                None,
-            )
-            .context("failed to initialize artboard renderer")?;
+        let registered_script_file = initialize_renderer_and_register_scripts(
+            &instance,
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+        )
+        .context("failed to initialize artboard renderer")?;
         let artboard_object = runtime
             .artboard(artboard_index)
             .context("missing selected artboard object")?;
-        factory.frame_size(
+        factory.borrow_mut().frame_size(
             frame_dimension(artboard_object.double_property("width").unwrap_or(0.0)),
             frame_dimension(artboard_object.double_property("height").unwrap_or(0.0)),
         );
-        let mut renderer = factory.make_renderer();
+        let mut renderer = factory.borrow().make_renderer();
         let mut state_machine = select_state_machine(&mut instance, artboard, &case.state_machine)?;
+        if let (Some(machine), Some(registered)) =
+            (state_machine.as_mut(), registered_script_file.as_ref())
+        {
+            initialize_state_machine_scripted_objects(
+                &runtime,
+                &graph.artboards,
+                machine,
+                &mut factory,
+                registered,
+            )
+            .context("failed to initialize state-machine scripted objects")?;
+        }
         let mut animation = select_animation(&instance, artboard, &case.animation)?;
         let mut owned_context = None;
         for action in actions {
@@ -314,8 +335,14 @@ impl Execution {
                     {
                         instance.bind_owned_view_model_artboard_contexts(&runtime, &context);
                         if let Some(machine) = state_machine.as_mut() {
-                            machine.bind_owned_view_model_contexts(&context);
-                            machine.advance_data_context();
+                            bind_machine_owned_view_model_context(
+                                &runtime,
+                                &graph.artboards,
+                                machine,
+                                &mut factory,
+                                &context,
+                                registered_script_file.as_ref(),
+                            )?;
                         }
                         owned_context = Some(context);
                     } else {
@@ -332,8 +359,14 @@ impl Execution {
                             .context("selected artboard has no view-model schema")?;
                     instance.bind_owned_view_model_artboard_contexts(&runtime, &context);
                     if let Some(machine) = state_machine.as_mut() {
-                        machine.bind_owned_view_model_contexts(&context);
-                        machine.advance_data_context();
+                        bind_machine_owned_view_model_context(
+                            &runtime,
+                            &graph.artboards,
+                            machine,
+                            &mut factory,
+                            &context,
+                            registered_script_file.as_ref(),
+                        )?;
                     }
                     owned_context = Some(context);
                 }
@@ -345,8 +378,14 @@ impl Execution {
                             })?;
                     instance.bind_owned_view_model_artboard_contexts(&runtime, &context);
                     if let Some(machine) = state_machine.as_mut() {
-                        machine.bind_owned_view_model_contexts(&context);
-                        machine.advance_data_context();
+                        bind_machine_owned_view_model_context(
+                            &runtime,
+                            &graph.artboards,
+                            machine,
+                            &mut factory,
+                            &context,
+                            registered_script_file.as_ref(),
+                        )?;
                     }
                     owned_context = Some(context);
                 }
@@ -363,8 +402,14 @@ impl Execution {
                         .context("no prepared view-model instance")?;
                     instance.bind_owned_view_model_artboard_contexts(&runtime, context);
                     if let Some(machine) = state_machine.as_mut() {
-                        machine.bind_owned_view_model_contexts(context);
-                        machine.advance_data_context();
+                        bind_machine_owned_view_model_context(
+                            &runtime,
+                            &graph.artboards,
+                            machine,
+                            &mut factory,
+                            context,
+                            registered_script_file.as_ref(),
+                        )?;
                     }
                 }
                 Action::SetViewModelNumber { property, value } => {
@@ -726,7 +771,7 @@ impl Execution {
                         )
                         .context("draw failed")?;
                 }
-                Action::Frame => factory.add_frame(),
+                Action::Frame => factory.borrow_mut().add_frame(),
                 Action::PointerDown { x, y, pointer_id } => {
                     let (x, y) = pointer_position(x, y, &instance)?;
                     state_machine
@@ -771,7 +816,7 @@ impl Execution {
                     let (width, height) = instance.artboard_dimensions();
                     let x = x.resolve(width, height)?;
                     let mut y = start_y.resolve(width, height)?;
-                    factory.add_frame();
+                    factory.borrow_mut().add_frame();
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
@@ -803,7 +848,7 @@ impl Execution {
                         true,
                     )?;
                     while y > *end_y_exclusive {
-                        factory.add_frame();
+                        factory.borrow_mut().add_frame();
                         state_machine
                             .as_mut()
                             .context("no selected state machine")?
@@ -836,7 +881,7 @@ impl Execution {
                         )?;
                         y -= *step;
                     }
-                    factory.add_frame();
+                    factory.borrow_mut().add_frame();
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
@@ -965,7 +1010,7 @@ impl Execution {
                         bail!("selected ScrollConstraint occurrence has no physics");
                     }
                     for _ in 0..*max_frames {
-                        factory.add_frame();
+                        factory.borrow_mut().add_frame();
                         advance_state_machine(
                             &mut instance,
                             state_machine
@@ -1006,7 +1051,7 @@ impl Execution {
             }
         }
         drop(renderer);
-        let bytes = factory.bytes().to_vec();
+        let bytes = factory.borrow().bytes().to_vec();
         Ok(Self { bytes })
     }
 }
@@ -1117,11 +1162,36 @@ fn select_animation(
         .with_context(|| format!("failed to instantiate animation {selector}"))
 }
 
+/// Applies the state-machine half of a Scene view-model bind. A machine whose
+/// DataContext owner is a fixed scripted object takes the scripted rebind
+/// path instead of the plain context bind
+/// (`state_machine_instance.cpp:2776-2790`).
+fn bind_machine_owned_view_model_context(
+    runtime: &RuntimeFile,
+    artboards: &[nuxie_graph::ArtboardGraph],
+    machine: &mut StateMachineInstance,
+    factory: &mut dyn RenderFactory,
+    context: &RuntimeOwnedViewModelContext,
+    registered_script_file: Option<&RegisteredScriptFile>,
+) -> anyhow::Result<()> {
+    if machine.has_fixed_scripted_data_context_owner() {
+        let registered = registered_script_file
+            .context("fixed scripted state-machine owner has no registered File VM")?;
+        rebind_state_machine_scripted_objects_after_artboard(
+            runtime, artboards, machine, factory, context, registered,
+        )?;
+    } else {
+        machine.bind_owned_view_model_contexts(context);
+    }
+    machine.advance_data_context();
+    Ok(())
+}
+
 fn advance_state_machine(
     instance: &mut ArtboardInstance,
     state_machine: &mut StateMachineInstance,
     seconds: f32,
-    factory: &mut SerializingFactory,
+    factory: &mut dyn RenderFactory,
 ) -> anyhow::Result<()> {
     StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
         instance,

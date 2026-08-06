@@ -16,7 +16,7 @@ fn fixture_font_bytes() -> Vec<u8> {
     let mut accumulator = 0u32;
     let mut bit_count = 0u8;
     let mut decoded = Vec::new();
-    for byte in include_bytes!("fixtures/roboto-a.ttf.base64")
+    for byte in include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
         .iter()
         .copied()
         .filter(|byte| !byte.is_ascii_whitespace())

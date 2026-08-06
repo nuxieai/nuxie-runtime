@@ -355,6 +355,63 @@ def workspace_packages(
     member_paths: set[str] = set()
     if isinstance(workspace_manifest.get("package"), dict):
         member_paths.add(".")
+
+    patches = workspace_manifest.get("patch", {})
+    if not isinstance(patches, dict):
+        errors.append("Cargo.toml: [patch] must be a table")
+        patches = {}
+    for source_name, source_patches in patches.items():
+        if not isinstance(source_patches, dict):
+            errors.append(f"Cargo.toml: [patch.{source_name}] must be a table")
+            continue
+        for patch_name, specification in source_patches.items():
+            if not isinstance(specification, dict):
+                continue
+            patch_path = specification.get("path")
+            if not isinstance(patch_path, str):
+                continue
+            resolved_patch = (repo_root / patch_path).resolve()
+            try:
+                relative = resolved_patch.relative_to(repo_root).as_posix()
+            except ValueError:
+                errors.append(
+                    f"Cargo.toml: path patch {patch_name!r} escapes repository: "
+                    f"{patch_path}"
+                )
+                continue
+            patch_manifest_path = resolved_patch / "Cargo.toml"
+            try:
+                patch_manifest = tomllib.loads(patch_manifest_path.read_text())
+            except (OSError, tomllib.TOMLDecodeError) as error:
+                errors.append(
+                    f"Cargo.toml: cannot parse path patch {patch_name!r} provider "
+                    f"{relative}/Cargo.toml: {error}"
+                )
+                continue
+            patch_package = patch_manifest.get("package")
+            patch_package_name = (
+                patch_package.get("name") if isinstance(patch_package, dict) else None
+            )
+            if not isinstance(patch_package_name, str) or not patch_package_name.strip():
+                errors.append(
+                    f"Cargo.toml: path patch {patch_name!r} provider "
+                    f"{relative}/Cargo.toml requires [package].name"
+                )
+                continue
+            if is_forbidden_dependency(patch_package_name):
+                errors.append(
+                    f"Cargo.toml: path patch {patch_name!r} resolves to product "
+                    f"package {patch_package_name!r}"
+                )
+            if is_excluded(relative):
+                if relative not in AUDITED_UNSCANNED_THIRD_PARTY_PATHS:
+                    errors.append(
+                        f"Cargo.toml: path patch {patch_name!r} resolves to excluded "
+                        f"provider {relative!r} outside the protected workspace scan"
+                    )
+                continue
+            member_paths.add(relative)
+
     for member in members:
         matches = (
             sorted(repo_root.glob(member))

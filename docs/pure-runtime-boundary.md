@@ -118,8 +118,11 @@ path and default-feature behavior. The approved portable-ABI facade edge is
 constrained to its exact dependency table, key, effective defaults, feature
 forwarding, audited in-workspace provider, and approved baseline symbols.
 Registry, git, alias, duplicate, and target-specific substitutions are
-rejected. Dependencies below `nuxie` are checked by the normal protected-package
-rules instead of by a facade-specific provider-shape exception.
+rejected. Root Cargo path patches are resolved too: non-excluded local providers
+join the protected scan, while excluded providers must be in the exact audited
+third-party set. Dependencies below `nuxie` are checked by the normal
+protected-package rules instead of by a facade-specific provider-shape
+exception.
 
 The source check scans every Rust source in each package, including build
 scripts and custom-target module trees outside conventional folders. It

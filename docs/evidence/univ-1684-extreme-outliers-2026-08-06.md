@@ -123,6 +123,55 @@ diagnostics therefore do not describe the final runtime source tree. They
 remain useful attribution evidence, but the corrected tip requires fresh
 authoritative golden and performance capture.
 
+## Corrected-tip profiling capture
+
+A fresh release runner was built from corrected tip
+`e2dd811814d291db303f5b34951d6020df66eebe` into a checkout-external artifact
+root so repository-local target cleanup could not invalidate the capture. Its
+source digest was
+`9af483becc5ed50cb0c00f4133d70474e8e2fbbf00efc0ae9f7166524d5fc79e`,
+its binary SHA-256 was
+`16a97d0538105926a5b314eb4d59aeb2aa4585ecae7f3836dcd4a498f4e1a8d9`,
+and the compiler remained `rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)`.
+
+The local quiet gate expired after its bounded wait, so the corrected-tip
+ratios remain diagnostic. One external C++-first capture at load 41.42 measured
+`car_widgets_v01` 40.199x, `gamepad_test` 6.724x, and
+`script_create_text_runs` 18.141x. The gamepad result is below the issue target
+even under contention, but none of these numbers may ratchet the corpus.
+
+Exact direct car timings isolated cold initialization: Rust advance was
+40.962 ms for one frame, 39.782 ms for two frames, and 43.559 ms for 100
+frames. C++ advance was 1.637 ms, 0.771 ms, and 1.135 ms respectively. Thus the
+avoidable Rust advance debt is concentrated in the first lifecycle traversal,
+not repeated frame replay.
+
+An exact 100-frame Instruments Time Profiler launch produced 53 samples under
+`advance_scene_to`; 47 passed through state-machine settlement, and 45 through
+nested-artboard host-dirt update. The dominant avoidable leaves were 11 direct
+samples in `RuntimeDrawableList::sort_draw_order`, with another five allocation
+or proxy samples beneath it, plus four samples in
+`clear_redundant_operations`. Static parity audit then identified the dispatch
+error: every cloned Component begins `FILTHY`, which includes DrawOrder and
+Clipping, while Rust ran the concrete Artboard-wide sort and clipping tails for
+every scheduled child. Pinned C++ runs those tails only in `Artboard::update`.
+The expected initial pass is therefore one sort and two clipping cleanups per
+Artboard, not one/two per dependency node.
+
+The host-specific trace bundle is not tracked, but its exported diagnostics are
+content-addressed here:
+
+- Time Profiler export SHA-256:
+  `94a23ee88df78890e5deb67112a7f6eca6069f238a5ea0ce6ca3a733385d3107`
+- Time Sample export SHA-256:
+  `9435ed52eeb52311db0ec8cf4313becaa2e239ee05c5fe0345f164d0e86f0ef1`
+- trace table-of-contents SHA-256:
+  `be8f313575266c289473bf1a13397db7015d6b8eb45b38b75de8dfe7fac1f891`
+- exact launch output SHA-256:
+  `78306351ab1e22e5e4873471a3fadabb4bb5f10fe6ce95c55684213bcdbc476e`
+- corrected-tip timing JSON SHA-256:
+  `21ae1c5eac0c06ad17f31fe0cdae28cab3449fb33c093fb21097555922006979`
+
 ## Required authoritative closeout
 
 After the PR is open, run the clean, serialized performance lane with the

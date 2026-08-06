@@ -8682,11 +8682,24 @@ impl ArtboardInstance {
                 skin.buffer_rebuilds += 1;
             }
         }
-        if dirt.contains(ComponentDirt::DRAW_ORDER) {
-            self.sort_runtime_draw_order();
-        }
-        if dirt.contains(ComponentDirt::CLIPPING) {
-            self.refresh_runtime_drawable_save_operations();
+        // These are the concrete `Artboard::update` tails, not base
+        // `Component::update` behavior. Every cloned Component begins FILTHY,
+        // so dispatching them for ordinary children sorts and re-clips the
+        // entire Artboard once per dependency node. C++ executes each tail
+        // only when the root Artboard reaches its own update
+        // (`src/component.cpp:71`; `src/artboard.cpp:1159-1170`).
+        let is_root_artboard = self.objects.root() == Some(component_handle)
+            && self
+                .objects
+                .component(component_handle)
+                .is_some_and(|component| component.type_name == "Artboard");
+        if is_root_artboard {
+            if dirt.contains(ComponentDirt::DRAW_ORDER) {
+                self.sort_runtime_draw_order();
+            }
+            if dirt.contains(ComponentDirt::CLIPPING) {
+                self.refresh_runtime_drawable_save_operations();
+            }
         }
     }
 

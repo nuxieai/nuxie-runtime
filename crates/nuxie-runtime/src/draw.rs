@@ -10602,6 +10602,10 @@ pub(crate) struct RuntimeDrawableList {
     draw_target_order: Vec<usize>,
     active_proxies: Vec<usize>,
     pooled_proxies: BTreeMap<usize, Vec<usize>>,
+    #[cfg(test)]
+    sort_draw_order_call_count: Cell<usize>,
+    #[cfg(test)]
+    clear_redundant_operations_call_count: Cell<usize>,
 }
 
 impl RuntimeDrawableList {
@@ -10729,6 +10733,10 @@ impl RuntimeDrawableList {
             draw_target_order,
             active_proxies: Vec::new(),
             pooled_proxies: BTreeMap::new(),
+            #[cfg(test)]
+            sort_draw_order_call_count: Cell::new(0),
+            #[cfg(test)]
+            clear_redundant_operations_call_count: Cell::new(0),
         };
         result.sort_draw_order(
             Some(objects),
@@ -10861,6 +10869,9 @@ impl RuntimeDrawableList {
         is_visible_key: Option<u16>,
         initial_clipping_visibility: Option<&BTreeMap<usize, bool>>,
     ) {
+        #[cfg(test)]
+        self.sort_draw_order_call_count
+            .set(self.sort_draw_order_call_count.get() + 1);
         // Ported from C++ `Artboard::sortDrawOrder` (artboard.cpp:574-746).
         self.reset_proxy_drawables();
         for drawable in &mut self.drawables[..self.imported_count] {
@@ -11080,6 +11091,9 @@ impl RuntimeDrawableList {
         is_visible_key: Option<u16>,
         initial_clipping_visibility: Option<&BTreeMap<usize, bool>>,
     ) {
+        #[cfg(test)]
+        self.clear_redundant_operations_call_count
+            .set(self.clear_redundant_operations_call_count.get() + 1);
         // Ported from C++ `Artboard::clearRedundantOperations`
         // (artboard.cpp:750-804).
         let mut current = self.first_drawable;
@@ -11119,6 +11133,20 @@ impl RuntimeDrawableList {
             current = self.drawables[index].prev;
         }
         debug_assert!(applied_clipping_saves.is_empty());
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reset_artboard_maintenance_call_counts(&self) {
+        self.sort_draw_order_call_count.set(0);
+        self.clear_redundant_operations_call_count.set(0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn artboard_maintenance_call_counts(&self) -> (usize, usize) {
+        (
+            self.sort_draw_order_call_count.get(),
+            self.clear_redundant_operations_call_count.get(),
+        )
     }
 
     pub(crate) fn iter(&self) -> RuntimeDrawableIter<'_> {
@@ -26470,12 +26498,22 @@ mod tests {
         let placement_key =
             property_key_for_name("DrawTarget", "placementValue").expect("placement key");
         let replacement = u64::from(target.placement_value == 0);
+        instance
+            .runtime_drawables
+            .reset_artboard_maintenance_call_counts();
         assert!(instance.set_uint_property(target.local_id, placement_key, replacement));
         assert_eq!(
             instance.uint_property(target.local_id, placement_key),
             Some(replacement)
         );
         assert!(instance.update_pass());
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .artboard_maintenance_call_counts(),
+            (1, 1),
+            "the generated DrawTarget callback publishes DrawOrder to the root Artboard"
+        );
 
         let identities_after = instance
             .runtime_drawables
@@ -26587,6 +26625,9 @@ mod tests {
             .collect::<Vec<_>>();
         let draw_target_id_key =
             property_key_for_name("DrawRules", "drawTargetId").expect("draw target id key");
+        instance
+            .runtime_drawables
+            .reset_artboard_maintenance_call_counts();
 
         // This deliberately bypasses the generated DrawRules callback. It is
         // the Rust equivalent of changing deserialized backing storage after
@@ -26598,6 +26639,14 @@ mod tests {
         );
         assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
         assert!(instance.update_pass());
+
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .artboard_maintenance_call_counts(),
+            (1, 1),
+            "root DrawOrder dirt runs Artboard sorting once, including its clipping cleanup"
+        );
 
         assert_eq!(
             instance

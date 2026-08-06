@@ -11137,6 +11137,95 @@
     }
 
     #[test]
+    fn layout_participant_display_is_folded_into_its_host_collapse_state() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "LayoutComponent"),
+                synthetic_typed_component(2, "Shape"),
+                synthetic_typed_component(3, "LayoutParticipant"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let display = property_key_for_name("LayoutParticipant", "displayValue")
+            .expect("LayoutParticipant.displayValue");
+        assert!(instance.set_uint_property(3, display, 1));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+
+        assert!(instance.set_uint_property(3, display, 0));
+        assert_collapsed(&instance, 2, false);
+        assert_collapsed(&instance, 3, false);
+
+        assert!(instance.collapse_component(1, true));
+        assert!(instance.set_uint_property(3, display, 1));
+        assert!(instance.set_uint_property(3, display, 0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+    }
+
+    #[test]
+    fn layout_participant_display_does_not_reveal_an_inactive_solo_child() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "Solo"),
+                synthetic_typed_component(2, "Shape"),
+                synthetic_typed_component(3, "LayoutParticipant"),
+                synthetic_typed_component(4, "Shape"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        synthetic_link_parent(&mut instance, 4, 1);
+        let active = property_key_for_name("Solo", "activeComponentId")
+            .expect("Solo.activeComponentId");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.solo.as_mut())
+            .expect("synthetic Solo state")
+            .cpp_local_ids = vec![2, 4];
+        assert!(instance.set_uint_property(1, active, 4));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 4, false);
+
+        let display = property_key_for_name("LayoutParticipant", "displayValue")
+            .expect("LayoutParticipant.displayValue");
+        assert!(instance.set_uint_property(3, display, 1));
+        assert!(instance.set_uint_property(3, display, 0));
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+    }
+
+    #[test]
+    fn initial_layout_participant_display_none_collapses_its_host() {
+        let bytes = synthetic_riv(9700, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "LayoutComponent", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "LayoutParticipant",
+                &[("parentId", 2), ("displayValue", 1)],
+            );
+        });
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+    }
+
+    #[test]
     fn instantiating_an_artboard_without_solos_skips_solo_mapping_analysis() {
         let bytes = synthetic_riv(9600, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);

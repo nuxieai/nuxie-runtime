@@ -243,6 +243,84 @@ class SourceProvenanceTests(unittest.TestCase):
         self.assertIn("invalid content-addressed coordinator bundle", completed.stderr)
         self.assertNotIn("RIVE_RUNTIME_DIR", completed.stderr)
 
+    def test_rejects_python_replaced_between_validation_and_descriptor_open(self):
+        source_dir = Path(__file__).parent
+        coordinator_dir = self.repo / "tools" / "browser-renderer-smoke"
+        coordinator_dir.mkdir(parents=True)
+        names = (
+            "run-wasm-perf.sh",
+            "run-wasm-perf.cjs",
+            "wasm_perf.py",
+            "wasm-perf-driver-lib.cjs",
+        )
+        for name in names:
+            (coordinator_dir / name).write_bytes((source_dir / name).read_bytes())
+        subprocess.run(["git", "add", "tools"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "coordinator bundle"],
+            cwd=self.repo,
+            check=True,
+        )
+        bundle = wasm_perf.stage_coordinator_bundle_from_git(
+            self.repo,
+            {
+                name: f"tools/browser-renderer-smoke/{name}"
+                for name in names
+            },
+            self.repo / "target" / "browser-wasm-perf" / "coordinators",
+        )
+
+        replacement = self.root / "replacement.py"
+        replacement.write_text('raise SystemExit("fabricated coordinator executed")\n')
+        shim_dir = self.root / "shim"
+        shim_dir.mkdir()
+        marker = self.root / "python-swapped"
+        python_shim = shim_dir / "python3"
+        python_shim.write_text(
+            "#!/bin/sh\n"
+            '"$REAL_PYTHON" "$@"\n'
+            "result=$?\n"
+            'if [ "$result" -eq 0 ] && [ ! -e "$SWAP_MARKER" ]; then\n'
+            '  rm -f "$SWAP_TARGET"\n'
+            '  mv "$SWAP_SOURCE" "$SWAP_TARGET"\n'
+            '  : >"$SWAP_MARKER"\n'
+            "fi\n"
+            'exit "$result"\n',
+            encoding="utf-8",
+        )
+        python_shim.chmod(0o755)
+        environment = os.environ.copy()
+        environment.pop("RIVE_RUNTIME_DIR", None)
+        environment.pop("RUST_GOLDEN_RUNNER", None)
+        environment.update(
+            {
+                "PATH": f"{shim_dir}{os.pathsep}{environment['PATH']}",
+                "REAL_PYTHON": sys.executable,
+                "SWAP_MARKER": str(marker),
+                "SWAP_SOURCE": str(replacement),
+                "SWAP_TARGET": str(bundle / "wasm_perf.py"),
+                "WASM_PERF_SEALED_COORDINATOR_BUNDLE": str(bundle),
+                "WASM_PERF_SOURCE_ROOT": str(self.repo),
+            }
+        )
+
+        completed = subprocess.run(
+            [str(bundle / "run-wasm-perf.sh")],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertTrue(marker.is_file())
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            "opened Python coordinator descriptor differs from validated manifest",
+            completed.stderr,
+        )
+        self.assertNotIn("fabricated coordinator executed", completed.stderr)
+        self.assertNotIn("RIVE_RUNTIME_DIR", completed.stderr)
+
     def test_post_seal_python_swap_executes_original_open_descriptor(self):
         python_source = self.repo / "wasm_perf.py"
         python_source.write_text(

@@ -305,6 +305,7 @@ class MicrobenchContractTests(unittest.TestCase):
             script.write_text(
                 "#!/bin/sh\n"
                 "set -eu\n"
+                "test ! -e \"$RIVE_OUT\"\n"
                 "mkdir -p \"$RIVE_OUT\"\n"
                 "printf 'pinned binary' > \"$RIVE_OUT/bench\"\n"
                 "chmod +x \"$RIVE_OUT/bench\"\n"

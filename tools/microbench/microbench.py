@@ -388,7 +388,8 @@ def build_cpp_benchmark(
 ) -> tuple[pathlib.Path, pathlib.Path, list[str]]:
     """Build the pinned C++ benchmark into the sealed run namespace."""
     build_dir = run_dir / "cpp-build"
-    build_dir.mkdir(parents=True, exist_ok=False)
+    if build_dir.exists():
+        raise ContractError(f"C++ build directory must be absent: {build_dir}")
     log = run_dir / "cpp-build.log"
     command = [str((upstream / "build" / "build_rive.sh").resolve()), "release", "--", "bench"]
     environment = os.environ.copy()

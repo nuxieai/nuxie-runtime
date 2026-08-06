@@ -1,14 +1,32 @@
 "use strict";
 
 const fs = require("node:fs");
+const crypto = require("node:crypto");
+const { isDeepStrictEqual } = require("node:util");
 const { chromium } = require("playwright");
 const { assertLoadedFixtureIdentity } = require("./wasm-perf-driver-lib.cjs");
 
-const [baseUrl, configPath, outputPath] = process.argv.slice(2);
-if (!baseUrl || !configPath || !outputPath) {
-  throw new Error("usage: node run-wasm-perf.cjs <base-url> <config-json> <output-json>");
+const [baseUrl, configPath, outputPath, sealPath, expectedSealSha256] = process.argv.slice(2);
+if (!baseUrl || !configPath || !outputPath || !sealPath || !expectedSealSha256) {
+  throw new Error(
+    "usage: node run-wasm-perf.cjs <base-url> <config-json> <output-json> <seal-json> <seal-sha256>",
+  );
 }
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const sealBytes = fs.readFileSync(sealPath);
+const sealSha256 = crypto.createHash("sha256").update(sealBytes).digest("hex");
+if (sealSha256 !== expectedSealSha256) {
+  throw new Error(
+    `run seal sha256 mismatch: expected=${expectedSealSha256} current=${sealSha256}`,
+  );
+}
+const seal = JSON.parse(sealBytes.toString("utf8"));
+if (
+  seal.schema !== "nuxie-wasm-perf-seal-v1" ||
+  !isDeepStrictEqual(config.provenance, seal.provenance)
+) {
+  throw new Error("config provenance differs from anchored seal");
+}
 const browserMode = process.env.BROWSER_RENDERER_BROWSER || "chrome";
 const launchOptions = { headless: true };
 if (browserMode === "chrome") {
@@ -74,6 +92,7 @@ if (browserMode === "chrome") {
       schema: "nuxie-wasm-perf-browser-raw-v1",
       browser: browserMode,
       browser_version: browser.version(),
+      seal_sha256: sealSha256,
       measurement: {
         repeat: config.repeat,
         runs: config.runs,

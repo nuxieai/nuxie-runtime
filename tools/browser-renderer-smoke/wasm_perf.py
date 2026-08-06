@@ -589,6 +589,31 @@ def sealed_config_identity(provenance: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def write_run_seal(path: Path, provenance: dict[str, Any]) -> str:
+    payload = canonical_json(
+        {"schema": "nuxie-wasm-perf-seal-v1", "provenance": provenance}
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def load_run_seal(path: Path, expected_sha256: str) -> dict[str, Any]:
+    contents = path.read_bytes()
+    actual_sha256 = hashlib.sha256(contents).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ContractError(
+            "run seal sha256 mismatch: "
+            f"expected={expected_sha256} current={actual_sha256}"
+        )
+    payload = json.loads(contents)
+    if payload.get("schema") != "nuxie-wasm-perf-seal-v1" or not isinstance(
+        payload.get("provenance"), dict
+    ):
+        raise ContractError("invalid wasm perf run seal")
+    return payload["provenance"]
+
+
 def verify_run_provenance(
     sealed: dict[str, Any],
     repo_root: Path,
@@ -803,9 +828,11 @@ def seal_run(args: argparse.Namespace) -> None:
         },
         allowed_outputs=[path.resolve() for path in args.allowed_output],
     )
+    seal_sha256 = write_run_seal(args.seal, sealed)
     config["provenance"] = sealed
     config["identity"] = sealed_config_identity(sealed)
     args.config.write_text(canonical_json(config), encoding="utf-8")
+    print(seal_sha256)
 
 
 def audit_run(args: argparse.Namespace) -> None:
@@ -926,13 +953,13 @@ def finalize_run(args: argparse.Namespace) -> None:
         raise ContractError("unsupported wasm perf config schema")
     if browser.get("schema") != "nuxie-wasm-perf-browser-raw-v1":
         raise ContractError("unsupported browser results schema")
-    provenance = config.get("provenance")
-    if (
-        not isinstance(provenance, dict)
-        or not provenance.get("artifacts")
-        or not provenance.get("fixtures")
-    ):
+    provenance = load_run_seal(args.seal, args.expected_seal_sha256)
+    if not provenance.get("artifacts") or not provenance.get("fixtures"):
         raise ContractError("wasm perf config omitted sealed run provenance")
+    if config.get("provenance") != provenance:
+        raise ContractError("config provenance differs from anchored seal")
+    if browser.get("seal_sha256") != args.expected_seal_sha256:
+        raise ContractError("browser results differ from anchored seal")
     allowed_outputs = [path.resolve() for path in args.allowed_output]
     verify_run_provenance(
         provenance,
@@ -957,6 +984,8 @@ def finalize_run(args: argparse.Namespace) -> None:
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"browser segment mismatch for {fixture['id']}")
     native = _native_runs(config, args.native_runner, provenance["fixtures"])
+    if load_run_seal(args.seal, args.expected_seal_sha256) != provenance:
+        raise ContractError("run seal changed during measurement")
     verify_run_provenance(
         provenance,
         args.repo_root.resolve(),
@@ -1009,6 +1038,7 @@ def _parser() -> argparse.ArgumentParser:
 
     seal = subparsers.add_parser("seal")
     seal.add_argument("--config", type=Path, required=True)
+    seal.add_argument("--seal", type=Path, required=True)
     seal.add_argument("--repo-root", type=Path, required=True)
     seal.add_argument("--rive-runtime-dir", type=Path, required=True)
     seal.add_argument("--native-runner", type=Path, required=True)
@@ -1019,6 +1049,8 @@ def _parser() -> argparse.ArgumentParser:
 
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--config", type=Path, required=True)
+    finalize.add_argument("--seal", type=Path, required=True)
+    finalize.add_argument("--expected-seal-sha256", required=True)
     finalize.add_argument("--browser-results", type=Path, required=True)
     finalize.add_argument("--native-runner", type=Path, required=True)
     finalize.add_argument("--repo-root", type=Path, required=True)

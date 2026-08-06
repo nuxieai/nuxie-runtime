@@ -78,11 +78,17 @@ def audit_production_boundary(feature_tree: str, source: str) -> None:
 def audit_python_coordinator_shell(source: str) -> None:
     required = (
         'exec 9<"$PYTHON_COORDINATOR"',
+        'exec 8<"$NODE_COORDINATOR"',
+        'exec 7<"$WASM_PERF_DRIVER_JS"',
         'PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"',
-        'VALIDATED_PYTHON_COORDINATOR_IDENTITY',
-        'opened Python coordinator descriptor differs from validated manifest',
+        'NODE_COORDINATOR_FD_PATH="/dev/fd/8"',
+        'WASM_PERF_DRIVER_FD_PATH="/dev/fd/7"',
+        'VALIDATED_NODE_COORDINATOR_IDENTITY',
+        'opened coordinator descriptor differs from validated manifest',
         "os.lseek(9, 0, os.SEEK_SET)",
         'python3 -c "$PYTHON_COORDINATOR_LOADER" "$@"',
+        'WASM_PERF_DRIVER_MODULE="$WASM_PERF_DRIVER_FD_PATH"',
+        'node "$NODE_COORDINATOR_FD_PATH"',
     )
     missing = [marker for marker in required if marker not in source]
     if missing:
@@ -92,6 +98,10 @@ def audit_python_coordinator_shell(source: str) -> None:
     if 'python3 "$PYTHON_COORDINATOR"' in source:
         raise ContractError(
             "wasm perf shell must not reopen mutable Python coordinator paths"
+        )
+    if '\n  node "$NODE_COORDINATOR" \\\n' in source:
+        raise ContractError(
+            "wasm perf shell must not reopen mutable Node coordinator paths"
         )
     descriptor_invocation = "run_python_coordinator"
     if source.count(descriptor_invocation) != 5:

@@ -157,18 +157,26 @@ class SourceProvenanceTests(unittest.TestCase):
             allowed_outputs=[generated],
         )
 
-        node_source = coordinator_sources["run-wasm-perf.cjs"]
-        original = node_source.read_text(encoding="utf-8")
-        node_source.write_text(
+        bundled_node = bundle / "run-wasm-perf.cjs"
+        original_bundled_node = bundled_node.read_bytes()
+        descriptor = os.open(bundled_node, os.O_RDONLY)
+        bundled_node.unlink()
+        bundled_node.write_text(
             'require("node:fs").writeFileSync(process.argv[2], '
             'JSON.stringify({accepted: "fabricated"}));\n',
             encoding="utf-8",
         )
         output = generated / "browser.json"
-        subprocess.run(
-            ["node", str(bundle / "run-wasm-perf.cjs"), str(output)], check=True
-        )
-        node_source.write_text(original, encoding="utf-8")
+        try:
+            subprocess.run(
+                ["node", f"/dev/fd/{descriptor}", str(output)],
+                pass_fds=(descriptor,),
+                check=True,
+            )
+        finally:
+            os.close(descriptor)
+        bundled_node.unlink()
+        bundled_node.write_bytes(original_bundled_node)
 
         self.assertEqual(
             json.loads(output.read_text(encoding="utf-8")),
@@ -180,6 +188,9 @@ class SourceProvenanceTests(unittest.TestCase):
             self.repo,
             self.runtime,
             allowed_outputs=[generated],
+        )
+        wasm_perf.audit_python_coordinator_shell(
+            Path(__file__).with_name("run-wasm-perf.sh").read_text(encoding="utf-8")
         )
 
     def test_rejects_pre_stage_node_coordinator_swap_then_restore(self):
@@ -315,7 +326,7 @@ class SourceProvenanceTests(unittest.TestCase):
         self.assertTrue(marker.is_file())
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn(
-            "opened Python coordinator descriptor differs from validated manifest",
+            "opened coordinator descriptor differs from validated manifest",
             completed.stderr,
         )
         self.assertNotIn("fabricated coordinator executed", completed.stderr)

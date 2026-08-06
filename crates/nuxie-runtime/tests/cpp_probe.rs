@@ -25158,7 +25158,7 @@ fn cpp_pointer_and_advance_event_boundaries_pin_flow_session_order() {
     // `d788e8ec6e8b598526607d6a1e8818e8b637b60c`:
     // `StateMachineInstance::applyEvents` consumes the pre-existing listener
     // reports before layer advance produces the post-advance reports
-    // (`state_machine_instance.cpp:2320-2335,2546-2584`). FlowSession exposes
+    // (`state_machine_instance.cpp:2320-2335,2546-2584`). Higher-level hosts expose
     // those two C++ batches as one host cycle without reordering either batch.
     let combined = synchronous_suffix
         .into_iter()

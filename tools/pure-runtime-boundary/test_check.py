@@ -1179,6 +1179,17 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product/authoring module", result.stderr)
 
+    def test_rejects_retired_product_flow_root_reexport(self) -> None:
+        product = self.create_package("crates/nuxie-product", "nuxie-product", "")
+        (product / "src/lib.rs").write_text(
+            "pub mod flow_session {}\npub use crate::flow_session::*;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retired crate-root compatibility export", result.stderr)
+
     def test_rejects_root_scene_reexport_from_portable_c_abi(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_scene.rs").write_text("use nuxie::Scene;\n")

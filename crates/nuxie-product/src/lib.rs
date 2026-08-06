@@ -5,6 +5,9 @@
 
 pub mod flow_session;
 
+#[cfg(all(test, feature = "scripting"))]
+mod scripted_listener_action_lifecycle_tests;
+
 /// ProjectDO value model, program compiler, evaluator, and runtime adapter.
 pub mod project_data {
     pub use nuxie_project_data::*;
@@ -70,26 +73,5 @@ pub mod scripting {
             Some(capability) => File::import_with_execution_capability(bytes, capability, limits),
             None => File::import(bytes),
         }
-    }
-}
-
-/// Temporary root-level compatibility export for callers that adopted the
-/// initial crate seam as `nuxie_product::*`. UNIV-1634 removes this export once
-/// every consumer imports `nuxie_product::flow_session` explicitly.
-#[doc(hidden)]
-pub use flow_session::*;
-
-#[cfg(test)]
-mod tests {
-    use super::FlowSessionConfig;
-
-    #[test]
-    fn root_compatibility_export_keeps_module_type_identity() {
-        fn accepts_module(value: super::flow_session::FlowSessionConfig) -> FlowSessionConfig {
-            value
-        }
-
-        let config = FlowSessionConfig::default();
-        assert!(accepts_module(config).artboard_name.is_none());
     }
 }

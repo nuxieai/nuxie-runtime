@@ -38,16 +38,6 @@ pub mod command_server;
 mod raw_text;
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_interpolator_tests;
-// Temporary test-only include for the baseline scripting lifecycle suite. The
-// shipping `nuxie` package does not expose or compile Flow; UNIV-1634 removes
-// this include after those white-box tests move behind public host interfaces.
-#[cfg(all(test, feature = "scripting"))]
-extern crate self as nuxie;
-#[cfg(all(test, feature = "scripting"))]
-#[path = "../../nuxie-product/src/flow_session.rs"]
-mod flow_session;
-#[cfg(all(test, feature = "scripting"))]
-mod scripted_listener_action_lifecycle_tests;
 
 pub use raw_text::{
     RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,

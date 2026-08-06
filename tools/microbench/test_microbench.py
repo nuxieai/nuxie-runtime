@@ -2,10 +2,12 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -62,8 +64,17 @@ def make_sealed_run_fixture(tool, root: pathlib.Path, case_count: int = 1):
     files["cpp_output"].write_text(
         "".join(f"1ms {case.name}\n" for case in inventory.cases)
     )
+    cpp_source = run_dir / "cpp-source"
+    (cpp_source / "tests").mkdir(parents=True)
+    environment = tool.cpp_build_environment(cpp_source, run_dir)
+    files["cpp_build_inputs"] = tool.write_cpp_build_inputs(
+        cpp_source,
+        run_dir,
+        environment,
+        [str((cpp_source / "build" / "build_rive.sh").resolve()), "release", "--", "bench"],
+    )
     run = {
-        "schema": "nuxie-upstream-microbench-run-v4",
+        "schema": tool.RUN_SCHEMA,
         "status": "complete",
         "run_id": run_id,
         "repo_revision": subprocess.run(
@@ -197,6 +208,39 @@ class MicrobenchContractTests(unittest.TestCase):
             run_manifest.write_text(json.dumps(run))
 
             loaded = tool.load_run(root, manifest, run_manifest, inventory)
+            self.assertEqual(
+                tool.load_sealed_criterion_timings(loaded, inventory),
+                {inventory.cases[0].name: 7.0},
+            )
+
+    def test_cpp_output_replaced_after_validation_does_not_change_comparison(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+
+            loaded = tool.load_run(root, manifest, run_manifest, inventory)
+            pathlib.Path(run["artifacts"]["cpp_output"]["path"]).write_text(
+                f"999ms {inventory.cases[0].name}\n"
+            )
+
+            self.assertEqual(
+                tool.load_sealed_cpp_timings(loaded),
+                {inventory.cases[0].name: 1_000_000.0},
+            )
+
+    def test_criterion_sample_replaced_after_validation_does_not_change_comparison(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+
+            loaded = tool.load_run(root, manifest, run_manifest, inventory)
+            sample = pathlib.Path(
+                run["artifacts"][f"criterion:{inventory.cases[0].name}"]["path"]
+            )
+            sample.write_text(json.dumps({"iters": [1.0], "times": [999.0]}))
+
             self.assertEqual(
                 tool.load_sealed_criterion_timings(loaded, inventory),
                 {inventory.cases[0].name: 7.0},
@@ -337,6 +381,26 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertIn("Directional timings (not ratio-comparable)", table)
         self.assertNotIn("Blocked equivalence", table)
 
+    def test_inventory_rejects_flipped_ratio_and_draw_directional_labels(self):
+        tool = load_tool()
+        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
+        flipped = [
+            case._replace(
+                comparison=(
+                    "directional" if case.name == "BuildRawPath" else "ratio"
+                )
+                if case.name in {"BuildRawPath", "DrawCustomFeathers"}
+                else case.comparison
+            )
+            for case in inventory.cases
+        ]
+
+        with self.assertRaisesRegex(
+            tool.ContractError,
+            "ratio case names differ|directional case names differ",
+        ):
+            tool.check_bench_sources(REPO_ROOT, inventory._replace(cases=flipped))
+
     def test_report_marks_architecture_blockers_without_timing_or_ratio(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
@@ -401,6 +465,16 @@ class MicrobenchContractTests(unittest.TestCase):
             script.write_text(
                 "#!/bin/sh\n"
                 "set -eu\n"
+                'test "$RIVE_CONFIG" = "release"\n'
+                'test "$RIVE_PREMAKE_ARGS" = "--with_rive_text --with_rive_layout --with_rive_canvas"\n'
+                'test "$RIVE_BUILD_SYSTEM" = "gmake2"\n'
+                'test "$RIVE_PREMAKE_TAG" = "v5.0.0-beta7"\n'
+                'test -z "${RIVE_OS+x}"\n'
+                'test -z "${RIVE_ARCH+x}"\n'
+                'test -z "${RIVE_VARIANT+x}"\n'
+                'test -z "${DEPENDENCIES+x}"\n'
+                'test -z "${PREMAKE_PATH+x}"\n'
+                'test -z "${SDKROOT+x}"\n'
                 "case \"$RIVE_OUT\" in /*) exit 2;; esac\n"
                 "test ! -e \"$RIVE_OUT\"\n"
                 "mkdir -p \"$RIVE_OUT\"\n"
@@ -411,12 +485,33 @@ class MicrobenchContractTests(unittest.TestCase):
             run_dir = root / "run"
             run_dir.mkdir()
 
-            binary, log, command = tool.build_cpp_benchmark(upstream, run_dir)
+            ambient = {
+                "RIVE_CONFIG": "debug",
+                "RIVE_PREMAKE_ARGS": "--with_rive_scripting",
+                "RIVE_BUILD_SYSTEM": "ninja",
+                "RIVE_PREMAKE_TAG": "ambient-tag",
+                "RIVE_OS": "android",
+                "RIVE_ARCH": "wasm",
+                "RIVE_VARIANT": "emulator",
+                "DEPENDENCIES": "/tmp/ambient-dependencies",
+                "PREMAKE_PATH": "/tmp/ambient-premake",
+                "SDKROOT": "/tmp/ambient-sdk",
+            }
+            with mock.patch.dict(os.environ, ambient):
+                binary, log, command, inputs = tool.build_cpp_benchmark(
+                    upstream, run_dir
+                )
 
             self.assertEqual(binary, run_dir / "cpp-build" / "bench")
             self.assertEqual(binary.read_text(), "pinned binary")
             self.assertTrue(log.is_file())
             self.assertEqual(command[-3:], ["release", "--", "bench"])
+            recorded = json.loads(inputs.read_text())
+            self.assertEqual(recorded["environment"]["RIVE_CONFIG"], "release")
+            self.assertNotIn("RIVE_OS", recorded["environment"])
+            self.assertNotIn("DEPENDENCIES", recorded["environment"])
+            self.assertIn("dependency_trees", recorded)
+            self.assertIn("tools", recorded)
 
     def test_cpp_source_stage_contains_only_the_pinned_commit(self):
         tool = load_tool()
@@ -456,6 +551,38 @@ class MicrobenchContractTests(unittest.TestCase):
             run["artifacts"]["cpp_output"]["sha256"] = "0" * 64
             run_manifest.write_text(json.dumps(run))
             with self.assertRaisesRegex(tool.ContractError, "artifact hash mismatch"):
+                tool.load_run(root, manifest, run_manifest, inventory)
+
+    def test_load_run_rejects_changed_cpp_dependency_tree(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, _ = make_sealed_run_fixture(tool, root)
+            dependency = (
+                run_manifest.parent
+                / "cpp-source"
+                / "tests"
+                / "dependencies"
+                / "ambient.txt"
+            )
+            dependency.write_text("changed after build\n")
+
+            with self.assertRaisesRegex(tool.ContractError, "dependency tree changed"):
+                tool.load_run(root, manifest, run_manifest, inventory)
+
+    def test_load_run_rejects_forged_cpp_tool_identity(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+            inputs = pathlib.Path(run["artifacts"]["cpp_build_inputs"]["path"])
+            document = json.loads(inputs.read_text())
+            document["tools"]["cxx"]["sha256"] = "0" * 64
+            inputs.write_text(json.dumps(document))
+            run["artifacts"]["cpp_build_inputs"] = tool.record_artifact(inputs)
+            run_manifest.write_text(json.dumps(run))
+
+            with self.assertRaisesRegex(tool.ContractError, "build tool changed: cxx"):
                 tool.load_run(root, manifest, run_manifest, inventory)
 
 

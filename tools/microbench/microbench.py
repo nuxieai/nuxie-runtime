@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -22,14 +23,59 @@ class ContractError(RuntimeError):
     pass
 
 
-RUN_SCHEMA = "nuxie-upstream-microbench-run-v4"
+RUN_SCHEMA = "nuxie-upstream-microbench-run-v5"
+CPP_BUILD_INPUTS_SCHEMA = "nuxie-upstream-microbench-cpp-build-inputs-v1"
 FIXED_RUN_ARTIFACTS = {
     "inventory",
     "cpp_source_archive",
+    "cpp_build_inputs",
     "cpp_binary",
     "cpp_build_log",
     "cpp_output",
 }
+RATIO_CASE_NAMES = {
+    "BuildRawPath",
+    "IntersectionBoardBench_marty",
+    "IntersectionBoardBench_paper",
+    "IntersectionTileBench",
+    "IntersectionTileBenchWithOverlap",
+    "IterateRawPath",
+    "MapPointsAffine",
+    "MapPointsScaleTrans",
+    "MeasurePath",
+    "RawPathBounds",
+}
+DIRECTIONAL_CASE_NAMES = {
+    "DrawCustomFeathers",
+    "DrawFeatheredPaths_paper",
+    "DrawOneChopStrokes",
+    "DrawOneCuspStrokes",
+    "DrawRiveRenderPaths",
+    "DrawRiveRenderPathsAsRoundJoinStrokes",
+    "DrawRiveRenderPathsAsStrokes",
+    "DrawTwoChopStrokes",
+    "DrawTwoCuspStrokes",
+    "DrawZeroChopStrokes",
+}
+CPP_PREMAKE_ARGS = "--with_rive_text --with_rive_layout --with_rive_canvas"
+CPP_BUILD_ENVIRONMENT_KEYS = {
+    "CC",
+    "CXX",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "RIVE_BUILD_SYSTEM",
+    "RIVE_CONFIG",
+    "RIVE_OUT",
+    "RIVE_PREMAKE_ARGS",
+    "RIVE_PREMAKE_TAG",
+    "TMPDIR",
+}
+CPP_BUILD_TOOL_NAMES = ("bash", "cc", "cxx", "curl", "git", "make", "python3", "unzip")
 
 
 class Case(NamedTuple):
@@ -62,12 +108,218 @@ class Inventory(NamedTuple):
     datasets: list[Dataset]
 
 
+class LoadedRun:
+    """A validated manifest plus the exact artifact bytes validated with it."""
+
+    __slots__ = ("manifest", "artifact_bytes")
+
+    def __init__(self, manifest: dict, artifact_bytes: dict[str, bytes]) -> None:
+        self.manifest = manifest
+        self.artifact_bytes = artifact_bytes
+
+    def __getitem__(self, key: str):
+        return self.manifest[key]
+
+
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def content_identity(contents: bytes) -> dict[str, int | str]:
+    return {"bytes": len(contents), "sha256": hashlib.sha256(contents).hexdigest()}
+
+
+def directory_content_identity(path: pathlib.Path) -> dict[str, int | str]:
+    """Hash a dependency tree without trusting filesystem metadata timestamps."""
+    if not path.is_dir():
+        raise ContractError(f"missing C++ dependency tree: {path}")
+    digest = hashlib.sha256(b"nuxie-cpp-dependency-tree-v1\0")
+    entries = 0
+    for entry in sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix()):
+        relative = entry.relative_to(path).as_posix().encode()
+        if entry.is_symlink():
+            kind = b"link"
+            contents = os.readlink(entry).encode()
+        elif entry.is_dir():
+            kind = b"dir"
+            contents = b""
+        elif entry.is_file():
+            kind = b"file"
+            contents = entry.read_bytes()
+        else:
+            raise ContractError(f"unsupported C++ dependency entry: {entry}")
+        digest.update(kind + b"\0" + relative + b"\0")
+        digest.update(hashlib.sha256(contents).digest())
+        digest.update(b"\0")
+        entries += 1
+    return {"entries": entries, "sha256": digest.hexdigest()}
+
+
+def sanitized_build_path() -> str:
+    candidates = (
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    )
+    present = [candidate for candidate in candidates if pathlib.Path(candidate).is_dir()]
+    if not present:
+        raise ContractError("no fixed system tool directories exist for C++ build")
+    return os.pathsep.join(present)
+
+
+def resolve_build_tool(name: str, environment: dict[str, str]) -> pathlib.Path:
+    command = {"bash": "/bin/bash", "cc": environment["CC"], "cxx": environment["CXX"]}.get(
+        name, name
+    )
+    resolved = shutil.which(command, path=environment["PATH"])
+    if resolved is None:
+        raise ContractError(f"missing sanitized C++ build tool: {name}")
+    path = pathlib.Path(resolved).resolve()
+    if not path.is_file():
+        raise ContractError(f"sanitized C++ build tool is not a file: {path}")
+    return path
+
+
+def cpp_build_environment(source_dir: pathlib.Path, run_dir: pathlib.Path) -> dict[str, str]:
+    """Construct the C++ build environment from an allowlist, never ambient overrides."""
+    fixed_path = sanitized_build_path()
+    cc = shutil.which("cc", path=fixed_path)
+    cxx = shutil.which("c++", path=fixed_path)
+    if cc is None or cxx is None:
+        raise ContractError("sanitized C++ compiler commands are unavailable")
+    home = run_dir / "cpp-home"
+    temporary = run_dir / "cpp-tmp"
+    home.mkdir()
+    temporary.mkdir()
+    return {
+        "CC": str(pathlib.Path(cc).resolve()),
+        "CXX": str(pathlib.Path(cxx).resolve()),
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "HOME": str(home.resolve()),
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": fixed_path,
+        "RIVE_BUILD_SYSTEM": "gmake2",
+        "RIVE_CONFIG": "release",
+        "RIVE_OUT": os.path.relpath(run_dir / "cpp-build", source_dir / "tests"),
+        "RIVE_PREMAKE_ARGS": CPP_PREMAKE_ARGS,
+        "RIVE_PREMAKE_TAG": "v5.0.0-beta7",
+        "TMPDIR": str(temporary.resolve()),
+    }
+
+
+def write_cpp_build_inputs(
+    source_dir: pathlib.Path,
+    run_dir: pathlib.Path,
+    environment: dict[str, str],
+    command: list[str],
+) -> pathlib.Path:
+    dependency_roots = ("build/dependencies", "tests/dependencies")
+    for relative in dependency_roots:
+        (source_dir / relative).mkdir(parents=True, exist_ok=True)
+    tools = {}
+    for name in CPP_BUILD_TOOL_NAMES:
+        path = resolve_build_tool(name, environment)
+        tools[name] = {"path": str(path), **content_identity(path.read_bytes())}
+    document = {
+        "schema": CPP_BUILD_INPUTS_SCHEMA,
+        "command": command,
+        "environment": environment,
+        "tools": tools,
+        "dependency_trees": {
+            relative: directory_content_identity(source_dir / relative)
+            for relative in dependency_roots
+        },
+    }
+    output = run_dir / "cpp-build-inputs.json"
+    output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+    return output
+
+
+def validate_cpp_build_inputs(contents: bytes, run_manifest: pathlib.Path) -> None:
+    try:
+        document = json.loads(contents)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("invalid sealed C++ build inputs") from error
+    if not isinstance(document, dict) or set(document) != {
+        "schema",
+        "command",
+        "environment",
+        "tools",
+        "dependency_trees",
+    }:
+        raise ContractError("invalid sealed C++ build input fields")
+    if document["schema"] != CPP_BUILD_INPUTS_SCHEMA:
+        raise ContractError("unsupported sealed C++ build input schema")
+    environment = document["environment"]
+    if not isinstance(environment, dict) or set(environment) != CPP_BUILD_ENVIRONMENT_KEYS:
+        raise ContractError("sealed C++ build environment differs from the allowlist")
+    run_dir = run_manifest.parent.resolve()
+    source_dir = run_dir / "cpp-source"
+    if document["command"] != [
+        str((source_dir / "build" / "build_rive.sh").resolve()),
+        "release",
+        "--",
+        "bench",
+    ]:
+        raise ContractError("sealed C++ build command differs")
+    expected_environment = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "HOME": str((run_dir / "cpp-home").resolve()),
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": sanitized_build_path(),
+        "RIVE_BUILD_SYSTEM": "gmake2",
+        "RIVE_CONFIG": "release",
+        "RIVE_OUT": os.path.relpath(run_dir / "cpp-build", source_dir / "tests"),
+        "RIVE_PREMAKE_ARGS": CPP_PREMAKE_ARGS,
+        "RIVE_PREMAKE_TAG": "v5.0.0-beta7",
+        "TMPDIR": str((run_dir / "cpp-tmp").resolve()),
+    }
+    for name, expected in expected_environment.items():
+        if environment.get(name) != expected:
+            raise ContractError(f"sealed C++ build environment mismatch for {name}")
+    tools = document["tools"]
+    if not isinstance(tools, dict) or set(tools) != set(CPP_BUILD_TOOL_NAMES):
+        raise ContractError("sealed C++ build tool set differs")
+    for compiler in ("cc", "cxx"):
+        if environment.get(compiler.upper()) != tools[compiler].get("path"):
+            raise ContractError(f"sealed C++ compiler path mismatch for {compiler}")
+    for name, identity in tools.items():
+        if not isinstance(identity, dict) or set(identity) != {"path", "bytes", "sha256"}:
+            raise ContractError(f"invalid sealed C++ build tool identity for {name}")
+        if (
+            not isinstance(identity["path"], str)
+            or not isinstance(identity["bytes"], int)
+            or identity["bytes"] <= 0
+            or not isinstance(identity["sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", identity["sha256"])
+        ):
+            raise ContractError(f"invalid sealed C++ build tool identity for {name}")
+        current_path = resolve_build_tool(name, environment)
+        if identity["path"] != str(current_path) or {
+            "bytes": identity["bytes"],
+            "sha256": identity["sha256"],
+        } != content_identity(current_path.read_bytes()):
+            raise ContractError(f"sealed C++ build tool changed: {name}")
+    dependencies = document["dependency_trees"]
+    expected_dependencies = {"build/dependencies", "tests/dependencies"}
+    if not isinstance(dependencies, dict) or set(dependencies) != expected_dependencies:
+        raise ContractError("sealed C++ dependency tree set differs")
+    for relative, expected in dependencies.items():
+        if expected != directory_content_identity(source_dir / relative):
+            raise ContractError(f"sealed C++ dependency tree changed: {relative}")
 
 
 def benchmark_content_identity(repo_root: pathlib.Path, revision: str = "HEAD") -> str:
@@ -165,6 +417,7 @@ def check_datasets(repo_root: pathlib.Path, inventory: Inventory) -> None:
 
 
 def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
+    check_case_comparison_contract(inventory)
     expected = {case.name for case in inventory.cases}
     if len(expected) != 20 or len(inventory.cases) != 20:
         raise ContractError("microbenchmark inventory must contain 20 unique cases")
@@ -182,6 +435,25 @@ def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
     comparisons = {case.comparison for case in inventory.cases}
     if not comparisons <= {"ratio", "directional", "blocked"}:
         raise ContractError(f"unsupported comparison classifications: {sorted(comparisons)}")
+
+
+def check_case_comparison_contract(inventory: Inventory) -> None:
+    ratio = {case.name for case in inventory.cases if case.comparison == "ratio"}
+    if ratio != RATIO_CASE_NAMES:
+        raise ContractError(
+            "ratio case names differ: "
+            f"missing={sorted(RATIO_CASE_NAMES - ratio)}, "
+            f"extra={sorted(ratio - RATIO_CASE_NAMES)}"
+        )
+    directional = {
+        case.name for case in inventory.cases if case.comparison == "directional"
+    }
+    if directional != DIRECTIONAL_CASE_NAMES:
+        raise ContractError(
+            "directional case names differ: "
+            f"missing={sorted(DIRECTIONAL_CASE_NAMES - directional)}, "
+            f"extra={sorted(directional - DIRECTIONAL_CASE_NAMES)}"
+        )
 
 
 def check_runnable_inventory(inventory: Inventory) -> None:
@@ -319,27 +591,42 @@ def extract_datasets(repo_root: pathlib.Path, upstream: pathlib.Path, inventory:
         print(f"wrote {dataset.path} sha256={hashlib.sha256(content).hexdigest()}")
 
 
-def load_cpp_timings(path: pathlib.Path) -> dict[str, float]:
+def parse_cpp_timings(contents: bytes) -> dict[str, float]:
     timings: dict[str, float] = {}
-    for line in path.read_text().splitlines():
+    for line in contents.decode().splitlines():
         match = re.fullmatch(r"\s*([0-9.eE+-]+)ms\s+(\S+)\s*", line)
         if match:
             timings[match.group(2)] = float(match.group(1)) * 1_000_000.0
     return timings
 
 
-def load_criterion_minimum(sample_path: pathlib.Path) -> float:
-    raw = json.loads(sample_path.read_text())
+def load_cpp_timings(path: pathlib.Path) -> dict[str, float]:
+    return parse_cpp_timings(path.read_bytes())
+
+
+def load_sealed_cpp_timings(run: LoadedRun) -> dict[str, float]:
+    return parse_cpp_timings(run.artifact_bytes["cpp_output"])
+
+
+def parse_criterion_minimum(contents: bytes, description: str) -> float:
+    raw = json.loads(contents)
     per_iteration = [float(elapsed) / float(iters) for iters, elapsed in zip(raw["iters"], raw["times"])]
     if not per_iteration:
-        raise ContractError(f"empty criterion sample: {sample_path}")
+        raise ContractError(f"empty criterion sample: {description}")
     return min(per_iteration)
 
 
-def load_sealed_criterion_timings(run: dict, inventory: Inventory) -> dict[str, float]:
+def load_criterion_minimum(sample_path: pathlib.Path) -> float:
+    return parse_criterion_minimum(sample_path.read_bytes(), str(sample_path))
+
+
+def load_sealed_criterion_timings(
+    run: LoadedRun, inventory: Inventory
+) -> dict[str, float]:
     return {
-        case.name: load_criterion_minimum(
-            pathlib.Path(run["artifacts"][f"criterion:{case.name}"]["path"])
+        case.name: parse_criterion_minimum(
+            run.artifact_bytes[f"criterion:{case.name}"],
+            f"sealed criterion:{case.name}",
         )
         for case in inventory.cases
     }
@@ -412,6 +699,7 @@ def validate_run_artifact_paths(
     expected_fixed_paths = {
         "inventory": manifest_path.resolve(),
         "cpp_source_archive": run_dir / "cpp-source.tar",
+        "cpp_build_inputs": run_dir / "cpp-build-inputs.json",
         "cpp_binary": run_dir / "cpp-build" / "bench",
         "cpp_build_log": run_dir / "cpp-build.log",
         "cpp_output": run_dir / "cpp.txt",
@@ -454,7 +742,7 @@ def validate_run_artifacts(
     inventory: Inventory,
     run_manifest: pathlib.Path,
     manifest_path: pathlib.Path,
-) -> None:
+) -> dict[str, bytes]:
     if run.get("schema") != RUN_SCHEMA:
         raise ContractError(
             f"unsupported benchmark run schema: expected {RUN_SCHEMA}, got {run.get('schema')}"
@@ -481,15 +769,19 @@ def validate_run_artifacts(
         ):
             raise ContractError(f"invalid run artifact entry for {name}")
     validate_run_artifact_paths(run, inventory, run_manifest, manifest_path)
+    validated: dict[str, bytes] = {}
     for name, artifact in artifacts.items():
         path = pathlib.Path(artifact["path"])
         if not path.is_file():
             raise ContractError(f"missing run artifact {name}: {path}")
-        actual = sha256(path)
+        contents = path.read_bytes()
+        actual = hashlib.sha256(contents).hexdigest()
         if actual != artifact["sha256"]:
             raise ContractError(
                 f"artifact hash mismatch for {name}: expected {artifact['sha256']}, got {actual}"
             )
+        validated[name] = contents
+    return validated
 
 
 def command_output(command: list[str], cwd: pathlib.Path | None = None) -> str:
@@ -504,18 +796,14 @@ def record_artifact(path: pathlib.Path) -> dict[str, str]:
 
 def build_cpp_benchmark(
     upstream: pathlib.Path, run_dir: pathlib.Path
-) -> tuple[pathlib.Path, pathlib.Path, list[str]]:
+) -> tuple[pathlib.Path, pathlib.Path, list[str], pathlib.Path]:
     """Build the pinned C++ benchmark into the sealed run namespace."""
     build_dir = run_dir / "cpp-build"
     if build_dir.exists():
         raise ContractError(f"C++ build directory must be absent: {build_dir}")
     log = run_dir / "cpp-build.log"
     command = [str((upstream / "build" / "build_rive.sh").resolve()), "release", "--", "bench"]
-    environment = os.environ.copy()
-    # Upstream Premake treats an absolute --out path as relative by stripping
-    # its leading separator. Keep the output run-scoped with an explicit path
-    # relative to the build script's tests working directory.
-    environment["RIVE_OUT"] = os.path.relpath(build_dir, upstream / "tests")
+    environment = cpp_build_environment(upstream, run_dir)
     result = subprocess.run(
         command,
         cwd=upstream / "tests",
@@ -532,7 +820,8 @@ def build_cpp_benchmark(
     binary = build_dir / "bench"
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise ContractError(f"pinned C++ build did not produce executable {binary}")
-    return binary, log, command
+    inputs = write_cpp_build_inputs(upstream, run_dir, environment, command)
+    return binary, log, command, inputs
 
 
 def stage_upstream_source(
@@ -565,6 +854,7 @@ def run_benchmarks(
     measurement: int,
     sample_size: int,
 ) -> pathlib.Path:
+    check_case_comparison_contract(inventory)
     check_runnable_inventory(inventory)
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ContractError(f"run directory must be absent or empty: {run_dir}")
@@ -596,7 +886,9 @@ def run_benchmarks(
     cpp_source, cpp_source_archive = stage_upstream_source(
         upstream, inventory.upstream_ref, run_dir
     )
-    cpp_bench, cpp_build_log, cpp_build_command = build_cpp_benchmark(cpp_source, run_dir)
+    cpp_bench, cpp_build_log, cpp_build_command, cpp_build_inputs = build_cpp_benchmark(
+        cpp_source, run_dir
+    )
     check_upstream_datasets(repo_root, upstream, inventory)
     if command_output(
         ["git", "status", "--porcelain", "--untracked-files=all"], upstream
@@ -630,6 +922,7 @@ def run_benchmarks(
         "artifacts": {
             "inventory": record_artifact(manifest_path),
             "cpp_source_archive": record_artifact(cpp_source_archive),
+            "cpp_build_inputs": record_artifact(cpp_build_inputs),
             "cpp_binary": record_artifact(cpp_bench),
             "cpp_build_log": record_artifact(cpp_build_log),
         },
@@ -681,9 +974,10 @@ def load_run(
     manifest_path: pathlib.Path,
     run_manifest: pathlib.Path,
     inventory: Inventory,
-) -> dict:
+) -> LoadedRun:
     run = json.loads(run_manifest.read_text())
-    validate_run_artifacts(run, inventory, run_manifest, manifest_path)
+    artifact_bytes = validate_run_artifacts(run, inventory, run_manifest, manifest_path)
+    validate_cpp_build_inputs(artifact_bytes["cpp_build_inputs"], run_manifest)
     dirty = uncommitted_benchmark_paths(repo_root)
     if dirty:
         raise ContractError(f"uncommitted benchmark content: {dirty}")
@@ -696,9 +990,11 @@ def load_run(
             "stale benchmark content: "
             f"expected measured {measured_identity}, got current {current_identity}"
         )
-    if run["artifacts"]["inventory"]["sha256"] != sha256(manifest_path):
+    if run["artifacts"]["inventory"]["sha256"] != hashlib.sha256(
+        artifact_bytes["inventory"]
+    ).hexdigest():
         raise ContractError("stale run inventory hash")
-    return run
+    return LoadedRun(run, artifact_bytes)
 
 
 def run_cpp(cpp_bench: pathlib.Path, inventory: Inventory, duration: int, output: pathlib.Path) -> None:
@@ -777,10 +1073,9 @@ def main(argv: list[str] | None = None) -> int:
         print(result)
     elif args.command == "compare":
         run = load_run(repo_root, manifest, args.run_manifest.resolve(), inventory)
-        cpp_output = pathlib.Path(run["artifacts"]["cpp_output"]["path"])
         table = render_report(
             inventory,
-            load_cpp_timings(cpp_output),
+            load_sealed_cpp_timings(run),
             load_sealed_criterion_timings(run, inventory),
         )
         if args.output:

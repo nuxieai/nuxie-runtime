@@ -84,9 +84,11 @@ pub struct LogicalPathHandle {
 
 impl LogicalPathHandle {
     pub fn new(raw_path: &RawPath, fill_rule: FillRule) -> Self {
+        let mut raw_path = raw_path.clone();
+        raw_path.renew_mutation_id();
         Self {
             path: LogicalPath {
-                raw_path: Arc::new(raw_path.clone()),
+                raw_path: Arc::new(raw_path),
                 fill_rule,
                 valid: true,
             },

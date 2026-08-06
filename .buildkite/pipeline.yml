@@ -13,7 +13,7 @@ steps:
       rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
       make fixtures
       make fmt-check check
-      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate microbench-gate
+      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
       make runtime-drawing-port-gate runtime-frame-loop-port-gate
       make lint-gate feature-compile-gate-portable
       make test
@@ -32,6 +32,7 @@ steps:
       rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
       rustup target add --toolchain stable wasm32-unknown-unknown
       make fixtures
+      make microbench-gate
       make capi-smoke
       make feature-compile-gate-apple
       make wasm-perf-test crate-seams-browser-check

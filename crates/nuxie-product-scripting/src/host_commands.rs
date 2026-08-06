@@ -4,7 +4,7 @@ use std::rc::{Rc, Weak};
 
 use luaur_rt::{Error, Lua, LuaString, MultiValue, Result, Table, Value};
 
-use super::resource_limits::{ResourceLimitTracker, ScriptResourceLimit};
+use nuxie_scripting::vm::ScriptResourceGuard;
 
 const MAX_HOST_VALUE_DEPTH: usize = 32;
 const MAX_HOST_VALUE_NODES: usize = 4_096;
@@ -15,16 +15,35 @@ const MAX_HOST_VALUE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HOST_COMMANDS_PER_CYCLE: usize = 256;
 const MAX_HOST_COMMAND_CONTENT_BYTES_PER_CYCLE: usize = 4 * 1024 * 1024;
 
+const HOST_IDENTIFIER_CODE: &str = "script.resource.host_identifier";
+const HOST_STRING_CODE: &str = "script.resource.host_string";
+const HOST_DEPTH_CODE: &str = "script.resource.host_depth";
+const HOST_NODES_CODE: &str = "script.resource.host_nodes";
+const HOST_EDGES_CODE: &str = "script.resource.host_edges";
+const HOST_VALUE_BYTES_CODE: &str = "script.resource.host_value_bytes";
+const COMMANDS_CODE: &str = "script.resource.host_commands";
+const COMMAND_CONTENT_CODE: &str = "script.resource.host_command_content";
+const HOST_IDENTIFIER_LIMIT_ERROR: &str = "host identifier exceeds maximum size 4096 bytes";
+const HOST_STRING_LIMIT_ERROR: &str = "host string exceeds maximum size 1048576 bytes";
+const HOST_DEPTH_LIMIT_ERROR: &str = "host value exceeds maximum depth 32";
+const HOST_NODE_LIMIT_ERROR: &str = "host value exceeds maximum node count 4096";
+const HOST_EDGE_LIMIT_ERROR: &str = "host value exceeds maximum edge count 16384";
+const HOST_VALUE_BYTES_LIMIT_ERROR: &str =
+    "host value exceeds maximum aggregate size 4194304 bytes";
+const COMMAND_LIMIT_ERROR: &str = "script cycle exceeds 256 host commands";
+const COMMAND_CONTENT_LIMIT_ERROR: &str =
+    "script cycle exceeds 4194304 bytes of host-command content";
+
 struct HostValueConversion {
     active_tables: HashSet<usize>,
     nodes: usize,
     edges: usize,
     aggregate_bytes: usize,
-    resource_limits: ResourceLimitTracker,
+    resource_limits: ScriptResourceGuard,
 }
 
 impl HostValueConversion {
-    fn new(resource_limits: ResourceLimitTracker) -> Self {
+    fn new(resource_limits: ScriptResourceGuard) -> Self {
         Self {
             active_tables: HashSet::new(),
             nodes: 0,
@@ -37,14 +56,18 @@ impl HostValueConversion {
     fn account_node(&mut self) -> Result<()> {
         self.nodes += 1;
         if self.nodes > MAX_HOST_VALUE_NODES {
-            return Err(self.resource_limits.fail(ScriptResourceLimit::HostNodes));
+            return Err(self
+                .resource_limits
+                .fail(HOST_NODES_CODE, HOST_NODE_LIMIT_ERROR));
         }
         Ok(())
     }
 
     fn account_edge(&mut self) -> Result<()> {
         if self.edges >= MAX_HOST_VALUE_EDGES {
-            return Err(self.resource_limits.fail(ScriptResourceLimit::HostEdges));
+            return Err(self
+                .resource_limits
+                .fail(HOST_EDGES_CODE, HOST_EDGE_LIMIT_ERROR));
         }
         self.edges += 1;
         Ok(())
@@ -55,7 +78,7 @@ impl HostValueConversion {
         if self.aggregate_bytes > MAX_HOST_VALUE_BYTES {
             return Err(self
                 .resource_limits
-                .fail(ScriptResourceLimit::HostValueBytes));
+                .fail(HOST_VALUE_BYTES_CODE, HOST_VALUE_BYTES_LIMIT_ERROR));
         }
         Ok(())
     }
@@ -99,7 +122,7 @@ struct HostCommandState {
     host_nodes_this_cycle: Cell<usize>,
     host_edges_this_cycle: Cell<usize>,
     content_bytes_this_cycle: Cell<usize>,
-    resource_limits: ResourceLimitTracker,
+    resource_limits: ScriptResourceGuard,
 }
 
 /// Opaque position used to discard commands from a failed script cycle.
@@ -115,7 +138,7 @@ pub struct HostEffectCheckpoint {
 }
 
 impl HostCommandQueue {
-    pub(super) fn new(resource_limits: ResourceLimitTracker) -> Self {
+    pub(super) fn new(resource_limits: ScriptResourceGuard) -> Self {
         Self {
             state: Rc::new(HostCommandState {
                 commands: RefCell::new(VecDeque::new()),
@@ -128,7 +151,7 @@ impl HostCommandQueue {
         }
     }
 
-    fn resource_limits(&self) -> ResourceLimitTracker {
+    fn resource_limits(&self) -> ScriptResourceGuard {
         self.state.resource_limits.clone()
     }
 
@@ -181,7 +204,7 @@ impl HostCommandQueue {
             return Err(self
                 .state
                 .resource_limits
-                .fail(ScriptResourceLimit::Commands));
+                .fail(COMMANDS_CODE, COMMAND_LIMIT_ERROR));
         }
         let structure = host_command_structure(&command);
         let cycle_nodes = self
@@ -192,13 +215,13 @@ impl HostCommandQueue {
             .ok_or_else(|| {
                 self.state
                     .resource_limits
-                    .fail(ScriptResourceLimit::HostNodes)
+                    .fail(HOST_NODES_CODE, HOST_NODE_LIMIT_ERROR)
             })?;
         if cycle_nodes > MAX_HOST_VALUE_NODES {
             return Err(self
                 .state
                 .resource_limits
-                .fail(ScriptResourceLimit::HostNodes));
+                .fail(HOST_NODES_CODE, HOST_NODE_LIMIT_ERROR));
         }
         let cycle_edges = self
             .state
@@ -208,13 +231,13 @@ impl HostCommandQueue {
             .ok_or_else(|| {
                 self.state
                     .resource_limits
-                    .fail(ScriptResourceLimit::HostEdges)
+                    .fail(HOST_EDGES_CODE, HOST_EDGE_LIMIT_ERROR)
             })?;
         if cycle_edges > MAX_HOST_VALUE_EDGES {
             return Err(self
                 .state
                 .resource_limits
-                .fail(ScriptResourceLimit::HostEdges));
+                .fail(HOST_EDGES_CODE, HOST_EDGE_LIMIT_ERROR));
         }
         let content_bytes = host_command_content_bytes(&command);
         let cycle_content_bytes = self
@@ -225,13 +248,13 @@ impl HostCommandQueue {
             .ok_or_else(|| {
                 self.state
                     .resource_limits
-                    .fail(ScriptResourceLimit::CommandContent)
+                    .fail(COMMAND_CONTENT_CODE, COMMAND_CONTENT_LIMIT_ERROR)
             })?;
         if cycle_content_bytes > MAX_HOST_COMMAND_CONTENT_BYTES_PER_CYCLE {
             return Err(self
                 .state
                 .resource_limits
-                .fail(ScriptResourceLimit::CommandContent));
+                .fail(COMMAND_CONTENT_CODE, COMMAND_CONTENT_LIMIT_ERROR));
         }
         self.state.commands.borrow_mut().push_back(command);
         self.state.commands_this_cycle.set(emitted + 1);
@@ -334,11 +357,7 @@ fn host_value_content_bytes(value: &HostValue) -> usize {
     }
 }
 
-pub(super) fn install_nuxie_module(
-    lua: &Lua,
-    module_cache: &Table,
-    queue: HostCommandQueue,
-) -> Result<()> {
+pub(super) fn nuxie_module(lua: &Lua, queue: HostCommandQueue) -> Result<Table> {
     let module = lua.create_table();
 
     let trigger_queue = queue.clone();
@@ -389,13 +408,13 @@ pub(super) fn install_nuxie_module(
     response.set_readonly(true);
     module.set("response", response)?;
     module.set_readonly(true);
-    module_cache.set("nuxie", module)
+    Ok(module)
 }
 
 fn required_nonempty_string(
     value: Option<Value>,
     what: &str,
-    resource_limits: &ResourceLimitTracker,
+    resource_limits: &ScriptResourceGuard,
 ) -> Result<String> {
     match value {
         Some(Value::String(value)) => {
@@ -403,7 +422,7 @@ fn required_nonempty_string(
             if value.is_empty() {
                 Err(Error::runtime(format!("{what} must not be empty")))
             } else if value.len() > MAX_HOST_IDENTIFIER_BYTES {
-                Err(resource_limits.fail(ScriptResourceLimit::HostIdentifier))
+                Err(resource_limits.fail(HOST_IDENTIFIER_CODE, HOST_IDENTIFIER_LIMIT_ERROR))
             } else {
                 Ok(value)
             }
@@ -418,7 +437,7 @@ fn required_nonempty_string(
 
 fn trigger_scalar_properties(
     value: Value,
-    resource_limits: ResourceLimitTracker,
+    resource_limits: ScriptResourceGuard,
 ) -> Result<BTreeMap<String, HostValue>> {
     let mut conversion = HostValueConversion::new(resource_limits);
     conversion.account_node()?;
@@ -430,7 +449,7 @@ fn trigger_scalar_properties(
 
 fn trigger_collection_properties(
     value: HostValue,
-    resource_limits: ResourceLimitTracker,
+    resource_limits: ScriptResourceGuard,
 ) -> Result<BTreeMap<String, HostValue>> {
     let mut conversion = HostValueConversion::new(resource_limits);
     conversion.account_node()?;
@@ -448,7 +467,7 @@ fn validate_normalized_host_value(
     if depth > MAX_HOST_VALUE_DEPTH {
         return Err(conversion
             .resource_limits
-            .fail(ScriptResourceLimit::HostDepth));
+            .fail(HOST_DEPTH_CODE, HOST_DEPTH_LIMIT_ERROR));
     }
     conversion.account_node()?;
     match value {
@@ -478,7 +497,7 @@ fn account_normalized_edges(conversion: &mut HostValueConversion, count: usize) 
     if conversion.edges > MAX_HOST_VALUE_EDGES {
         return Err(conversion
             .resource_limits
-            .fail(ScriptResourceLimit::HostEdges));
+            .fail(HOST_EDGES_CODE, HOST_EDGE_LIMIT_ERROR));
     }
     Ok(())
 }
@@ -510,11 +529,11 @@ fn scalar_host_value(value: Value, conversion: &mut HostValueConversion) -> Resu
     }
 }
 
-fn host_value(value: Value, resource_limits: ResourceLimitTracker) -> Result<HostValue> {
+fn host_value(value: Value, resource_limits: ScriptResourceGuard) -> Result<HostValue> {
     host_value_at_depth(value, 1, &mut HostValueConversion::new(resource_limits))
 }
 
-fn host_table_value(table: Table, resource_limits: ResourceLimitTracker) -> Result<HostValue> {
+fn host_table_value(table: Table, resource_limits: ScriptResourceGuard) -> Result<HostValue> {
     let mut conversion = HostValueConversion::new(resource_limits);
     conversion.account_node()?;
     table_host_value(table, 1, &mut conversion)
@@ -528,7 +547,7 @@ fn host_value_at_depth(
     if depth > MAX_HOST_VALUE_DEPTH {
         return Err(conversion
             .resource_limits
-            .fail(ScriptResourceLimit::HostDepth));
+            .fail(HOST_DEPTH_CODE, HOST_DEPTH_LIMIT_ERROR));
     }
     conversion.account_node()?;
     match value {
@@ -574,7 +593,7 @@ fn table_host_value(
                     if key.len() > MAX_HOST_IDENTIFIER_BYTES {
                         return Err(conversion
                             .resource_limits
-                            .fail(ScriptResourceLimit::HostIdentifier));
+                            .fail(HOST_IDENTIFIER_CODE, HOST_IDENTIFIER_LIMIT_ERROR));
                     }
                     conversion.account_bytes(key.len())?;
                     object.insert(key, host_value_at_depth(value, depth + 1, conversion)?);
@@ -628,10 +647,10 @@ fn table_host_value(
     result
 }
 
-fn checked_host_string(value: LuaString, resource_limits: &ResourceLimitTracker) -> Result<String> {
+fn checked_host_string(value: LuaString, resource_limits: &ScriptResourceGuard) -> Result<String> {
     let value = value.to_str()?;
     if value.len() > MAX_HOST_STRING_BYTES {
-        return Err(resource_limits.fail(ScriptResourceLimit::HostString));
+        return Err(resource_limits.fail(HOST_STRING_CODE, HOST_STRING_LIMIT_ERROR));
     }
     Ok(value)
 }

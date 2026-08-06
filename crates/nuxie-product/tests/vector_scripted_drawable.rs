@@ -7,13 +7,13 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     File, OwnedArtboardInstance, PersistentFactory, RecordingFactory, ScriptExecutionLimits,
-    ScriptImportCapability,
 };
 use nuxie_product::flow_session::{
     FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
     FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession, FlowSessionConfig,
     FlowSessionErrorKind,
 };
+use nuxie_product::scripting::ScriptImportCapability;
 use nuxie_schema::definition_by_name;
 use sha2::{Digest as _, Sha256};
 
@@ -21,6 +21,19 @@ type ScriptFactory = PersistentFactory<RecordingFactory>;
 
 fn script_factory() -> ScriptFactory {
     PersistentFactory::new(RecordingFactory::new())
+}
+
+fn import_authenticated(bytes: &[u8], capability: ScriptImportCapability) -> Result<File> {
+    nuxie_product::scripting::import_authenticated_file(
+        bytes,
+        capability,
+        ScriptExecutionLimits::new(),
+    )
+}
+
+fn import_locally_authored(bytes: &[u8], limits: ScriptExecutionLimits) -> Result<File> {
+    // SAFETY: every caller in this test constructs the fixture bytes in-process.
+    unsafe { nuxie_product::scripting::import_locally_authored_file(bytes, limits) }
 }
 
 fn scripted_cpp_probe_path() -> Option<PathBuf> {
@@ -327,7 +340,7 @@ fn authenticated_capability(bytes: &[u8]) -> ScriptImportCapability {
 fn scripted_instances() -> Result<(OwnedArtboardInstance, OwnedArtboardInstance)> {
     let bytes = imported_scripted_file();
     let capability = authenticated_capability(&bytes);
-    let file = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    let file = Arc::new(import_authenticated(&bytes, capability)?);
     Ok((
         OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?,
         OwnedArtboardInstance::instantiate(file, 0)?,
@@ -420,7 +433,7 @@ fn visual_only_import_skips_scripts_but_keeps_ordinary_visuals_live() -> Result<
 fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result<()> {
     let bytes = imported_scripted_file();
     let capability = authenticated_capability(&bytes);
-    let trusted = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    let trusted = Arc::new(import_authenticated(&bytes, capability)?);
     let (mut first_session, _) =
         FlowSession::create(Arc::clone(&trusted), FlowSessionConfig::default())?;
     let (mut second_session, _) =
@@ -445,8 +458,7 @@ fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result
     let mut changed_bytes = bytes.clone();
     changed_bytes.push(0);
     assert!(
-        File::import_with_script_capability(&changed_bytes, authenticated_capability(&bytes))
-            .is_err(),
+        import_authenticated(&changed_bytes, authenticated_capability(&bytes)).is_err(),
         "an authenticated capability must remain bound to the exact artifact bytes"
     );
     Ok(())
@@ -482,7 +494,7 @@ fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_orde
         "#,
     );
     let capability = authenticated_capability(&bytes);
-    let file = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    let file = Arc::new(import_authenticated(&bytes, capability)?);
     let mut factory = script_factory();
     let (mut session, creation) = FlowSession::create_with_factory(
         Arc::clone(&file),
@@ -628,7 +640,7 @@ fn aggregate_host_trees_overflow_before_crossing_the_apple_result_seam_and_poiso
             end
         "#,
     );
-    let file = Arc::new(File::import_with_script_capability(
+    let file = Arc::new(import_authenticated(
         &bytes,
         authenticated_capability(&bytes),
     )?);
@@ -680,7 +692,7 @@ fn pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work() 
             end
         "#,
     );
-    let file = Arc::new(File::import_with_script_capability(
+    let file = Arc::new(import_authenticated(
         &bytes,
         authenticated_capability(&bytes),
     )?);
@@ -795,7 +807,7 @@ end
     let limits = ScriptExecutionLimits::new()
         .with_max_memory_bytes(4 * 1024 * 1024)
         .with_max_interrupts_per_callback(8);
-    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let file = import_locally_authored(&bytes, limits)?;
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")
@@ -829,7 +841,10 @@ return function(context)
 end
 "#,
     );
-    let file = Arc::new(File::import_with_unsigned_scripts(&bytes)?);
+    let file = Arc::new(import_locally_authored(
+        &bytes,
+        ScriptExecutionLimits::new(),
+    )?);
     let retained = Arc::clone(&file);
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))?;
     let mut sibling = OwnedArtboardInstance::instantiate_default(file)?;
@@ -879,7 +894,7 @@ return function(context)
 end
 "#,
     );
-    let file = File::import_with_unsigned_scripts(&bytes)?;
+    let file = import_locally_authored(&bytes, ScriptExecutionLimits::new())?;
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")
@@ -911,7 +926,7 @@ return function(_context)
 end
 "#,
     );
-    let file = File::import_with_unsigned_scripts(&bytes)?;
+    let file = import_locally_authored(&bytes, ScriptExecutionLimits::new())?;
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")
@@ -1008,7 +1023,7 @@ end
     let limits = ScriptExecutionLimits::new()
         .with_max_memory_bytes(4 * 1024 * 1024)
         .with_max_interrupts_per_callback(8);
-    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let file = import_locally_authored(&bytes, limits)?;
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")
@@ -1040,7 +1055,7 @@ fn trusted_import_rejects_unbounded_zero_limits_before_execution() {
         ScriptExecutionLimits::new().with_max_memory_bytes(0),
         ScriptExecutionLimits::new().with_max_interrupts_per_callback(0),
     ] {
-        let error = File::import_with_trusted_scripts(&bytes, limits)
+        let error = import_locally_authored(&bytes, limits)
             .expect_err("zero must never mean unlimited at the trusted import seam");
         assert!(
             format!("{error:#}").contains("must be greater than zero"),
@@ -1066,7 +1081,7 @@ end
     let limits = ScriptExecutionLimits::new()
         .with_max_memory_bytes(2 * 1024 * 1024)
         .with_max_interrupts_per_callback(100_000);
-    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let file = import_locally_authored(&bytes, limits)?;
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")

@@ -2,10 +2,12 @@
 
 use ed25519_dalek::{Signature, VerifyingKey};
 use nux_container::VerifiedScene;
+use nuxie::ScriptExecutionCapability;
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
+use std::sync::Arc;
 
-use crate::ScriptExecutionAuthorization;
+use crate::NuxieScriptHostExtension;
 
 /// A sealed decision about whether one exact imported artifact may execute its
 /// embedded `ScriptAsset` bytecode.
@@ -123,16 +125,16 @@ impl ScriptImportCapability {
         }))
     }
 
-    pub(crate) fn execution_authorization_for(
+    pub fn execution_capability_for(
         &self,
         artifact_bytes: &[u8],
-    ) -> Result<ScriptExecutionAuthorization, ScriptAuthenticationError> {
+    ) -> Result<Option<ScriptExecutionCapability>, ScriptAuthenticationError> {
         let ScriptImportAuthority::Authenticated {
             artifact_size,
             artifact_sha256,
         } = &self.0
         else {
-            return Ok(ScriptExecutionAuthorization::VisualOnly);
+            return Ok(None);
         };
         if u64::try_from(artifact_bytes.len()) != Ok(*artifact_size) {
             return Err(ScriptAuthenticationError::ArtifactSizeMismatch);
@@ -140,7 +142,16 @@ impl ScriptImportCapability {
         if <[u8; 32]>::from(Sha256::digest(artifact_bytes)) != *artifact_sha256 {
             return Err(ScriptAuthenticationError::ArtifactHashMismatch);
         }
-        Ok(ScriptExecutionAuthorization::Authenticated)
+        // SAFETY: the authenticated authority above was minted only after the
+        // signed manifest or verified package bound these exact bytes.
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_artifact_unchecked(
+                artifact_bytes,
+                Arc::new(NuxieScriptHostExtension),
+            )
+        }
+        .map_err(|_| ScriptAuthenticationError::ArtifactSizeMismatch)?;
+        Ok(Some(capability))
     }
 }
 
@@ -182,23 +193,31 @@ mod tests {
 
     #[test]
     fn visual_only_capability_never_permits_script_execution() {
-        assert_eq!(
-            ScriptImportCapability::visual_only().execution_authorization_for(b"artifact"),
-            Ok(ScriptExecutionAuthorization::VisualOnly)
+        assert!(
+            ScriptImportCapability::visual_only()
+                .execution_capability_for(b"artifact")
+                .expect("visual-only decision succeeds")
+                .is_none()
         );
     }
 
     #[test]
     fn authenticated_capability_is_bound_to_the_signed_artifact() {
         let capability = signed_capability(b"artifact", b"artifact").expect("authenticate");
-        assert_eq!(
-            capability.execution_authorization_for(b"artifact"),
-            Ok(ScriptExecutionAuthorization::Authenticated)
+        assert!(
+            capability
+                .execution_capability_for(b"artifact")
+                .expect("exact signed bytes authorize")
+                .is_some()
         );
-        assert_eq!(
-            capability.execution_authorization_for(b"artifact!"),
+        assert!(matches!(
+            capability.execution_capability_for(b"artifact!"),
             Err(ScriptAuthenticationError::ArtifactSizeMismatch)
-        );
+        ));
+        assert!(matches!(
+            capability.execution_capability_for(b"artifacX"),
+            Err(ScriptAuthenticationError::ArtifactHashMismatch)
+        ));
     }
 
     #[test]
@@ -206,6 +225,31 @@ mod tests {
         assert_eq!(
             signed_capability(b"artifacX", b"artifact"),
             Err(ScriptAuthenticationError::ArtifactHashMismatch)
+        );
+    }
+
+    #[test]
+    fn tampering_with_the_exact_signed_manifest_bytes_invalidates_authority() {
+        let artifact = b"artifact";
+        let signing_key = SigningKey::from_bytes(&[17; 32]);
+        let mut manifest = serde_json::to_vec(&serde_json::json!({
+            "riv": {
+                "sha256": sha256_hex(&Sha256::digest(artifact).into()),
+                "sizeBytes": artifact.len(),
+            },
+        }))
+        .expect("manifest encodes");
+        let signature = signing_key.sign(&manifest);
+        manifest.push(b' ');
+
+        assert_eq!(
+            ScriptImportCapability::authenticate_ed25519(
+                artifact,
+                &manifest,
+                &signature.to_bytes(),
+                &signing_key.verifying_key().to_bytes(),
+            ),
+            Err(ScriptAuthenticationError::InvalidSignature)
         );
     }
 }

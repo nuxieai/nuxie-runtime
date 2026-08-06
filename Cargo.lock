@@ -1164,7 +1164,6 @@ dependencies = [
  "ed25519-dalek",
  "luaur-common",
  "luaur-compiler",
- "nux-container",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",
@@ -1173,7 +1172,6 @@ dependencies = [
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-scripting",
- "serde",
  "serde_json",
  "sha2",
  "silver-corpus",
@@ -1269,11 +1267,28 @@ dependencies = [
  "luaur-compiler",
  "nuxie",
  "nuxie-binary",
+ "nuxie-product-scripting",
  "nuxie-render-stream",
  "nuxie-schema",
  "serde_json",
  "sha2",
  "silver-corpus",
+]
+
+[[package]]
+name = "nuxie-product-scripting"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "luaur-common",
+ "luaur-compiler",
+ "luaur-rt",
+ "nux-container",
+ "nuxie",
+ "nuxie-scripting",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

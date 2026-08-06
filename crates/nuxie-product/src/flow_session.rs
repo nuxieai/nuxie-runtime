@@ -15,7 +15,7 @@ use nuxie::{
     StateMachineInstance, ViewModelInstance,
 };
 #[cfg(feature = "scripting")]
-use nuxie::{ScriptHostCommand, ScriptHostValue};
+use nuxie_product_scripting::{HostCommand as ScriptHostCommand, HostValue as ScriptHostValue};
 
 /// Maximum UTF-8 byte length accepted for an identifier or property path.
 pub const MAX_ID_PATH_BYTES: usize = 4 * 1024;
@@ -789,7 +789,10 @@ impl FlowSession {
                     })?;
                 session.listener_binding_baseline = listener_binding_baseline;
             }
-            let commands = session.artboard.drain_host_commands();
+            let commands = session
+                .artboard
+                .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+                .unwrap_or_default();
             session.append_lua_host_commands(&mut outputs, 0, commands)?;
             (outputs, dirty)
         };
@@ -845,7 +848,10 @@ impl FlowSession {
             let operation_result = self.perform_inner(operation, Some(factory));
             return match operation_result {
                 Ok(mut result) => {
-                    let commands = self.artboard.drain_host_commands();
+                    let commands = self
+                        .artboard
+                        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+                        .unwrap_or_default();
                     if let Err(error) =
                         self.integrate_lua_host_commands(&mut result, sequence_before, commands)
                     {
@@ -992,10 +998,15 @@ impl FlowSession {
         #[cfg(feature = "scripting")]
         {
             if let Err(error) = draw_result {
-                let _ = self.artboard.drain_host_commands();
+                let _ = self
+                    .artboard
+                    .drain_script_host_effects::<Vec<ScriptHostCommand>>();
                 return Err(self.poison_after_mutation(error));
             }
-            let commands = self.artboard.drain_host_commands();
+            let commands = self
+                .artboard
+                .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+                .unwrap_or_default();
             if let Err(error) = self.integrate_lua_host_commands(result, sequence_before, commands)
             {
                 return Err(self.poison_after_mutation(error));
@@ -1577,7 +1588,10 @@ impl FlowSession {
                 #[cfg(feature = "scripting")]
                 let cycle_result = {
                     let mut cycle_result = cycle_result;
-                    let commands = self.artboard.drain_host_commands();
+                    let commands = self
+                        .artboard
+                        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+                        .unwrap_or_default();
                     self.integrate_lua_host_commands(&mut cycle_result, sequence_before, commands)?;
                     cycle_result
                 };

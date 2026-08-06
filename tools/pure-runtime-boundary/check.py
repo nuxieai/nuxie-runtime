@@ -172,12 +172,7 @@ INTERNAL_DEBT_FILES = {
         "crates/nuxie-runtime/tests/project_data_converter.rs",
         "crates/nuxie-runtime/tests/simple_array_adaptation.rs",
     },
-    "product-host-commands": {
-        "crates/nuxie-scripting/src/vm.rs",
-        "crates/nuxie-scripting/src/vm/host_commands.rs",
-        "crates/nuxie-scripting/src/vm/resource_limits.rs",
-        "crates/nuxie-scripting/tests/nuxie_host_commands.rs",
-    },
+    "product-host-commands": set(),
 }
 INTERNAL_DEBT_MARKERS = {
     "editor-gpu-tooling": re.compile(

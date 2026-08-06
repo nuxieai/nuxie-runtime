@@ -13,7 +13,6 @@
 mod buffer_ext;
 mod bytecode;
 mod command_server;
-mod host_commands;
 mod listener_invocation;
 mod logging_scripting_context;
 pub(crate) mod lua_blob;
@@ -72,10 +71,9 @@ use crate::gpu_canvas::{
     RegisteredGpuCanvasShaderAsset,
 };
 
-pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
 pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
-pub use resource_limits::ScriptResourceLimit;
+pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
 /// Registry key for the require cache (C++: `registeredCacheTableKey` in
 /// `src/lua/rive_lua_libs.cpp`).
@@ -570,9 +568,8 @@ pub struct ScriptVm {
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<Option<ScriptViewModel>>,
-    host_commands: host_commands::HostCommandQueue,
     script_safepoints: Rc<Cell<usize>>,
-    host_cycle_active: Rc<Cell<bool>>,
+    script_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
     blob_assets: lua_blob::ScriptedBlobAssets,
     audio_assets: lua_audio::ScriptedAudioAssets,
@@ -620,7 +617,7 @@ pub struct LuaScriptInstance {
     table: Option<Table>,
     execution_budget: Option<ScriptExecutionBudget>,
     script_safepoints: Option<Rc<Cell<usize>>>,
-    host_cycle_active: Option<Rc<Cell<bool>>>,
+    script_cycle_active: Option<Rc<Cell<bool>>>,
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context_present: Rc<Cell<bool>>,
@@ -645,7 +642,7 @@ impl LuaScriptInstance {
             table: Some(table),
             execution_budget: None,
             script_safepoints: None,
-            host_cycle_active: None,
+            script_cycle_active: None,
             renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context_present: Rc::new(Cell::new(false)),
@@ -679,14 +676,14 @@ impl LuaScriptInstance {
         gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
         execution_budget: Option<ScriptExecutionBudget>,
         script_safepoints: Option<Rc<Cell<usize>>>,
-        host_cycle_active: Option<Rc<Cell<bool>>>,
+        script_cycle_active: Option<Rc<Cell<bool>>>,
         logging: LoggingScriptingContext,
     ) -> Self {
         Self {
             table: Some(table),
             execution_budget,
             script_safepoints,
-            host_cycle_active,
+            script_cycle_active,
             renderer_bindings,
             context_view_model,
             context_present,
@@ -734,7 +731,7 @@ impl LuaScriptInstance {
             }
         }
         if self
-            .host_cycle_active
+            .script_cycle_active
             .as_ref()
             .is_some_and(|active| !active.get())
         {
@@ -1179,7 +1176,7 @@ impl ScriptVm {
                 Some(gpu_canvas_context),
                 self.execution_budget.clone(),
                 Some(Rc::clone(&self.script_safepoints)),
-                Some(Rc::clone(&self.host_cycle_active)),
+                Some(Rc::clone(&self.script_cycle_active)),
                 self.logging.clone(),
             )) as Box<dyn ScriptInstance>)
         };
@@ -1213,7 +1210,7 @@ impl ScriptVm {
             .map(|error| format!("failed to configure the script VM memory ceiling: {error}"));
         let resource_limits = resource_limits::ResourceLimitTracker::default();
         let script_safepoints = Rc::new(Cell::new(0));
-        let host_cycle_active = Rc::new(Cell::new(false));
+        let script_cycle_active = Rc::new(Cell::new(false));
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
         lua.set_interrupt(move |_| {
@@ -1234,9 +1231,8 @@ impl ScriptVm {
             view_models: BTreeMap::new(),
             default_context_view_model: None,
             default_context_parent_view_models: Vec::new(),
-            host_commands: host_commands::HostCommandQueue::new(resource_limits.clone()),
             script_safepoints,
-            host_cycle_active,
+            script_cycle_active,
             resource_limits,
             blob_assets,
             audio_assets,
@@ -1309,7 +1305,7 @@ impl ScriptVm {
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise
         // healthy script after enough ordinary frames. Explicit flow cycles
         // retain their aggregate command/content/safepoint budget.
-        if !self.host_cycle_active.get() {
+        if !self.script_cycle_active.get() {
             self.resource_limits.begin_cycle();
             self.script_safepoints.set(0);
         }
@@ -1532,7 +1528,6 @@ impl ScriptVm {
         self.lua.globals().set("late", late)?;
 
         let cache = self.ensure_module_cache()?;
-        host_commands::install_nuxie_module(&self.lua, &cache, self.host_commands.clone())?;
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;
         crate::gpu_canvas::install_gpu_canvas_globals(self)?;
@@ -1828,46 +1823,33 @@ impl ScriptVm {
         self.lua.globals().get(name)
     }
 
-    /// Start a bounded unit of script work without discarding commands that
-    /// the host has not drained yet.
-    pub fn begin_host_cycle(&self) -> HostCycleCheckpoint {
-        self.host_cycle_active.set(true);
+    /// Start a bounded unit of script work controlled by an embedding host.
+    pub fn begin_script_cycle(&self) {
+        self.script_cycle_active.set(true);
         self.resource_limits.begin_cycle();
         self.script_safepoints.set(0);
-        self.host_commands.begin_cycle()
     }
 
-    /// Discard only effects appended after `checkpoint`, leaving older
-    /// import/creation effects available for a later successful drain.
-    pub fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
-        self.host_commands.rollback(checkpoint);
-        self.host_cycle_active.set(false);
-    }
-
-    /// Mark the current host-effect queue position inside an already-bounded
-    /// cycle. Rolling back this checkpoint removes only later commands and
-    /// intentionally does not refund command, content, or safepoint budgets.
-    pub fn checkpoint_host_effects(&self) -> HostEffectCheckpoint {
-        self.host_commands.checkpoint_effects()
-    }
-
-    /// Discard host commands emitted after `checkpoint` without resetting any
-    /// enclosing cycle resource counter.
-    pub fn rollback_host_effects(&self, checkpoint: HostEffectCheckpoint) {
-        self.host_commands.rollback_effects(checkpoint);
+    /// End the embedding host's bounded unit of script work.
+    pub fn end_script_cycle(&self) {
+        self.script_cycle_active.set(false);
     }
 
     /// Machine-readable resource identity retained after terminal script
-    /// exhaustion and cleared only by [`Self::begin_host_cycle`].
+    /// exhaustion and cleared only by [`Self::begin_script_cycle`].
     pub fn terminal_resource_limit(&self) -> Option<ScriptResourceLimit> {
         self.resource_limits.terminal_limit()
     }
 
-    /// Drain Nuxie-owned host effects in the exact order scripts emitted them.
-    pub fn drain_host_commands(&self) -> Vec<HostCommand> {
-        let commands = self.host_commands.drain();
-        self.host_cycle_active.set(false);
-        commands
+    /// A cloneable terminal-resource side channel for an injected host module.
+    pub fn resource_guard(&self) -> ScriptResourceGuard {
+        ScriptResourceGuard::new(self.resource_limits.clone())
+    }
+
+    /// Register an embedding-host module for lookup through Rive `require`.
+    pub fn register_host_module(&self, name: &str, module: Table) -> Result<()> {
+        self.ensure_initialized()?;
+        self.ensure_module_cache()?.set(name, module)
     }
 
     pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
@@ -1886,7 +1868,7 @@ impl ScriptVm {
             None,
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
-            Some(Rc::clone(&self.host_cycle_active)),
+            Some(Rc::clone(&self.script_cycle_active)),
             self.logging.clone(),
         )
     }
@@ -1990,7 +1972,7 @@ impl RuntimeScriptingVm for ScriptVm {
             Some(gpu_canvas_context),
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
-            Some(Rc::clone(&self.host_cycle_active)),
+            Some(Rc::clone(&self.script_cycle_active)),
             self.logging.clone(),
         )))
     }
@@ -3825,7 +3807,7 @@ mod context_init_tests {
         )
         .expect("bounded callback installs");
 
-        vm.begin_host_cycle();
+        vm.begin_script_cycle();
         vm.call_global::<f64>("boundedCycleWork", ())
             .expect("first callback stays within both ceilings");
         let error = vm

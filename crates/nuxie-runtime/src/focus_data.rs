@@ -1428,6 +1428,17 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "coverage finding: docs/upstream-test-findings.md#finding-focus-fixture-surface"]
+    fn upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface() {
+        panic!(
+            "focus_test.cpp exposes Focusable pointer identity/delegation, per-node isScope() and \
+             manager() pointer observables (focus_test.cpp:91/93), and exact bindable \
+             artboard/list occurrence swaps that nuxie-runtime's public focus API does not \
+             expose; scope topology and manager ownership live on FocusManager instead"
+        );
+    }
+
+    #[test]
     fn focusing_child_notifies_leaf_and_ancestors() {
         let mut manager = FocusManager::new();
         let parent = manager.create_node(FocusNode::new());

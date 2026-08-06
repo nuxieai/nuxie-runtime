@@ -213,8 +213,14 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
             gate.max_renderer_ratio,
         )
         .env("RENDERER_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
-        .env("RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
-        .env("RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
+        .env(
+            "RENDERER_TIMING_GATE_MAX_CONTROL_DRIFT",
+            gate.max_control_drift,
+        )
+        .env(
+            "RENDERER_TIMING_GATE_MAX_REPEAT_DRIFT",
+            gate.max_repeat_drift,
+        )
         .env("RENDERER_TIMING_GATE_HOST_SAMPLER", sampler)
         .env(
             "RENDERER_TIMING_GATE_BASELINE_SOURCE_ID",

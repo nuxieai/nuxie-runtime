@@ -1,6 +1,7 @@
 use crate::scripting::{
     RegisteredScriptFile, initialize_renderer_and_register_scripts,
-    initialize_state_machine_scripted_objects, rebind_state_machine_scripted_objects_after_artboard,
+    initialize_state_machine_scripted_objects,
+    rebind_state_machine_scripted_objects_after_artboard,
 };
 use crate::{ActionTarget::*, Case};
 use anyhow::{Context, bail};

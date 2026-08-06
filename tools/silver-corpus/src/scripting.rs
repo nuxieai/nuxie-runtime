@@ -607,8 +607,12 @@ fn retry_cold_state_machine_scripted_objects_during_constructor(
         )? {
             continue;
         }
-        let context =
-            state_machine_script_context_hydration(runtime, state_machine, None, HydrationPhase::Cold);
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            None,
+            HydrationPhase::Cold,
+        );
         let owner = format!(
             "state-machine ScriptedObject global {}",
             definition.scripted_object_global_id()
@@ -683,8 +687,12 @@ pub(crate) fn initialize_state_machine_scripted_objects(
         )? {
             continue;
         }
-        let context =
-            state_machine_script_context_hydration(runtime, state_machine, None, HydrationPhase::Cold);
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            None,
+            HydrationPhase::Cold,
+        );
         let owner = format!(
             "state-machine ScriptedObject global {}",
             definition.scripted_object_global_id()

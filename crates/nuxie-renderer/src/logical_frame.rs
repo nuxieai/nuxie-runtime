@@ -1280,7 +1280,7 @@ impl PreparedGradientSelection<'_> {
 struct PreparedGradientFlush {
     address: usize,
     draw_count: usize,
-    inputs: Vec<u64>,
+    occurrence_ids: Vec<u64>,
     batch: GradientBatch,
 }
 
@@ -1294,17 +1294,18 @@ impl PreparedLogicalFrameResources {
         draws: &[SolidDraw],
     ) -> PreparedGradientSelection<'a> {
         let address = draws.as_ptr() as usize;
-        let copied_inputs = || {
+        let copied_occurrence_ids = || {
             draws
                 .iter()
-                .map(gradient_input_fingerprint)
+                .map(|draw| draw.logical_occurrence_id)
                 .collect::<Vec<_>>()
         };
-        let mut inputs = None;
+        let mut occurrence_ids = None;
         let matched = self.gradient_flushes.iter().find(|flush| {
             flush.draw_count == draws.len()
                 && (flush.address == address
-                    || flush.inputs == *inputs.get_or_insert_with(copied_inputs))
+                    || flush.occurrence_ids
+                        == *occurrence_ids.get_or_insert_with(copied_occurrence_ids))
         });
         if let Some(flush) = matched {
             return PreparedGradientSelection {
@@ -1313,19 +1314,20 @@ impl PreparedLogicalFrameResources {
             };
         }
 
-        let requested = inputs.get_or_insert_with(copied_inputs);
+        let requested = occurrence_ids.get_or_insert_with(copied_occurrence_ids);
         for flush in &self.gradient_flushes {
             let mut mapped = Vec::with_capacity(requested.len());
-            let mut available = vec![true; flush.inputs.len()];
+            let mut available = vec![true; flush.occurrence_ids.len()];
             let mut complete = true;
             for input in requested.iter().copied() {
-                let Some(index) = flush
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, candidate)| {
-                        (available[index] && *candidate == input).then_some(index)
-                    })
+                let Some(index) =
+                    flush
+                        .occurrence_ids
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, candidate)| {
+                            (available[index] && *candidate == input).then_some(index)
+                        })
                 else {
                     complete = false;
                     break;
@@ -1342,8 +1344,8 @@ impl PreparedLogicalFrameResources {
         }
 
         panic!(
-            "encoder requested gradient inputs outside the finalized logical frame; \
-             production gradient normalization must run exactly once"
+            "encoder requested gradient inputs outside one finalized logical flush; \
+             production gradient normalization must run exactly once per flush"
         )
     }
 
@@ -1506,8 +1508,8 @@ impl LogicalResourceStore {
         let mut buffer_write_operations = 0;
         let mut written_bytes = 0;
         let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
-        let gradient_batch = prepare_gradient_batch(&frame.draws);
         let atomic_batch_flags = production_atomic_batch_flags(frame);
+        let mut gradient_flushes = Vec::with_capacity(starts.len());
         let mut typed_draws = Vec::with_capacity(frame.draws.len());
         for (flush_index, (&start, counts)) in starts.iter().zip(&flushes).enumerate() {
             let end = starts
@@ -1516,13 +1518,11 @@ impl LogicalResourceStore {
                 .unwrap_or(frame.draws.len());
             let before_capacities = buffers.buffer_capacities();
             buffers.grow(*counts);
+            let draws = &frame.draws[start..end];
+            let gradient_batch = prepare_gradient_batch(draws);
             let gradient_selection = PreparedGradientSelection {
                 batch: Cow::Borrowed(&gradient_batch),
-                draws: (start != 0 || end != frame.draws.len()).then(|| {
-                    (start..end)
-                        .map(|draw_index| gradient_batch.draw(draw_index))
-                        .collect()
-                }),
+                draws: None,
             };
             typed_draws.extend(write_resources(
                 &mut buffers,
@@ -1534,6 +1534,15 @@ impl LogicalResourceStore {
                 &atomic_batch_flags[start..end],
                 &gradient_selection,
             ));
+            gradient_flushes.push(PreparedGradientFlush {
+                address: draws.as_ptr() as usize,
+                draw_count: draws.len(),
+                occurrence_ids: draws
+                    .iter()
+                    .map(|draw| draw.logical_occurrence_id)
+                    .collect(),
+                batch: gradient_batch,
+            });
             written_bytes += buffers.written_bytes();
             buffer_write_operations += buffers.nonempty_buffer_count();
             allocation_growths += before_capacities
@@ -1568,12 +1577,7 @@ impl LogicalResourceStore {
         };
         Ok(PreparedLogicalFrameResources {
             report,
-            gradient_flushes: vec![PreparedGradientFlush {
-                address: frame.draws.as_ptr() as usize,
-                draw_count: frame.draws.len(),
-                inputs: frame.draws.iter().map(gradient_input_fingerprint).collect(),
-                batch: gradient_batch,
-            }],
+            gradient_flushes,
             typed_address: frame.draws.as_ptr() as usize,
             typed_inputs: frame
                 .draws
@@ -1588,59 +1592,6 @@ impl LogicalResourceStore {
             typed_draws,
         })
     }
-}
-
-fn gradient_input_fingerprint(draw: &SolidDraw) -> u64 {
-    fn write(hash: &mut u64, bytes: &[u8]) {
-        for &byte in bytes {
-            *hash ^= u64::from(byte);
-            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
-
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    write(&mut hash, &draw.state.opacity.to_bits().to_le_bytes());
-    for value in draw.state.transform.0 {
-        write(&mut hash, &value.to_bits().to_le_bytes());
-    }
-    match draw.paint.shader.as_ref() {
-        None => write(&mut hash, &[0]),
-        Some(super::WgpuShader::Linear {
-            start,
-            end,
-            colors,
-            stops,
-        }) => {
-            write(&mut hash, &[1]);
-            for value in [start.0, start.1, end.0, end.1] {
-                write(&mut hash, &value.to_bits().to_le_bytes());
-            }
-            for color in colors {
-                write(&mut hash, &color.to_le_bytes());
-            }
-            for stop in stops {
-                write(&mut hash, &stop.to_bits().to_le_bytes());
-            }
-        }
-        Some(super::WgpuShader::Radial {
-            center,
-            radius,
-            colors,
-            stops,
-        }) => {
-            write(&mut hash, &[2]);
-            for value in [center.0, center.1, *radius] {
-                write(&mut hash, &value.to_bits().to_le_bytes());
-            }
-            for color in colors {
-                write(&mut hash, &color.to_le_bytes());
-            }
-            for stop in stops {
-                write(&mut hash, &stop.to_bits().to_le_bytes());
-            }
-        }
-    }
-    hash
 }
 
 pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {

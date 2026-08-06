@@ -11,9 +11,9 @@ use nuxie::{
     command_server::CommandServer,
 };
 use nuxie_product::flow_session::{
-    FlowInstanceRef, FlowOperation, FlowOutputPhase, FlowQuery, FlowScalarValue, FlowSession,
-    FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch, FlowStateMutation, FlowValue,
-    FlowValueArena,
+    FlowAdvance, FlowInstanceRef, FlowOperation, FlowOutputPayload, FlowOutputPhase, FlowQuery,
+    FlowScalarValue, FlowSession, FlowSessionConfig, FlowSessionErrorKind, FlowStateBatch,
+    FlowStateMutation, FlowValue, FlowValueArena,
 };
 use nuxie_schema::definition_by_name;
 
@@ -179,6 +179,14 @@ pub struct DeliveryPhaseComparison {
     pub command_events_before_server_poll: usize,
     pub command_events_before_message_dispatch: usize,
     pub command_events_after_message_dispatch: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhaseRecord {
+    pub sequence: u64,
+    pub cycle: u64,
+    pub phase: &'static str,
+    pub payload: &'static str,
 }
 
 pub struct AtomicFailureComparison {
@@ -377,6 +385,39 @@ pub fn compare_delivery_phases() -> DeliveryPhaseComparison {
         command_events_before_message_dispatch: before_dispatch,
         command_events_after_message_dispatch: after_dispatch,
     }
+}
+
+pub fn compare_exact_output_order() -> Vec<PhaseRecord> {
+    let (mut flow, _) = flow_fixture();
+    flow.perform(FlowOperation::Advance(FlowAdvance {
+        timestamp_seconds: 0.25,
+        delta_seconds: 0.25,
+        render: true,
+    }))
+    .expect("advance static Flow fixture")
+    .outputs
+    .into_iter()
+    .map(|output| {
+        let phase = match output.phase {
+            FlowOutputPhase::RuntimeAdvance => "runtime_advance",
+            FlowOutputPhase::Render => "render",
+            _ => "unexpected",
+        };
+        let payload = match output.payload {
+            FlowOutputPayload::RuntimeAdvanced {
+                delta_seconds: 0.25,
+            } => "runtime_advanced(0.25)",
+            FlowOutputPayload::RenderRequested { artboard_index: 0 } => "render_requested(0)",
+            _ => "unexpected",
+        };
+        PhaseRecord {
+            sequence: output.sequence,
+            cycle: output.cycle,
+            phase,
+            payload,
+        }
+    })
+    .collect()
 }
 
 pub fn compare_atomic_failure() -> AtomicFailureComparison {

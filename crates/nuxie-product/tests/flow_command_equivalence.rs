@@ -3,8 +3,8 @@
 mod flow_command_equivalence_support;
 
 use flow_command_equivalence_support::{
-    Classification, RESPONSIBILITY_DECISIONS, compare_atomic_failure, compare_delivery_phases,
-    compare_scalar_round_trip,
+    Classification, PhaseRecord, RESPONSIBILITY_DECISIONS, compare_atomic_failure,
+    compare_delivery_phases, compare_exact_output_order, compare_scalar_round_trip,
 };
 
 #[test]
@@ -50,6 +50,27 @@ fn scalar_round_trip_matches_but_delivery_phases_do_not() {
     assert_eq!(phases.command_events_before_server_poll, 0);
     assert_eq!(phases.command_events_before_message_dispatch, 0);
     assert!(phases.command_events_after_message_dispatch > 0);
+}
+
+#[test]
+fn flow_advance_preserves_exact_ordered_output_tuples() {
+    assert_eq!(
+        compare_exact_output_order(),
+        [
+            PhaseRecord {
+                sequence: 1,
+                cycle: 1,
+                phase: "runtime_advance",
+                payload: "runtime_advanced(0.25)",
+            },
+            PhaseRecord {
+                sequence: 2,
+                cycle: 1,
+                phase: "render",
+                payload: "render_requested(0)",
+            },
+        ]
+    );
 }
 
 #[test]

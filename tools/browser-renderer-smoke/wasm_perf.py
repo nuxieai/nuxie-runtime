@@ -51,6 +51,21 @@ def audit_production_boundary(feature_tree: str, source: str) -> None:
     runner_source = source[source.index(marker) :]
     if "File::import(bytes)" not in runner_source or "import_with_unsigned_scripts" in runner_source.split("impl WasmPerfRunner", 1)[-1].split("pub async fn", 1)[0]:
         raise ContractError("WasmPerfRunner must use production File::import")
+    runner_impl = runner_source.split("impl WasmPerfRunner", 1)[-1].split("pub async fn", 1)[0]
+    if (
+        "instantiate_default_view_model_instance" in runner_impl
+        or "instantiate_view_model()" not in runner_impl
+    ):
+        raise ContractError(
+            "WasmPerfRunner must use schema-default view model initialization"
+        )
+    if (
+        "default_state_machine_instance()" in runner_impl
+        or ".default_state_machine_index()" not in runner_impl
+    ):
+        raise ContractError(
+            "WasmPerfRunner must select only the authored default state machine"
+        )
 
 
 def select_fixtures(
@@ -183,6 +198,12 @@ def parse_native_report(output: str) -> dict[str, Any]:
         key, raw_value = line.split("=", 1)
         if key == "segments":
             values[key] = int(raw_value)
+        elif key == "default_state_machine_id":
+            values.setdefault("workload_identity", {})[key] = (
+                None if raw_value == "none" else int(raw_value)
+            )
+        elif key in ("scene_kind", "view_model_initialization"):
+            values.setdefault("workload_identity", {})[key] = raw_value
         elif key.endswith("_ms"):
             values[key] = float(raw_value)
     values.setdefault("total_ms", values.get("elapsed_ms"))
@@ -194,7 +215,13 @@ def parse_native_report(output: str) -> dict[str, Any]:
 
 
 def validate_timing_report(report: dict[str, Any]) -> dict[str, Any]:
-    required = ("schema", *TIMING_FLOAT_FIELDS, "accounted_ms", "segments")
+    required = (
+        "schema",
+        *TIMING_FLOAT_FIELDS,
+        "accounted_ms",
+        "segments",
+        "workload_identity",
+    )
     for field in required:
         if field not in report:
             raise ContractError(f"missing report field {field}")
@@ -209,7 +236,41 @@ def validate_timing_report(report: dict[str, Any]) -> dict[str, Any]:
     expected = sum(float(report[key]) for key in ("advance_ms", "input_ms", "prepare_ms", "draw_ms"))
     if not math.isclose(float(report["accounted_ms"]), expected, rel_tol=1e-9, abs_tol=1e-9):
         raise ContractError("accounted_ms does not equal advance+input+prepare+draw")
+    validate_workload_identity(report["workload_identity"])
     return report
+
+
+def validate_workload_identity(identity: Any) -> dict[str, Any]:
+    required = {
+        "scene_kind",
+        "default_state_machine_id",
+        "view_model_initialization",
+    }
+    if not isinstance(identity, dict) or set(identity) != required:
+        raise ContractError(
+            "workload_identity must contain exactly scene_kind, "
+            "default_state_machine_id, and view_model_initialization"
+        )
+    scene_kind = identity["scene_kind"]
+    default_id = identity["default_state_machine_id"]
+    view_model_mode = identity["view_model_initialization"]
+    if scene_kind not in ("static", "state_machine"):
+        raise ContractError(f"invalid workload scene_kind {scene_kind!r}")
+    if default_id is not None and (
+        not isinstance(default_id, int) or isinstance(default_id, bool) or default_id < 0
+    ):
+        raise ContractError(
+            "workload default_state_machine_id must be null or a non-negative integer"
+        )
+    if scene_kind == "static" and default_id is not None:
+        raise ContractError("static workload must not identify a default state machine")
+    if scene_kind == "state_machine" and default_id is None:
+        raise ContractError("state-machine workload must identify its authored default")
+    if view_model_mode not in ("none", "schema-default"):
+        raise ContractError(
+            f"invalid workload view_model_initialization {view_model_mode!r}"
+        )
+    return identity
 
 
 def _metric_summary(values: list[float]) -> dict[str, float]:
@@ -259,8 +320,13 @@ def build_comparison_report(
     rows = []
     for fixture in fixtures:
         fixture_id = fixture["id"]
-        wasm = _run_summary(wasm_runs.get(fixture_id, []))
-        native = _run_summary(native_runs.get(fixture_id, []))
+        raw_wasm_runs = wasm_runs.get(fixture_id, [])
+        raw_native_runs = native_runs.get(fixture_id, [])
+        workload_identity = _matching_workload_identity(
+            fixture_id, raw_wasm_runs, raw_native_runs
+        )
+        wasm = _run_summary(raw_wasm_runs)
+        native = _run_summary(raw_native_runs)
         ratios = {}
         for metric, label in (
             ("elapsed_ms", "elapsed"),
@@ -279,6 +345,7 @@ def build_comparison_report(
                     if key in fixture
                 },
                 "segments_per_run": repeat,
+                "workload_identity": workload_identity,
                 "wasm": wasm,
                 "native_rust": native,
                 "ratio": ratios,
@@ -297,6 +364,33 @@ def build_comparison_report(
         },
         "fixtures": rows,
     }
+
+
+def _matching_workload_identity(
+    fixture_id: str,
+    wasm_runs: list[dict[str, Any]],
+    native_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not wasm_runs or not native_runs:
+        raise ContractError(f"{fixture_id} cannot compare empty run sets")
+    wasm_identities = [
+        validate_workload_identity(run.get("workload_identity")) for run in wasm_runs
+    ]
+    native_identities = [
+        validate_workload_identity(run.get("workload_identity")) for run in native_runs
+    ]
+    expected = wasm_identities[0]
+    if any(identity != expected for identity in wasm_identities[1:]):
+        raise ContractError(f"{fixture_id} wasm workload identity changed between runs")
+    native_expected = native_identities[0]
+    if any(identity != native_expected for identity in native_identities[1:]):
+        raise ContractError(f"{fixture_id} native workload identity changed between runs")
+    if expected != native_expected:
+        raise ContractError(
+            f"{fixture_id} workload identity mismatch: wasm={expected!r} "
+            f"native={native_expected!r}"
+        )
+    return expected
 
 
 def canonical_json(payload: dict[str, Any]) -> str:
@@ -418,6 +512,16 @@ def _ratio(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.3f}x"
 
 
+def _workload_label(identity: dict[str, Any]) -> str:
+    state_machine = identity["default_state_machine_id"]
+    scene = (
+        "static"
+        if state_machine is None
+        else f"state machine {state_machine}"
+    )
+    return f"{scene}; VM {identity['view_model_initialization']}"
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Wasm advance+draw performance evidence",
@@ -429,14 +533,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"{report['measurement']['repeat']} segments/run; "
         f"{report['measurement']['browser_warmups']} discarded browser warmup(s).",
         "",
-        "| Fixture | Size | Wasm median (CV) | Native Rust median (CV) | Wasm/native | Advance | Draw |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Fixture | Workload identity | Size | Wasm median (CV) | Native Rust median (CV) | Wasm/native | Advance | Draw |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report["fixtures"]:
         wasm = row["wasm"]["elapsed_ms"]
         native = row["native_rust"]["elapsed_ms"]
         lines.append(
-            f"| `{row['id']}` | {row['bytes']:,} | {wasm['median']:.3f} ms ({wasm['coefficient_of_variation']:.1%}) "
+            f"| `{row['id']}` | {_workload_label(row['workload_identity'])} | {row['bytes']:,} | {wasm['median']:.3f} ms ({wasm['coefficient_of_variation']:.1%}) "
             f"| {native['median']:.3f} ms ({native['coefficient_of_variation']:.1%}) "
             f"| {_ratio(row['ratio']['elapsed'])} | {_ratio(row['ratio']['advance'])} | {_ratio(row['ratio']['draw'])} |"
         )

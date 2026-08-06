@@ -7,12 +7,12 @@ source hashes, comparison classification, fixture hashes, and pinned ref live in
 
 The mirror is diagnostic evidence, not a merge ratchet. Ratios are emitted only
 where both sides use the same input construction, operation boundary,
-repetition count, and minimum-per-iteration statistic. Ten cases currently meet
-that requirement; the ten `Draw*` cases are explicitly blocked.
+repetition count, and minimum-per-iteration statistic. All 20 cases meet that
+requirement.
 
 ## Workload correspondence
 
-Ten cases have equivalent measured boundaries and receive direct ratios:
+All 20 cases have equivalent measured boundaries and receive direct ratios:
 
 - `BuildRawPath`, `IterateRawPath`, `MeasurePath`, and `RawPathBounds`.
 - `MapPointsScaleTrans` and `MapPointsAffine` use the production bulk
@@ -24,21 +24,21 @@ Ten cases have equivalent measured boundaries and receive direct ratios:
 measure directly from the transformed `RawPath`; no Rust-only command adapter is
 inside the timed boundary.
 
-The ten `Draw*` cases have no ratio. Upstream's null backend skips only final GPU
-submission; production `RenderContext::flush()` still lays out logical flushes,
-grows and maps shadow-buffer rings, writes every typed resource buffer, plans
-draws, and tears down the frame. Rust's corresponding planning is inseparable
-from concrete WebGPU devices, pipelines, attachments, and encoders. The
-[dated blocker evidence](evidence/upstream-draw-microbenchmark-blocker-2026-08-06.md)
-maps that dependency. Direct tessellation helpers are not accepted as a
-substitute, and `microbench-run` refuses evidence while any case is blocked.
+- The ten `Draw*` cases use the production `LogicalFrame` through its retained
+  `NullLogicalRenderer`. Both sides execute ten 1600x1600 clockwise-atomic
+  begin/draw/flush frames, include logical planning and typed shadow-buffer
+  writes, and omit final GPU submission. The
+  [dated resolution record](evidence/upstream-draw-microbenchmark-blocker-2026-08-06.md)
+  maps the exact seam and regression coverage.
 
 The path coordinates, matrix values, C `srand(0)`/`rand()` inputs, and ten-frame
-draw loops follow the pinned sources. Random point normalization uses the host C
+draw loops follow the pinned sources. Paper capture preserves authored color,
+blend mode, and linear/radial gradients before applying upstream's forced
+stroke or feather mutations. Random point normalization uses the host C
 library's supported `RAND_MAX` contract: 32,767 on Windows and 2,147,483,647 on
 the Apple/Linux targets used by the upstream suite. Forced paper feathering
-uses Round joins and Round caps, matching upstream and production Rust rather
-than the authored paint styles.
+preserves authored paint styles while setting feather to 100 and the path fill
+rule to clockwise, matching upstream.
 
 The two bbox arrays and `paper.riv` are deterministic byte conversions of the
 upstream generated headers. `make microbench-gate` parses `REGISTER_BENCH`
@@ -87,12 +87,11 @@ and iteration count, rather than its median estimate.
 The timed binaries call production-compiled code through doc-hidden
 `upstream-microbenchmarks` modules in `nuxie-runtime` and `nuxie-renderer`.
 These opt-in public symbols are not in default builds, but they are a permanent
-API and maintenance tradeoff. The draw workload currently panics rather than
-time a shallow tessellation substitute; it can become runnable only after the
-backend-neutral production `LogicalFrame` described in the blocker evidence is
-available. This is preferable to copying private source modules into the bench
-target, which compiles `cfg(test)` counters and statistics into timed code and
-can suppress real tests under `--all-features`.
+API and maintenance tradeoff. Draw workloads cross the production
+`LogicalFrame` seam through the Null adapter; they never call shallow direct
+tessellation substitutes. This is preferable to copying private source modules
+into the bench target, which compiles `cfg(test)` counters and statistics into
+timed code and can suppress real tests under `--all-features`.
 
 Criterion remains a dev-only dependency. Renderer's optional `libc` dependency
 is enabled only by the benchmark-support feature for the upstream C PRNG input

@@ -222,7 +222,7 @@ class MicrobenchContractTests(unittest.TestCase):
         self.assertEqual(len(content), 32)
         self.assertEqual(content[:16].hex(), "ffffffff020000000300000004000000")
 
-    def test_report_emits_ratios_only_for_the_ten_equivalent_boundaries(self):
+    def test_report_emits_ratios_for_all_twenty_equivalent_boundaries(self):
         tool = load_tool()
         inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
         cpp = {case.name: index + 1.0 for index, case in enumerate(inventory.cases)}
@@ -232,14 +232,12 @@ class MicrobenchContractTests(unittest.TestCase):
 
         rows = [line for line in table.splitlines() if line.startswith("| `")]
         ratio_rows = [line for line in rows if "2.000x" in line]
-        blocked_rows = [line for line in rows if "LogicalFrame" in line]
-        self.assertEqual(len(ratio_rows), 10)
-        self.assertEqual(len(blocked_rows), 10)
+        self.assertEqual(len(ratio_rows), 20)
         self.assertTrue(any("| `BuildRawPath` |" in row for row in rows))
         self.assertTrue(any("| `RawPathBounds` |" in row for row in rows))
         self.assertTrue(all("2.000x" in row for row in ratio_rows))
         self.assertNotIn("Directional timings", table)
-        self.assertEqual(table.count("requires a production backend-neutral LogicalFrame"), 10)
+        self.assertNotIn("Blocked equivalence", table)
 
     def test_report_marks_architecture_blockers_without_timing_or_ratio(self):
         tool = load_tool()

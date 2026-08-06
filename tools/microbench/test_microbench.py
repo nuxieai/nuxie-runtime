@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -100,6 +101,77 @@ def make_sealed_run_fixture(tool, root: pathlib.Path, case_count: int = 1):
 
 
 class MicrobenchContractTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "requires the Apple developer toolchain")
+    def test_cpp_build_inputs_seal_effective_xcode_tools_not_dispatcher_shims(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "cpp-source"
+            run_dir = root / "run"
+            source.mkdir()
+            run_dir.mkdir()
+
+            environment = tool.cpp_build_environment(source, run_dir)
+            developer_dir = pathlib.Path(
+                subprocess.run(
+                    ["/usr/bin/xcode-select", "-p"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+            ).resolve()
+            xcrun_environment = {
+                "DEVELOPER_DIR": str(developer_dir),
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            }
+
+            def selected_tool(name: str) -> pathlib.Path:
+                command = ["/usr/bin/xcrun"]
+                if name in {"metal", "metallib"}:
+                    command.extend(["--sdk", "macosx"])
+                command.extend(["--find", name])
+                return pathlib.Path(
+                    subprocess.run(
+                        command,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        env=xcrun_environment,
+                    ).stdout.strip()
+                )
+
+            selected_sdk = pathlib.Path(
+                subprocess.run(
+                    ["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=xcrun_environment,
+                ).stdout.strip()
+            ).resolve()
+
+            inputs = tool.write_cpp_build_inputs(
+                source,
+                run_dir,
+                environment,
+                [str(source / "build" / "build_rive.sh"), "release", "--", "bench"],
+            )
+            document = json.loads(inputs.read_text())
+
+            self.assertEqual(environment["DEVELOPER_DIR"], str(developer_dir))
+            self.assertEqual(environment["CC"], str(selected_tool("clang")))
+            self.assertEqual(environment["CXX"], str(selected_tool("clang++")))
+            self.assertEqual(pathlib.Path(environment["CXX"]).name, "clang++")
+            self.assertEqual(environment["SDKROOT"], str(selected_sdk))
+            self.assertEqual(document["macos_sdk"]["path"], str(selected_sdk))
+            self.assertEqual(document["tools"]["make"]["path"], str(selected_tool("make")))
+            self.assertEqual(document["tools"]["metal"]["path"], str(selected_tool("metal")))
+            self.assertEqual(
+                document["tools"]["metallib"]["path"], str(selected_tool("metallib"))
+            )
+            self.assertNotEqual(document["tools"]["cc"]["path"], "/usr/bin/cc")
+            self.assertNotEqual(document["tools"]["make"]["path"], "/usr/bin/make")
+
     def test_benchmark_content_identity_ignores_only_evidence_docs(self):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as directory:
@@ -474,7 +546,7 @@ class MicrobenchContractTests(unittest.TestCase):
                 'test -z "${RIVE_VARIANT+x}"\n'
                 'test -z "${DEPENDENCIES+x}"\n'
                 'test -z "${PREMAKE_PATH+x}"\n'
-                'test -z "${SDKROOT+x}"\n'
+                'test -d "$SDKROOT"\n'
                 "case \"$RIVE_OUT\" in /*) exit 2;; esac\n"
                 "test ! -e \"$RIVE_OUT\"\n"
                 "mkdir -p \"$RIVE_OUT\"\n"
@@ -494,6 +566,7 @@ class MicrobenchContractTests(unittest.TestCase):
                 "RIVE_ARCH": "wasm",
                 "RIVE_VARIANT": "emulator",
                 "DEPENDENCIES": "/tmp/ambient-dependencies",
+                "DEVELOPER_DIR": "/tmp/ambient-developer-dir",
                 "PREMAKE_PATH": "/tmp/ambient-premake",
                 "SDKROOT": "/tmp/ambient-sdk",
             }
@@ -508,6 +581,10 @@ class MicrobenchContractTests(unittest.TestCase):
             self.assertEqual(command[-3:], ["release", "--", "bench"])
             recorded = json.loads(inputs.read_text())
             self.assertEqual(recorded["environment"]["RIVE_CONFIG"], "release")
+            self.assertNotEqual(
+                recorded["environment"]["DEVELOPER_DIR"], ambient["DEVELOPER_DIR"]
+            )
+            self.assertNotEqual(recorded["environment"]["SDKROOT"], ambient["SDKROOT"])
             self.assertNotIn("RIVE_OS", recorded["environment"])
             self.assertNotIn("DEPENDENCIES", recorded["environment"])
             self.assertIn("dependency_trees", recorded)
@@ -583,6 +660,21 @@ class MicrobenchContractTests(unittest.TestCase):
             run_manifest.write_text(json.dumps(run))
 
             with self.assertRaisesRegex(tool.ContractError, "build tool changed: cxx"):
+                tool.load_run(root, manifest, run_manifest, inventory)
+
+    def test_load_run_rejects_forged_developer_directory_identity(self):
+        tool = load_tool()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            inventory, manifest, run_manifest, run = make_sealed_run_fixture(tool, root)
+            inputs = pathlib.Path(run["artifacts"]["cpp_build_inputs"]["path"])
+            document = json.loads(inputs.read_text())
+            document["developer_directory"]["version_plist"]["sha256"] = "0" * 64
+            inputs.write_text(json.dumps(document))
+            run["artifacts"]["cpp_build_inputs"] = tool.record_artifact(inputs)
+            run_manifest.write_text(json.dumps(run))
+
+            with self.assertRaisesRegex(tool.ContractError, "developer directory changed"):
                 tool.load_run(root, manifest, run_manifest, inventory)
 
 

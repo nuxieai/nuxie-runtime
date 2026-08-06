@@ -23,8 +23,8 @@ class ContractError(RuntimeError):
     pass
 
 
-RUN_SCHEMA = "nuxie-upstream-microbench-run-v5"
-CPP_BUILD_INPUTS_SCHEMA = "nuxie-upstream-microbench-cpp-build-inputs-v1"
+RUN_SCHEMA = "nuxie-upstream-microbench-run-v6"
+CPP_BUILD_INPUTS_SCHEMA = "nuxie-upstream-microbench-cpp-build-inputs-v2"
 FIXED_RUN_ARTIFACTS = {
     "inventory",
     "cpp_source_archive",
@@ -59,8 +59,10 @@ DIRECTIONAL_CASE_NAMES = {
 }
 CPP_PREMAKE_ARGS = "--with_rive_text --with_rive_layout --with_rive_canvas"
 CPP_BUILD_ENVIRONMENT_KEYS = {
+    "AR",
     "CC",
     "CXX",
+    "DEVELOPER_DIR",
     "GIT_CONFIG_GLOBAL",
     "GIT_CONFIG_NOSYSTEM",
     "GIT_TERMINAL_PROMPT",
@@ -73,9 +75,43 @@ CPP_BUILD_ENVIRONMENT_KEYS = {
     "RIVE_OUT",
     "RIVE_PREMAKE_ARGS",
     "RIVE_PREMAKE_TAG",
+    "SDKROOT",
     "TMPDIR",
 }
-CPP_BUILD_TOOL_NAMES = ("bash", "cc", "cxx", "curl", "git", "make", "python3", "unzip")
+CPP_XCODE_TOOL_NAMES = {
+    "ar": "ar",
+    "cc": "clang",
+    "cxx": "clang++",
+    "ld": "ld",
+    "libtool": "libtool",
+    "make": "make",
+    "metal": "metal",
+    "metallib": "metallib",
+    "ranlib": "ranlib",
+    "strip": "strip",
+}
+CPP_BUILD_TOOL_NAMES = (
+    "ar",
+    "bash",
+    "cc",
+    "cxx",
+    "curl",
+    "git",
+    "ld",
+    "libtool",
+    "make",
+    "metal",
+    "metallib",
+    "python3",
+    "ranlib",
+    "strip",
+    "unzip",
+    "xcode_select",
+    "xcrun",
+    "xxd",
+)
+XCODE_SELECT = pathlib.Path("/usr/bin/xcode-select")
+XCRUN = pathlib.Path("/usr/bin/xcrun")
 
 
 class Case(NamedTuple):
@@ -174,10 +210,124 @@ def sanitized_build_path() -> str:
     return os.pathsep.join(present)
 
 
+def active_developer_directory() -> pathlib.Path:
+    """Resolve xcode-select state without accepting an ambient DEVELOPER_DIR."""
+    try:
+        selected = subprocess.run(
+            [str(XCODE_SELECT), "-p"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={"LANG": "C", "LC_ALL": "C", "PATH": sanitized_build_path()},
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ContractError("unable to resolve the active Apple developer directory") from error
+    path = pathlib.Path(selected).resolve()
+    if not path.is_dir():
+        raise ContractError(f"active Apple developer directory is missing: {path}")
+    return path
+
+
+def resolve_xcode_tool(name: str, developer_dir: pathlib.Path) -> pathlib.Path:
+    command = [str(XCRUN)]
+    if name in {"metal", "metallib"}:
+        command.extend(["--sdk", "macosx"])
+    command.extend(["--find", name])
+    try:
+        selected = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                "DEVELOPER_DIR": str(developer_dir),
+                "LANG": "C",
+                "LC_ALL": "C",
+                "PATH": sanitized_build_path(),
+            },
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ContractError(f"unable to resolve Apple developer tool: {name}") from error
+    path = pathlib.Path(selected)
+    if not path.is_absolute() or not path.is_file():
+        raise ContractError(f"selected Apple developer tool is missing: {path}")
+    return path
+
+
+def selected_xcode_tools(developer_dir: pathlib.Path) -> dict[str, pathlib.Path]:
+    return {
+        logical_name: resolve_xcode_tool(command, developer_dir)
+        for logical_name, command in CPP_XCODE_TOOL_NAMES.items()
+    }
+
+
+def resolve_macos_sdk(developer_dir: pathlib.Path) -> pathlib.Path:
+    try:
+        selected = subprocess.run(
+            [str(XCRUN), "--sdk", "macosx", "--show-sdk-path"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                "DEVELOPER_DIR": str(developer_dir),
+                "LANG": "C",
+                "LC_ALL": "C",
+                "PATH": sanitized_build_path(),
+            },
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ContractError("unable to resolve the macOS developer SDK") from error
+    path = pathlib.Path(selected).resolve()
+    if not path.is_dir():
+        raise ContractError(f"selected macOS developer SDK is missing: {path}")
+    return path
+
+
+def macos_sdk_identity(sdk: pathlib.Path) -> dict:
+    settings = (sdk / "SDKSettings.json").resolve()
+    if not settings.is_file():
+        raise ContractError(f"selected macOS developer SDK has no settings identity: {sdk}")
+    return {
+        "path": str(sdk),
+        "settings": {"path": str(settings), **content_identity(settings.read_bytes())},
+    }
+
+
+def xcode_build_path(tools: dict[str, pathlib.Path]) -> str:
+    directories: list[str] = []
+    for name in ("cc", "make", "metal"):
+        directory = str(tools[name].parent)
+        if directory not in directories:
+            directories.append(directory)
+    for directory in sanitized_build_path().split(os.pathsep):
+        if directory not in directories:
+            directories.append(directory)
+    return os.pathsep.join(directories)
+
+
+def developer_directory_identity(developer_dir: pathlib.Path) -> dict:
+    candidates = (developer_dir.parent / "version.plist", developer_dir / "version.plist")
+    version_plist = next((path.resolve() for path in candidates if path.is_file()), None)
+    if version_plist is None:
+        raise ContractError(f"Apple developer directory has no version identity: {developer_dir}")
+    return {
+        "path": str(developer_dir),
+        "version_plist": {
+            "path": str(version_plist),
+            **content_identity(version_plist.read_bytes()),
+        },
+    }
+
+
 def resolve_build_tool(name: str, environment: dict[str, str]) -> pathlib.Path:
-    command = {"bash": "/bin/bash", "cc": environment["CC"], "cxx": environment["CXX"]}.get(
-        name, name
-    )
+    if name in CPP_XCODE_TOOL_NAMES:
+        developer_dir = pathlib.Path(environment["DEVELOPER_DIR"])
+        return resolve_xcode_tool(CPP_XCODE_TOOL_NAMES[name], developer_dir)
+    command = {
+        "bash": "/bin/bash",
+        "xcode_select": str(XCODE_SELECT),
+        "xcrun": str(XCRUN),
+    }.get(name, name)
     resolved = shutil.which(command, path=environment["PATH"])
     if resolved is None:
         raise ContractError(f"missing sanitized C++ build tool: {name}")
@@ -189,30 +339,31 @@ def resolve_build_tool(name: str, environment: dict[str, str]) -> pathlib.Path:
 
 def cpp_build_environment(source_dir: pathlib.Path, run_dir: pathlib.Path) -> dict[str, str]:
     """Construct the C++ build environment from an allowlist, never ambient overrides."""
-    fixed_path = sanitized_build_path()
-    cc = shutil.which("cc", path=fixed_path)
-    cxx = shutil.which("c++", path=fixed_path)
-    if cc is None or cxx is None:
-        raise ContractError("sanitized C++ compiler commands are unavailable")
+    developer_dir = active_developer_directory()
+    xcode_tools = selected_xcode_tools(developer_dir)
+    macos_sdk = resolve_macos_sdk(developer_dir)
     home = run_dir / "cpp-home"
     temporary = run_dir / "cpp-tmp"
     home.mkdir()
     temporary.mkdir()
     return {
-        "CC": str(pathlib.Path(cc).resolve()),
-        "CXX": str(pathlib.Path(cxx).resolve()),
+        "AR": str(xcode_tools["ar"]),
+        "CC": str(xcode_tools["cc"]),
+        "CXX": str(xcode_tools["cxx"]),
+        "DEVELOPER_DIR": str(developer_dir),
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_TERMINAL_PROMPT": "0",
         "HOME": str(home.resolve()),
         "LANG": "C",
         "LC_ALL": "C",
-        "PATH": fixed_path,
+        "PATH": xcode_build_path(xcode_tools),
         "RIVE_BUILD_SYSTEM": "gmake2",
         "RIVE_CONFIG": "release",
         "RIVE_OUT": os.path.relpath(run_dir / "cpp-build", source_dir / "tests"),
         "RIVE_PREMAKE_ARGS": CPP_PREMAKE_ARGS,
         "RIVE_PREMAKE_TAG": "v5.0.0-beta7",
+        "SDKROOT": str(macos_sdk),
         "TMPDIR": str(temporary.resolve()),
     }
 
@@ -233,7 +384,11 @@ def write_cpp_build_inputs(
     document = {
         "schema": CPP_BUILD_INPUTS_SCHEMA,
         "command": command,
+        "developer_directory": developer_directory_identity(
+            pathlib.Path(environment["DEVELOPER_DIR"])
+        ),
         "environment": environment,
+        "macos_sdk": macos_sdk_identity(pathlib.Path(environment["SDKROOT"])),
         "tools": tools,
         "dependency_trees": {
             relative: directory_content_identity(source_dir / relative)
@@ -253,7 +408,9 @@ def validate_cpp_build_inputs(contents: bytes, run_manifest: pathlib.Path) -> No
     if not isinstance(document, dict) or set(document) != {
         "schema",
         "command",
+        "developer_directory",
         "environment",
+        "macos_sdk",
         "tools",
         "dependency_trees",
     }:
@@ -272,29 +429,41 @@ def validate_cpp_build_inputs(contents: bytes, run_manifest: pathlib.Path) -> No
         "bench",
     ]:
         raise ContractError("sealed C++ build command differs")
+    developer_dir = active_developer_directory()
+    xcode_tools = selected_xcode_tools(developer_dir)
+    macos_sdk = resolve_macos_sdk(developer_dir)
     expected_environment = {
+        "AR": str(xcode_tools["ar"]),
+        "CC": str(xcode_tools["cc"]),
+        "CXX": str(xcode_tools["cxx"]),
+        "DEVELOPER_DIR": str(developer_dir),
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_TERMINAL_PROMPT": "0",
         "HOME": str((run_dir / "cpp-home").resolve()),
         "LANG": "C",
         "LC_ALL": "C",
-        "PATH": sanitized_build_path(),
+        "PATH": xcode_build_path(xcode_tools),
         "RIVE_BUILD_SYSTEM": "gmake2",
         "RIVE_CONFIG": "release",
         "RIVE_OUT": os.path.relpath(run_dir / "cpp-build", source_dir / "tests"),
         "RIVE_PREMAKE_ARGS": CPP_PREMAKE_ARGS,
         "RIVE_PREMAKE_TAG": "v5.0.0-beta7",
+        "SDKROOT": str(macos_sdk),
         "TMPDIR": str((run_dir / "cpp-tmp").resolve()),
     }
     for name, expected in expected_environment.items():
         if environment.get(name) != expected:
             raise ContractError(f"sealed C++ build environment mismatch for {name}")
+    if document["developer_directory"] != developer_directory_identity(developer_dir):
+        raise ContractError("sealed Apple developer directory changed")
+    if document["macos_sdk"] != macos_sdk_identity(macos_sdk):
+        raise ContractError("sealed macOS developer SDK changed")
     tools = document["tools"]
     if not isinstance(tools, dict) or set(tools) != set(CPP_BUILD_TOOL_NAMES):
         raise ContractError("sealed C++ build tool set differs")
-    for compiler in ("cc", "cxx"):
-        if environment.get(compiler.upper()) != tools[compiler].get("path"):
+    for compiler, variable in (("ar", "AR"), ("cc", "CC"), ("cxx", "CXX")):
+        if environment.get(variable) != tools[compiler].get("path"):
             raise ContractError(f"sealed C++ compiler path mismatch for {compiler}")
     for name, identity in tools.items():
         if not isinstance(identity, dict) or set(identity) != {"path", "bytes", "sha256"}:

@@ -8864,6 +8864,14 @@ impl ArtboardInstance {
         if layout_component_style_display_value_property_key() == Some(property_key) {
             changed |= self.propagate_layout_component_display_changed(local_id);
         }
+        if type_name == Some("LayoutParticipant")
+            && property_key_for_name("LayoutParticipant", "displayValue") == Some(property_key)
+        {
+            if let Some(host_local) = self.component_parent_local(local_id) {
+                changed |= crate::layout_node_provider::mark_layout_node_dirty(self, host_local);
+            }
+            changed |= self.propagate_layout_participant_display_collapse(local_id);
+        }
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("LayoutComponentStyle")
             && [
                 property_key_for_name("LayoutComponentStyle", "animationStyleType"),
@@ -9154,6 +9162,20 @@ impl ArtboardInstance {
                 changed |= self.propagate_layout_component_display_collapse(local_id);
             }
         }
+        // `LayoutParticipant::syncStyleChanges` runs after the authored
+        // onAddedClean callbacks above and folds its local display state into
+        // the host TransformComponent's retained collapse bit. Do the same
+        // after Solo/LayoutComponent have established their parent state.
+        let participant_locals = self
+            .components()
+            .iter()
+            .filter_map(|component| {
+                (component.type_name == "LayoutParticipant").then_some(component.local_id)
+            })
+            .collect::<Vec<_>>();
+        for participant_local in participant_locals {
+            changed |= self.propagate_layout_participant_display_collapse(participant_local);
+        }
         changed
     }
 
@@ -9163,6 +9185,91 @@ impl ArtboardInstance {
 
     fn propagate_layout_component_display_collapse(&mut self, layout_local: usize) -> bool {
         self.propagate_layout_component_display_collapse_with_ancestor(layout_local, false)
+    }
+
+    /// Port of pinned `LayoutParticipant::syncStyleChanges`: display:none is
+    /// retained on the host TransformComponent so `Drawable::willDraw` remains
+    /// an O(1) collapse-bit read. The parent and Solo checks match the C++ fold
+    /// and prevent display:flex from revealing an otherwise hidden host.
+    fn propagate_layout_participant_display_collapse(&mut self, participant_local: usize) -> bool {
+        let Some(participant) = self.component_handle(participant_local) else {
+            return false;
+        };
+        if self
+            .objects
+            .component(participant)
+            .is_none_or(|component| component.type_name != "LayoutParticipant")
+        {
+            return false;
+        }
+        let Some(host) = self
+            .objects
+            .component(participant)
+            .and_then(|component| component.parent)
+        else {
+            return false;
+        };
+        let Some(host_local) = self.objects.component_local_id(host) else {
+            return false;
+        };
+
+        let display_hidden = property_key_for_name("LayoutParticipant", "displayValue")
+            .and_then(|key| self.uint_property(participant_local, key))
+            == Some(1);
+        let mut parent_hides_host = false;
+        if let Some(parent) = self
+            .objects
+            .component(host)
+            .and_then(|component| component.parent)
+        {
+            parent_hides_host = self
+                .objects
+                .component(parent)
+                .is_some_and(RuntimeComponent::is_collapsed);
+            if let Some(parent_local) = self.objects.component_local_id(parent) {
+                let parent_display_hidden =
+                    self.objects
+                        .component(parent)
+                        .is_some_and(|component| component.concrete.layout.is_some())
+                        && self.layout_component_style_local(parent_local).and_then(
+                            |style_local| {
+                                layout_component_style_display_value_property_key()
+                                    .and_then(|key| self.uint_property(style_local, key))
+                            },
+                        ) == Some(1);
+                parent_hides_host |= parent_display_hidden;
+            }
+
+            if let Some((active_key, host_cpp_local)) =
+                self.objects.component(parent).and_then(|component| {
+                    let solo = component.concrete.solo.as_ref()?;
+                    let host_index = component.children.iter().position(|child| *child == host)?;
+                    Some((
+                        solo.active_component_property_key?,
+                        *solo.cpp_local_ids.get(host_index)?,
+                    ))
+                })
+            {
+                let active_cpp_local = self
+                    .objects
+                    .component_local_id(parent)
+                    .and_then(|parent_local| self.uint_property(parent_local, active_key))
+                    .and_then(|value| usize::try_from(value).ok());
+                parent_hides_host |= active_cpp_local != Some(host_cpp_local);
+            }
+        }
+
+        let collapsed = parent_hides_host || display_hidden;
+        if self
+            .objects
+            .component(host)
+            .is_some_and(|component| component.is_collapsed() == collapsed)
+        {
+            // Component::collapse returns before ContainerComponent walks its
+            // descendants when the retained bit already has this value.
+            return false;
+        }
+        self.collapse_component_tree(host_local, collapsed)
     }
 
     // Mirrors C++ src/layout_component.cpp LayoutComponent::propagateCollapse:

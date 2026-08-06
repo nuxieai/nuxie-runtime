@@ -4978,12 +4978,13 @@ impl ArtboardInstance {
         &self,
         component: &RuntimeComponent,
     ) -> bool {
-        // Mirrors C++ `Component::isCollapsed` plus
-        // `LayoutComponent::isCollapsed`: descendants receive propagated
-        // collapse dirt during update, while a layout component's own
-        // display:none is checked locally.
+        // Mirrors C++ virtual dispatch: ordinary Components read only their
+        // retained collapse bit. LayoutComponent alone adds its direct style
+        // check; LayoutParticipant folds display:none into its host's bit when
+        // styles sync, so drawing never searches every owner's child list.
         component.is_collapsed()
-            || self.runtime_layout_component_is_display_none(component.local_id)
+            || (component.concrete.layout.is_some()
+                && self.runtime_layout_component_is_display_none(component.local_id))
     }
 
     fn runtime_drawable_dispatch_for_node(
@@ -8247,7 +8248,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_is_display_none(&self, layout_local: usize) -> bool {
-        let Some(style_local) = self.runtime_layout_node_style_local(layout_local) else {
+        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
             return false;
         };
         const YG_DISPLAY_NONE: u64 = 1;

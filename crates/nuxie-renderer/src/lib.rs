@@ -2435,6 +2435,9 @@ impl Renderer for WgpuFrame {
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
+            return;
+        }
         let Some(path) = logical_path(path) else {
             self.unsupported
                 .get_or_insert("clip path from another renderer backend");
@@ -9792,6 +9795,41 @@ mod tests {
     }
 
     #[test]
+    fn null_frame_poison_prevents_clip_residency_after_failed_scheduled_draw() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::Msaa,
+            max_texture_dimension_2d: 16,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut null = NullLogicalRenderer::new(config);
+        let clip = null.prepare_path(&logical_triangle(), FillRule::NonZero);
+        let oversized = null.prepare_path(&logical_triangle(), FillRule::NonZero);
+        let valid = null.prepare_path(&logical_triangle(), FillRule::NonZero);
+        null.begin_frame();
+        null.clip_path(&clip).unwrap();
+
+        let error = null
+            .draw_path(
+                &oversized,
+                LogicalPathPaint {
+                    feather: 16.0,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error, "draw batch exceeds logical flush resource limits");
+        assert_eq!(
+            null.draw_path(&valid, LogicalPathPaint::default()),
+            Err(error),
+            "a draw must not observe clip residency staged by the failed draw"
+        );
+        assert_eq!(null.clip_path(&clip), Err(error));
+        assert!(matches!(null.flush(), Err(flush_error) if flush_error == error));
+    }
+
+    #[test]
     fn wgpu_encoder_consumes_one_shared_logical_resource_plan() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let path = LogicalPath {
@@ -14040,6 +14078,21 @@ mod tests {
                 "paint shader from another renderer backend"
             ))
         ));
+    }
+
+    #[test]
+    fn foreign_wgpu_clip_is_a_noop_after_the_clip_is_already_empty() {
+        let mut factory = WgpuFactory::new_with_mode(4, 4, RenderMode::Msaa).unwrap();
+        let mut recording = nuxie_render_api::RecordingFactory::new();
+        let empty_clip = factory.make_empty_render_path();
+        let foreign_clip = recording.make_empty_render_path();
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(empty_clip.as_ref());
+        frame.clip_path(foreign_clip.as_ref());
+
+        assert!(frame.unsupported.is_none());
+        assert!(frame.finish().is_ok());
     }
 
     #[test]

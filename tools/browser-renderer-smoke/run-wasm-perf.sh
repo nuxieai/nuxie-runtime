@@ -129,6 +129,10 @@ PYTHON_COORDINATOR="$COORDINATOR_DIR/wasm_perf.py"
 NODE_COORDINATOR="$COORDINATOR_DIR/run-wasm-perf.cjs"
 exec 9<"$PYTHON_COORDINATOR"
 PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"
+PYTHON_COORDINATOR_LOADER='import os; os.lseek(9, 0, os.SEEK_SET); source = b"".join(iter(lambda: os.read(9, 1048576), b"")); exec(compile(source, "<sealed-wasm-perf-coordinator>", "exec"), {"__name__": "__main__", "__file__": "<sealed-wasm-perf-coordinator>"})'
+run_python_coordinator() {
+  PYTHONDONTWRITEBYTECODE=1 python3 -c "$PYTHON_COORDINATOR_LOADER" "$@"
+}
 RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:?RIVE_RUNTIME_DIR is required}"
 RUST_GOLDEN_RUNNER="${RUST_GOLDEN_RUNNER:?RUST_GOLDEN_RUNNER is required}"
 PORT="${BROWSER_WASM_PERF_PORT:-8766}"
@@ -159,12 +163,12 @@ if ! command -v npm >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
 fi
 
 mkdir -p "$WORK_DIR"
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" audit \
+run_python_coordinator audit \
   --repo-root "$ROOT" \
   --cargo "$STABLE_CARGO" \
   --source "$ROOT/tools/browser-renderer-smoke/src/lib.rs" \
   --shell-source "$COORDINATOR_DIR/run-wasm-perf.sh"
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" prepare \
+run_python_coordinator prepare \
   --repo-root "$ROOT" \
   --rive-runtime-dir "$RIVE_RUNTIME_DIR" \
   --perf-manifest "$ROOT/perf-corpus.toml" \
@@ -203,7 +207,7 @@ cleanup() {
 trap cleanup EXIT
 
 BROWSER_RENDERER_PRODUCTION_ONLY=1 "$ROOT/tools/browser-renderer-smoke/build.sh"
-RUN_SEAL_SHA256="$(PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" seal \
+RUN_SEAL_SHA256="$(run_python_coordinator seal \
   --config "$CONFIG" \
   --seal "$SEAL" \
   --repo-root "$ROOT" \
@@ -245,7 +249,7 @@ NODE_PATH="$PLAYWRIGHT_ROOT/node_modules" \
   "$SEAL" \
   "$RUN_SEAL_SHA256"
 
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" finalize \
+run_python_coordinator finalize \
   --config "$CONFIG" \
   --seal "$SEAL" \
   --expected-seal-sha256 "$RUN_SEAL_SHA256" \

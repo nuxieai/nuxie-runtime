@@ -1,0 +1,105 @@
+{
+  "schema": "nuxie-univ-1684-diagnostic-summary-v1",
+  "issue": "UNIV-1684",
+  "status": "diagnostic-only-contention",
+  "candidate_commit": "74e8fbeb",
+  "correctness_followup_commit": "bd6fd1f7",
+  "pinned_cpp_commit": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "runner": {
+    "source_digest": "4f6d045fe2c9a6a93dddf2529a3e8a8b8a181ef7aea32d7e4915e1512420d4e3",
+    "binary_sha256": "9f87bbc6648a532b1be04f7cfc4ac7f7c539a74cc4a8227ac3e2129e46c60a32",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)"
+  },
+  "measurement": {
+    "frames": 100,
+    "hz": 60,
+    "iterations": 5,
+    "warmups": 0,
+    "aggregate": "median",
+    "runner_order": "cpp-first",
+    "quiet_wait_seconds": 900,
+    "quiet_threshold": 9,
+    "loads": [24, 23, 21]
+  },
+  "clean_ci_before_ratios": {
+    "car_widgets_v01": 20.445,
+    "gamepad_test": 14.47,
+    "script_create_text_runs": 8.343
+  },
+  "local_before": [
+    {
+      "runner_order": "cpp-first",
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 8.78516, "rust_total_ms": 299.516215, "ratio": 34.093427 },
+        "gamepad_test": { "cpp_total_ms": 0.656092, "rust_total_ms": 15.111476, "ratio": 23.032556 },
+        "script_create_text_runs": { "cpp_total_ms": 1.15041, "rust_total_ms": 28.199167, "ratio": 24.512276 }
+      }
+    },
+    {
+      "runner_order": "rust-first",
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 6.01674, "rust_total_ms": 287.259533, "ratio": 47.743385 },
+        "gamepad_test": { "cpp_total_ms": 0.475572, "rust_total_ms": 13.568185, "ratio": 28.530244 },
+        "script_create_text_runs": { "cpp_total_ms": 0.902338, "rust_total_ms": 29.139216, "ratio": 32.293017 }
+      }
+    }
+  ],
+  "local_after": [
+    {
+      "load": 24,
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 5.46418, "rust_total_ms": 243.706911, "ratio": 44.60082 },
+        "gamepad_test": { "cpp_total_ms": 0.584254, "rust_total_ms": 8.672427, "ratio": 14.84359 },
+        "script_create_text_runs": { "cpp_total_ms": 0.923834, "rust_total_ms": 21.546384, "ratio": 23.322787 }
+      }
+    },
+    {
+      "load": 23,
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 6.70198, "rust_total_ms": 261.105753, "ratio": 38.959495 },
+        "gamepad_test": { "cpp_total_ms": 0.532256, "rust_total_ms": 8.372632, "ratio": 15.730461 },
+        "script_create_text_runs": { "cpp_total_ms": 0.941834, "rust_total_ms": 23.794788, "ratio": 25.264312 }
+      }
+    },
+    {
+      "load": 21,
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 5.03492, "rust_total_ms": 251.192535, "ratio": 49.890075 },
+        "gamepad_test": { "cpp_total_ms": 0.613002, "rust_total_ms": 8.599674, "ratio": 14.028786 },
+        "script_create_text_runs": { "cpp_total_ms": 1.102588, "rust_total_ms": 25.397042, "ratio": 23.034027 }
+      }
+    }
+  ],
+  "sampled_stack_summary": {
+    "car_widgets_v01": {
+      "before": {
+        "layout_participant_samples": 427,
+        "participant_below_draw_collapse_predicate": true
+      },
+      "after": {
+        "main_thread_samples": 4037,
+        "draw_collapse_predicate_samples": 56,
+        "layout_participant_samples": 50,
+        "participant_below_draw_collapse_predicate": false
+      }
+    },
+    "gamepad_test": {
+      "before": {
+        "callback_registration_below_userdata_creation": true
+      },
+      "after": {
+        "callback_registration_samples": 0,
+        "metatable_registration_samples": 0,
+        "scripted_mat2d_payload_creation_samples": 1
+      }
+    },
+    "script_create_text_runs": {
+      "status": "acceptance-control-no-new-attribution",
+      "clean_ci_before_ratio": 8.343,
+      "new_profile_captured": false,
+      "optimization_claimed": false
+    }
+  },
+  "ratchet_changed": false,
+  "authoritative_closeout_required": true
+}

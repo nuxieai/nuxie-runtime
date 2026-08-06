@@ -26,7 +26,7 @@ pub(crate) struct ResourceCounters {
 }
 
 impl ResourceCounters {
-    fn checked_add(self, rhs: Self) -> Option<Self> {
+    pub(crate) fn checked_add(self, rhs: Self) -> Option<Self> {
         Some(Self {
             midpoint_fan_tess_vertex_count: self
                 .midpoint_fan_tess_vertex_count

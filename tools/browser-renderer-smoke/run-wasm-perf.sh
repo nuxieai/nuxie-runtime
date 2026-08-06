@@ -16,6 +16,9 @@ WORK_DIR="$ROOT/target/browser-wasm-perf"
 CONFIG="$WORK_DIR/config.json"
 BROWSER_RESULTS="$WORK_DIR/browser-results.json"
 SERVER_LOG="$WORK_DIR/server.log"
+WASM_ARTIFACT="$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke_bg.wasm"
+WASM_BINDGEN_JS="$ROOT/tools/browser-renderer-smoke/pkg/browser_renderer_smoke.js"
+GENERATED_PKG="$ROOT/tools/browser-renderer-smoke/pkg"
 PLAYWRIGHT_VERSION=1.55.0
 PLAYWRIGHT_ROOT="$ROOT/target/browser-tools/playwright"
 STABLE_CARGO="${CARGO:-$(rustup which --toolchain stable cargo)}"
@@ -41,7 +44,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.
   --ids "$IDS" \
   --repeat "$REPEAT" \
   --runs "$RUNS" \
-  --warmups "$WARMUPS"
+  --warmups "$WARMUPS" \
+  --allowed-output "$WORK_DIR" \
+  --allowed-output "$OUTPUT" \
+  --allowed-output "$MARKDOWN" \
+  --allowed-output "$GENERATED_PKG"
 
 installed_version="$(
   node -p "try { require('$PLAYWRIGHT_ROOT/node_modules/playwright/package.json').version } catch (_) { '' }"
@@ -65,6 +72,17 @@ cleanup() {
 trap cleanup EXIT
 
 BROWSER_RENDERER_PRODUCTION_ONLY=1 "$ROOT/tools/browser-renderer-smoke/build.sh"
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.py" seal \
+  --config "$CONFIG" \
+  --repo-root "$ROOT" \
+  --rive-runtime-dir "$RIVE_RUNTIME_DIR" \
+  --native-runner "$RUST_GOLDEN_RUNNER" \
+  --wasm-artifact "$WASM_ARTIFACT" \
+  --wasm-bindgen-js "$WASM_BINDGEN_JS" \
+  --allowed-output "$WORK_DIR" \
+  --allowed-output "$OUTPUT" \
+  --allowed-output "$MARKDOWN" \
+  --allowed-output "$GENERATED_PKG"
 python3 -m http.server "$PORT" \
   --bind 127.0.0.1 \
   --directory "$ROOT" \
@@ -92,6 +110,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tools/browser-renderer-smoke/wasm_perf.
   --config "$CONFIG" \
   --browser-results "$BROWSER_RESULTS" \
   --native-runner "$RUST_GOLDEN_RUNNER" \
+  --repo-root "$ROOT" \
+  --rive-runtime-dir "$RIVE_RUNTIME_DIR" \
+  --allowed-output "$WORK_DIR" \
+  --allowed-output "$OUTPUT" \
+  --allowed-output "$MARKDOWN" \
+  --allowed-output "$GENERATED_PKG" \
   --output "$OUTPUT" \
   --markdown "$MARKDOWN"
 

@@ -1,9 +1,117 @@
+import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 import wasm_perf
+
+
+class SourceProvenanceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.repo = self.root / "repo"
+        self.runtime = self.root / "runtime"
+        self._initialize_repo(self.repo, "measured.rs")
+        self._initialize_repo(self.runtime, "fixture.riv")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _initialize_repo(root: Path, filename: str) -> None:
+        root.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "wasm-perf@example.com"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Wasm Perf"], cwd=root, check=True
+        )
+        (root / filename).write_text("committed\n", encoding="utf-8")
+        subprocess.run(["git", "add", filename], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "fixture"], cwd=root, check=True)
+
+    def test_rejects_dirty_measured_source_before_capture(self):
+        (self.repo / "measured.rs").write_text("dirty\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(wasm_perf.ContractError, "source checkout is dirty"):
+            wasm_perf.capture_source_provenance(self.repo, self.runtime)
+
+    def test_rejects_measured_source_mutated_after_capture(self):
+        provenance = wasm_perf.capture_source_provenance(self.repo, self.runtime)
+        (self.repo / "measured.rs").write_text("mutated mid-run\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(wasm_perf.ContractError, "changed after capture"):
+            wasm_perf.verify_source_provenance(
+                provenance, self.repo, self.runtime
+            )
+
+    def test_allows_declared_generated_outputs_without_allowing_other_files(self):
+        generated = self.repo / "evidence" / "report.json"
+        generated.parent.mkdir()
+        generated.write_text("generated\n", encoding="utf-8")
+
+        provenance = wasm_perf.capture_source_provenance(
+            self.repo, self.runtime, allowed_outputs=[generated]
+        )
+        self.assertEqual(len(provenance["repo_sha"]), 40)
+        self.assertEqual(len(provenance["repo_tree_sha"]), 40)
+
+        (self.repo / "other-untracked.rs").write_text("source\n", encoding="utf-8")
+        with self.assertRaisesRegex(wasm_perf.ContractError, "other-untracked.rs"):
+            wasm_perf.verify_source_provenance(
+                provenance,
+                self.repo,
+                self.runtime,
+                allowed_outputs=[generated],
+            )
+
+    def test_rejects_output_allowance_that_contains_tracked_source(self):
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "allowance contains tracked source"
+        ):
+            wasm_perf.capture_source_provenance(
+                self.repo,
+                self.runtime,
+                allowed_outputs=[self.repo],
+            )
+
+    def test_seals_artifact_hashes_and_rejects_mid_run_artifact_mutation(self):
+        wasm = self.repo / "generated" / "runner.wasm"
+        native = self.repo / "generated" / "native-runner"
+        wasm.parent.mkdir()
+        wasm.write_bytes(b"wasm-v1")
+        native.write_bytes(b"native-v1")
+        allowed = [wasm.parent]
+        sources = wasm_perf.capture_source_provenance(
+            self.repo, self.runtime, allowed_outputs=allowed
+        )
+
+        sealed = wasm_perf.seal_run_provenance(
+            sources,
+            self.repo,
+            self.runtime,
+            artifacts={"wasm": wasm, "native_runner": native},
+            allowed_outputs=allowed,
+        )
+        self.assertEqual(
+            sealed["artifacts"]["wasm"]["sha256"],
+            hashlib.sha256(b"wasm-v1").hexdigest(),
+        )
+
+        wasm.write_bytes(b"wasm-v2")
+        with self.assertRaisesRegex(wasm_perf.ContractError, "artifact changed"):
+            wasm_perf.verify_run_provenance(
+                sealed,
+                self.repo,
+                self.runtime,
+                allowed_outputs=allowed,
+            )
 
 
 class CorpusSelectionTests(unittest.TestCase):

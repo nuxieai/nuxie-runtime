@@ -1,7 +1,23 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { measureFixture, measureRuns } = require("./wasm-perf-driver-lib.cjs");
+const {
+  assertLoadedFixtureIdentity,
+  measureFixture,
+  measureRuns,
+} = require("./wasm-perf-driver-lib.cjs");
+
+test("rejects fixture bytes changed before browser measurement", () => {
+  assert.throws(
+    () =>
+      assertLoadedFixtureIdentity(
+        "data_bind",
+        { bytes: 10, sha256: "expected" },
+        { bytes: 11, sha256: "mutated" },
+      ),
+    /browser loaded fixture identity mismatch.*data_bind/,
+  );
+});
 
 test("measures fresh total and phase passes with setup outside the clock", async () => {
   const events = [];

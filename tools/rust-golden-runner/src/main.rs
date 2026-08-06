@@ -25,6 +25,7 @@ use nuxie_runtime::{
 };
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{DetachedViewModelFrame, ScriptProgram, ScriptVm};
+use sha2::{Digest, Sha256};
 #[cfg(feature = "coverage-trace")]
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::{BTreeMap, BTreeSet};
@@ -591,6 +592,7 @@ fn run() -> Result<String> {
     let script_events = merge_script_events(input_events, view_model_events);
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
+    verify_expected_file_sha256(&bytes, options.expected_file_sha256.as_deref())?;
     let runtime = read_runtime_for_options(&bytes, options.execute_scripts)
         .context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
@@ -1176,6 +1178,17 @@ fn run() -> Result<String> {
     } else {
         Ok(factory.stream())
     }
+}
+
+fn verify_expected_file_sha256(bytes: &[u8], expected: Option<&str>) -> Result<()> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let actual = format!("{:x}", Sha256::digest(bytes));
+    if !actual.eq_ignore_ascii_case(expected) {
+        bail!("fixture sha256 mismatch: expected={expected} actual={actual}");
+    }
+    Ok(())
 }
 
 #[cfg(feature = "scripting")]
@@ -2860,6 +2873,39 @@ mod tests {
     }
 
     #[test]
+    fn expected_file_sha256_parses_for_sealed_fixture_runs() {
+        let expected = "a".repeat(64);
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--expected-file-sha256".to_owned(),
+            expected.clone(),
+        ])
+        .expect("parse sealed fixture identity");
+
+        assert_eq!(
+            options.expected_file_sha256.as_deref(),
+            Some(expected.as_str())
+        );
+        assert!(
+            Options::parse(vec![
+                "--file".to_owned(),
+                "fixture.riv".to_owned(),
+                "--expected-file-sha256".to_owned(),
+                "not-a-sha".to_owned(),
+            ])
+            .is_err()
+        );
+
+        verify_expected_file_sha256(b"sealed", None).expect("unsealed runs remain valid");
+        let sealed_sha = format!("{:x}", Sha256::digest(b"sealed"));
+        verify_expected_file_sha256(b"sealed", Some(&sealed_sha))
+            .expect("matching sealed bytes are accepted");
+        let error = verify_expected_file_sha256(b"swapped", Some(&sealed_sha)).unwrap_err();
+        assert!(error.to_string().contains("fixture sha256 mismatch"));
+    }
+
+    #[test]
     fn active_script_import_is_explicit() {
         let plain = Options::parse(vec!["--file".to_owned(), "fixture.riv".to_owned()])
             .expect("parse plain runner options");
@@ -3135,6 +3181,7 @@ fn advance_scene_to(
 #[derive(Debug)]
 struct Options {
     file: PathBuf,
+    expected_file_sha256: Option<String>,
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<PathBuf>,
@@ -3152,6 +3199,7 @@ struct Options {
 impl Options {
     fn parse(args: Vec<String>) -> Result<Self> {
         let mut file = None::<PathBuf>;
+        let mut expected_file_sha256 = None;
         let mut artboard = None;
         let mut state_machine = None;
         let mut input_script = None;
@@ -3177,6 +3225,15 @@ impl Options {
 
             match arg.as_str() {
                 "--file" => file = Some(PathBuf::from(value(arg)?)),
+                "--expected-file-sha256" => {
+                    let expected = value(arg)?;
+                    if expected.len() != 64
+                        || !expected.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    {
+                        bail!("--expected-file-sha256 requires 64 hexadecimal characters");
+                    }
+                    expected_file_sha256 = Some(expected);
+                }
                 "--artboard" => artboard = Some(value(arg)?),
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
@@ -3193,7 +3250,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--input-script <path>] [--view-model-script <path>] [--layout-bounds] [--execute-scripts] [--side-channel] [--semantic-default-view-model] [--semantic-side-channel-only] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--expected-file-sha256 SHA256] [--artboard <name>] [--samples <t0,t1,...>] [--input-script <path>] [--view-model-script <path>] [--layout-bounds] [--execute-scripts] [--side-channel] [--semantic-default-view-model] [--semantic-side-channel-only] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -3234,6 +3291,7 @@ impl Options {
 
         Ok(Self {
             file: file.context("missing --file <path>")?,
+            expected_file_sha256,
             artboard,
             state_machine,
             input_script,

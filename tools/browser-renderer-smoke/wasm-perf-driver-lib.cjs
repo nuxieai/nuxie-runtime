@@ -61,6 +61,20 @@ function assertExactKeys(value, expectedKeys, label) {
   }
 }
 
+function assertLoadedFixtureIdentity(fixtureId, expected, loaded) {
+  assertExactKeys(loaded, ["bytes", "sha256"], "browser loaded fixture identity");
+  const expectedIdentity = {
+    bytes: expected.bytes,
+    sha256: expected.sha256,
+  };
+  if (loaded.bytes !== expectedIdentity.bytes || loaded.sha256 !== expectedIdentity.sha256) {
+    throw new Error(
+      `browser loaded fixture identity mismatch for ${fixtureId}: ` +
+        `expected=${JSON.stringify(expectedIdentity)} loaded=${JSON.stringify(loaded)}`,
+    );
+  }
+}
+
 async function measureFixture({ createRunner, now, repeat, sampleSeconds }) {
   if (!Number.isInteger(repeat) || repeat <= 0) {
     throw new Error("repeat must be a positive integer");
@@ -135,7 +149,7 @@ async function measureRuns({ measure, warmups, runs }) {
   return reports;
 }
 
-const api = { checkedElapsed, measureFixture, measureRuns };
+const api = { assertLoadedFixtureIdentity, checkedElapsed, measureFixture, measureRuns };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = api;
 }

@@ -1817,6 +1817,7 @@ dependencies = [
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-scripting",
+ "sha2",
 ]
 
 [[package]]

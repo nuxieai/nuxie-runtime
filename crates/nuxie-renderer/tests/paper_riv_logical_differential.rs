@@ -15,8 +15,8 @@ use nuxie_render_api::{
     RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
 use nuxie_renderer::{
-    LogicalFrameConfig, LogicalFrameReport, LogicalPathPaint, NullLogicalRenderer, RenderMode,
-    WgpuFactory,
+    LogicalFrameConfig, LogicalFrameReport, LogicalGradient, LogicalPathPaint, NullLogicalRenderer,
+    RenderMode, WgpuFactory,
 };
 use nuxie_runtime::ArtboardInstance;
 use sha2::{Digest, Sha256};
@@ -35,6 +35,18 @@ struct CapturedPathPaint {
     join: StrokeJoin,
     cap: StrokeCap,
     feather: f32,
+    color: ColorInt,
+    blend_mode: BlendMode,
+    gradient: Option<LogicalGradient>,
+}
+
+#[derive(Clone, Debug)]
+struct CaptureShader(LogicalGradient);
+
+impl RenderShader for CaptureShader {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 struct CapturePath {
@@ -96,6 +108,9 @@ struct CapturePaint {
     join: StrokeJoin,
     cap: StrokeCap,
     feather: f32,
+    color: ColorInt,
+    blend_mode: BlendMode,
+    gradient: Option<LogicalGradient>,
 }
 
 impl Default for CapturePaint {
@@ -106,6 +121,9 @@ impl Default for CapturePaint {
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 0.0,
+            color: 0xff00_0000,
+            blend_mode: BlendMode::SrcOver,
+            gradient: None,
         }
     }
 }
@@ -119,7 +137,9 @@ impl RenderPaint for CapturePaint {
         self.style = style;
     }
 
-    fn color(&mut self, _value: ColorInt) {}
+    fn color(&mut self, value: ColorInt) {
+        self.color = value;
+    }
 
     fn thickness(&mut self, value: f32) {
         self.thickness = value.abs();
@@ -137,8 +157,20 @@ impl RenderPaint for CapturePaint {
         self.feather = value.abs();
     }
 
-    fn blend_mode(&mut self, _value: BlendMode) {}
-    fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
+    fn blend_mode(&mut self, value: BlendMode) {
+        self.blend_mode = value;
+    }
+
+    fn shader(&mut self, shader: Option<&dyn RenderShader>) {
+        self.gradient = shader.map(|shader| {
+            shader
+                .as_any()
+                .downcast_ref::<CaptureShader>()
+                .expect("capture shader")
+                .0
+                .clone()
+        });
+    }
     fn invalidate_stroke(&mut self) {}
 }
 
@@ -174,8 +206,12 @@ impl Factory for CaptureFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.null
-            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        Box::new(CaptureShader(LogicalGradient::Linear {
+            start: (sx, sy),
+            end: (ex, ey),
+            colors: colors.to_vec(),
+            stops: stops.to_vec(),
+        }))
     }
 
     fn make_radial_gradient(
@@ -186,8 +222,12 @@ impl Factory for CaptureFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.null
-            .make_radial_gradient(cx, cy, radius, colors, stops)
+        Box::new(CaptureShader(LogicalGradient::Radial {
+            center: (cx, cy),
+            radius,
+            colors: colors.to_vec(),
+            stops: stops.to_vec(),
+        }))
     }
 
     fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -236,6 +276,9 @@ impl Renderer for CaptureRenderer {
             join: paint.join,
             cap: paint.cap,
             feather: paint.feather,
+            color: paint.color,
+            blend_mode: paint.blend_mode,
+            gradient: paint.gradient.clone(),
         });
     }
 
@@ -316,6 +359,62 @@ fn capture_paper_paths() -> Vec<CapturedPathPaint> {
         .into_inner()
 }
 
+#[test]
+fn capture_paint_preserves_authored_color_blend_and_gradients() {
+    let mut factory = CaptureFactory::default();
+    let gradients = [
+        (
+            factory.make_linear_gradient(
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                &[0xff11_2233, 0xff44_5566],
+                &[0.0, 1.0],
+            ),
+            LogicalGradient::Linear {
+                start: (1.0, 2.0),
+                end: (3.0, 4.0),
+                colors: vec![0xff11_2233, 0xff44_5566],
+                stops: vec![0.0, 1.0],
+            },
+        ),
+        (
+            factory.make_radial_gradient(5.0, 6.0, 7.0, &[0xff77_8899, 0xffaa_bbcc], &[0.25, 0.75]),
+            LogicalGradient::Radial {
+                center: (5.0, 6.0),
+                radius: 7.0,
+                colors: vec![0xff77_8899, 0xffaa_bbcc],
+                stops: vec![0.25, 0.75],
+            },
+        ),
+    ];
+    let output = Rc::new(RefCell::new(Vec::new()));
+    let mut renderer = CaptureRenderer {
+        output: Rc::clone(&output),
+    };
+    let path = CapturePath {
+        path: RawPath::new(),
+        fill_rule: FillRule::EvenOdd,
+    };
+
+    for (shader, expected_gradient) in gradients {
+        let mut paint = CapturePaint::default();
+        paint.color(0xffde_adbe);
+        paint.blend_mode(BlendMode::Multiply);
+        paint.shader(Some(shader.as_ref()));
+        renderer.draw_path(&path, &paint);
+
+        let captured = output.borrow().last().expect("paint was captured").clone();
+        assert_eq!(captured.color, 0xffde_adbe);
+        assert_eq!(captured.blend_mode, BlendMode::Multiply);
+        assert_eq!(captured.gradient, Some(expected_gradient));
+        let logical = logical_paint(&captured);
+        assert_eq!(logical.color, captured.color);
+        assert_eq!(logical.blend_mode, captured.blend_mode);
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum PaperWorkload {
     Authored,
@@ -377,7 +476,8 @@ fn logical_paint(draw: &CapturedPathPaint) -> LogicalPathPaint {
         join: draw.join,
         cap: draw.cap,
         feather: draw.feather,
-        ..LogicalPathPaint::default()
+        color: draw.color,
+        blend_mode: draw.blend_mode,
     }
 }
 
@@ -391,9 +491,14 @@ fn null_report(
         .collect::<Vec<_>>();
     renderer.begin_frame();
     for (draw, path) in draws.iter().zip(&paths) {
-        renderer
-            .draw_path(path, logical_paint(draw))
-            .expect("paper draw is supported by Null");
+        match &draw.gradient {
+            Some(gradient) => renderer
+                .draw_path_with_gradient(path, logical_paint(draw), gradient.clone())
+                .expect("paper gradient draw is supported by Null"),
+            None => renderer
+                .draw_path(path, logical_paint(draw))
+                .expect("paper draw is supported by Null"),
+        }
     }
     renderer
         .flush_with_diagnostics()
@@ -411,6 +516,23 @@ fn wgpu_report(factory: &mut WgpuFactory, draws: &[CapturedPathPaint]) -> Logica
             paint.join(draw.join);
             paint.cap(draw.cap);
             paint.feather(draw.feather);
+            paint.color(draw.color);
+            paint.blend_mode(draw.blend_mode);
+            let shader = draw.gradient.as_ref().map(|gradient| match gradient {
+                LogicalGradient::Linear {
+                    start,
+                    end,
+                    colors,
+                    stops,
+                } => factory.make_linear_gradient(start.0, start.1, end.0, end.1, colors, stops),
+                LogicalGradient::Radial {
+                    center,
+                    radius,
+                    colors,
+                    stops,
+                } => factory.make_radial_gradient(center.0, center.1, *radius, colors, stops),
+            });
+            paint.shader(shader.as_deref());
             (path, paint)
         })
         .collect::<Vec<_>>();
@@ -488,6 +610,10 @@ fn pinned_paper_workloads_match_between_wgpu_and_null_logical_frames() {
             .iter()
             .any(|draw| draw.style == RenderPaintStyle::Stroke),
         "paper lost authored strokes"
+    );
+    assert!(
+        authored.iter().any(|draw| draw.color != 0xff00_0000),
+        "paper capture discarded authored solid colors"
     );
 
     for workload in PaperWorkload::ALL {

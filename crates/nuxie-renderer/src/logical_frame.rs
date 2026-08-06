@@ -275,6 +275,14 @@ pub struct LogicalFrameReport {
     pub buffer_rewinds: usize,
     pub written_bytes: usize,
     pub shadow_fingerprint: u64,
+    /// Draws for which the shared logical writer emitted a typed path/paint
+    /// resource bundle that the production backend must consume exactly once.
+    pub production_typed_output_eligible_draws: usize,
+    /// Eligible typed bundles consumed exactly once by the production backend.
+    pub production_typed_output_consumed_draws: usize,
+    /// Draws intentionally handled by a backend-specific non-path fallback
+    /// (for example images and MSAA clip resets).
+    pub production_fallback_draws: usize,
     pub production_typed_output_consumed: bool,
 }
 
@@ -288,6 +296,7 @@ pub struct LogicalFrame {
     pub(crate) logical_flush_allocations: LogicalFlushAllocations,
     pub(crate) logical_flush_starts: Vec<usize>,
     pub(crate) msaa_schedule: Vec<super::MsaaDrawSchedule>,
+    next_occurrence_id: u64,
     pub(crate) msaa_schedule_flush_starts: Vec<usize>,
     finalized: bool,
     finalization_passes: usize,
@@ -311,6 +320,7 @@ impl LogicalFrame {
             logical_flush_starts: vec![0],
             msaa_schedule: Vec::new(),
             msaa_schedule_flush_starts: Vec::new(),
+            next_occurrence_id: 1,
             finalized: false,
             finalization_passes: 0,
         }
@@ -322,6 +332,18 @@ impl LogicalFrame {
     ) -> Result<(), &'static str> {
         if self.finalized {
             return self.validate();
+        }
+        // Focused tests and internal replay helpers can construct SolidDraws
+        // directly. Give those occurrences the same stable identity that the
+        // normal admission path assigns before any scheduler clones/reorders.
+        for draw in &mut self.draws {
+            if draw.logical_occurrence_id == 0 {
+                draw.logical_occurrence_id = self.next_occurrence_id;
+                self.next_occurrence_id = self
+                    .next_occurrence_id
+                    .checked_add(1)
+                    .ok_or("logical draw occurrence identity overflow")?;
+            }
         }
         self.validate()?;
         if self.config.mode == RenderMode::Msaa {
@@ -366,6 +388,15 @@ impl LogicalFrame {
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
         if self.draws.len() != self.draw_resources.len() {
             return Err("logical frame draw/resource plan length mismatch");
+        }
+        if self.finalized {
+            let mut occurrence_ids = std::collections::HashSet::with_capacity(self.draws.len());
+            if self.draws.iter().any(|draw| {
+                draw.logical_occurrence_id == 0
+                    || !occurrence_ids.insert(draw.logical_occurrence_id)
+            }) {
+                return Err("logical frame draw occurrence identities are not unique");
+            }
         }
         if self
             .logical_flush_starts
@@ -479,11 +510,21 @@ impl LogicalFrame {
 
     pub(crate) fn push_content_batch(
         &mut self,
-        initial_clip_updates: Vec<SolidDraw>,
-        content: SolidDraw,
+        mut initial_clip_updates: Vec<SolidDraw>,
+        mut content: SolidDraw,
     ) -> Result<(), &'static str> {
         if self.finalized {
             return Err("cannot append draws after logical frame finalization");
+        }
+        for draw in initial_clip_updates
+            .iter_mut()
+            .chain(std::iter::once(&mut content))
+        {
+            draw.logical_occurrence_id = self.next_occurrence_id;
+            self.next_occurrence_id = self
+                .next_occurrence_id
+                .checked_add(1)
+                .ok_or("logical draw occurrence identity overflow")?;
         }
         let config = self.config;
         let uses_generic_atomic_plane =
@@ -512,7 +553,15 @@ impl LogicalFrame {
 
         let mut content = content;
         self.begin_logical_flush();
-        let (clip_updates, clip_id) = self.logical_state.prepare_scheduled_clip_updates(config)?;
+        let (mut clip_updates, clip_id) =
+            self.logical_state.prepare_scheduled_clip_updates(config)?;
+        for draw in &mut clip_updates {
+            draw.logical_occurrence_id = self.next_occurrence_id;
+            self.next_occurrence_id = self
+                .next_occurrence_id
+                .checked_add(1)
+                .ok_or("logical draw occurrence identity overflow")?;
+        }
         match &mut content.role {
             DrawRole::Content { clip_id: id } => *id = clip_id,
             DrawRole::ClipUpdate { .. } | DrawRole::ClipReset { .. } => {
@@ -1159,7 +1208,7 @@ pub(crate) struct PreparedLogicalFrameResources {
     typed_address: usize,
     typed_inputs: Vec<u64>,
     typed_draws: Vec<Option<PreparedTypedDrawResources>>,
-    typed_encoder_reads: Arc<AtomicUsize>,
+    typed_consumption: Arc<Vec<AtomicUsize>>,
 }
 
 #[derive(Clone)]
@@ -1182,12 +1231,24 @@ pub(crate) struct PreparedTypedDrawResources {
 }
 
 pub(crate) struct PreparedTypedDrawSelection<'a> {
-    draws: Vec<Option<&'a PreparedTypedDrawResources>>,
+    resources: &'a PreparedLogicalFrameResources,
+    indices: Vec<Option<usize>>,
 }
 
 impl PreparedTypedDrawSelection<'_> {
     pub(crate) fn draw(&self, index: usize) -> Option<&PreparedTypedDrawResources> {
-        self.draws[index]
+        let resource_index = self.indices[index]?;
+        let state = &self.resources.typed_consumption[resource_index];
+        match state.compare_exchange(usize::MAX, 1, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => {}
+            Err(1) => {
+                state.store(2, Ordering::Relaxed);
+            }
+            Err(actual) => panic!(
+                "typed logical output was consumed without a unique reservation (state {actual})"
+            ),
+        }
+        self.resources.typed_draws[resource_index].as_ref()
     }
 }
 
@@ -1224,12 +1285,8 @@ struct PreparedGradientFlush {
 }
 
 impl PreparedLogicalFrameResources {
-    pub(crate) fn report(&self) -> &LogicalFrameReport {
-        &self.report
-    }
-
     pub(crate) fn into_report(self) -> LogicalFrameReport {
-        self.report
+        self.report_with_consumption()
     }
 
     pub(crate) fn gradient_batch<'a>(
@@ -1291,18 +1348,23 @@ impl PreparedLogicalFrameResources {
     }
 
     pub(crate) fn typed_draws<'a>(&'a self, draws: &[SolidDraw]) -> PreparedTypedDrawSelection<'a> {
-        self.typed_encoder_reads.fetch_add(1, Ordering::Relaxed);
         if draws.as_ptr() as usize == self.typed_address && draws.len() == self.typed_draws.len() {
+            let indices = self
+                .typed_draws
+                .iter()
+                .enumerate()
+                .map(|(index, draw)| draw.as_ref().map(|_| self.reserve_typed_draw(index)))
+                .collect();
             return PreparedTypedDrawSelection {
-                draws: self.typed_draws.iter().map(Option::as_ref).collect(),
+                resources: self,
+                indices,
             };
         }
 
         let requested = draws
             .iter()
-            .map(logical_draw_fingerprint)
+            .map(|draw| draw.logical_occurrence_id)
             .collect::<Vec<_>>();
-        let mut available = vec![true; self.typed_inputs.len()];
         let mut mapped = Vec::with_capacity(requested.len());
         for input in requested {
             let index = self
@@ -1310,17 +1372,64 @@ impl PreparedLogicalFrameResources {
                 .iter()
                 .enumerate()
                 .find_map(|(index, candidate)| {
-                    (available[index] && *candidate == input).then_some(index)
+                    if *candidate != input {
+                        return None;
+                    }
+                    if self.typed_draws[index].is_none() {
+                        return Some(index);
+                    }
+                    self.typed_consumption[index]
+                        .compare_exchange(0, usize::MAX, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                        .then_some(index)
                 })
                 .expect("encoder requested typed resources outside the finalized logical frame");
-            available[index] = false;
-            mapped.push(self.typed_draws[index].as_ref());
+            mapped.push(self.typed_draws[index].as_ref().map(|_| index));
         }
-        PreparedTypedDrawSelection { draws: mapped }
+        PreparedTypedDrawSelection {
+            resources: self,
+            indices: mapped,
+        }
     }
 
-    pub(crate) fn typed_encoder_read_count(&self) -> usize {
-        self.typed_encoder_reads.load(Ordering::Relaxed)
+    fn reserve_typed_draw(&self, index: usize) -> usize {
+        self.typed_consumption[index]
+            .compare_exchange(0, usize::MAX, Ordering::Relaxed, Ordering::Relaxed)
+            .unwrap_or_else(|state| {
+                panic!("typed logical output occurrence {index} was selected twice (state {state})")
+            });
+        index
+    }
+
+    pub(crate) fn consume_all_for_null(&self) {
+        for (index, draw) in self.typed_draws.iter().enumerate() {
+            if draw.is_some() {
+                self.typed_consumption[index]
+                    .compare_exchange(0, 1, Ordering::Relaxed, Ordering::Relaxed)
+                    .unwrap_or_else(|state| {
+                        panic!(
+                            "null adapter consumed typed logical output occurrence {index} twice (state {state})"
+                        )
+                    });
+            }
+        }
+    }
+
+    pub(crate) fn report_with_consumption(&self) -> LogicalFrameReport {
+        let mut report = self.report.clone();
+        let mut consumed_once = 0;
+        let mut exact = report.production_typed_output_eligible_draws != 0;
+        for (draw, state) in self.typed_draws.iter().zip(self.typed_consumption.iter()) {
+            if draw.is_none() {
+                continue;
+            }
+            let state = state.load(Ordering::Relaxed);
+            consumed_once += usize::from(state == 1);
+            exact &= state == 1;
+        }
+        report.production_typed_output_consumed_draws = consumed_once;
+        report.production_typed_output_consumed = exact;
+        report
     }
 }
 
@@ -1334,6 +1443,9 @@ impl LogicalResourceStore {
         &self,
         frame: &LogicalFrame,
     ) -> Result<PreparedLogicalFrameResources, &'static str> {
+        if !frame.is_finalized() {
+            return Err("production logical frame must be finalized");
+        }
         let prepared = self.prepare_frame(frame, true)?;
         self.production_frame_writes.fetch_add(1, Ordering::Relaxed);
         Ok(prepared)
@@ -1343,6 +1455,9 @@ impl LogicalResourceStore {
         &self,
         frame: &LogicalFrame,
     ) -> Result<PreparedLogicalFrameResources, &'static str> {
+        if !frame.is_finalized() {
+            return Err("production logical frame must be finalized");
+        }
         let prepared = self.prepare_frame(frame, false)?;
         self.production_frame_writes.fetch_add(1, Ordering::Relaxed);
         Ok(prepared)
@@ -1446,6 +1561,9 @@ impl LogicalResourceStore {
             buffer_rewinds: starts.len(),
             written_bytes,
             shadow_fingerprint: (!production).then_some(fingerprint).unwrap_or(0),
+            production_typed_output_eligible_draws: typed_draws.iter().flatten().count(),
+            production_typed_output_consumed_draws: 0,
+            production_fallback_draws: typed_draws.iter().filter(|draw| draw.is_none()).count(),
             production_typed_output_consumed: false,
         };
         Ok(PreparedLogicalFrameResources {
@@ -1457,69 +1575,19 @@ impl LogicalResourceStore {
                 batch: gradient_batch,
             }],
             typed_address: frame.draws.as_ptr() as usize,
-            typed_inputs: frame.draws.iter().map(logical_draw_fingerprint).collect(),
+            typed_inputs: frame
+                .draws
+                .iter()
+                .map(|draw| draw.logical_occurrence_id)
+                .collect(),
+            typed_consumption: Arc::new(
+                (0..typed_draws.len())
+                    .map(|_| AtomicUsize::new(0))
+                    .collect(),
+            ),
             typed_draws,
-            typed_encoder_reads: Arc::new(AtomicUsize::new(0)),
         })
     }
-}
-
-fn logical_draw_fingerprint(draw: &SolidDraw) -> u64 {
-    fn write(hash: &mut u64, bytes: &[u8]) {
-        for &byte in bytes {
-            *hash ^= u64::from(byte);
-            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
-
-    let mut hash = gradient_input_fingerprint(draw);
-    write(&mut hash, &draw.path.raw_path.mutation_id().to_le_bytes());
-    write(
-        &mut hash,
-        &[draw.path.fill_rule as u8, draw.paint.style as u8],
-    );
-    write(&mut hash, &draw.paint.color.to_le_bytes());
-    for value in [draw.paint.thickness, draw.paint.feather] {
-        write(&mut hash, &value.to_bits().to_le_bytes());
-    }
-    write(
-        &mut hash,
-        &[
-            draw.paint.join as u8,
-            draw.paint.cap as u8,
-            draw.paint.blend_mode as u8,
-        ],
-    );
-    write(&mut hash, &draw.state.clip_stack_height.to_le_bytes());
-    if let Some(rect) = draw.state.clip_rect {
-        write(&mut hash, &[1]);
-        for value in rect.rect.into_iter().chain(rect.matrix.0) {
-            write(&mut hash, &value.to_bits().to_le_bytes());
-        }
-    } else {
-        write(&mut hash, &[0]);
-    }
-    match draw.role {
-        DrawRole::Content { clip_id } => {
-            write(&mut hash, &[0]);
-            write(&mut hash, &clip_id.to_le_bytes());
-        }
-        DrawRole::ClipUpdate {
-            replacement_id,
-            parent_id,
-        } => {
-            write(&mut hash, &[1]);
-            write(&mut hash, &replacement_id.to_le_bytes());
-            write(&mut hash, &parent_id.to_le_bytes());
-        }
-        DrawRole::ClipReset { bounds, action } => {
-            write(&mut hash, &[2, clip_reset_action_tag(action)]);
-            for value in bounds {
-                write(&mut hash, &value.to_bits().to_le_bytes());
-            }
-        }
-    }
-    hash
 }
 
 fn gradient_input_fingerprint(draw: &SolidDraw) -> u64 {
@@ -1927,28 +1995,32 @@ fn write_resources(
             use_clockwise_atomic_batch,
             gradient_batch,
         );
-        prepared.push((buffers.paths.len() != path_start).then(|| {
-            debug_assert_eq!(buffers.paths.len(), path_start + 1);
-            debug_assert_eq!(buffers.paints.len(), paint_start + 1);
-            let paint = buffers.paints[paint_start];
-            let metadata = typed_draw_metadata(draw, config, use_clockwise_atomic_batch);
-            PreparedTypedDrawResources {
-                contour_base: u32::try_from(contour_start).expect("contour base overflow"),
-                path: buffers.paths[path_start],
-                paint: paint.paint,
-                paint_aux: paint.aux,
-                spans: buffers.tessellations[tessellation_start..].to_vec(),
-                contours: buffers.contours[contour_start..].to_vec(),
-                triangles: buffers.triangles[triangle_start..].to_vec(),
-                base_instance: metadata.base_instance,
-                instance_count: metadata.instance_count,
-                triangle_count: metadata.triangle_count,
-                borrowed_triangle_count: metadata.borrowed_triangle_count,
-                main_triangle_batches: metadata.main_triangle_batches,
-                has_interior_triangles: metadata.has_interior_triangles,
-                uses_interior: metadata.uses_interior,
-            }
-        }));
+        let backend_fallback =
+            typed_draw_uses_backend_fallback(config, draw, use_clockwise_atomic_batch);
+        prepared.push(
+            (buffers.paths.len() != path_start && !backend_fallback).then(|| {
+                debug_assert_eq!(buffers.paths.len(), path_start + 1);
+                debug_assert_eq!(buffers.paints.len(), paint_start + 1);
+                let paint = buffers.paints[paint_start];
+                let metadata = typed_draw_metadata(draw, config, use_clockwise_atomic_batch);
+                PreparedTypedDrawResources {
+                    contour_base: u32::try_from(contour_start).expect("contour base overflow"),
+                    path: buffers.paths[path_start],
+                    paint: paint.paint,
+                    paint_aux: paint.aux,
+                    spans: buffers.tessellations[tessellation_start..].to_vec(),
+                    contours: buffers.contours[contour_start..].to_vec(),
+                    triangles: buffers.triangles[triangle_start..].to_vec(),
+                    base_instance: metadata.base_instance,
+                    instance_count: metadata.instance_count,
+                    triangle_count: metadata.triangle_count,
+                    borrowed_triangle_count: metadata.borrowed_triangle_count,
+                    main_triangle_batches: metadata.main_triangle_batches,
+                    has_interior_triangles: metadata.has_interior_triangles,
+                    uses_interior: metadata.uses_interior,
+                }
+            }),
+        );
         match gradient_batch.draw(draw_index) {
             None => push_u8(&mut buffers.gradients, 0),
             Some(gradient) => {
@@ -1989,6 +2061,18 @@ fn write_resources(
         });
     }
     prepared
+}
+
+pub(crate) fn typed_draw_uses_backend_fallback(
+    config: LogicalFrameConfig,
+    draw: &SolidDraw,
+    use_clockwise_atomic_batch: bool,
+) -> bool {
+    matches!(draw.role, DrawRole::ClipReset { .. })
+        || draw.image.is_some()
+        || (config.mode == RenderMode::ClockwiseAtomic
+            && use_clockwise_atomic_batch
+            && matches!(draw.role, DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0))
 }
 
 struct TypedDrawMetadata {
@@ -2542,14 +2626,16 @@ impl NullLogicalRenderer {
             return Err(error);
         }
         frame.logical.finalize(&mut self.intersection_board)?;
-        let mut report = if diagnostics {
-            self.resources.prepare(&frame.logical)?
-        } else {
+        let prepared = if diagnostics {
             self.resources
-                .prepare_for_production(&frame.logical)?
-                .into_report()
+                .prepare_for_production_with_diagnostics(&frame.logical)?
+        } else {
+            self.resources.prepare_for_production(&frame.logical)?
         };
-        report.production_typed_output_consumed = true;
+        // The null adapter's retained shadow writer is the terminal consumer:
+        // there is deliberately no GPU-side encoder after this boundary.
+        prepared.consume_all_for_null();
+        let report = prepared.into_report();
         drop(frame);
         Ok(report)
     }

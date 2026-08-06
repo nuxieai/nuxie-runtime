@@ -1689,6 +1689,10 @@ impl Default for DrawState {
 
 #[derive(Clone)]
 struct SolidDraw {
+    /// Stable authored-frame occurrence identity. Scheduler clones and
+    /// reorderings retain it so shared typed resources are selected by exact
+    /// occurrence rather than collision-prone content fingerprints.
+    logical_occurrence_id: u64,
     path: LogicalPath,
     paint: LogicalPaint,
     state: DrawState,
@@ -2104,6 +2108,7 @@ impl SolidDraw {
                 })
             });
         Self {
+            logical_occurrence_id: 0,
             path,
             paint,
             state,
@@ -3025,7 +3030,6 @@ impl WgpuFrame {
                 .prepare_for_production(&self.logical_frame)
         }
         .map_err(RendererError::Unsupported)?;
-        let mut logical_report = prepared_logical_resources.report().clone();
         let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
         let texture = frame_attachments.target_texture.clone();
         let view = frame_attachments.target_view.clone();
@@ -3250,13 +3254,6 @@ impl WgpuFrame {
                 });
                 let compact_direct_stroke_geometry_end =
                     direct_stroke_geometry_end.filter(|_| direct_stroke_midpoint_end.is_none());
-                let borrowed_compact_direct_stroke_geometry_end =
-                    compact_direct_stroke_geometry_end.filter(|_| {
-                        draws.iter().all(|draw| {
-                            draw.prepared_stroke()
-                                .is_some_and(|stroke| stroke.local_contour_ids_are_dense)
-                        })
-                    });
                 let mut prepared = Vec::with_capacity(draws.len());
                 let mut paths = Vec::with_capacity(draws.len() + 1);
                 paths.push(gpu::PathData::zeroed());
@@ -3270,12 +3267,11 @@ impl WgpuFrame {
                 paint_aux.push(gpu::PaintAuxData::zeroed());
                 let mut contours = Vec::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
+                    // Claim this exact authored occurrence once. Backend-only
+                    // fallbacks are explicitly represented as None.
+                    let shared = typed_draws.draw(draw_index);
                     let path_id = u16::try_from(draw_index + 1).expect("atomic path ID overflow");
-                    let borrowed_stroke = borrowed_compact_direct_stroke_geometry_end.map(|_| {
-                        draw.prepared_stroke
-                            .as_ref()
-                            .expect("compact direct stroke must retain prepared geometry")
-                    });
+                    let borrowed_stroke: Option<&Arc<PreparedStrokeGeometry>> = None;
                     let clockwise_override = atomic_fill_clockwise_override(
                         draw,
                         self.mode == RenderMode::ClockwiseAtomic,
@@ -3337,9 +3333,8 @@ impl WgpuFrame {
                             ClockwiseAtomicMainTriangles::default(),
                             false,
                         )
-                    } else if inverse_clip_path.is_none() && borrowed_stroke.is_none() {
-                        let shared = typed_draws
-                            .draw(draw_index)
+                    } else if inverse_clip_path.is_none() {
+                        let shared = shared
                             .expect("admitted atomic path draw must have shared typed resources");
                         let mut spans = shared.spans.clone();
                         for span in &mut spans {
@@ -3689,8 +3684,7 @@ impl WgpuFrame {
                         }
                     };
                     let mut paint = if inverse_clip_path.is_none() && draw.image.is_none() {
-                        typed_draws
-                            .draw(draw_index)
+                        shared
                             .expect("admitted atomic path draw must have shared typed resources")
                             .paint
                     } else {
@@ -3707,8 +3701,7 @@ impl WgpuFrame {
                     }
                     paints.push(paint);
                     paint_aux.push(if inverse_clip_path.is_none() && draw.image.is_none() {
-                        typed_draws
-                            .draw(draw_index)
+                        shared
                             .expect("admitted atomic path draw must have shared typed resources")
                             .paint_aux
                     } else {
@@ -3868,8 +3861,7 @@ impl WgpuFrame {
                             < gpu::TESS_TEXTURE_WIDTH as u32
                 });
                 let compact_shared_stroke_end = compact_direct_stroke_geometry_end;
-                let borrowed_compact_shared_stroke_end =
-                    borrowed_compact_direct_stroke_geometry_end;
+                let borrowed_compact_shared_stroke_end = None;
                 let outer_patch_range = (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
                     + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
                     as u32
@@ -4743,25 +4735,23 @@ impl WgpuFrame {
                 }
                 let gradient_batch = prepared_logical_resources.gradient_batch(draws);
                 let typed_draws = prepared_logical_resources.typed_draws(draws);
-                let shared_tessellation = |draw_index: usize| {
-                    typed_draws.draw(draw_index).map(|shared| {
-                        let mut spans = shared.spans.clone();
-                        for span in &mut spans {
-                            let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
-                            if id != 0 {
-                                span.contour_id_with_flags = (span.contour_id_with_flags
-                                    & !gpu::CONTOUR_ID_MASK)
-                                    | id.saturating_sub(shared.contour_base);
-                            }
+                let shared_tessellation = |shared: &logical_frame::PreparedTypedDrawResources| {
+                    let mut spans = shared.spans.clone();
+                    for span in &mut spans {
+                        let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+                        if id != 0 {
+                            span.contour_id_with_flags = (span.contour_id_with_flags
+                                & !gpu::CONTOUR_ID_MASK)
+                                | id.saturating_sub(shared.contour_base);
                         }
-                        draw::FillTessellation {
-                            spans,
-                            path: shared.path,
-                            contours: shared.contours.clone(),
-                            base_instance: shared.base_instance,
-                            instance_count: shared.instance_count,
-                        }
-                    })
+                    }
+                    draw::FillTessellation {
+                        spans,
+                        path: shared.path,
+                        contours: shared.contours.clone(),
+                        base_instance: shared.base_instance,
+                        instance_count: shared.instance_count,
+                    }
                 };
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
                 if gradient_batch.height() != 0 {
@@ -4782,6 +4772,9 @@ impl WgpuFrame {
                 let mut image_mesh_resources = None;
                 let mut image_groups = std::collections::HashMap::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
+                    // Reserve and consume this exact authored occurrence once;
+                    // backend-specific fallbacks are explicitly None.
+                    let shared = typed_draws.draw(draw_index);
                     let scheduled = draw_schedule.map(|schedule| schedule[draw_index]);
                     let z_index = scheduled.map_or_else(
                         || {
@@ -4815,27 +4808,17 @@ impl WgpuFrame {
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
-                        let reverse_fill = draw.authored_msaa_fill_requires_reverse();
-                        let geometry = if !reverse_fill {
-                            shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
-                        } else {
-                            draw.prepared_fill()
-                                .and_then(|prepared| {
-                                    prepared.reversed_midpoint(&draw.path, draw.state.transform)
-                                })
-                                .map(|prepared| {
-                                    PendingPathGeometry::Owned(prepared.tessellation.clone())
-                                })
-                        };
+                        let geometry = shared
+                            .map(shared_tessellation)
+                            .map(PendingPathGeometry::Shared);
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
                             let mut path = tessellation.path;
                             path.z_index = z_index;
                             let base_instance = tessellation.base_instance;
                             let instance_count = tessellation.instance_count;
-                            let shared = typed_draws
-                                .draw(draw_index)
-                                .expect("MSAA clip update must have shared typed resources");
+                            let shared =
+                                shared.expect("MSAA clip update must have shared typed resources");
                             let paint = shared.paint;
                             let path_index = pending_paths.len();
                             pending_paths.push(PendingPathDraw {
@@ -4946,7 +4929,7 @@ impl WgpuFrame {
                             stroke.is_some(),
                         );
                         if let (Some(mut tessellation), Some(placement)) = (
-                            shared_tessellation(draw_index).or_else(|| {
+                            shared.map(shared_tessellation).or_else(|| {
                                 draw::build_feather_tessellation_with_direction(
                                     &draw.path.raw_path,
                                     draw.state.transform,
@@ -4968,9 +4951,8 @@ impl WgpuFrame {
                             for contour in &mut tessellation.contours {
                                 contour.path_id = 1;
                             }
-                            let shared = typed_draws
-                                .draw(draw_index)
-                                .expect("MSAA feather draw must have shared typed resources");
+                            let shared =
+                                shared.expect("MSAA feather draw must have shared typed resources");
                             let paint = shared.paint;
                             let [left, top, right, bottom] = placement.bounds;
                             let vertices = [
@@ -5045,31 +5027,25 @@ impl WgpuFrame {
                                 "clip rectangles on msaa direct path draws",
                             ));
                         }
-                        let reverse_fill = draw.paint.style == RenderPaintStyle::Fill
-                            && draw.authored_msaa_fill_requires_reverse();
                         let geometry = match draw.paint.style {
-                            RenderPaintStyle::Fill if !reverse_fill && draw.image.is_none() => {
-                                shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
-                            }
-                            RenderPaintStyle::Fill if !reverse_fill => draw
-                                .prepared_fill()
-                                .and_then(|prepared| {
-                                    prepared.midpoint(&draw.path, draw.state.transform)
-                                })
-                                .map(|prepared| {
-                                    PendingPathGeometry::Owned(prepared.tessellation.clone())
-                                }),
+                            RenderPaintStyle::Fill if draw.image.is_none() => shared
+                                .map(shared_tessellation)
+                                .map(PendingPathGeometry::Shared),
                             RenderPaintStyle::Fill => draw
                                 .prepared_fill()
                                 .and_then(|prepared| {
-                                    prepared.reversed_midpoint(&draw.path, draw.state.transform)
+                                    if draw.authored_msaa_fill_requires_reverse() {
+                                        prepared.reversed_midpoint(&draw.path, draw.state.transform)
+                                    } else {
+                                        prepared.midpoint(&draw.path, draw.state.transform)
+                                    }
                                 })
                                 .map(|prepared| {
                                     PendingPathGeometry::Owned(prepared.tessellation.clone())
                                 }),
-                            RenderPaintStyle::Stroke => {
-                                shared_tessellation(draw_index).map(PendingPathGeometry::Shared)
-                            }
+                            RenderPaintStyle::Stroke => shared
+                                .map(shared_tessellation)
+                                .map(PendingPathGeometry::Shared),
                         };
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
@@ -5134,7 +5110,7 @@ impl WgpuFrame {
                                 clip_rect_paint_aux(draw.state.clip_rect)
                             };
                             let (paint, paint_aux) = if image.is_none() {
-                                let shared = typed_draws.draw(draw_index).expect(
+                                let shared = shared.expect(
                                     "MSAA direct path draw must have shared typed resources",
                                 );
                                 (shared.paint, shared.paint_aux)
@@ -6611,8 +6587,7 @@ impl WgpuFrame {
                 }
             }
             let backend_work = self.work_recorder.snapshot();
-            logical_report.production_typed_output_consumed =
-                prepared_logical_resources.typed_encoder_read_count() != 0;
+            let logical_report = prepared_logical_resources.report_with_consumption();
             return Ok((
                 Vec::new(),
                 Vec::new(),
@@ -6713,8 +6688,7 @@ impl WgpuFrame {
         let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
         tessellation_texture_frame.borrow_mut().recycle();
         let backend_work = self.work_recorder.snapshot();
-        logical_report.production_typed_output_consumed =
-            prepared_logical_resources.typed_encoder_read_count() != 0;
+        let logical_report = prepared_logical_resources.report_with_consumption();
         Ok((
             pixels,
             coverage_snapshots,
@@ -9910,11 +9884,168 @@ mod tests {
         null: &LogicalFrameReport,
         wgpu: &LogicalFrameReport,
     ) {
-        assert!(null.production_typed_output_consumed);
+        assert_eq!(
+            null.production_typed_output_consumed,
+            null.production_typed_output_eligible_draws != 0
+        );
         assert!(!wgpu.production_typed_output_consumed);
         let mut null = null.clone();
         null.production_typed_output_consumed = false;
+        null.production_typed_output_consumed_draws = 0;
         assert_eq!(&null, wgpu);
+    }
+
+    fn typed_attestation_draw(role: DrawRole) -> SolidDraw {
+        SolidDraw::new(
+            LogicalPath {
+                raw_path: Arc::new(logical_triangle()),
+                fill_rule: FillRule::NonZero,
+                valid: true,
+            },
+            LogicalPaint::default(),
+            DrawState::default(),
+            role,
+            None,
+        )
+    }
+
+    fn prepared_typed_attestation_frame(
+        mode: RenderMode,
+        draws: Vec<SolidDraw>,
+    ) -> (
+        logical_frame::LogicalFrame,
+        logical_frame::PreparedLogicalFrameResources,
+    ) {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        frame.resource_planning_evaluations = draws.len();
+        frame.draw_resources = draws
+            .iter()
+            .map(|draw| {
+                logical_flush_draw_resources(
+                    draw,
+                    mode,
+                    config.width,
+                    config.height,
+                    mode == RenderMode::ClockwiseAtomic,
+                )
+            })
+            .collect();
+        frame.draws = draws;
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize(&mut board).unwrap();
+        let prepared = logical_frame::LogicalResourceStore::default()
+            .prepare_for_production(&frame)
+            .unwrap();
+        (frame, prepared)
+    }
+
+    #[test]
+    fn typed_output_selection_tracks_exact_occurrences_across_chunks_and_clones() {
+        let first = typed_attestation_draw(DrawRole::Content { clip_id: 0 });
+        let second = first.clone();
+        let (frame, prepared) =
+            prepared_typed_attestation_frame(RenderMode::Msaa, vec![first, second]);
+
+        let second_chunk = prepared.typed_draws(&frame.draws[1..2]);
+        assert_eq!(second_chunk.draw(0).unwrap().path.z_index, 2);
+        let reordered_clone = vec![frame.draws[0].clone()];
+        let first_chunk = prepared.typed_draws(&reordered_clone);
+        assert_eq!(first_chunk.draw(0).unwrap().path.z_index, 1);
+
+        let report = prepared.report_with_consumption();
+        assert_eq!(report.production_typed_output_eligible_draws, 2);
+        assert_eq!(report.production_typed_output_consumed_draws, 2);
+        assert_eq!(report.production_fallback_draws, 0);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn typed_output_attestation_rejects_partial_and_fallback_only_consumption() {
+        let draws = vec![
+            typed_attestation_draw(DrawRole::Content { clip_id: 0 }),
+            typed_attestation_draw(DrawRole::Content { clip_id: 0 }),
+        ];
+        let (frame, prepared) = prepared_typed_attestation_frame(RenderMode::Msaa, draws);
+        let partial = prepared.typed_draws(&frame.draws[..1]);
+        assert!(partial.draw(0).is_some());
+        let report = prepared.report_with_consumption();
+        assert_eq!(report.production_typed_output_eligible_draws, 2);
+        assert_eq!(report.production_typed_output_consumed_draws, 1);
+        assert!(!report.production_typed_output_consumed);
+
+        let fallback = typed_attestation_draw(DrawRole::ClipReset {
+            bounds: [0.0, 0.0, 64.0, 64.0],
+            action: MsaaClipResetAction::ClearPrevious,
+        });
+        let (frame, prepared) = prepared_typed_attestation_frame(RenderMode::Msaa, vec![fallback]);
+        let selected = prepared.typed_draws(&frame.draws);
+        assert!(selected.draw(0).is_none());
+        let report = prepared.report_with_consumption();
+        assert_eq!(report.production_typed_output_eligible_draws, 0);
+        assert_eq!(report.production_typed_output_consumed_draws, 0);
+        assert_eq!(report.production_fallback_draws, 1);
+        assert!(!report.production_typed_output_consumed);
+
+        let (frame, prepared) = prepared_typed_attestation_frame(
+            RenderMode::Msaa,
+            vec![typed_attestation_draw(DrawRole::Content { clip_id: 0 })],
+        );
+        let selected = prepared.typed_draws(&frame.draws);
+        assert!(selected.draw(0).is_some());
+        assert!(selected.draw(0).is_some());
+        let report = prepared.report_with_consumption();
+        assert_eq!(report.production_typed_output_eligible_draws, 1);
+        assert_eq!(report.production_typed_output_consumed_draws, 0);
+        assert!(!report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn typed_output_attestation_exposes_mixed_and_nested_inverse_fallbacks() {
+        let path = typed_attestation_draw(DrawRole::Content { clip_id: 0 });
+        let reset = typed_attestation_draw(DrawRole::ClipReset {
+            bounds: [0.0, 0.0, 64.0, 64.0],
+            action: MsaaClipResetAction::ClearPrevious,
+        });
+        let (frame, prepared) =
+            prepared_typed_attestation_frame(RenderMode::Msaa, vec![path, reset]);
+        let selected = prepared.typed_draws(&frame.draws);
+        assert!(selected.draw(0).is_some());
+        assert!(selected.draw(1).is_none());
+        let report = prepared.report_with_consumption();
+        assert_eq!(report.production_typed_output_eligible_draws, 1);
+        assert_eq!(report.production_typed_output_consumed_draws, 1);
+        assert_eq!(report.production_fallback_draws, 1);
+        assert!(report.production_typed_output_consumed);
+
+        let nested_clip = typed_attestation_draw(DrawRole::ClipUpdate {
+            replacement_id: 2,
+            parent_id: 1,
+        });
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        assert!(logical_frame::typed_draw_uses_backend_fallback(
+            config,
+            &nested_clip,
+            true,
+        ));
+        assert!(!logical_frame::typed_draw_uses_backend_fallback(
+            config,
+            &nested_clip,
+            false,
+        ));
     }
 
     #[test]
@@ -11226,6 +11357,7 @@ mod tests {
     #[test]
     fn gradient_batch_packs_simple_ramps_before_complex_rows() {
         let draw = |shader| SolidDraw {
+            logical_occurrence_id: 0,
             path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
@@ -11275,6 +11407,7 @@ mod tests {
             stops: vec![0.0, 1.0],
         };
         let draw = |translation: f32| SolidDraw {
+            logical_occurrence_id: 0,
             path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
@@ -11342,6 +11475,7 @@ mod tests {
     #[test]
     fn solid_gradient_batch_keeps_per_draw_table_sparse() {
         let solid_draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(RawPath::new()),
@@ -13083,6 +13217,7 @@ mod tests {
     #[test]
     fn intersection_board_separates_overlapping_atomic_aa_bounds() {
         let make_draw = |bounds| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path(bounds, FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -13109,6 +13244,7 @@ mod tests {
     #[test]
     fn atomic_plain_fill_bounds_have_only_the_cpp_grouping_outset() {
         let make_draw = |bounds| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path(bounds, FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -13136,6 +13272,7 @@ mod tests {
     #[test]
     fn intersection_board_rolls_over_before_group_index_overflow() {
         let draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([10.0, 10.0, 11.0, 11.0], FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -13166,6 +13303,7 @@ mod tests {
     fn disjoint_atomic_groups_split_before_atomic_path_id_overflow() {
         let draws = (0..5)
             .map(|index| SolidDraw {
+                logical_occurrence_id: 0,
                 path: rect_path(
                     [index as f32 * 10.0, 0.0, index as f32 * 10.0 + 2.0, 2.0],
                     FillRule::NonZero,
@@ -13201,6 +13339,7 @@ mod tests {
     #[test]
     fn msaa_intersection_board_groups_disjoint_draws_before_overlapping_draws() {
         let make_draw = |bounds, color| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path(bounds, FillRule::NonZero),
             paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
@@ -13249,6 +13388,7 @@ mod tests {
     #[test]
     fn msaa_scheduler_runs_opaque_prepasses_before_translucent_subpasses() {
         let make_draw = |color, blend_mode| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
             paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
@@ -13286,6 +13426,7 @@ mod tests {
     #[test]
     fn msaa_scheduler_promotes_non_overlapping_opaque_draws_before_destination_reads() {
         let make_draw = |rect, color, blend_mode| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path(rect, FillRule::NonZero),
             paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
@@ -13322,6 +13463,7 @@ mod tests {
     #[test]
     fn flat_msaa_schedule_matches_bucket_reference_and_moves_owned_draws() {
         let make_draw = |bounds, color, fill_rule, style, feather, blend_mode, role| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path(bounds, fill_rule),
             paint: LogicalPaint {
                 color: 0xff00_0000u32 | color,
@@ -13600,6 +13742,7 @@ mod tests {
     #[test]
     fn msaa_submission_splitting_requires_independent_direct_source_over_draws() {
         let mut draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -13634,6 +13777,7 @@ mod tests {
     #[test]
     fn msaa_intersection_board_reserves_cpp_subpass_layers() {
         let mut draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -14038,6 +14182,7 @@ mod tests {
     #[test]
     fn direct_stroke_batching_rejects_pipeline_and_order_boundaries() {
         let draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([0.0, 0.0, 1.0, 1.0], FillRule::NonZero),
             paint: LogicalPaint {
                 style: RenderPaintStyle::Stroke,
@@ -14965,6 +15110,7 @@ mod tests {
     #[test]
     fn clockwise_atomic_clip_is_inactive_only_with_full_pixel_margin() {
         let make_draw = |clip_rect| SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([10.0, 10.0, 20.0, 20.0], FillRule::Clockwise),
             paint: LogicalPaint::default(),
             state: DrawState {
@@ -15613,6 +15759,7 @@ mod tests {
         raw_path.line_to(0.0, 10.0);
         raw_path.close();
         let draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: LogicalPath {
                 valid: true,
                 raw_path: Arc::new(raw_path),
@@ -16416,6 +16563,7 @@ mod tests {
     #[test]
     fn advanced_atomic_segment_plan_reuses_precomputed_eligible_suffixes() {
         let simple = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([8.0, 8.0, 28.0, 56.0], FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -20301,6 +20449,7 @@ mod tests {
         let config = frame.logical_frame_config();
         let mut allocations = LogicalFlushAllocations::default();
         let mut draw = SolidDraw {
+            logical_occurrence_id: 0,
             path: rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
             paint: LogicalPaint::default(),
             state: DrawState::default(),
@@ -20338,6 +20487,7 @@ mod tests {
             let atlas_frame = atlas_factory.begin_frame(0);
             let config = atlas_frame.logical_frame_config();
             let atlas_draw = SolidDraw {
+                logical_occurrence_id: 0,
                 path: rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise),
                 paint: LogicalPaint {
                     feather: 32.0,

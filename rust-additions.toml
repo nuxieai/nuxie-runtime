@@ -101,6 +101,10 @@ path = "crates/nuxie-runtime/src/state_machine/listener_types/mod.rs"
 category = "codegen"
 
 [[addition]]
+path = "crates/nuxie-runtime/src/upstream_microbenchmarks.rs"
+category = "test-infra"
+
+[[addition]]
 path = "crates/nuxie-runtime/src/viewmodel/mod.rs"
 category = "codegen"
 

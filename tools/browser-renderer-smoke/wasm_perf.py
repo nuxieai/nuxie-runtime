@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import hashlib
+import json
 import math
 import platform
 import shutil
@@ -397,24 +397,171 @@ def canonical_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
-def _git_sha(directory: Path) -> str:
+def _git_output(directory: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", "-C", str(directory), "rev-parse", "HEAD"],
+        ["git", "-C", str(directory), *args],
         text=True,
         capture_output=True,
         check=False,
     )
-    if result.returncode != 0 or not result.stdout.strip():
-        raise ContractError(f"cannot identify git checkout {directory}: {result.stderr.strip()}")
+    if result.returncode != 0:
+        raise ContractError(
+            f"cannot inspect git checkout {directory}: {result.stderr.strip()}"
+        )
     return result.stdout.strip()
+
+
+def _allowed_untracked_paths(
+    directory: Path, allowed_outputs: list[Path]
+) -> list[Path]:
+    allowed = []
+    for output in allowed_outputs:
+        resolved = output.resolve()
+        try:
+            relative = resolved.relative_to(directory)
+        except ValueError:
+            continue
+        tracked = _git_output(directory, "ls-files", "--", relative.as_posix())
+        if tracked:
+            raise ContractError(
+                f"generated output allowance contains tracked source: {relative.as_posix()}"
+            )
+        allowed.append(resolved)
+    return allowed
+
+
+def _assert_clean_checkout(
+    label: str, directory: Path, allowed_outputs: list[Path]
+) -> None:
+    tracked = _git_output(
+        directory, "status", "--porcelain=v1", "--untracked-files=no"
+    )
+    if tracked:
+        raise ContractError(f"{label} source checkout is dirty: {tracked.splitlines()[0]}")
+    allowed = _allowed_untracked_paths(directory, allowed_outputs)
+    untracked = _git_output(
+        directory, "ls-files", "--others", "--exclude-standard"
+    ).splitlines()
+    for relative in untracked:
+        candidate = (directory / relative).resolve()
+        if any(
+            candidate == output or (output.is_dir() and candidate.is_relative_to(output))
+            for output in allowed
+        ):
+            continue
+        raise ContractError(f"{label} source checkout is dirty: ?? {relative}")
+
+
+def capture_source_provenance(
+    repo_root: Path,
+    rive_runtime_dir: Path,
+    *,
+    allowed_outputs: list[Path] | None = None,
+) -> dict[str, str]:
+    allowed_outputs = allowed_outputs or []
+    sources = {}
+    for label, directory in (
+        ("repo", repo_root.resolve()),
+        ("rive_runtime", rive_runtime_dir.resolve()),
+    ):
+        _assert_clean_checkout(label, directory, allowed_outputs)
+        sources[f"{label}_sha"] = _git_output(directory, "rev-parse", "HEAD")
+        sources[f"{label}_tree_sha"] = _git_output(
+            directory, "rev-parse", "HEAD^{tree}"
+        )
+    return sources
+
+
+def verify_source_provenance(
+    expected: dict[str, str],
+    repo_root: Path,
+    rive_runtime_dir: Path,
+    *,
+    allowed_outputs: list[Path] | None = None,
+) -> None:
+    try:
+        current = capture_source_provenance(
+            repo_root,
+            rive_runtime_dir,
+            allowed_outputs=allowed_outputs,
+        )
+    except ContractError as error:
+        raise ContractError(f"measured source changed after capture: {error}") from error
+    if current != expected:
+        raise ContractError(
+            f"measured source changed after capture: expected={expected!r} current={current!r}"
+        )
+
+
+def _artifact_record(path: Path) -> dict[str, Any]:
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise ContractError(f"missing measured artifact: {resolved}")
+    contents = resolved.read_bytes()
+    return {
+        "path": str(resolved),
+        "bytes": len(contents),
+        "sha256": hashlib.sha256(contents).hexdigest(),
+    }
+
+
+def seal_run_provenance(
+    sources: dict[str, str],
+    repo_root: Path,
+    rive_runtime_dir: Path,
+    *,
+    artifacts: dict[str, Path],
+    allowed_outputs: list[Path] | None = None,
+) -> dict[str, Any]:
+    verify_source_provenance(
+        sources,
+        repo_root,
+        rive_runtime_dir,
+        allowed_outputs=allowed_outputs,
+    )
+    return {
+        "sources": sources,
+        "artifacts": {
+            name: _artifact_record(path) for name, path in sorted(artifacts.items())
+        },
+    }
+
+
+def verify_run_provenance(
+    sealed: dict[str, Any],
+    repo_root: Path,
+    rive_runtime_dir: Path,
+    *,
+    allowed_outputs: list[Path] | None = None,
+) -> None:
+    verify_source_provenance(
+        sealed["sources"],
+        repo_root,
+        rive_runtime_dir,
+        allowed_outputs=allowed_outputs,
+    )
+    for name, expected in sealed["artifacts"].items():
+        current = _artifact_record(Path(expected["path"]))
+        if current != expected:
+            raise ContractError(
+                f"measured artifact changed after seal: {name} "
+                f"expected={expected!r} current={current!r}"
+            )
 
 
 def prepare_run(args: argparse.Namespace) -> None:
     repo_root = args.repo_root.resolve()
+    rive_runtime_dir = args.rive_runtime_dir.resolve()
+    allowed_outputs = [path.resolve() for path in args.allowed_output]
+    source_provenance = capture_source_provenance(
+        repo_root,
+        rive_runtime_dir,
+        allowed_outputs=allowed_outputs,
+    )
     fixtures = select_fixtures(
         args.perf_manifest,
         args.corpus,
-        args.rive_runtime_dir,
+        rive_runtime_dir,
         limit=args.limit,
         requested_ids=[value for value in args.ids.split(",") if value],
     )
@@ -429,8 +576,10 @@ def prepare_run(args: argparse.Namespace) -> None:
             raise ContractError("staging directory must be inside the repository root") from error
         staged_fixtures.append({**fixture, "url": f"/{url_path.as_posix()}"})
     identity = {
-        "git_sha": _git_sha(repo_root),
-        "rive_runtime_sha": _git_sha(args.rive_runtime_dir.resolve()),
+        "git_sha": source_provenance["repo_sha"],
+        "git_tree_sha": source_provenance["repo_tree_sha"],
+        "rive_runtime_sha": source_provenance["rive_runtime_sha"],
+        "rive_runtime_tree_sha": source_provenance["rive_runtime_tree_sha"],
         "browser": "pending",
         "build_profile": "release",
         "host": f"{platform.system()}-{platform.machine()}",
@@ -442,10 +591,37 @@ def prepare_run(args: argparse.Namespace) -> None:
         "runs": args.runs,
         "warmups": args.warmups,
         "identity": identity,
+        "provenance": {"sources": source_provenance},
         "fixtures": staged_fixtures,
     }
     args.config.parent.mkdir(parents=True, exist_ok=True)
     args.config.write_text(canonical_json(payload), encoding="utf-8")
+
+
+def seal_run(args: argparse.Namespace) -> None:
+    config = json.loads(args.config.read_text(encoding="utf-8"))
+    if config.get("schema") != "nuxie-wasm-perf-config-v1":
+        raise ContractError("unsupported wasm perf config schema")
+    sources = config.get("provenance", {}).get("sources")
+    if not isinstance(sources, dict):
+        raise ContractError("wasm perf config omitted source provenance")
+    sealed = seal_run_provenance(
+        sources,
+        args.repo_root.resolve(),
+        args.rive_runtime_dir.resolve(),
+        artifacts={
+            "native_runner": args.native_runner,
+            "wasm": args.wasm_artifact,
+            "wasm_bindgen_js": args.wasm_bindgen_js,
+        },
+        allowed_outputs=[path.resolve() for path in args.allowed_output],
+    )
+    config["provenance"] = sealed
+    config["identity"]["artifacts"] = {
+        name: {key: record[key] for key in ("bytes", "sha256")}
+        for name, record in sealed["artifacts"].items()
+    }
+    args.config.write_text(canonical_json(config), encoding="utf-8")
 
 
 def audit_run(args: argparse.Namespace) -> None:
@@ -561,6 +737,21 @@ def finalize_run(args: argparse.Namespace) -> None:
         raise ContractError("unsupported wasm perf config schema")
     if browser.get("schema") != "nuxie-wasm-perf-browser-raw-v1":
         raise ContractError("unsupported browser results schema")
+    provenance = config.get("provenance")
+    if not isinstance(provenance, dict) or not provenance.get("artifacts"):
+        raise ContractError("wasm perf config omitted sealed run provenance")
+    allowed_outputs = [path.resolve() for path in args.allowed_output]
+    verify_run_provenance(
+        provenance,
+        args.repo_root.resolve(),
+        args.rive_runtime_dir.resolve(),
+        allowed_outputs=allowed_outputs,
+    )
+    expected_native = Path(provenance["artifacts"]["native_runner"]["path"])
+    if args.native_runner.resolve() != expected_native:
+        raise ContractError(
+            f"native runner differs from sealed artifact: {args.native_runner}"
+        )
     for fixture in config["fixtures"]:
         runs = browser.get("fixtures", {}).get(fixture["id"], [])
         if len(runs) != config["runs"]:
@@ -570,6 +761,12 @@ def finalize_run(args: argparse.Namespace) -> None:
             if report["segments"] != config["repeat"]:
                 raise ContractError(f"browser segment mismatch for {fixture['id']}")
     native = _native_runs(config, args.native_runner)
+    verify_run_provenance(
+        provenance,
+        args.repo_root.resolve(),
+        args.rive_runtime_dir.resolve(),
+        allowed_outputs=allowed_outputs,
+    )
     identity = {
         **config["identity"],
         "browser": browser["browser"],
@@ -605,6 +802,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--repeat", type=int, default=100)
     prepare.add_argument("--runs", type=int, default=5)
     prepare.add_argument("--warmups", type=int, default=1)
+    prepare.add_argument("--allowed-output", type=Path, action="append", default=[])
     prepare.set_defaults(action=prepare_run)
 
     audit = subparsers.add_parser("audit")
@@ -613,12 +811,25 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("--source", type=Path, required=True)
     audit.set_defaults(action=audit_run)
 
+    seal = subparsers.add_parser("seal")
+    seal.add_argument("--config", type=Path, required=True)
+    seal.add_argument("--repo-root", type=Path, required=True)
+    seal.add_argument("--rive-runtime-dir", type=Path, required=True)
+    seal.add_argument("--native-runner", type=Path, required=True)
+    seal.add_argument("--wasm-artifact", type=Path, required=True)
+    seal.add_argument("--wasm-bindgen-js", type=Path, required=True)
+    seal.add_argument("--allowed-output", type=Path, action="append", default=[])
+    seal.set_defaults(action=seal_run)
+
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--config", type=Path, required=True)
     finalize.add_argument("--browser-results", type=Path, required=True)
     finalize.add_argument("--native-runner", type=Path, required=True)
+    finalize.add_argument("--repo-root", type=Path, required=True)
+    finalize.add_argument("--rive-runtime-dir", type=Path, required=True)
     finalize.add_argument("--output", type=Path, required=True)
     finalize.add_argument("--markdown", type=Path)
+    finalize.add_argument("--allowed-output", type=Path, action="append", default=[])
     finalize.set_defaults(action=finalize_run)
     return parser
 

@@ -108,21 +108,57 @@ class ReportContractTests(unittest.TestCase):
     def test_audits_production_only_feature_tree_and_import(self):
         wasm_perf.audit_production_boundary(
             'browser-renderer-smoke\n└── nuxie feature "default"',
-            "pub struct WasmPerfRunner; impl WasmPerfRunner { File::import(bytes); }",
+            """pub struct WasmPerfRunner;
+impl WasmPerfRunner {
+    File::import(bytes);
+    instance.instantiate_view_model();
+    instance.artboard().default_state_machine_index();
+}
+""",
         )
 
     def test_rejects_test_support_in_measured_feature_tree(self):
         with self.assertRaisesRegex(wasm_perf.ContractError, "test-support"):
             wasm_perf.audit_production_boundary(
                 'nuxie feature "test-support"',
-                "pub struct WasmPerfRunner; File::import(bytes);",
+                """pub struct WasmPerfRunner;
+File::import(bytes);
+instance.instantiate_view_model();
+instance.artboard().default_state_machine_index();
+""",
             )
 
     def test_rejects_unsigned_import_in_measured_runner(self):
         with self.assertRaisesRegex(wasm_perf.ContractError, "production File::import"):
             wasm_perf.audit_production_boundary(
                 'nuxie feature "default"',
-                "pub struct WasmPerfRunner; File::import_with_unsigned_scripts(bytes);",
+                """pub struct WasmPerfRunner;
+File::import_with_unsigned_scripts(bytes);
+instance.instantiate_view_model();
+instance.artboard().default_state_machine_index();
+""",
+            )
+
+    def test_rejects_authored_default_view_model_initialization(self):
+        with self.assertRaisesRegex(wasm_perf.ContractError, "schema-default view model"):
+            wasm_perf.audit_production_boundary(
+                'nuxie feature "default"',
+                """pub struct WasmPerfRunner;
+File::import(bytes);
+instance.instantiate_default_view_model_instance();
+instance.artboard().default_state_machine_index();
+""",
+            )
+
+    def test_rejects_fallback_to_state_machine_zero_without_authored_default(self):
+        with self.assertRaisesRegex(wasm_perf.ContractError, "authored default state machine"):
+            wasm_perf.audit_production_boundary(
+                'nuxie feature "default"',
+                """pub struct WasmPerfRunner;
+File::import(bytes);
+instance.instantiate_view_model();
+instance.default_state_machine_instance();
+""",
             )
 
     def test_parses_native_report_contract(self):
@@ -136,12 +172,19 @@ prepare_ms=0
 draw_ms=8.0
 bookkeeping_ms=0.5
 segments=10
+scene_kind=state_machine
+default_state_machine_id=0
+view_model_initialization=schema-default
 """
         )
 
         self.assertEqual(parsed["schema"], "rive-golden-benchmark-v1")
         self.assertEqual(parsed["segments"], 10)
         self.assertEqual(parsed["accounted_ms"], 11.0)
+        self.assertEqual(
+            parsed["workload_identity"],
+            workload_identity(),
+        )
 
     def test_rejects_incomplete_browser_report(self):
         report = {
@@ -193,6 +236,46 @@ segments=10
         self.assertEqual(row["wasm"]["run_count"], 3)
         self.assertAlmostEqual(row["ratio"]["elapsed"], 2.0)
         self.assertGreater(row["wasm"]["elapsed_ms"]["coefficient_of_variation"], 0)
+        self.assertEqual(row["workload_identity"], workload_identity())
+        self.assertIn(
+            "state machine 0; VM schema-default",
+            wasm_perf.render_markdown(report),
+        )
+
+    def test_rejects_data_bind_authored_default_against_native_schema_default(self):
+        fixture = {
+            "id": "data_bind_test_cmdq",
+            "bytes": 100,
+            "relative_path": "assets/data_bind_test_cmdq.riv",
+            "sample_seconds": 0.0,
+        }
+        wasm = timing(12.0, 3.0, 8.0, 10)
+        wasm["workload_identity"] = {
+            **workload_identity(),
+            "view_model_initialization": "none",
+        }
+
+        with self.assertRaisesRegex(
+            wasm_perf.ContractError, "data_bind_test_cmdq workload identity mismatch"
+        ):
+            wasm_perf.build_comparison_report(
+                [fixture],
+                {"data_bind_test_cmdq": [wasm, wasm]},
+                {
+                    "data_bind_test_cmdq": [
+                        timing(6.0, 1.0, 4.0, 10),
+                        timing(7.0, 1.5, 4.5, 10),
+                    ]
+                },
+                identity={
+                    "git_sha": "abc123",
+                    "rive_runtime_sha": "def456",
+                    "browser": "chrome",
+                    "build_profile": "release",
+                },
+                repeat=10,
+                warmups=1,
+            )
 
     def test_round_trips_machine_readable_json(self):
         payload = {"schema": "nuxie-wasm-perf-v1", "conclusion": "report-only"}
@@ -212,6 +295,15 @@ def timing(elapsed, advance, draw, segments):
         "accounted_ms": accounted,
         "bookkeeping_ms": max(elapsed - accounted, 0.0),
         "segments": segments,
+        "workload_identity": workload_identity(),
+    }
+
+
+def workload_identity():
+    return {
+        "scene_kind": "state_machine",
+        "default_state_machine_id": 0,
+        "view_model_initialization": "schema-default",
     }
 
 

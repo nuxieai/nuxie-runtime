@@ -1278,8 +1278,22 @@ fn write_benchmark_repeat_report(
     )?;
     let accounted_elapsed = phases.advance + phases.input + phases.prepare + phases.draw;
     let bookkeeping_elapsed = phases.elapsed.saturating_sub(accounted_elapsed);
+    let scene_kind = if scene.state_machine_index.is_some() {
+        "state_machine"
+    } else {
+        "static"
+    };
+    let default_state_machine_id = scene
+        .state_machine_index
+        .map_or_else(|| "none".to_owned(), |index| index.to_string());
+    let view_model_initialization =
+        if selected_artboard_view_model_index(runtime, artboard_index).is_some() {
+            "schema-default"
+        } else {
+            "none"
+        };
     Ok(format!(
-        "rive-golden-benchmark-v1\nelapsed_ms={}\ntotal_ms={}\nadvance_ms={}\ninput_ms={}\nprepare_ms={}\ndraw_ms={}\nbookkeeping_ms={}\nsegments={}\n",
+        "rive-golden-benchmark-v1\nelapsed_ms={}\ntotal_ms={}\nadvance_ms={}\ninput_ms={}\nprepare_ms={}\ndraw_ms={}\nbookkeeping_ms={}\nsegments={}\nscene_kind={}\ndefault_state_machine_id={}\nview_model_initialization={}\n",
         total.elapsed.as_secs_f64() * 1000.0,
         total.elapsed.as_secs_f64() * 1000.0,
         phases.advance.as_secs_f64() * 1000.0,
@@ -1287,7 +1301,10 @@ fn write_benchmark_repeat_report(
         phases.prepare.as_secs_f64() * 1000.0,
         phases.draw.as_secs_f64() * 1000.0,
         bookkeeping_elapsed.as_secs_f64() * 1000.0,
-        options.samples.len() * options.benchmark_repeat
+        options.samples.len() * options.benchmark_repeat,
+        scene_kind,
+        default_state_machine_id,
+        view_model_initialization,
     ))
 }
 
@@ -1733,7 +1750,13 @@ fn selected_artboard_view_model_index(
     artboard_index: usize,
 ) -> Option<usize> {
     let artboard = runtime.artboard(artboard_index)?;
-    usize::try_from(artboard.uint_property("viewModelId")?).ok()
+    let view_model_id = artboard.uint_property("viewModelId")?;
+    if view_model_id == u32::MAX as u64 {
+        return None;
+    }
+    usize::try_from(view_model_id)
+        .ok()
+        .filter(|index| runtime.view_model(*index).is_some())
 }
 
 fn selected_artboard_owned_view_model_context(

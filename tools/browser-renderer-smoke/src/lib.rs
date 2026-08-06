@@ -1,5 +1,46 @@
+#[cfg(any(target_arch = "wasm32", test))]
+fn wasm_perf_workload_identity(
+    default_state_machine_id: Option<usize>,
+    has_view_model: bool,
+) -> String {
+    let (scene_kind, state_machine_id) = match default_state_machine_id {
+        Some(index) => ("state_machine", index.to_string()),
+        None => ("static", "null".to_owned()),
+    };
+    let view_model_initialization = if has_view_model {
+        "schema-default"
+    } else {
+        "none"
+    };
+    format!(
+        r#"{{"scene_kind":"{scene_kind}","default_state_machine_id":{state_machine_id},"view_model_initialization":"{view_model_initialization}"}}"#
+    )
+}
+
+#[cfg(test)]
+mod wasm_perf_identity_tests {
+    use super::wasm_perf_workload_identity;
+
+    #[test]
+    fn no_authored_default_selects_static_scene_even_when_machine_zero_could_exist() {
+        assert_eq!(
+            wasm_perf_workload_identity(None, false),
+            r#"{"scene_kind":"static","default_state_machine_id":null,"view_model_initialization":"none"}"#
+        );
+    }
+
+    #[test]
+    fn root_view_model_is_identified_as_schema_default() {
+        assert_eq!(
+            wasm_perf_workload_identity(Some(0), true),
+            r#"{"scene_kind":"state_machine","default_state_machine_id":0,"view_model_initialization":"schema-default"}"#
+        );
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use super::wasm_perf_workload_identity;
     #[cfg(feature = "correctness-smoke")]
     use nuxie::PersistentFactory;
     use nuxie::{
@@ -60,6 +101,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         factory: NullFactory,
         renderer: NullRenderer,
         current_seconds: f32,
+        workload_identity_json: String,
     }
 
     #[wasm_bindgen]
@@ -69,11 +111,15 @@ fn fs_main() -> @location(0) vec4<f32> {
             let file = Arc::new(File::import(bytes).map_err(js_error)?);
             let mut instance =
                 OwnedArtboardInstance::instantiate_default(file).map_err(js_error)?;
-            let default_view_model = instance.instantiate_default_view_model_instance();
+            let default_state_machine_id = instance.artboard().default_state_machine_index();
+            let default_view_model = instance.instantiate_view_model();
+            let workload_identity_json =
+                wasm_perf_workload_identity(default_state_machine_id, default_view_model.is_some());
             if let Some(view_model) = default_view_model.as_ref() {
                 instance.bind_view_model(view_model);
             }
-            let mut state_machine = instance.default_state_machine_instance();
+            let mut state_machine =
+                default_state_machine_id.and_then(|index| instance.state_machine_instance(index));
             if let (Some(machine), Some(view_model)) =
                 (state_machine.as_mut(), default_view_model.as_ref())
             {
@@ -91,7 +137,13 @@ fn fs_main() -> @location(0) vec4<f32> {
                 factory,
                 renderer,
                 current_seconds: 0.0,
+                workload_identity_json,
             })
+        }
+
+        #[wasm_bindgen(js_name = workloadIdentityJson)]
+        pub fn workload_identity_json(&self) -> String {
+            self.workload_identity_json.clone()
         }
 
         pub fn advance(&mut self, target_seconds: f32) -> Result<(), JsValue> {

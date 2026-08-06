@@ -9,6 +9,12 @@ test("measures fresh total and phase passes with setup outside the clock", async
   const createRunner = async (pass) => {
     events.push(`create:${pass}`);
     return {
+      workloadIdentityJson: () =>
+        JSON.stringify({
+          scene_kind: "state_machine",
+          default_state_machine_id: 0,
+          view_model_initialization: "schema-default",
+        }),
       advanceAndDraw: () => events.push(`total:${pass}`),
       advance: () => events.push(`advance:${pass}`),
       draw: () => events.push(`draw:${pass}`),
@@ -40,10 +46,66 @@ test("measures fresh total and phase passes with setup outside the clock", async
   assert.equal(report.draw_ms, 5);
   assert.equal(report.bookkeeping_ms, 1);
   assert.equal(report.segments, 2);
+  assert.deepEqual(report.workload_identity, {
+    scene_kind: "state_machine",
+    default_state_machine_id: 0,
+    view_model_initialization: "schema-default",
+  });
+});
+
+test("rejects fresh runners that do not describe the same workload", async () => {
+  await assert.rejects(
+    measureFixture({
+      createRunner: async (pass) => ({
+        workloadIdentityJson: () =>
+          JSON.stringify({
+            scene_kind: pass === "total" ? "state_machine" : "static",
+            default_state_machine_id: pass === "total" ? 0 : null,
+            view_model_initialization: "schema-default",
+          }),
+        advanceAndDraw() {},
+        advance() {},
+        draw() {},
+        free() {},
+      }),
+      now: () => 1,
+      repeat: 1,
+      sampleSeconds: 0,
+    }),
+    /fresh runner workload identity mismatch/,
+  );
+});
+
+test("records a static no-default-state-machine workload", async () => {
+  const identity = {
+    scene_kind: "static",
+    default_state_machine_id: null,
+    view_model_initialization: "none",
+  };
+  const report = await measureFixture({
+    createRunner: async () => ({
+      workloadIdentityJson: () => JSON.stringify(identity),
+      advanceAndDraw() {},
+      advance() {},
+      draw() {},
+      free() {},
+    }),
+    now: () => 1,
+    repeat: 1,
+    sampleSeconds: 0,
+  });
+
+  assert.deepEqual(report.workload_identity, identity);
 });
 
 test("fails closed when the monotonic browser clock moves backwards", async () => {
   const runner = {
+    workloadIdentityJson: () =>
+      JSON.stringify({
+        scene_kind: "static",
+        default_state_machine_id: null,
+        view_model_initialization: "none",
+      }),
     advanceAndDraw() {},
     advance() {},
     draw() {},

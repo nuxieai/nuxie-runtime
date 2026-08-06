@@ -8,21 +8,25 @@ MSAA intersection-board scheduling and the draw/resource permutation happen
 when that shared plan is finalized, before either adapter consumes it.
 
 `WgpuFrame` owns a `LogicalFrame`; draw admission appends each draw and its
-resource layout to that object exactly once. `WgpuFrame::finish` invokes the
-shared production resource writer once, then its encoders consume the prepared
-gradient records and plan-owned geometry before performing backend-specific GPU
-uploads and submission. `WgpuFrame::prepare_logical_frame` explicitly runs the
-same retained-buffer writes with diagnostic fingerprinting. `NullLogicalRenderer`
-consumes the production resource writer and stops, without a WGPU context,
-device, queue, encoder, or submission. It is intended for CPU benchmarks and
-differential tests, not as a second renderer implementation.
+resource layout to that object exactly once. Admission retains fill, stroke,
+interior, and mode-specific feather tessellations. The production writer emits
+the renderer's real typed `PathData`, `PaintData`/`PaintAuxData`,
+`ContourData`, `TessVertexSpan`, and `TriangleVertex` records into a retained
+buffer ring; there is no parallel count-only geometry serialization.
+`WgpuFrame::finish` invokes that writer once, then its encoders consume the same
+prepared gradients and retained geometry before GPU upload and submission.
+`NullLogicalRenderer` invokes the identical writer and stops, without a WGPU
+context, device, queue, encoder, or submission.
 
 `NullLogicalRenderer::flush` keeps diagnostic hashing out of benchmark timing;
-`flush_with_diagnostics` fingerprints authored clip rectangles and gradient
-kind, geometry, colors, and stops. It also reports exact shadow bytes, buffer
-write operations, retained allocation growth, and per-flush rewinds. Retained
-capacity is the peak reusable capacity required by any one logical flush, not
-the sum of every flush in the frame.
+`flush_with_diagnostics` fingerprints the exact typed output records. It also
+reports exact shadow bytes, buffer write operations, retained allocation
+growth, and per-flush rewinds. Retained capacity is the peak reusable capacity
+required by any one logical flush, not the sum of every flush in the frame.
+`WgpuFrame::finish_logical_frame_for_differential` crosses the production CPU
+boundary and retains the same diagnostics while intentionally stopping before
+GPU encoding; differential tests use that method, not the diagnostic-only
+planning helper.
 
 The null adapter deliberately has a narrow begin/draw/flush API. Add an
 operation to it only when the logical phase must model that operation for both
@@ -39,8 +43,8 @@ without improving CPU measurement fidelity.
 - Every new CPU Draw workload shape needs a differential test that feeds the
   same owned path and paint data through WGPU and null logical frames and
   compares their complete reports.
-- The null adapter may use shadow bytes to model buffer writes, but it must not
-  create or retain GPU resources.
+- The null adapter retains typed CPU records that are byte-identical to GPU
+  upload inputs, but it must not create or retain GPU resources.
 - Logical buffers grow with retained capacity and rewind their written ranges
   after each flush. A later small frame must reuse capacity without retaining
   the previous frame's contents.

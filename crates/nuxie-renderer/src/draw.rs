@@ -257,6 +257,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn build_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -295,6 +296,8 @@ pub(crate) fn build_feather_tessellation_with_direction(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     fill_direction: FeatherFillDirection,
 ) -> Option<FillTessellation> {
+    #[cfg(test)]
+    FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     let feather_radius = paint_feather * 1.5;
     if feather_radius <= 0.0 || !feather_radius.is_finite() {
         return None;
@@ -2003,7 +2006,18 @@ thread_local! {
     static FILL_TESSELLATION_CLONE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static INTERIOR_TESSELLATION_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static INTERIOR_TESSELLATION_CLONE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FEATHER_TESSELLATION_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static INTERIOR_TRIANGLE_VISIT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_feather_tessellation_build_count() {
+    FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn feather_tessellation_build_count() -> usize {
+    FEATHER_TESSELLATION_BUILD_COUNT.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

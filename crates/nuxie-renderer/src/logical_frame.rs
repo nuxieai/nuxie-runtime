@@ -5,9 +5,11 @@
 //! behind it so a backend cannot accidentally benchmark a shallower seam.
 
 use std::borrow::Cow;
+use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use bytemuck::{Pod, Zeroable};
 #[cfg(test)]
 use std::cell::Cell;
 
@@ -16,12 +18,14 @@ use nuxie_render_api::{
 };
 
 use super::{
-    apply_clip_rect, draw, feather_atlas_placement, gpu, gradient_pipeline, intersect_pixel_bounds,
-    logical_flush, multiply, pack_logical_feather_atlas_for_cpp, path_aabb,
-    path_draw_has_valid_parameters, path_draw_pixel_bounds, pixel_bounds_are_empty,
-    pixel_bounds_are_outside_frame, prepare_path_draw_with_pixel_bounds, ClipElement, DrawRole,
-    DrawState, LogicalPaint, LogicalPath, MsaaClipResetAction, PathDrawPreparation,
-    PreparedFillGeometry, RenderMode, SolidDraw, FEATHER_ATLAS_PADDING,
+    apply_clip_rect, atomic_fill_clockwise_override, atomic_paint_fill_rule, clip_rect_paint_aux,
+    draw, feather_atlas_placement, gpu, gradient_paint_aux, gradient_pipeline,
+    intersect_pixel_bounds, logical_flush, modulate_color_alpha, multiply,
+    pack_logical_feather_atlas_for_cpp, path_aabb, path_draw_has_valid_parameters,
+    path_draw_pixel_bounds, pixel_bounds_are_empty, pixel_bounds_are_outside_frame,
+    prepare_path_draw_with_pixel_bounds, ClipElement, DrawRole, DrawState, LogicalPaint,
+    LogicalPath, MsaaClipResetAction, PathDrawPreparation, PreparedFillGeometry, RenderMode,
+    SolidDraw, FEATHER_ATLAS_PADDING,
 };
 
 #[cfg(test)]
@@ -917,6 +921,7 @@ impl LogicalDrawState {
                 },
                 None,
                 Some(Arc::clone(&clip.prepared_fill)),
+                None,
                 prepared_pixel_bounds,
             ));
             parent_id = replacement_id;
@@ -948,15 +953,34 @@ impl LogicalDrawState {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct TypedPaintRecord {
+    paint: gpu::PaintData,
+    aux: gpu::PaintAuxData,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct TypedDrawRecord {
+    role: u32,
+    primary_id: u32,
+    secondary_id: u32,
+    draw_pass_count: u32,
+    bounds: [f32; 4],
+    transform: [f32; 6],
+    fill_rule: u32,
+}
+
 #[derive(Default)]
 struct ShadowBuffers {
-    paths: Vec<u8>,
-    paints: Vec<u8>,
-    contours: Vec<u8>,
-    tessellations: Vec<u8>,
-    triangles: Vec<u8>,
-    images: Vec<u8>,
-    draws: Vec<u8>,
+    paths: Vec<gpu::PathData>,
+    paints: Vec<TypedPaintRecord>,
+    contours: Vec<gpu::ContourData>,
+    tessellations: Vec<gpu::TessVertexSpan>,
+    triangles: Vec<gpu::TriangleVertex>,
+    images: Vec<u64>,
+    draws: Vec<TypedDrawRecord>,
     gradients: Vec<u8>,
     capacity: LogicalResourceCounts,
 }
@@ -984,17 +1008,13 @@ impl ShadowBuffers {
                 required.gradient_stop_records,
             ),
         };
-        reserve_records(&mut self.paths, self.capacity.path_records, 64);
-        reserve_records(&mut self.paints, self.capacity.paint_records, 32);
-        reserve_records(&mut self.contours, self.capacity.contour_records, 8);
-        reserve_records(
-            &mut self.tessellations,
-            self.capacity.tessellation_records,
-            8,
-        );
-        reserve_records(&mut self.triangles, self.capacity.triangle_records, 8);
-        reserve_records(&mut self.images, self.capacity.image_records, 16);
-        reserve_records(&mut self.draws, self.capacity.draw_records, 16);
+        reserve_typed(&mut self.paths, self.capacity.path_records);
+        reserve_typed(&mut self.paints, self.capacity.paint_records);
+        reserve_typed(&mut self.contours, self.capacity.contour_records);
+        reserve_typed(&mut self.tessellations, self.capacity.tessellation_records);
+        reserve_typed(&mut self.triangles, self.capacity.triangle_records);
+        reserve_typed(&mut self.images, self.capacity.image_records);
+        reserve_typed(&mut self.draws, self.capacity.draw_records);
         let gradient_values = self
             .capacity
             .gradient_records
@@ -1006,13 +1026,25 @@ impl ShadowBuffers {
 
     fn buffer_capacities(&self) -> [usize; 8] {
         [
-            self.paths.capacity(),
-            self.paints.capacity(),
-            self.contours.capacity(),
-            self.tessellations.capacity(),
-            self.triangles.capacity(),
-            self.images.capacity(),
-            self.draws.capacity(),
+            self.paths
+                .capacity()
+                .saturating_mul(size_of::<gpu::PathData>()),
+            self.paints
+                .capacity()
+                .saturating_mul(size_of::<TypedPaintRecord>()),
+            self.contours
+                .capacity()
+                .saturating_mul(size_of::<gpu::ContourData>()),
+            self.tessellations
+                .capacity()
+                .saturating_mul(size_of::<gpu::TessVertexSpan>()),
+            self.triangles
+                .capacity()
+                .saturating_mul(size_of::<gpu::TriangleVertex>()),
+            self.images.capacity().saturating_mul(size_of::<u64>()),
+            self.draws
+                .capacity()
+                .saturating_mul(size_of::<TypedDrawRecord>()),
             self.gradients.capacity(),
         ]
     }
@@ -1030,13 +1062,13 @@ impl ShadowBuffers {
 
     fn fingerprint_into(&self, mut hash: u64) -> u64 {
         for bytes in [
-            self.paths.as_slice(),
-            self.paints.as_slice(),
-            self.contours.as_slice(),
-            self.tessellations.as_slice(),
-            self.triangles.as_slice(),
-            self.images.as_slice(),
-            self.draws.as_slice(),
+            bytemuck::cast_slice(self.paths.as_slice()),
+            bytemuck::cast_slice(self.paints.as_slice()),
+            bytemuck::cast_slice(self.contours.as_slice()),
+            bytemuck::cast_slice(self.tessellations.as_slice()),
+            bytemuck::cast_slice(self.triangles.as_slice()),
+            bytemuck::cast_slice(self.images.as_slice()),
+            bytemuck::cast_slice(self.draws.as_slice()),
             self.gradients.as_slice(),
         ] {
             for &byte in bytes {
@@ -1048,13 +1080,28 @@ impl ShadowBuffers {
     }
 
     fn written_bytes(&self) -> usize {
-        self.paths.len()
-            + self.paints.len()
-            + self.contours.len()
-            + self.tessellations.len()
-            + self.triangles.len()
-            + self.images.len()
-            + self.draws.len()
+        self.paths.len().saturating_mul(size_of::<gpu::PathData>())
+            + self
+                .paints
+                .len()
+                .saturating_mul(size_of::<TypedPaintRecord>())
+            + self
+                .contours
+                .len()
+                .saturating_mul(size_of::<gpu::ContourData>())
+            + self
+                .tessellations
+                .len()
+                .saturating_mul(size_of::<gpu::TessVertexSpan>())
+            + self
+                .triangles
+                .len()
+                .saturating_mul(size_of::<gpu::TriangleVertex>())
+            + self.images.len().saturating_mul(size_of::<u64>())
+            + self
+                .draws
+                .len()
+                .saturating_mul(size_of::<TypedDrawRecord>())
             + self.gradients.len()
     }
 
@@ -1093,6 +1140,12 @@ fn reserve_records(buffer: &mut Vec<u8>, records: usize, stride: usize) {
     }
 }
 
+fn reserve_typed<T>(buffer: &mut Vec<T>, records: usize) {
+    if buffer.capacity() < records {
+        buffer.reserve_exact(records.saturating_sub(buffer.len()));
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct LogicalResourceStore {
     buffers: Arc<Mutex<ShadowBuffers>>,
@@ -1102,6 +1155,31 @@ pub(crate) struct LogicalResourceStore {
 pub(crate) struct PreparedLogicalFrameResources {
     report: LogicalFrameReport,
     gradient_flushes: Vec<PreparedGradientFlush>,
+}
+
+pub(crate) struct PreparedGradientSelection<'a> {
+    batch: Cow<'a, GradientBatch>,
+    draws: Option<Vec<Option<PreparedGradient>>>,
+}
+
+impl PreparedGradientSelection<'_> {
+    pub(crate) fn spans(&self) -> &[gpu::GradientSpan] {
+        &self.batch.spans
+    }
+
+    pub(crate) fn height(&self) -> u32 {
+        self.batch.height
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.batch.is_empty()
+    }
+
+    pub(crate) fn draw(&self, index: usize) -> Option<PreparedGradient> {
+        self.draws
+            .as_ref()
+            .map_or_else(|| self.batch.draw(index), |draws| draws[index])
+    }
 }
 
 struct PreparedGradientFlush {
@@ -1116,7 +1194,10 @@ impl PreparedLogicalFrameResources {
         self.report
     }
 
-    pub(crate) fn gradient_batch<'a>(&'a self, draws: &[SolidDraw]) -> Cow<'a, GradientBatch> {
+    pub(crate) fn gradient_batch<'a>(
+        &'a self,
+        draws: &[SolidDraw],
+    ) -> PreparedGradientSelection<'a> {
         let address = draws.as_ptr() as usize;
         let copied_inputs = || {
             draws
@@ -1125,17 +1206,50 @@ impl PreparedLogicalFrameResources {
                 .collect::<Vec<_>>()
         };
         let mut inputs = None;
-        self.gradient_flushes
-            .iter()
-            .find(|flush| {
-                flush.draw_count == draws.len()
-                    && (flush.address == address
-                        || flush.inputs == *inputs.get_or_insert_with(copied_inputs))
-            })
-            .map_or_else(
-                || Cow::Owned(prepare_gradient_batch(draws)),
-                |flush| Cow::Borrowed(&flush.batch),
-            )
+        let matched = self.gradient_flushes.iter().find(|flush| {
+            flush.draw_count == draws.len()
+                && (flush.address == address
+                    || flush.inputs == *inputs.get_or_insert_with(copied_inputs))
+        });
+        if let Some(flush) = matched {
+            return PreparedGradientSelection {
+                batch: Cow::Borrowed(&flush.batch),
+                draws: None,
+            };
+        }
+
+        let requested = inputs.get_or_insert_with(copied_inputs);
+        for flush in &self.gradient_flushes {
+            let mut mapped = Vec::with_capacity(requested.len());
+            let mut available = vec![true; flush.inputs.len()];
+            let mut complete = true;
+            for input in requested.iter().copied() {
+                let Some(index) = flush
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, candidate)| {
+                        (available[index] && *candidate == input).then_some(index)
+                    })
+                else {
+                    complete = false;
+                    break;
+                };
+                available[index] = false;
+                mapped.push(flush.batch.draw(index));
+            }
+            if complete {
+                return PreparedGradientSelection {
+                    batch: Cow::Borrowed(&flush.batch),
+                    draws: Some(mapped),
+                };
+            }
+        }
+
+        panic!(
+            "encoder requested gradient inputs outside the finalized logical frame; \
+             production gradient normalization must run exactly once"
+        )
     }
 }
 
@@ -1150,6 +1264,15 @@ impl LogicalResourceStore {
         frame: &LogicalFrame,
     ) -> Result<PreparedLogicalFrameResources, &'static str> {
         let prepared = self.prepare_frame(frame, true)?;
+        self.production_frame_writes.fetch_add(1, Ordering::Relaxed);
+        Ok(prepared)
+    }
+
+    pub(crate) fn prepare_for_production_with_diagnostics(
+        &self,
+        frame: &LogicalFrame,
+    ) -> Result<PreparedLogicalFrameResources, &'static str> {
+        let prepared = self.prepare_frame(frame, false)?;
         self.production_frame_writes.fetch_add(1, Ordering::Relaxed);
         Ok(prepared)
     }
@@ -1197,7 +1320,8 @@ impl LogicalResourceStore {
         let mut buffer_write_operations = 0;
         let mut written_bytes = 0;
         let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
-        let mut gradient_flushes = Vec::with_capacity(flushes.len());
+        let gradient_batch = prepare_gradient_batch(&frame.draws);
+        let atomic_batch_flags = production_atomic_batch_flags(frame);
         for (flush_index, (&start, counts)) in starts.iter().zip(&flushes).enumerate() {
             let end = starts
                 .get(flush_index + 1)
@@ -1205,7 +1329,14 @@ impl LogicalResourceStore {
                 .unwrap_or(frame.draws.len());
             let before_capacities = buffers.buffer_capacities();
             buffers.grow(*counts);
-            let gradient_batch = prepare_gradient_batch(&frame.draws[start..end]);
+            let gradient_selection = PreparedGradientSelection {
+                batch: Cow::Borrowed(&gradient_batch),
+                draws: (start != 0 || end != frame.draws.len()).then(|| {
+                    (start..end)
+                        .map(|draw_index| gradient_batch.draw(draw_index))
+                        .collect()
+                }),
+            };
             write_resources(
                 &mut buffers,
                 config,
@@ -1213,7 +1344,8 @@ impl LogicalResourceStore {
                 *counts,
                 &frame.draws[start..end],
                 &frame.draw_resources[start..end],
-                &gradient_batch,
+                &atomic_batch_flags[start..end],
+                &gradient_selection,
             );
             written_bytes += buffers.written_bytes();
             buffer_write_operations += buffers.nonempty_buffer_count();
@@ -1228,15 +1360,6 @@ impl LogicalResourceStore {
             if !production {
                 fingerprint = buffers.fingerprint_into(fingerprint);
             }
-            gradient_flushes.push(PreparedGradientFlush {
-                address: frame.draws[start..end].as_ptr() as usize,
-                draw_count: end - start,
-                inputs: frame.draws[start..end]
-                    .iter()
-                    .map(gradient_input_fingerprint)
-                    .collect(),
-                batch: gradient_batch,
-            });
             buffers.rewind();
         }
         let report = LogicalFrameReport {
@@ -1254,7 +1377,12 @@ impl LogicalResourceStore {
         };
         Ok(PreparedLogicalFrameResources {
             report,
-            gradient_flushes,
+            gradient_flushes: vec![PreparedGradientFlush {
+                address: frame.draws.as_ptr() as usize,
+                draw_count: frame.draws.len(),
+                inputs: frame.draws.iter().map(gradient_input_fingerprint).collect(),
+                batch: gradient_batch,
+            }],
         })
     }
 }
@@ -1269,6 +1397,9 @@ fn gradient_input_fingerprint(draw: &SolidDraw) -> u64 {
 
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     write(&mut hash, &draw.state.opacity.to_bits().to_le_bytes());
+    for value in draw.state.transform.0 {
+        write(&mut hash, &value.to_bits().to_le_bytes());
+    }
     match draw.paint.shader.as_ref() {
         None => write(&mut hash, &[0]),
         Some(super::WgpuShader::Linear {
@@ -1576,6 +1707,48 @@ fn validate_gradient(colors: &[ColorInt], stops: &[f32]) -> Option<()> {
     Some(())
 }
 
+fn production_atomic_batch_flags(frame: &LogicalFrame) -> Vec<bool> {
+    let mut flags = vec![false; frame.draws.len()];
+    if frame.config.mode != RenderMode::ClockwiseAtomic {
+        return flags;
+    }
+    let advanced_segments = frame
+        .draws
+        .iter()
+        .any(super::draw_uses_advanced_blend)
+        .then(|| super::AdvancedAtomicSegmentPlan::new(&frame.draws));
+    let mut start = 0;
+    let mut logical_flush_index = 0;
+    while start < frame.draws.len() {
+        let logical_flush_end = frame
+            .logical_flush_starts
+            .get(logical_flush_index + 1)
+            .copied()
+            .unwrap_or(frame.draws.len());
+        let atomic = super::atomic_draw_is_eligible(&frame.draws[start]);
+        let advanced_end = advanced_segments
+            .as_ref()
+            .and_then(|plan| plan.segment_end(start, logical_flush_end));
+        let clockwise_atomic = super::WEBGPU_SUPPORTS_CLOCKWISE_ATOMIC_MODE
+            && atomic
+            && advanced_end.is_none()
+            && super::draw_requires_clockwise_atomic(
+                &frame.draws[start],
+                frame.config.width,
+                frame.config.height,
+            );
+        let end = advanced_end.unwrap_or_else(|| {
+            super::atomic_strategy_run_end(&frame.draws, start, logical_flush_end)
+        });
+        flags[start..end].fill(clockwise_atomic);
+        start = end;
+        if start == logical_flush_end {
+            logical_flush_index += 1;
+        }
+    }
+    flags
+}
+
 fn write_resources(
     buffers: &mut ShadowBuffers,
     config: LogicalFrameConfig,
@@ -1583,29 +1756,13 @@ fn write_resources(
     counts: LogicalResourceCounts,
     draws: &[SolidDraw],
     draw_resources: &[logical_flush::ResourceCounters],
-    gradient_batch: &GradientBatch,
+    atomic_batch_flags: &[bool],
+    gradient_batch: &PreparedGradientSelection<'_>,
 ) {
-    push_u32(&mut buffers.draws, config.width);
-    push_u32(&mut buffers.draws, config.height);
-    push_u8(&mut buffers.draws, mode_tag(config.mode));
-    push_usize(&mut buffers.draws, flush_index);
-    for value in [
-        counts.path_records,
-        counts.paint_records,
-        counts.contour_records,
-        counts.tessellation_records,
-        counts.triangle_records,
-        counts.image_records,
-        counts.draw_records,
-        counts.gradient_records,
-        counts.gradient_color_records,
-        counts.gradient_stop_records,
-    ] {
-        push_usize(&mut buffers.draws, value);
-    }
-    push_u32(&mut buffers.gradients, gradient_batch.height);
-    push_usize(&mut buffers.gradients, gradient_batch.spans.len());
-    for span in &gradient_batch.spans {
+    let _ = (flush_index, counts);
+    push_u32(&mut buffers.gradients, gradient_batch.height());
+    push_usize(&mut buffers.gradients, gradient_batch.spans().len());
+    for span in gradient_batch.spans() {
         for value in [
             span.horizontal_span,
             span.y_with_flags,
@@ -1615,66 +1772,20 @@ fn write_resources(
             push_u32(&mut buffers.gradients, value);
         }
     }
-    for (draw_index, (draw, resources)) in draws.iter().zip(draw_resources).enumerate() {
-        push_u8(&mut buffers.paths, fill_rule_tag(draw.path.fill_rule));
-        for value in draw.state.transform.0 {
-            push_u32(&mut buffers.paths, value.to_bits());
-        }
-        match draw.state.clip_rect {
-            None => push_u8(&mut buffers.paths, 0),
-            Some(clip) => {
-                push_u8(&mut buffers.paths, 1);
-                for value in clip.rect.into_iter().chain(clip.matrix.0) {
-                    push_u32(&mut buffers.paths, value.to_bits());
-                }
-            }
-        }
-        for value in draw.state.overall_clip_pixel_bounds {
-            push_u32(&mut buffers.paths, value as u32);
-        }
-        for verb in draw.path.raw_path.verbs() {
-            push_u8(&mut buffers.paths, path_verb_tag(*verb));
-        }
-        for point in draw.path.raw_path.points() {
-            push_u32(&mut buffers.paths, point.x.to_bits());
-            push_u32(&mut buffers.paths, point.y.to_bits());
-        }
-
-        push_u8(&mut buffers.paints, paint_style_tag(draw.paint.style));
-        push_u32(&mut buffers.paints, draw.paint.color);
-        push_u32(&mut buffers.paints, draw.paint.thickness.to_bits());
-        push_u8(&mut buffers.paints, stroke_join_tag(draw.paint.join));
-        push_u8(&mut buffers.paints, stroke_cap_tag(draw.paint.cap));
-        push_u32(&mut buffers.paints, draw.paint.feather.to_bits());
-        push_u32(&mut buffers.paints, draw.state.opacity.to_bits());
-        push_u8(&mut buffers.paints, draw.paint.blend_mode as u8);
-        match draw.paint.shader.as_ref() {
-            None => push_u8(&mut buffers.gradients, 0),
-            Some(super::WgpuShader::Linear {
-                start,
-                end,
-                colors,
-                stops,
-            }) => {
-                push_u8(&mut buffers.gradients, 1);
-                for value in [start.0, start.1, end.0, end.1] {
-                    push_u32(&mut buffers.gradients, value.to_bits());
-                }
-                write_gradient_values(&mut buffers.gradients, colors, stops);
-            }
-            Some(super::WgpuShader::Radial {
-                center,
-                radius,
-                colors,
-                stops,
-            }) => {
-                push_u8(&mut buffers.gradients, 2);
-                for value in [center.0, center.1, *radius] {
-                    push_u32(&mut buffers.gradients, value.to_bits());
-                }
-                write_gradient_values(&mut buffers.gradients, colors, stops);
-            }
-        }
+    for (draw_index, ((draw, resources), &use_clockwise_atomic_batch)) in draws
+        .iter()
+        .zip(draw_resources)
+        .zip(atomic_batch_flags)
+        .enumerate()
+    {
+        write_typed_draw_resources(
+            buffers,
+            config,
+            draw_index,
+            draw,
+            use_clockwise_atomic_batch,
+            gradient_batch,
+        );
         match gradient_batch.draw(draw_index) {
             None => push_u8(&mut buffers.gradients, 0),
             Some(gradient) => {
@@ -1686,65 +1797,212 @@ fn write_resources(
                 }
             }
         }
-        for value in [
-            resources.path_count,
-            resources.contour_count,
-            resources.midpoint_fan_tess_vertex_count,
-            resources.outer_cubic_tess_vertex_count,
-            resources.max_tessellated_segment_count,
-            resources.max_triangle_vertex_count,
-        ] {
-            push_usize(&mut buffers.tessellations, value);
-        }
-        push_usize(&mut buffers.contours, resources.contour_count);
-        push_usize(&mut buffers.triangles, resources.max_triangle_vertex_count);
-        push_usize(&mut buffers.images, resources.image_draw_count);
-        push_usize(&mut buffers.draws, resources.draw_pass_count);
-        match draw.role {
-            DrawRole::Content { clip_id } => {
-                push_u8(&mut buffers.draws, 0);
-                push_u16(&mut buffers.draws, clip_id);
-            }
+        buffers
+            .images
+            .extend(std::iter::repeat_n(1, resources.image_draw_count));
+        let (role, primary_id, secondary_id, bounds) = match draw.role {
+            DrawRole::Content { clip_id } => (0, u32::from(clip_id), 0, [0.0; 4]),
             DrawRole::ClipUpdate {
                 replacement_id,
                 parent_id,
-            } => {
-                push_u8(&mut buffers.draws, 1);
-                push_u16(&mut buffers.draws, replacement_id);
-                push_u16(&mut buffers.draws, parent_id);
-            }
+            } => (1, u32::from(replacement_id), u32::from(parent_id), [0.0; 4]),
             DrawRole::ClipReset { bounds, action } => {
-                push_u8(&mut buffers.draws, 2);
-                for value in bounds {
-                    push_u32(&mut buffers.draws, value.to_bits());
-                }
-                push_u8(&mut buffers.draws, clip_reset_action_tag(action));
-                push_u8(&mut buffers.draws, fill_rule_tag(draw.path.fill_rule));
-                for value in draw.state.transform.0 {
-                    push_u32(&mut buffers.draws, value.to_bits());
-                }
+                (2, u32::from(clip_reset_action_tag(action)), 0, bounds)
             }
-        }
+        };
+        buffers.draws.push(TypedDrawRecord {
+            role,
+            primary_id,
+            secondary_id,
+            draw_pass_count: u32::try_from(resources.draw_pass_count)
+                .expect("draw pass count overflow"),
+            bounds,
+            transform: draw.state.transform.0,
+            fill_rule: match draw.path.fill_rule {
+                FillRule::NonZero => 0,
+                FillRule::EvenOdd => 1,
+                FillRule::Clockwise => 2,
+            },
+        });
     }
 }
 
-fn write_gradient_values(buffer: &mut Vec<u8>, colors: &[ColorInt], stops: &[f32]) {
-    push_usize(buffer, colors.len());
-    for color in colors {
-        push_u32(buffer, *color);
+fn write_typed_draw_resources(
+    buffers: &mut ShadowBuffers,
+    config: LogicalFrameConfig,
+    draw_index: usize,
+    draw: &SolidDraw,
+    use_clockwise_atomic_batch: bool,
+    gradients: &PreparedGradientSelection<'_>,
+) {
+    if matches!(draw.role, DrawRole::ClipReset { .. }) || draw.image.is_some() {
+        return;
     }
-    push_usize(buffer, stops.len());
-    for stop in stops {
-        push_u32(buffer, stop.to_bits());
+
+    let path_id = u16::try_from(draw_index + 1).expect("logical path ID overflow");
+    let frame_clockwise_override = config.mode == RenderMode::ClockwiseAtomic;
+    let clockwise_override = atomic_fill_clockwise_override(draw, frame_clockwise_override);
+    let mut spans = Vec::new();
+    let mut contours = Vec::new();
+    let mut triangles = Vec::new();
+    let mut path = gpu::PathData::zeroed();
+
+    if draw.paint.feather != 0.0 {
+        if let Some(prepared) = draw.prepared_feather(config.mode) {
+            spans.clone_from(&prepared.tessellation.spans);
+            contours.clone_from(&prepared.tessellation.contours);
+            path = prepared.tessellation.path;
+        }
+    } else if draw.paint.style == RenderPaintStyle::Stroke {
+        if let Some(stroke) = draw.prepared_stroke() {
+            spans.clone_from(&stroke.tessellation.spans);
+            contours.clone_from(&stroke.tessellation.contours);
+            path = stroke.tessellation.path;
+        }
+    } else if config.mode == RenderMode::ClockwiseAtomic && draw.authored_should_use_interior() {
+        let prepared = draw.authored_atomic_interior_geometry(
+            clockwise_override,
+            use_clockwise_atomic_batch,
+            use_clockwise_atomic_batch
+                && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                && super::clockwise_atomic_clip_is_inactive(draw),
+            path_id,
+        );
+        if let Some(mut prepared) = prepared {
+            spans = prepared.spans;
+            contours = prepared.contours;
+            path = prepared.path;
+            triangles = prepared.triangles;
+            triangles.append(&mut prepared.borrowed_triangles);
+            triangles.append(&mut prepared.main_triangles.vertices);
+        }
+    } else if let Some(mut tessellation) =
+        if config.mode == RenderMode::Msaa && draw.authored_msaa_fill_requires_reverse() {
+            draw.prepared_fill()
+                .and_then(|prepared| prepared.reversed_midpoint(&draw.path, draw.state.transform))
+                .map(|prepared| prepared.tessellation.clone())
+        } else {
+            draw.authored_fill_tessellation()
+        }
+    {
+        if config.mode == RenderMode::ClockwiseAtomic {
+            tessellation.make_double_sided_with_direction(
+                draw.authored_clockwise_atomic_negate_coverage(
+                    draw.path.fill_rule,
+                    clockwise_override,
+                ),
+            );
+        }
+        spans = tessellation.spans;
+        contours = tessellation.contours;
+        path = tessellation.path;
     }
+
+    if spans.is_empty()
+        && contours.is_empty()
+        && triangles.is_empty()
+        && draw.paint.style == RenderPaintStyle::Fill
+    {
+        if let Some(mut tessellation) = draw.authored_fill_tessellation() {
+            if config.mode == RenderMode::ClockwiseAtomic {
+                tessellation.make_double_sided_with_direction(
+                    draw.authored_clockwise_atomic_negate_coverage(
+                        draw.path.fill_rule,
+                        clockwise_override,
+                    ),
+                );
+            }
+            spans = tessellation.spans;
+            contours = tessellation.contours;
+            path = tessellation.path;
+        }
+    }
+    if spans.is_empty() && contours.is_empty() && triangles.is_empty() {
+        return;
+    }
+    path.z_index = if config.mode == RenderMode::Msaa {
+        path_id.into()
+    } else {
+        0
+    };
+    if config.mode == RenderMode::ClockwiseAtomic {
+        path.coverage_buffer_range.pitch = config.width.div_ceil(32) * 32;
+    }
+    let contour_offset = u32::try_from(buffers.contours.len()).expect("contour offset overflow");
+    for span in &mut spans {
+        let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+        if local_id != 0 {
+            span.contour_id_with_flags = (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK)
+                | contour_offset.saturating_add(local_id);
+        }
+    }
+    for contour in &mut contours {
+        contour.path_id = path_id.into();
+    }
+    for triangle in &mut triangles {
+        triangle.weight_path_id = (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+    }
+
+    let fill_rule = if config.mode == RenderMode::ClockwiseAtomic {
+        atomic_paint_fill_rule(draw.path.fill_rule, clockwise_override)
+    } else {
+        draw.path.fill_rule
+    };
+    let gradient = gradients.draw(draw_index);
+    let mut paint = match draw.role {
+        DrawRole::ClipUpdate {
+            replacement_id,
+            parent_id,
+        } => gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule),
+        DrawRole::Content { clip_id } => {
+            let paint = if let Some(gradient) = gradient {
+                if draw.paint.style == RenderPaintStyle::Stroke {
+                    gpu::PaintData::gradient_stroke(
+                        gradient.paint_type,
+                        gradient.texture_y,
+                        draw.paint.blend_mode,
+                    )
+                } else {
+                    gpu::PaintData::gradient(
+                        gradient.paint_type,
+                        gradient.texture_y,
+                        fill_rule,
+                        draw.paint.blend_mode,
+                    )
+                }
+            } else if draw.paint.style == RenderPaintStyle::Stroke {
+                gpu::PaintData::solid_stroke(
+                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                    draw.paint.blend_mode,
+                )
+            } else {
+                gpu::PaintData::solid(
+                    modulate_color_alpha(draw.paint.color, draw.state.opacity),
+                    fill_rule,
+                    draw.paint.blend_mode,
+                )
+            };
+            paint.with_clip_id(clip_id)
+        }
+        DrawRole::ClipReset { .. } => unreachable!(),
+    };
+    if draw.state.clip_rect.is_some() {
+        paint = paint.with_clip_rect();
+    }
+    let aux = gradient.map_or_else(
+        || clip_rect_paint_aux(draw.state.clip_rect),
+        |gradient| gradient_paint_aux(draw.state.clip_rect, gradient),
+    );
+
+    buffers.paths.push(path);
+    buffers.paints.push(TypedPaintRecord { paint, aux });
+    buffers.contours.extend(contours);
+    buffers.tessellations.extend(spans);
+    buffers.triangles.extend(triangles);
 }
 
 fn push_u8(buffer: &mut Vec<u8>, value: u8) {
     buffer.push(value);
-}
-
-fn push_u16(buffer: &mut Vec<u8>, value: u16) {
-    buffer.extend_from_slice(&value.to_le_bytes());
 }
 
 fn push_u32(buffer: &mut Vec<u8>, value: u32) {
@@ -1753,13 +2011,6 @@ fn push_u32(buffer: &mut Vec<u8>, value: u32) {
 
 fn push_usize(buffer: &mut Vec<u8>, value: usize) {
     buffer.extend_from_slice(&(value as u64).to_le_bytes());
-}
-
-fn mode_tag(mode: RenderMode) -> u8 {
-    match mode {
-        RenderMode::Msaa => 0,
-        RenderMode::ClockwiseAtomic => 1,
-    }
 }
 
 fn paint_type_tag(paint_type: gpu::PaintType) -> u8 {
@@ -1778,47 +2029,6 @@ fn clip_reset_action_tag(action: MsaaClipResetAction) -> u8 {
         MsaaClipResetAction::IntersectPreviousNonZero => 1,
         MsaaClipResetAction::IntersectPreviousEvenOdd => 2,
         MsaaClipResetAction::IntersectPreviousClockwise => 3,
-    }
-}
-
-fn fill_rule_tag(rule: FillRule) -> u8 {
-    match rule {
-        FillRule::NonZero => 0,
-        FillRule::EvenOdd => 1,
-        FillRule::Clockwise => 2,
-    }
-}
-
-fn paint_style_tag(style: RenderPaintStyle) -> u8 {
-    match style {
-        RenderPaintStyle::Fill => 0,
-        RenderPaintStyle::Stroke => 1,
-    }
-}
-
-fn stroke_join_tag(join: StrokeJoin) -> u8 {
-    match join {
-        StrokeJoin::Miter => 0,
-        StrokeJoin::Round => 1,
-        StrokeJoin::Bevel => 2,
-    }
-}
-
-fn stroke_cap_tag(cap: StrokeCap) -> u8 {
-    match cap {
-        StrokeCap::Butt => 0,
-        StrokeCap::Round => 1,
-        StrokeCap::Square => 2,
-    }
-}
-
-fn path_verb_tag(verb: nuxie_render_api::PathVerb) -> u8 {
-    match verb {
-        nuxie_render_api::PathVerb::Move => 0,
-        nuxie_render_api::PathVerb::Line => 1,
-        nuxie_render_api::PathVerb::Quad => 2,
-        nuxie_render_api::PathVerb::Cubic => 3,
-        nuxie_render_api::PathVerb::Close => 4,
     }
 }
 

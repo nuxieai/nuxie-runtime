@@ -1706,6 +1706,11 @@ struct SolidDraw {
     // behind a shared cell so admission, resource accounting, and encoding all
     // observe the same preparation, like C++ PathDraw.
     prepared_stroke: Option<Arc<PreparedStrokeGeometry>>,
+    // Feather tessellation used to be built once for logical accounting and
+    // then discarded and rebuilt by the encoder. Retain the mode-specific
+    // production result so the logical writer and GPU backend consume the
+    // identical typed geometry.
+    prepared_feather: Option<Arc<PreparedFeatherGeometry>>,
 }
 
 struct PreparedFillGeometry {
@@ -1718,6 +1723,9 @@ struct PreparedFillGeometry {
     // defensive fallback when interior triangulation fails. Cache `None` too,
     // so degenerate paths do not retry the same preparation in every phase.
     midpoint: OnceLock<Option<PreparedMidpointGeometry>>,
+    // Reversed MSAA geometry is an uncommon fill-rule variant. Keep its
+    // tessellation out of the hot per-fill header until a frame needs it.
+    reversed_midpoint: OnceLock<Option<Box<PreparedMidpointGeometry>>>,
     is_collinear: bool,
     contour_count: usize,
     should_use_interior: OnceLock<bool>,
@@ -1726,7 +1734,8 @@ struct PreparedFillGeometry {
     // Admission predicts one run-level override, but a later compatible draw
     // can flip the final atomic run. Keep those two variants independently
     // synchronized while spilling their large headers out of this hot object.
-    interior_tessellations: [OnceLock<Option<Box<draw::InteriorTessellation>>>; 2],
+    interior_tessellations: Box<[OnceLock<Option<Box<draw::InteriorTessellation>>>; 2]>,
+    atomic_interior_tessellations: Box<[OnceLock<Option<Box<PreparedAtomicInteriorGeometry>>>; 8]>,
 }
 
 struct PreparedMidpointGeometry {
@@ -1741,6 +1750,13 @@ struct PreparedStrokeGeometry {
     local_contour_ids_are_dense: bool,
 }
 
+struct PreparedFeatherGeometry {
+    mode: RenderMode,
+    tessellation: draw::FillTessellation,
+    resources: logical_flush::ResourceCounters,
+}
+
+#[derive(Clone)]
 struct PreparedAtomicInteriorGeometry {
     spans: Vec<gpu::TessVertexSpan>,
     path: gpu::PathData,
@@ -1780,12 +1796,14 @@ impl PreparedFillGeometry {
             key: PathTransformKey::new(path, transform),
             authored_fill_rule: path.fill_rule,
             midpoint: OnceLock::new(),
+            reversed_midpoint: OnceLock::new(),
             is_collinear: fill_path_is_collinear(&path.raw_path),
             contour_count,
             should_use_interior: OnceLock::new(),
             complex_fill_topology: OnceLock::new(),
             coarse_area: OnceLock::new(),
-            interior_tessellations: std::array::from_fn(|_| OnceLock::new()),
+            interior_tessellations: Box::new(std::array::from_fn(|_| OnceLock::new())),
+            atomic_interior_tessellations: Box::new(std::array::from_fn(|_| OnceLock::new())),
         }
     }
 
@@ -1805,6 +1823,26 @@ impl PreparedFillGeometry {
 
     fn cached_midpoint(&self) -> Option<&PreparedMidpointGeometry> {
         self.midpoint.get().and_then(Option::as_ref)
+    }
+
+    fn reversed_midpoint(
+        &self,
+        path: &LogicalPath,
+        transform: Mat2D,
+    ) -> Option<&PreparedMidpointGeometry> {
+        self.reversed_midpoint
+            .get_or_init(|| {
+                let mut reversed = RawPath::new();
+                reversed.add_path_backwards(&path.raw_path, Mat2D::IDENTITY);
+                draw::build_fill_tessellation(&reversed, transform).map(|tessellation| {
+                    let resources = midpoint_resource_counts(&tessellation, 0);
+                    Box::new(PreparedMidpointGeometry {
+                        tessellation,
+                        resources,
+                    })
+                })
+            })
+            .as_deref()
     }
 
     fn midpoint_resources(
@@ -1863,10 +1901,37 @@ impl PreparedFillGeometry {
             .should_use_interior
             .get_or_init(|| draw::should_use_interior_tessellation(&path.raw_path, transform))
     }
+
+    fn atomic_interior_tessellation(
+        &self,
+        path: &LogicalPath,
+        transform: Mat2D,
+        clockwise_override: bool,
+        use_clockwise_atomic_batch: bool,
+        expand_unclipped_winding: bool,
+    ) -> Option<&PreparedAtomicInteriorGeometry> {
+        let index = usize::from(clockwise_override) * 4
+            + usize::from(use_clockwise_atomic_batch) * 2
+            + usize::from(expand_unclipped_winding);
+        self.atomic_interior_tessellations[index]
+            .get_or_init(|| {
+                self.interior_tessellation(path, transform, clockwise_override)
+                    .map(|tessellation| {
+                        Box::new(prepare_atomic_interior_geometry(
+                            tessellation,
+                            1,
+                            use_clockwise_atomic_batch,
+                            expand_unclipped_winding,
+                        ))
+                    })
+            })
+            .as_deref()
+    }
 }
 
 struct PathDrawPreparation {
     prepared_fill: Option<Arc<PreparedFillGeometry>>,
+    prepared_feather: Option<Arc<PreparedFeatherGeometry>>,
     pixel_bounds: Option<[i32; 4]>,
 }
 
@@ -1912,6 +1977,7 @@ impl SolidDraw {
             role,
             image,
             prepared_fill,
+            None,
             pixel_bounds,
             &mut stroke_preparation_scratch,
         )
@@ -1931,6 +1997,7 @@ impl SolidDraw {
             state,
             role,
             Some(ImageDraw::Rect(image)),
+            None,
             None,
             pixel_bounds,
         )
@@ -1973,6 +2040,7 @@ impl SolidDraw {
             role,
             image,
             preparation.prepared_fill,
+            preparation.prepared_feather,
             preparation.pixel_bounds,
             stroke_preparation_scratch,
         )
@@ -1985,6 +2053,7 @@ impl SolidDraw {
         role: DrawRole,
         image: Option<ImageDraw>,
         prepared_fill: Option<Arc<PreparedFillGeometry>>,
+        prepared_feather: Option<Arc<PreparedFeatherGeometry>>,
         prepared_pixel_bounds: Option<[i32; 4]>,
     ) -> Self {
         let mut stroke_preparation_scratch = draw::StrokePreparationScratch::default();
@@ -1995,6 +2064,7 @@ impl SolidDraw {
             role,
             image,
             prepared_fill,
+            prepared_feather,
             prepared_pixel_bounds,
             &mut stroke_preparation_scratch,
         )
@@ -2007,6 +2077,7 @@ impl SolidDraw {
         role: DrawRole,
         image: Option<ImageDraw>,
         prepared_fill: Option<Arc<PreparedFillGeometry>>,
+        prepared_feather: Option<Arc<PreparedFeatherGeometry>>,
         prepared_pixel_bounds: Option<[i32; 4]>,
         stroke_preparation_scratch: &mut draw::StrokePreparationScratch,
     ) -> Self {
@@ -2041,6 +2112,7 @@ impl SolidDraw {
             prepared_pixel_bounds,
             prepared_fill,
             prepared_stroke,
+            prepared_feather,
         }
     }
 
@@ -2138,6 +2210,48 @@ impl SolidDraw {
         .map(prepare)
     }
 
+    fn authored_atomic_interior_geometry(
+        &self,
+        clockwise_override: bool,
+        use_clockwise_atomic_batch: bool,
+        expand_unclipped_winding: bool,
+        path_id: u16,
+    ) -> Option<PreparedAtomicInteriorGeometry> {
+        let mut prepared = if let Some(fill) = self.prepared_fill() {
+            fill.atomic_interior_tessellation(
+                &self.path,
+                self.state.transform,
+                clockwise_override,
+                use_clockwise_atomic_batch,
+                expand_unclipped_winding,
+            )?
+            .clone()
+        } else {
+            self.with_authored_interior_tessellation(clockwise_override, |tessellation| {
+                prepare_atomic_interior_geometry(
+                    tessellation,
+                    1,
+                    use_clockwise_atomic_batch,
+                    expand_unclipped_winding,
+                )
+            })?
+        };
+        if path_id != 1 {
+            for contour in &mut prepared.contours {
+                contour.path_id = u32::from(path_id);
+            }
+            for vertex in prepared
+                .triangles
+                .iter_mut()
+                .chain(&mut prepared.borrowed_triangles)
+                .chain(&mut prepared.main_triangles.vertices)
+            {
+                vertex.weight_path_id = (vertex.weight_path_id & !0xffff) | i32::from(path_id);
+            }
+        }
+        Some(prepared)
+    }
+
     fn authored_interior_resources(
         &self,
         clockwise_override: bool,
@@ -2233,6 +2347,12 @@ impl SolidDraw {
             "prepared stroke geometry inputs changed after SolidDraw construction"
         );
         Some(prepared)
+    }
+
+    fn prepared_feather(&self, mode: RenderMode) -> Option<&PreparedFeatherGeometry> {
+        self.prepared_feather
+            .as_deref()
+            .filter(|prepared| prepared.mode == mode)
     }
 }
 
@@ -2701,6 +2821,35 @@ impl WgpuFrame {
         self.context
             .logical_resources
             .prepare(&self.logical_frame)
+            .map_err(RendererError::Unsupported)
+    }
+
+    /// Completes the exact production CPU boundary used immediately before
+    /// GPU encoding, but stops before command encoding/submission. This is the
+    /// WGPU side of backend differentials; unlike `prepare_logical_frame`, it
+    /// counts as a production resource write while retaining diagnostics.
+    pub fn finish_logical_frame_for_differential(
+        mut self,
+    ) -> Result<LogicalFrameReport, RendererError> {
+        if let Some(feature) = self.unsupported {
+            return Err(RendererError::Unsupported(feature));
+        }
+        if let Some(failure) = self.context.device_health.current() {
+            return Err(RendererError::Device(failure.message));
+        }
+        let mut board = self
+            .context
+            .intersection_board
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.logical_frame
+            .finalize(&mut board)
+            .map_err(RendererError::Unsupported)?;
+        drop(board);
+        self.context
+            .logical_resources
+            .prepare_for_production_with_diagnostics(&self.logical_frame)
+            .map(|prepared| prepared.into_report())
             .map_err(RendererError::Unsupported)
     }
 
@@ -3226,14 +3375,20 @@ impl WgpuFrame {
                                 (false, false) => draw::FeatherFillDirection::ReverseThenForward,
                             }
                         };
-                        let tessellation = draw::build_feather_tessellation_with_direction(
-                            raw_path,
-                            draw.state.transform,
-                            draw.paint.feather,
-                            stroke,
-                            fill_direction,
-                        )
-                        .expect("atomic eligibility already validated feather tessellation");
+                        let tessellation = draw
+                            .prepared_feather(self.mode)
+                            .filter(|_| inverse_clip_path.is_none())
+                            .map(|prepared| prepared.tessellation.clone())
+                            .or_else(|| {
+                                draw::build_feather_tessellation_with_direction(
+                                    raw_path,
+                                    draw.state.transform,
+                                    draw.paint.feather,
+                                    stroke,
+                                    fill_direction,
+                                )
+                            })
+                            .expect("atomic eligibility already validated feather tessellation");
                         let patch_index_range = if is_stroke {
                             0..gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT as u32
                         } else {
@@ -3290,21 +3445,13 @@ impl WgpuFrame {
                     } else if let Some(tessellation) = if inverse_clip_path.is_none() {
                         draw.authored_should_use_interior()
                             .then(|| {
-                                draw.with_authored_interior_tessellation(
+                                draw.authored_atomic_interior_geometry(
                                     clockwise_override,
-                                    |tessellation| {
-                                        prepare_atomic_interior_geometry(
-                                            tessellation,
-                                            path_id,
-                                            use_clockwise_atomic_batch,
-                                            use_clockwise_atomic_batch
-                                                && matches!(
-                                                    draw.role,
-                                                    DrawRole::Content { clip_id: 0 }
-                                                )
-                                                && clockwise_atomic_clip_is_inactive(draw),
-                                        )
-                                    },
+                                    use_clockwise_atomic_batch,
+                                    use_clockwise_atomic_batch
+                                        && matches!(draw.role, DrawRole::Content { clip_id: 0 })
+                                        && clockwise_atomic_clip_is_inactive(draw),
+                                    path_id,
                                 )
                             })
                             .flatten()
@@ -4044,8 +4191,8 @@ impl WgpuFrame {
                     None
                 };
                 let mut uniforms = analytic_uniforms(self.width, self.height, tessellation_height);
-                if gradient_batch.height != 0 {
-                    uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                if gradient_batch.height() != 0 {
+                    uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
                 }
                 uniforms.color_clear_value = swizzle_rive_color_to_rgba_premul(self.clear_color);
                 uniforms.max_path_id = u32::try_from(paths.len() - 1).expect("path ID overflow");
@@ -4131,8 +4278,8 @@ impl WgpuFrame {
                     &self.context.device,
                     encoder,
                     &uniforms,
-                    &gradient_batch.spans,
-                    gradient_batch.height,
+                    gradient_batch.spans(),
+                    gradient_batch.height(),
                 );
                 let atlas_texture = prepared.iter().any(|draw| draw.atlas.is_some()).then(|| {
                     let texture = self
@@ -4535,15 +4682,15 @@ impl WgpuFrame {
                 }
                 let gradient_batch = prepared_logical_resources.gradient_batch(draws);
                 let mut gradient_uniforms = analytic_uniforms(self.width, self.height, 1);
-                if gradient_batch.height != 0 {
-                    gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                if gradient_batch.height() != 0 {
+                    gradient_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
                 }
                 let gradient_texture = self.context.gradient_pipeline.encode(
                     &self.context.device,
                     encoder,
                     &gradient_uniforms,
-                    &gradient_batch.spans,
-                    gradient_batch.height,
+                    gradient_batch.spans(),
+                    gradient_batch.height(),
                 );
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::with_capacity(draws.len());
@@ -4586,13 +4733,8 @@ impl WgpuFrame {
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
-                        let oriented_path = draw.authored_msaa_fill_requires_reverse().then(|| {
-                            let mut path = RawPath::new();
-                            path.add_path_backwards(&draw.path.raw_path, Mat2D::IDENTITY);
-                            path
-                        });
-                        let raw_path = oriented_path.as_ref().unwrap_or(&draw.path.raw_path);
-                        let geometry = if oriented_path.is_none() {
+                        let reverse_fill = draw.authored_msaa_fill_requires_reverse();
+                        let geometry = if !reverse_fill {
                             match draw.prepared_fill.as_ref() {
                                 Some(prepared) => prepared
                                     .midpoint(&draw.path, draw.state.transform)
@@ -4606,8 +4748,13 @@ impl WgpuFrame {
                                 .map(PendingPathGeometry::Owned),
                             }
                         } else {
-                            draw::build_fill_tessellation(raw_path, draw.state.transform)
-                                .map(PendingPathGeometry::Owned)
+                            draw.prepared_fill()
+                                .and_then(|prepared| {
+                                    prepared.reversed_midpoint(&draw.path, draw.state.transform)
+                                })
+                                .map(|prepared| {
+                                    PendingPathGeometry::Owned(prepared.tessellation.clone())
+                                })
                         };
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
@@ -4726,13 +4873,17 @@ impl WgpuFrame {
                             stroke.is_some(),
                         );
                         if let (Some(mut tessellation), Some(placement)) = (
-                            draw::build_feather_tessellation_with_direction(
-                                &draw.path.raw_path,
-                                draw.state.transform,
-                                draw.paint.feather,
-                                stroke,
-                                fill_direction,
-                            ),
+                            draw.prepared_feather(self.mode)
+                                .map(|prepared| prepared.tessellation.clone())
+                                .or_else(|| {
+                                    draw::build_feather_tessellation_with_direction(
+                                        &draw.path.raw_path,
+                                        draw.state.transform,
+                                        draw.paint.feather,
+                                        stroke,
+                                        fill_direction,
+                                    )
+                                }),
                             feather_atlas_placement(
                                 &draw.path.raw_path,
                                 draw.state.transform,
@@ -4853,16 +5004,10 @@ impl WgpuFrame {
                                 "clip rectangles on msaa direct path draws",
                             ));
                         }
-                        let oriented_path = (draw.paint.style == RenderPaintStyle::Fill
-                            && draw.authored_msaa_fill_requires_reverse())
-                        .then(|| {
-                            let mut path = RawPath::new();
-                            path.add_path_backwards(&draw.path.raw_path, Mat2D::IDENTITY);
-                            path
-                        });
-                        let raw_path = oriented_path.as_ref().unwrap_or(&draw.path.raw_path);
+                        let reverse_fill = draw.paint.style == RenderPaintStyle::Fill
+                            && draw.authored_msaa_fill_requires_reverse();
                         let geometry = match draw.paint.style {
-                            RenderPaintStyle::Fill if oriented_path.is_none() => {
+                            RenderPaintStyle::Fill if !reverse_fill => {
                                 match draw.prepared_fill.as_ref() {
                                     Some(prepared) => prepared
                                         .midpoint(&draw.path, draw.state.transform)
@@ -4876,10 +5021,14 @@ impl WgpuFrame {
                                     .map(PendingPathGeometry::Owned),
                                 }
                             }
-                            RenderPaintStyle::Fill => {
-                                draw::build_fill_tessellation(raw_path, draw.state.transform)
-                                    .map(PendingPathGeometry::Owned)
-                            }
+                            RenderPaintStyle::Fill => draw
+                                .prepared_fill()
+                                .and_then(|prepared| {
+                                    prepared.reversed_midpoint(&draw.path, draw.state.transform)
+                                })
+                                .map(|prepared| {
+                                    PendingPathGeometry::Owned(prepared.tessellation.clone())
+                                }),
                             RenderPaintStyle::Stroke => {
                                 draw.prepared_stroke.as_ref().map(|stroke| {
                                     PendingPathGeometry::PreparedStroke(Arc::clone(stroke))
@@ -5141,8 +5290,9 @@ impl WgpuFrame {
                                 draw::tessellation_texture_height(&draw.tessellation.spans);
                             let mut uniforms =
                                 analytic_uniforms(self.width, self.height, tessellation_height);
-                            if gradient_batch.height != 0 {
-                                uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                            if gradient_batch.height() != 0 {
+                                uniforms.inverse_viewports[0] =
+                                    -2.0 / gradient_batch.height() as f32;
                             }
                             uniforms.atlas_texture_inverse_size = [
                                 1.0 / atlas_physical_size[0] as f32,
@@ -5430,8 +5580,8 @@ impl WgpuFrame {
                     }
                     let mut uniforms =
                         analytic_uniforms(self.width, self.height, tessellation_height);
-                    if gradient_batch.height != 0 {
-                        uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height as f32;
+                    if gradient_batch.height() != 0 {
+                        uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height() as f32;
                     }
                     uniforms.max_path_id =
                         u32::try_from(paths.len() - 1).expect("MSAA path ID overflow");
@@ -7547,8 +7697,54 @@ fn prepare_path_draw_with_pixel_bounds(
             return None;
         }
     }
+    let prepared_feather = if paint.feather == 0.0 {
+        None
+    } else {
+        let stroke = paint.effective_stroke();
+        let is_stroke = stroke.is_some();
+        let direction = if mode == RenderMode::Msaa {
+            draw::feather_atlas_fill_direction(state.transform, path.fill_rule, is_stroke)
+        } else if is_stroke {
+            draw::FeatherFillDirection::Forward
+        } else {
+            let uses_atlas = draw::feather_requires_atlas(paint.feather, state.transform, false);
+            let negate = draw::clockwise_atomic_negate_coverage(
+                &path.raw_path,
+                state.transform,
+                path.fill_rule,
+                true,
+            );
+            match (uses_atlas, negate) {
+                (true, true) => draw::FeatherFillDirection::Reverse,
+                (true, false) => draw::FeatherFillDirection::Forward,
+                (false, true) => draw::FeatherFillDirection::ForwardThenReverse,
+                (false, false) => draw::FeatherFillDirection::ReverseThenForward,
+            }
+        };
+        let tessellation = draw::build_feather_tessellation_with_direction(
+            &path.raw_path,
+            state.transform,
+            paint.feather,
+            stroke,
+            direction,
+        )?;
+        let pass_count = if mode == RenderMode::Msaa || is_stroke {
+            1
+        } else if draw::feather_requires_atlas(paint.feather, state.transform, false) {
+            1
+        } else {
+            2
+        };
+        let resources = midpoint_resource_counts(&tessellation, pass_count);
+        Some(Arc::new(PreparedFeatherGeometry {
+            mode,
+            tessellation,
+            resources,
+        }))
+    };
     Some(PathDrawPreparation {
         prepared_fill,
+        prepared_feather,
         pixel_bounds,
     })
 }
@@ -7796,13 +7992,7 @@ fn atomic_draw_is_eligible(draw: &SolidDraw) -> bool {
             || draw.has_authored_fill_tessellation();
     }
     if draw.paint.feather != 0.0 {
-        return draw::build_feather_tessellation(
-            &draw.path.raw_path,
-            draw.state.transform,
-            draw.paint.feather,
-            draw.paint.effective_stroke(),
-        )
-        .is_some();
+        return draw.prepared_feather.is_some();
     }
     match draw.paint.style {
         RenderPaintStyle::Fill => {
@@ -7877,24 +8067,13 @@ fn logical_flush_draw_resources(
 
     if mode == RenderMode::Msaa {
         if draw.paint.feather != 0.0 {
-            let stroke = draw.paint.effective_stroke();
-            let direction = draw::feather_atlas_fill_direction(
-                draw.state.transform,
-                draw.path.fill_rule,
-                stroke.is_some(),
-            );
-            return draw::build_feather_tessellation_with_direction(
-                &draw.path.raw_path,
-                draw.state.transform,
-                draw.paint.feather,
-                stroke,
-                direction,
-            )
-            .map(|tessellation| midpoint_resource_counts(&tessellation, 1))
-            .unwrap_or(logical_flush::ResourceCounters {
-                draw_pass_count: 1,
-                ..Default::default()
-            });
+            return draw
+                .prepared_feather(mode)
+                .map(|prepared| prepared.resources)
+                .unwrap_or(logical_flush::ResourceCounters {
+                    draw_pass_count: 1,
+                    ..Default::default()
+                });
         }
         let pass_count = if draw.paint.style == RenderPaintStyle::Stroke
             || matches!(draw.role, DrawRole::ClipUpdate { parent_id, .. } if parent_id != 0)
@@ -7916,43 +8095,27 @@ fn logical_flush_draw_resources(
     }
 
     let outermost_clip = matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. });
-    let raw_path = &draw.path.raw_path;
     let fill_rule = draw.path.fill_rule;
     let clockwise_override = atomic_fill_clockwise_override(draw, frame_clockwise_override);
     if draw.paint.feather != 0.0 {
-        let stroke = draw.paint.effective_stroke();
-        let is_stroke = stroke.is_some();
+        let is_stroke = draw.paint.effective_stroke().is_some();
         let uses_atlas =
             draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false);
-        let negate_coverage =
-            draw.authored_clockwise_atomic_negate_coverage(fill_rule, clockwise_override);
-        let direction = if is_stroke {
-            draw::FeatherFillDirection::Forward
-        } else {
-            match (uses_atlas, negate_coverage) {
-                (true, true) => draw::FeatherFillDirection::Reverse,
-                (true, false) => draw::FeatherFillDirection::Forward,
-                (false, true) => draw::FeatherFillDirection::ForwardThenReverse,
-                (false, false) => draw::FeatherFillDirection::ReverseThenForward,
-            }
-        };
         let pass_count = if uses_atlas || is_stroke || outermost_clip {
             1
         } else {
             2
         };
-        return draw::build_feather_tessellation_with_direction(
-            raw_path,
-            draw.state.transform,
-            draw.paint.feather,
-            stroke,
-            direction,
-        )
-        .map(|tessellation| midpoint_resource_counts(&tessellation, pass_count))
-        .unwrap_or(logical_flush::ResourceCounters {
-            draw_pass_count: pass_count,
-            ..Default::default()
-        });
+        return draw
+            .prepared_feather(mode)
+            .map(|prepared| {
+                debug_assert_eq!(prepared.resources.draw_pass_count, pass_count);
+                prepared.resources
+            })
+            .unwrap_or(logical_flush::ResourceCounters {
+                draw_pass_count: pass_count,
+                ..Default::default()
+            });
     }
     if draw.paint.style == RenderPaintStyle::Stroke {
         return draw
@@ -9380,7 +9543,7 @@ fn fill_requires_clockwise_atomic(
         .is_some()
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ClockwiseAtomicMainTriangles {
     vertices: Vec<gpu::TriangleVertex>,
     batches: Vec<clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>,
@@ -9884,6 +10047,33 @@ mod tests {
     }
 
     #[test]
+    fn feather_geometry_is_prepared_once_and_shared_with_each_backend_phase() {
+        for mode in [RenderMode::ClockwiseAtomic, RenderMode::Msaa] {
+            let factory = WgpuFactory::new_with_mode(64, 64, mode).unwrap();
+            let path = LogicalPath {
+                raw_path: Arc::new(logical_triangle()),
+                fill_rule: FillRule::Clockwise,
+                valid: true,
+            };
+            let paint = LogicalPaint {
+                feather: 3.0,
+                ..LogicalPaint::default()
+            };
+            draw::reset_feather_tessellation_build_count();
+            let mut frame = factory.begin_frame(0);
+            frame.draw_path(&path, &paint);
+            assert_eq!(draw::feather_tessellation_build_count(), 1);
+
+            frame.finish().unwrap();
+            assert_eq!(
+                draw::feather_tessellation_build_count(),
+                1,
+                "{mode:?} logical writes and encoding must consume admission's retained result"
+            );
+        }
+    }
+
+    #[test]
     fn logical_rollover_plans_each_admitted_draw_once() {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
         let path = LogicalPath {
@@ -9986,7 +10176,10 @@ mod tests {
         assert_eq!(report.retained_capacity.draw_records, 125);
         assert_eq!(report.written.path_records, 180);
         assert_eq!(report.buffer_rewinds, 2);
-        assert_eq!(report.buffer_write_operations, 16);
+        assert_eq!(
+            report.buffer_write_operations, 12,
+            "only nonempty typed output buffers count as writes"
+        );
         assert!(report.written_bytes > 0);
     }
 
@@ -10517,7 +10710,7 @@ mod tests {
             frame.draw_path(&path, &draw.paint.into_wgpu());
             frame.restore();
         }
-        frame.prepare_logical_frame().unwrap()
+        frame.finish_logical_frame_for_differential().unwrap()
     }
 
     fn null_logical_workload(
@@ -10986,6 +11179,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let batch = prepare_gradient_batch(&[
             draw(WgpuShader::Linear {
@@ -11011,6 +11205,79 @@ mod tests {
     }
 
     #[test]
+    fn prepared_gradients_are_reused_for_encoder_subsets_and_reorders() {
+        let gradient = || WgpuShader::Linear {
+            start: (0.0, 0.0),
+            end: (10.0, 0.0),
+            colors: vec![0xff000000, 0xffffffff],
+            stops: vec![0.0, 1.0],
+        };
+        let draw = |translation: f32| SolidDraw {
+            path: LogicalPath {
+                valid: true,
+                raw_path: Arc::new(RawPath::new()),
+                fill_rule: FillRule::NonZero,
+            },
+            paint: LogicalPaint {
+                shader: Some(gradient()),
+                ..Default::default()
+            },
+            state: DrawState {
+                transform: Mat2D([1.0, 0.0, 0.0, 1.0, translation, 0.0]),
+                ..Default::default()
+            },
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+            prepared_pixel_bounds: None,
+            prepared_fill: None,
+            prepared_stroke: None,
+            prepared_feather: None,
+        };
+        let mut frame = logical_frame::LogicalFrame::new(LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        });
+        frame.draws = vec![draw(0.0), draw(12.0)];
+        frame.draw_resources = vec![logical_flush::ResourceCounters::default(); 2];
+        frame.logical_flush_starts = vec![0, 1];
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize(&mut board).unwrap();
+        let resources = logical_frame::LogicalResourceStore::default();
+        let _ = logical_frame::take_gradient_batch_preparations();
+        let prepared = resources.prepare_for_production(&frame).unwrap();
+        assert_eq!(logical_frame::take_gradient_batch_preparations(), 1);
+        let baseline = prepared.gradient_batch(&frame.draws);
+        let first = baseline.draw(0).unwrap();
+        let second = baseline.draw(1).unwrap();
+        drop(baseline);
+
+        let reordered = vec![frame.draws[1].clone(), frame.draws[0].clone()];
+        let reordered_batch = prepared.gradient_batch(&reordered);
+        let reordered_first = reordered_batch.draw(0).unwrap();
+        let reordered_second = reordered_batch.draw(1).unwrap();
+        assert_eq!(reordered_first.matrix, second.matrix);
+        assert_eq!(reordered_first.texture_y, second.texture_y);
+        assert_eq!(reordered_first.texture_span, second.texture_span);
+        assert_eq!(reordered_second.matrix, first.matrix);
+        assert_eq!(reordered_second.texture_y, first.texture_y);
+        assert_eq!(reordered_second.texture_span, first.texture_span);
+        let subset_batch = prepared.gradient_batch(&reordered[..1]);
+        let subset = subset_batch.draw(0).unwrap();
+        assert_eq!(subset.matrix, second.matrix);
+        assert_eq!(subset.texture_y, second.texture_y);
+        assert_eq!(subset.texture_span, second.texture_span);
+        assert_eq!(
+            logical_frame::take_gradient_batch_preparations(),
+            0,
+            "encoder views must not repeat gradient normalization or packing"
+        );
+    }
+
+    #[test]
     fn solid_gradient_batch_keeps_per_draw_table_sparse() {
         let solid_draw = SolidDraw {
             path: LogicalPath {
@@ -11025,6 +11292,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
 
         let batch = prepare_gradient_batch(&[solid_draw.clone(), solid_draw]);
@@ -12761,6 +13029,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let draws = [
             make_draw([10.0, 10.0, 11.0, 11.0]),
@@ -12786,6 +13055,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         // After C++'s single grouping outset these half-open rectangles only
         // touch at x=12, so they are safe to issue in one disjoint group. A
@@ -12812,6 +13082,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let draws = vec![draw; 3];
 
@@ -12847,6 +13118,7 @@ mod tests {
                 prepared_pixel_bounds: None,
                 prepared_fill: None,
                 prepared_stroke: None,
+                prepared_feather: None,
             })
             .collect::<Vec<_>>();
 
@@ -12878,6 +13150,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let draws = [
             make_draw([10.0, 10.0, 20.0, 20.0], 1),
@@ -12926,6 +13199,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let draws = [
             make_draw(1, BlendMode::Difference),
@@ -12962,6 +13236,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let draws = [
             make_draw([0.0, 0.0, 10.0, 10.0], 1, BlendMode::Difference),
@@ -12999,6 +13274,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let scenes = [
             vec![
@@ -13270,6 +13546,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         assert!(msaa_draws_can_submit_independently(std::slice::from_ref(
             &draw
@@ -13303,6 +13580,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
 
         assert_eq!(msaa_draw_layer_count(&draw, false), 3);
@@ -13709,6 +13987,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         assert!(direct_stroke_can_batch(&draw, false));
         assert!(!direct_stroke_can_batch(&draw, true));
@@ -14635,6 +14914,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let clip = |rect| {
             Some(ClipRectState {
@@ -15283,6 +15563,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         assert_eq!(tessellate_solid(&draw, 10, 10).unwrap().len(), 3);
     }
@@ -16081,6 +16362,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         let mut compound = simple.clone();
         compound.path.raw_path_mut().add_path(
@@ -19961,6 +20243,7 @@ mod tests {
             prepared_pixel_bounds: None,
             prepared_fill: None,
             prepared_stroke: None,
+            prepared_feather: None,
         };
         for index in 0..2048u32 {
             draw.paint.shader = Some(WgpuShader::Linear {
@@ -20000,6 +20283,7 @@ mod tests {
                 prepared_pixel_bounds: None,
                 prepared_fill: None,
                 prepared_stroke: None,
+                prepared_feather: None,
             };
             let mut atlas = LogicalFlushAllocations::default();
             let atlas_count = (1..10_000)

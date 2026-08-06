@@ -218,8 +218,9 @@ container's fixed opacity owner on its runtime shape during the existing
 container-index construction pass. Live inherited blend reads now follow that
 O(1) retained index instead of reopening the immutable component graph and
 walking static ancestry. Focused coverage proves that every supported paint
-container and its clone retain the same owner as the prior static resolver, and
-that a live inherited blend update performs zero ancestry resolutions.
+container present in the text-style fixture, and its clone, retains the same
+owner as the prior static resolver, and that a live inherited blend update
+performs zero ancestry resolutions.
 
 The scripting-enabled release runner SHA-256 for that commit is
 `37639c25c77fbff5681a4dcc622daa3bb2b8e376682c6cab192027e3adf43d9a`.

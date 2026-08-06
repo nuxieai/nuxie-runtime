@@ -16,7 +16,7 @@
 //! [`Error::UserDataDestructed`].
 //!
 //! Each registered method/field is compiled into a Rust closure wired into a
-//! per-instance metatable:
+//! per-VM, per-type metatable:
 //!   - ordinary methods go into a method table,
 //!   - field getters/setters are dispatched by an `__index`/`__newindex`
 //!     function (only when fields are registered),
@@ -24,6 +24,7 @@
 
 use std::any::TypeId;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::callback::{create_callback_function, BoxedCallback};
@@ -34,6 +35,77 @@ use crate::sys::*;
 use crate::table::Table;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
+
+type UserDataMetatableCache = HashMap<TypeId, c_int>;
+
+#[inline]
+unsafe fn vm_key(state: *mut lua_State) -> usize {
+    unsafe { (*state).global as usize }
+}
+
+#[cfg(feature = "send")]
+mod metatable_store {
+    use super::UserDataMetatableCache;
+    use std::collections::HashMap;
+    use std::sync::{LazyLock, Mutex};
+
+    static STORE: LazyLock<Mutex<HashMap<usize, UserDataMetatableCache>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+
+    pub(super) fn with<R>(f: impl FnOnce(&mut HashMap<usize, UserDataMetatableCache>) -> R) -> R {
+        let mut guard = STORE.lock().unwrap_or_else(|error| error.into_inner());
+        f(&mut guard)
+    }
+}
+
+#[cfg(not(feature = "send"))]
+mod metatable_store {
+    use super::UserDataMetatableCache;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static STORE: RefCell<HashMap<usize, UserDataMetatableCache>> =
+            RefCell::new(HashMap::new());
+    }
+
+    pub(super) fn with<R>(f: impl FnOnce(&mut HashMap<usize, UserDataMetatableCache>) -> R) -> R {
+        STORE.with(|store| f(&mut store.borrow_mut()))
+    }
+}
+
+fn cached_metatable(state: *mut lua_State, type_id: TypeId) -> Option<c_int> {
+    let key = unsafe { vm_key(state) };
+    metatable_store::with(|store| {
+        store
+            .get(&key)
+            .and_then(|cache| cache.get(&type_id).copied())
+    })
+}
+
+fn retain_metatable(state: *mut lua_State, type_id: TypeId, metatable: &crate::Table) -> c_int {
+    unsafe { metatable.push_to_stack() };
+    let reference = unsafe { lua_ref(state, -1) };
+    unsafe { lua_pop(state, 1) };
+    let key = unsafe { vm_key(state) };
+    metatable_store::with(|store| {
+        store.entry(key).or_default().insert(type_id, reference);
+    });
+    reference
+}
+
+/// Release the raw registry references retained for one VM's per-type
+/// metatables. The owning Lua handle calls this immediately before closing the
+/// state; borrowed callback handles deliberately leave the shared cache alone.
+pub(crate) fn clear_metatable_cache(state: *mut lua_State) {
+    let key = unsafe { vm_key(state) };
+    let references = metatable_store::with(|store| store.remove(&key));
+    if let Some(references) = references {
+        for reference in references.into_values() {
+            unsafe { lua_unref(state, reference) };
+        }
+    }
+}
 
 /// A Rust type that can be exposed to Lua as userdata.
 ///
@@ -1181,20 +1253,21 @@ pub(crate) fn create_scoped_userdata<T: UserData>(
     Ok((ud, neutralise))
 }
 
-/// Build a userdata value wrapping `data`, with a metatable assembled from the
-/// type's [`UserData::add_fields`] + [`UserData::add_methods`].
-pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
-    lua: &Lua,
-    data: T,
-) -> Result<AnyUserData> {
+fn userdata_metatable<T: UserData + MaybeSend + MaybeSync + 'static>(lua: &Lua) -> Result<c_int> {
     let state = lua.state();
+    let type_id = TypeId::of::<T>();
+    if let Some(reference) = cached_metatable(state, type_id) {
+        return Ok(reference);
+    }
 
-    // 1. Collect fields, methods, and meta-methods.
+    // Register the Rust surface once per VM/type, matching Luau's native
+    // `lua_register_rive<T>` model. Constructing another T should allocate
+    // only its userdata payload, not rebuild tables and callback closures.
     let mut collector = Collector::<T>::new();
     T::add_fields(&mut collector);
     T::add_methods(&mut collector);
 
-    // 2. Build the method table + meta-methods, and the field getter/setter
+    // Build the method table + meta-methods, and the field getter/setter
     //    tables (if any fields were registered).
     let method_table = lua.create_table();
     let metatable = lua.create_table();
@@ -1221,8 +1294,9 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
 
     if has_fields {
         // __index tries a field getter then the method table; __newindex tries
-        // a field setter, else raises. Built as Lua closures so dispatch never
-        // depends on the creating state (see `create_field_dispatchers`).
+        // a field setter, else raises. The cached metatable retains Lua closures
+        // whose upvalues are VM values, so dispatch never depends on the
+        // creating coroutine state or holds a strong Rust Lua handle.
         let (index_fn, newindex_fn) =
             create_field_dispatchers(lua, &getters, &setters, &method_table)?;
         metatable.set("__index", index_fn)?;
@@ -1232,7 +1306,19 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
         metatable.set("__index", method_table)?;
     }
 
-    // 3. Allocate the userdata holding UserDataCell<T> and move `data` in.
+    Ok(retain_metatable(state, type_id, &metatable))
+}
+
+/// Build a userdata value wrapping `data`, reusing the metatable assembled
+/// from the type's [`UserData::add_fields`] + [`UserData::add_methods`].
+pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
+    lua: &Lua,
+    data: T,
+) -> Result<AnyUserData> {
+    let state = lua.state();
+    let metatable = userdata_metatable::<T>(lua)?;
+
+    // Allocate the userdata holding UserDataCell<T> and move `data` in.
     unsafe {
         let storage = lua_newuserdatadtor(
             state,
@@ -1250,11 +1336,14 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
             },
         );
 
-        // 4. Set the metatable on the userdata (which is on top of stack).
-        metatable.push_to_stack();
+        luaur_vm::functions::lua_rawgeti::lua_rawgeti(
+            state,
+            luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX,
+            metatable,
+        );
         lua_setmetatable(state, -2);
 
-        // 5. Take a ref to the userdata and return.
+        // Take a ref to the userdata and return.
         Ok(AnyUserData::from_ref(lua.pop_ref()))
     }
 }

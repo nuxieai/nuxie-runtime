@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -220,6 +222,65 @@ class SourceProvenanceTests(unittest.TestCase):
                 check=True,
             ).stdout,
             "",
+        )
+
+    def test_rejects_inherited_tracked_source_bundle_before_runtime_env(self):
+        shell = Path(__file__).with_name("run-wasm-perf.sh")
+        environment = os.environ.copy()
+        environment.pop("RIVE_RUNTIME_DIR", None)
+        environment.pop("RUST_GOLDEN_RUNNER", None)
+        environment["WASM_PERF_SEALED_COORDINATOR_BUNDLE"] = str(shell.parent)
+
+        completed = subprocess.run(
+            [str(shell)],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("invalid content-addressed coordinator bundle", completed.stderr)
+        self.assertNotIn("RIVE_RUNTIME_DIR", completed.stderr)
+
+    def test_post_seal_python_swap_executes_original_open_descriptor(self):
+        python_source = self.repo / "wasm_perf.py"
+        python_source.write_text(
+            'from pathlib import Path\nPath(__import__("sys").argv[1]).write_text("sealed")\n',
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", python_source.name], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "python coordinator"],
+            cwd=self.repo,
+            check=True,
+        )
+        generated = self.repo / "generated"
+        bundle = wasm_perf.stage_coordinator_bundle_from_git(
+            self.repo,
+            {python_source.name: python_source.name},
+            generated / "coordinators",
+        )
+        bundled_python = bundle / python_source.name
+        descriptor = os.open(bundled_python, os.O_RDONLY)
+        try:
+            bundled_python.unlink()
+            bundled_python.write_text(
+                'from pathlib import Path\nPath(__import__("sys").argv[1]).write_text("fabricated")\n',
+                encoding="utf-8",
+            )
+            output = generated / "python-result.txt"
+            subprocess.run(
+                [sys.executable, f"/dev/fd/{descriptor}", str(output)],
+                pass_fds=(descriptor,),
+                check=True,
+            )
+        finally:
+            os.close(descriptor)
+
+        self.assertEqual(output.read_text(encoding="utf-8"), "sealed")
+        wasm_perf.audit_python_coordinator_shell(
+            Path(__file__).with_name("run-wasm-perf.sh").read_text(encoding="utf-8")
         )
 
     def test_seals_staged_fixture_and_rejects_mutation_after_seal(self):

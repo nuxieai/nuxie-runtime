@@ -1258,31 +1258,6 @@ fn instantiate_state_machine_data_converters(
     Ok(())
 }
 
-#[cfg(all(feature = "scripting", test))]
-fn instantiate_script_listener_actions(
-    file: &Arc<File>,
-    machine: &mut StateMachineInstance,
-    factory: &mut dyn Factory,
-    root_view_model: Option<&ViewModelInstance>,
-) -> std::result::Result<(), nuxie_runtime::ScriptError> {
-    instantiate_script_listener_actions_with_optional_factory(
-        file,
-        machine,
-        Some(factory),
-        root_view_model,
-    )?;
-    // This test-only entry point represents the complete synchronous C++
-    // constructor pass. A retained table may still have user `init` pending
-    // because a live hydration prerequisite is absent, but low-level
-    // callbacks may use that valid `m_self` occurrence
-    // (`scripted_object.cpp:399-437`;
-    // `state_machine_instance.cpp:2072-2082`).
-    machine.mark_scripted_object_initialization_complete(
-        root_view_model.map(ViewModelInstance::handle),
-    );
-    Ok(())
-}
-
 #[cfg(feature = "scripting")]
 fn instantiate_script_listener_actions_with_optional_factory(
     file: &Arc<File>,
@@ -5931,13 +5906,13 @@ impl OwnedArtboardInstance {
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
     pub fn drain_script_host_effects<T: 'static>(&self) -> Option<T> {
-        let effects = self.file.scripts.borrow().drain_host_effects()?;
-        Some(*effects.downcast::<T>().unwrap_or_else(|_| {
-            panic!(
-                "script host effects had an unexpected concrete type; expected {}",
-                std::any::type_name::<T>()
-            )
-        }))
+        self.file
+            .scripts
+            .borrow()
+            .drain_host_effects()?
+            .downcast::<T>()
+            .ok()
+            .map(|effects| *effects)
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,

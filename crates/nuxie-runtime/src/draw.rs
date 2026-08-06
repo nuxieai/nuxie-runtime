@@ -9061,6 +9061,11 @@ pub(crate) struct RuntimeShape {
     paint_container_index: Option<usize>,
     pub(crate) paint_container_family:
         Option<crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily>,
+    /// Concrete Transform/Artboard whose retained Drawable state supplies
+    /// this paint container's inherited opacity and blend mode. C++ fixes the
+    /// equivalent parent pointer topology during construction; it is stable
+    /// for every clone of this Artboard occurrence.
+    opacity_owner_local: Option<usize>,
     pub(crate) paint_paths: [RuntimeShapePaintPathOwner; 3],
     pub(crate) paint_owners: Vec<RuntimeShapePaintOwner>,
     pub(crate) world_bounds: Cell<Option<RenderAabb>>,
@@ -9073,6 +9078,7 @@ impl Clone for RuntimeShape {
             path_locals: Vec::new(),
             paint_container_index: self.paint_container_index,
             paint_container_family: self.paint_container_family,
+            opacity_owner_local: self.opacity_owner_local,
             paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
             paint_owners: self.paint_owners.clone(),
             world_bounds: Cell::new(None),
@@ -9528,6 +9534,7 @@ impl RuntimeShapeList {
                 graph,
                 container.local_id,
             );
+            self.slot_mut(container.local_id).opacity_owner_local = Some(owner_local);
             if self.opacity_paint_containers_by_owner_local.len() <= owner_local {
                 self.opacity_paint_containers_by_owner_local
                     .resize_with(owner_local + 1, Vec::new);
@@ -9685,6 +9692,7 @@ impl RuntimeShapeList {
             path_locals: Vec::new(),
             paint_container_index: None,
             paint_container_family: None,
+            opacity_owner_local: None,
             paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
             paint_owners: Vec::new(),
             world_bounds: Cell::new(None),
@@ -21079,10 +21087,10 @@ fn runtime_live_owned_shape_paint_blend_mode_value(
     // ShapePaint owns RenderPaint while the concrete text drawable owns the
     // inherited opacity/blend state.
     let blend_owner_local = instance
-        .runtime_graph()
-        .map_or(paint.container_local, |graph| {
-            crate::shapes::shape_paint_container::opacity_owner_local(graph, paint.container_local)
-        });
+        .runtime_shapes
+        .get(paint.container_local)
+        .and_then(|container| container.opacity_owner_local)
+        .unwrap_or(paint.container_local);
     let container_blend_mode_value =
         runtime_draw_property_key_for_name("Drawable", "blendModeValue")
             .and_then(|key| instance.uint_property(blend_owner_local, key))
@@ -27615,6 +27623,32 @@ mod tests {
         let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let owners = RuntimeShapeList::from_graph(graph);
+        let cloned = owners.clone();
+
+        for container in graph.shape_paint_containers.iter().filter(|container| {
+            crate::shapes::shape_paint_container::family(container.type_name).is_some()
+        }) {
+            let expected = crate::shapes::shape_paint_container::opacity_owner_local(
+                graph,
+                container.local_id,
+            );
+            let retained = owners
+                .get(container.local_id)
+                .expect("paint container is retained");
+            assert_eq!(
+                retained.opacity_owner_local,
+                Some(expected),
+                "container {} retains the same concrete parent owner as static construction",
+                container.local_id,
+            );
+            assert_eq!(
+                cloned
+                    .get(container.local_id)
+                    .and_then(|container| container.opacity_owner_local),
+                Some(expected),
+                "clone occurrence preserves immutable paint-container ownership"
+            );
+        }
 
         for component in &graph.components {
             let expected = graph
@@ -29256,10 +29290,16 @@ mod tests {
             .get(1)
             .and_then(|shape| shape.paint_owners.first())
             .expect("settled ShapePaint owner");
+        crate::shapes::shape_paint_container::reset_opacity_owner_resolution_count();
         assert_eq!(
             runtime_live_owned_shape_paint_blend_mode_value(&instance, paint),
             14,
             "ShapePaint::blendMode reads the live parent value when its own generated value is 127"
+        );
+        assert_eq!(
+            crate::shapes::shape_paint_container::opacity_owner_resolution_count(),
+            0,
+            "a live paint query follows the retained C++ parent owner instead of re-walking the static graph"
         );
     }
 

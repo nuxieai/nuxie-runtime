@@ -56,7 +56,7 @@ if [[ "$EXECUTED_COORDINATOR_DIR" != "$COORDINATOR_DIR" \
   echo "invalid content-addressed coordinator bundle" >&2
   exit 1
 fi
-if ! python3 - "$COORDINATOR_DIR" "$ROOT" "$0" <<'PY'
+if ! VALIDATED_PYTHON_COORDINATOR_IDENTITY="$(python3 - "$COORDINATOR_DIR" "$ROOT" "$0" <<'PY'
 import hashlib
 import json
 import subprocess
@@ -120,7 +120,10 @@ current_source = {
 }
 if status or current_source != source:
     raise SystemExit("coordinator bundle source identity differs from clean checkout")
+python_identity = files["wasm_perf.py"]
+print(f"{python_identity['bytes']}:{python_identity['sha256']}")
 PY
+)"
 then
   echo "invalid content-addressed coordinator bundle" >&2
   exit 1
@@ -128,6 +131,26 @@ fi
 PYTHON_COORDINATOR="$COORDINATOR_DIR/wasm_perf.py"
 NODE_COORDINATOR="$COORDINATOR_DIR/run-wasm-perf.cjs"
 exec 9<"$PYTHON_COORDINATOR"
+if ! python3 - "$VALIDATED_PYTHON_COORDINATOR_IDENTITY" <<'PY'
+import hashlib
+import os
+import sys
+
+expected_bytes, expected_sha256 = sys.argv[1].split(":", 1)
+os.lseek(9, 0, os.SEEK_SET)
+contents = b"".join(iter(lambda: os.read(9, 1048576), b""))
+current = (len(contents), hashlib.sha256(contents).hexdigest())
+expected = (int(expected_bytes), expected_sha256)
+if current != expected:
+    raise SystemExit(
+        f"opened Python coordinator identity mismatch: expected={expected!r} current={current!r}"
+    )
+os.lseek(9, 0, os.SEEK_SET)
+PY
+then
+  echo "opened Python coordinator descriptor differs from validated manifest" >&2
+  exit 1
+fi
 PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"
 PYTHON_COORDINATOR_LOADER='import os; os.lseek(9, 0, os.SEEK_SET); source = b"".join(iter(lambda: os.read(9, 1048576), b"")); exec(compile(source, "<sealed-wasm-perf-coordinator>", "exec"), {"__name__": "__main__", "__file__": "<sealed-wasm-perf-coordinator>"})'
 run_python_coordinator() {

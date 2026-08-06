@@ -228,6 +228,9 @@ jobs:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
 
+      - name: Verify Wasm performance harness contracts
+        run: make wasm-perf-test
+
       - name: Install Rust stable with wasm target
         run: |
           rustup toolchain install stable --profile minimal --no-self-update

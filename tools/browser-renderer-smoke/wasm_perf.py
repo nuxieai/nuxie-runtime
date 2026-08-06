@@ -79,6 +79,8 @@ def audit_python_coordinator_shell(source: str) -> None:
     required = (
         'exec 9<"$PYTHON_COORDINATOR"',
         'PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"',
+        'VALIDATED_PYTHON_COORDINATOR_IDENTITY',
+        'opened Python coordinator descriptor differs from validated manifest',
         "os.lseek(9, 0, os.SEEK_SET)",
         'python3 -c "$PYTHON_COORDINATOR_LOADER" "$@"',
     )

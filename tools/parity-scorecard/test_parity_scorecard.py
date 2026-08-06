@@ -141,6 +141,29 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("prohibited_pattern=", check)
         self.assertIn("- browser-renderer", workflow)
 
+    def test_ci_runs_wasm_perf_contract_suites(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        makefile = (REPO_ROOT / "Makefile").read_text()
+
+        self.assertRegex(
+            makefile,
+            re.compile(
+                r"wasm-perf-test:\n"
+                r"\tcd tools/browser-renderer-smoke && "
+                r"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover "
+                r"-s \. -p 'test_wasm_perf\.py' -v\n"
+                r"\tnode --test tools/browser-renderer-smoke/"
+                r"wasm-perf-driver\.test\.cjs"
+            ),
+        )
+        self.assertRegex(
+            workflow,
+            re.compile(
+                r"- name: Verify Wasm performance harness contracts\n"
+                r"\s+run: make wasm-perf-test"
+            ),
+        )
+
     def test_same_runner_uses_current_runtime_without_relabeling_historical_oracle(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         makefile = (REPO_ROOT / "Makefile").read_text()

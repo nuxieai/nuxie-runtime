@@ -141,6 +141,14 @@ path = "crates/nuxie-browser-adapter/src/lib.rs"
 category = "platform-adapter"
 
 [[addition]]
+path = "crates/nuxie-browser-adapter/src/browser.rs"
+category = "platform-adapter"
+
+[[addition]]
+path = "crates/nuxie-browser-adapter/src/browser_surface_lifecycle.rs"
+category = "platform-adapter"
+
+[[addition]]
 path = "crates/nuxie-apple-adapter/src/lib.rs"
 category = "platform-adapter"
 
@@ -150,12 +158,4 @@ category = "platform-adapter"
 
 [[addition]]
 path = "crates/nuxie-apple-adapter/src/size_report_roots.rs"
-category = "platform-adapter"
-
-[[addition]]
-path = "crates/nuxie-browser-adapter/src/browser.rs"
-category = "platform-adapter"
-
-[[addition]]
-path = "crates/nuxie-browser-adapter/src/browser_surface_lifecycle.rs"
 category = "platform-adapter"

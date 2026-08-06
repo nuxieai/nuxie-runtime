@@ -3100,7 +3100,7 @@ b6_row_id = "B6-0453"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "MR-3 justification: direct filename correspondence implemented by the 7fcd80a6 layout-dirty port (layout/grid_item_placement.rs owns the markOwnerDirty routes; draw.rs retains the style projection). Cycle S4 faithful grid-item placement owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+note = "Cycle S4 faithful grid-item placement owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. MR (draw boundary): placement math lives in its own module while draw.rs owns the shared grid draw seam."
 
 [[file]]
 upstream = "src/layout/grid_track.cpp"
@@ -3112,7 +3112,7 @@ b6_row_id = "B6-0454"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "MR-3 justification: direct filename correspondence implemented by the 7fcd80a6 layout-dirty port (layout/grid_track.rs owns the markLayoutDirty routes; draw.rs retains the style projection). Cycle S4 faithful grid-track owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+note = "Cycle S4 faithful grid-track owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. MR (draw boundary): track sizing lives in its own module while draw.rs owns the shared grid draw seam."
 
 [[file]]
 upstream = "src/layout/layout_component_style.cpp"

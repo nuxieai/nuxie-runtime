@@ -2107,10 +2107,7 @@ status = "faithful"
 upstream = "src/layout/grid_item_placement.cpp"
 source_set = "s4-pin-advance-extensions"
 wave = "S4"
-rust_modules = [
-  "crates/nuxie-runtime/src/draw.rs",
-  "crates/nuxie-runtime/src/layout/grid_item_placement.rs",
-]
+rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/layout/grid_item_placement.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2118,10 +2115,7 @@ status = "faithful"
 upstream = "src/layout/grid_track.cpp"
 source_set = "s4-pin-advance-extensions"
 wave = "S4"
-rust_modules = [
-  "crates/nuxie-runtime/src/draw.rs",
-  "crates/nuxie-runtime/src/layout/grid_track.rs",
-]
+rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/layout/grid_track.rs"]
 dynamically_reached = true
 status = "faithful"
 

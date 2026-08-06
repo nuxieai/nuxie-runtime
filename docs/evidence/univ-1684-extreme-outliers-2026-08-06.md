@@ -172,6 +172,45 @@ content-addressed here:
 - corrected-tip timing JSON SHA-256:
   `21ae1c5eac0c06ad17f31fe0cdae28cab3449fb33c093fb21097555922006979`
 
+## Root-Artboard dispatch gate result
+
+Commit `793d0c6d7c95d9e77de5c5d7bdbce93e702ce7c2` gates the concrete
+Artboard draw-order and clipping tails to the root Artboard. Focused coverage
+asserts one sort/two clipping cleanups for a root plus two FILTHY children, the
+same counts for a mounted nested occurrence, zero calls for direct non-root
+DrawOrder/Clipping dirt, and one sort/cleanup for a live DrawTarget property
+change that publishes DrawOrder dirt to the root.
+
+The release runner SHA-256 for that commit is
+`9d4bc43aa6c007888bd1178375999360d2114ed57f305034ef214191528c36f8`.
+The bounded quiet gate again expired under unrelated machine activity, at load
+28 versus threshold 9. The resulting ratios are diagnostic only:
+`car_widgets_v01` 25.905x, `gamepad_test` 12.087x, and
+`script_create_text_runs` 17.812x. Car's Rust advance median nevertheless fell
+from the immediately preceding contended 46.128 ms to 32.030 ms.
+
+The exact post-gate car profile contains 35 samples under `advance_scene_to`.
+Both `sort_draw_order` and `clear_redundant_operations` have zero samples,
+confirming removal of the attributed hot path. Renderer preparation is now the
+dominant captured phase: 95 samples under `synchronize_artboard_renderer`,
+including 41 leaf samples in `runtime_shape_paint_commands` and 30 leaf samples
+in `runtime_live_owned_shape_paint_blend_mode_value`. The latter repeatedly
+walks static container ancestry to rediscover an owner already fixed by the
+C++ parent topology, and is the next profile-backed narrow target. Paint-command
+materialization is recorded separately and is not folded into that owner-lookup
+slice.
+
+The post-gate external diagnostics are content-addressed as follows:
+
+- timing JSON SHA-256:
+  `6dad515e63a521e4fc495adbeff25655839b8752b1aeb4d3bef9b16692485ff6`
+- Time Profiler export SHA-256:
+  `a1576e772a318778daaf869d4e69b344ee720d05ba570b79427a09c6b01244be`
+- Time Sample export SHA-256:
+  `ba426f61e6158e3866a38658cc8f56844e080f29116d9ef3a14539246de167c2`
+- trace table-of-contents SHA-256:
+  `dfc0c09753d02cad1b133854d895115a3a830e07c44eadd636de60c935851dbe`
+
 ## Required authoritative closeout
 
 After the PR is open, run the clean, serialized performance lane with the

@@ -48,6 +48,45 @@
       "timing_json": "21ae1c5eac0c06ad17f31fe0cdae28cab3449fb33c093fb21097555922006979"
     }
   },
+  "root_artboard_dispatch_gate_profile": {
+    "commit": "793d0c6d7c95d9e77de5c5d7bdbce93e702ce7c2",
+    "status": "diagnostic-only-contention",
+    "runner_binary_sha256": "9d4bc43aa6c007888bd1178375999360d2114ed57f305034ef214191528c36f8",
+    "measurement": {
+      "frames": 100,
+      "hz": 60,
+      "iterations": 5,
+      "warmups": 0,
+      "runner_order": "cpp-first",
+      "quiet_wait_seconds": 60,
+      "quiet_threshold": 9,
+      "load": 28,
+      "files": {
+        "car_widgets_v01": { "cpp_total_ms": 6.67474, "rust_total_ms": 172.911893, "ratio": 25.905412, "rust_advance_ms": 32.030334 },
+        "gamepad_test": { "cpp_total_ms": 0.50066, "rust_total_ms": 6.051605, "ratio": 12.087255 },
+        "script_create_text_runs": { "cpp_total_ms": 1.079322, "rust_total_ms": 19.225149, "ratio": 17.812246 }
+      }
+    },
+    "time_profile": {
+      "rows": 547,
+      "advance_scene_to_samples": 35,
+      "sort_draw_order_samples": 0,
+      "clear_redundant_operations_samples": 0,
+      "synchronize_artboard_renderer_samples": 95,
+      "runtime_shape_paint_commands_inclusive_samples": 78,
+      "runtime_shape_paint_commands_leaf_samples": 41,
+      "runtime_live_owned_shape_paint_blend_mode_value_inclusive_samples": 31,
+      "runtime_live_owned_shape_paint_blend_mode_value_leaf_samples": 30
+    },
+    "external_capture_sha256": {
+      "timing_json": "6dad515e63a521e4fc495adbeff25655839b8752b1aeb4d3bef9b16692485ff6",
+      "time_profile_xml": "a1576e772a318778daaf869d4e69b344ee720d05ba570b79427a09c6b01244be",
+      "time_sample_xml": "ba426f61e6158e3866a38658cc8f56844e080f29116d9ef3a14539246de167c2",
+      "trace_toc_xml": "dfc0c09753d02cad1b133854d895115a3a830e07c44eadd636de60c935851dbe"
+    },
+    "next_profile_backed_target": "retain each paint container's fixed opacity/blend owner and remove live static-graph ancestry lookup",
+    "paint_command_materialization_in_scope": false
+  },
   "pinned_cpp_commit": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
   "runner": {
     "source_digest_kind": "golden-runner digest_state",

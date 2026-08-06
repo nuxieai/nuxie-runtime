@@ -1484,27 +1484,27 @@ note = "MR-3 justification: row-specific Weight behavior lives in bones/weight.r
 
 [[file]]
 upstream = "src/command_queue.cpp"
-status = "partial"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie/src/command_queue.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0121"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3F/F3F6 against pinned 4ac7b327: typed transport plus semantic enable/drain/action/focus commands now have faithful equivalents for 79/83 command_queue_test.cpp cases, including all 13 former F6-gated cases. The row remains partial because the four S4-45 blob command/message cases remain WATCH; whole-file faithful promotion is not claimed until that command-protocol decision lands."
+note = "P3F/F3F6/S4-45 against pinned 4ac7b327: typed transport, semantic enable/drain/action/focus commands, and blob handle/message/view-model behavior have faithful equivalents for all 83 command_queue_test.cpp cases. The four former S4-45 WATCH cases are direct ports of upstream runtime behavior introduced by commit 3c77a64d01c2afd2a50e47a324ee77972be5b370."
 
 [[file]]
 upstream = "src/command_server.cpp"
-status = "partial"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0122"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3F/F3F6 against pinned 4ac7b327: the server owner implements semantic enable/drain/action/focus dispatch, non-empty diff delivery, and view-space mapping, bringing faithful command_queue_test.cpp equivalents to 79/83. The row remains partial because the four S4-45 blob command/message cases remain WATCH. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
+note = "P3F/F3F6/S4-45 against pinned 4ac7b327: the server owner implements semantic dispatch/diff/view mapping and blob handle/message/view-model behavior, completing faithful equivalents for all 83 command_queue_test.cpp cases. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
 
 [[file]]
 upstream = "src/component.cpp"

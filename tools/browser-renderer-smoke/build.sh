@@ -16,10 +16,19 @@ if [[ ! -x "$WASM_BINDGEN" ]] ||
     --root "$TOOLS_ROOT"
 fi
 
-"$STABLE_CARGO" build \
-  --release \
-  --package browser-renderer-smoke \
-  --target wasm32-unknown-unknown
+if [[ "${BROWSER_RENDERER_PRODUCTION_ONLY:-0}" == "1" ]]; then
+  CARGO_FEATURE_ARGS=(--no-default-features)
+  "$STABLE_CARGO" build \
+    --release \
+    --package browser-renderer-smoke \
+    --target wasm32-unknown-unknown \
+    "${CARGO_FEATURE_ARGS[@]}"
+else
+  "$STABLE_CARGO" build \
+    --release \
+    --package browser-renderer-smoke \
+    --target wasm32-unknown-unknown
+fi
 
 "$WASM_BINDGEN" \
   "$ROOT/target/wasm32-unknown-unknown/release/browser_renderer_smoke.wasm" \

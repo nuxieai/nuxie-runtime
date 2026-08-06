@@ -1,18 +1,23 @@
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    #[cfg(feature = "correctness-smoke")]
+    use nuxie::PersistentFactory;
     use nuxie::{
         BlendMode, Factory, File, FillRule, GpuCanvasPassState, GpuCanvasPipelineState,
         GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
         GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
         GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
-        PersistentFactory, RecordingFactory, Renderer,
+        OwnedArtboardInstance, RecordingFactory, Renderer, StateMachineInstance,
     };
     use nuxie_browser_adapter::{BrowserFactory, BrowserResizeError};
+    use nuxie_render_api::{NullFactory, NullRenderer};
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
+    use std::sync::Arc;
     use wasm_bindgen::prelude::*;
     use web_sys::HtmlCanvasElement;
 
+    #[cfg(feature = "correctness-smoke")]
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/imported-gpu-canvas.riv"));
 
@@ -41,6 +46,97 @@ fn fs_main() -> @location(0) vec4<f32> {
     return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
+
+    /// Production-runtime advance+draw boundary used by the browser perf lane.
+    ///
+    /// Construction imports and instantiates the real facade, selects the
+    /// default state machine when present, and primes retained render topology.
+    /// The Playwright driver creates fresh instances for total and phase passes,
+    /// keeping all of that lifecycle work outside `performance.now()` clocks.
+    #[wasm_bindgen]
+    pub struct WasmPerfRunner {
+        instance: OwnedArtboardInstance,
+        state_machine: Option<StateMachineInstance>,
+        factory: NullFactory,
+        renderer: NullRenderer,
+        current_seconds: f32,
+    }
+
+    #[wasm_bindgen]
+    impl WasmPerfRunner {
+        #[wasm_bindgen(constructor)]
+        pub fn new(bytes: &[u8]) -> Result<WasmPerfRunner, JsValue> {
+            let file = Arc::new(File::import(bytes).map_err(js_error)?);
+            let mut instance =
+                OwnedArtboardInstance::instantiate_default(file).map_err(js_error)?;
+            let default_view_model = instance.instantiate_default_view_model_instance();
+            if let Some(view_model) = default_view_model.as_ref() {
+                instance.bind_view_model(view_model);
+            }
+            let mut state_machine = instance.default_state_machine_instance();
+            if let (Some(machine), Some(view_model)) =
+                (state_machine.as_mut(), default_view_model.as_ref())
+            {
+                machine.bind_owned_view_model_handle(view_model.handle());
+                machine.advance_data_context();
+            }
+            let mut factory = NullFactory::new();
+            let mut renderer = factory.make_renderer();
+            instance
+                .draw(&mut factory, &mut renderer)
+                .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
+            Ok(Self {
+                instance,
+                state_machine,
+                factory,
+                renderer,
+                current_seconds: 0.0,
+            })
+        }
+
+        pub fn advance(&mut self, target_seconds: f32) -> Result<(), JsValue> {
+            if !target_seconds.is_finite() || target_seconds < 0.0 {
+                return Err(JsValue::from_str(
+                    "wasm perf target must be a finite non-negative number",
+                ));
+            }
+            if target_seconds + 1.0e-6 < self.current_seconds {
+                return Err(JsValue::from_str(
+                    "wasm perf timeline cannot move backwards",
+                ));
+            }
+            let elapsed_seconds = (target_seconds - self.current_seconds).max(0.0);
+            if let Some(state_machine) = self.state_machine.as_mut() {
+                self.instance
+                    .try_advance_with_state_machine_and_factory(
+                        state_machine,
+                        elapsed_seconds,
+                        &mut self.factory,
+                    )
+                    .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
+            } else {
+                // Match rust-golden-runner's StaticScene boundary: static scenes
+                // move the sample clock but advance mounted components at zero.
+                self.instance
+                    .try_advance_with_factory(&mut self.factory, 0.0)
+                    .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
+            }
+            self.current_seconds = target_seconds;
+            Ok(())
+        }
+
+        pub fn draw(&mut self) -> Result<(), JsValue> {
+            self.instance
+                .draw(&mut self.factory, &mut self.renderer)
+                .map_err(|error| JsValue::from_str(&format!("{error:#}")))
+        }
+
+        #[wasm_bindgen(js_name = advanceAndDraw)]
+        pub fn advance_and_draw(&mut self, target_seconds: f32) -> Result<(), JsValue> {
+            self.advance(target_seconds)?;
+            self.draw()
+        }
+    }
 
     fn imported_gpu_canvas_shader(source: &str) -> GpuCanvasShader {
         GpuCanvasShader {
@@ -266,6 +362,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         Ok("surface-acquisition-persistent-loss=typed retry=bounded".into())
     }
 
+    #[cfg(feature = "correctness-smoke")]
     #[wasm_bindgen]
     pub async fn assert_imported_gpu_canvas(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
         let file = File::import_with_unsigned_scripts(IMPORTED_GPU_CANVAS_RIV).map_err(js_error)?;
@@ -737,8 +834,11 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::{
-    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas,
-    assert_persistent_surface_acquisition_failure, assert_resize, assert_surface_acquisition_retry,
+    WasmPerfRunner, assert_direct_gpu_canvas_image, assert_persistent_surface_acquisition_failure,
+    assert_resize, assert_surface_acquisition_retry,
     assert_webgpu_gpu_canvas_rejects_invalid_interface, assert_webgpu_uniform_limit_rejection,
     recording_float_probe, run_backend, run_stream_case,
 };
+
+#[cfg(all(target_arch = "wasm32", feature = "correctness-smoke"))]
+pub use wasm::assert_imported_gpu_canvas;

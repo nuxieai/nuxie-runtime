@@ -6,12 +6,17 @@ license.workspace = true
 publish = false
 build = "build.rs"
 
+[features]
+default = ["correctness-smoke"]
+correctness-smoke = ["nuxie/scripting", "nuxie/test-support"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-nuxie = { path = "../../crates/nuxie", features = ["scripting"] }
+nuxie = { path = "../../crates/nuxie" }
 nuxie-browser-adapter = { path = "../../crates/nuxie-browser-adapter" }
+nuxie-render-api = { path = "../../crates/nuxie-render-api" }
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
 pixel-compare = { path = "../pixel-compare" }
 wasm-bindgen = "0.2"

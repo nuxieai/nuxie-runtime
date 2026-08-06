@@ -24,7 +24,7 @@ promotion_rule = "Only an orchestrator-verified gate run may finally promote a r
 decision_rule = "divergent-by-decision requires a cited parity-gap-register D-row bound to a named docs/PORTING.md ceiling rule."
 
 [scatter_ratchet]
-max_multi_module_rows = 155
+max_multi_module_rows = 157
 
 [[file]]
 upstream = "src/advancing_component.cpp"
@@ -3100,7 +3100,7 @@ b6_row_id = "B6-0453"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Cycle S4 faithful grid-item placement owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+note = "Cycle S4 faithful grid-item placement owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. MR (draw boundary): placement math lives in its own module while draw.rs owns the shared grid draw seam."
 
 [[file]]
 upstream = "src/layout/grid_track.cpp"
@@ -3112,7 +3112,7 @@ b6_row_id = "B6-0454"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Cycle S4 faithful grid-track owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+note = "Cycle S4 faithful grid-track owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet. MR (draw boundary): track sizing lives in its own module while draw.rs owns the shared grid draw seam."
 
 [[file]]
 upstream = "src/layout/layout_component_style.cpp"

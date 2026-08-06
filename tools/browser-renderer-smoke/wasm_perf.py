@@ -75,6 +75,35 @@ def audit_production_boundary(feature_tree: str, source: str) -> None:
         )
 
 
+def audit_python_coordinator_shell(source: str) -> None:
+    required = (
+        'exec 9<"$PYTHON_COORDINATOR"',
+        'PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"',
+    )
+    missing = [marker for marker in required if marker not in source]
+    if missing:
+        raise ContractError(
+            "wasm perf shell must retain one open Python coordinator descriptor"
+        )
+    if 'python3 "$PYTHON_COORDINATOR"' in source:
+        raise ContractError(
+            "wasm perf shell must not reopen mutable Python coordinator paths"
+        )
+    descriptor_invocation = 'python3 "$PYTHON_COORDINATOR_FD_PATH"'
+    if source.count(descriptor_invocation) != 4:
+        raise ContractError(
+            "wasm perf shell must run audit, prepare, seal, and finalize "
+            "through one Python coordinator descriptor"
+        )
+    if not all(
+        f'{descriptor_invocation} {command}' in source
+        for command in ("audit", "prepare", "seal", "finalize")
+    ):
+        raise ContractError(
+            "wasm perf shell omitted a descriptor-backed coordinator phase"
+        )
+
+
 def select_fixtures(
     perf_manifest: Path,
     corpus_manifest: Path,
@@ -1130,6 +1159,9 @@ def audit_run(args: argparse.Namespace) -> None:
         completed.stdout,
         args.source.read_text(encoding="utf-8"),
     )
+    audit_python_coordinator_shell(
+        args.shell_source.read_text(encoding="utf-8")
+    )
 
 
 def stage_coordinator_run(args: argparse.Namespace) -> None:
@@ -1378,6 +1410,7 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("--repo-root", type=Path, required=True)
     audit.add_argument("--cargo", type=Path, required=True)
     audit.add_argument("--source", type=Path, required=True)
+    audit.add_argument("--shell-source", type=Path, required=True)
     audit.set_defaults(action=audit_run)
 
     stage_coordinator = subparsers.add_parser("stage-coordinator")

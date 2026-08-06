@@ -49,12 +49,86 @@ fi
 ROOT="$SOURCE_ROOT"
 COORDINATOR_DIR="$WASM_PERF_SEALED_COORDINATOR_BUNDLE"
 EXECUTED_COORDINATOR_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [[ "$EXECUTED_COORDINATOR_DIR" != "$COORDINATOR_DIR" ]]; then
-  echo "wasm perf must execute the content-addressed coordinator shell" >&2
+COORDINATOR_BUNDLE_NAME="$(basename "$COORDINATOR_DIR")"
+if [[ "$EXECUTED_COORDINATOR_DIR" != "$COORDINATOR_DIR" \
+  || ! "$COORDINATOR_BUNDLE_NAME" =~ ^[0-9a-f]{64}$ \
+  || ! -f "$COORDINATOR_DIR/manifest.json" ]]; then
+  echo "invalid content-addressed coordinator bundle" >&2
+  exit 1
+fi
+if ! python3 - "$COORDINATOR_DIR" "$ROOT" "$0" <<'PY'
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+bundle = Path(sys.argv[1]).resolve()
+repo = Path(sys.argv[2]).resolve()
+executed_shell = Path(sys.argv[3]).resolve()
+manifest_bytes = (bundle / "manifest.json").read_bytes()
+if hashlib.sha256(manifest_bytes).hexdigest() != bundle.name:
+    raise SystemExit("coordinator manifest digest differs from bundle path")
+manifest = json.loads(manifest_bytes)
+if manifest.get("schema") != "nuxie-wasm-perf-coordinator-bundle-v1":
+    raise SystemExit("invalid coordinator manifest schema")
+expected_names = {
+    "run-wasm-perf.sh",
+    "run-wasm-perf.cjs",
+    "wasm_perf.py",
+    "wasm-perf-driver-lib.cjs",
+}
+files = manifest.get("files")
+source = manifest.get("source")
+if not isinstance(files, dict) or set(files) != expected_names:
+    raise SystemExit("coordinator manifest member set differs")
+if not isinstance(source, dict) or set(source) != {"repo_sha", "repo_tree_sha"}:
+    raise SystemExit("coordinator manifest source identity is invalid")
+if {path.name for path in bundle.iterdir()} != expected_names | {"manifest.json"}:
+    raise SystemExit("coordinator bundle member set differs")
+for name, expected in files.items():
+    if not isinstance(expected, dict) or set(expected) != {"bytes", "sha256"}:
+        raise SystemExit(f"invalid coordinator member identity: {name}")
+    contents = (bundle / name).read_bytes()
+    current = {
+        "bytes": len(contents),
+        "sha256": hashlib.sha256(contents).hexdigest(),
+    }
+    if current != expected:
+        raise SystemExit(f"coordinator member identity mismatch: {name}")
+if executed_shell != bundle / "run-wasm-perf.sh":
+    raise SystemExit("executed shell differs from coordinator bundle")
+status = subprocess.run(
+    ["git", "-C", str(repo), "status", "--porcelain=v1", "--untracked-files=no"],
+    text=True,
+    capture_output=True,
+    check=True,
+).stdout
+current_source = {
+    "repo_sha": subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip(),
+    "repo_tree_sha": subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD^{tree}"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip(),
+}
+if status or current_source != source:
+    raise SystemExit("coordinator bundle source identity differs from clean checkout")
+PY
+then
+  echo "invalid content-addressed coordinator bundle" >&2
   exit 1
 fi
 PYTHON_COORDINATOR="$COORDINATOR_DIR/wasm_perf.py"
 NODE_COORDINATOR="$COORDINATOR_DIR/run-wasm-perf.cjs"
+exec 9<"$PYTHON_COORDINATOR"
+PYTHON_COORDINATOR_FD_PATH="/dev/fd/9"
 RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:?RIVE_RUNTIME_DIR is required}"
 RUST_GOLDEN_RUNNER="${RUST_GOLDEN_RUNNER:?RUST_GOLDEN_RUNNER is required}"
 PORT="${BROWSER_WASM_PERF_PORT:-8766}"
@@ -85,11 +159,12 @@ if ! command -v npm >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
 fi
 
 mkdir -p "$WORK_DIR"
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR" audit \
+PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" audit \
   --repo-root "$ROOT" \
   --cargo "$STABLE_CARGO" \
-  --source "$ROOT/tools/browser-renderer-smoke/src/lib.rs"
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR" prepare \
+  --source "$ROOT/tools/browser-renderer-smoke/src/lib.rs" \
+  --shell-source "$COORDINATOR_DIR/run-wasm-perf.sh"
+PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" prepare \
   --repo-root "$ROOT" \
   --rive-runtime-dir "$RIVE_RUNTIME_DIR" \
   --perf-manifest "$ROOT/perf-corpus.toml" \
@@ -128,7 +203,7 @@ cleanup() {
 trap cleanup EXIT
 
 BROWSER_RENDERER_PRODUCTION_ONLY=1 "$ROOT/tools/browser-renderer-smoke/build.sh"
-RUN_SEAL_SHA256="$(PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR" seal \
+RUN_SEAL_SHA256="$(PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" seal \
   --config "$CONFIG" \
   --seal "$SEAL" \
   --repo-root "$ROOT" \
@@ -170,7 +245,7 @@ NODE_PATH="$PLAYWRIGHT_ROOT/node_modules" \
   "$SEAL" \
   "$RUN_SEAL_SHA256"
 
-PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR" finalize \
+PYTHONDONTWRITEBYTECODE=1 python3 "$PYTHON_COORDINATOR_FD_PATH" finalize \
   --config "$CONFIG" \
   --seal "$SEAL" \
   --expected-seal-sha256 "$RUN_SEAL_SHA256" \

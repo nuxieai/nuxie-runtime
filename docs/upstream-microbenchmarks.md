@@ -90,7 +90,7 @@ the document, current tool bytes, and retained dependency-tree bytes. An existin
 non-empty run directory is rejected. If `CRITERION_HOME` is set, the unique run
 namespace is created below it. If `CARGO_TARGET_DIR` is set, Cargo uses and
 records it; otherwise the repository target directory is recorded. Comparison
-accepts only `run.json`, requires the exact v5 run schema and exact artifact key
+accepts only `run.json`, requires the exact v6 run schema and exact artifact key
 set (the six fixed artifacts plus one `criterion:<case>` entry per inventory
 case), verifies every path and hash, and reads each C++ output and Criterion
 sample once while hashing it. Comparison parses only those retained validated

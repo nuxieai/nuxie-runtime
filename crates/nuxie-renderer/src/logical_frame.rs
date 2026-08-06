@@ -7,17 +7,53 @@
 use std::sync::{Arc, Mutex};
 
 use nuxie_render_api::{
-    BlendMode, ColorInt, FillRule, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, FillRule, Mat2D, RawPath, RenderPaintStyle, StrokeCap, StrokeJoin,
 };
 
 use super::{
-    apply_clip_rect, draw, feather_atlas_placement, gradient_pipeline, intersect_pixel_bounds,
-    logical_flush, multiply, normalize_gradient, pack_logical_feather_atlas_for_cpp, path_aabb,
+    apply_clip_rect, draw, feather_atlas_placement, gpu, gradient_pipeline, intersect_pixel_bounds,
+    logical_flush, multiply, pack_logical_feather_atlas_for_cpp, path_aabb,
     path_draw_has_valid_parameters, path_draw_pixel_bounds, pixel_bounds_are_empty,
     pixel_bounds_are_outside_frame, prepare_path_draw_with_pixel_bounds, ClipElement, DrawRole,
     DrawState, LogicalPaint, LogicalPath, MsaaClipResetAction, PathDrawPreparation,
     PreparedFillGeometry, RenderMode, SolidDraw, FEATHER_ATLAS_PADDING,
 };
+
+#[derive(Clone)]
+pub(crate) struct GradientDefinition {
+    pub(crate) paint_type: gpu::PaintType,
+    pub(crate) colors: Vec<ColorInt>,
+    pub(crate) stops: Vec<f32>,
+    pub(crate) coeffs: [f32; 3],
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct PreparedGradient {
+    pub(crate) paint_type: gpu::PaintType,
+    pub(crate) texture_y: f32,
+    pub(crate) matrix: Mat2D,
+    pub(crate) texture_span: [f32; 2],
+}
+
+pub(crate) struct GradientBatch {
+    pub(crate) spans: Vec<gpu::GradientSpan>,
+    pub(crate) height: u32,
+    pub(crate) draws: Vec<Option<PreparedGradient>>,
+}
+
+impl GradientBatch {
+    pub(crate) fn draw(&self, index: usize) -> Option<PreparedGradient> {
+        if self.draws.is_empty() {
+            None
+        } else {
+            self.draws[index]
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.height == 0
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LogicalFrameConfig {
@@ -37,6 +73,25 @@ pub struct LogicalPathPaint {
     pub cap: StrokeCap,
     pub feather: f32,
     pub blend_mode: BlendMode,
+}
+
+/// Immutable backend-neutral path storage prepared once and shared by every
+/// frame/draw that references it.
+#[derive(Clone, Debug)]
+pub struct LogicalPathHandle {
+    path: LogicalPath,
+}
+
+impl LogicalPathHandle {
+    pub fn new(raw_path: &RawPath, fill_rule: FillRule) -> Self {
+        Self {
+            path: LogicalPath {
+                raw_path: Arc::new(raw_path.clone()),
+                fill_rule,
+                valid: true,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -273,6 +328,10 @@ impl LogicalFrame {
         self.finalized = true;
         self.finalization_passes = self.finalization_passes.saturating_add(1);
         self.validate()
+    }
+
+    pub(crate) fn is_finalized(&self) -> bool {
+        self.finalized
     }
 
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
@@ -1016,6 +1075,12 @@ pub(crate) struct LogicalResourceStore {
 }
 
 impl LogicalResourceStore {
+    /// Prepares the backend-neutral CPU resources consumed by both GPU
+    /// encoding and the null adapter's shadow writes.
+    pub(crate) fn prepare_batch(&self, draws: &[SolidDraw]) -> GradientBatch {
+        prepare_gradient_batch(draws)
+    }
+
     pub(crate) fn prepare(&self, frame: &LogicalFrame) -> Result<LogicalFrameReport, &'static str> {
         frame.validate()?;
         let config = frame.config;
@@ -1057,6 +1122,7 @@ impl LogicalResourceStore {
                 .unwrap_or(frame.draws.len());
             let before_capacities = buffers.buffer_capacities();
             buffers.grow(*counts);
+            let gradient_batch = self.prepare_batch(&frame.draws[start..end]);
             write_resources(
                 &mut buffers,
                 config,
@@ -1064,6 +1130,7 @@ impl LogicalResourceStore {
                 *counts,
                 &frame.draws[start..end],
                 &frame.draw_resources[start..end],
+                &gradient_batch,
             );
             written_bytes += buffers.written_bytes();
             buffer_write_operations += buffers.nonempty_buffer_count();
@@ -1092,6 +1159,270 @@ impl LogicalResourceStore {
     }
 }
 
+pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
+    const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
+    const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
+    const LEFT_BORDER: u32 = 0x8000_0000;
+    const RIGHT_BORDER: u32 = 0x4000_0000;
+    const COMPLEX_BORDER: u32 = 0x2000_0000;
+
+    // Preserve C++'s sparse solid-paint shape: allocate the per-draw table
+    // only after the first authored gradient appears.
+    let mut definitions = Vec::new();
+    for (draw_index, draw) in draws.iter().enumerate() {
+        let shader = draw.paint.shader.as_ref();
+        if definitions.is_empty() {
+            let Some(shader) = shader else {
+                continue;
+            };
+            definitions.reserve(draws.len());
+            definitions.resize_with(draw_index, || None);
+            definitions.push(normalize_gradient(shader, draw.state.opacity));
+        } else {
+            definitions
+                .push(shader.and_then(|shader| normalize_gradient(shader, draw.state.opacity)));
+        }
+    }
+    if definitions.is_empty() {
+        return GradientBatch {
+            spans: Vec::new(),
+            height: 0,
+            draws: Vec::new(),
+        };
+    }
+    let is_simple = |gradient: &GradientDefinition| {
+        gradient.stops.len() == 1
+            || (gradient.stops.len() == 2 && gradient.stops[0] == 0.0 && gradient.stops[1] == 1.0)
+    };
+    let simple_count = definitions
+        .iter()
+        .flatten()
+        .filter(|gradient| is_simple(gradient))
+        .count();
+    let complex_count = definitions
+        .iter()
+        .flatten()
+        .filter(|gradient| !is_simple(gradient))
+        .count();
+    let simple_height = simple_count.div_ceil(RAMPS_PER_SIMPLE_ROW) as u32;
+    let height = simple_height + complex_count as u32;
+    let mut simple_index = 0usize;
+    let mut complex_index = 0u32;
+    let mut spans = Vec::new();
+    let mut prepared = Vec::with_capacity(draws.len());
+    for (draw, gradient) in draws.iter().zip(definitions) {
+        let Some(gradient) = gradient else {
+            prepared.push(None);
+            continue;
+        };
+        let (row, texture_span) = if is_simple(&gradient) {
+            let row = (simple_index / RAMPS_PER_SIMPLE_ROW) as u32;
+            let left = ((simple_index % RAMPS_PER_SIMPLE_ROW) * 2) as u32;
+            let center_fixed = (left + 1) * ONE_TEXEL_FIXED;
+            let color0 = gradient.colors[0];
+            let color1 = gradient.colors.get(1).copied().unwrap_or(color0);
+            spans.push(gpu::GradientSpan::new(
+                center_fixed,
+                center_fixed,
+                row,
+                LEFT_BORDER | RIGHT_BORDER,
+                color0,
+                color1,
+            ));
+            simple_index += 1;
+            (
+                row,
+                [
+                    1.0 / gradient_pipeline::TEXTURE_WIDTH as f32,
+                    (left as f32 + 0.5) / gradient_pipeline::TEXTURE_WIDTH as f32,
+                ],
+            )
+        } else {
+            let row = simple_height + complex_index;
+            let scale = (gradient_pipeline::TEXTURE_WIDTH - 1) as f32 * ONE_TEXEL_FIXED as f32;
+            let bias = 0.5 * ONE_TEXEL_FIXED as f32;
+            let mut last_x = (gradient.stops[0] * scale + bias) as u32;
+            let mut last_color = gradient.colors[0];
+            for index in 1..gradient.stops.len() {
+                let x = (gradient.stops[index] * scale + bias) as u32;
+                let mut flags = COMPLEX_BORDER;
+                if index == 1 {
+                    flags |= LEFT_BORDER;
+                }
+                if index + 1 == gradient.stops.len() {
+                    flags |= RIGHT_BORDER;
+                }
+                spans.push(gpu::GradientSpan::new(
+                    last_x,
+                    x,
+                    row,
+                    flags,
+                    last_color,
+                    gradient.colors[index],
+                ));
+                last_x = x;
+                last_color = gradient.colors[index];
+            }
+            complex_index += 1;
+            (
+                row,
+                [
+                    (gradient_pipeline::TEXTURE_WIDTH - 1) as f32
+                        / gradient_pipeline::TEXTURE_WIDTH as f32,
+                    0.5 / gradient_pipeline::TEXTURE_WIDTH as f32,
+                ],
+            )
+        };
+        let inverse = super::invert(draw.state.transform).unwrap_or(Mat2D([0.0; 6]));
+        let gradient_matrix = match gradient.paint_type {
+            gpu::PaintType::LinearGradient => Mat2D([
+                gradient.coeffs[0],
+                0.0,
+                gradient.coeffs[1],
+                0.0,
+                gradient.coeffs[2],
+                0.0,
+            ]),
+            gpu::PaintType::RadialGradient => {
+                let inverse_radius = gradient.coeffs[2].recip();
+                Mat2D([
+                    inverse_radius,
+                    0.0,
+                    0.0,
+                    inverse_radius,
+                    -gradient.coeffs[0] * inverse_radius,
+                    -gradient.coeffs[1] * inverse_radius,
+                ])
+            }
+            _ => unreachable!(),
+        };
+        prepared.push(Some(PreparedGradient {
+            paint_type: gradient.paint_type,
+            texture_y: (row as f32 + 0.5) / height as f32,
+            matrix: multiply(gradient_matrix, inverse),
+            texture_span,
+        }));
+    }
+    GradientBatch {
+        spans,
+        height,
+        draws: prepared,
+    }
+}
+
+pub(crate) fn normalize_gradient(
+    shader: &super::WgpuShader,
+    opacity: f32,
+) -> Option<GradientDefinition> {
+    const EPSILON: f32 = 1.0 / 4096.0;
+    let (paint_type, mut colors, stops, coeffs) = match shader {
+        super::WgpuShader::Linear {
+            start,
+            end,
+            colors,
+            stops,
+        } => {
+            let mut start = *start;
+            let mut end = *end;
+            let mut stops = stops.clone();
+            validate_gradient(colors, &stops)?;
+            let first = stops[0];
+            let last = *stops.last()?;
+            if (first != 0.0 || last != 1.0) && last - first > EPSILON {
+                let original_start = start;
+                let original_end = end;
+                start = (
+                    original_start.0 + (original_end.0 - original_start.0) * first,
+                    original_start.1 + (original_end.1 - original_start.1) * first,
+                );
+                end = (
+                    original_start.0 + (original_end.0 - original_start.0) * last,
+                    original_start.1 + (original_end.1 - original_start.1) * last,
+                );
+                let inverse_range = (last - first).recip();
+                for stop in &mut stops {
+                    *stop = (*stop - first) * inverse_range;
+                }
+                stops[0] = 0.0;
+                *stops.last_mut().unwrap() = 1.0;
+                let final_index = stops.len() - 1;
+                for index in 1..final_index {
+                    stops[index] = stops[index].max(stops[index - 1]);
+                }
+                for index in (1..final_index).rev() {
+                    stops[index] = stops[index].min(stops[index + 1]);
+                }
+            }
+            let dx = end.0 - start.0;
+            let dy = end.1 - start.1;
+            let inverse_length_squared = (dx * dx + dy * dy).recip();
+            let vx = dx * inverse_length_squared;
+            let vy = dy * inverse_length_squared;
+            (
+                gpu::PaintType::LinearGradient,
+                colors.clone(),
+                stops,
+                [vx, vy, -(vx * start.0 + vy * start.1)],
+            )
+        }
+        super::WgpuShader::Radial {
+            center,
+            radius,
+            colors,
+            stops,
+        } => {
+            let mut radius = *radius;
+            let mut stops = stops.clone();
+            validate_gradient(colors, &stops)?;
+            let last = *stops.last()?;
+            if last != 1.0 && last > EPSILON {
+                radius *= last;
+                let inverse_last = last.recip();
+                let final_index = stops.len() - 1;
+                for stop in &mut stops[..final_index] {
+                    *stop *= inverse_last;
+                }
+                *stops.last_mut().unwrap() = 1.0;
+                stops[0] = stops[0].max(0.0);
+                for index in 1..final_index {
+                    stops[index] = stops[index].max(stops[index - 1]);
+                }
+                for index in (0..final_index).rev() {
+                    stops[index] = stops[index].min(stops[index + 1]);
+                }
+            }
+            (
+                gpu::PaintType::RadialGradient,
+                colors.clone(),
+                stops,
+                [center.0, center.1, radius],
+            )
+        }
+    };
+    for color in &mut colors {
+        *color = super::modulate_color_alpha(*color, opacity);
+    }
+    Some(GradientDefinition {
+        paint_type,
+        colors,
+        stops,
+        coeffs,
+    })
+}
+
+fn validate_gradient(colors: &[ColorInt], stops: &[f32]) -> Option<()> {
+    if colors.len() != stops.len()
+        || stops.is_empty()
+        || stops
+            .iter()
+            .any(|stop| !stop.is_finite() || !(0.0..=1.0).contains(stop))
+        || stops.windows(2).any(|pair| pair[0] > pair[1])
+    {
+        return None;
+    }
+    Some(())
+}
+
 fn write_resources(
     buffers: &mut ShadowBuffers,
     config: LogicalFrameConfig,
@@ -1099,6 +1430,7 @@ fn write_resources(
     counts: LogicalResourceCounts,
     draws: &[SolidDraw],
     draw_resources: &[logical_flush::ResourceCounters],
+    gradient_batch: &GradientBatch,
 ) {
     push_u32(&mut buffers.draws, config.width);
     push_u32(&mut buffers.draws, config.height);
@@ -1118,7 +1450,19 @@ fn write_resources(
     ] {
         push_usize(&mut buffers.draws, value);
     }
-    for (draw, resources) in draws.iter().zip(draw_resources) {
+    push_u32(&mut buffers.gradients, gradient_batch.height);
+    push_usize(&mut buffers.gradients, gradient_batch.spans.len());
+    for span in &gradient_batch.spans {
+        for value in [
+            span.horizontal_span,
+            span.y_with_flags,
+            span.color0,
+            span.color1,
+        ] {
+            push_u32(&mut buffers.gradients, value);
+        }
+    }
+    for (draw_index, (draw, resources)) in draws.iter().zip(draw_resources).enumerate() {
         push_u8(&mut buffers.paths, fill_rule_tag(draw.path.fill_rule));
         for value in draw.state.transform.0 {
             push_u32(&mut buffers.paths, value.to_bits());
@@ -1178,6 +1522,17 @@ fn write_resources(
                 write_gradient_values(&mut buffers.gradients, colors, stops);
             }
         }
+        match gradient_batch.draw(draw_index) {
+            None => push_u8(&mut buffers.gradients, 0),
+            Some(gradient) => {
+                push_u8(&mut buffers.gradients, 1);
+                push_u8(&mut buffers.gradients, paint_type_tag(gradient.paint_type));
+                push_u32(&mut buffers.gradients, gradient.texture_y.to_bits());
+                for value in gradient.matrix.0.into_iter().chain(gradient.texture_span) {
+                    push_u32(&mut buffers.gradients, value.to_bits());
+                }
+            }
+        }
         for value in [
             resources.path_count,
             resources.contour_count,
@@ -1205,7 +1560,17 @@ fn write_resources(
                 push_u16(&mut buffers.draws, replacement_id);
                 push_u16(&mut buffers.draws, parent_id);
             }
-            DrawRole::ClipReset { .. } => push_u8(&mut buffers.draws, 2),
+            DrawRole::ClipReset { bounds, action } => {
+                push_u8(&mut buffers.draws, 2);
+                for value in bounds {
+                    push_u32(&mut buffers.draws, value.to_bits());
+                }
+                push_u8(&mut buffers.draws, clip_reset_action_tag(action));
+                push_u8(&mut buffers.draws, fill_rule_tag(draw.path.fill_rule));
+                for value in draw.state.transform.0 {
+                    push_u32(&mut buffers.draws, value.to_bits());
+                }
+            }
         }
     }
 }
@@ -1241,6 +1606,25 @@ fn mode_tag(mode: RenderMode) -> u8 {
     match mode {
         RenderMode::Msaa => 0,
         RenderMode::ClockwiseAtomic => 1,
+    }
+}
+
+fn paint_type_tag(paint_type: gpu::PaintType) -> u8 {
+    match paint_type {
+        gpu::PaintType::ClipUpdate => 0,
+        gpu::PaintType::SolidColor => 1,
+        gpu::PaintType::LinearGradient => 2,
+        gpu::PaintType::RadialGradient => 3,
+        gpu::PaintType::Image => 4,
+    }
+}
+
+fn clip_reset_action_tag(action: MsaaClipResetAction) -> u8 {
+    match action {
+        MsaaClipResetAction::ClearPrevious => 0,
+        MsaaClipResetAction::IntersectPreviousNonZero => 1,
+        MsaaClipResetAction::IntersectPreviousEvenOdd => 2,
+        MsaaClipResetAction::IntersectPreviousClockwise => 3,
     }
 }
 
@@ -1406,6 +1790,10 @@ impl NullLogicalRenderer {
         });
     }
 
+    pub fn prepare_path(&self, raw_path: &RawPath, fill_rule: FillRule) -> LogicalPathHandle {
+        LogicalPathHandle::new(raw_path, fill_rule)
+    }
+
     pub fn save(&mut self) {
         self.active_frame().logical_state.save();
     }
@@ -1418,56 +1806,42 @@ impl NullLogicalRenderer {
         self.active_frame().logical_state.transform(transform);
     }
 
-    pub fn clip_path(
-        &mut self,
-        raw_path: &RawPath,
-        fill_rule: FillRule,
-    ) -> Result<(), &'static str> {
+    pub fn clip_path(&mut self, path: &LogicalPathHandle) -> Result<(), &'static str> {
         let config = self.config;
-        let path = LogicalPath {
-            raw_path: Arc::new(raw_path.clone()),
-            fill_rule,
-            valid: true,
-        };
-        self.active_frame().logical_state.clip_path(config, &path)
+        self.active_frame()
+            .logical_state
+            .clip_path(config, &path.path)
     }
 
     pub fn draw_path(
         &mut self,
-        raw_path: &RawPath,
-        fill_rule: FillRule,
+        path: &LogicalPathHandle,
         paint: LogicalPathPaint,
     ) -> Result<(), &'static str> {
-        self.draw_path_internal(raw_path, fill_rule, paint, None)
+        self.draw_path_internal(path, paint, None)
     }
 
     pub fn draw_path_with_gradient(
         &mut self,
-        raw_path: &RawPath,
-        fill_rule: FillRule,
+        path: &LogicalPathHandle,
         paint: LogicalPathPaint,
         gradient: LogicalGradient,
     ) -> Result<(), &'static str> {
-        self.draw_path_internal(raw_path, fill_rule, paint, Some(gradient))
+        self.draw_path_internal(path, paint, Some(gradient))
     }
 
     fn draw_path_internal(
         &mut self,
-        raw_path: &RawPath,
-        fill_rule: FillRule,
+        path: &LogicalPathHandle,
         paint: LogicalPathPaint,
         gradient: Option<LogicalGradient>,
     ) -> Result<(), &'static str> {
         let config = self.config;
         let frame = self.active_frame();
-        let path = LogicalPath {
-            raw_path: Arc::new(raw_path.clone()),
-            fill_rule,
-            valid: true,
-        };
         let mut paint = paint.into_wgpu();
         paint.shader = gradient.map(LogicalGradient::into_wgpu);
-        let Some(admitted) = admit_path_draw(config, frame.logical_state.state, &path, &paint)?
+        let Some(admitted) =
+            admit_path_draw(config, frame.logical_state.state, &path.path, &paint)?
         else {
             return Ok(());
         };

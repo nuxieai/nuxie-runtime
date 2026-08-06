@@ -9272,6 +9272,45 @@ impl ArtboardInstance {
         self.collapse_component_tree(host_local, collapsed)
     }
 
+    /// Re-applies the retained half of `LayoutParticipant::syncStyleChanges`
+    /// after parent collapse propagation has revealed a subtree. The pinned
+    /// C++ runtime folds display:none into the host's collapse bit during the
+    /// subsequent style sync; doing that at the propagation boundary preserves
+    /// the same transition ordering without putting participant discovery back
+    /// into `Drawable::willDraw`.
+    fn refold_hidden_layout_participants_in_subtree(&mut self, root: ComponentHandle) -> bool {
+        let Some(display_key) = property_key_for_name("LayoutParticipant", "displayValue") else {
+            return false;
+        };
+        let mut pending = vec![root];
+        let mut visited = BTreeSet::new();
+        let mut hidden_participants = Vec::new();
+        while let Some(handle) = pending.pop() {
+            if !visited.insert(handle) {
+                continue;
+            }
+            if self
+                .objects
+                .component(handle)
+                .is_some_and(|component| component.type_name == "LayoutParticipant")
+                && let Some(local_id) = self.objects.component_local_id(handle)
+                && self.uint_property(local_id, display_key) == Some(1)
+            {
+                hidden_participants.push(local_id);
+            }
+            pending.extend(
+                (0..self.component_child_len(handle))
+                    .filter_map(|index| self.component_child_at(handle, index)),
+            );
+        }
+
+        hidden_participants
+            .into_iter()
+            .fold(false, |changed, participant_local| {
+                self.propagate_layout_participant_display_collapse(participant_local) || changed
+            })
+    }
+
     // Mirrors C++ src/layout_component.cpp LayoutComponent::propagateCollapse:
     // the propagated value folds in the local display:none state, and each
     // child receives a full-subtree collapse (ContainerComponent::collapse).
@@ -9290,11 +9329,13 @@ impl ArtboardInstance {
         let Some(layout) = self.component_handle(layout_local) else {
             return false;
         };
-        self.propagate_layout_component_display_collapse_with_ancestor_guarded(
+        let mut changed = self.propagate_layout_component_display_collapse_with_ancestor_guarded(
             layout,
             ancestor_changed,
             &mut visited,
-        )
+        );
+        changed |= self.refold_hidden_layout_participants_in_subtree(layout);
+        changed
     }
 
     fn propagate_layout_component_display_collapse_with_ancestor_guarded(
@@ -10083,12 +10124,16 @@ impl ArtboardInstance {
         let Some(handle) = self.component_handle(local_id) else {
             return false;
         };
-        self.collapse_component_tree_with_ancestor_guarded(
+        let mut changed = self.collapse_component_tree_with_ancestor_guarded(
             handle,
             collapsed,
             ancestor_changed,
             &mut visited,
-        )
+        );
+        if !collapsed {
+            changed |= self.refold_hidden_layout_participants_in_subtree(handle);
+        }
+        changed
     }
 
     fn collapse_component_tree_with_ancestor_guarded(

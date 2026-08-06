@@ -11207,6 +11207,106 @@
     }
 
     #[test]
+    fn layout_participant_display_none_survives_solo_switch_onto_its_host() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "Solo"),
+                synthetic_typed_component(2, "Shape"),
+                synthetic_typed_component(3, "LayoutParticipant"),
+                synthetic_typed_component(4, "Shape"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        synthetic_link_parent(&mut instance, 4, 1);
+        let active = property_key_for_name("Solo", "activeComponentId")
+            .expect("Solo.activeComponentId");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.solo.as_mut())
+            .expect("synthetic Solo state")
+            .cpp_local_ids = vec![2, 4];
+        assert!(instance.set_uint_property(1, active, 4));
+        assert_collapsed(&instance, 2, true);
+
+        let display = property_key_for_name("LayoutParticipant", "displayValue")
+            .expect("LayoutParticipant.displayValue");
+        assert!(instance.set_uint_property(3, display, 1));
+        assert!(instance.set_uint_property(1, active, 2));
+
+        assert_collapsed(&instance, 1, false);
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 4, true);
+    }
+
+    #[test]
+    fn layout_participant_display_none_survives_ancestor_reveal() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "Node"),
+                synthetic_typed_component(2, "Shape"),
+                synthetic_typed_component(3, "LayoutParticipant"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        assert!(instance.collapse_component(1, true));
+
+        let display = property_key_for_name("LayoutParticipant", "displayValue")
+            .expect("LayoutParticipant.displayValue");
+        assert!(instance.set_uint_property(3, display, 1));
+        assert!(instance.collapse_component(1, false));
+
+        assert_collapsed(&instance, 1, false);
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, true);
+    }
+
+    #[test]
+    fn layout_participant_display_none_survives_layout_reveal() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "LayoutComponent"),
+                synthetic_typed_component(2, "LayoutComponentStyle"),
+                synthetic_typed_component(3, "Shape"),
+                synthetic_typed_component(4, "LayoutParticipant"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 1);
+        synthetic_link_parent(&mut instance, 4, 3);
+        let style = instance.component_handle(2).expect("layout style");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.layout.as_mut())
+            .expect("layout state")
+            .style = Some(style);
+        let layout_display = property_key_for_name("LayoutComponentStyle", "displayValue")
+            .expect("LayoutComponentStyle.displayValue");
+        assert!(instance.set_uint_property(2, layout_display, 1));
+        assert_collapsed(&instance, 3, true);
+
+        let participant_display = property_key_for_name("LayoutParticipant", "displayValue")
+            .expect("LayoutParticipant.displayValue");
+        assert!(instance.set_uint_property(4, participant_display, 1));
+        assert!(instance.set_uint_property(2, layout_display, 0));
+
+        assert_collapsed(&instance, 1, false);
+        assert_collapsed(&instance, 3, true);
+        assert_collapsed(&instance, 4, true);
+    }
+
+    #[test]
     fn initial_layout_participant_display_none_collapses_its_host() {
         let bytes = synthetic_riv(9700, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);

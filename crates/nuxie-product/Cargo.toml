@@ -26,6 +26,7 @@ luaur-compiler = "=0.1.8"
 nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
+nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"
 sha2 = "0.10"

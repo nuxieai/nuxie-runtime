@@ -38,16 +38,6 @@ pub mod command_server;
 mod raw_text;
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_interpolator_tests;
-// Temporary test-only include for the baseline scripting lifecycle suite. The
-// shipping `nuxie` package does not expose or compile Flow; UNIV-1634 removes
-// this include after those white-box tests move behind public host interfaces.
-#[cfg(all(test, feature = "scripting"))]
-extern crate self as nuxie;
-#[cfg(all(test, feature = "scripting"))]
-#[path = "../../nuxie-product/src/flow_session.rs"]
-mod flow_session;
-#[cfg(all(test, feature = "scripting"))]
-mod scripted_listener_action_lifecycle_tests;
 
 pub use raw_text::{
     RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,
@@ -1265,31 +1255,6 @@ fn instantiate_state_machine_data_converters(
         );
         let _ = scripted_listener_action_or_inert(result)?;
     }
-    Ok(())
-}
-
-#[cfg(all(feature = "scripting", test))]
-fn instantiate_script_listener_actions(
-    file: &Arc<File>,
-    machine: &mut StateMachineInstance,
-    factory: &mut dyn Factory,
-    root_view_model: Option<&ViewModelInstance>,
-) -> std::result::Result<(), nuxie_runtime::ScriptError> {
-    instantiate_script_listener_actions_with_optional_factory(
-        file,
-        machine,
-        Some(factory),
-        root_view_model,
-    )?;
-    // This test-only entry point represents the complete synchronous C++
-    // constructor pass. A retained table may still have user `init` pending
-    // because a live hydration prerequisite is absent, but low-level
-    // callbacks may use that valid `m_self` occurrence
-    // (`scripted_object.cpp:399-437`;
-    // `state_machine_instance.cpp:2072-2082`).
-    machine.mark_scripted_object_initialization_complete(
-        root_view_model.map(ViewModelInstance::handle),
-    );
     Ok(())
 }
 
@@ -7590,6 +7555,38 @@ mod owned_instance_tests {
         assert!(cloned.data().is_some());
         drop(cloned);
         assert!(weak_file.upgrade().is_none());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_child_advance_does_not_consume_the_supplied_root_trigger() {
+        let file = Arc::new(facade_view_model_file());
+        let owning_artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate owning artboard");
+        let root = owning_artboard
+            .instantiate_view_model_instance(0)
+            .expect("instantiate the authored root");
+        let supplied = nuxie_runtime::script_view_model_from_owned(file.runtime(), root.handle())
+            .expect("project the supplied root into the script facade");
+        assert!(supplied.fire_trigger("submit"));
+        assert_eq!(supplied.trigger("submit"), Some(4));
+
+        let mut child =
+            FileScriptArtboard::new_with_view_model(file, 0, None, Some(supplied.clone()))
+                .expect("instantiate the concrete scripted child");
+        assert_eq!(supplied.trigger("submit"), Some(4));
+        assert!(
+            nuxie_runtime::ScriptArtboard::advance(&mut child, 0.0)
+                .expect("advance the concrete child"),
+            "C++ advanceAndApply forces a zero-second child frame to keep going"
+        );
+        assert_eq!(
+            supplied.trigger("submit"),
+            Some(4),
+            "child advance leaves root trigger consumption to the owning host frame"
+        );
+        assert!(supplied.advance_script_frame());
+        assert_eq!(supplied.trigger("submit"), Some(0));
     }
 
     #[test]

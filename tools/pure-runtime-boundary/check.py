@@ -38,6 +38,8 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
+PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
+
 # All workspace packages are protected by default. These named packages are
 # current/future owners above the baseline, plus the one browser consumer that
 # is allowed to depend on the browser adapter. Adding another exemption is an
@@ -1179,6 +1181,24 @@ def check_repository(
                 errors.append(
                     f"{relative}: stale {family} boundary debt exception; remove the "
                     "allowlist entry with the debt or restore the marker classification"
+                )
+
+    product_lib = repo_root / "crates/nuxie-product/src/lib.rs"
+    if product_lib.is_file():
+        try:
+            product_source = strip_rust_non_code(product_lib.read_text())
+        except OSError as error:
+            errors.append(f"crates/nuxie-product/src/lib.rs: cannot read source: {error}")
+        else:
+            for match in PRODUCT_ROOT_REEXPORT.finditer(product_source):
+                prefix = product_source[: match.start()]
+                if prefix.count("{") != prefix.count("}"):
+                    continue
+                line_number = product_source.count("\n", 0, match.start()) + 1
+                errors.append(
+                    "crates/nuxie-product/src/lib.rs:"
+                    f"{line_number}: product vocabulary must remain namespaced; "
+                    "crate-root compatibility exports cannot return"
                 )
 
     return (

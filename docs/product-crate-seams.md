@@ -59,26 +59,29 @@ make crate-seams-apple-check
 make crate-seams-full-check
 ```
 
-The product selector also checks that `nuxie-product --no-default-features
+The product selector compiles and runs the product-owned scripted-listener
+lifecycle suite. It also checks that `nuxie-product --no-default-features
 --features scripting` does not recover `js-host-seed` through a transitive
 dependency; this is the self-contained publisher-wasm profile. The browser
 selector targets `wasm32-unknown-unknown` so it cannot pass by compiling away
 wasm-only code. The Apple selector is run in the macOS CI tier. The full
 selector is the ordinary whole-workspace build.
 
-## Temporary compatibility paths
+## Compatibility closeout
 
-Two compatibility paths remain for UNIV-1634 to remove:
+The temporary compatibility paths are removed. Product consumers import the
+Flow protocol through `nuxie_product::flow_session`; the crate root does not
+flatten that vocabulary. The scripted-listener lifecycle suite is owned and
+compiled by `nuxie-product`, so baseline `nuxie` no longer includes product
+source even in its test build.
 
-- `nuxie_product::*` re-exports `nuxie_product::flow_session::*` for callers
-  that adopted the initial crate seam before the physical move.
-- `nuxie` includes the product-owned source only in its scripting unit-test
-  build so the existing white-box listener lifecycle suite can keep exercising
-  the product transaction boundary. The shipping library does not compile or
-  export this module; the closeout moves those tests behind public host seams.
+The former `nuxie::flow_session` shipping path remains removed. Product
+consumers must depend on `nuxie-product` directly.
 
-The former `nuxie::flow_session` shipping path is removed. Product consumers
-must depend on `nuxie-product` directly.
+Forty-five lifecycle cases moved with the product owner through public host
+seams. The one concrete `FileScriptArtboard` trigger-consumption case remains
+with the baseline facade's private unit tests, where it can exercise that
+implementation detail without product source inclusion.
 
 UNIV-1627 completed the authoring cut: the runtime workspace no longer owns an
 authoring package or exports Scene symbols. `nuxie-binary` exposes authored

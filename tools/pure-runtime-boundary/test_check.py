@@ -1179,6 +1179,39 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product/authoring module", result.stderr)
 
+    def test_rejects_product_root_reexports(self) -> None:
+        product = self.create_package("crates/nuxie-product", "nuxie-product", "")
+        sources = [
+            "pub mod flow_session {}\npub use crate::flow_session::*;\n",
+            "pub mod flow_session { pub struct FlowSession; }\n"
+            "pub use flow_session::FlowSession;\n",
+            "pub mod flow_session { pub struct FlowSession; pub struct FlowOperation; }\n"
+            "pub use flow_session::{FlowOperation, FlowSession};\n",
+            "pub mod flow_session { pub struct FlowSession; }\n"
+            "pub use self::flow_session::FlowSession as Session;\n",
+            "mod compatibility { pub use crate::flow_session::*; }\n"
+            "pub mod flow_session { pub struct FlowSession; }\n"
+            "pub use compatibility::*;\n",
+        ]
+        for source in sources:
+            with self.subTest(source=source):
+                (product / "src/lib.rs").write_text(source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "crate-root compatibility exports cannot return", result.stderr
+                )
+
+    def test_allows_namespaced_product_reexport(self) -> None:
+        product = self.create_package("crates/nuxie-product", "nuxie-product", "")
+        (product / "src/lib.rs").write_text(
+            "pub mod project_data { pub use nuxie_project_data::*; }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_root_scene_reexport_from_portable_c_abi(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_scene.rs").write_text("use nuxie::Scene;\n")

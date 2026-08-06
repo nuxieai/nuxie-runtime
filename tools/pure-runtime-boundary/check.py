@@ -235,8 +235,9 @@ RUST_INCLUDE_SOURCE_EDGE = re.compile(
 )
 RUST_INCLUDE_INVOCATION = re.compile(r"\binclude\s*!\s*[\(\[\{]")
 RUST_PATH_ASSIGNMENT = re.compile(r"\bpath\s*=")
-CFG_TEST_MODULE = re.compile(
-    r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*"
+CFG_ATTRIBUTE_START = re.compile(r"#\s*\[\s*cfg\s*\(")
+RUST_MODULE_AFTER_CFG = re.compile(
+    r"\s*(?:#\s*\[[^\]]*\]\s*)*"
     r"(?:pub(?:\([^)]*\))?\s+)?mod\s+[A-Za-z_][A-Za-z0-9_]*\s*\{"
 )
 ALLOWED_DYNAMIC_INCLUDES = {
@@ -567,24 +568,81 @@ def strip_rust_non_code(source: str) -> str:
     return "".join(characters)
 
 
+def matching_delimiter(
+    source: str, opening_index: int, opening: str, closing: str
+) -> int | None:
+    depth = 0
+    for index in range(opening_index, len(source)):
+        character = source[index]
+        if character == opening:
+            depth += 1
+        elif character == closing:
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def split_cfg_arguments(arguments: str) -> list[str]:
+    parts = []
+    start = 0
+    depth = 0
+    for index, character in enumerate(arguments):
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth = max(0, depth - 1)
+        elif character == "," and depth == 0:
+            parts.append(arguments[start:index].strip())
+            start = index + 1
+    parts.append(arguments[start:].strip())
+    return [part for part in parts if part]
+
+
+def cfg_predicate_implies_test(predicate: str) -> bool:
+    predicate = predicate.strip()
+    if predicate == "test":
+        return True
+    call = re.fullmatch(r"(?P<operator>all|any|not)\s*\((?P<body>.*)\)", predicate, re.DOTALL)
+    if call is None:
+        return False
+    arguments = split_cfg_arguments(call.group("body"))
+    implications = [cfg_predicate_implies_test(argument) for argument in arguments]
+    if call.group("operator") == "all":
+        return any(implications)
+    if call.group("operator") == "any":
+        return bool(implications) and all(implications)
+    # Conservatively reject `not`, including double negation, rather than
+    # attempting to prove a more complex predicate test-only.
+    return False
+
+
 def cfg_test_module_ranges(source: str) -> list[tuple[int, int]]:
-    """Return byte ranges owned by top-level `#[cfg(test)] mod ...` blocks."""
+    """Return ranges for modules whose cfg predicate necessarily requires test."""
 
     ranges = []
-    for match in CFG_TEST_MODULE.finditer(source):
-        opening_brace = source.find("{", match.start(), match.end())
+    for cfg_match in CFG_ATTRIBUTE_START.finditer(source):
+        opening_parenthesis = source.find("(", cfg_match.start(), cfg_match.end())
+        closing_parenthesis = matching_delimiter(
+            source, opening_parenthesis, "(", ")"
+        )
+        if closing_parenthesis is None:
+            continue
+        predicate = source[opening_parenthesis + 1 : closing_parenthesis]
+        if not cfg_predicate_implies_test(predicate):
+            continue
+        closing_bracket = source.find("]", closing_parenthesis + 1)
+        if closing_bracket < 0:
+            continue
+        module_match = RUST_MODULE_AFTER_CFG.match(source, closing_bracket + 1)
+        if module_match is None:
+            continue
+        opening_brace = source.find("{", module_match.start(), module_match.end())
         if opening_brace < 0:
             continue
-        depth = 0
-        for index in range(opening_brace, len(source)):
-            character = source[index]
-            if character == "{":
-                depth += 1
-            elif character == "}":
-                depth -= 1
-                if depth == 0:
-                    ranges.append((match.start(), index + 1))
-                    break
+        closing_brace = matching_delimiter(source, opening_brace, "{", "}")
+        if closing_brace is not None:
+            ranges.append((cfg_match.start(), closing_brace + 1))
     return ranges
 
 
@@ -1133,7 +1191,7 @@ def check_repository(
                     line_number = source.count("\n", 0, out_of_scope.start()) + 1
                     errors.append(
                         f"{relative}:{line_number}: {family} test-only boundary debt "
-                        "escaped its #[cfg(test)] module"
+                        "escaped its test-only cfg module"
                     )
                     continue
                 if (

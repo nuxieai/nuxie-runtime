@@ -970,7 +970,31 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("binary-authoring test-only boundary debt", result.stderr)
-        self.assertIn("escaped its #[cfg(test)] module", result.stderr)
+        self.assertIn("escaped its test-only cfg module", result.stderr)
+
+    def test_allows_authoring_marker_in_compound_cfg_test_module(self) -> None:
+        facade = self.create_package("crates/nuxie", "nuxie", "")
+        (facade / "src/lib.rs").write_text(
+            '#[cfg(all(feature = "scripting", test))]\n'
+            "#[allow(dead_code)]\n"
+            "mod tests { pub struct AuthoringRecord; }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_authoring_marker_in_cfg_that_can_build_without_test(self) -> None:
+        facade = self.create_package("crates/nuxie", "nuxie", "")
+        (facade / "src/lib.rs").write_text(
+            '#[cfg(any(test, feature = "scripting"))]\n'
+            "mod tests { pub struct AuthoringRecord; }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("escaped its test-only cfg module", result.stderr)
 
     def test_rejects_expansion_of_nuxie_self_test_support_dependency(self) -> None:
         self.create_package(

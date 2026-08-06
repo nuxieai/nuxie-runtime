@@ -7,7 +7,7 @@ const { chromium } = require("playwright");
 const {
   assertLoadedArtifactIdentity,
   assertLoadedFixtureIdentity,
-} = require("./wasm-perf-driver-lib.cjs");
+} = require(process.env.WASM_PERF_DRIVER_MODULE);
 
 const [baseUrl, configPath, outputPath, sealPath, expectedSealSha256] = process.argv.slice(2);
 if (!baseUrl || !configPath || !outputPath || !sealPath || !expectedSealSha256) {
@@ -45,10 +45,15 @@ const expectedArtifacts = Object.fromEntries(
     },
   ]),
 );
-const nodeCoordinatorBytes = fs.readFileSync(__filename);
+const executedNodeIdentity = process.env.WASM_PERF_EXECUTED_NODE_IDENTITY;
+if (!executedNodeIdentity || !/^\d+:[0-9a-f]{64}$/.test(executedNodeIdentity)) {
+  throw new Error("missing executed Node coordinator identity");
+}
+const [nodeCoordinatorByteCount, nodeCoordinatorSha256] =
+  executedNodeIdentity.split(":", 2);
 const nodeCoordinatorIdentity = {
-  bytes: nodeCoordinatorBytes.byteLength,
-  sha256: crypto.createHash("sha256").update(nodeCoordinatorBytes).digest("hex"),
+  bytes: Number(nodeCoordinatorByteCount),
+  sha256: nodeCoordinatorSha256,
 };
 assertLoadedArtifactIdentity(
   "wasm_perf_node",

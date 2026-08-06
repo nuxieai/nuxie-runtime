@@ -1164,6 +1164,7 @@ dependencies = [
  "ed25519-dalek",
  "luaur-common",
  "luaur-compiler",
+ "nuxie",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",

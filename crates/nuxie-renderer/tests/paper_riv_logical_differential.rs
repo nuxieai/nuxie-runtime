@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 //! Differential coverage for the four `paper.riv` workloads in the pinned
 //! upstream `draw_pls_path.cpp` microbenchmark.
 

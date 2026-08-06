@@ -1191,6 +1191,49 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("helpers/helper/Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
 
+    def test_rejects_deprecated_cargo_replace_override(self) -> None:
+        self.create_package(
+            "crates/nuxie",
+            "nuxie",
+            """
+            [dependencies]
+            helper = "=1.0.0"
+            """,
+        )
+        helper = self.root / "vendor/helper"
+        (helper / "src").mkdir(parents=True)
+        (helper / "src/lib.rs").write_text("// replacement helper\n")
+        (helper / "Cargo.toml").write_text(
+            textwrap.dedent(
+                """
+                [package]
+                name = "helper"
+                version = "1.0.0"
+                """
+            )
+        )
+        members = ",\n".join(f'    "{member}"' for member in self.members)
+        (self.root / "Cargo.toml").write_text(
+            textwrap.dedent(
+                f"""
+                [workspace]
+                members = [
+                {members}
+                ]
+                exclude = ["vendor/helper"]
+                resolver = "3"
+
+                [replace]
+                "helper:1.0.0" = {{ path = "vendor/helper" }}
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("deprecated [replace] override 'helper:1.0.0'", result.stderr)
+
     def test_rejects_expansion_of_portable_abi_facade_edge(self) -> None:
         self.create_package(
             "crates/nux-capi",

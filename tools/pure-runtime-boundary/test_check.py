@@ -1153,6 +1153,44 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("path patch 'helper'", result.stderr)
         self.assertIn("outside the protected workspace scan", result.stderr)
 
+    def test_rejects_dependency_provider_overrides_in_cargo_config(self) -> None:
+        config_directory = self.root / ".cargo"
+        config_directory.mkdir()
+        override_cases = {
+            "patch": textwrap.dedent(
+                """
+                [patch.crates-io]
+                helper = { path = "../vendor/helper" }
+                """
+            ),
+            "paths": 'paths = ["../vendor/helper"]\n',
+            "source": textwrap.dedent(
+                """
+                [source.crates-io]
+                replace-with = "vendored-sources"
+
+                [source.vendored-sources]
+                directory = "../vendor"
+                """
+            ),
+        }
+
+        for config_name in ("config.toml", "config"):
+            config_path = config_directory / config_name
+            for override_name, config_body in override_cases.items():
+                with self.subTest(config=config_name, override=override_name):
+                    config_path.write_text(config_body)
+
+                    result = self.run_check()
+
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        f".cargo/{config_name}: dependency provider override "
+                        f"[{override_name}] is not allowed",
+                        result.stderr,
+                    )
+            config_path.unlink()
+
     def test_scans_nonexcluded_local_cargo_patch_provider(self) -> None:
         self.create_package(
             "crates/nuxie",

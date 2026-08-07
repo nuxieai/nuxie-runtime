@@ -356,6 +356,29 @@ def workspace_packages(
     if isinstance(workspace_manifest.get("package"), dict):
         member_paths.add(".")
 
+    # Cargo configuration can override dependency providers with higher
+    # precedence than the workspace manifest. Keep committed provider changes
+    # in the root Cargo.toml, where this checker can resolve and audit them as
+    # part of the protected graph.
+    for cargo_config_relative in (".cargo/config.toml", ".cargo/config"):
+        cargo_config_path = repo_root / cargo_config_relative
+        if not cargo_config_path.is_file():
+            continue
+        try:
+            cargo_config = tomllib.loads(cargo_config_path.read_text())
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            errors.append(
+                f"{cargo_config_relative}: cannot parse Cargo configuration: {error}"
+            )
+            continue
+        for override_name in ("patch", "paths", "source"):
+            if cargo_config.get(override_name):
+                errors.append(
+                    f"{cargo_config_relative}: dependency provider override "
+                    f"[{override_name}] is not allowed; declare an audited "
+                    "[patch] in Cargo.toml instead"
+                )
+
     patches = workspace_manifest.get("patch", {})
     if not isinstance(patches, dict):
         errors.append("Cargo.toml: [patch] must be a table")

@@ -109,6 +109,15 @@ fn corpus_script_assets_carry_luau_bytecode_not_source() {
     }
 }
 
+/// Vendored sync fixtures pinned in-repo (`fixtures/sync/`), used when a
+/// matrix row must bind to an exact recorded fixture hash rather than
+/// whatever revision the local runtime checkout has.
+fn sync_fixture_path(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/sync")
+        .join(name)
+}
+
 #[cfg(feature = "luau")]
 mod luau {
     use super::*;
@@ -243,6 +252,118 @@ mod luau {
             loaded_version_7 > 0,
             "scope probe should witness candidate Luau bytecode version 7"
         );
+    }
+
+    /// Historical rows of the editor-emitted bytecode compatibility matrix
+    /// (docs/luau-fork.md). Each row is an editor-emitted fixture that is
+    /// already an exact scripted corpus entry (behavior continuously refereed
+    /// by `make scripted-golden-compare`); this test supplies the per-blob
+    /// provenance and load proof: every ScriptAsset blob is extracted,
+    /// recorded (name, size, SHA-256, LBC version byte), pinned to the
+    /// emitter generation's bytecode version, and loaded through the fork
+    /// VM's real `luau_load` path (`load_script_asset_payload`; load only,
+    /// no execution).
+    #[test]
+    fn editor_bytecode_matrix_rows_extract_pin_version_and_load() {
+        use sha2::{Digest, Sha256};
+
+        struct MatrixRow {
+            fixture: &'static str,
+            path: std::path::PathBuf,
+            /// Pinned SHA-256 of the whole fixture file, for the vendored
+            /// in-repo rows whose provenance the matrix records exactly.
+            fixture_sha256: Option<&'static str>,
+            expected_lbc_version: u8,
+            expected_blob_count: usize,
+        }
+
+        let rows = [
+            // Historical editor generation (LBC v6).
+            MatrixRow {
+                fixture: "script_artboard_test.riv",
+                path: asset_path("script_artboard_test.riv"),
+                fixture_sha256: None,
+                expected_lbc_version: 6,
+                expected_blob_count: 1,
+            },
+            MatrixRow {
+                fixture: "script_dependency_test.riv",
+                path: asset_path("script_dependency_test.riv"),
+                fixture_sha256: None,
+                expected_lbc_version: 6,
+                expected_blob_count: 6,
+            },
+            // Real Rive Editor generation (LBC v7), vendored in-repo.
+            MatrixRow {
+                fixture: "data_bind_blob_test.riv",
+                path: sync_fixture_path("data_bind_blob_test.riv"),
+                fixture_sha256: Some(
+                    "46b47578e6dd6e70ecffac35449498275fd2ee8773efbc5cb04d22cad5fb7e58",
+                ),
+                expected_lbc_version: 7,
+                expected_blob_count: 2,
+            },
+            MatrixRow {
+                fixture: "scope_probe.riv",
+                path: sync_fixture_path("scope_probe.riv"),
+                fixture_sha256: Some(
+                    "fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347",
+                ),
+                expected_lbc_version: 7,
+                expected_blob_count: 149,
+            },
+        ];
+
+        for row in &rows {
+            let bytes = std::fs::read(&row.path).unwrap_or_else(|e| {
+                panic!("missing matrix fixture {}: {e}", row.path.display())
+            });
+            if let Some(expected) = row.fixture_sha256 {
+                let actual = format!("{:x}", Sha256::digest(&bytes));
+                assert_eq!(
+                    actual, expected,
+                    "{}: vendored fixture drifted from its recorded provenance hash",
+                    row.fixture
+                );
+            }
+
+            let scripts = extract_scripts(&bytes);
+            assert_eq!(
+                scripts.len(),
+                row.expected_blob_count,
+                "{}: ScriptAsset blob count changed",
+                row.fixture
+            );
+
+            // Fresh VM per row so one row's registrations cannot mask
+            // another row's load failure.
+            let vm = ScriptVm::new();
+            for script in &scripts {
+                let envelope = SignedContent::parse(&script.payload)
+                    .unwrap_or_else(|e| panic!("{}/'{}': {e}", row.fixture, script.name));
+                let version = envelope.content[0];
+                eprintln!(
+                    "{}: script '{}' {} bytes sha256={:x} lbc-version {version}",
+                    row.fixture,
+                    script.name,
+                    envelope.content.len(),
+                    Sha256::digest(envelope.content),
+                );
+                assert_eq!(
+                    version, row.expected_lbc_version,
+                    "{}/'{}': bytecode version does not match the emitter \
+                     generation this matrix row records",
+                    row.fixture, script.name
+                );
+                vm.load_script_asset_payload(&script.name, &script.payload)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "fork VM failed to load '{}' from {}: {e}",
+                            script.name, row.fixture
+                        )
+                    });
+            }
+        }
     }
 
     /// script_dependency_test.riv stores its modules *out of dependency

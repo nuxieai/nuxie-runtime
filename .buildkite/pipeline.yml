@@ -79,14 +79,15 @@ steps:
         - exit_status: -1
           limit: 1
 
-  # This is the only PR lane that needs macOS: it type-checks the Objective-C
-  # / Metal adapter and the host audio feature against the Apple SDK.
-  - label: ":mac: Apple adapter compile"
+  # This is the only PR lane that needs macOS: it type-checks the opaque Metal
+  # measurement roots and the host audio feature against the Apple SDK.
+  - label: ":mac: Darwin renderer compile"
     if: "build.pull_request.id != null"
     if_changed:
       - Cargo.{toml,lock}
       - Makefile
-      - crates/{nuxie-apple-adapter,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
+      - crates/{nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
+      - tools/size-report-roots/**
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --no-self-update

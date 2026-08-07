@@ -1277,21 +1277,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nuxie-apple-adapter"
-version = "0.1.0"
-dependencies = [
- "block2",
- "nuxie-image-codec",
- "nuxie-render-api",
- "nuxie-renderer",
- "objc2",
- "objc2-core-foundation",
- "objc2-metal",
- "objc2-quartz-core",
- "png",
-]
-
-[[package]]
 name = "nuxie-audio"
 version = "0.1.0"
 dependencies = [
@@ -1492,6 +1477,14 @@ dependencies = [
  "nuxie-render-api",
  "nuxie-runtime",
  "sha2",
+]
+
+[[package]]
+name = "nuxie-size-report-roots"
+version = "0.1.0"
+dependencies = [
+ "nuxie-render-api",
+ "nuxie-renderer",
 ]
 
 [[package]]

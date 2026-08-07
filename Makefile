@@ -202,7 +202,7 @@ crate-seams-browser-check:
 		-p browser-renderer-smoke --target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
-	cargo check -p nuxie-apple-adapter --all-targets
+	cargo check -p nuxie-size-report-roots --all-targets
 
 crate-seams-full-check:
 	cargo check --workspace
@@ -366,8 +366,8 @@ lint-gate:
 # --- Feature compile gate ---------------------------------------------------
 # Code behind a Cargo feature that no CI job builds does not compile in CI, and
 # a `#[cfg(feature = ...)]` module that nothing compiles rots silently. That is
-# how crates/nux-capi/src/size_report_roots.rs sat broken on main: the only
-# consumer of `size-report-roots` is tools/size-report.sh, whose renderer root
+# how an earlier size-report root harness sat broken on main: the only
+# consumer is tools/size-report.sh, whose renderer root
 # inventory check runs (correctly) ahead of the fat-LTO build, so the compile
 # errors were never reached.
 #
@@ -378,8 +378,8 @@ lint-gate:
 #
 # Two tiers because two hosts:
 # - PORTABLE runs anywhere and is wired into the ubuntu Clippy lint gate job.
-# - APPLE needs an Apple target (nuxie re-exports AppleSurface and friends only
-#   on ios/macos), so it is wired into the macOS runtime-evidence job ahead of
+# - APPLE needs an Apple target because the measurement roots include the
+#   renderer-owned opaque Metal presenter, so it is wired into macOS ahead of
 #   that job's expensive reference-runtime build.
 # Both tiers report every failing entry rather than stopping at the first.
 .PHONY: feature-compile-gate feature-compile-gate-portable feature-compile-gate-apple
@@ -401,9 +401,9 @@ feature-compile-gate-portable:
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
-		"nuxie-apple-adapter --features size-report-roots" "cargo check -p nuxie-apple-adapter --features size-report-roots --lib" \
+		"nuxie-size-report-roots" "cargo check -p nuxie-size-report-roots --lib" \
 		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
-		"Apple adapter seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
+		"Darwin renderer measurement seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
 	@tools/report-all.sh "feature-compile-gate" \

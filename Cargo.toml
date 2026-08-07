@@ -11,7 +11,6 @@ members = [
     "crates/nuxie",
     "crates/nuxie-product",
     "crates/nuxie-project-data",
-    "crates/nuxie-apple-adapter",
     "crates/nux-capi",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",
@@ -25,6 +24,7 @@ members = [
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
     "tools/silver-corpus",
+    "tools/size-report-roots",
 ]
 exclude = [
     "vendor/luaur-ast-0.1.8",

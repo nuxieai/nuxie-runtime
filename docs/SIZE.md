@@ -37,7 +37,8 @@ scripting ON).
 
 Measured 2026-07-20 at source revision `d8091cd5`, using the then-current
 42-entry core-renderer and Darwin-presentation consumer harness. The active
-harness now audits 52 roots across the portable renderer and Apple adapter.
+harness now audits 43 renderer-owned roots, including the opaque Metal
+presenter used by the SDK-owned Apple adapter.
 The committed baseline snapshot records its exact measurement revision,
 artifact digests, toolchain, public-root inventory, and symbol-size breakdown in
 [`docs/evidence/size-b3-2026-07-20.md`](evidence/size-b3-2026-07-20.md). Two
@@ -85,13 +86,12 @@ artifact mechanically:
 1. Build `nux-capi` as `staticlib` + `cdylib` under the `release-size` profile,
    with `--no-default-features --features nuxie/renderer`; add
    `nuxie/scripting` for the scripting-on variant. Separately build
-   `nuxie-apple-adapter` with its measurement-only `size-report-roots` feature.
+   the non-shipping `nuxie-size-report-roots` tooling crate.
 2. Verify the resolved dependency graph contains `nuxie-renderer` and the
    repository's vendored `wgpu` 30.0.0.
-3. Verify the measurement consumer's 52 calls exactly match the public methods
-   found across the renderer and Apple adapter: 16 `WgpuFactory`/`WgpuFrame`
-   methods, six opaque Metal-presenter methods, 12 Apple policy methods, ten
-   `Factory` methods, and eight `Renderer` methods. Re-link both staticlibs as
+3. Verify the measurement consumer's 43 calls exactly match the public renderer
+   methods: 19 `WgpuFactory`/`WgpuFrame` methods, six opaque Metal-presenter
+   methods, ten `Factory` methods, and eight `Renderer` methods. Re-link both staticlibs as
    one Mach-O dylib, retaining every public `_nux_*` C ABI export plus that
    exact consumer root.
 4. Link with `-dead_strip -dead_strip_dylibs`, verify the C ABI export set is
@@ -99,8 +99,10 @@ artifact mechanically:
    run `strip -S -x`.
 
 This root set models an application consuming the full portable ABI, public
-`WgpuFactory` / `WgpuFrame` renderer surface, and public
-`AppleSurface` / `ApplePresentationCompletion` presentation surface. It
+`WgpuFactory` / `WgpuFrame` renderer surface, and the opaque
+`WgpuMetalPresenter` used by Apple presentation. Product-owned drawable
+lifecycle, completion, and image-admission policy are measured with the
+nuxie-ios artifact rather than retained in this repository. It
 deliberately avoids two misleading numbers:
 
 - The raw static archive contains object code that a consuming linker removes,

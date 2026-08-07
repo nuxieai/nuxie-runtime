@@ -1,13 +1,15 @@
-//! Measurement-only full renderer consumer.
+//! Measurement-only full renderer consumer for the Darwin link-closure report.
 //!
 //! Fat LTO removes renderer methods that the portable C ABI does not call.
 //! `tools/size-report.sh` links this one hidden root to model a Rust host that
 //! consumes every public `WgpuFactory` / `WgpuFrame` entry point plus the
-//! Darwin presentation surface. The report verifies the `root!` inventory
+//! renderer-owned opaque Metal presentation seam. The report verifies the `root!` inventory
 //! against both renderer source files and the committed audited inventory
-//! before accepting a measurement.
+//! before accepting a measurement. Product-owned Apple drawable lifecycle and
+//! image-admission policy live in nuxie-ios and are deliberately absent here.
 
-use crate::{AppleImageAdmission, ApplePresentationCompletion, AppleSurface};
+#![cfg(any(target_os = "ios", target_os = "macos"))]
+
 use nuxie_render_api::{
     BlendMode, Factory, FillRule, GpuCanvasPassState, GpuCanvasPipelineShaders,
     GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, ImageFilter, ImageSampler, ImageWrap,
@@ -30,8 +32,6 @@ struct RootArgs {
     factory: *mut WgpuFactory,
     frame: *mut WgpuFrame,
     presenter: *mut WgpuMetalPresenter,
-    surface: *mut AppleSurface,
-    completion: *mut ApplePresentationCompletion,
     drawable: *mut c_void,
     path: *const Box<dyn RenderPath>,
     paint: *const Box<dyn RenderPaint>,
@@ -158,26 +158,22 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 52 {
-        0 => root!("inherent AppleImageAdmission::validate_image_bytes", {
-            black_box(AppleImageAdmission::validate_image_bytes(bytes).is_ok());
-            0
-        }),
-        1 => root!("inherent WgpuFactory::new", {
+    match selector % 43 {
+        0 => root!("inherent WgpuFactory::new", {
             black_box(WgpuFactory::new(args.width, args.height).is_ok());
             0
         }),
-        2 => root!("inherent WgpuFactory::new_with_mode", {
+        1 => root!("inherent WgpuFactory::new_with_mode", {
             black_box(
                 WgpuFactory::new_with_mode(args.width, args.height, render_mode(selector)).is_ok(),
             );
             0
         }),
-        3 => root!("inherent WgpuFactory::new_async", {
+        2 => root!("inherent WgpuFactory::new_async", {
             poll_once(WgpuFactory::new_async(args.width, args.height));
             0
         }),
-        4 => root!("inherent WgpuFactory::new_async_with_mode", {
+        3 => root!("inherent WgpuFactory::new_async_with_mode", {
             poll_once(WgpuFactory::new_async_with_mode(
                 args.width,
                 args.height,
@@ -185,49 +181,49 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        5 => root!("inherent WgpuFactory::begin_frame", {
+        4 => root!("inherent WgpuFactory::begin_frame", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.begin_frame(args.count));
             0
         }),
-        6 => root!("inherent WgpuFactory::begin_frame_for_benchmark", {
+        5 => root!("inherent WgpuFactory::begin_frame_for_benchmark", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.begin_frame_for_benchmark(args.count, selector & 1 != 0));
             0
         }),
-        7 => root!("inherent WgpuFactory::adapter_info", {
+        6 => root!("inherent WgpuFactory::adapter_info", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.adapter_info());
             0
         }),
-        8 => root!("inherent WgpuFactory::dimensions", {
+        7 => root!("inherent WgpuFactory::dimensions", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.dimensions());
             0
         }),
-        9 => root!("inherent WgpuFactory::device_is_lost", {
+        8 => root!("inherent WgpuFactory::device_is_lost", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.device_is_lost());
             0
         }),
-        10 => root!("inherent WgpuFactory::resize", {
+        9 => root!("inherent WgpuFactory::resize", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             black_box(factory.resize(args.width, args.height).is_ok());
             0
         }),
-        11 => root!("inherent WgpuFactory::new_session_factory", {
+        10 => root!("inherent WgpuFactory::new_session_factory", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
@@ -238,35 +234,35 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        12 => root!("inherent WgpuFrame::finish", {
+        11 => root!("inherent WgpuFrame::finish", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             black_box(unsafe { ptr::read(frame) }.finish().is_ok());
             0
         }),
-        13 => root!("inherent WgpuFrame::finish_async", {
+        12 => root!("inherent WgpuFrame::finish_async", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             poll_once(unsafe { ptr::read(frame) }.finish_async());
             0
         }),
-        14 => root!("inherent WgpuFrame::finish_for_benchmark", {
+        13 => root!("inherent WgpuFrame::finish_for_benchmark", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             black_box(unsafe { ptr::read(frame) }.finish_for_benchmark().is_ok());
             0
         }),
-        15 => root!("inherent WgpuFrame::finish_for_benchmark_async", {
+        14 => root!("inherent WgpuFrame::finish_for_benchmark_async", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             poll_once(unsafe { ptr::read(frame) }.finish_for_benchmark_async());
             0
         }),
-        16 => root!("trait Factory::make_render_buffer", {
+        15 => root!("trait Factory::make_render_buffer", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -278,7 +274,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        17 => root!("trait Factory::make_linear_gradient", {
+        16 => root!("trait Factory::make_linear_gradient", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -293,7 +289,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        18 => root!("trait Factory::make_radial_gradient", {
+        17 => root!("trait Factory::make_radial_gradient", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -307,7 +303,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        19 => root!("trait Factory::make_render_path", {
+        18 => root!("trait Factory::make_render_path", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -318,28 +314,28 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        20 => root!("trait Factory::make_empty_render_path", {
+        19 => root!("trait Factory::make_empty_render_path", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             black_box(Factory::make_empty_render_path(factory));
             0
         }),
-        21 => root!("trait Factory::make_render_paint", {
+        20 => root!("trait Factory::make_render_paint", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             black_box(Factory::make_render_paint(factory));
             0
         }),
-        22 => root!("trait Factory::decode_image", {
+        21 => root!("trait Factory::decode_image", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             black_box(Factory::decode_image(factory, bytes).is_ok());
             0
         }),
-        23 => root!("trait Factory::make_gpu_canvas_shader", {
+        22 => root!("trait Factory::make_gpu_canvas_shader", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -351,7 +347,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             black_box(Factory::make_gpu_canvas_shader(factory, &shader).is_ok());
             0
         }),
-        24 => root!("trait Factory::make_gpu_canvas_image", {
+        23 => root!("trait Factory::make_gpu_canvas_image", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -387,7 +383,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             }
             0
         }),
-        25 => root!("trait Factory::make_gpu_canvas_image_with_pipelines", {
+        24 => root!("trait Factory::make_gpu_canvas_image_with_pipelines", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
@@ -430,28 +426,28 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             }
             0
         }),
-        26 => root!("trait Renderer::save", {
+        25 => root!("trait Renderer::save", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::save(frame);
             0
         }),
-        27 => root!("trait Renderer::restore", {
+        26 => root!("trait Renderer::restore", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::restore(frame);
             0
         }),
-        28 => root!("trait Renderer::transform", {
+        27 => root!("trait Renderer::transform", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::transform(frame, Mat2D([args.scalar; 6]));
             0
         }),
-        29 => root!("trait Renderer::draw_path", {
+        28 => root!("trait Renderer::draw_path", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -464,7 +460,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             Renderer::draw_path(frame, path, paint);
             0
         }),
-        30 => root!("trait Renderer::clip_path", {
+        29 => root!("trait Renderer::clip_path", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -474,7 +470,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             Renderer::clip_path(frame, path);
             0
         }),
-        31 => root!("trait Renderer::draw_image", {
+        30 => root!("trait Renderer::draw_image", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -487,7 +483,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        32 => root!("trait Renderer::draw_image_mesh", {
+        31 => root!("trait Renderer::draw_image_mesh", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -505,139 +501,77 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        33 => root!("trait Renderer::modulate_opacity", {
+        32 => root!("trait Renderer::modulate_opacity", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::modulate_opacity(frame, args.scalar);
             0
         }),
-        34 => root!("inherent ApplePresentationCompletion::new", {
-            black_box(ApplePresentationCompletion::new(|| {}));
-            0
-        }),
-        35 => root!("inherent AppleSurface::attach_with_factory", {
-            black_box(
-                AppleSurface::attach_with_factory(args.width, args.height, render_mode(selector))
-                    .is_ok(),
-            );
-            0
-        }),
-        36 => root!("inherent AppleSurface::attach", {
-            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
-                return 0;
-            };
-            black_box(AppleSurface::attach(factory, args.width, args.height).is_ok());
-            0
-        }),
-        37 => root!("inherent AppleSurface::dimensions", {
-            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
-                return 0;
-            };
-            black_box(surface.dimensions());
-            0
-        }),
-        38 => root!("inherent AppleSurface::is_attached", {
-            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
-                return 0;
-            };
-            black_box(surface.is_attached());
-            0
-        }),
-        39 => root!("inherent AppleSurface::resize", {
-            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
-                return 0;
-            };
-            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
-                return 0;
-            };
-            black_box(surface.resize(factory, args.width, args.height).is_ok());
-            0
-        }),
-        40 => root!("inherent AppleSurface::detach", {
-            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
-                return 0;
-            };
-            surface.detach();
-            0
-        }),
-        41 => root!("inherent AppleSurface::reattach", {
-            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
-                return 0;
-            };
-            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
-                return 0;
-            };
-            black_box(surface.reattach(factory, args.width, args.height).is_ok());
-            0
-        }),
-        42 => root!("inherent AppleSurface::copy_metal_device", {
-            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
-                return 0;
-            };
-            black_box(surface.copy_metal_device());
-            0
-        }),
-        43 => root!("inherent AppleSurface::preflight_present", {
-            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
-                return 0;
-            };
-            black_box(surface.preflight_present(selector & 1 != 0).is_ok());
-            0
-        }),
-        44 => root!("inherent AppleSurface::present", {
-            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
-                return 0;
-            };
-            let Some(frame) = (unsafe { args.frame.as_mut() }) else {
-                return 0;
-            };
-            let completion = unsafe {
-                args.completion
-                    .as_mut()
-                    .map(|completion| ptr::read(completion))
-            };
-            black_box(
-                unsafe { surface.present(ptr::read(frame), args.drawable, completion) }.is_ok(),
-            );
-            0
-        }),
-        45 => root!("inherent WgpuFrame::metrics", {
+        33 => root!("inherent WgpuFrame::metrics", {
             let Some(frame) = (unsafe { args.frame.as_ref() }) else {
                 return 0;
             };
             black_box(frame.metrics());
             0
         }),
-        46 => root!("inherent WgpuFactory::create_metal_presenter", {
+        34 => root!("inherent WgpuFactory::logical_frame_config", {
+            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
+                return 0;
+            };
+            black_box(factory.logical_frame_config());
+            0
+        }),
+        35 => root!("inherent WgpuFrame::prepare_logical_frame", {
+            let Some(frame) = (unsafe { args.frame.as_mut() }) else {
+                return 0;
+            };
+            black_box(frame.prepare_logical_frame().is_ok());
+            0
+        }),
+        36 => root!(
+            "inherent WgpuFrame::finish_logical_frame_for_differential",
+            {
+                let Some(frame) = (unsafe { args.frame.as_mut() }) else {
+                    return 0;
+                };
+                black_box(
+                    unsafe { ptr::read(frame) }
+                        .finish_logical_frame_for_differential()
+                        .is_ok(),
+                );
+                0
+            }
+        ),
+        37 => root!("inherent WgpuFactory::create_metal_presenter", {
             let Some(factory) = (unsafe { args.factory.as_ref() }) else {
                 return 0;
             };
             black_box(factory.create_metal_presenter().is_ok());
             0
         }),
-        47 => root!("inherent WgpuMetalPresenter::copy_device", {
+        38 => root!("inherent WgpuMetalPresenter::copy_device", {
             let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
                 return 0;
             };
             black_box(presenter.copy_device().is_ok());
             0
         }),
-        48 => root!("inherent WgpuMetalPresenter::copy_command_queue", {
+        39 => root!("inherent WgpuMetalPresenter::copy_command_queue", {
             let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
                 return 0;
             };
             black_box(presenter.copy_command_queue().is_ok());
             0
         }),
-        49 => root!("inherent WgpuMetalPresenter::device_health", {
+        40 => root!("inherent WgpuMetalPresenter::device_health", {
             let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
                 return 0;
             };
             black_box(presenter.device_health());
             0
         }),
-        50 => root!("inherent WgpuMetalPresenter::record_external_failure", {
+        41 => root!("inherent WgpuMetalPresenter::record_external_failure", {
             let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
                 return 0;
             };

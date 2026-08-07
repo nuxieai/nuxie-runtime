@@ -83,12 +83,11 @@ class RustAttributionCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("crates/nuxie-audio/src/lib.rs", result.stderr)
 
-    def test_product_and_remaining_adapter_crate_sources_are_in_scope(self) -> None:
+    def test_product_crate_sources_are_in_scope(self) -> None:
         expected = (
             "crates/nuxie-product/src/lib.rs",
             "crates/nuxie-project-data/src/lib.rs",
             "crates/nuxie-authoring/src/lib.rs",
-            "crates/nuxie-apple-adapter/src/lib.rs",
         )
         for relative in expected:
             source = self.root / relative

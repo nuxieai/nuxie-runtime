@@ -49,6 +49,9 @@ EXTRACTED_PRODUCT_PATHS = (
     "crates/nux-container",
     "crates/nuxie-product-scripting",
 )
+# These packages are owned by product repositories and may not be restored as
+# runtime workspace members even if they happen to avoid a forbidden edge.
+FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES = {"nuxie-apple-adapter"}
 
 PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 
@@ -60,7 +63,6 @@ PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
-    "nuxie-apple-adapter",
     "nuxie-authoring",
     "nuxie-flow",
     "nuxie-product",
@@ -1376,6 +1378,13 @@ def check_repository(
                     "Cargo.toml: the remaining product host requires the exact audited "
                     "runtime self-patches"
                 )
+
+    for package, package_name, _ in packages:
+        if package_name in FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES:
+            errors.append(
+                f"{package}/Cargo.toml: {package_name} is owned by nuxie-ios, "
+                "not the runtime workspace"
+            )
 
     for package, package_name, manifest in packages:
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:

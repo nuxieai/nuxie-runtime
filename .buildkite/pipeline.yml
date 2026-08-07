@@ -8,7 +8,103 @@ env:
   RIVE_PREMAKE_TAG: "v5.0.0-beta7"
 
 steps:
-  - label: ":linux: Rust workspace and port contracts"
+  # Every pull request gets a fast, portable compile and lint signal. Keep this
+  # independent of the pinned C++ runtime, fixtures, and Apple host so the
+  # common path does not wait behind expensive confidence work.
+  - label: ":linux: Runtime fast checks"
+    if: "build.pull_request.id != null"
+    command: |
+      set -euo pipefail
+      rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      make fmt-check check lint-gate feature-compile-gate-portable
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: linux
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  # These gates compare the Rust port to the pinned upstream runtime. They are
+  # valuable before merge when runtime/port inputs change, but irrelevant to a
+  # documentation-only pull request.
+  - label: ":linux: Runtime port contracts"
+    if: "build.pull_request.id != null"
+    if_changed:
+      - Cargo.{toml,lock}
+      - Makefile
+      - crates/**
+      - tools/{port-manifest,rust-attribution,pure-runtime-boundary,runtime-drawing-port,runtime-frame-loop-port,test-correspondence,layout-style-handler}/**
+      - fixtures/**
+    command: |
+      set -euo pipefail
+      sudo apt-get update -qq
+      sudo apt-get install --no-install-recommends -y zlib1g-dev
+      export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
+      git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
+      git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
+      make fixtures
+      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
+      make runtime-drawing-port-gate runtime-frame-loop-port-gate
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: linux
+    timeout_in_minutes: 60
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  # The C ABI is portable. Compile and execute its C consumer on Linux instead
+  # of making every ABI change wait for the scarce Apple host.
+  - label: ":linux: C ABI smoke"
+    if: "build.pull_request.id != null"
+    if_changed:
+      - Cargo.{toml,lock}
+      - Makefile
+      - crates/nux-capi/**
+      - crates/nuxie/**
+      - crates/{nuxie-runtime,nuxie-schema,nuxie-binary,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
+      - fixtures/**
+    command: |
+      set -euo pipefail
+      make fixtures capi-smoke
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: linux
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  # This is the only PR lane that needs macOS: it type-checks the Objective-C
+  # / Metal adapter and the host audio feature against the Apple SDK.
+  - label: ":mac: Apple adapter compile"
+    if: "build.pull_request.id != null"
+    if_changed:
+      - Cargo.{toml,lock}
+      - Makefile
+      - crates/{nuxie-apple-adapter,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
+    command: |
+      set -euo pipefail
+      rustup toolchain install stable --profile minimal --no-self-update
+      make feature-compile-gate-apple
+    agents:
+      queue: nuxie-pr
+      nuxie-platform: macos
+    timeout_in_minutes: 45
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+
+  # The following jobs are intentionally scheduled confidence. They retain the
+  # exhaustive upstream, renderer, browser/WASM, and full-workspace evidence
+  # without turning every runtime pull request into a multi-hour queue item.
+  - label: ":linux: Nightly full runtime confidence"
+    if: 'build.source == "schedule"'
     command: |
       set -euo pipefail
       sudo apt-get update -qq
@@ -39,7 +135,8 @@ steps:
         - exit_status: -1
           limit: 1
 
-  - label: ":mac: Apple and C ABI compatibility"
+  - label: ":mac: Nightly renderer and Apple confidence"
+    if: 'build.source == "schedule"'
     command: |
       set -euo pipefail
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
@@ -60,4 +157,3 @@ steps:
     retry:
       automatic:
         - exit_status: -1
-          limit: 1

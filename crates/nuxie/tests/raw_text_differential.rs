@@ -101,18 +101,17 @@ fn font(path: &Path) -> RawTextFont {
     .expect("decode differential font")
 }
 
+fn raster_font_asset() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/sbix.ttf")
+}
+
 fn cpp_report() -> Option<Value> {
     let probe = probe_path()?;
     let output = Command::new(probe)
         .arg("--raw-text-probe")
         .arg(asset("RobotoFlex.ttf"))
         .arg(asset("TwemojiMozilla.subset.ttf"))
-        .arg(
-            std::env::var_os("RIVE_RUNTIME_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
-                .join("skia/dependencies/skia/resources/fonts/sbix.ttf"),
-        )
+        .arg(raster_font_asset())
         .output()
         .expect("run freshly built C++ RawText probe");
     assert!(
@@ -513,7 +512,7 @@ fn d_rt_engine_live_cpp_classification_and_layer_metadata() {
         ),
         (
             "raster",
-            std::fs::read(root.join("skia/dependencies/skia/resources/fonts/sbix.ttf")).unwrap(),
+            std::fs::read(raster_font_asset()).unwrap(),
         ),
     ];
     for (name, bytes) in fonts {

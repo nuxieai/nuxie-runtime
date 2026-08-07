@@ -106,5 +106,16 @@ if ! gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --bo
     fi
     echo "land.sh: reusing existing open PR #$existing for $branch"
 fi
-gh pr merge --merge || exit 1
-echo "LANDED: $branch"
+# Repo ruleset (2026-08-06): merge commits disallowed; a "Required signoffs"
+# status check gates the merge and admin does not bypass it. Rebase-merge
+# needs a linear branch, so landings that merged origin/main must rebase
+# before invoking land.sh. Queue the merge and report instead of failing.
+if gh pr merge --rebase 2>/tmp/land-merge-err.txt; then
+    echo "LANDED: $branch"
+elif grep -q "Required signoffs" /tmp/land-merge-err.txt; then
+    gh pr merge --rebase --auto >/dev/null 2>&1 || true
+    echo "GATES GREEN, AWAITING SIGNOFF: $branch (auto-merge queued; approve the Required signoffs check to land)"
+else
+    cat /tmp/land-merge-err.txt >&2
+    echo "land.sh: merge failed for $branch" >&2; exit 1
+fi

@@ -1830,6 +1830,13 @@ impl ScriptVm {
         self.script_safepoints.set(0);
     }
 
+    /// Resume a host-controlled unit of script work without resetting its
+    /// aggregate limits. This lets a deferred phase share the originating
+    /// operation's resource cycle after its effects have been drained.
+    pub fn continue_script_cycle(&self) {
+        self.script_cycle_active.set(true);
+    }
+
     /// End the embedding host's bounded unit of script work.
     pub fn end_script_cycle(&self) {
         self.script_cycle_active.set(false);

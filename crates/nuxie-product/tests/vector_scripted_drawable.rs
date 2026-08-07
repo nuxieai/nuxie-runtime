@@ -584,6 +584,62 @@ fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_orde
 }
 
 #[test]
+fn draw_continues_the_originating_script_resource_cycle() -> Result<()> {
+    let bytes = imported_scripted_file_with_protocol(
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    advance = function(_self, _seconds)
+                        for command = 1, 256 do
+                            nuxie.trigger("advance_" .. command)
+                        end
+                        return false
+                    end,
+                    draw = function(_self, _renderer)
+                        nuxie.trigger("draw")
+                    end,
+                }
+            end
+        "#,
+    );
+    let file = Arc::new(import_authenticated(
+        &bytes,
+        authenticated_capability(&bytes),
+    )?);
+    let mut factory = script_factory();
+    let (mut session, creation) =
+        FlowSession::create_with_factory(file, FlowSessionConfig::default(), &mut factory)?;
+    assert!(creation.outputs.is_empty());
+
+    let mut result = session.perform_with_factory(
+        FlowOperation::Advance(FlowAdvance {
+            timestamp_seconds: 0.016,
+            delta_seconds: 0.016,
+            render: true,
+        }),
+        &mut factory,
+    )?;
+    assert_eq!(
+        result
+            .outputs
+            .iter()
+            .filter(|output| matches!(output.payload, FlowOutputPayload::HostCommand { .. }))
+            .count(),
+        256
+    );
+
+    let mut renderer = factory.borrow().make_renderer();
+    let error = session
+        .draw_into_result(&mut factory, &mut renderer, &mut result)
+        .expect_err("draw must share the advance operation's aggregate host-command quota");
+    assert_eq!(error.kind(), FlowSessionErrorKind::Runtime);
+    assert_eq!(error.message(), "failed to draw Rive artboard");
+    Ok(())
+}
+
+#[test]
 fn aggregate_host_trees_overflow_before_crossing_the_apple_result_seam_and_poison_session()
 -> Result<()> {
     let bytes = imported_scripted_file_with_protocol(

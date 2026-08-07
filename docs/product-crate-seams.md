@@ -23,6 +23,12 @@ module, ordered host effects, and their quotas live in
 `nuxie-product-scripting`. The shipping `nuxie` facade contains no Flow module
 or product dependency; it owns the neutral host-extension interface and an
 opaque exact-byte capability consumed during baseline VM setup.
+Transactional runtime mechanics cross that boundary through
+`ArtboardTransaction`: dropping an uncommitted operation rolls back its effect
+checkpoint, and state batches receive only an opaque validated candidate to
+commit. Listener-table adoption, DataContext rehoming, hydration, and source
+synchronization remain baseline implementation details rather than a sequence
+coordinated by `nuxie-product`.
 ProjectDO's value model, program compiler, evaluator, and adapter live in
 `nuxie-project-data`; the baseline owns only the product-neutral runtime-value,
 program, state, resolver, and registry interfaces used by the bind graph.

@@ -265,11 +265,39 @@ impl ScriptExecutionCapability {
     }
 }
 
-/// Opaque checkpoint for rolling back script host effects when a higher-level
-/// operation fails atomically.
-#[cfg(feature = "scripting")]
+/// One atomic baseline operation over an owned artboard.
+///
+/// The transaction owns the script-effect checkpoint. Dropping it before
+/// [`Self::commit_host_effects`] rolls every still-pending effect back to the
+/// operation boundary; callers never receive or coordinate checkpoint tokens.
 #[doc(hidden)]
-pub struct ScriptHostCycleCheckpoint(Box<dyn Any>);
+pub struct ArtboardTransaction {
+    #[cfg(feature = "scripting")]
+    scripts: Rc<RefCell<FileScriptRuntime>>,
+    #[cfg(feature = "scripting")]
+    checkpoint: Option<ArtboardTransactionCheckpoint>,
+}
+
+#[cfg(feature = "scripting")]
+enum ArtboardTransactionCheckpoint {
+    Cycle(Box<dyn Any>),
+    ContinuedCycle(Box<dyn Any>),
+}
+
+/// Validated state-machine candidate whose runtime-owned listener and
+/// DataContext state is ready to replace one live instance atomically.
+#[doc(hidden)]
+pub struct ArtboardStateCandidate {
+    machine: StateMachineInstance,
+}
+
+impl ArtboardStateCandidate {
+    /// Adopt this validated candidate as the live state-machine instance.
+    #[doc(hidden)]
+    pub fn commit(self, live: &mut StateMachineInstance) {
+        *live = self.machine;
+    }
+}
 
 #[cfg(feature = "scripting")]
 type FileScriptPolicy = Option<ScriptExecutionLimits>;
@@ -679,9 +707,23 @@ impl FileScriptRuntime {
         })
     }
 
+    fn continue_cycle(&self) -> Option<Box<dyn Any>> {
+        self.ready.as_ref().map(|ready| {
+            ready.vm.continue_script_cycle();
+            ready.host.checkpoint_effects()
+        })
+    }
+
     fn rollback_cycle(&self, checkpoint: Box<dyn Any>) {
         if let Some(ready) = self.ready.as_ref() {
             let _ = ready.host.rollback_cycle(checkpoint);
+            ready.vm.end_script_cycle();
+        }
+    }
+
+    fn rollback_continued_cycle(&self, checkpoint: Box<dyn Any>) {
+        if let Some(ready) = self.ready.as_ref() {
+            let _ = ready.host.rollback_effects(checkpoint);
             ready.vm.end_script_cycle();
         }
     }
@@ -5602,6 +5644,174 @@ pub struct OwnedArtboardInstance {
     artboard_index: usize,
 }
 
+impl ArtboardTransaction {
+    fn take_host_effects<T: 'static>(&self) -> Option<T> {
+        #[cfg(feature = "scripting")]
+        {
+            return self
+                .scripts
+                .borrow()
+                .drain_host_effects()?
+                .downcast::<T>()
+                .ok()
+                .map(|effects| *effects);
+        }
+        #[cfg(not(feature = "scripting"))]
+        None
+    }
+
+    /// Commit this operation and return its final ordered host effects.
+    #[doc(hidden)]
+    #[allow(unused_mut)]
+    pub fn commit_host_effects<T: 'static>(mut self) -> Option<T> {
+        let effects = self.take_host_effects();
+        #[cfg(feature = "scripting")]
+        {
+            self.checkpoint = None;
+        }
+        effects
+    }
+
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn bootstrap_player(
+        artboard: &mut OwnedArtboardInstance,
+        mut machine: Option<&mut StateMachineInstance>,
+        factory: &mut dyn Factory,
+        root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        let changed = artboard.prepare_transaction_scripts(factory)?;
+        if let Some(machine) = machine.as_deref_mut() {
+            artboard.prepare_transaction_listener_actions(machine, factory, root_view_model)?;
+        }
+        Ok(changed)
+    }
+
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn prepare_player_for_input(
+        artboard: &mut OwnedArtboardInstance,
+        mut machine: Option<&mut StateMachineInstance>,
+        mut factory: Option<&mut dyn Factory>,
+        root_view_model: Option<&ViewModelInstance>,
+        synchronize_sources: bool,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        let fixed_listener_initialization_was_pending = machine.as_deref().is_some_and(|machine| {
+            machine.has_fixed_scripted_data_context_owner()
+                && !machine.scripted_object_initialization_complete()
+        });
+        let mut changed = false;
+        if let Some(factory) = factory.as_deref_mut() {
+            changed |= artboard.prepare_transaction_scripts(factory)?;
+            if let Some(machine) = machine.as_deref_mut() {
+                artboard.prepare_transaction_listener_actions(machine, factory, root_view_model)?;
+            }
+        } else if let Some(machine) = machine.as_deref_mut() {
+            artboard
+                .prepare_transaction_listener_actions_without_factory(machine, root_view_model)?;
+        }
+        let fixed_listener_initialized_now = fixed_listener_initialization_was_pending
+            && machine
+                .as_deref()
+                .is_some_and(StateMachineInstance::scripted_object_initialization_complete);
+        if (synchronize_sources || fixed_listener_initialized_now)
+            && let Some(machine) = machine.as_deref_mut()
+        {
+            artboard.apply_transaction_listener_action_source_updates(machine)?;
+        }
+        Ok(changed)
+    }
+
+    /// Validate and prepare one detached state-machine candidate. Listener
+    /// table identity, DataContext rehoming, hydration, and source binding are
+    /// owned here; the caller can only commit the returned opaque candidate.
+    #[doc(hidden)]
+    pub fn prepare_state_candidate<'a>(
+        artboard: &mut OwnedArtboardInstance,
+        live: &mut StateMachineInstance,
+        mut candidate: StateMachineInstance,
+        context_roots: impl IntoIterator<Item = (&'a ViewModelInstance, &'a ViewModelInstance)>,
+        candidate_root: Option<&ViewModelInstance>,
+        previous_root_view_model: Option<&ViewModelInstance>,
+        factory: &mut Option<&mut dyn Factory>,
+    ) -> std::result::Result<(ArtboardStateCandidate, bool), nuxie_runtime::ScriptError> {
+        #[cfg(feature = "scripting")]
+        artboard.apply_transaction_listener_action_source_updates(live)?;
+
+        candidate.adopt_scripted_listener_action_state_from(live)?;
+        let context_root_rehomes = context_roots
+            .into_iter()
+            .map(|(source, candidate)| (source.handle().clone(), candidate.handle().clone()))
+            .collect::<Vec<_>>();
+        candidate.rehome_owned_data_context_for_transaction(&context_root_rehomes);
+
+        #[cfg(feature = "scripting")]
+        let mut scripts_changed = false;
+        #[cfg(not(feature = "scripting"))]
+        let scripts_changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            if candidate.scripted_object_initialization_complete() {
+                let staged_context_bind = match candidate_root {
+                    Some(candidate_root) => {
+                        candidate.begin_scripted_object_data_context_bind(candidate_root.handle())
+                    }
+                    None => candidate.begin_retained_scripted_object_data_context_rebind(),
+                };
+                if staged_context_bind {
+                    artboard.rehydrate_transaction_listener_actions(
+                        &mut candidate,
+                        candidate_root,
+                        previous_root_view_model,
+                        factory,
+                    )?;
+                }
+            } else if let Some(active_factory) = factory.as_deref_mut() {
+                scripts_changed |= artboard.prepare_transaction_scripts(active_factory)?;
+                artboard.prepare_transaction_listener_actions(
+                    &mut candidate,
+                    active_factory,
+                    candidate_root,
+                )?;
+            } else {
+                artboard.prepare_transaction_listener_actions_without_factory(
+                    &mut candidate,
+                    candidate_root,
+                )?;
+            }
+            artboard.apply_transaction_listener_action_source_updates(&mut candidate)?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            if let Some(candidate_root) = candidate_root {
+                let _ = candidate.bind_owned_view_model_handle(candidate_root.handle());
+            }
+            let _ = (artboard, previous_root_view_model, factory);
+        }
+
+        Ok((
+            ArtboardStateCandidate { machine: candidate },
+            scripts_changed,
+        ))
+    }
+}
+
+impl Drop for ArtboardTransaction {
+    fn drop(&mut self) {
+        #[cfg(feature = "scripting")]
+        if let Some(checkpoint) = self.checkpoint.take() {
+            match checkpoint {
+                ArtboardTransactionCheckpoint::Cycle(checkpoint) => {
+                    self.scripts.borrow().rollback_cycle(checkpoint);
+                }
+                ArtboardTransactionCheckpoint::ContinuedCycle(checkpoint) => {
+                    self.scripts.borrow().rollback_continued_cycle(checkpoint);
+                }
+            }
+        }
+    }
+}
+
 impl OwnedArtboardInstance {
     /// Instantiate `artboard_index` of `file` as an owning instance.
     pub fn instantiate(file: Arc<File>, artboard_index: usize) -> Result<Self> {
@@ -5803,9 +6013,42 @@ impl OwnedArtboardInstance {
         }
     }
 
-    #[cfg(feature = "scripting")]
+    /// Begin one atomic runtime operation. The returned transaction owns the
+    /// script-effect checkpoint and rolls it back unless effects are committed.
     #[doc(hidden)]
-    pub fn prepare_host_scripts(
+    pub fn begin_transaction(&self) -> ArtboardTransaction {
+        ArtboardTransaction {
+            #[cfg(feature = "scripting")]
+            scripts: Rc::clone(&self.file.scripts),
+            #[cfg(feature = "scripting")]
+            checkpoint: self
+                .file
+                .scripts
+                .borrow()
+                .begin_cycle()
+                .map(ArtboardTransactionCheckpoint::Cycle),
+        }
+    }
+
+    /// Continue one atomic runtime operation in the current resource cycle.
+    /// This checkpoints pending effects without resetting aggregate quotas.
+    #[doc(hidden)]
+    pub fn continue_transaction(&self) -> ArtboardTransaction {
+        ArtboardTransaction {
+            #[cfg(feature = "scripting")]
+            scripts: Rc::clone(&self.file.scripts),
+            #[cfg(feature = "scripting")]
+            checkpoint: self
+                .file
+                .scripts
+                .borrow()
+                .continue_cycle()
+                .map(ArtboardTransactionCheckpoint::ContinuedCycle),
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    fn prepare_transaction_scripts(
         &mut self,
         factory: &mut dyn Factory,
     ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
@@ -5823,8 +6066,7 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    #[doc(hidden)]
-    pub fn prepare_host_listener_actions(
+    fn prepare_transaction_listener_actions(
         &self,
         machine: &mut StateMachineInstance,
         factory: &mut dyn Factory,
@@ -5840,8 +6082,7 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    #[doc(hidden)]
-    pub fn prepare_host_listener_actions_without_factory(
+    fn prepare_transaction_listener_actions_without_factory(
         &self,
         machine: &mut StateMachineInstance,
         root_view_model: Option<&ViewModelInstance>,
@@ -5855,8 +6096,7 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    #[doc(hidden)]
-    pub fn rehydrate_host_listener_actions(
+    fn rehydrate_transaction_listener_actions(
         &self,
         machine: &mut StateMachineInstance,
         root_view_model: Option<&ViewModelInstance>,
@@ -5874,8 +6114,7 @@ impl OwnedArtboardInstance {
     }
 
     #[cfg(feature = "scripting")]
-    #[doc(hidden)]
-    pub fn apply_host_listener_action_source_updates(
+    fn apply_transaction_listener_action_source_updates(
         &self,
         machine: &mut StateMachineInstance,
     ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
@@ -5887,25 +6126,65 @@ impl OwnedArtboardInstance {
         Ok(())
     }
 
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     #[doc(hidden)]
-    pub fn begin_host_effect_cycle(&self) -> Option<ScriptHostCycleCheckpoint> {
-        self.file
-            .scripts
-            .borrow()
-            .begin_cycle()
-            .map(ScriptHostCycleCheckpoint)
+    pub fn test_prepare_scripts(
+        &mut self,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        self.prepare_transaction_scripts(factory)
     }
 
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     #[doc(hidden)]
-    pub fn rollback_host_effect_cycle(&self, checkpoint: ScriptHostCycleCheckpoint) {
-        self.file.scripts.borrow().rollback_cycle(checkpoint.0);
+    pub fn test_prepare_listener_actions(
+        &self,
+        machine: &mut StateMachineInstance,
+        factory: &mut dyn Factory,
+        root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        self.prepare_transaction_listener_actions(machine, factory, root_view_model)
     }
 
-    #[cfg(feature = "scripting")]
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
     #[doc(hidden)]
-    pub fn drain_script_host_effects<T: 'static>(&self) -> Option<T> {
+    pub fn test_prepare_listener_actions_without_factory(
+        &self,
+        machine: &mut StateMachineInstance,
+        root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        self.prepare_transaction_listener_actions_without_factory(machine, root_view_model)
+    }
+
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+    #[doc(hidden)]
+    pub fn test_rehydrate_listener_actions(
+        &self,
+        machine: &mut StateMachineInstance,
+        root_view_model: Option<&ViewModelInstance>,
+        previous_root_view_model: Option<&ViewModelInstance>,
+        factory: &mut Option<&mut dyn Factory>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        self.rehydrate_transaction_listener_actions(
+            machine,
+            root_view_model,
+            previous_root_view_model,
+            factory,
+        )
+    }
+
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+    #[doc(hidden)]
+    pub fn test_synchronize_listener_sources(
+        &self,
+        machine: &mut StateMachineInstance,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        self.apply_transaction_listener_action_source_updates(machine)
+    }
+
+    #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+    #[doc(hidden)]
+    pub fn test_drain_host_effects<T: 'static>(&self) -> Option<T> {
         self.file
             .scripts
             .borrow()

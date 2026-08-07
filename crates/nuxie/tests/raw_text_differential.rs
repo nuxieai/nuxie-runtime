@@ -510,10 +510,7 @@ fn d_rt_engine_live_cpp_classification_and_layer_metadata() {
             "colr",
             std::fs::read(root.join("tests/unit_tests/assets/TwemojiMozilla.subset.ttf")).unwrap(),
         ),
-        (
-            "raster",
-            std::fs::read(raster_font_asset()).unwrap(),
-        ),
+        ("raster", std::fs::read(raster_font_asset()).unwrap()),
     ];
     for (name, bytes) in fonts {
         let expected = &cpp["engine"][name];

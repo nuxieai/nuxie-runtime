@@ -35,8 +35,8 @@
 
 #include "nux_capi.generated.h"
 
-/* Stable encodings used by the generic callback-renderer test surface. The
- * Apple product renderer does not expose per-primitive callbacks. */
+/* Stable encodings used by the portable callback-renderer surface. Embedders
+ * supply these per-primitive callbacks when they choose that rendering path. */
 typedef enum NuxFillRule
 {
     NUX_FILL_RULE_NON_ZERO = 0,

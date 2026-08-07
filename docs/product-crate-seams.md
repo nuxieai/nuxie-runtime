@@ -1,6 +1,7 @@
 # Product crate seams
 
-Status: physical package contract. Scene authoring now lives in nuxie-dev.
+Status: physical package contract and repository-extraction direction. Scene
+authoring now lives in nuxie-dev.
 
 UNIV-1623 gives each upper layer an explicit Cargo package before code moves
 across packages or repositories. The packages expose the current types without
@@ -9,7 +10,7 @@ errors, and behavior.
 
 ```text
 nuxie-dev authoring ----+----> nuxie baseline facade ----> baseline crates
-nuxie-product ----------+
+nuxieai/nuxie-product --+
 nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
 nuxie-product-scripting-+
                         |
@@ -30,6 +31,36 @@ lowering, transactions, export, remounting, stable identity, and authored
 observations are owned by nuxie-dev's `nuxie-authoring` crate. Protected
 baseline, portable-ABI, replay, oracle, fuzz, golden, and performance packages
 may not add an upward dependency on an authoring or product package.
+
+The current in-workspace product crates are migration staging, not final
+repository ownership. Their final owner is the dedicated
+[`nuxieai/nuxie-product`](https://github.com/nuxieai/nuxie-product) repository,
+which moves `nux-container`, `nuxie-product-scripting`, `nuxie-project-data`,
+and `nuxie-product` as one dependency-ordered cluster. The repository exposes a
+separately named product ABI for experience/session/product operations. It does
+not extend or wrap `nux-capi` with product vocabulary.
+
+## Cross-repository provider and release contract
+
+The product repository is the only shared product provider. Its release
+contract is:
+
+- pin `nuxie-runtime` with a full exact Git `rev`, never a branch, tag, version
+  range, or implicit local path;
+- commit `Cargo.lock` and qualify the locked graph;
+- declare reviewed provider and `[patch]` configuration in the repository root
+  manifest, with no committed `.cargo/config` `paths`, `[source]`, or `[patch]`
+  substitution;
+- publish or otherwise qualify one immutable product Git revision only after
+  its runtime pin and lockfile pass product fixtures; and
+- make `nuxie-dev` and `nuxie-ios` pin that same exact product Git revision.
+
+Consumers may use an explicit local development checkout, but that override is
+uncommitted and cannot determine a qualified build. A consumer that also needs
+a direct engine/renderer edge must derive it from the product release's exact
+runtime revision; two independently selected runtime providers are invalid.
+Apple surfaces, the Apple C ABI, XCFramework assembly, and Swift module
+packaging remain `nuxie-ios` responsibilities.
 
 ## Package ownership and interface
 

@@ -108,6 +108,28 @@ PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"FlowSession[A-Za-z0-9_]*|"
     r"Scene(?:Tx)?[A-Za-z0-9_]*|ProjectData[A-Za-z0-9_]*)\b"
 )
+PORTABLE_ABI_FORBIDDEN_VOCABULARY = re.compile(
+    r"\b(?:Nux)?(?:Apple[A-Za-z0-9_]*|CAMetal(?:Layer|Drawable)?|"
+    r"FlowSession[A-Za-z0-9_]*|"
+    r"Experience(?:Context|Package|Session)[A-Za-z0-9_]*|"
+    r"Project(?:DO|Data)[A-Za-z0-9_]*|PackageSession[A-Za-z0-9_]*)\b|"
+    r"\bNuxPackage[A-Za-z0-9_]*\b|"
+    r"\bnuxie[-_]product(?:[-_][A-Za-z0-9_-]+)?\b|"
+    r"\bnux[-_]container\b",
+    re.IGNORECASE,
+)
+PORTABLE_ABI_CONTRACT_SUFFIXES = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+    ".m",
+    ".md",
+    ".mm",
+    ".modulemap",
+    ".rs",
+    ".toml",
+}
 DIRECT_NUXIE_PATH = re.compile(r"\bnuxie\s*::\s*(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)")
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
@@ -904,6 +926,38 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     return errors
 
 
+def portable_abi_vocabulary_errors(
+    repo_root: pathlib.Path, package_root: pathlib.Path
+) -> list[str]:
+    """Reject product/platform terms anywhere in the portable ABI contract.
+
+    Unlike the general Rust source scan, this intentionally includes comments,
+    headers, smoke sources, module maps, and manifests. Naming the portable ABI
+    as an Apple or product surface is itself an ownership regression even when
+    the token does not compile into a dependency edge.
+    """
+
+    errors = []
+    for path in sorted(package_root.rglob("*")):
+        if not path.is_file() or path.suffix not in PORTABLE_ABI_CONTRACT_SUFFIXES:
+            continue
+        if "target" in path.relative_to(package_root).parts:
+            continue
+        relative = path.relative_to(repo_root).as_posix()
+        try:
+            source = path.read_text()
+        except OSError as error:
+            errors.append(f"{relative}: cannot read portable ABI contract: {error}")
+            continue
+        for match in PORTABLE_ABI_FORBIDDEN_VOCABULARY.finditer(source):
+            line = source.count("\n", 0, match.start()) + 1
+            errors.append(
+                f"{relative}:{line}: portable ABI contains product/Apple vocabulary "
+                f"{match.group(0)!r}"
+            )
+    return errors
+
+
 def missing_debt_exception_errors(
     repo_root: pathlib.Path,
     observed_debt: dict[str, set[str]],
@@ -1240,6 +1294,8 @@ def check_repository(
         errors.extend(
             portable_abi_facade_feature_errors(package, package_name, manifest)
         )
+        if package_name == PORTABLE_ABI_FACADE_EDGE[0]:
+            errors.extend(portable_abi_vocabulary_errors(repo_root, package_root))
 
         for table_path, dependencies in dependency_tables(manifest):
             dependency_table_count += 1

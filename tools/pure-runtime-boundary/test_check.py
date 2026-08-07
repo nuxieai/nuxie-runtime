@@ -904,6 +904,48 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("crates/nux-capi/Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
 
+    def test_rejects_apple_dependency_from_portable_abi(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            platform = { package = "nuxie-apple-adapter", path = "../apple" }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nux-capi/Cargo.toml", result.stderr)
+        self.assertIn("nuxie-apple-adapter", result.stderr)
+
+    def test_rejects_product_vocabulary_in_portable_abi_header(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "nux_capi.h").write_text(
+            "typedef struct NuxExperienceSession NuxExperienceSession;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI contains product/Apple vocabulary", result.stderr)
+        self.assertIn("NuxExperienceSession", result.stderr)
+
+    def test_rejects_apple_vocabulary_in_portable_abi_comment(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "// The Apple renderer consumes this callback.\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI contains product/Apple vocabulary", result.stderr)
+        self.assertIn("'Apple'", result.stderr)
+
     def test_allows_exact_portable_abi_facade_edge_without_debt_report(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(
@@ -1422,14 +1464,14 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("feature 'helper' forwards forbidden", result.stderr)
 
-    def test_allows_current_renderer_feature_forwarding(self) -> None:
+    def test_allows_renderer_feature_forwarding(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            apple-renderer = ["nuxie/renderer"]
+            renderer = ["nuxie/renderer"]
 
             [dependencies]
             nuxie = { path = "../nuxie", default-features = false }

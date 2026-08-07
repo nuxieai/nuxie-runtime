@@ -1091,7 +1091,7 @@ fn public_machine_construction_synchronously_prepares_scripted_data_without_bloc
         .expect("instantiate public construction artboard");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
     let mut machine = instance
         .default_state_machine_instance()
@@ -1175,7 +1175,7 @@ fn public_machine_construction_retains_preparation_failure_without_dropping_the_
         .expect("instantiate failed public construction artboard");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
 
     let machine = instance
@@ -1403,11 +1403,11 @@ fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
         .scripted_object_global_id();
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap unbound scripted-listener file VM");
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("run unbound scripted-listener constructor");
     assert!(
         !machine.has_scripted_object_instance(definition),
@@ -1419,7 +1419,7 @@ fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
     );
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut factory_option)
         .expect("run the first genuine DataContext retry");
     assert!(
         machine.has_scripted_object_instance(definition),
@@ -1603,7 +1603,7 @@ fn first_no_factory_listener_preparation_does_not_make_an_idle_nonzero_frame_cha
     while instance.raw_mut().update_pass() {}
     assert!(
         !instance
-            .prepare_host_scripts(&mut factory)
+            .test_prepare_scripts(&mut factory)
             .expect("prepare the File VM without initializing the listener"),
         "the listener-only fixture has no scripted artboard draw work"
     );
@@ -2476,7 +2476,7 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         )
         .expect("public factory advance");
     let first = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -2506,7 +2506,7 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
         .expect("steady public factory advance");
     assert!(
         instance
-            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .test_drain_host_effects::<Vec<ScriptHostCommand>>()
             .unwrap_or_default()
             .into_iter()
             .all(|command| !matches!(
@@ -2675,7 +2675,7 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         "each concrete ordinary DataBind occurrence owns a live table"
     );
     let first = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -2715,7 +2715,7 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
         .expect("steady ordinary-converter advance");
     assert!(
         instance
-            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .test_drain_host_effects::<Vec<ScriptHostCommand>>()
             .unwrap_or_default()
             .into_iter()
             .all(|command| !matches!(
@@ -2804,7 +2804,7 @@ fn ordinary_converter_replacement_is_visible_to_the_next_authored_bind_same_fram
     );
     assert_eq!(
         instance
-            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .test_drain_host_effects::<Vec<ScriptHostCommand>>()
             .unwrap_or_default()
             .into_iter()
             .filter_map(|command| match command {
@@ -2901,7 +2901,7 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("mount the first-root occurrence");
     let first = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -2933,7 +2933,7 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         )
         .expect("rebind the retained occurrences to the second root");
     let rebound = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -3095,10 +3095,10 @@ fn direct_runtime_callbacks_wait_for_same_root_structural_rebind() {
     );
 
     instance
-        .prepare_host_listener_actions_without_factory(&mut machine, Some(&root))
+        .test_prepare_listener_actions_without_factory(&mut machine, Some(&root))
         .expect("complete the source-corresponding retained rebind");
     instance
-        .apply_host_listener_action_source_updates(&mut machine)
+        .test_synchronize_listener_sources(&mut machine)
         .expect("apply the rebound fixed sources");
     assert!(machine.pointer_down(instance.raw_mut(), 0.0, 0.0, 2));
     assert_eq!(
@@ -3356,7 +3356,7 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
         .expect("instantiate atomic-hydration machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap atomic-hydration scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -3373,11 +3373,11 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
     );
     machine.bind_owned_view_model_context_handle(&root_context);
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("retain converter table through the machine-owned scoped context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let creation_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -3408,11 +3408,11 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
     );
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
         .expect("rehydrate the retained converter table without a facade root fallback");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let rebind_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -3476,7 +3476,7 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
         .expect("instantiate retry-preflight machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap retry-preflight scripts");
 
     let valid_root = instance
@@ -3497,10 +3497,10 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     );
     machine.bind_owned_view_model_context_handle(&valid_context);
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("first converter lifetime reaches its rejecting init");
     let first_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -3535,10 +3535,10 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     machine.bind_owned_view_model_context_handle(&unresolved_context);
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut factory_option)
         .expect("ordinary missing-input preflight remains inert");
     let unresolved_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -3569,11 +3569,11 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     );
     machine.bind_owned_view_model_context_handle(&unresolved_context);
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut factory_option)
         .expect("the regenerated table completes hydration and init");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let recovered_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4016,7 +4016,7 @@ fn listener_init_failure_retries_during_constructor_initialization() {
         2,
     );
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap the file VM");
     let action_ids = machine
         .scripted_listener_actions()
@@ -4025,7 +4025,7 @@ fn listener_init_failure_retries_during_constructor_initialization() {
         .collect::<Vec<_>>();
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("ordinary init rejection is retained for a later retry");
     assert_eq!(action_ids.len(), 2);
     assert!(
@@ -4090,14 +4090,14 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
         .expect("instantiate cold-generator machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap cold-generator scripts");
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("run cold then live listener initialization");
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4155,14 +4155,14 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
         .expect("instantiate cold-table machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap cold-table scripts");
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("retain cold table through live ViewModel hydration");
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4226,14 +4226,14 @@ fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
         .expect("instantiate constructor-order machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap constructor-order scripts");
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("run the complete constructor lifecycle");
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4297,7 +4297,7 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
         .expect("construct machine without a DataContext");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap post-bind scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4309,10 +4309,10 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
     machine.bind_owned_view_model_context_handle(&root_context);
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("run explicit-bind lifecycle");
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4369,7 +4369,7 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("instantiate empty-listener machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap empty-listener scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4380,14 +4380,14 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     );
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("mount the unresolved listener occurrence");
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
         .expect("empty owned context keeps the listener unresolved");
     let cold_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4409,10 +4409,10 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     );
     machine.bind_owned_view_model_context_handle(&root_context);
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut factory_option)
         .expect("the same table hydrates after its owned context becomes live");
     let live_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4475,7 +4475,7 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
         .expect("instantiate empty-converter machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap empty-converter scripts");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4495,14 +4495,14 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
     );
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("mount the unresolved converter occurrence");
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
         .expect("empty owned context keeps the converter unresolved");
     let cold_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4524,11 +4524,11 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
     );
     machine.bind_owned_view_model_context_handle(&root_context);
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut factory_option)
         .expect("the same converter table hydrates from its owned context");
     instance.advance_with_state_machine(&mut machine, 0.0);
     let live_commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4581,7 +4581,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         .expect("instantiate failed-hydration machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap failed-hydration VM");
     let action_id = machine
         .scripted_listener_actions()
@@ -4590,7 +4590,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         .action_global_id();
 
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, None)
+        .test_prepare_listener_actions(&mut machine, &mut factory, None)
         .expect("a missing context defers hydration without failing the owner");
     assert!(
         machine.has_scripted_listener_action_instance(action_id),
@@ -4607,7 +4607,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
     );
     assert!(
         instance
-            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .test_drain_host_effects::<Vec<ScriptHostCommand>>()
             .unwrap_or_default()
             .iter()
             .any(|command| {
@@ -4624,7 +4624,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
         .expect("instantiate the authored root context");
     let mut factory_option = Some(&mut factory as &mut dyn Factory);
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), None, &mut factory_option)
         .expect("the live context completes deferred hydration and init");
     assert!(
         !machine
@@ -4633,7 +4633,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
     );
     assert!(
         instance
-            .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+            .test_drain_host_effects::<Vec<ScriptHostCommand>>()
             .unwrap_or_default()
             .iter()
             .any(|command| {
@@ -4675,16 +4675,16 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
         .expect("instantiate factoryless listener machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("register the protocol while the renderer factory is available");
 
     let mut no_factory = None;
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut no_factory)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut no_factory)
         .expect("generator/init are scripting-VM operations");
 
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4737,19 +4737,19 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
         .expect("instantiate factoryless retry machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("register retry protocol");
 
     let mut no_factory = None;
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut no_factory)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut no_factory)
         .expect("first factoryless init rejection is retained");
     instance
-        .rehydrate_host_listener_actions(&mut machine, None, None, &mut no_factory)
+        .test_rehydrate_listener_actions(&mut machine, None, None, &mut no_factory)
         .expect("factoryless retry recreates and initializes");
 
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4813,7 +4813,7 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
         .expect("instantiate factoryless converter machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("register converter protocol while the renderer factory is available");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4826,14 +4826,14 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
 
     let mut no_factory = None;
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), None, &mut no_factory)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), None, &mut no_factory)
         .expect("first factoryless converter init rejection is retained");
     instance
-        .rehydrate_host_listener_actions(&mut machine, Some(&root), Some(&root), &mut no_factory)
+        .test_rehydrate_listener_actions(&mut machine, Some(&root), Some(&root), &mut no_factory)
         .expect("factoryless converter retry recreates and initializes");
 
     let commands = instance
-        .drain_script_host_effects::<Vec<ScriptHostCommand>>()
+        .test_drain_host_effects::<Vec<ScriptHostCommand>>()
         .unwrap_or_default()
         .into_iter()
         .filter_map(|command| match command {
@@ -4880,7 +4880,7 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
         .expect("instantiate public-update machine");
     let mut factory = script_factory();
     instance
-        .prepare_host_scripts(&mut factory)
+        .test_prepare_scripts(&mut factory)
         .expect("bootstrap public-update VM");
     let root = instance
         .instantiate_view_model_instance(0)
@@ -4894,7 +4894,7 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
         "stage the public root as an actual DataContext before constructor completion"
     );
     instance
-        .prepare_host_listener_actions(&mut machine, &mut factory, Some(&root))
+        .test_prepare_listener_actions(&mut machine, &mut factory, Some(&root))
         .expect("mount cloned ScriptInput binding");
     assert_eq!(
         root.raw().number_value_by_property_name("amount"),

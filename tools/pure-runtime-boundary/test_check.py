@@ -875,18 +875,28 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("crates/included/Cargo.toml", result.stderr)
 
-    def test_rejects_dependency_on_unprotected_browser_consumer(self) -> None:
+    def test_rejects_dependency_on_browser_adapter(self) -> None:
         self.write_manifest(
             """
             [dependencies]
-            browser-renderer-smoke = { path = "../browser-renderer-smoke" }
+            nuxie-browser-adapter = { path = "../browser-adapter" }
             """
         )
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("browser-renderer-smoke", result.stderr)
+        self.assertIn("nuxie-browser-adapter", result.stderr)
+
+    def test_rejects_browser_adapter_workspace_ownership(self) -> None:
+        self.create_package(
+            "crates/nuxie-browser-adapter", "nuxie-browser-adapter", ""
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("belongs to its external product/platform owner", result.stderr)
 
     def test_rejects_product_dependency_from_portable_abi(self) -> None:
         self.create_package(

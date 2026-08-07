@@ -41,20 +41,22 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
 PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 
 # All workspace packages are protected by default. These named packages are
-# current/future owners above the baseline, plus the one browser consumer that
-# is allowed to depend on the browser adapter. Adding another exemption is an
-# architecture-policy change reviewed in the same diff as the new package.
+# current/future owners above the baseline, plus the browser parity executable
+# that deliberately drives the protected facade and generated oracle fixture.
+# The separate browser-WebGPU guard prevents that tool from owning product
+# lifecycle policy. Adding another exemption is an architecture-policy change
+# reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
     "nux-container",
     "nuxie-apple-adapter",
     "nuxie-authoring",
-    "nuxie-browser-adapter",
     "nuxie-flow",
     "nuxie-product",
     "nuxie-product-scripting",
     "nuxie-project-data",
 }
+EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}
 # Exemption means a package is an upward-facing owner or consumer. Protected
 # packages must therefore never depend on any exempt package, even when its
 # name does not follow one of the reserved product prefixes.
@@ -1284,6 +1286,13 @@ def check_repository(
     dependency_table_count = 0
     protected_count = 0
     package_paths = {package for package, _, _ in packages}
+
+    for package, package_name, _ in packages:
+        if package_name in EXTERNAL_OWNER_PACKAGES:
+            errors.append(
+                f"{package}/Cargo.toml: package {package_name!r} belongs to its "
+                "external product/platform owner, not nuxie-runtime"
+            )
 
     for package, package_name, manifest in packages:
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:

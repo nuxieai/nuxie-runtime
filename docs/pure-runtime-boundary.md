@@ -70,8 +70,10 @@ semantics remain baseline-owned.
 ### Browser adapter
 
 The browser adapter owns canvas attachment, browser resize/recovery policy,
-and direct WebGPU presentation. Backend-neutral renderer factory, frame, and
-render-target mechanics remain in the baseline.
+and direct WebGPU presentation. It is physically owned by nuxie-dev and targets
+the exact nuxie-runtime gitlink pinned by that repository. Backend-neutral
+renderer factory, frame, presentation-target mechanics, and parity/oracle
+tooling remain in the baseline.
 
 ### Apple adapter
 

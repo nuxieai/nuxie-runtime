@@ -17,7 +17,6 @@ CRATE_ROOTS = (
     "crates/nuxie-project-data/src",
     "crates/nuxie-product-scripting/src",
     "crates/nuxie-authoring/src",
-    "crates/nuxie-browser-adapter/src",
     "crates/nuxie-apple-adapter/src",
     "crates/nuxie-scripting/src",
     "crates/nuxie-binary/src",

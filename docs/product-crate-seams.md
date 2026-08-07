@@ -14,7 +14,7 @@ nuxieai/nuxie-product --+
 nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
 nuxie-product-scripting-+
                         |
-nuxie-browser-adapter --+----> nuxie-renderer
+nuxie-dev browser adapter +----> nuxie-renderer
 nuxie-apple-adapter ----+----> nuxie-renderer
 ```
 
@@ -76,7 +76,7 @@ packaging remain `nuxie-ios` responsibilities.
 | `nuxie-project-data` | ProjectDO value model, program compiler/evaluator, encoded artifact envelope, and adapter registration | `nuxie-runtime` with defaults disabled | Baseline bind-graph internals, editor authoring, Flow, or platform ABI policy |
 | `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
-| `nuxie-browser-adapter` | Browser canvas presentation | `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
+| nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
 
 The browser and Apple interfaces re-export only the existing high-level
@@ -128,10 +128,12 @@ default shipping interface remains byte-import only. Hidden aliases retain
 source compatibility for editor revisions pinned before UNIV-1788 without
 allowing authoring vocabulary back into protected runtime consumers.
 
-UNIV-1625 completed the browser cut: `BrowserFactory`, `BrowserFrame`, and
-`BrowserResizeError` are owned only by `nuxie-browser-adapter`. The renderer
-retains opaque presentation surface/frame primitives and exposes no raw wgpu
-device, queue, surface, or texture state.
+UNIV-1795 completed the physical browser cut: `BrowserFactory`, `BrowserFrame`,
+`BrowserResizeError`, canvas attachment, and bounded recovery are owned only by
+nuxie-dev's `nuxie-browser-adapter`, against the exact runtime gitlink pinned by
+that repository. Nuxie-runtime retains its WebGPU renderer, opaque presentation
+surface/frame primitives, and backend/parity smoke; it exposes no raw wgpu
+device, queue, surface, or texture state to the browser owner.
 
 UNIV-1626 completed the Apple cut: surface lifecycle, CAMetalDrawable
 validation, presentation scheduling/completion, failure disposition, and

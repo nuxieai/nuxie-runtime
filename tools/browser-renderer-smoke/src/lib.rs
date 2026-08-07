@@ -50,11 +50,15 @@ mod wasm {
         GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
         OwnedArtboardInstance, RecordingFactory, Renderer, StateMachineInstance,
     };
-    use nuxie_browser_adapter::{BrowserFactory, BrowserResizeError};
     use nuxie_render_api::{NullFactory, NullRenderer};
     use nuxie_render_stream::RenderStream;
+    use nuxie_renderer::{WgpuFactory, WgpuPresentationAcquireError, WgpuPresentationAlpha};
     use nuxie_runtime::set_runtime_deterministic_mode;
     use pixel_compare::{RgbaImage, Tolerance, compare};
+    use raw_window_handle::{
+        DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WebCanvasWindowHandle,
+        WindowHandle,
+    };
     use std::sync::Arc;
     use wasm_bindgen::prelude::*;
     use web_sys::HtmlCanvasElement;
@@ -237,10 +241,8 @@ fn fs_main() -> @location(0) vec4<f32> {
     }
 
     #[wasm_bindgen]
-    pub async fn run_backend(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let mut factory = BrowserFactory::new(canvas, 64, 64)
-            .await
-            .map_err(js_error)?;
+    pub async fn run_backend(_canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        let mut factory = WgpuFactory::new_async(64, 64).await.map_err(js_error)?;
 
         let mut clip = factory.make_empty_render_path();
         clip.move_to(16.0, 8.0);
@@ -276,7 +278,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         let mut transform_paint = factory.make_render_paint();
         transform_paint.color(0xff33_66cc);
 
-        let mut frame = factory.begin_frame(0xff10_2030).map_err(js_error)?;
+        let mut frame = factory.begin_frame(0xff10_2030);
         frame.save();
         frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 2.0]));
         frame.transform(Mat2D([2.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
@@ -284,30 +286,39 @@ fn fs_main() -> @location(0) vec4<f32> {
         frame.restore();
         frame.clip_path(clip.as_ref());
         frame.draw_path(path.as_ref(), paint.as_ref());
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish_async().await.map_err(js_error)?;
         assert_pixels(&pixels)?;
         Ok(format!("backend=webgpu checksum={:016x}", fnv1a64(&pixels)))
     }
 
     #[wasm_bindgen]
     pub async fn assert_direct_presentation(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        factory
-            .begin_frame(0x80ff_0000)
-            .map_err(js_error)?
-            .present()
+        canvas.set_width(4);
+        canvas.set_height(3);
+        let factory = WgpuFactory::new_async(4, 3).await.map_err(js_error)?;
+        let surface = factory
+            .create_presentation_surface(
+                CanvasSurfaceTarget(canvas),
+                4,
+                3,
+                WgpuPresentationAlpha::Premultiplied,
+            )
+            .map_err(js_error)?;
+        surface
+            .acquire()
+            .map_err(surface_acquisition_error)?
+            .present(factory.begin_frame(0x80ff_0000))
             .await
             .map_err(js_error)?;
         Ok("browser-presentation=direct-webgpu alpha=premultiplied".into())
     }
 
     #[wasm_bindgen]
-    pub async fn assert_explicit_readback(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
+    pub async fn assert_explicit_readback(_canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        let factory = WgpuFactory::new_async(4, 3).await.map_err(js_error)?;
         let pixels = factory
             .begin_frame(0xff12_3456)
-            .map_err(js_error)?
-            .finish_with_readback()
+            .finish_async()
             .await
             .map_err(js_error)?;
         let expected = [0x12, 0x34, 0x56, 0xff];
@@ -326,99 +337,9 @@ fn fs_main() -> @location(0) vec4<f32> {
         ))
     }
 
-    #[wasm_bindgen]
-    pub async fn assert_resize(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let mut factory = BrowserFactory::new(canvas.clone(), 8, 6)
-            .await
-            .map_err(js_error)?;
-        let frame = factory.begin_frame(0xff12_3456).map_err(js_error)?;
-        match factory.resize(13, 9) {
-            Err(BrowserResizeError::FrameInFlight) => {}
-            Err(error) => {
-                return Err(JsValue::from_str(&format!(
-                    "unexpected in-flight resize error: {error}"
-                )));
-            }
-            Ok(()) => {
-                return Err(JsValue::from_str(
-                    "browser factory resized while a frame was in flight",
-                ));
-            }
-        }
-        if factory.size() != (8, 6) {
-            return Err(JsValue::from_str(
-                "in-flight resize changed readable factory state",
-            ));
-        }
-        if frame.finish_with_readback().await.map_err(js_error)?.len() != 8 * 6 * 4 {
-            return Err(JsValue::from_str(
-                "in-flight frame changed extent after rejected resize",
-            ));
-        }
-        factory.resize(13, 9).map_err(js_error)?;
-        if factory.size() != (13, 9) || canvas.width() != 13 || canvas.height() != 9 {
-            return Err(JsValue::from_str(
-                "resize did not update the factory and canvas extent",
-            ));
-        }
-        let pixels = factory
-            .begin_frame(0xff65_4321)
-            .map_err(js_error)?
-            .finish_with_readback()
-            .await
-            .map_err(js_error)?;
-        if pixels.len() != 13 * 9 * 4 {
-            return Err(JsValue::from_str(
-                "resized frame returned the old pixel extent",
-            ));
-        }
-        factory
-            .begin_frame(0xff65_4321)
-            .map_err(js_error)?
-            .present()
-            .await
-            .map_err(js_error)?;
-        Ok("resize=webgpu in-flight=rejected extent=13x9 presented=true".into())
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_surface_acquisition_retry(
-        canvas: HtmlCanvasElement,
-    ) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        factory
-            .begin_frame(0x80ff_0000)
-            .map_err(js_error)?
-            .present()
-            .await
-            .map_err(js_error)?;
-        Ok("surface-acquisition-loss=recreated retry=same-present alpha=premultiplied".into())
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_persistent_surface_acquisition_failure(
-        canvas: HtmlCanvasElement,
-    ) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        let error = factory
-            .begin_frame(0xff12_3456)
-            .map_err(js_error)?
-            .present()
-            .await
-            .expect_err("persistent surface loss must fail after one recovery attempt")
-            .to_string();
-        let expected = "wgpu device error: browser WebGPU canvas surface remained lost after surface recreation";
-        if error != expected {
-            return Err(JsValue::from_str(&format!(
-                "persistent surface loss returned {error:?}, expected {expected:?}"
-            )));
-        }
-        Ok("surface-acquisition-persistent-loss=typed retry=bounded".into())
-    }
-
     #[cfg(feature = "correctness-smoke")]
     #[wasm_bindgen]
-    pub async fn assert_imported_gpu_canvas(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+    pub async fn assert_imported_gpu_canvas(_canvas: HtmlCanvasElement) -> Result<String, JsValue> {
         let file = File::import_with_unsigned_scripts(IMPORTED_GPU_CANVAS_RIV).map_err(js_error)?;
         let artboard = file
             .default_artboard()
@@ -430,19 +351,13 @@ fn fs_main() -> @location(0) vec4<f32> {
             )));
         }
         let mut instance = artboard.instantiate().map_err(js_error)?;
-        let mut factory = PersistentFactory::new(
-            BrowserFactory::new(canvas, 32, 24)
-                .await
-                .map_err(js_error)?,
-        );
-        let mut frame = factory
-            .borrow()
-            .begin_frame(0xff00_0000)
-            .map_err(js_error)?;
+        let mut factory =
+            PersistentFactory::new(WgpuFactory::new_async(32, 24).await.map_err(js_error)?);
+        let mut frame = factory.borrow().begin_frame(0xff00_0000);
         instance
             .draw(&mut factory, &mut frame)
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish_async().await.map_err(js_error)?;
         let red_pixels = pixels
             .chunks_exact(4)
             .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
@@ -463,25 +378,23 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     #[wasm_bindgen]
     pub async fn assert_direct_gpu_canvas_image(
-        canvas: HtmlCanvasElement,
+        _canvas: HtmlCanvasElement,
     ) -> Result<String, JsValue> {
-        let mut factory = BrowserFactory::new(canvas, 32, 24)
-            .await
-            .map_err(js_error)?;
+        let mut factory = WgpuFactory::new_async(32, 24).await.map_err(js_error)?;
         let shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
         let shader = factory.make_gpu_canvas_shader(&shader).map_err(js_error)?;
         let plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
         let image = factory
             .make_gpu_canvas_image(&shader, &shader, &plan)
             .map_err(js_error)?;
-        let mut frame = factory.begin_frame(0xff00_0000).map_err(js_error)?;
+        let mut frame = factory.begin_frame(0xff00_0000);
         frame.draw_image(
             Some(image.as_ref()),
             ImageSampler::default(),
             BlendMode::SrcOver,
             1.0,
         );
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish_async().await.map_err(js_error)?;
         let red = pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [255, 0, 0, 255])
@@ -500,10 +413,10 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     #[wasm_bindgen]
     pub async fn assert_webgpu_gpu_canvas_rejects_invalid_interface(
-        canvas: HtmlCanvasElement,
+        _canvas: HtmlCanvasElement,
     ) -> Result<String, JsValue> {
-        let mut factory = BrowserFactory::new(canvas, 8, 8).await.map_err(js_error)?;
-        let unrelated = factory.begin_frame(0xff12_3456).map_err(js_error)?;
+        let mut factory = WgpuFactory::new_async(8, 8).await.map_err(js_error)?;
+        let unrelated = factory.begin_frame(0xff12_3456);
         let invalid_shader = imported_gpu_canvas_shader(INVALID_IMPORTED_WGSL);
         let invalid_shader = factory
             .make_gpu_canvas_shader(&invalid_shader)
@@ -522,7 +435,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish_async().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -538,14 +451,14 @@ fn fs_main() -> @location(0) vec4<f32> {
         let valid_image = factory
             .make_gpu_canvas_image(&valid_shader, &valid_shader, &plan)
             .map_err(js_error)?;
-        let mut valid_frame = factory.begin_frame(0xff65_4321).map_err(js_error)?;
+        let mut valid_frame = factory.begin_frame(0xff65_4321);
         valid_frame.draw_image(
             Some(valid_image.as_ref()),
             ImageSampler::default(),
             BlendMode::SrcOver,
             1.0,
         );
-        let valid_pixels = valid_frame.finish_with_readback().await.map_err(js_error)?;
+        let valid_pixels = valid_frame.finish_async().await.map_err(js_error)?;
         let red = valid_pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [0xff, 0x00, 0x00, 0xff])
@@ -564,11 +477,11 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     #[wasm_bindgen]
     pub async fn assert_webgpu_uniform_limit_rejection(
-        canvas: HtmlCanvasElement,
+        _canvas: HtmlCanvasElement,
     ) -> Result<String, JsValue> {
         const UNIFORM_COUNT: usize = 13;
-        let mut factory = BrowserFactory::new(canvas, 8, 8).await.map_err(js_error)?;
-        let unrelated = factory.begin_frame(0xff12_3456).map_err(js_error)?;
+        let mut factory = WgpuFactory::new_async(8, 8).await.map_err(js_error)?;
+        let unrelated = factory.begin_frame(0xff12_3456);
         let mut module = String::from(
             r#"
 @vertex
@@ -634,7 +547,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish_async().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -651,20 +564,20 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
         let valid_image = factory
             .make_gpu_canvas_image(&valid_shader, &valid_shader, &valid_plan)
             .map_err(js_error)?;
-        let mut valid_frame = factory.begin_frame(0xff65_4321).map_err(js_error)?;
+        let mut valid_frame = factory.begin_frame(0xff65_4321);
         valid_frame.draw_image(
             Some(valid_image.as_ref()),
             ImageSampler::default(),
             BlendMode::SrcOver,
             1.0,
         );
-        valid_frame.finish_with_readback().await.map_err(js_error)?;
+        valid_frame.finish_async().await.map_err(js_error)?;
         Ok("webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean".into())
     }
 
     #[wasm_bindgen]
     pub async fn run_stream_case(
-        canvas: HtmlCanvasElement,
+        _canvas: HtmlCanvasElement,
         stream_name: String,
         stream_text: String,
         reference_png: Vec<u8>,
@@ -678,14 +591,14 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             .frame_size
             .ok_or_else(|| JsValue::from_str("stream does not declare frameSize"))?;
         let clear = stream.clear_color.unwrap_or(0);
-        let mut factory = BrowserFactory::new(canvas, width, height)
+        let mut factory = WgpuFactory::new_async(width, height)
             .await
             .map_err(js_error)?;
-        let mut frame = factory.begin_frame(clear).map_err(js_error)?;
+        let mut frame = factory.begin_frame(clear);
         stream
             .replay_frame(0, &mut factory, &mut frame)
             .map_err(js_error)?;
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish_async().await.map_err(js_error)?;
         let actual = RgbaImage::new(width, height, pixels).map_err(js_error)?;
         let expected = RgbaImage::decode_png(&reference_png).map_err(js_error)?;
         let report = compare(
@@ -751,6 +664,31 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             )));
         }
         Ok(result)
+    }
+
+    #[derive(Clone)]
+    struct CanvasSurfaceTarget(HtmlCanvasElement);
+
+    impl HasWindowHandle for CanvasSurfaceTarget {
+        fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+            let value: &JsValue = &self.0;
+            let raw = WebCanvasWindowHandle::from_wasm_bindgen_0_2(value).into();
+            // SAFETY: `raw` points at the JsValue retained by this owned
+            // target. The renderer retains the target for the surface life.
+            Ok(unsafe { WindowHandle::borrow_raw(raw) })
+        }
+    }
+
+    impl HasDisplayHandle for CanvasSurfaceTarget {
+        fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+            Ok(DisplayHandle::web())
+        }
+    }
+
+    fn surface_acquisition_error(error: WgpuPresentationAcquireError) -> JsValue {
+        JsValue::from_str(&format!(
+            "runtime browser smoke could not acquire presentation frame: {error:?}"
+        ))
     }
 
     fn expected_edge_mask(image: &RgbaImage, delta: u8, radius: u32) -> Vec<bool> {
@@ -888,8 +826,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::{
-    WasmPerfRunner, assert_direct_gpu_canvas_image, assert_persistent_surface_acquisition_failure,
-    assert_resize, assert_surface_acquisition_retry,
+    WasmPerfRunner, assert_direct_gpu_canvas_image,
     assert_webgpu_gpu_canvas_rejects_invalid_interface, assert_webgpu_uniform_limit_rejection,
     recording_float_probe, run_backend, run_stream_case,
 };

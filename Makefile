@@ -199,7 +199,7 @@ crate-seams-product-host-free-check:
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \
 		"$$(rustup which --toolchain stable cargo)" check \
-		-p nuxie-browser-adapter --target wasm32-unknown-unknown --all-targets
+		-p browser-renderer-smoke --target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
 	cargo check -p nuxie-apple-adapter --all-targets

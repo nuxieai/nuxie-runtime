@@ -926,12 +926,103 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         include.mkdir()
         (include / "nux_capi.h").write_text(
             "typedef struct NuxExperienceSession NuxExperienceSession;\n"
+            "typedef struct NuxProductSession NuxProductSession;\n"
+            "typedef struct NuxExperience NuxExperience;\n"
         )
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI contains product/Apple vocabulary", result.stderr)
+        self.assertIn("NuxExperienceSession", result.stderr)
+        self.assertIn("NuxProductSession", result.stderr)
+        self.assertIn("NuxExperience", result.stderr)
+
+    def test_rejects_snake_case_product_vocabulary_in_portable_abi(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "nux_capi.h").write_text(
+            "void nux_experience_session_create(void);\n"
+            "void nux_experience_create(void);\n"
+            "void nux_product_session_create(void);\n"
+            "void nux_flow_session_advance(void);\n"
+            "void nux_package_open(void);\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("nux_experience_session_create", result.stderr)
+        self.assertIn("nux_experience_create", result.stderr)
+        self.assertIn("nux_product_session_create", result.stderr)
+        self.assertIn("nux_flow_session_advance", result.stderr)
+        self.assertIn("nux_package_open", result.stderr)
+
+    def test_rejects_prefixed_product_vocabulary_in_portable_abi(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "fn create_product_session() {}\n"
+            "struct PortableProductSession;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("create_product_session", result.stderr)
+        self.assertIn("PortableProductSession", result.stderr)
+
+    def test_rejects_product_vocabulary_in_included_header_fragment(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "nux_capi.h").write_text('#include "portable_api.inc"\n')
+        (include / "portable_api.inc").write_text(
+            "typedef struct NuxProductSession NuxProductSession;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable_api.inc", result.stderr)
+        self.assertIn("NuxProductSession", result.stderr)
+
+    def test_rejects_nux_artifact_vocabulary_in_portable_abi(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "struct NuxArtifact;\n"
+            "fn nux_artifact_open() {}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NuxArtifact", result.stderr)
+        self.assertIn("nux_artifact_open", result.stderr)
+
+    def test_allows_mathematical_product_vocabulary_in_portable_abi(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "// Return the product of the values.\n"
+            "fn dot_product() -> usize { [1, 2].iter().product() }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_scans_nested_directory_named_target_in_portable_abi(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include/target"
+        include.mkdir(parents=True)
+        (include / "nux_capi.h").write_text(
+            "typedef struct NuxExperienceSession NuxExperienceSession;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include/target/nux_capi.h", result.stderr)
         self.assertIn("NuxExperienceSession", result.stderr)
 
     def test_rejects_apple_vocabulary_in_portable_abi_comment(self) -> None:

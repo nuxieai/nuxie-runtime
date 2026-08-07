@@ -109,20 +109,27 @@ PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"Scene(?:Tx)?[A-Za-z0-9_]*|ProjectData[A-Za-z0-9_]*)\b"
 )
 PORTABLE_ABI_FORBIDDEN_VOCABULARY = re.compile(
-    r"\b(?:Nux)?(?:Apple[A-Za-z0-9_]*|CAMetal(?:Layer|Drawable)?|"
-    r"FlowSession[A-Za-z0-9_]*|"
-    r"Experience(?:Context|Package|Session)[A-Za-z0-9_]*|"
-    r"Project(?:DO|Data)[A-Za-z0-9_]*|PackageSession[A-Za-z0-9_]*)\b|"
-    r"\bNuxPackage[A-Za-z0-9_]*\b|"
-    r"\bnuxie[-_]product(?:[-_][A-Za-z0-9_-]+)?\b|"
-    r"\bnux[-_]container\b",
-    re.IGNORECASE,
+    r"(?-i:\b[A-Za-z0-9_]*(?:Apple|CAMetal(?:Layer|Drawable)?|FlowSession|"
+    r"NuxExperience|Experience(?:Context|Package|Session)|Project(?:DO|Data)|"
+    r"PackageSession|NuxPackage|NuxArtifact)(?:[A-Z_][A-Za-z0-9_]*)?\b)|"
+    r"(?-i:\b(?:NuxProduct[A-Za-z0-9_]*|[A-Za-z0-9_]*Product(?:Session|"
+    r"Context|Package|ABI|Api|Host|Runtime|Operation|Result|Value)"
+    r"[A-Za-z0-9_]*)\b)|"
+    r"(?i:(?<![A-Za-z0-9])(?:[a-z0-9]+_)*(?:nux_)?(?:apple|flow_session|"
+    r"experience|project_(?:do|data)|package_session|nux_package|nux_artifact)"
+    r"(?:_[a-z0-9]+)*(?![A-Za-z0-9]))|"
+    r"(?i:(?<![A-Za-z0-9])(?:[a-z0-9]+_)*(?:nux_)?product_(?:session|"
+    r"context|package|abi|api|host|runtime|operation|result|value)"
+    r"(?:_[a-z0-9]+)*(?![A-Za-z0-9]))|"
+    r"(?i:\bnuxie[-_]product(?:[-_][A-Za-z0-9_-]+)?\b|"
+    r"\bnux[-_]container\b)",
 )
 PORTABLE_ABI_CONTRACT_SUFFIXES = {
     ".c",
     ".cc",
     ".cpp",
     ".h",
+    ".inc",
     ".m",
     ".md",
     ".mm",
@@ -941,7 +948,8 @@ def portable_abi_vocabulary_errors(
     for path in sorted(package_root.rglob("*")):
         if not path.is_file() or path.suffix not in PORTABLE_ABI_CONTRACT_SUFFIXES:
             continue
-        if "target" in path.relative_to(package_root).parts:
+        package_relative_parts = path.relative_to(package_root).parts
+        if package_relative_parts and package_relative_parts[0] == "target":
             continue
         relative = path.relative_to(repo_root).as_posix()
         try:

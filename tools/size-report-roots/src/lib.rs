@@ -13,9 +13,9 @@
 
 use nuxie_render_api::{
     BlendMode, Factory, FillRule, GpuCanvasPassState, GpuCanvasPipelineShaders,
-    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, ImageFilter, ImageSampler, ImageWrap,
-    Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPath, Renderer,
+    GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderLoad, ImageFilter,
+    ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPath, Renderer,
 };
 use nuxie_renderer::{
     RenderMode, WgpuExternalDeviceFailureKind, WgpuFactory, WgpuFrame, WgpuMetalPresenter,
@@ -159,7 +159,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 43 {
+    match selector % 44 {
         0 => root!("inherent WgpuFactory::new", {
             black_box(WgpuFactory::new(args.width, args.height).is_ok());
             0
@@ -578,6 +578,21 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             };
             presenter
                 .record_external_failure(WgpuExternalDeviceFailureKind::Internal, String::new());
+            0
+        }),
+        42 => root!("trait Factory::load_gpu_canvas_shader", {
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            let shader = GpuCanvasShader {
+                source: "@vertex fn vs_main() -> @builtin(position) vec4<f32> { return vec4<f32>(); }\n@fragment fn fs_main() -> @location(0) vec4<f32> { return vec4<f32>(); }".into(),
+                entries: Vec::new(),
+                bindings: Vec::new(),
+            };
+            black_box(matches!(
+                Factory::load_gpu_canvas_shader(factory, &shader),
+                GpuCanvasShaderLoad::Ready(Ok(_))
+            ));
             0
         }),
         _ => root!("inherent WgpuMetalPresenter::render_to_texture", {

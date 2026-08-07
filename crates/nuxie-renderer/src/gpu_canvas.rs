@@ -2,7 +2,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub use nuxie_render_api::{
@@ -21,6 +20,7 @@ use nuxie_render_api::{
 };
 use wgpu::util::DeviceExt;
 
+use super::gpu_canvas_shader::WgpuGpuCanvasShader;
 use super::{RendererError, WgpuFactory, WgpuImage, WgpuImageTexture};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
@@ -43,7 +43,6 @@ const MAX_IMPORTED_GPU_CANVAS_CACHE_BYTES: usize = MAX_VERTEX_BUFFERS * MAX_VERT
 // aggregate target budget.
 const MAX_RETAINED_GPU_CANVAS_TARGETS: usize = 16;
 const MAX_RETAINED_GPU_CANVAS_TARGET_BYTES: usize = 64 * 1024 * 1024;
-static NEXT_GPU_CANVAS_SHADER_OCCURRENCE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Default)]
 pub(super) struct RetainedGpuCanvasTargetBudget {
@@ -826,9 +825,9 @@ struct ImportedWgpuGpuCanvasPipeline {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct ImportedUniformRequirement {
-    required_size: u32,
-    stage_mask: u8,
+pub(super) struct ImportedUniformRequirement {
+    pub(super) required_size: u32,
+    pub(super) stage_mask: u8,
 }
 
 impl ImportedUniformRequirement {
@@ -848,7 +847,7 @@ impl ImportedUniformRequirement {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ImportedResourceRequirement {
+pub(super) enum ImportedResourceRequirement {
     Uniform(ImportedUniformRequirement),
     Texture {
         stage_mask: u8,
@@ -879,19 +878,9 @@ impl ImportedResourceRequirement {
     }
 }
 
-struct ParsedAuthoredWgsl {
-    module: naga::Module,
-    info: naga::valid::ModuleInfo,
-}
-
-struct WgpuGpuCanvasShader {
-    occurrence_id: u64,
-    owner: std::sync::Weak<super::Context>,
-    shader: GpuCanvasShader,
-    parsed: ParsedAuthoredWgsl,
-    uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
-    resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
-    module: wgpu::ShaderModule,
+pub(super) struct ParsedAuthoredWgsl {
+    pub(super) module: naga::Module,
+    pub(super) info: naga::valid::ModuleInfo,
 }
 
 #[derive(Clone, Copy)]
@@ -910,12 +899,6 @@ impl WgpuGpuCanvasShader {
             uniform_requirements: &self.uniform_requirements,
             resource_requirements: &self.resource_requirements,
         }
-    }
-}
-
-impl RenderGpuCanvasShader for WgpuGpuCanvasShader {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }
 
@@ -1443,7 +1426,7 @@ fn imported_format(value: &str) -> Result<&'static str, GpuCanvasError> {
     }
 }
 
-fn imported_resource_requirements(
+pub(super) fn imported_resource_requirements(
     shader: &GpuCanvasShader,
     module: &naga::Module,
     info: &naga::valid::ModuleInfo,
@@ -2251,32 +2234,17 @@ impl WgpuFactory {
         &mut self,
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
-        let parsed = parse_authored_wgsl(&shader.source)?;
-        let resource_requirements =
-            imported_resource_requirements(shader, &parsed.module, &parsed.info)?;
-        let uniform_requirements = resource_requirements
-            .iter()
-            .filter_map(|(&binding, requirement)| match requirement {
-                ImportedResourceRequirement::Uniform(requirement) => Some((binding, *requirement)),
-                _ => None,
-            })
-            .collect();
-        let module = self
-            .context
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("nuxie-imported-gpu-canvas"),
-                source: wgpu::ShaderSource::Wgsl(shader.source.clone().into()),
-            });
-        Ok(Arc::new(WgpuGpuCanvasShader {
-            occurrence_id: NEXT_GPU_CANVAS_SHADER_OCCURRENCE_ID.fetch_add(1, Ordering::Relaxed),
-            owner: Arc::downgrade(&self.context),
-            shader: shader.clone(),
-            parsed,
-            uniform_requirements,
-            resource_requirements,
-            module,
-        }))
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            super::gpu_canvas_shader::load_ready(&self.context, shader)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = shader;
+            Err(GpuCanvasError::new(
+                "browser WebGPU shader creation requires awaitable GPU-canvas preparation",
+            ))
+        }
     }
 
     /// Execute authored RSTB WGSL on the retained device and return the
@@ -2990,7 +2958,7 @@ impl WgpuFactory {
 /// Parse and validate the exact authored WGSL selected from RSTB target 0.
 /// Retain Naga's module analysis so target-16 visibility can be checked before
 /// any WebGPU object or error scope is needed.
-fn parse_authored_wgsl(source: &str) -> Result<ParsedAuthoredWgsl, GpuCanvasError> {
+pub(super) fn parse_authored_wgsl(source: &str) -> Result<ParsedAuthoredWgsl, GpuCanvasError> {
     let module = naga::front::wgsl::parse_str(source)
         .map_err(|error| GpuCanvasError::new(error.emit_to_string(source)))?;
     let info = naga::valid::Validator::new(
@@ -3933,6 +3901,8 @@ fn stencil_operation(value: &str) -> Result<wgpu::StencilOperation, RendererErro
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::Ordering;
+
     use super::*;
     use nuxie_render_api::{
         GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderTextureSampleType,
@@ -5090,6 +5060,129 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
                 .contains("different factory/device domain"),
             "{error}"
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn device_rejected_shader_returns_no_occurrence_and_keeps_device_healthy() {
+        let Ok(mut factory) = WgpuFactory::new(8, 8) else {
+            eprintln!("GPU adapter unavailable; the browser referee remains required");
+            return;
+        };
+        let invalid_group = factory.context.device.limits().max_bind_groups;
+        let invalid_group_u8 = u8::try_from(invalid_group)
+            .expect("the configured WebGPU bind-group limit fits authored RSTB metadata");
+        let source = format!(
+            r#"
+struct Tint {{ value: vec4<f32>, }}
+@group({invalid_group}) @binding(0) var<uniform> tint: Tint;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {{
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {{
+    return tint.value;
+}}
+"#
+        );
+        let mut shader = imported_shader(&source);
+        shader.bindings = vec![GpuCanvasShaderBinding {
+            group: invalid_group_u8,
+            binding: 0,
+            kind: GpuCanvasShaderResourceKind::UniformBuffer,
+            stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
+            backend_space: invalid_group_u8,
+            backend_slots: [None, Some(0), None],
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
+            texture_multisampled: false,
+        }];
+
+        let error = match factory.make_imported_gpu_canvas_shader(&shader) {
+            Ok(_) => {
+                panic!("the exact physical module must be accepted before an occurrence exists")
+            }
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("shader module"), "{error}");
+        assert_eq!(
+            factory
+                .context
+                .next_gpu_canvas_shader_occurrence_id
+                .load(Ordering::Relaxed),
+            1,
+            "rejected physical modules must not allocate a logical occurrence"
+        );
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("validation work completes");
+        assert_eq!(
+            factory.context.device_health.current(),
+            None,
+            "captured authored-shader rejection must not poison the renderer device"
+        );
+
+        let valid = factory
+            .make_imported_gpu_canvas_shader(&imported_shader(IMPORTED_WGSL))
+            .expect("a valid physical module still materializes after rejection");
+        assert_eq!(
+            valid
+                .as_any()
+                .downcast_ref::<WgpuGpuCanvasShader>()
+                .expect("WGPU shader occurrence")
+                .occurrence_id,
+            1
+        );
+        assert_eq!(factory.context.device_health.current(), None);
+    }
+
+    /// Premise guard for the browser device-rejected ShaderAsset fixture
+    /// (`tools/browser-renderer-smoke/build.rs::rejected_wgsl`). That fixture
+    /// nests 90 `if` statements: Chrome's Tint counts two statement-nesting
+    /// levels per `if` against its 127 cap and rejects the module at
+    /// `createShaderModule` (measured: 63 nested `if`s accepted, 64
+    /// rejected), while naga's brace-nesting cap counts one brace per `if`,
+    /// so the runtime's own CPU-side parse/validation ACCEPTS the construct
+    /// and the rejection genuinely comes from the device. If naga ever
+    /// started rejecting this construct, the browser fixture would return
+    /// zero Lua values for the wrong reason (CPU validation instead of the
+    /// device's asynchronous validation scope) and UNIV-1764's fail-closed
+    /// path would silently lose its referee — this test turns that drift into
+    /// a loud native failure.
+    ///
+    /// naga's recursive-descent parser uses large per-level frames in
+    /// unoptimized builds, so the parse runs on a dedicated 16 MiB thread:
+    /// the default 2 MiB test-thread stack overflows well below 64 levels in
+    /// debug, while production parses run on ≥8 MiB native threads or with
+    /// compact release frames on wasm (the browser gate exercises the real
+    /// depth-90 fixture end to end).
+    #[test]
+    fn browser_rejected_fixture_construct_passes_cpu_validation() {
+        let mut source =
+            String::from("@fragment\nfn physical_fragment_1() -> @location(0) vec4<f32> {\n");
+        for _ in 0..90 {
+            source.push_str("if true {\n");
+        }
+        for _ in 0..90 {
+            source.push_str("}\n");
+        }
+        source.push_str("    return vec4<f32>(1.0, 0.0, 0.0, 1.0);\n}\n");
+        std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(move || {
+                parse_authored_wgsl(&source)
+                    .expect("90 nested if statements must pass CPU validation and reach the device")
+            })
+            .expect("spawn premise-parse thread")
+            .join()
+            .expect("premise-parse thread completes");
     }
 
     #[cfg(not(target_arch = "wasm32"))]

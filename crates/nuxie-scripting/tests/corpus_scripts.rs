@@ -315,9 +315,8 @@ mod luau {
         ];
 
         for row in &rows {
-            let bytes = std::fs::read(&row.path).unwrap_or_else(|e| {
-                panic!("missing matrix fixture {}: {e}", row.path.display())
-            });
+            let bytes = std::fs::read(&row.path)
+                .unwrap_or_else(|e| panic!("missing matrix fixture {}: {e}", row.path.display()));
             if let Some(expected) = row.fixture_sha256 {
                 let actual = format!("{:x}", Sha256::digest(&bytes));
                 assert_eq!(

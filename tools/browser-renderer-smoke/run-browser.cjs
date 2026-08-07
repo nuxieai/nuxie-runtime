@@ -25,6 +25,7 @@ const fullCases = [
       "browser-readback=explicit rgba-bytes=48 exact=true surface=0 mapAsync=1 putImageData=0",
       "direct-gpu-canvas=webgpu",
       "imported-gpu-canvas=webgpu",
+      "gpu-canvas-physical-shader=rejected lua-values=zero device=clean valid=clean",
       "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
       "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
       "stream=gm-rect backend=webgpu",
@@ -71,6 +72,7 @@ const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
       expected: [
         "direct-gpu-canvas=webgpu",
         "imported-gpu-canvas=webgpu",
+        "gpu-canvas-physical-shader=rejected lua-values=zero device=clean valid=clean",
         "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
         "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
       ],
@@ -82,9 +84,20 @@ const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
   try {
     for (const testCase of cases) {
       const page = await browser.newPage();
-      page.on("console", (message) =>
-        console.log(`browser console ${message.type()}: ${message.text()}`),
-      );
+      // Uncaptured WebGPU errors never reject a page promise — Chrome only
+      // reports them on the console. Collect them so a device poisoned by a
+      // rejected shader (UNIV-1764) fails the case instead of passing on
+      // pixels alone.
+      const uncapturedGpuErrors = [];
+      page.on("console", (message) => {
+        console.log(`browser console ${message.type()}: ${message.text()}`);
+        if (
+          message.type() === "error" &&
+          /webgpu|wgpu|uncaptured/i.test(message.text())
+        ) {
+          uncapturedGpuErrors.push(message.text());
+        }
+      });
       page.on("pageerror", (error) =>
         console.error(`browser page error: ${error.stack || String(error)}`),
       );
@@ -106,6 +119,11 @@ const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
             `browser smoke for ${testCase.path || "default"} omitted ${expected}`,
           );
         }
+      }
+      if (uncapturedGpuErrors.length > 0) {
+        throw new Error(
+          `browser smoke for ${testCase.path || "default"} left uncaptured WebGPU errors:\n${uncapturedGpuErrors.join("\n")}`,
+        );
       }
       await page.close();
     }

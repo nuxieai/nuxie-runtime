@@ -23,6 +23,7 @@ trait Factory::make_empty_render_path
 trait Factory::make_render_paint
 trait Factory::decode_image
 trait Factory::make_gpu_canvas_shader
+trait Factory::load_gpu_canvas_shader
 trait Factory::make_gpu_canvas_image
 trait Factory::make_gpu_canvas_image_with_pipelines
 trait Renderer::save

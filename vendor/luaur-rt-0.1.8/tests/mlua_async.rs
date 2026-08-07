@@ -36,6 +36,25 @@ use tokio::sync::Mutex;
 
 use luaur_rt::{Error, Function, Lua, MultiValue, Result, Thread, Value};
 
+const THREAD_DATA_SENTINEL: usize = 0x51a7_c0de;
+
+unsafe fn install_thread_data(state: *mut luaur_rt::lua_State) -> std::os::raw::c_int {
+    unsafe {
+        luaur_rt::ffi::lua_setthreaddata(state, THREAD_DATA_SENTINEL as *mut std::ffi::c_void);
+    }
+    0
+}
+
+unsafe fn thread_data_matches(state: *mut luaur_rt::lua_State) -> std::os::raw::c_int {
+    let matches = unsafe {
+        luaur_rt::ffi::lua_getthreaddata(state) == THREAD_DATA_SENTINEL as *mut std::ffi::c_void
+    };
+    unsafe {
+        luaur_rt::ffi::lua_pushboolean(state, i32::from(matches));
+    }
+    1
+}
+
 async fn sleep_ms(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
 }
@@ -473,5 +492,87 @@ async fn test_async_current_thread() -> Result<()> {
     let inner_thread = get_inner_thread.call_async::<Thread>(()).await?;
     assert_eq!(inner_thread, lua.current_thread());
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn call_async_inherits_parent_thread_data_across_yield() -> Result<()> {
+    let lua = Lua::new();
+    let install = unsafe { lua.create_c_function(Some(install_thread_data))? };
+    install.call::<()>(())?;
+    let matches = unsafe { lua.create_c_function(Some(thread_data_matches))? };
+    lua.globals().set("threadDataMatches", matches)?;
+
+    let wait = lua.create_async_function(|_, ()| async move {
+        tokio::task::yield_now().await;
+        Ok(())
+    })?;
+    lua.globals().set("wait", wait)?;
+
+    let check: bool = lua
+        .load(
+            r#"
+            assert(threadDataMatches())
+            wait()
+            return threadDataMatches()
+            "#,
+        )
+        .call_async(())
+        .await?;
+    assert!(check);
+
+    Ok(())
+}
+
+// Regression for UNIV-1764's browser abort: an implicit `call_async` coroutine
+// creates a userdata local *before* awaiting a genuinely pending Rust future,
+// then returns a table holding a closure that method-indexes the captured
+// userdata after the coroutine has completed. The captured upvalue must be
+// closed into a durable value; a stale stack reference surfaces as
+// `lua_g_indexerror` (or a wrong value) once the dead coroutine stack is
+// collected or reused.
+#[tokio::test]
+async fn call_async_closure_captures_userdata_across_pending_await() -> Result<()> {
+    struct Canvas;
+    impl luaur_rt::UserData for Canvas {
+        fn add_methods<M: luaur_rt::UserDataMethods<Self>>(methods: &mut M) {
+            methods.add_method("get", |_, _, ()| Ok(7));
+        }
+    }
+
+    let lua = Lua::new();
+    let make = lua.create_function(|lua, ()| lua.create_userdata(Canvas))?;
+    lua.globals().set("makeCanvas", make)?;
+    let wait = lua.create_async_function(|_, ()| async move {
+        tokio::task::yield_now().await;
+        Ok(())
+    })?;
+    lua.globals().set("wait", wait)?;
+
+    let entry: Function = lua
+        .load(
+            r#"
+            return function()
+                local canvas = makeCanvas()
+                wait()
+                return {
+                    probe = function(self)
+                        return canvas:get()
+                    end,
+                }
+            end
+            "#,
+        )
+        .eval()?;
+    let tbl: luaur_rt::Table = entry.call_async(()).await?;
+
+    // Force full collections so a stale stack-slot upvalue reference cannot
+    // keep limping along on the dead coroutine's memory.
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+
+    let probe: Function = tbl.get("probe")?;
+    let v: i64 = probe.call(&tbl)?;
+    assert_eq!(v, 7);
     Ok(())
 }

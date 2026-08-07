@@ -182,6 +182,18 @@ impl Function {
         // errors surface when awaited (wrapped in a ready future).
         let setup: Result<crate::async_support::AsyncThread<R>> = (|| {
             let thread = lua.create_thread(self.clone())?;
+            // Rive copies the invoking thread's host data onto every child
+            // coroutine before it can resume: promise coroutines at
+            // `src/lua/lua_promise.cpp:1102` and module threads at
+            // `src/lua/rive_lua_libs.cpp:693` (both
+            // `lua_setthreaddata(co, lua_getthreaddata(L))`). `call_async`
+            // creates the same kind of implicit coroutine, so it must preserve
+            // that host-owned context too. This is particularly important when
+            // the invoking state is itself a coroutine rather than the VM's
+            // main state.
+            unsafe {
+                lua_setthreaddata(thread.state(), lua_getthreaddata(lua.state()));
+            }
             // The coroutine is *implicit* (created by `call_async`): register it
             // so `Lua::current_thread` running on it resolves to the owner (the
             // thread that issued this call). Mirrors mlua's thread-ownership map.

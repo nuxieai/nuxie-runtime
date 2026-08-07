@@ -66,6 +66,9 @@ mod wasm {
     #[cfg(feature = "correctness-smoke")]
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/imported-gpu-canvas.riv"));
+    #[cfg(feature = "correctness-smoke")]
+    const REJECTED_SHADER_GPU_CANVAS_RIV: &[u8] =
+        include_bytes!(concat!(env!("OUT_DIR"), "/rejected-shader-gpu-canvas.riv"));
 
     const IMPORTED_WGSL: &str = r#"
 @vertex
@@ -355,7 +358,8 @@ fn fs_main() -> @location(0) vec4<f32> {
             PersistentFactory::new(WgpuFactory::new_async(32, 24).await.map_err(js_error)?);
         let mut frame = factory.borrow().begin_frame(0xff00_0000);
         instance
-            .draw(&mut factory, &mut frame)
+            .draw_async(&mut factory, &mut frame)
+            .await
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
         let pixels = frame.finish_async().await.map_err(js_error)?;
         let red_pixels = pixels
@@ -376,13 +380,54 @@ fn fs_main() -> @location(0) vec4<f32> {
         ))
     }
 
+    #[cfg(feature = "correctness-smoke")]
+    #[wasm_bindgen]
+    pub async fn assert_imported_gpu_canvas_rejects_physical_shader(
+        _canvas: HtmlCanvasElement,
+    ) -> Result<String, JsValue> {
+        let file =
+            File::import_with_unsigned_scripts(REJECTED_SHADER_GPU_CANVAS_RIV).map_err(js_error)?;
+        let artboard = file.default_artboard().ok_or_else(|| {
+            JsValue::from_str("device-rejected ShaderAsset fixture has no artboard")
+        })?;
+        let mut instance = artboard.instantiate().map_err(js_error)?;
+        let mut factory =
+            PersistentFactory::new(WgpuFactory::new_async(32, 24).await.map_err(js_error)?);
+        let mut frame = factory.borrow().begin_frame(0xff00_0000);
+        instance
+            .draw_async(&mut factory, &mut frame)
+            .await
+            .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
+        let pixels = frame.finish_async().await.map_err(js_error)?;
+        let red_pixels = pixels
+            .chunks_exact(4)
+            .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
+            .count();
+        let opaque_black = pixels
+            .chunks_exact(4)
+            .filter(|pixel| *pixel == [0, 0, 0, 255])
+            .count();
+        if red_pixels < 300 || opaque_black < 300 {
+            return Err(JsValue::from_str(&format!(
+                "valid ShaderAsset after physical rejection produced red={red_pixels} black={opaque_black}"
+            )));
+        }
+        Ok(format!(
+            "gpu-canvas-physical-shader=rejected lua-values=zero device=clean valid=clean red={red_pixels}"
+        ))
+    }
+
     #[wasm_bindgen]
     pub async fn assert_direct_gpu_canvas_image(
         _canvas: HtmlCanvasElement,
     ) -> Result<String, JsValue> {
         let mut factory = WgpuFactory::new_async(32, 24).await.map_err(js_error)?;
         let shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
-        let shader = factory.make_gpu_canvas_shader(&shader).map_err(js_error)?;
+        let shader = factory
+            .load_gpu_canvas_shader(&shader)
+            .resolve()
+            .await
+            .map_err(js_error)?;
         let plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
         let image = factory
             .make_gpu_canvas_image(&shader, &shader, &plan)
@@ -419,7 +464,9 @@ fn fs_main() -> @location(0) vec4<f32> {
         let unrelated = factory.begin_frame(0xff12_3456);
         let invalid_shader = imported_gpu_canvas_shader(INVALID_IMPORTED_WGSL);
         let invalid_shader = factory
-            .make_gpu_canvas_shader(&invalid_shader)
+            .load_gpu_canvas_shader(&invalid_shader)
+            .resolve()
+            .await
             .map_err(js_error)?;
         let plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
         match factory.make_gpu_canvas_image(&invalid_shader, &invalid_shader, &plan) {
@@ -446,7 +493,9 @@ fn fs_main() -> @location(0) vec4<f32> {
         }
         let valid_shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
         let valid_shader = factory
-            .make_gpu_canvas_shader(&valid_shader)
+            .load_gpu_canvas_shader(&valid_shader)
+            .resolve()
+            .await
             .map_err(js_error)?;
         let valid_image = factory
             .make_gpu_canvas_image(&valid_shader, &valid_shader, &plan)
@@ -533,7 +582,11 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 bytes: vec![0; 16],
             })
             .collect();
-        let shader = factory.make_gpu_canvas_shader(&shader).map_err(js_error)?;
+        let shader = factory
+            .load_gpu_canvas_shader(&shader)
+            .resolve()
+            .await
+            .map_err(js_error)?;
         match factory.make_gpu_canvas_image(&shader, &shader, &plan) {
             Err(error) if error.to_string().contains("uniform buffers") => {}
             Err(error) => {
@@ -559,7 +612,9 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
         let valid_plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
         let valid_shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
         let valid_shader = factory
-            .make_gpu_canvas_shader(&valid_shader)
+            .load_gpu_canvas_shader(&valid_shader)
+            .resolve()
+            .await
             .map_err(js_error)?;
         let valid_image = factory
             .make_gpu_canvas_image(&valid_shader, &valid_shader, &valid_plan)
@@ -833,3 +888,5 @@ pub use wasm::{
 
 #[cfg(all(target_arch = "wasm32", feature = "correctness-smoke"))]
 pub use wasm::assert_imported_gpu_canvas;
+#[cfg(all(target_arch = "wasm32", feature = "correctness-smoke"))]
+pub use wasm::assert_imported_gpu_canvas_rejects_physical_shader;

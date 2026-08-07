@@ -132,6 +132,54 @@
     "mechanism_verified": "live inherited blend reads perform zero static opacity-owner ancestry resolutions",
     "paint_command_materialization_in_scope": false
   },
+  "shape_report_opacity_owner_profile": {
+    "commit": "e5e587bc5f37ca787eb118756c467089a299591d",
+    "status": "diagnostic-only-contention",
+    "runner_binary_sha256": "e51b9a9fa55c3c5bb22750c67e61275251f2ff57a1eb78ec864ba652b9f5d875",
+    "measurement": {
+      "frames": 100,
+      "hz": 60,
+      "load_1m_before_capture": 26.48,
+      "timing_acceptance_claimed": false
+    },
+    "fixture_ownership": {
+      "root_artboard": "Main_Artboard",
+      "mounted_once": ["G_Meter", "COMPASS", "TIRE PRESSURE"],
+      "shape_containers": 730,
+      "shape_paints": 757,
+      "text_style_paint_containers": 78,
+      "artboard_paint_containers": 4,
+      "total_paints": 839,
+      "pre_change_shape_owner_component_comparisons": 1309270,
+      "comparisons_by_artboard": {
+        "Main_Artboard": 52724,
+        "TIRE PRESSURE": 344377,
+        "COMPASS": 881930,
+        "G_Meter": 30239
+      }
+    },
+    "time_profile": {
+      "rows": 429,
+      "advance_scene_to_samples": 32,
+      "opacity_owner_local_inclusive_samples": 0,
+      "opacity_owner_local_leaf_samples": 0,
+      "runtime_live_owned_shape_paint_blend_mode_value_inclusive_samples": 0,
+      "runtime_live_owned_shape_paint_blend_mode_value_leaf_samples": 0,
+      "runtime_shape_paint_commands_inclusive_samples": 9,
+      "runtime_shape_paint_commands_leaf_samples": 4,
+      "pre_change_runtime_shape_paint_commands_inclusive_samples": 55,
+      "pre_change_runtime_shape_paint_commands_leaf_samples": 42,
+      "pre_change_ancestry_scan_self_samples": 38,
+      "ancestry_scan_present_after_change": false
+    },
+    "external_capture_sha256": {
+      "time_profile_xml": "9a645b04b44ae83027fed72dd3e1e6f13551d86f643908abeec1e276a7e3ca81",
+      "time_sample_xml": "15078f954b45ddef3428ac418567efc25c6f52a87d82dde457a5e37a152d6653",
+      "trace_toc_xml": "89d8e7371492cd6b576afaf54756d54b13592ae543cc4b60f0cc2a531c116f42"
+    },
+    "mechanism_verified": "Shape compatibility reports reuse construction-retained opacity ownership with exact live values and zero post-construction static resolution",
+    "artboard_text_style_and_layout_routing_changed": false
+  },
   "pinned_cpp_commit": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
   "runner": {
     "source_digest_kind": "golden-runner digest_state",

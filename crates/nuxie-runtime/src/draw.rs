@@ -5259,11 +5259,9 @@ impl ArtboardInstance {
             .map_or(Mat2D::IDENTITY, |component| {
                 component.transform.world_transform
             });
+        let opacity_owner_local = shape.opacity_owner_local.unwrap_or(container.local_id);
         let render_opacity = self
-            .component(crate::shapes::shape_paint_container::opacity_owner_local(
-                graph,
-                container.local_id,
-            ))
+            .component(opacity_owner_local)
             .map_or(1.0, |component| component.transform.render_opacity);
         let needs_save_operation = drawable_needs_save_operation || shape.paint_owners.len() > 1;
         let mut commands = Vec::with_capacity(shape.paint_owners.len());
@@ -29118,6 +29116,44 @@ mod tests {
                     .as_ref()
                     .is_some_and(|path| !path.raw_path.verbs().is_empty()),
             "the live stroke must select the occurrence-owned world path"
+        );
+    }
+
+    #[test]
+    fn shape_paint_command_report_uses_retained_opacity_owner_without_graph_resolution() {
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let opacity_key = property_key_for_name("Node", "opacity").expect("Node.opacity key");
+        assert!(instance.set_double_property(1, opacity_key, 0.25));
+        instance.update_components();
+
+        let retained = instance
+            .runtime_shapes
+            .get(1)
+            .and_then(|shape| shape.paint_owners.first())
+            .expect("settled ShapePaint owner");
+        let expected_opacity = retained.render_opacity.get();
+        let expected_paint_state = retained.paint_state.borrow().clone();
+        assert_eq!(expected_opacity, 0.25);
+
+        crate::shapes::shape_paint_container::reset_opacity_owner_resolution_count();
+        let commands = instance.runtime_owned_shape_paint_command_report(1, false, graph);
+
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].render_opacity, expected_opacity);
+        assert_eq!(commands[0].paint_state, expected_paint_state);
+        assert_eq!(
+            crate::shapes::shape_paint_container::opacity_owner_resolution_count(),
+            0,
+            "a report must use construction-retained ownership instead of comparing graph components"
         );
     }
 

@@ -17,7 +17,7 @@ threading = ["nuxie/threading"]
 anyhow = "1"
 nuxie = { path = "../nuxie", default-features = false }
 nuxie-project-data = { path = "../nuxie-project-data" }
-nuxie-product-scripting = { path = "../nuxie-product-scripting", optional = true }
+nuxie-product-scripting = { git = "https://github.com/nuxieai/nuxie-product", rev = "73b70caa0ee9fed060326a79d61e5698222593f1", optional = true }
 
 [dev-dependencies]
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }

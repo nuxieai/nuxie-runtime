@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/nux-container",
     "crates/nuxie-audio",
     "crates/nuxie-binary",
     "crates/nuxie-graph",
@@ -11,7 +10,6 @@ members = [
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nuxie-product",
-    "crates/nuxie-product-scripting",
     "crates/nuxie-project-data",
     "crates/nuxie-apple-adapter",
     "crates/nux-capi",
@@ -62,6 +60,14 @@ luaur-common = { path = "vendor/luaur-common-0.1.8" }
 luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
 luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
+
+# `nuxie-product-scripting` is sourced from the product-owned workspace. Its
+# exact runtime dependencies resolve back to this checkout so the remaining
+# in-repository product host shares one baseline type graph until UNIV-1794
+# moves that host out as well.
+[patch."https://github.com/nuxieai/nuxie-runtime"]
+nuxie = { path = "crates/nuxie" }
+nuxie-scripting = { path = "crates/nuxie-scripting" }
 
 # Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates

@@ -38,6 +38,18 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
+RUNTIME_REPOSITORY = "https://github.com/nuxieai/nuxie-runtime"
+PRODUCT_REPOSITORY = "https://github.com/nuxieai/nuxie-product"
+FULL_GIT_REVISION = re.compile(r"^[0-9a-f]{40}$")
+AUDITED_SELF_PATCHES = {
+    "nuxie": "crates/nuxie",
+    "nuxie-scripting": "crates/nuxie-scripting",
+}
+EXTRACTED_PRODUCT_PATHS = (
+    "crates/nux-container",
+    "crates/nuxie-product-scripting",
+)
+
 PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 
 # All workspace packages are protected by default. These named packages are
@@ -48,15 +60,17 @@ PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
-    "nux-container",
     "nuxie-apple-adapter",
     "nuxie-authoring",
     "nuxie-flow",
     "nuxie-product",
-    "nuxie-product-scripting",
     "nuxie-project-data",
 }
-EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}
+EXTERNAL_OWNER_PACKAGES = {
+    "nux-container",
+    "nuxie-browser-adapter",
+    "nuxie-product-scripting",
+}
 # Exemption means a package is an upward-facing owner or consumer. Protected
 # packages must therefore never depend on any exempt package, even when its
 # name does not follow one of the reserved product prefixes.
@@ -408,6 +422,22 @@ def workspace_packages(
     if not isinstance(patches, dict):
         errors.append("Cargo.toml: [patch] must be a table")
         patches = {}
+    runtime_patches = patches.get(RUNTIME_REPOSITORY)
+    if runtime_patches is not None:
+        if not isinstance(runtime_patches, dict) or set(runtime_patches) != set(
+            AUDITED_SELF_PATCHES
+        ):
+            errors.append(
+                f"Cargo.toml: [patch.{RUNTIME_REPOSITORY!r}] must contain exactly "
+                f"{sorted(AUDITED_SELF_PATCHES)!r}"
+            )
+        else:
+            for package_name, expected_path in AUDITED_SELF_PATCHES.items():
+                if runtime_patches.get(package_name) != {"path": expected_path}:
+                    errors.append(
+                        f"Cargo.toml: runtime self-patch {package_name!r} must resolve "
+                        f"exactly to {expected_path!r}"
+                    )
     for source_name, source_patches in patches.items():
         if not isinstance(source_patches, dict):
             errors.append(f"Cargo.toml: [patch.{source_name}] must be a table")
@@ -446,7 +476,12 @@ def workspace_packages(
                     f"{relative}/Cargo.toml requires [package].name"
                 )
                 continue
-            if is_forbidden_dependency(patch_package_name):
+            audited_self_patch = (
+                source_name == RUNTIME_REPOSITORY
+                and AUDITED_SELF_PATCHES.get(patch_name) == relative
+                and patch_package_name == patch_name
+            )
+            if is_forbidden_dependency(patch_package_name) and not audited_self_patch:
                 errors.append(
                     f"Cargo.toml: path patch {patch_name!r} resolves to product "
                     f"package {patch_package_name!r}"
@@ -1293,6 +1328,54 @@ def check_repository(
                 f"{package}/Cargo.toml: package {package_name!r} belongs to its "
                 "external product/platform owner, not nuxie-runtime"
             )
+
+    # This repository's ratified ownership contract makes these paths and the
+    # remaining staging host's provider shape part of the live boundary. Unit
+    # fixtures omit the contract document and continue to exercise the generic
+    # package scanner independently.
+    if (repo_root / "docs/product-crate-seams.md").is_file():
+        for extracted_path in EXTRACTED_PRODUCT_PATHS:
+            if (repo_root / extracted_path).exists():
+                errors.append(
+                    f"{extracted_path}: extracted product source must remain owned "
+                    f"by {PRODUCT_REPOSITORY}"
+                )
+        product_package = next(
+            (
+                manifest
+                for package, package_name, manifest in packages
+                if package == "crates/nuxie-product" and package_name == "nuxie-product"
+            ),
+            None,
+        )
+        if product_package is not None:
+            dependencies = product_package.get("dependencies", {})
+            product_scripting = (
+                dependencies.get("nuxie-product-scripting")
+                if isinstance(dependencies, dict)
+                else None
+            )
+            valid_product_scripting = (
+                isinstance(product_scripting, dict)
+                and product_scripting.get("git") == PRODUCT_REPOSITORY
+                and isinstance(product_scripting.get("rev"), str)
+                and FULL_GIT_REVISION.fullmatch(product_scripting["rev"]) is not None
+                and product_scripting.get("optional") is True
+                and set(product_scripting) == {"git", "rev", "optional"}
+            )
+            if not valid_product_scripting:
+                errors.append(
+                    "crates/nuxie-product/Cargo.toml: nuxie-product-scripting must be "
+                    "an optional exact-revision dependency on the canonical product repository"
+                )
+            root_manifest = tomllib.loads((repo_root / "Cargo.toml").read_text())
+            if root_manifest.get("patch", {}).get(RUNTIME_REPOSITORY) != {
+                name: {"path": path} for name, path in AUDITED_SELF_PATCHES.items()
+            }:
+                errors.append(
+                    "Cargo.toml: the remaining product host requires the exact audited "
+                    "runtime self-patches"
+                )
 
     for package, package_name, manifest in packages:
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:

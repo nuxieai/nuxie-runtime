@@ -1,7 +1,7 @@
 # Product crate seams
 
-Status: physical package contract and repository-extraction direction. Scene
-authoring now lives in nuxie-dev.
+Status: physical ownership contract. Scene authoring lives in nuxie-dev;
+`.nux` trust and product scripting live in nuxieai/nuxie-product.
 
 UNIV-1623 gives each upper layer an explicit Cargo package before code moves
 across packages or repositories. The packages expose the current types without
@@ -10,17 +10,18 @@ errors, and behavior.
 
 ```text
 nuxie-dev authoring ----+----> nuxie baseline facade ----> baseline crates
-nuxieai/nuxie-product --+
+nuxieai/nuxie-product --+----> nuxie baseline facade
+  nux-container          |
+  nuxie-product-scripting+
 nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
-nuxie-product-scripting-+
                         |
 nuxie-dev browser adapter +----> nuxie-renderer
 nuxie-apple-adapter ----+----> nuxie-renderer
 ```
 
-Flow now lives in `nuxie-product`; Nux artifact trust, the private Nuxie Luau
-module, ordered host effects, and their quotas live in
-`nuxie-product-scripting`. The shipping `nuxie` facade contains no Flow module
+Flow currently lives in the staged `nuxie-product` host; Nux artifact trust,
+the private Nuxie Luau module, ordered host effects, and their quotas live in
+the product repository's `nuxie-product-scripting`. The shipping `nuxie` facade contains no Flow module
 or product dependency; it owns the neutral host-extension interface and an
 opaque exact-byte capability consumed during baseline VM setup.
 Transactional runtime mechanics cross that boundary through
@@ -38,13 +39,15 @@ observations are owned by nuxie-dev's `nuxie-authoring` crate. Protected
 baseline, portable-ABI, replay, oracle, fuzz, golden, and performance packages
 may not add an upward dependency on an authoring or product package.
 
-The current in-workspace product crates are migration staging, not final
-repository ownership. Their final owner is the dedicated
-[`nuxieai/nuxie-product`](https://github.com/nuxieai/nuxie-product) repository,
-which moves `nux-container`, `nuxie-product-scripting`, `nuxie-project-data`,
-and `nuxie-product` as one dependency-ordered cluster. The repository exposes a
-separately named product ABI for experience/session/product operations. It does
-not extend or wrap `nux-capi` with product vocabulary.
+The dedicated
+[`nuxieai/nuxie-product`](https://github.com/nuxieai/nuxie-product) repository
+is the sole source owner for `nux-container` and `nuxie-product-scripting`.
+Their runtime-workspace copies are deleted. The remaining in-workspace
+`nuxie-project-data` and `nuxie-product` crates are migration staging for
+UNIV-1794; the latter consumes product scripting from one full immutable Git
+revision and resolves its runtime interfaces back to this checkout through an
+audited self-patch. The product repository owns the separately named product
+ABI and never extends `nux-capi` with product vocabulary.
 
 ## Cross-repository provider and release contract
 
@@ -74,7 +77,7 @@ packaging remain `nuxie-ios` responsibilities.
 |---|---|---|---|
 | `nuxie-product` | Shared product execution and the Flow protocol | `nuxie` with defaults disabled | Renderer/device internals or an Apple ABI |
 | `nuxie-project-data` | ProjectDO value model, program compiler/evaluator, encoded artifact envelope, and adapter registration | `nuxie-runtime` with defaults disabled | Baseline bind-graph internals, editor authoring, Flow, or platform ABI policy |
-| `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
+| product repo `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | Exact pinned `nuxie`/`nuxie-scripting` provider plus sibling `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
@@ -114,6 +117,11 @@ source even in its test build.
 
 The former `nuxie::flow_session` shipping path remains removed. Product
 consumers must depend on `nuxie-product` directly.
+
+UNIV-1793 extracted the `.nux` grammar/trust fixtures and product scripting
+implementation. The pure-runtime gate now rejects either source directory
+returning and verifies the remaining staged host's exact external provider and
+local type-unifying runtime patches.
 
 Forty-five lifecycle cases moved with the product owner through public host
 seams. The one concrete `FileScriptArtboard` trigger-consumption case remains

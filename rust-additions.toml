@@ -125,20 +125,8 @@ path = "crates/nuxie-scripting/src/vm/bytecode.rs"
 category = "baseline-adaptation"
 
 [[addition]]
-path = "crates/nuxie-product-scripting/src/host_commands.rs"
-category = "product-host"
-
-[[addition]]
 path = "crates/nuxie-scripting/src/vm/resource_limits.rs"
 category = "baseline-adaptation"
-
-[[addition]]
-path = "crates/nuxie-product-scripting/src/lib.rs"
-category = "product-host"
-
-[[addition]]
-path = "crates/nuxie-product-scripting/src/script_import.rs"
-category = "product-trust"
 
 [[addition]]
 path = "crates/nuxie-product/src/flow_session.rs"

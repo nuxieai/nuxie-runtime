@@ -54,6 +54,11 @@ replace pinned runtime semantics.
 `nuxie-product` pins `nuxie-runtime` by an exact Git revision, commits its Cargo
 lockfile, and records every provider or `[patch]` override in its audited root
 manifest. Cargo configuration may not silently replace those providers.
+The runtime repository contains no `nux-container` or
+`nuxie-product-scripting` source. Until the remaining staged product host moves
+under UNIV-1794, it consumes product scripting from one full immutable product
+revision and uses an exact audited self-patch only to preserve one local
+baseline type graph.
 `nuxie-dev` and `nuxie-ios` in turn pin the same exact `nuxie-product` revision;
 they do not independently select product-component revisions. The qualified
 product revision is the cross-repository release unit. Runtime changes advance

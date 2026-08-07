@@ -9,16 +9,23 @@ repository.workspace = true
 default = []
 # Synthetic record builders and shared bytes for tests/tools. This feature is
 # deliberately absent from the runtime's default shipping API.
+inspect = ["dep:serde_json"]
 test-support = []
 
 [dependencies]
 anyhow = "1"
 nuxie-schema = { path = "../nuxie-schema" }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
+serde_json = "1"
 sha2 = "0.10"
+
+[[bin]]
+name = "riv-inspect"
+path = "src/bin/riv-inspect.rs"
+required-features = ["inspect"]
 
 [[test]]
 name = "fixture_records"

@@ -39,3 +39,9 @@ every file-import or locally-authored-runtime adoption path.
   registration, payload decode, output application, and retained state.
 - `serde` and `serde_json` are no longer production dependencies of
   `nuxie-runtime`; they remain dev dependencies for C++ oracle tests.
+- `serde_json` is also absent from the default `nuxie-binary` and
+  `nuxie-graph` library closures. Their JSON inspector binaries opt into the
+  non-default `inspect` feature, while differential tests retain a dev-only
+  dependency.
+- `make size-report` ratchets the renderer-on, scripting-off SDK dependency
+  closure against `nuxie-project-data`, `serde_json`, and `zmij` regressions.

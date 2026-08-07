@@ -259,6 +259,32 @@ scripted-vector snapshot through `publish_json` with the bytecode
 live-compiled by `compile_luau_bytecode` (script only, no shader
 mutation) and re-recording commit + hashes.
 
+### Historical rows
+
+The rows below are pre-existing editor artifacts rather than freshly
+materialized publishes, so no pre-materialization compiler hash exists for
+them. Their acceptance is two-sided instead: per-blob provenance and load
+proof come from
+`crates/nuxie-scripting/tests/corpus_scripts.rs::editor_bytecode_matrix_rows_extract_pin_version_and_load`
+(extracts every ScriptAsset blob, records name/size/SHA-256/LBC version
+byte, pins the blob count and the emitter generation's bytecode version,
+and loads each blob through the fork VM's real `luau_load` path — load
+only, no execution), and behavior is continuously refereed by the
+scripted corpus row (`make scripted-golden-compare`).
+
+| emitter generation | fixture | blobs | LBC | per-blob proof | behavior referee (corpus id) |
+|---|---|---|---|---|---|
+| historical editor (v6 era) | `script_artboard_test.riv` | 1 | 6 | matrix load test above | `script_artboard_test` (`scripted-status:exact`) — simple observable protocol script |
+| historical editor (v6 era) | `script_dependency_test.riv` | 6 | 6 | matrix load test above | `script_dependency_test` (`exact`) — six-script module/dependency chain |
+| real Rive Editor (v7) | `fixtures/sync/data_bind_blob_test.riv` (sha256 `46b47578e6dd6e70ecffac35449498275fd2ee8773efbc5cb04d22cad5fb7e58`, from rive-runtime `36aabf60`) | 2 | 7 | matrix load test above, incl. fixture-hash pin | `data_bind_blob_test` (`not-yet`, V43 `blob-layout-geometry-diverges`) — small observable blob-binding case |
+| real Rive Editor (v7) | `fixtures/sync/scope_probe.riv` (sha256 `fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347`, from rive-runtime `b73bc675`) | 149 | 7 | matrix load test above, incl. fixture-hash pin | `scope_probe` (`exact`) — 149-script library/static-require stress |
+
+The two v6-era rows resolve from the pinned C++ runtime checkout
+(`RIVE_RUNTIME_DIR` `tests/unit_tests/assets/`, same resolution as the
+corpus); the two v7 rows bind to the vendored `fixtures/sync/` copies whose
+whole-file SHA-256 the matrix test asserts, so provenance drift fails the
+gate rather than silently re-rowing the matrix.
+
 Method (reusable for the next engine bump): per rung, a read-only inventory
 maps every C hunk to its Rust twin with FFlag posture and scope class; the
 orchestrator adjudicates; a writer lane ports row-by-row with per-row focused

@@ -41,6 +41,26 @@ path = "crates/nuxie-render-api/src/serializing.rs"
 category = "retained-render"
 
 [[addition]]
+path = "crates/nux-container/src/format.rs"
+category = "product-trust"
+
+[[addition]]
+path = "crates/nux-container/src/lib.rs"
+category = "product-trust"
+
+[[addition]]
+path = "crates/nux-container/src/manifest.rs"
+category = "product-trust"
+
+[[addition]]
+path = "crates/nux-container/src/signature.rs"
+category = "product-trust"
+
+[[addition]]
+path = "crates/nux-container/src/test_support.rs"
+category = "test-infra"
+
+[[addition]]
 path = "crates/nuxie-runtime/src/data_bind_container.rs"
 category = "codegen"
 
@@ -125,8 +145,20 @@ path = "crates/nuxie-scripting/src/vm/bytecode.rs"
 category = "baseline-adaptation"
 
 [[addition]]
+path = "crates/nuxie-product-scripting/src/host_commands.rs"
+category = "product-host"
+
+[[addition]]
 path = "crates/nuxie-scripting/src/vm/resource_limits.rs"
 category = "baseline-adaptation"
+
+[[addition]]
+path = "crates/nuxie-product-scripting/src/lib.rs"
+category = "product-host"
+
+[[addition]]
+path = "crates/nuxie-product-scripting/src/script_import.rs"
+category = "product-trust"
 
 [[addition]]
 path = "crates/nuxie-product/src/flow_session.rs"

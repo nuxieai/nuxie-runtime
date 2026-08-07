@@ -18,6 +18,9 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 - `nuxie-graph`: imported component graph
 - `nuxie-render-api`: renderer-neutral traits
 - `nuxie-scripting`: optional pure-Rust Luau integration
+- `nux-container`: optional `.nux` package format and trust model
+- `nuxie-product-scripting`: optional Nuxie host module and effects
+- `nuxie-product`: optional session and product behavior above the baseline
 
 ## Development
 
@@ -38,14 +41,13 @@ dependency only; it is not linked into or shipped with the Nuxie SDK.
 The fixture bootstrap pins and verifies the small upstream test-asset set;
 those `.riv` binaries are intentionally not stored in this repository.
 
-Shared `.nux`, product scripting, ProjectDO, session behavior, and their
-separately named product ABI are owned by the
-[nuxie-product repository](https://github.com/nuxieai/nuxie-product), which
-pins this runtime exactly. The Apple surface ABI, binary packaging, and
-XCFramework releases are owned by the
+Nuxie-specific `.nux`, product scripting, ProjectDO, and session behavior are
+isolated in upper-layer crates in this workspace. Protected baseline crates do
+not depend on them. The Apple surface ABI, binary packaging, and XCFramework
+releases are owned by the
 [nuxie-ios repository](https://github.com/nuxieai/nuxie-ios). `nux-capi`
-remains a baseline-only portable ABI; this repository remains the
-platform-independent engine and `.riv` format authority.
+remains a baseline-only portable ABI; editor and Apple implementation code
+remain in their respective repositories.
 
 ## License
 

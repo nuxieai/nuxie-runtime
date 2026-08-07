@@ -1244,7 +1244,6 @@ dependencies = [
 [[package]]
 name = "nux-container"
 version = "0.1.0"
-source = "git+https://github.com/nuxieai/nuxie-product?rev=73b70caa0ee9fed060326a79d61e5698222593f1#73b70caa0ee9fed060326a79d61e5698222593f1"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1352,9 +1351,10 @@ dependencies = [
 [[package]]
 name = "nuxie-product-scripting"
 version = "0.1.0"
-source = "git+https://github.com/nuxieai/nuxie-product?rev=73b70caa0ee9fed060326a79d61e5698222593f1#73b70caa0ee9fed060326a79d61e5698222593f1"
 dependencies = [
  "ed25519-dalek",
+ "luaur-common",
+ "luaur-compiler",
  "luaur-rt",
  "nux-container",
  "nuxie",

@@ -898,6 +898,32 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("belongs to its external product/platform owner", result.stderr)
 
+    def test_rejects_platform_or_renderer_source_in_product_layer(self) -> None:
+        product_root = self.create_package("crates/nux-container", "nux-container", "")
+        source = product_root / "src/lib.rs"
+        for forbidden in (
+            "use UIKit;",
+            "use CAMetalLayer;",
+            "fn device(value: wgpu::Device) {}",
+            "use nuxie_renderer::WgpuFactory;",
+        ):
+            with self.subTest(forbidden=forbidden):
+                source.write_text(forbidden + "\n")
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("platform/renderer ownership", result.stderr)
+
+    def test_product_layer_platform_words_in_comments_and_strings_are_ignored(self) -> None:
+        product_root = self.create_package("crates/nux-container", "nux-container", "")
+        (product_root / "src/lib.rs").write_text(
+            "// UIKit and wgpu belong outside this crate\n"
+            'const NOTE: &str = "CAMetalLayer and nuxie_renderer::WgpuFactory";\n'
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_product_dependency_from_portable_abi(self) -> None:
         self.create_package(
             "crates/nux-capi",
@@ -1459,74 +1485,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("helpers/helper/Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
-
-    def test_allows_the_exact_runtime_self_patch_for_external_product_types(self) -> None:
-        self.create_package("crates/nuxie", "nuxie", "")
-        self.create_package("crates/nuxie-scripting", "nuxie-scripting", "")
-        self.write_workspace(
-            f'''
-            [patch."{BOUNDARY_TOOL.RUNTIME_REPOSITORY}"]
-            nuxie = {{ path = "crates/nuxie" }}
-            nuxie-scripting = {{ path = "crates/nuxie-scripting" }}
-            '''
-        )
-
-        result = self.run_check()
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_rejects_runtime_self_patch_shape_drift(self) -> None:
-        self.create_package("crates/nuxie", "nuxie", "")
-        self.write_workspace(
-            f'''
-            [patch."{BOUNDARY_TOOL.RUNTIME_REPOSITORY}"]
-            nuxie = {{ path = "crates/nuxie" }}
-            '''
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must contain exactly", result.stderr)
-
-    def test_live_contract_rejects_returning_extracted_product_source(self) -> None:
-        contract = self.root / "docs/product-crate-seams.md"
-        contract.parent.mkdir(parents=True)
-        contract.write_text("# Product crate seams\n")
-        extracted = self.root / "crates/nux-container"
-        extracted.mkdir()
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("extracted product source must remain owned", result.stderr)
-
-    def test_live_contract_requires_an_exact_external_product_provider(self) -> None:
-        contract = self.root / "docs/product-crate-seams.md"
-        contract.parent.mkdir(parents=True)
-        contract.write_text("# Product crate seams\n")
-        self.create_package("crates/nuxie", "nuxie", "")
-        self.create_package("crates/nuxie-scripting", "nuxie-scripting", "")
-        self.create_package(
-            "crates/nuxie-product",
-            "nuxie-product",
-            '''
-            [dependencies]
-            nuxie-product-scripting = { path = "../nuxie-product-scripting", optional = true }
-            ''',
-        )
-        self.write_workspace(
-            f'''
-            [patch."{BOUNDARY_TOOL.RUNTIME_REPOSITORY}"]
-            nuxie = {{ path = "crates/nuxie" }}
-            nuxie-scripting = {{ path = "crates/nuxie-scripting" }}
-            '''
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("optional exact-revision dependency", result.stderr)
 
     def test_rejects_deprecated_cargo_replace_override(self) -> None:
         self.create_package(

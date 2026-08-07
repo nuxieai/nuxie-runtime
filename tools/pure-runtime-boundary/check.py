@@ -38,22 +38,14 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
-RUNTIME_REPOSITORY = "https://github.com/nuxieai/nuxie-runtime"
-PRODUCT_REPOSITORY = "https://github.com/nuxieai/nuxie-product"
-FULL_GIT_REVISION = re.compile(r"^[0-9a-f]{40}$")
-AUDITED_SELF_PATCHES = {
-    "nuxie": "crates/nuxie",
-    "nuxie-scripting": "crates/nuxie-scripting",
-}
-EXTRACTED_PRODUCT_PATHS = (
-    "crates/nux-container",
-    "crates/nuxie-product-scripting",
-)
-# These packages are owned by product repositories and may not be restored as
-# runtime workspace members even if they happen to avoid a forbidden edge.
+# Platform-specific packages must not return to this workspace even if they
+# happen to avoid a forbidden dependency edge.
 FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES = {"nuxie-apple-adapter"}
-
 PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
+PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
+    r"\b(?:UIKit|SwiftUI|AppKit|CAMetal(?:Layer|Drawable)?|MTLDrawable|wgpu)\b|"
+    r"\bnuxie_renderer\s*::"
+)
 
 # All workspace packages are protected by default. These named packages are
 # current/future owners above the baseline, plus the browser parity executable
@@ -63,16 +55,20 @@ PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
+    "nux-container",
     "nuxie-authoring",
     "nuxie-flow",
     "nuxie-product",
+    "nuxie-product-scripting",
     "nuxie-project-data",
 }
-EXTERNAL_OWNER_PACKAGES = {
+PRODUCT_LAYER_PACKAGES = {
     "nux-container",
-    "nuxie-browser-adapter",
+    "nuxie-product",
     "nuxie-product-scripting",
+    "nuxie-project-data",
 }
+EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}
 # Exemption means a package is an upward-facing owner or consumer. Protected
 # packages must therefore never depend on any exempt package, even when its
 # name does not follow one of the reserved product prefixes.
@@ -424,22 +420,6 @@ def workspace_packages(
     if not isinstance(patches, dict):
         errors.append("Cargo.toml: [patch] must be a table")
         patches = {}
-    runtime_patches = patches.get(RUNTIME_REPOSITORY)
-    if runtime_patches is not None:
-        if not isinstance(runtime_patches, dict) or set(runtime_patches) != set(
-            AUDITED_SELF_PATCHES
-        ):
-            errors.append(
-                f"Cargo.toml: [patch.{RUNTIME_REPOSITORY!r}] must contain exactly "
-                f"{sorted(AUDITED_SELF_PATCHES)!r}"
-            )
-        else:
-            for package_name, expected_path in AUDITED_SELF_PATCHES.items():
-                if runtime_patches.get(package_name) != {"path": expected_path}:
-                    errors.append(
-                        f"Cargo.toml: runtime self-patch {package_name!r} must resolve "
-                        f"exactly to {expected_path!r}"
-                    )
     for source_name, source_patches in patches.items():
         if not isinstance(source_patches, dict):
             errors.append(f"Cargo.toml: [patch.{source_name}] must be a table")
@@ -478,12 +458,7 @@ def workspace_packages(
                     f"{relative}/Cargo.toml requires [package].name"
                 )
                 continue
-            audited_self_patch = (
-                source_name == RUNTIME_REPOSITORY
-                and AUDITED_SELF_PATCHES.get(patch_name) == relative
-                and patch_package_name == patch_name
-            )
-            if is_forbidden_dependency(patch_package_name) and not audited_self_patch:
+            if is_forbidden_dependency(patch_package_name):
                 errors.append(
                     f"Cargo.toml: path patch {patch_name!r} resolves to product "
                     f"package {patch_package_name!r}"
@@ -1305,6 +1280,25 @@ def inherited_dependency_specification(
     return effective, None
 
 
+def product_layer_source_errors(
+    repo_root: pathlib.Path, package_root: pathlib.Path
+) -> list[str]:
+    errors: list[str] = []
+    for path in sorted(package_root.rglob("*.rs")):
+        try:
+            source = strip_rust_non_code(path.read_text())
+        except OSError as error:
+            errors.append(f"{path.relative_to(repo_root)}: cannot read source: {error}")
+            continue
+        for match in PRODUCT_LAYER_FORBIDDEN_SOURCE.finditer(source):
+            line = source.count("\n", 0, match.start()) + 1
+            errors.append(
+                f"{path.relative_to(repo_root)}:{line}: product source crosses into "
+                f"platform/renderer ownership via {match.group(0)!r}"
+            )
+    return errors
+
+
 def check_repository(
     repo_root: pathlib.Path,
 ) -> tuple[list[str], dict[str, set[str]], int, int]:
@@ -1331,54 +1325,6 @@ def check_repository(
                 "external product/platform owner, not nuxie-runtime"
             )
 
-    # This repository's ratified ownership contract makes these paths and the
-    # remaining staging host's provider shape part of the live boundary. Unit
-    # fixtures omit the contract document and continue to exercise the generic
-    # package scanner independently.
-    if (repo_root / "docs/product-crate-seams.md").is_file():
-        for extracted_path in EXTRACTED_PRODUCT_PATHS:
-            if (repo_root / extracted_path).exists():
-                errors.append(
-                    f"{extracted_path}: extracted product source must remain owned "
-                    f"by {PRODUCT_REPOSITORY}"
-                )
-        product_package = next(
-            (
-                manifest
-                for package, package_name, manifest in packages
-                if package == "crates/nuxie-product" and package_name == "nuxie-product"
-            ),
-            None,
-        )
-        if product_package is not None:
-            dependencies = product_package.get("dependencies", {})
-            product_scripting = (
-                dependencies.get("nuxie-product-scripting")
-                if isinstance(dependencies, dict)
-                else None
-            )
-            valid_product_scripting = (
-                isinstance(product_scripting, dict)
-                and product_scripting.get("git") == PRODUCT_REPOSITORY
-                and isinstance(product_scripting.get("rev"), str)
-                and FULL_GIT_REVISION.fullmatch(product_scripting["rev"]) is not None
-                and product_scripting.get("optional") is True
-                and set(product_scripting) == {"git", "rev", "optional"}
-            )
-            if not valid_product_scripting:
-                errors.append(
-                    "crates/nuxie-product/Cargo.toml: nuxie-product-scripting must be "
-                    "an optional exact-revision dependency on the canonical product repository"
-                )
-            root_manifest = tomllib.loads((repo_root / "Cargo.toml").read_text())
-            if root_manifest.get("patch", {}).get(RUNTIME_REPOSITORY) != {
-                name: {"path": path} for name, path in AUDITED_SELF_PATCHES.items()
-            }:
-                errors.append(
-                    "Cargo.toml: the remaining product host requires the exact audited "
-                    "runtime self-patches"
-                )
-
     for package, package_name, _ in packages:
         if package_name in FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES:
             errors.append(
@@ -1387,10 +1333,12 @@ def check_repository(
             )
 
     for package, package_name, manifest in packages:
+        package_root = repo_root / package
+        if package_name in PRODUCT_LAYER_PACKAGES:
+            errors.extend(product_layer_source_errors(repo_root, package_root))
         if package_name in UNPROTECTED_WORKSPACE_PACKAGES:
             continue
         protected_count += 1
-        package_root = repo_root / package
         if package_name == "nuxie-binary":
             features = manifest.get("features", {})
             if isinstance(features, dict) and feature_reaches(

@@ -183,9 +183,10 @@ const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
 const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
 const FEATHER_ATLAS_PADDING: u32 = 2;
 // A single Metal command buffer first fails at 2,044 direct MSAA draws with
-// the current per-draw tessellation resources. Reuse that twofold safety
-// fence while the shared C++ logical-flush resource layout is translated.
-const MAX_DRAWS_PER_SUBMISSION: usize = 1_024;
+// the current per-draw tessellation resources. Keep a twofold safety fence on
+// that backend while the shared C++ logical-flush resource layout is
+// translated. Other backends must not inherit a Metal observation.
+const METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION: usize = 1_024;
 const MAX_CACHED_FRAME_ATTACHMENTS: usize = 1;
 const MAX_CACHED_STROKE_PREPARATION_SCRATCHES: usize = 1;
 // Match C++ RenderContext's retained 1 MiB per-frame allocator while dropping
@@ -198,6 +199,7 @@ const MAXIMAL_PIXEL_BOUNDS: [i32; 4] = [i32::MIN, i32::MIN, i32::MAX, i32::MAX];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RendererCapabilities {
     polyfill_vertex_storage_buffers: bool,
+    max_independent_draws_per_submission: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,6 +235,7 @@ impl RendererCapabilities {
     fn from_adapter(
         limits: &wgpu::Limits,
         downlevel: &wgpu::DownlevelCapabilities,
+        backend: wgpu::Backend,
         vertex_storage_limit_override: Option<u32>,
         force_polyfill: bool,
     ) -> Self {
@@ -245,6 +248,8 @@ impl RendererCapabilities {
                     && !downlevel
                         .flags
                         .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)),
+            max_independent_draws_per_submission: matches!(backend, wgpu::Backend::Metal)
+                .then_some(METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION),
         }
     }
 
@@ -313,6 +318,7 @@ struct Context {
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
     device_health: Arc<DeviceHealth>,
     adapter_info: WgpuAdapterInfo,
+    capabilities: RendererCapabilities,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
     cover_pipeline: wgpu::RenderPipeline,
@@ -663,6 +669,7 @@ async fn finish_wgpu_device_request(
     let capabilities = RendererCapabilities::from_adapter(
         &adapter_limits,
         &adapter.get_downlevel_capabilities(),
+        raw_adapter_info.backend,
         compatibility_plan.map(|plan| plan.effective_limit),
         force_vertex_storage_polyfill,
     );
@@ -1036,6 +1043,7 @@ impl WgpuFactory {
                 )),
                 device_health,
                 adapter_info,
+                capabilities,
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
                 cover_pipeline,
@@ -6338,12 +6346,18 @@ impl WgpuFrame {
                 Ok(())
             };
         let logical_flush_starts = self.logical_frame.logical_flush_starts.clone();
+        let independent_draw_limit = self
+            .context
+            .capabilities
+            .max_independent_draws_per_submission;
         if self.draws.is_empty() {
             encode_fallback_run(&self.draws, None, &[0], true, &mut encoder)?;
         } else if self.mode == RenderMode::Msaa {
-            if self.draws.len() > MAX_DRAWS_PER_SUBMISSION
+            if independent_draw_limit.is_some_and(|limit| self.draws.len() > limit)
                 && msaa_draws_can_submit_independently(&self.draws)
             {
+                let draw_limit = independent_draw_limit
+                    .expect("submission split requires an advertised draw limit");
                 let mut clear_target = true;
                 for (flush_index, &flush_start) in logical_flush_starts.iter().enumerate() {
                     let flush_end = logical_flush_starts
@@ -6360,9 +6374,8 @@ impl WgpuFrame {
                     let draw_schedule =
                         &self.logical_frame.msaa_schedule[schedule_start..schedule_end];
                     debug_assert_eq!(draw_schedule.len(), flush_end - flush_start);
-                    for chunk_start in (0..draw_schedule.len()).step_by(MAX_DRAWS_PER_SUBMISSION) {
-                        let chunk_end =
-                            (chunk_start + MAX_DRAWS_PER_SUBMISSION).min(draw_schedule.len());
+                    for chunk_start in (0..draw_schedule.len()).step_by(draw_limit) {
+                        let chunk_end = (chunk_start + draw_limit).min(draw_schedule.len());
                         encode_fallback_run(
                             &self.draws[flush_start + chunk_start..flush_start + chunk_end],
                             Some(&draw_schedule[chunk_start..chunk_end]),
@@ -6493,6 +6506,7 @@ impl WgpuFrame {
                                 independent_atomic_draws_in_encoder
                                     .saturating_add(batch_draws.len()),
                                 group.len(),
+                                independent_draw_limit,
                             ) {
                                 if !batch_draws.is_empty() {
                                     encode_atomic_run(
@@ -8657,9 +8671,11 @@ fn disjoint_atomic_draw_groups(
 fn independent_atomic_group_requires_submit(
     draws_in_encoder: usize,
     next_group_draws: usize,
+    draw_limit: Option<usize>,
 ) -> bool {
-    draws_in_encoder != 0
-        && draws_in_encoder.saturating_add(next_group_draws) > MAX_DRAWS_PER_SUBMISSION
+    draw_limit.is_some_and(|limit| {
+        draws_in_encoder != 0 && draws_in_encoder.saturating_add(next_group_draws) > limit
+    })
 }
 
 fn disjoint_atomic_draw_groups_with_limit(
@@ -11111,26 +11127,45 @@ mod tests {
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
         assert!(
-            !RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
-                .polyfill_vertex_storage_buffers
+            !RendererCapabilities::from_adapter(
+                &limits,
+                &downlevel,
+                wgpu::Backend::Vulkan,
+                None,
+                false,
+            )
+            .polyfill_vertex_storage_buffers
         );
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS - 1;
         assert!(
-            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
-                .polyfill_vertex_storage_buffers
+            RendererCapabilities::from_adapter(
+                &limits,
+                &downlevel,
+                wgpu::Backend::Vulkan,
+                None,
+                false,
+            )
+            .polyfill_vertex_storage_buffers
         );
 
         limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
         downlevel.flags.remove(wgpu::DownlevelFlags::VERTEX_STORAGE);
         assert!(
-            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
-                .polyfill_vertex_storage_buffers
+            RendererCapabilities::from_adapter(
+                &limits,
+                &downlevel,
+                wgpu::Backend::Vulkan,
+                None,
+                false,
+            )
+            .polyfill_vertex_storage_buffers
         );
         assert!(
             !RendererCapabilities::from_adapter(
                 &limits,
                 &downlevel,
+                wgpu::Backend::Vulkan,
                 Some(MAX_VERTEX_STORAGE_BUFFERS),
                 false,
             )
@@ -11140,11 +11175,39 @@ mod tests {
             RendererCapabilities::from_adapter(
                 &limits,
                 &wgpu::DownlevelCapabilities::default(),
+                wgpu::Backend::Vulkan,
                 None,
                 true,
             )
             .polyfill_vertex_storage_buffers
         );
+    }
+
+    #[test]
+    fn independent_draw_submission_limit_is_a_backend_capability() {
+        let limits = wgpu::Limits::default();
+        let downlevel = wgpu::DownlevelCapabilities::default();
+
+        let metal = RendererCapabilities::from_adapter(
+            &limits,
+            &downlevel,
+            wgpu::Backend::Metal,
+            None,
+            false,
+        );
+        let vulkan = RendererCapabilities::from_adapter(
+            &limits,
+            &downlevel,
+            wgpu::Backend::Vulkan,
+            None,
+            false,
+        );
+
+        assert_eq!(
+            metal.max_independent_draws_per_submission,
+            Some(METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION)
+        );
+        assert_eq!(vulkan.max_independent_draws_per_submission, None);
     }
 
     #[test]
@@ -13451,10 +13514,32 @@ mod tests {
 
     #[test]
     fn independent_atomic_groups_share_an_encoder_until_the_draw_budget() {
-        assert!(!independent_atomic_group_requires_submit(0, 2_048));
-        assert!(!independent_atomic_group_requires_submit(1_023, 1));
-        assert!(independent_atomic_group_requires_submit(1_024, 1));
-        assert!(independent_atomic_group_requires_submit(1, 1_024));
+        let metal_limit = Some(METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION);
+        assert!(!independent_atomic_group_requires_submit(
+            0,
+            2_048,
+            metal_limit
+        ));
+        assert!(!independent_atomic_group_requires_submit(
+            1_023,
+            1,
+            metal_limit
+        ));
+        assert!(independent_atomic_group_requires_submit(
+            1_024,
+            1,
+            metal_limit
+        ));
+        assert!(independent_atomic_group_requires_submit(
+            1,
+            1_024,
+            metal_limit
+        ));
+        assert!(!independent_atomic_group_requires_submit(
+            usize::MAX,
+            usize::MAX,
+            None
+        ));
     }
 
     #[test]
@@ -13885,7 +13970,7 @@ mod tests {
         };
 
         let mut split = factory.begin_frame(0xff00_0000);
-        for _ in 0..MAX_DRAWS_PER_SUBMISSION {
+        for _ in 0..METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION {
             split.draw_path(&path, &red);
         }
         split.draw_path(&path, &green);
@@ -13926,7 +14011,7 @@ mod tests {
         )));
         draw.role = DrawRole::Content { clip_id: 0 };
         draw.paint.feather = 1.0;
-        let oversized_feather_flush = vec![draw; MAX_DRAWS_PER_SUBMISSION + 1];
+        let oversized_feather_flush = vec![draw; METAL_MAX_INDEPENDENT_DRAWS_PER_SUBMISSION + 1];
         assert!(!msaa_draws_can_submit_independently(
             &oversized_feather_flush
         ));

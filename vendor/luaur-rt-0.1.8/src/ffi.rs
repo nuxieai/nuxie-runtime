@@ -14,8 +14,10 @@ pub(crate) use luaur_vm::type_aliases::lua_state::lua_State;
 
 // ---- state ---------------------------------------------------------------
 pub(crate) use luaur_vm::functions::lua_close::lua_close;
+pub(crate) use luaur_vm::functions::lua_getthreaddata::lua_getthreaddata;
 pub(crate) use luaur_vm::functions::lua_l_newstate::lua_l_newstate;
 pub(crate) use luaur_vm::functions::lua_l_openlibs::lua_l_openlibs;
+pub(crate) use luaur_vm::functions::lua_setthreaddata::lua_setthreaddata;
 
 // ---- stack / values ------------------------------------------------------
 pub(crate) use luaur_vm::functions::lua_gettop::lua_gettop;

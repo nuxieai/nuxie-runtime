@@ -12,6 +12,7 @@
       import init, {
         assert_direct_gpu_canvas_image,
         assert_imported_gpu_canvas,
+        assert_imported_gpu_canvas_rejects_physical_shader,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
       } from "./pkg/browser_renderer_smoke.js";
@@ -22,6 +23,7 @@
         const results = [
           await assert_direct_gpu_canvas_image(document.createElement("canvas")),
           await assert_imported_gpu_canvas(document.createElement("canvas")),
+          await assert_imported_gpu_canvas_rejects_physical_shader(document.createElement("canvas")),
           await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")),
           await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")),
         ];

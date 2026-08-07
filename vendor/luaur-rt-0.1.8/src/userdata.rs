@@ -31,6 +31,7 @@ use crate::error::{Error, Result};
 use crate::state::{Lua, LuaRef};
 use crate::sync::{MaybeSend, MaybeSync, NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
+use crate::table::Table;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::value::Value;
 
@@ -1031,6 +1032,49 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
     }
 }
 
+/// Build the `__index`/`__newindex` field dispatchers as Lua closures.
+///
+/// The dispatchers outlive the state that created the userdata: a userdata
+/// created inside a callback running on an implicit `call_async` coroutine is
+/// routinely retained (upvalues, registry) past that coroutine's death. A Rust
+/// dispatcher closure would capture `Table` handles bound to the creating
+/// state and later scribble on the dead coroutine's stack (UNIV-1764's browser
+/// abort). A Lua closure is a VM heap object whose upvalues are plain values:
+/// the lookup executes on whichever live thread invokes the metamethod,
+/// matching mlua's current-state dispatch and C++ Luau's C-function
+/// metamethods, which never touch a foreign thread's stack.
+fn create_field_dispatchers(
+    lua: &Lua,
+    getters: &Table,
+    setters: &Table,
+    method_table: &Table,
+) -> Result<(crate::function::Function, crate::function::Function)> {
+    let builder: crate::function::Function = lua
+        .load(
+            r#"
+local getters, setters, methods = ...
+local function index(ud, key)
+    local getter = getters[key]
+    if getter ~= nil then
+        return getter(ud)
+    end
+    return methods[key]
+end
+local function newindex(ud, key, value)
+    local setter = setters[key]
+    if setter ~= nil then
+        return setter(ud, value)
+    end
+    error(string.format("attempt to set unknown field '%s' on userdata", tostring(key)), 0)
+end
+return index, newindex
+"#,
+        )
+        .set_name("__luaur_userdata_dispatch")
+        .into_function()?;
+    builder.call((getters.clone(), setters.clone(), method_table.clone()))
+}
+
 /// Build a scoped (non-`'static`) userdata wrapping `data`, with a metatable
 /// assembled from `T::add_fields` + `T::add_methods`. Returns the
 /// [`AnyUserData`] handle plus a closure that, when called, neutralises the
@@ -1080,31 +1124,9 @@ pub(crate) fn create_scoped_userdata<T: UserData>(
     }
 
     if has_fields {
-        let getters_c = getters.clone();
-        let methods_c = method_table.clone();
-        let index_fn = lua.create_function(move |_, (ud, key): (Value, Value)| {
-            let getter: Value = getters_c.get(key.clone())?;
-            if let Value::Function(f) = getter {
-                return f.call::<Value>(ud);
-            }
-            let m: Value = methods_c.get(key)?;
-            Ok(m)
-        })?;
+        let (index_fn, newindex_fn) =
+            create_field_dispatchers(lua, &getters, &setters, &method_table)?;
         metatable.set("__index", index_fn)?;
-
-        let setters_c = setters.clone();
-        let newindex_fn =
-            lua.create_function(move |_, (ud, key, val): (Value, Value, Value)| {
-                let setter: Value = setters_c.get(key.clone())?;
-                if let Value::Function(f) = setter {
-                    f.call::<()>((ud, val))?;
-                    return Ok(());
-                }
-                let name = key.to_string().unwrap_or_default();
-                Err(Error::RuntimeError(format!(
-                    "attempt to set unknown field '{name}' on userdata"
-                )))
-            })?;
         metatable.set("__newindex", newindex_fn)?;
     } else {
         metatable.set("__index", method_table)?;
@@ -1198,34 +1220,12 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
     }
 
     if has_fields {
-        // __index dispatcher: try a field getter, then the method table.
-        let getters_c = getters.clone();
-        let methods_c = method_table.clone();
-        let index_fn = lua.create_function(move |_, (ud, key): (Value, Value)| {
-            let getter: Value = getters_c.get(key.clone())?;
-            if let Value::Function(f) = getter {
-                return f.call::<Value>(ud);
-            }
-            // Fall back to the method table.
-            let m: Value = methods_c.get(key)?;
-            Ok(m)
-        })?;
+        // __index tries a field getter then the method table; __newindex tries
+        // a field setter, else raises. Built as Lua closures so dispatch never
+        // depends on the creating state (see `create_field_dispatchers`).
+        let (index_fn, newindex_fn) =
+            create_field_dispatchers(lua, &getters, &setters, &method_table)?;
         metatable.set("__index", index_fn)?;
-
-        // __newindex dispatcher: try a field setter, else raise.
-        let setters_c = setters.clone();
-        let newindex_fn =
-            lua.create_function(move |_, (ud, key, val): (Value, Value, Value)| {
-                let setter: Value = setters_c.get(key.clone())?;
-                if let Value::Function(f) = setter {
-                    f.call::<()>((ud, val))?;
-                    return Ok(());
-                }
-                let name = key.to_string().unwrap_or_default();
-                Err(Error::RuntimeError(format!(
-                    "attempt to set unknown field '{name}' on userdata"
-                )))
-            })?;
         metatable.set("__newindex", newindex_fn)?;
     } else {
         // No fields: the metatable's __index is just the method table.

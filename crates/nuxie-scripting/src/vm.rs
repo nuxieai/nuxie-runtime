@@ -63,7 +63,10 @@ use nuxie_runtime::{
     ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
-use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
+use view_model::{
+    ScriptViewModelFrameContext, ScriptedContext, create_awaitable_scripted_context,
+    create_scripted_view_model,
+};
 
 use crate::envelope::SignedContent;
 use crate::gpu_canvas::{
@@ -1089,6 +1092,72 @@ impl ScriptVm {
             context_view_model_value,
             context_parent_view_models,
         )
+    }
+
+    /// Browser counterpart of the pinned synchronous generator call. WebGPU
+    /// validates physical shader modules asynchronously, so only this path
+    /// exposes an awaitable `context:shader`; every other context method still
+    /// delegates to the same concrete ScriptedContext userdata.
+    pub async fn instantiate_registered_script_with_factory_async(
+        &self,
+        program: &ScriptProgram,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        bindings
+            .verify_render_context(factory)
+            .map_err(|error| self.script_error(error))?;
+        let context_alive = Rc::new(Cell::new(true));
+        let context_present = Rc::new(Cell::new(
+            self.default_context_view_model.is_some()
+                || !self.default_context_parent_view_models.is_empty(),
+        ));
+        let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_missing_requested_data = Rc::new(Cell::new(false));
+        let context_parent_view_models = self.default_context_parent_view_models.clone();
+        let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
+            Rc::clone(&self.gpu_canvas_shaders),
+            self.renderer_bindings.clone(),
+        );
+        let (context, proxy) = create_awaitable_scripted_context(
+            &self.lua,
+            ScriptedContext::new_with_lifetime(
+                Rc::clone(&context_view_model),
+                Rc::clone(&context_present),
+                context_parent_view_models.clone(),
+                Rc::clone(&context_missing_requested_data),
+                Some(gpu_canvas_context.clone()),
+                Rc::clone(&context_alive),
+            ),
+        )
+        .map_err(|error| self.script_error(error))?;
+        self.reset_execution_budget();
+        let result = program.generator.call_async(proxy).await;
+        let instance: Table = match self.track_resource_result(result) {
+            Ok(instance) => instance,
+            Err(error) => {
+                context_alive.set(false);
+                return Err(self.script_error(error));
+            }
+        };
+        Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
+            instance,
+            self.renderer_bindings.clone(),
+            context_view_model,
+            context_present,
+            Some(context),
+            Some(context_alive),
+            context_missing_requested_data,
+            context_parent_view_models,
+            Some(program.generator.clone()),
+            self.resource_limits.clone(),
+            Some(gpu_canvas),
+            Some(gpu_canvas_context),
+            self.execution_budget.clone(),
+            Some(Rc::clone(&self.script_safepoints)),
+            Some(Rc::clone(&self.script_cycle_active)),
+            self.logging.clone(),
+        )))
     }
 
     /// Invoke a registered protocol generator without a callback-local factory

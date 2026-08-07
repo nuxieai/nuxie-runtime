@@ -56,8 +56,10 @@ repository = "https://github.com/nuxieai/nuxie-runtime"
 # In-house luaur fork (docs/luau-fork.md): every luaur crate in the dependency
 # graph resolves to the vendored fork baseline (crates.io 0.1.8 packages,
 # upstream commit f0eac7f7, Luau 0.724-era). luaur-common and luaur-vm carry
-# the pre-existing Apple Mach-clock patch (their NUXIE_PATCH.md files); the
-# other four are byte-identical to crates.io (NUXIE_PROVENANCE.md files).
+# the pre-existing Apple Mach-clock patch; luaur-rt carries Rive's async
+# coroutine host-data inheritance and state-independent userdata field
+# dispatchers. Modified packages enumerate their deltas in NUXIE_PATCH.md;
+# the others remain byte-identical to crates.io.
 luaur-ast = { path = "vendor/luaur-ast-0.1.8" }
 luaur-bytecode = { path = "vendor/luaur-bytecode-0.1.8" }
 luaur-common = { path = "vendor/luaur-common-0.1.8" }

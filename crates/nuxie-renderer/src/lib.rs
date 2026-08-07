@@ -18,6 +18,7 @@ mod draw;
 mod feather_lut;
 mod gpu;
 mod gpu_canvas;
+mod gpu_canvas_shader;
 mod gr_triangulator;
 mod gradient_pipeline;
 #[allow(dead_code)]
@@ -52,10 +53,10 @@ use bytemuck::{Pod, Zeroable};
 use nuxie_image_codec::{decode_image_rgba, preflight_encoded_image};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
-    GpuCanvasPlan, GpuCanvasShader, ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
-    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
-    Vec2D,
+    GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderLoad, ImageDecodeError, ImageSampler, Mat2D,
+    PathVerb, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
+    StrokeJoin, Vec2D,
 };
 use std::any::Any;
 #[cfg(test)]
@@ -63,6 +64,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
@@ -312,6 +314,7 @@ struct Context {
     logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
     device_health: Arc<DeviceHealth>,
+    next_gpu_canvas_shader_occurrence_id: AtomicU64,
     adapter_info: WgpuAdapterInfo,
     capabilities: RendererCapabilities,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
@@ -1037,6 +1040,7 @@ impl WgpuFactory {
                     intersection_board::GroupingType::Disjoint,
                 )),
                 device_health,
+                next_gpu_canvas_shader_occurrence_id: AtomicU64::new(1),
                 adapter_info,
                 capabilities,
                 non_zero_stencil_pipeline,
@@ -1316,6 +1320,17 @@ impl Factory for WgpuFactory {
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         self.make_imported_gpu_canvas_shader(shader)
+    }
+
+    fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            GpuCanvasShaderLoad::Ready(self.make_imported_gpu_canvas_shader(shader))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            gpu_canvas_shader::load_awaitable(Arc::clone(&self.context), shader.clone())
+        }
     }
 
     fn make_gpu_canvas_image(

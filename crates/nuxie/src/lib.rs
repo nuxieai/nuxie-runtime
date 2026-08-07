@@ -50,12 +50,13 @@ pub use nuxie_render_api::{
     GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders,
     GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
     GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
-    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
-    GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderLoad, GpuCanvasShaderResourceKind,
+    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
+    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError,
+    ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
+    StrokeJoin, Vec2D,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
@@ -700,6 +701,55 @@ impl FileScriptRuntime {
         })
     }
 
+    async fn prepare_mounts_async(
+        &mut self,
+        runtime: &RuntimeFile,
+        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
+        groups: &[ScriptMountGroup],
+        factory: &mut dyn Factory,
+        default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+        root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
+        let domain = render_factory_domain(factory);
+        if let Some(ready) = self.ready.as_mut() {
+            if ready.factory_domain != domain {
+                return Err(nuxie_runtime::ScriptError::new(
+                    "scripted File was used with a different renderer Factory domain",
+                ));
+            }
+            let initialize_default_context = !ready.default_context_initialized;
+            if initialize_default_context {
+                ready
+                    .vm
+                    .set_default_context_view_model(default_context_view_model);
+            }
+            let groups =
+                instantiate_script_mounts_async(ready, runtime, groups, factory, root_view_model)
+                    .await?;
+            if initialize_default_context {
+                ready.default_context_initialized = true;
+            }
+            return Ok(PreparedFileScriptMounts {
+                groups,
+                candidate: None,
+            });
+        }
+
+        let mut candidate = self.build_candidate(runtime, factory)?;
+        candidate
+            .vm
+            .set_default_context_view_model(default_context_view_model);
+        candidate.default_context_initialized = true;
+        Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
+        let groups =
+            instantiate_script_mounts_async(&candidate, runtime, groups, factory, root_view_model)
+                .await?;
+        Ok(PreparedFileScriptMounts {
+            groups,
+            candidate: Some(candidate),
+        })
+    }
+
     fn begin_cycle(&self) -> Option<Box<dyn Any>> {
         self.ready.as_ref().map(|ready| {
             ready.vm.begin_script_cycle();
@@ -999,6 +1049,89 @@ fn instantiate_script_mounts(
                             target.global_id,
                             target.asset_ordinal,
                             target.asset_name
+                        ))
+                    })?;
+                if !initialized {
+                    return Err(nuxie_runtime::ScriptError::new(format!(
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase init returned false or nil",
+                        group.path, target.global_id, target.asset_ordinal, target.asset_name
+                    )));
+                }
+            }
+            scripts.push((
+                target.kind,
+                target.global_id,
+                target.serialized_implemented_methods,
+                script,
+            ));
+        }
+        prepared.push(PreparedScriptMountGroup {
+            graph_global_id: group.graph_global_id,
+            scripts,
+            interpolators,
+        });
+    }
+    Ok(prepared)
+}
+
+#[cfg(feature = "scripting")]
+async fn instantiate_script_mounts_async(
+    ready: &ReadyFileScripts,
+    runtime: &RuntimeFile,
+    groups: &[ScriptMountGroup],
+    factory: &mut dyn Factory,
+    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+) -> std::result::Result<Vec<PreparedScriptMountGroup>, nuxie_runtime::ScriptError> {
+    let mut prepared = Vec::with_capacity(groups.len());
+    for group in groups {
+        let mut scripts = Vec::with_capacity(group.targets.len());
+        let mut interpolators = Vec::new();
+        for target in &group.targets {
+            let target_label = target.kind.label();
+            let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{} {target_label} global {} references unregistered protocol ordinal {} name '{}'",
+                    group.path, target.global_id, target.asset_ordinal, target.asset_name
+                ))
+            })?;
+            if matches!(target.kind, ScriptMountTargetKind::Interpolator) {
+                interpolators.push(PreparedScriptedInterpolator {
+                    graph_global_id: group.graph_global_id,
+                    local_id: target.local_id,
+                    global_id: target.global_id,
+                    asset_ordinal: target.asset_ordinal,
+                    asset_name: target.asset_name.clone(),
+                    serialized_implemented_methods: target.serialized_implemented_methods,
+                    fallback_root: root_view_model.cloned(),
+                });
+                continue;
+            }
+            let mut script = ready
+                .vm
+                .instantiate_registered_script_with_factory_async(program, factory)
+                .await
+                .map_err(|error| {
+                    error.with_context(format!(
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase generator failed",
+                        group.path, target.global_id, target.asset_ordinal, target.asset_name
+                    ))
+                })?;
+            if matches!(target.kind, ScriptMountTargetKind::Layout) {
+                hydrate_prepared_layout_inputs(
+                    runtime,
+                    group.graph_global_id,
+                    target,
+                    script.as_mut(),
+                    root_view_model,
+                )?;
+            }
+            if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
+                let initialized = script
+                    .call_init_with_factory(&mut NoopScriptHost, factory)
+                    .map_err(|error| {
+                        error.with_context(format!(
+                            "{} {target_label} global {} asset ordinal {} name '{}' phase init failed",
+                            group.path, target.global_id, target.asset_ordinal, target.asset_name
                         ))
                     })?;
                 if !initialized {
@@ -3575,6 +3708,53 @@ fn mount_scripted_artboard_tree(
 }
 
 #[cfg(feature = "scripting")]
+async fn mount_scripted_artboard_tree_async(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    {
+        let scripts = file.scripts.borrow();
+        if !scripts.scripts_are_authenticated()
+            || !scripts
+                .assets
+                .iter()
+                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_external_data_converter)
+        {
+            return Ok(false);
+        }
+    }
+    let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    let mut prepared = {
+        let mut scripts = file.scripts.borrow_mut();
+        scripts
+            .prepare_mounts_async(
+                &file.runtime,
+                &file.file_asset_owners,
+                &groups,
+                factory,
+                None,
+                None,
+            )
+            .await?
+    };
+    validate_prepared_script_mount_topology(instance, &prepared.groups)?;
+    if let Some(candidate) = prepared.candidate.take() {
+        file.scripts.borrow_mut().ready = Some(candidate);
+    }
+    attach_prepared_script_mounts(instance, prepared.groups, &file.scripts, &file.runtime);
+    let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
+    if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{} still has unattached scripted runtime instances",
+            group.path
+        )));
+    }
+    Ok(has_script_target)
+}
+
+#[cfg(feature = "scripting")]
 fn verify_scripted_artboard_tree_attached(
     file: &File,
     root_graph: &ArtboardGraph,
@@ -3611,6 +3791,24 @@ fn prepare_scripted_artboard_tree(
     // Script update refreshes component-list occurrences. A newly materialized
     // child is mounted on the next preparation call, but must not slip through
     // this draw without a table in the meantime.
+    verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
+    Ok(changed)
+}
+
+#[cfg(feature = "scripting")]
+async fn prepare_scripted_artboard_tree_async(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    let has_script_target =
+        mount_scripted_artboard_tree_async(file, root_graph, instance, factory).await?;
+    let changed = if has_script_target {
+        flush_scripted_artboard_tree(instance, factory)?
+    } else {
+        false
+    };
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
 }
@@ -5624,6 +5822,30 @@ impl<'a> ArtboardInstance<'a> {
         Ok(())
     }
 
+    /// Draw after awaiting browser WebGPU's physical shader-module validation.
+    /// Native callers may keep using [`Self::draw`]; browser GPU-canvas hosts
+    /// use this once so the generator observes the pinned C++ fail-closed
+    /// `context:shader` result before synchronous renderer traversal begins.
+    pub async fn draw_async(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+    ) -> Result<()> {
+        #[cfg(feature = "scripting")]
+        {
+            let artboard = self
+                .file
+                .graph
+                .artboards
+                .get(self.artboard_index)
+                .context("artboard instance graph is unavailable")?;
+            prepare_scripted_artboard_tree_async(self.file, artboard, &mut self.raw, factory)
+                .await
+                .context("failed to prepare scripted drawables")?;
+        }
+        self.draw(factory, renderer)
+    }
+
     /// Drop renderer-owned members before switching this occurrence to a
     /// replacement backend. The next draw rebuilds them from live state.
     pub fn reset_renderer(&self) {
@@ -6629,6 +6851,27 @@ impl OwnedArtboardInstance {
             .context("failed to draw Rive artboard")?;
         self.raw.observe_owned_images()?;
         Ok(())
+    }
+
+    /// Owning mirror of [`ArtboardInstance::draw_async`].
+    pub async fn draw_async(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+    ) -> Result<()> {
+        #[cfg(feature = "scripting")]
+        {
+            let artboard = self
+                .file
+                .graph
+                .artboards
+                .get(self.artboard_index)
+                .context("owned artboard instance graph is unavailable")?;
+            prepare_scripted_artboard_tree_async(&self.file, artboard, &mut self.raw, factory)
+                .await
+                .context("failed to prepare scripted drawables")?;
+        }
+        self.draw(factory, renderer)
     }
 
     /// Drop renderer-owned members before switching this occurrence to a

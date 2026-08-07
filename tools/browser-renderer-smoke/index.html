@@ -14,6 +14,7 @@
         assert_direct_gpu_canvas_image,
         assert_explicit_readback,
         assert_imported_gpu_canvas,
+        assert_imported_gpu_canvas_rejects_physical_shader,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -414,6 +415,7 @@
           } else {
             results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
             results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));
+            results.push(await assert_imported_gpu_canvas_rejects_physical_shader(document.createElement("canvas")));
             results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
             results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
 

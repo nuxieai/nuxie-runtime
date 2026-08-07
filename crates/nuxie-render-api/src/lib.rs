@@ -6,6 +6,8 @@ use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1373,6 +1375,35 @@ impl std::fmt::Display for GpuCanvasError {
 
 impl std::error::Error for GpuCanvasError {}
 
+/// One exact authored-shader lookup, ready immediately on synchronous
+/// backends or completed by WebGPU's asynchronous validation scope.
+///
+/// Pinned C++ `buildShaderEntries` returns false when `makeShaderModule`
+/// fails, so the shader lookup produces no Lua values
+/// (`src/lua/renderer/lua_gpu.cpp:519-656`). This adapter keeps that factory
+/// result intact on browser WebGPU, whose physical validation result is a
+/// promise rather than a synchronous return value.
+pub enum GpuCanvasShaderLoad {
+    Ready(Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError>),
+    Pending(
+        Pin<
+            Box<
+                dyn Future<Output = Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError>>
+                    + 'static,
+            >,
+        >,
+    ),
+}
+
+impl GpuCanvasShaderLoad {
+    pub async fn resolve(self) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        match self {
+            Self::Ready(result) => result,
+            Self::Pending(future) => future.await,
+        }
+    }
+}
+
 /// A renderer adapter could not decode encoded image bytes into a render image.
 ///
 /// Image codecs and backend limits are adapter-specific, so this error deliberately
@@ -1642,6 +1673,13 @@ pub trait Factory {
         Err(GpuCanvasError::unsupported())
     }
 
+    /// Begin one per-lookup physical shader creation. Native factories inherit
+    /// the immediate C++-shaped result; browser WebGPU overrides this because
+    /// `popErrorScope()` is asynchronous.
+    fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader(shader))
+    }
+
     /// Execute one imported GPU-canvas plan and retain its result as a normal
     /// render image suitable for `Renderer::draw_image`.
     ///
@@ -1734,6 +1772,10 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         self.borrow_mut().make_gpu_canvas_shader(shader)
+    }
+
+    fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        self.borrow_mut().load_gpu_canvas_shader(shader)
     }
 
     fn make_gpu_canvas_image(

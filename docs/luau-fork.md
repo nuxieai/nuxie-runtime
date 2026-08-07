@@ -32,7 +32,7 @@ crates.io, vendored byte-for-byte under `vendor/`:
 | `luaur-bytecode` | `vendor/luaur-bytecode-0.1.8` | no | `NUXIE_PROVENANCE.md` |
 | `luaur-common` | `vendor/luaur-common-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
 | `luaur-compiler` | `vendor/luaur-compiler-0.1.8` | no | `NUXIE_PROVENANCE.md` |
-| `luaur-rt` | `vendor/luaur-rt-0.1.8` | no | `NUXIE_PROVENANCE.md` |
+| `luaur-rt` | `vendor/luaur-rt-0.1.8` | yes (async thread data, userdata dispatch) | `NUXIE_PATCH.md` |
 | `luaur-vm` | `vendor/luaur-vm-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
 
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
@@ -80,6 +80,24 @@ Verified at the fork switch (both green, no behavioral diff):
    `get_clock_timestamp.rs`/`get_clock_period.rs` (common),
    `clock_timestamp.rs`/`clock_period.rs` (vm). Details in each package's
    `NUXIE_PATCH.md`.
+2. **Async coroutine host-data inheritance** (`luaur-rt`). Generic
+   `Function::call_async` coroutines copy the invoking thread's host pointer
+   before their first resume, matching Rive's
+   `lua_setthreaddata(co, lua_getthreaddata(L))` on promise coroutines
+   (`src/lua/lua_promise.cpp:1102`) and module threads
+   (`src/lua/rive_lua_libs.cpp:693`). This extends the already-ported
+   Promise-specific behavior to the generic async bridge used when WebGPU
+   validation must complete before an authored shader becomes visible.
+3. **State-independent userdata field dispatchers** (`luaur-rt`,
+   UNIV-1764). `create_userdata`/`create_scoped_userdata` build their
+   `__index`/`__newindex` field dispatchers as Lua closures rather than Rust
+   closures capturing `Table` handles. luaur-rt handles are bound to the
+   `lua_State` that created them, so a userdata created inside a callback on
+   an implicit `call_async` coroutine kept dispatchers that manipulated the
+   dead coroutine's stack after the coroutine completed (browser abort via
+   `lua_g_indexerror`; native `index2addr` assert). Lua-closure dispatch runs
+   on whichever live thread invokes the metamethod, matching mlua's
+   current-state dispatch and C++ Luau's C-function metamethods.
 
 Every future engine change lands as a documented entry in the affected
 package's `NUXIE_PATCH.md` (create one when a baseline package is first

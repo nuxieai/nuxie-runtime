@@ -27,7 +27,7 @@ nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 # Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
 # against upstream Luau commit 8f33df9 per the luaur README).
 luaur-common = { version = "=0.1.8", optional = true }
-luaur-rt = { version = "=0.1.8", optional = true }
+luaur-rt = { version = "=0.1.8", optional = true, features = ["async"] }
 # The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
 # version as luaur-rt's own dependency so cargo unifies to one copy.
 luaur-vm = { version = "=0.1.8", optional = true }

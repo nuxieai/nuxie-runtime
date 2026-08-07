@@ -333,11 +333,11 @@ impl ViewModelInstanceRuntime {
 mod viewmodel_instance_runtime_identity_tests {
     use super::*;
     use crate::properties::property_key_for_name;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_schema::definition_by_name;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -346,8 +346,8 @@ mod viewmodel_instance_runtime_identity_tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -356,14 +356,14 @@ mod viewmodel_instance_runtime_identity_tests {
 
     pub(super) fn runtime_family_file() -> Rc<RuntimeFile> {
         Rc::new(
-            RuntimeFile::from_authoring_records(vec![
+            RuntimeFile::from_fixture_records(vec![
                 record("Backboard", Vec::new()),
                 record(
                     "ViewModel",
                     vec![property(
                         "ViewModel",
                         "name",
-                        AuthoringValue::String("Root".to_owned()),
+                        FixtureValue::String("Root".to_owned()),
                     )],
                 ),
                 record(
@@ -371,7 +371,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModelPropertyNumber",
                         "name",
-                        AuthoringValue::String("count".to_owned()),
+                        FixtureValue::String("count".to_owned()),
                     )],
                 ),
                 record(
@@ -379,7 +379,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModelPropertyList",
                         "name",
-                        AuthoringValue::String("items".to_owned()),
+                        FixtureValue::String("items".to_owned()),
                     )],
                 ),
                 record(
@@ -388,12 +388,12 @@ mod viewmodel_instance_runtime_identity_tests {
                         property(
                             "ViewModelPropertyViewModel",
                             "name",
-                            AuthoringValue::String("child".to_owned()),
+                            FixtureValue::String("child".to_owned()),
                         ),
                         property(
                             "ViewModelPropertyViewModel",
                             "viewModelReferenceId",
-                            AuthoringValue::Uint(1),
+                            FixtureValue::Uint(1),
                         ),
                     ],
                 ),
@@ -402,7 +402,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModel",
                         "name",
-                        AuthoringValue::String("Child".to_owned()),
+                        FixtureValue::String("Child".to_owned()),
                     )],
                 ),
                 record(
@@ -410,7 +410,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModelPropertyNumber",
                         "name",
-                        AuthoringValue::String("value".to_owned()),
+                        FixtureValue::String("value".to_owned()),
                     )],
                 ),
             ])
@@ -420,14 +420,14 @@ mod viewmodel_instance_runtime_identity_tests {
 
     fn runtime_asset_file() -> Rc<RuntimeFile> {
         Rc::new(
-            RuntimeFile::from_authoring_records(vec![
+            RuntimeFile::from_fixture_records(vec![
                 record("Backboard", Vec::new()),
                 record(
                     "ViewModel",
                     vec![property(
                         "ViewModel",
                         "name",
-                        AuthoringValue::String("Assets".to_owned()),
+                        FixtureValue::String("Assets".to_owned()),
                     )],
                 ),
                 record(
@@ -435,7 +435,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModelPropertyAssetImage",
                         "name",
-                        AuthoringValue::String("image".to_owned()),
+                        FixtureValue::String("image".to_owned()),
                     )],
                 ),
                 record(
@@ -443,7 +443,7 @@ mod viewmodel_instance_runtime_identity_tests {
                     vec![property(
                         "ViewModelPropertyArtboard",
                         "name",
-                        AuthoringValue::String("artboard".to_owned()),
+                        FixtureValue::String("artboard".to_owned()),
                     )],
                 ),
             ])

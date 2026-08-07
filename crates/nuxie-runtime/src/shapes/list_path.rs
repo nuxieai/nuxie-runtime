@@ -622,7 +622,7 @@ mod tests {
             state.reconcile(
                 // This branch does not inspect the file because the list is
                 // rejected before row traversal.
-                &RuntimeFile::from_authoring_records(Vec::new()).unwrap(),
+                &RuntimeFile::from_fixture_records(Vec::new()).unwrap(),
                 None,
             ),
             Err(RuntimeListPathInputError::NullList)
@@ -634,7 +634,7 @@ mod tests {
         // compressed to zero output rows and still reconciles/dirties.
         assert_eq!(
             state.reconcile(
-                &RuntimeFile::from_authoring_records(Vec::new()).unwrap(),
+                &RuntimeFile::from_fixture_records(Vec::new()).unwrap(),
                 Some(&[None, None])
             ),
             Ok(())

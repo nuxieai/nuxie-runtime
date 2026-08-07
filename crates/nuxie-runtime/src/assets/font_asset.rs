@@ -169,7 +169,7 @@ impl ArtboardInstance {
 mod tests {
     use super::*;
     use crate::{RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetOwners};
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
     use nuxie_render_api::{
         ColorInt, DecodedFont, Factory, FillRule, FontDecodeError, GpuCanvasError, GpuCanvasPlan,
@@ -272,8 +272,8 @@ mod tests {
         }
     }
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing {type_name} definition"))
                 .type_key
@@ -282,64 +282,36 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
         }
     }
 
-    #[allow(clippy::arithmetic_side_effects)]
     fn fixture_font_bytes() -> Vec<u8> {
-        let mut accumulator = 0u32;
-        let mut bit_count = 0u8;
-        let mut decoded = Vec::new();
-        for byte in include_bytes!("../../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
-            .iter()
-            .copied()
-            .filter(|byte| !byte.is_ascii_whitespace())
-        {
-            if byte == b'=' {
-                break;
-            }
-            let value = match byte {
-                b'A'..=b'Z' => byte - b'A',
-                b'a'..=b'z' => byte - b'a' + 26,
-                b'0'..=b'9' => byte - b'0' + 52,
-                b'+' => 62,
-                b'/' => 63,
-                _ => panic!("invalid base64 font fixture"),
-            };
-            accumulator = (accumulator << 6) | u32::from(value);
-            bit_count += 6;
-            if bit_count >= 8 {
-                bit_count -= 8;
-                decoded.push((accumulator >> bit_count) as u8);
-                accumulator &= (1u32 << bit_count) - 1;
-            }
-        }
-        decoded
+        include_bytes!("../../../../fixtures/fonts/roboto-a.ttf").to_vec()
     }
 
     #[test]
     fn asynchronously_decoded_font_notifies_live_text_style_shape_dirt() {
-        let runtime = RuntimeFile::from_authoring_records(vec![
+        let runtime = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "FontAsset",
-                vec![property("FontAsset", "assetId", AuthoringValue::Uint(10))],
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(10))],
             ),
             record("Artboard", Vec::new()),
             record(
                 "Text",
-                vec![property("Component", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Component", "parentId", FixtureValue::Uint(0))],
             ),
             record(
                 "TextStylePaint",
                 vec![
-                    property("Component", "parentId", AuthoringValue::Uint(1)),
-                    property("TextStyle", "fontAssetId", AuthoringValue::Uint(0)),
+                    property("Component", "parentId", FixtureValue::Uint(1)),
+                    property("TextStyle", "fontAssetId", FixtureValue::Uint(0)),
                 ],
             ),
         ])

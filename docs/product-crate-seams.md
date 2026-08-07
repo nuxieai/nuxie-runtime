@@ -83,10 +83,13 @@ seams. The one concrete `FileScriptArtboard` trigger-consumption case remains
 with the baseline facade's private unit tests, where it can exercise that
 implementation detail without product source inclusion.
 
-UNIV-1627 completed the authoring cut: the runtime workspace no longer owns an
-authoring package or exports Scene symbols. `nuxie-binary` exposes authored
-record construction only through its non-default `test-support` feature; its
-default shipping interface remains byte-import only.
+UNIV-1627 completed the authoring cut, and UNIV-1788 removed the remaining
+test vocabulary debt: the runtime workspace no longer owns an authoring
+package or exports Scene symbols. `nuxie-binary` exposes neutral synthetic
+fixture construction only through its non-default `test-support` feature; its
+default shipping interface remains byte-import only. Hidden aliases retain
+source compatibility for editor revisions pinned before UNIV-1788 without
+allowing authoring vocabulary back into protected runtime consumers.
 
 UNIV-1625 completed the browser cut: `BrowserFactory`, `BrowserFrame`, and
 `BrowserResizeError` are owned only by `nuxie-browser-adapter`. The renderer

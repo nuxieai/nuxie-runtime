@@ -5,7 +5,7 @@ use crate::state_machine::focus_listener_group::RuntimeFocusListenerGroup;
 use crate::state_machine::gamepad_listener_group::RuntimeGamepadListenerGroup;
 use crate::state_machine::keyboard_listener_group::RuntimeKeyboardListenerGroup;
 use nuxie_binary::{
-    AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, read_runtime_file,
+    FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file,
 };
 use nuxie_graph::GraphFile;
 use std::cell::{Cell, RefCell};
@@ -2622,8 +2622,8 @@ fn scripted_drawable_subtype_input_artboard_and_machine_with_optional_script(
     script: Option<Box<dyn ScriptInstance>>,
     mount_before_machine: bool,
 ) -> (ArtboardInstance, StateMachineInstance, u32) {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -2631,29 +2631,29 @@ fn scripted_drawable_subtype_input_artboard_and_machine_with_optional_script(
             properties,
         }
     }
-    fn parent(type_name: &str, local_id: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn parent(type_name: &str, local_id: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, "parentId")
                 .unwrap_or_else(|| panic!("missing {type_name}.parentId")),
-            value: AuthoringValue::Uint(local_id),
+            value: FixtureValue::Uint(local_id),
         }
     }
-    fn uint(type_name: &str, property_name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, property_name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{property_name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
-    fn double(type_name: &str, property_name: &str, value: f32) -> AuthoringProperty {
-        AuthoringProperty {
+    fn double(type_name: &str, property_name: &str, value: f32) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{property_name}")),
-            value: AuthoringValue::Double(value),
+            value: FixtureValue::Double(value),
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record(
@@ -2959,8 +2959,8 @@ fn nested_scripted_drawable_input_artboard_and_machine(
     ancestor_script: Box<dyn ScriptInstance>,
     leaf_script: Box<dyn ScriptInstance>,
 ) -> (ArtboardInstance, StateMachineInstance) {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -2968,29 +2968,29 @@ fn nested_scripted_drawable_input_artboard_and_machine(
             properties,
         }
     }
-    fn parent(type_name: &str, local_id: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn parent(type_name: &str, local_id: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, "parentId")
                 .unwrap_or_else(|| panic!("missing {type_name}.parentId")),
-            value: AuthoringValue::Uint(local_id),
+            value: FixtureValue::Uint(local_id),
         }
     }
-    fn uint(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
-    fn double(type_name: &str, name: &str, value: f32) -> AuthoringProperty {
-        AuthoringProperty {
+    fn double(type_name: &str, name: &str, value: f32) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
-            value: AuthoringValue::Double(value),
+            value: FixtureValue::Double(value),
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record(
@@ -3332,8 +3332,8 @@ fn focused_keyboard_dispatch_bubbles_leaf_to_parent_and_stops_when_handled() {
 
 #[test]
 fn text_input_parent_precedes_scripted_and_listener_keyboard_dispatch() {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -3341,35 +3341,35 @@ fn text_input_parent_precedes_scripted_and_listener_keyboard_dispatch() {
             properties,
         }
     }
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record(
             "TextInput",
             vec![
-                property("TextInput", "parentId", AuthoringValue::Uint(0)),
-                property("TextInput", "opacity", AuthoringValue::Double(1.0)),
-                property("TextInput", "multiline", AuthoringValue::Bool(true)),
+                property("TextInput", "parentId", FixtureValue::Uint(0)),
+                property("TextInput", "opacity", FixtureValue::Double(1.0)),
+                property("TextInput", "multiline", FixtureValue::Bool(true)),
                 property(
                     "TextInput",
                     "text",
-                    AuthoringValue::String("seed".to_owned()),
+                    FixtureValue::String("seed".to_owned()),
                 ),
             ],
         ),
         record(
             "FocusData",
             vec![
-                property("FocusData", "parentId", AuthoringValue::Uint(1)),
-                property("FocusData", "focusFlags", AuthoringValue::Uint(7)),
+                property("FocusData", "parentId", FixtureValue::Uint(1)),
+                property("FocusData", "focusFlags", FixtureValue::Uint(7)),
             ],
         ),
         record("StateMachine", Vec::new()),
@@ -3555,8 +3555,8 @@ fn semantic_callbacks_apply_constraints_preserve_duplicates_and_defer_actions() 
         }
     }
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -3564,15 +3564,15 @@ fn semantic_callbacks_apply_constraints_preserve_duplicates_and_defer_actions() 
             properties,
         }
     }
-    fn uint(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record("Node", vec![uint("Node", "parentId", 0)]),
@@ -4162,8 +4162,8 @@ fn scripted_drawable_without_attached_script_still_owns_gamepad_dispatch() {
 
 #[test]
 fn gamepad_listener_dispatches_all_payloads_fifo_marks_advance_and_returns_false() {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -4171,15 +4171,15 @@ fn gamepad_listener_dispatches_all_payloads_fifo_marks_advance_and_returns_false
             properties,
         }
     }
-    fn uint(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record("Node", vec![uint("Node", "parentId", 0)]),
@@ -4296,8 +4296,8 @@ fn fl_c5_event_host_drain_leaves_the_core_queue_for_apply_events() {
 
 #[test]
 fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -4305,11 +4305,11 @@ fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
             properties,
         }
     }
-    fn uint(type_name: &str, property_name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, property_name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{property_name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
     fn event_listener(
@@ -4341,7 +4341,7 @@ fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record("Event", vec![uint("Event", "parentId", 0)]),
@@ -4417,7 +4417,7 @@ fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
     finite_records.extend((0..100).map(|_| record("Event", vec![uint("Event", "parentId", 0)])));
     finite_records.push(record("StateMachine", Vec::new()));
     let finite_file =
-        RuntimeFile::from_authoring_records(finite_records).expect("finite chain imports");
+        RuntimeFile::from_fixture_records(finite_records).expect("finite chain imports");
     let finite_graph =
         GraphFile::from_runtime_file(&finite_file).expect("finite chain graph builds");
     let mut finite_artboard = ArtboardInstance::from_graph_with_artboards(
@@ -4631,8 +4631,8 @@ fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
 
 #[test]
 fn fl_c5_event_listener_fire_reports_live_payload_before_advance() {
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -4640,22 +4640,22 @@ fn fl_c5_event_listener_fire_reports_live_payload_before_advance() {
             properties,
         }
     }
-    fn uint(type_name: &str, property_name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, property_name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{property_name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
-    fn string(type_name: &str, property_name: &str, value: &str) -> AuthoringProperty {
-        AuthoringProperty {
+    fn string(type_name: &str, property_name: &str, value: &str) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{property_name}")),
-            value: AuthoringValue::String(value.to_owned()),
+            value: FixtureValue::String(value.to_owned()),
         }
     }
 
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record(
@@ -4771,30 +4771,30 @@ fn fl_c5_test_reported_event(local_index: usize) -> StateMachineReportedEvent {
 }
 
 fn fl_c5_test_audio_event(local_index: usize) -> (StateMachineReportedEvent, u32) {
-    let audio_file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+    let audio_file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name("Backboard")
                 .expect("Backboard schema definition")
                 .type_key
                 .int,
             properties: Vec::new(),
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name("Artboard")
                 .expect("Artboard schema definition")
                 .type_key
                 .int,
             properties: Vec::new(),
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name("AudioEvent")
                 .expect("AudioEvent schema definition")
                 .type_key
                 .int,
-            properties: vec![AuthoringProperty {
+            properties: vec![FixtureProperty {
                 key: crate::properties::property_key_for_name("AudioEvent", "parentId")
                     .expect("AudioEvent.parentId"),
-                value: AuthoringValue::Uint(0),
+                value: FixtureValue::Uint(0),
             }],
         },
     ])
@@ -6510,8 +6510,8 @@ fn transactional_candidate_can_adopt_the_same_occurrence_listener_state() {
     assert_eq!(calls.borrow().len(), 1);
 }
 
-fn fl_c5_bind_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-    AuthoringRecord {
+fn fl_c5_bind_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+    FixtureRecord {
         type_key: nuxie_schema::definition_by_name(type_name)
             .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
             .type_key
@@ -6520,8 +6520,8 @@ fn fl_c5_bind_record(type_name: &str, properties: Vec<AuthoringProperty>) -> Aut
     }
 }
 
-fn fl_c5_bind_property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-    AuthoringProperty {
+fn fl_c5_bind_property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+    FixtureProperty {
         key: property_key_for_name(type_name, name)
             .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
         value,
@@ -6529,14 +6529,14 @@ fn fl_c5_bind_property(type_name: &str, name: &str, value: AuthoringValue) -> Au
 }
 
 fn fl_c5_bind_file_and_artboard() -> (RuntimeFile, ArtboardInstance) {
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         fl_c5_bind_record("Backboard", Vec::new()),
         fl_c5_bind_record(
             "ViewModel",
             vec![fl_c5_bind_property(
                 "ViewModel",
                 "name",
-                AuthoringValue::String("Main".to_owned()),
+                FixtureValue::String("Main".to_owned()),
             )],
         ),
         fl_c5_bind_record(
@@ -6545,9 +6545,9 @@ fn fl_c5_bind_file_and_artboard() -> (RuntimeFile, ArtboardInstance) {
                 fl_c5_bind_property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Global A".to_owned()),
+                    FixtureValue::String("Global A".to_owned()),
                 ),
-                fl_c5_bind_property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                fl_c5_bind_property("ViewModel", "viewModelType", FixtureValue::Uint(2)),
             ],
         ),
         fl_c5_bind_record(
@@ -6556,9 +6556,9 @@ fn fl_c5_bind_file_and_artboard() -> (RuntimeFile, ArtboardInstance) {
                 fl_c5_bind_property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Global B".to_owned()),
+                    FixtureValue::String("Global B".to_owned()),
                 ),
-                fl_c5_bind_property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                fl_c5_bind_property("ViewModel", "viewModelType", FixtureValue::Uint(2)),
             ],
         ),
         fl_c5_bind_record(
@@ -6566,15 +6566,15 @@ fn fl_c5_bind_file_and_artboard() -> (RuntimeFile, ArtboardInstance) {
             vec![fl_c5_bind_property(
                 "ViewModel",
                 "name",
-                AuthoringValue::String("Standard".to_owned()),
+                FixtureValue::String("Standard".to_owned()),
             )],
         ),
         fl_c5_bind_record(
             "Artboard",
             vec![
-                fl_c5_bind_property("Artboard", "width", AuthoringValue::Double(100.0)),
-                fl_c5_bind_property("Artboard", "height", AuthoringValue::Double(100.0)),
-                fl_c5_bind_property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                fl_c5_bind_property("Artboard", "width", FixtureValue::Double(100.0)),
+                fl_c5_bind_property("Artboard", "height", FixtureValue::Double(100.0)),
+                fl_c5_bind_property("Artboard", "viewModelId", FixtureValue::Uint(0)),
             ],
         ),
     ])

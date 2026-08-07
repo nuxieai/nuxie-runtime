@@ -3848,7 +3848,6 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
 
     #[test]
     fn encoded_image_metadata_reports_supported_raster_identity() {
@@ -4303,14 +4302,7 @@ mod tests {
     #[test]
     fn p3g_factory_font_helper_validates_and_owns_the_encoded_font() {
         let mut factory = NullFactory::new();
-        let encoded = include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
-            .iter()
-            .copied()
-            .filter(|byte| !byte.is_ascii_whitespace())
-            .collect::<Vec<_>>();
-        let mut bytes = base64::engine::general_purpose::STANDARD
-            .decode(encoded)
-            .expect("fixture font base64 decodes");
+        let mut bytes = include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec();
         let expected = bytes.clone();
 
         let font = factory.decode_font(&bytes).expect("valid font decodes");

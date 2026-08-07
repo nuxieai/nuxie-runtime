@@ -1,78 +1,78 @@
 use nuxie_binary::{
-    AuthoringProperty, AuthoringRecord, AuthoringValue, HeaderFieldKind, RuntimeFile,
+    FixtureProperty, FixtureRecord, FixtureValue, HeaderFieldKind, RuntimeFile,
     RuntimeImportStatus, SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION,
 };
 
-fn uint(key: u16, value: u64) -> AuthoringProperty {
-    AuthoringProperty {
+fn uint(key: u16, value: u64) -> FixtureProperty {
+    FixtureProperty {
         key,
-        value: AuthoringValue::Uint(value),
+        value: FixtureValue::Uint(value),
     }
 }
 
-fn double(key: u16, value: f32) -> AuthoringProperty {
-    AuthoringProperty {
+fn double(key: u16, value: f32) -> FixtureProperty {
+    FixtureProperty {
         key,
-        value: AuthoringValue::Double(value),
+        value: FixtureValue::Double(value),
     }
 }
 
-fn string(key: u16, value: &str) -> AuthoringProperty {
-    AuthoringProperty {
+fn string(key: u16, value: &str) -> FixtureProperty {
+    FixtureProperty {
         key,
-        value: AuthoringValue::String(value.to_owned()),
+        value: FixtureValue::String(value.to_owned()),
     }
 }
 
-fn bool_value(key: u16, value: bool) -> AuthoringProperty {
-    AuthoringProperty {
+fn bool_value(key: u16, value: bool) -> FixtureProperty {
+    FixtureProperty {
         key,
-        value: AuthoringValue::Bool(value),
+        value: FixtureValue::Bool(value),
     }
 }
 
-fn bytes(key: u16, value: Vec<u8>) -> AuthoringProperty {
-    AuthoringProperty {
+fn bytes(key: u16, value: Vec<u8>) -> FixtureProperty {
+    FixtureProperty {
         key,
-        value: AuthoringValue::Bytes(value),
+        value: FixtureValue::Bytes(value),
     }
 }
 
 #[test]
-fn authoring_records_build_an_importable_runtime_file() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_build_an_importable_runtime_file() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 7,
             properties: vec![uint(5, 1)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 20,
             properties: vec![uint(5, 1)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 18,
             properties: vec![
                 uint(5, 3),
-                AuthoringProperty {
+                FixtureProperty {
                     key: 37,
-                    value: AuthoringValue::Color(0xff_33_66_cc),
+                    value: FixtureValue::Color(0xff_33_66_cc),
                 },
             ],
         },
     ])
-    .expect("valid authoring records should build a runtime file");
+    .expect("valid fixture records should build a runtime file");
 
     assert_eq!(SUPPORTED_MAJOR_VERSION, 7);
     assert_eq!(SUPPORTED_MINOR_VERSION, 2);
@@ -102,7 +102,7 @@ fn authoring_records_build_an_importable_runtime_file() {
     for (id, expected_type) in expected_types.into_iter().enumerate() {
         let object = file
             .object(id)
-            .unwrap_or_else(|| panic!("missing authored object {id}"));
+            .unwrap_or_else(|| panic!("missing fixture object {id}"));
         assert_eq!(object.id, id as u32);
         assert_eq!(object.type_name, expected_type);
         assert_eq!(file.import_status(id), Some(RuntimeImportStatus::Imported));
@@ -137,49 +137,49 @@ fn authoring_records_build_an_importable_runtime_file() {
 
 #[test]
 fn artboard_geometry_preserves_local_order_and_shape_ownership() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+    let file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 7,
             properties: vec![uint(5, 1)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 20,
             properties: vec![uint(5, 1)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 18,
             properties: vec![uint(5, 3)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 4,
             properties: vec![uint(5, 5)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 24,
             properties: vec![uint(5, 5)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 18,
             properties: vec![uint(5, 7)],
         },
     ])
-    .expect("valid authored shapes should build a runtime file");
+    .expect("valid fixture shapes should build a runtime file");
 
     let geometry = file
         .artboard_geometry(0)
@@ -232,17 +232,17 @@ fn artboard_geometry_preserves_local_order_and_shape_ownership() {
 }
 
 #[test]
-fn authoring_records_use_the_wire_canonical_property_order() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_use_the_wire_canonical_property_order() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![
                 double(18, 0.5),
@@ -252,7 +252,7 @@ fn authoring_records_use_the_wire_canonical_property_order() {
             ],
         },
     ])
-    .expect("valid authoring records should build a runtime file");
+    .expect("valid fixture records should build a runtime file");
 
     let property_keys = file
         .object(2)
@@ -265,39 +265,39 @@ fn authoring_records_use_the_wire_canonical_property_order() {
 }
 
 #[test]
-fn authoring_header_uses_only_wire_compatible_property_field_types() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_header_uses_only_wire_compatible_property_field_types() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0), string(4, "Shape"), double(13, 12.0)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 7,
             properties: vec![uint(5, 1), bool_value(164, true)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 20,
             properties: vec![uint(5, 1)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 18,
             properties: vec![
                 uint(5, 3),
-                AuthoringProperty {
+                FixtureProperty {
                     key: 37,
-                    value: AuthoringValue::Color(0xff_33_66_cc),
+                    value: FixtureValue::Color(0xff_33_66_cc),
                 },
             ],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 92,
             properties: vec![uint(5, 0), bytes(582, Vec::new())],
         },
@@ -322,8 +322,8 @@ fn authoring_header_uses_only_wire_compatible_property_field_types() {
 }
 
 #[test]
-fn authoring_records_reject_objects_the_runtime_would_drop() {
-    let error = RuntimeFile::from_authoring_records(vec![AuthoringRecord {
+fn fixture_records_reject_objects_the_runtime_would_drop() {
+    let error = RuntimeFile::from_fixture_records(vec![FixtureRecord {
         type_key: 1,
         properties: vec![],
     }])
@@ -336,17 +336,17 @@ fn authoring_records_reject_objects_the_runtime_would_drop() {
 }
 
 #[test]
-fn authoring_records_reject_an_invalid_component_parent() {
-    let error = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_reject_an_invalid_component_parent() {
+    let error = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 99)],
         },
@@ -360,8 +360,8 @@ fn authoring_records_reject_an_invalid_component_parent() {
 }
 
 #[test]
-fn authoring_records_reject_an_unknown_type() {
-    let error = RuntimeFile::from_authoring_records(vec![AuthoringRecord {
+fn fixture_records_reject_an_unknown_type() {
+    let error = RuntimeFile::from_fixture_records(vec![FixtureRecord {
         type_key: u16::MAX,
         properties: vec![],
     }])
@@ -370,14 +370,14 @@ fn authoring_records_reject_an_unknown_type() {
     assert!(
         error
             .to_string()
-            .contains("unknown authoring object type key"),
+            .contains("unknown fixture object type key"),
         "unexpected error: {error:#}"
     );
 }
 
 #[test]
-fn authoring_records_reject_an_abstract_type() {
-    let error = RuntimeFile::from_authoring_records(vec![AuthoringRecord {
+fn fixture_records_reject_an_abstract_type() {
+    let error = RuntimeFile::from_fixture_records(vec![FixtureRecord {
         type_key: 9,
         properties: vec![],
     }])
@@ -390,8 +390,8 @@ fn authoring_records_reject_an_abstract_type() {
 }
 
 #[test]
-fn authoring_records_reject_non_deserializable_properties() {
-    let error = RuntimeFile::from_authoring_records(vec![AuthoringRecord {
+fn fixture_records_reject_non_deserializable_properties() {
+    let error = RuntimeFile::from_fixture_records(vec![FixtureRecord {
         type_key: 122,
         properties: vec![uint(401, 0)],
     }])
@@ -404,8 +404,8 @@ fn authoring_records_reject_non_deserializable_properties() {
 }
 
 #[test]
-fn authoring_records_reject_the_wrong_property_value_kind() {
-    let error = RuntimeFile::from_authoring_records(vec![AuthoringRecord {
+fn fixture_records_reject_the_wrong_property_value_kind() {
+    let error = RuntimeFile::from_fixture_records(vec![FixtureRecord {
         type_key: 18,
         properties: vec![uint(37, 0xff_33_66_cc)],
     }])
@@ -420,17 +420,17 @@ fn authoring_records_reject_the_wrong_property_value_kind() {
 }
 
 #[test]
-fn authoring_records_reject_duplicate_property_keys() {
-    let error = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_reject_duplicate_property_keys() {
+    let error = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0), uint(5, 0)],
         },
@@ -440,27 +440,27 @@ fn authoring_records_reject_duplicate_property_keys() {
     assert!(
         error
             .to_string()
-            .contains("duplicate authoring property key 5"),
+            .contains("duplicate fixture property key 5"),
         "unexpected error: {error:#}"
     );
 }
 
 #[test]
-fn authoring_records_reject_uints_that_cannot_round_trip_through_the_wire_format() {
-    let error = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_reject_uints_that_cannot_round_trip_through_the_wire_format() {
+    let error = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 3,
             properties: vec![uint(5, 0)],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 20,
             properties: vec![uint(5, 1), uint(40, u64::from(u32::MAX) + 1)],
         },
@@ -476,17 +476,17 @@ fn authoring_records_reject_uints_that_cannot_round_trip_through_the_wire_format
 }
 
 #[test]
-fn authoring_records_apply_uint8_member_truncation_after_uint_wire_validation() {
-    let file = RuntimeFile::from_authoring_records(vec![
-        AuthoringRecord {
+fn fixture_records_apply_uint8_member_truncation_after_uint_wire_validation() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        FixtureRecord {
             type_key: 23,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 1,
             properties: vec![],
         },
-        AuthoringRecord {
+        FixtureRecord {
             type_key: 420,
             properties: vec![uint(596, 0x1ff)],
         },

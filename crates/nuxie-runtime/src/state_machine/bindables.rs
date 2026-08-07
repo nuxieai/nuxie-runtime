@@ -2108,11 +2108,11 @@ pub(crate) fn runtime_default_view_model_triggers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use std::sync::Arc;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -2121,8 +2121,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -2131,7 +2131,7 @@ mod tests {
 
     #[test]
     fn unresolved_parent_number_bind_retains_its_dynamic_source() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "DataBindContext",
@@ -2139,7 +2139,7 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("BindablePropertyNumber", "propertyValue")
                                 .expect("number property key"),
                         )),
@@ -2147,9 +2147,9 @@ mod tests {
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![1, 0]),
+                        FixtureValue::Bytes(vec![1, 0]),
                     ),
-                    property("DataBindContext", "flags", AuthoringValue::Uint(4)),
+                    property("DataBindContext", "flags", FixtureValue::Uint(4)),
                 ],
             ),
         ])
@@ -2185,7 +2185,7 @@ mod tests {
 
     #[test]
     fn unresolved_parent_list_to_length_bind_retains_its_list_source_kind() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "DataBindContext",
@@ -2193,7 +2193,7 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("BindablePropertyNumber", "propertyValue")
                                 .expect("number property key"),
                         )),
@@ -2201,10 +2201,10 @@ mod tests {
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![1, 0]),
+                        FixtureValue::Bytes(vec![1, 0]),
                     ),
-                    property("DataBindContext", "flags", AuthoringValue::Uint(4)),
-                    property("DataBindContext", "converterId", AuthoringValue::Uint(0)),
+                    property("DataBindContext", "flags", FixtureValue::Uint(4)),
+                    property("DataBindContext", "converterId", FixtureValue::Uint(0)),
                 ],
             ),
             record("DataConverterListToLength", Vec::new()),

@@ -148,38 +148,10 @@ INTERNAL_DEBT_FILES = {
     "editor-gpu-tooling": set(),
     "apple-image-admission": set(),
     "apple-presentation": set(),
-    "binary-authoring": {
-        "crates/nuxie/src/lib.rs",
-        "crates/nuxie/tests/empty_text_binding.rs",
-        "crates/nuxie-binary/src/lib.rs",
-        "crates/nuxie-runtime/src/artboard/tests.rs",
-        "crates/nuxie-runtime/src/assets/font_asset.rs",
-        "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
-        "crates/nuxie-runtime/src/draw.rs",
-        "crates/nuxie-runtime/src/shapes/list_path.rs",
-        "crates/nuxie-runtime/src/state_machine/bindables.rs",
-        "crates/nuxie-runtime/src/state_machine/data_bind_template.rs",
-        "crates/nuxie-runtime/src/state_machine/focus_action_target.rs",
-        "crates/nuxie-runtime/src/state_machine/focus_action_traversal.rs",
-        "crates/nuxie-runtime/src/state_machine/listener_action.rs",
-        "crates/nuxie-runtime/src/state_machine/listener_align_target.rs",
-        "crates/nuxie-runtime/src/state_machine/listener_input_change.rs",
-        "crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_viewmodel.rs",
-        "crates/nuxie-runtime/src/state_machine/state_machine.rs",
-        "crates/nuxie-runtime/src/state_machine/state_machine_fire_action.rs",
-        "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
-        "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/view_model_listener.rs",
-        "crates/nuxie-runtime/src/state_machine/state_machine_listener.rs",
-        "crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs",
-        "crates/nuxie-runtime/src/text.rs",
-        "crates/nuxie-runtime/src/view_model.rs",
-        "crates/nuxie-runtime/src/view_model_cell.rs",
-        "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_list_index_runtime.rs",
-        "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_runtime.rs",
-        "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs",
-        "crates/nuxie-binary/tests/authoring_records.rs",
-        "tools/nuxie-codegen/src/main.rs",
-    },
+    # A single compatibility shim keeps pinned nuxie-dev authoring builds
+    # source-compatible. It is compiled only with nuxie-binary's non-default
+    # test-support feature and must not spread into protected consumers.
+    "binary-authoring": {"crates/nuxie-binary/src/legacy_test_support.rs"},
     "browser-presentation": set(),
     "project-data": set(),
     "product-host-commands": set(),
@@ -234,6 +206,20 @@ RUST_INCLUDE_SOURCE_EDGE = re.compile(
     rf"\binclude\s*!\s*\(\s*{RUST_STRING_LITERAL}\s*\)", re.DOTALL
 )
 RUST_INCLUDE_INVOCATION = re.compile(r"\binclude\s*!\s*[\(\[\{]")
+RUST_DATA_INCLUDE_SOURCE_EDGE = re.compile(
+    rf"\b(?P<macro>include_(?:bytes|str))\s*!\s*\(\s*"
+    rf"{RUST_STRING_LITERAL}\s*\)",
+    re.DOTALL,
+)
+RUST_DATA_INCLUDE_MANIFEST_EDGE = re.compile(
+    rf"\b(?P<macro>include_(?:bytes|str))\s*!\s*\(\s*concat\s*!\s*\(\s*"
+    rf'env\s*!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,\s*'
+    rf"{RUST_STRING_LITERAL}\s*\)\s*\)",
+    re.DOTALL,
+)
+RUST_DATA_INCLUDE_INVOCATION = re.compile(
+    r"\binclude_(?:bytes|str)\s*!\s*[\(\[\{]"
+)
 RUST_PATH_ASSIGNMENT = re.compile(r"\bpath\s*=")
 CFG_ATTRIBUTE_START = re.compile(r"#\s*\[\s*cfg\s*\(")
 RUST_MODULE_AFTER_CFG = re.compile(
@@ -246,6 +232,14 @@ ALLOWED_DYNAMIC_INCLUDES = {
         r'\s*"/runtime_objects\.rs"\s*\)\s*\)'
     ),
 }
+
+BINARY_AUTHORING_COMPATIBILITY_FILE = (
+    "crates/nuxie-binary/src/legacy_test_support.rs"
+)
+BINARY_AUTHORING_COMPATIBILITY_MODULE = re.compile(
+    r'#\s*\[\s*cfg\s*\(\s*feature\s*=\s*"test-support"\s*\)\s*\]\s*'
+    r"mod\s+legacy_test_support\s*;"
+)
 
 
 def normalized_package_name(name: str) -> str:
@@ -579,8 +573,8 @@ def _blank_non_newlines(characters: list[str], start: int, end: int) -> None:
             characters[index] = " "
 
 
-def strip_rust_non_code(source: str) -> str:
-    """Blank comments and string literals while preserving line positions."""
+def _strip_rust(source: str, *, blank_literals: bool) -> str:
+    """Blank comments and optionally literals while preserving positions."""
 
     characters = list(source)
     length = len(source)
@@ -619,7 +613,8 @@ def strip_rust_non_code(source: str) -> str:
                 end += 1
             if end < length and source[end] == "'":
                 end += 1
-                _blank_non_newlines(characters, index, end)
+                if blank_literals:
+                    _blank_non_newlines(characters, index, end)
                 index = end
                 continue
 
@@ -635,7 +630,8 @@ def strip_rust_non_code(source: str) -> str:
                 delimiter = '"' + hashes
                 end = source.find(delimiter, quote + 1)
                 end = length if end < 0 else end + len(delimiter)
-                _blank_non_newlines(characters, index, end)
+                if blank_literals:
+                    _blank_non_newlines(characters, index, end)
                 index = end
                 continue
 
@@ -651,11 +647,59 @@ def strip_rust_non_code(source: str) -> str:
                 end += 1
                 if source[end - 1] == '"':
                     break
-            _blank_non_newlines(characters, index, min(end, length))
+            if blank_literals:
+                _blank_non_newlines(characters, index, min(end, length))
             index = end
             continue
         index += 1
     return "".join(characters)
+
+
+def strip_rust_non_code(source: str) -> str:
+    """Blank comments and string literals while preserving line positions."""
+
+    return _strip_rust(source, blank_literals=True)
+
+
+def strip_rust_comments(source: str) -> str:
+    """Blank comments while preserving literals and line positions."""
+
+    return _strip_rust(source, blank_literals=False)
+
+
+def rust_code_pattern_is_present(pattern: re.Pattern[str], source: str) -> bool:
+    """Match code while retaining literals needed to interpret attributes."""
+
+    comments_removed = strip_rust_comments(source)
+    code_mask = strip_rust_non_code(source)
+    return any(
+        not code_mask[match.start()].isspace()
+        for match in pattern.finditer(comments_removed)
+    )
+
+
+def feature_reaches(
+    features: dict[str, object], start: str, target: str, visited: set[str] | None = None
+) -> bool:
+    """Follow Cargo's local feature aliases without chasing dependency features."""
+
+    if start == target:
+        return True
+    if visited is None:
+        visited = set()
+    if start in visited:
+        return False
+    visited.add(start)
+    activations = features.get(start)
+    if not isinstance(activations, list):
+        return False
+    return any(
+        isinstance(activation, str)
+        and "/" not in activation
+        and not activation.startswith("dep:")
+        and feature_reaches(features, activation, target, visited)
+        for activation in activations
+    )
 
 
 def matching_delimiter(
@@ -1013,6 +1057,7 @@ def cross_package_source_edge_errors(
     relative: str,
     source_path: pathlib.Path,
     package_root: pathlib.Path,
+    repo_root: pathlib.Path,
     source: str,
 ) -> list[str]:
     errors = []
@@ -1069,6 +1114,58 @@ def cross_package_source_edge_errors(
         line = source.count("\n", 0, invocation.start()) + 1
         errors.append(
             f"{relative}:{line}: protected source include! form could not be verified"
+        )
+
+    verified_data_include_starts = set()
+    data_include_edges = [
+        (match, (source_path.parent / rust_string_literal_value(match)).resolve())
+        for match in RUST_DATA_INCLUDE_SOURCE_EDGE.finditer(source)
+        if not code_mask[match.start()].isspace()
+        and rust_string_literal_value(match) is not None
+    ]
+    data_include_edges.extend(
+        (
+            match,
+            pathlib.Path(f"{package_root}{rust_string_literal_value(match)}").resolve(),
+        )
+        for match in RUST_DATA_INCLUDE_MANIFEST_EDGE.finditer(source)
+        if not code_mask[match.start()].isspace()
+        and rust_string_literal_value(match) is not None
+    )
+    for match, resolved in data_include_edges:
+        verified_data_include_starts.add(match.start())
+        if code_mask[match.start()].isspace():
+            continue
+        line = source.count("\n", 0, match.start()) + 1
+        edge_kind = f"{match.group('macro')}!"
+        try:
+            resolved.relative_to(repo_root)
+        except ValueError:
+            errors.append(
+                f"{relative}:{line}: protected source {edge_kind} escapes "
+                f"the repository to {resolved}"
+            )
+            continue
+        owning_package = next(
+            (
+                parent
+                for parent in (resolved, *resolved.parents)
+                if parent == repo_root or repo_root in parent.parents
+                if manifest_declares_package(parent / "Cargo.toml")
+            ),
+            None,
+        )
+        if owning_package is not None and owning_package != package_root:
+            errors.append(
+                f"{relative}:{line}: protected source {edge_kind} crosses "
+                f"a package boundary to {resolved}"
+            )
+    for invocation in RUST_DATA_INCLUDE_INVOCATION.finditer(code_mask):
+        if invocation.start() in verified_data_include_starts:
+            continue
+        line = source.count("\n", 0, invocation.start()) + 1
+        errors.append(
+            f"{relative}:{line}: protected source data include form could not be verified"
         )
     return errors
 
@@ -1131,6 +1228,15 @@ def check_repository(
             continue
         protected_count += 1
         package_root = repo_root / package
+        if package_name == "nuxie-binary":
+            features = manifest.get("features", {})
+            if isinstance(features, dict) and feature_reaches(
+                features, "default", "test-support"
+            ):
+                errors.append(
+                    f"{package}/Cargo.toml: test-support must remain outside "
+                    "the default shipping feature set"
+                )
         errors.extend(
             portable_abi_facade_feature_errors(package, package_name, manifest)
         )
@@ -1246,7 +1352,7 @@ def check_repository(
                 continue
             errors.extend(
                 cross_package_source_edge_errors(
-                    relative, source_path, package_root, raw_source
+                    relative, source_path, package_root, repo_root, raw_source
                 )
             )
             source = strip_rust_non_code(raw_source)
@@ -1298,6 +1404,20 @@ def check_repository(
     errors.extend(
         missing_debt_exception_errors(repo_root, observed_debt, INTERNAL_DEBT_FILES)
     )
+    if BINARY_AUTHORING_COMPATIBILITY_FILE in observed_debt["binary-authoring"]:
+        binary_lib = repo_root / "crates/nuxie-binary/src/lib.rs"
+        try:
+            binary_source = binary_lib.read_text()
+        except OSError as error:
+            errors.append(f"crates/nuxie-binary/src/lib.rs: cannot read source: {error}")
+        else:
+            if not rust_code_pattern_is_present(
+                BINARY_AUTHORING_COMPATIBILITY_MODULE, binary_source
+            ):
+                errors.append(
+                    "crates/nuxie-binary/src/lib.rs: legacy authoring compatibility "
+                    "must remain gated by the non-default test-support feature"
+                )
     for family, exceptions in INTERNAL_DEBT_FILES.items():
         for relative in sorted(exceptions):
             if (repo_root / relative).is_file() and relative not in observed_debt[family]:

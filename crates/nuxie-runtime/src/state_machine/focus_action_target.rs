@@ -68,11 +68,11 @@ impl RuntimeFocusActionTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing {type_name}"))
                 .type_key
@@ -81,8 +81,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
@@ -90,30 +90,30 @@ mod tests {
     }
 
     fn artboard() -> ArtboardInstance {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(
                 "Node",
-                vec![property("Node", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Node", "parentId", FixtureValue::Uint(0))],
             ),
             record(
                 "FocusData",
                 vec![
-                    property("FocusData", "parentId", AuthoringValue::Uint(1)),
-                    property("FocusData", "focusFlags", AuthoringValue::Uint(7)),
+                    property("FocusData", "parentId", FixtureValue::Uint(1)),
+                    property("FocusData", "focusFlags", FixtureValue::Uint(7)),
                 ],
             ),
             record(
                 "FocusData",
                 vec![
-                    property("FocusData", "parentId", AuthoringValue::Uint(1)),
-                    property("FocusData", "focusFlags", AuthoringValue::Uint(7)),
+                    property("FocusData", "parentId", FixtureValue::Uint(1)),
+                    property("FocusData", "focusFlags", FixtureValue::Uint(7)),
                 ],
             ),
             record(
                 "Event",
-                vec![property("Event", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Event", "parentId", FixtureValue::Uint(0))],
             ),
         ])
         .expect("focus target records import");

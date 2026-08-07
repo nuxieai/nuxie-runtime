@@ -2,6 +2,12 @@ use anyhow::{Context, Result, bail};
 mod binary_data_reader;
 mod binary_writer;
 
+#[cfg(feature = "test-support")]
+mod legacy_test_support;
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use legacy_test_support::*;
+
 pub use binary_data_reader::BinaryDataReader;
 pub use binary_writer::{BinaryStream, BinaryWriter};
 #[cfg(any(test, feature = "test-support"))]
@@ -467,22 +473,22 @@ pub struct RuntimeFile {
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct AuthoringRecord {
+pub struct FixtureRecord {
     pub type_key: u16,
-    pub properties: Vec<AuthoringProperty>,
+    pub properties: Vec<FixtureProperty>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct AuthoringProperty {
+pub struct FixtureProperty {
     pub key: u16,
-    pub value: AuthoringValue,
+    pub value: FixtureValue,
 }
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub enum AuthoringValue {
+pub enum FixtureValue {
     Bool(bool),
     Bytes(Vec<u8>),
     Color(u32),
@@ -494,17 +500,17 @@ pub enum AuthoringValue {
 
 impl RuntimeFile {
     #[cfg(any(test, feature = "test-support"))]
-    pub fn from_authoring_records(records: Vec<AuthoringRecord>) -> Result<Self> {
+    pub fn from_fixture_records(records: Vec<FixtureRecord>) -> Result<Self> {
         let mut property_field_ids = BTreeMap::new();
         let objects = records
             .into_iter()
             .enumerate()
             .map(|(id, record)| {
-                authoring_record_to_runtime_object(id, record, &mut property_field_ids).map(Some)
+                fixture_record_to_runtime_object(id, record, &mut property_field_ids).map(Some)
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // Authoring can deliberately construct the scripting-enabled record
+        // Fixtures can deliberately construct the scripting-enabled record
         // vocabulary even when the external C++ conformance reader was built
         // without WITH_RIVE_SCRIPTING. Keep byte-file import on the conformance
         // profile while giving authored ScriptAsset/ShaderAsset contents their
@@ -519,8 +525,8 @@ impl RuntimeFile {
             objects,
             true,
         )?;
-        validate_authoring_import_statuses(&file)?;
-        validate_authoring_artboard_local_objects(&file)?;
+        validate_fixture_import_statuses(&file)?;
+        validate_fixture_artboard_local_objects(&file)?;
         Ok(file)
     }
 
@@ -7893,22 +7899,22 @@ fn read_runtime_file_with_profile_and_limits(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-fn authoring_record_to_runtime_object(
+fn fixture_record_to_runtime_object(
     id: usize,
-    record: AuthoringRecord,
+    record: FixtureRecord,
     property_field_ids: &mut BTreeMap<u32, HeaderFieldKind>,
 ) -> Result<RuntimeObject> {
     let definition = definition_by_type_key(record.type_key)
-        .with_context(|| format!("unknown authoring object type key {}", record.type_key))?;
+        .with_context(|| format!("unknown fixture object type key {}", record.type_key))?;
     if definition.abstract_ {
         bail!(
-            "authoring object type key {} ({}) is abstract",
+            "fixture object type key {} ({}) is abstract",
             record.type_key,
             definition.name
         );
     }
 
-    let object_id = u32::try_from(id).context("authoring object id does not fit in u32")?;
+    let object_id = u32::try_from(id).context("fixture object id does not fit in u32")?;
     let mut seen_property_keys = BTreeSet::new();
     let mut properties = Vec::with_capacity(record.properties.len());
     let mut authored_properties = record.properties;
@@ -7916,7 +7922,7 @@ fn authoring_record_to_runtime_object(
     for authored_property in authored_properties {
         if !seen_property_keys.insert(authored_property.key) {
             bail!(
-                "duplicate authoring property key {} on object {} ({})",
+                "duplicate fixture property key {} on object {} ({})",
                 authored_property.key,
                 object_id,
                 definition.name
@@ -7927,14 +7933,14 @@ fn authoring_record_to_runtime_object(
             property_by_primary_key_in_hierarchy(definition, authored_property.key).with_context(
                 || {
                     format!(
-                        "authoring property key {} is not allowed on object {} ({})",
+                        "fixture property key {} is not allowed on object {} ({})",
                         authored_property.key, object_id, definition.name
                     )
                 },
             )?;
         if !property.deserializes {
             bail!(
-                "authoring property key {} on object {} ({}) is not deserializable",
+                "fixture property key {} on object {} ({}) is not deserializable",
                 authored_property.key,
                 object_id,
                 definition.name
@@ -7945,7 +7951,7 @@ fn authoring_record_to_runtime_object(
             .matches_field_kind(property.runtime_type)
         {
             bail!(
-                "authoring property key {} on object {} ({}) expects {:?}, got {}",
+                "fixture property key {} on object {} ({}) expects {:?}, got {}",
                 authored_property.key,
                 object_id,
                 definition.name,
@@ -7953,11 +7959,11 @@ fn authoring_record_to_runtime_object(
                 authored_property.value.kind_name()
             );
         }
-        if let AuthoringValue::Uint(value) = &authored_property.value
+        if let FixtureValue::Uint(value) = &authored_property.value
             && u32::try_from(*value).is_err()
         {
             bail!(
-                "authoring property key {} on object {} ({}) uint value {} does not fit in C++ unsigned int",
+                "fixture property key {} on object {} ({}) uint value {} does not fit in C++ unsigned int",
                 authored_property.key,
                 object_id,
                 definition.name,
@@ -7972,7 +7978,7 @@ fn authoring_record_to_runtime_object(
                 && existing != header_kind
             {
                 bail!(
-                    "authoring property key {} has conflicting runtime field kinds",
+                    "fixture property key {} has conflicting runtime field kinds",
                     authored_property.key
                 );
             }
@@ -8004,7 +8010,7 @@ fn authoring_record_to_runtime_object(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl AuthoringValue {
+impl FixtureValue {
     fn matches_field_kind(&self, kind: FieldKind) -> bool {
         matches!(
             (self, kind),
@@ -8070,7 +8076,7 @@ fn header_field_kind_for_property(
         | (FieldKind::Bool, CoreRegistryFieldKind::Bool) => None,
         (runtime_kind, registry_kind) => {
             bail!(
-                "authoring property key {key} has conflicting schema field kind {runtime_kind:?} and core-registry field kind {registry_kind:?}"
+                "fixture property key {key} has conflicting schema field kind {runtime_kind:?} and core-registry field kind {registry_kind:?}"
             )
         }
     };
@@ -8113,7 +8119,7 @@ fn imported_file_asset_object_ids(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
+fn validate_fixture_import_statuses(file: &RuntimeFile) -> Result<()> {
     for (id, (object, status)) in file
         .objects
         .iter()
@@ -8123,7 +8129,7 @@ fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
         match status {
             RuntimeImportStatus::Imported => {}
             RuntimeImportStatus::NullObject => {
-                bail!("authored object {id} would import as a null object")
+                bail!("fixture object {id} would import as a null object")
             }
             RuntimeImportStatus::Dropped { reason } => {
                 let type_name = object
@@ -8131,21 +8137,21 @@ fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
                     .map(|object| object.type_name)
                     .unwrap_or("unknown");
                 bail!(
-                    "authored object {id} ({type_name}) would be dropped during import: {reason:?}"
+                    "fixture object {id} ({type_name}) would be dropped during import: {reason:?}"
                 );
             }
         }
     }
 
     if file.objects.len() != file.import_statuses.len() {
-        bail!("authored object/import-status counts do not match");
+        bail!("fixture object/import-status counts do not match");
     }
 
     Ok(())
 }
 
 #[cfg(any(test, feature = "test-support"))]
-fn validate_authoring_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
+fn validate_fixture_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
     for range in runtime_artboard_ranges(&file.objects, &file.import_statuses) {
         let original_slots =
             runtime_artboard_local_slots(&file.objects, &file.import_statuses, range);
@@ -8169,7 +8175,7 @@ fn validate_authoring_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
                 .map(|object| object.type_name)
                 .unwrap_or("unknown");
             bail!(
-                "authored object {file_id} ({type_name}) is an invalid artboard-local object at local id {local_id}"
+                "fixture object {file_id} ({type_name}) is an invalid artboard-local object at local id {local_id}"
             );
         }
     }
@@ -12007,12 +12013,12 @@ fn read_cpp_int_var_uint(reader: &mut BinaryReader<'_>, label: &str) -> Result<u
 #[cfg(test)]
 mod file_global_state_machine_import_tests {
     use super::{
-        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, compute_import_statuses,
+        FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, compute_import_statuses,
         cpp_property_key, definition_by_name,
     };
 
-    fn record(type_name: &str) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .expect("schema type")
                 .type_key
@@ -12021,22 +12027,22 @@ mod file_global_state_machine_import_tests {
         }
     }
 
-    fn uint_record(type_name: &str, property_name: &str, value: u64) -> AuthoringRecord {
+    fn uint_record(type_name: &str, property_name: &str, value: u64) -> FixtureRecord {
         uint_properties_record(type_name, &[(property_name, value)])
     }
 
-    fn uint_properties_record(type_name: &str, properties: &[(&str, u64)]) -> AuthoringRecord {
-        AuthoringRecord {
+    fn uint_properties_record(type_name: &str, properties: &[(&str, u64)]) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .expect("schema type")
                 .type_key
                 .int,
             properties: properties
                 .iter()
-                .map(|(property_name, value)| AuthoringProperty {
+                .map(|(property_name, value)| FixtureProperty {
                     key: u16::try_from(cpp_property_key(type_name, property_name))
                         .expect("schema property key"),
-                    value: AuthoringValue::Uint(*value),
+                    value: FixtureValue::Uint(*value),
                 })
                 .collect(),
         }
@@ -12068,7 +12074,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn layer_cursor_survives_a_later_artboard_and_state_machine_cursor_change() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("StateMachine"),
@@ -12095,7 +12101,7 @@ mod file_global_state_machine_import_tests {
     #[test]
     fn dropped_artboard_does_not_shift_imported_artboard_owner_ranges() {
         let file = with_leading_dropped_artboard(
-            RuntimeFile::from_authoring_records(vec![
+            RuntimeFile::from_fixture_records(vec![
                 record("Backboard"),
                 record("Artboard"),
                 record("CubicEaseInterpolator"),
@@ -12153,7 +12159,7 @@ mod file_global_state_machine_import_tests {
     #[test]
     fn unknown_object_is_owned_by_exactly_one_latest_importer() {
         let artboard_null = with_trailing_unknown(
-            RuntimeFile::from_authoring_records(vec![record("Backboard"), record("Artboard")])
+            RuntimeFile::from_fixture_records(vec![record("Backboard"), record("Artboard")])
                 .expect("artboard null-owner fixture imports"),
         );
         assert_eq!(
@@ -12163,7 +12169,7 @@ mod file_global_state_machine_import_tests {
         );
 
         let state_machine_null = with_trailing_unknown(
-            RuntimeFile::from_authoring_records(vec![
+            RuntimeFile::from_fixture_records(vec![
                 record("Backboard"),
                 record("Artboard"),
                 record("StateMachine"),
@@ -12187,7 +12193,7 @@ mod file_global_state_machine_import_tests {
         );
 
         let layer_null = with_trailing_unknown(
-            RuntimeFile::from_authoring_records(vec![
+            RuntimeFile::from_fixture_records(vec![
                 record("Backboard"),
                 record("Artboard"),
                 record("StateMachine"),
@@ -12211,7 +12217,7 @@ mod file_global_state_machine_import_tests {
             "the same null remains the generic LayerState occurrence",
         );
 
-        let mut keyed_property_null = RuntimeFile::from_authoring_records(vec![
+        let mut keyed_property_null = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("StateMachine"),
@@ -12222,11 +12228,11 @@ mod file_global_state_machine_import_tests {
             record("LinearAnimation"),
             record("KeyedObject"),
             record("KeyedProperty"),
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: definition_by_name("Shape").unwrap().type_key.int,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 5,
-                    value: AuthoringValue::Uint(0),
+                    value: FixtureValue::Uint(0),
                 }],
             },
         ])
@@ -12259,7 +12265,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn delayed_animation_state_uses_the_artboard_captured_by_its_layer_importer() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("LinearAnimation"),
@@ -12292,7 +12298,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn layer_created_under_a_later_artboard_captures_that_later_animation_table() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("LinearAnimation"),
@@ -12321,7 +12327,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn delayed_blend_animation_uses_the_record_time_artboard_importer() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("LinearAnimation"),
@@ -12334,19 +12340,19 @@ mod file_global_state_machine_import_tests {
             record("BlendStateDirect"),
             record("Artboard"),
             record("LinearAnimation"),
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: definition_by_name("BlendAnimationDirect")
                     .unwrap()
                     .type_key
                     .int,
                 properties: vec![
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 165,
-                        value: AuthoringValue::Uint(0),
+                        value: FixtureValue::Uint(0),
                     },
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 168,
-                        value: AuthoringValue::Uint(0),
+                        value: FixtureValue::Uint(0),
                     },
                 ],
             },
@@ -12365,7 +12371,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn delayed_fire_event_resolves_against_the_state_machine_owner_artboard() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("Event"),
@@ -12391,7 +12397,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn transition_added_after_its_owner_artboard_resolved_keeps_null_interpolator() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("CubicEaseInterpolator"),
@@ -12423,7 +12429,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn transition_added_after_its_layer_importer_resolved_keeps_null_target() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("StateMachine"),
@@ -12451,7 +12457,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn layer_added_after_its_owner_artboard_initialized_skips_system_state_validation() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("StateMachine"),
@@ -12470,7 +12476,7 @@ mod file_global_state_machine_import_tests {
 
     #[test]
     fn system_state_added_after_owner_artboard_initialization_cannot_repair_earlier_failure() {
-        let error = RuntimeFile::from_authoring_records(vec![
+        let error = RuntimeFile::from_fixture_records(vec![
             record("Backboard"),
             record("Artboard"),
             record("StateMachine"),
@@ -12799,7 +12805,7 @@ mod uint_wire_tests {
 #[cfg(test)]
 mod manifest_key_tests {
     use super::{
-        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, cpp_manifest_key,
+        FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, cpp_manifest_key,
         cpp_manifest_resolver_key,
     };
 
@@ -12847,23 +12853,23 @@ mod manifest_key_tests {
         // those trailing bytes, even though they form one otherwise-valid
         // path entry when decoded as an unbounded stream.
         let malformed_manifest = vec![1, 1, 0x81, 0x00, 7, 2, 10, 11];
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: 23,
                 properties: vec![],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 642,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 204,
-                    value: AuthoringValue::Uint(41),
+                    value: FixtureValue::Uint(41),
                 }],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 106,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 212,
-                    value: AuthoringValue::Bytes(malformed_manifest),
+                    value: FixtureValue::Bytes(malformed_manifest),
                 }],
             },
         ])
@@ -12882,46 +12888,46 @@ mod manifest_key_tests {
 
     #[test]
     fn inspection_catalog_includes_manifest_assets_without_changing_the_dense_catalog() {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: 23,
                 properties: vec![],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 105,
                 properties: vec![
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 203,
-                        value: AuthoringValue::String("External image".into()),
+                        value: FixtureValue::String("External image".into()),
                     },
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 204,
-                        value: AuthoringValue::Uint(7),
+                        value: FixtureValue::Uint(7),
                     },
                 ],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 642,
                 properties: vec![
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 203,
-                        value: AuthoringValue::String("Manifest".into()),
+                        value: FixtureValue::String("Manifest".into()),
                     },
-                    AuthoringProperty {
+                    FixtureProperty {
                         key: 204,
-                        value: AuthoringValue::Uint(41),
+                        value: FixtureValue::Uint(41),
                     },
                 ],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 106,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 212,
-                    value: AuthoringValue::Bytes(vec![1, 2, 3]),
+                    value: FixtureValue::Bytes(vec![1, 2, 3]),
                 }],
             },
         ])
-        .expect("manifest-only authoring records import");
+        .expect("manifest-only fixture records import");
 
         let dense_catalog = runtime.scripting_file_assets_with_contents();
         let [external_image] = dense_catalog.as_slice() else {
@@ -12958,26 +12964,26 @@ mod manifest_key_tests {
 
     #[test]
     fn repeated_contents_records_fail_closed_consistently_for_catalog_and_direct_lookup() {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: 23,
                 properties: vec![],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 105,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 204,
-                    value: AuthoringValue::Uint(7),
+                    value: FixtureValue::Uint(7),
                 }],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 106,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: 212,
-                    value: AuthoringValue::Bytes(vec![1, 2, 3]),
+                    value: FixtureValue::Bytes(vec![1, 2, 3]),
                 }],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 106,
                 properties: vec![],
             },

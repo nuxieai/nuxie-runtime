@@ -383,11 +383,11 @@ fn artboard_double_property(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -396,11 +396,11 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
 
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn imported_listener_retains_keyboard_owner_and_constraints() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -447,7 +447,7 @@ mod tests {
                 ],
             ),
         ])
-        .expect("keyboard listener authoring records import");
+        .expect("keyboard listener fixture records import");
         let graph = GraphFile::from_runtime_file(&file).expect("keyboard listener graph builds");
         let authored = file.artboard_state_machine_graphs(0);
         let listener = runtime_state_machine_listener(
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn imported_listener_retains_gamepad_and_semantic_owners() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn missing_pointer_hit_shape_does_not_drop_keyboard_channel() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("Node", vec![property("Node", "parentId", 0)]),
@@ -609,7 +609,7 @@ mod tests {
 
     #[test]
     fn imported_listener_retains_every_view_model_input_in_authored_order() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -648,7 +648,7 @@ mod tests {
                 )],
             ),
         ])
-        .expect("view-model listener authoring records import");
+        .expect("view-model listener fixture records import");
         let graph = GraphFile::from_runtime_file(&file).expect("view-model listener graph builds");
         let authored = file.artboard_state_machine_graphs(0);
         let listener = runtime_state_machine_listener(
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn listeners_without_a_recognized_dispatch_type_remain_ordered_inert_owners() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -712,7 +712,7 @@ mod tests {
                 vec![property("ListenerBoolChange", "inputId", 0)],
             ),
         ])
-        .expect("inert listener authoring records import");
+        .expect("inert listener fixture records import");
         let graph = GraphFile::from_runtime_file(&file).expect("inert listener graph builds");
         let artboard = ArtboardInstance::from_graph_with_artboards(
             &file,
@@ -742,11 +742,11 @@ mod tests {
         assert_eq!(cold_clone.listeners[1].listener_actions.len(), 1);
     }
 
-    fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> AuthoringProperty {
-        AuthoringProperty {
+    fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
-            value: AuthoringValue::Bytes(value),
+            value: FixtureValue::Bytes(value),
         }
     }
 

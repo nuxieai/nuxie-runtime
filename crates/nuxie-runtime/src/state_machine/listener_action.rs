@@ -345,12 +345,12 @@ pub(crate) fn perform_scheduled_listener_actions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_graph::GraphFile;
     use std::sync::Arc;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing {type_name}"))
                 .type_key
@@ -359,16 +359,16 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
         }
     }
 
-    fn instantiate(records: Vec<AuthoringRecord>) -> anyhow::Result<ArtboardInstance> {
-        let file = RuntimeFile::from_authoring_records(records)?;
+    fn instantiate(records: Vec<FixtureRecord>) -> anyhow::Result<ArtboardInstance> {
+        let file = RuntimeFile::from_fixture_records(records)?;
         let graph = GraphFile::from_runtime_file(&file)?;
         ArtboardInstance::from_graph_with_artboards(
             &file,
@@ -377,13 +377,13 @@ mod tests {
         )
     }
 
-    fn prefix_with_input(input_type: &str) -> Vec<AuthoringRecord> {
+    fn prefix_with_input(input_type: &str) -> Vec<FixtureRecord> {
         vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(
                 "Node",
-                vec![property("Node", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Node", "parentId", FixtureValue::Uint(0))],
             ),
             record("StateMachine", Vec::new()),
             record(input_type, Vec::new()),
@@ -393,19 +393,19 @@ mod tests {
                     property(
                         "StateMachineListenerSingle",
                         "targetId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "StateMachineListenerSingle",
                         "listenerTypeValue",
-                        AuthoringValue::Uint(15),
+                        FixtureValue::Uint(15),
                     ),
                 ],
             ),
         ]
     }
 
-    fn prefix() -> Vec<AuthoringRecord> {
+    fn prefix() -> Vec<FixtureRecord> {
         prefix_with_input("StateMachineNumber")
     }
 
@@ -419,7 +419,7 @@ mod tests {
             let mut records = prefix_with_input(input_type);
             records.push(record(
                 action_type,
-                vec![property(action_type, "inputId", AuthoringValue::Uint(0))],
+                vec![property(action_type, "inputId", FixtureValue::Uint(0))],
             ));
             let error =
                 instantiate(records).expect_err("known wrong direct input type must reject");
@@ -437,10 +437,10 @@ mod tests {
         ] {
             records.push(record(
                 action_type,
-                vec![property(action_type, "inputId", AuthoringValue::Uint(99))],
+                vec![property(action_type, "inputId", FixtureValue::Uint(99))],
             ));
         }
-        let file = RuntimeFile::from_authoring_records(records)
+        let file = RuntimeFile::from_fixture_records(records)
             .expect("pinned C++ accepts forward-compatible null input slots");
         let state_machine = file
             .artboard_state_machine_graphs(0)
@@ -471,12 +471,12 @@ mod tests {
             vec![property(
                 "BindablePropertyNumber",
                 "propertyValue",
-                AuthoringValue::Double(3.0),
+                FixtureValue::Double(3.0),
             )],
         ));
         records.push(record("ListenerViewModelChange", Vec::new()));
         records.push(record("ListenerViewModelChange", Vec::new()));
-        let file = RuntimeFile::from_authoring_records(records)
+        let file = RuntimeFile::from_fixture_records(records)
             .expect("the importer remains present after its pointer is consumed");
         let state_machine = file
             .artboard_state_machine_graphs(0)
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn listener_parent_kind_requires_owner_and_raw_three_falls_back_to_listener() {
-        let error = RuntimeFile::from_authoring_records(vec![
+        let error = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -517,10 +517,10 @@ mod tests {
                 "flags",
                 // `(flags >> 1) & 3 == 3` canonicalizes to Listener in
                 // pinned `ListenerAction::parentKind`.
-                AuthoringValue::Uint(3 << 1),
+                FixtureValue::Uint(3 << 1),
             )],
         ));
-        let file = RuntimeFile::from_authoring_records(records)
+        let file = RuntimeFile::from_fixture_records(records)
             .expect("reserved raw parent kind attaches to current listener");
         let state_machine = file
             .artboard_state_machine_graphs(0)
@@ -584,7 +584,7 @@ mod tests {
                 record("Artboard", Vec::new()),
                 record(
                     "Node",
-                    vec![property("Node", "parentId", AuthoringValue::Uint(0))],
+                    vec![property("Node", "parentId", FixtureValue::Uint(0))],
                 ),
                 record("StateMachine", Vec::new()),
                 record(
@@ -593,12 +593,12 @@ mod tests {
                         property(
                             "StateMachineListenerSingle",
                             "targetId",
-                            AuthoringValue::Uint(1),
+                            FixtureValue::Uint(1),
                         ),
                         property(
                             "StateMachineListenerSingle",
                             "listenerTypeValue",
-                            AuthoringValue::Uint(15),
+                            FixtureValue::Uint(15),
                         ),
                     ],
                 ),
@@ -614,7 +614,7 @@ mod tests {
                     vec![property(
                         "StateTransition",
                         "stateToId",
-                        AuthoringValue::Uint(3),
+                        FixtureValue::Uint(3),
                     )],
                 ));
             }
@@ -623,10 +623,10 @@ mod tests {
                 vec![property(
                     "FocusActionClear",
                     "flags",
-                    AuthoringValue::Uint(flags),
+                    FixtureValue::Uint(flags),
                 )],
             ));
-            RuntimeFile::from_authoring_records(records).expect("routed listener action")
+            RuntimeFile::from_fixture_records(records).expect("routed listener action")
         };
 
         let transition_file = routed(true, 1 << 1);
@@ -667,7 +667,7 @@ mod tests {
                 .is_empty()
         );
 
-        let missing_listener = RuntimeFile::from_authoring_records(vec![
+        let missing_listener = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -681,22 +681,18 @@ mod tests {
                 vec![property(
                     "StateTransition",
                     "stateToId",
-                    AuthoringValue::Uint(3),
+                    FixtureValue::Uint(3),
                 )],
             ),
             record(
                 "FocusActionClear",
-                vec![property(
-                    "FocusActionClear",
-                    "flags",
-                    AuthoringValue::Uint(0),
-                )],
+                vec![property("FocusActionClear", "flags", FixtureValue::Uint(0))],
             ),
         ]);
         assert!(missing_listener.is_err());
         // The failed import did not attach the action to the layer component:
         // constructing the same prefix without it leaves the transition empty.
-        let control = RuntimeFile::from_authoring_records(vec![
+        let control = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -710,7 +706,7 @@ mod tests {
                 vec![property(
                     "StateTransition",
                     "stateToId",
-                    AuthoringValue::Uint(3),
+                    FixtureValue::Uint(3),
                 )],
             ),
         ])
@@ -742,20 +738,20 @@ mod tests {
             record("Artboard", Vec::new()),
             record(
                 "Node",
-                vec![property("Node", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Node", "parentId", FixtureValue::Uint(0))],
             ),
             record(
                 "Event",
                 vec![
-                    property("Event", "parentId", AuthoringValue::Uint(0)),
-                    property("Event", "name", AuthoringValue::String("first".to_owned())),
+                    property("Event", "parentId", FixtureValue::Uint(0)),
+                    property("Event", "name", FixtureValue::String("first".to_owned())),
                 ],
             ),
             record(
                 "Event",
                 vec![
-                    property("Event", "parentId", AuthoringValue::Uint(0)),
-                    property("Event", "name", AuthoringValue::String("second".to_owned())),
+                    property("Event", "parentId", FixtureValue::Uint(0)),
+                    property("Event", "name", FixtureValue::String("second".to_owned())),
                 ],
             ),
             record("StateMachine", Vec::new()),
@@ -767,35 +763,35 @@ mod tests {
                     property(
                         "StateMachineListenerSingle",
                         "targetId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "StateMachineListenerSingle",
                         "listenerTypeValue",
-                        AuthoringValue::Uint(15),
+                        FixtureValue::Uint(15),
                     ),
                 ],
             ),
             record(
                 "ListenerFireEvent",
                 vec![
-                    property("ListenerFireEvent", "eventId", AuthoringValue::Uint(2)),
+                    property("ListenerFireEvent", "eventId", FixtureValue::Uint(2)),
                     property(
                         "ListenerFireEvent",
                         "flags",
-                        AuthoringValue::Uint(StateMachineFireOccurrence::AtStart.value()),
+                        FixtureValue::Uint(StateMachineFireOccurrence::AtStart.value()),
                     ),
                 ],
             ),
             record(
                 "ListenerBoolChange",
                 vec![
-                    property("ListenerBoolChange", "inputId", AuthoringValue::Uint(0)),
-                    property("ListenerBoolChange", "value", AuthoringValue::Uint(0)),
+                    property("ListenerBoolChange", "inputId", FixtureValue::Uint(0)),
+                    property("ListenerBoolChange", "value", FixtureValue::Uint(0)),
                 ],
             ),
         ];
-        let file = RuntimeFile::from_authoring_records(records).expect("live action fixture");
+        let file = RuntimeFile::from_fixture_records(records).expect("live action fixture");
         let graph = GraphFile::from_runtime_file(&file).expect("live action graph");
         let action_catalog = super::super::RuntimeFileStateMachineActionCatalog::new(&file);
         let file_view_models = crate::RuntimeFileViewModelInstanceCatalog::new(&file);

@@ -5033,7 +5033,7 @@ mod tests {
 
     use super::*;
     use nuxie::File;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
 
     static FIXTURE: LazyLock<Vec<u8>> = LazyLock::new(|| external_fixture("dependency_test.riv"));
     static SMI_FIXTURE: LazyLock<Vec<u8>> = LazyLock::new(|| external_fixture("smi_test.riv"));
@@ -5055,10 +5055,7 @@ mod tests {
         .0
     }
 
-    fn authoring_record(
-        type_name: &str,
-        properties: Vec<(&str, AuthoringValue)>,
-    ) -> AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
         let definition =
             nuxie_schema::definition_by_name(type_name).expect("text-run fixture record type");
         let properties = properties
@@ -5070,55 +5067,55 @@ mod tests {
                     .flat_map(|owner| owner.properties)
                     .find(|property| property.name == property_name)
                     .expect("text-run fixture property");
-                AuthoringProperty {
+                FixtureProperty {
                     key: property.key.int,
                     value,
                 }
             })
             .collect();
-        AuthoringRecord {
+        FixtureRecord {
             type_key: definition.type_key.int,
             properties,
         }
     }
 
     fn text_run_session() -> FlowSession {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "Artboard",
                 vec![
-                    ("name", AuthoringValue::String("Root".to_owned())),
-                    ("width", AuthoringValue::Double(100.0)),
-                    ("height", AuthoringValue::Double(100.0)),
+                    ("name", FixtureValue::String("Root".to_owned())),
+                    ("width", FixtureValue::Double(100.0)),
+                    ("height", FixtureValue::Double(100.0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "Text",
-                vec![("name", AuthoringValue::String("Text".to_owned()))],
+                vec![("name", FixtureValue::String("Text".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "TextValueRun",
                 vec![
-                    ("parentId", AuthoringValue::Uint(1)),
-                    ("name", AuthoringValue::String("headline".to_owned())),
-                    ("text", AuthoringValue::String("initial".to_owned())),
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("headline".to_owned())),
+                    ("text", FixtureValue::String("initial".to_owned())),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "TextValueRun",
                 vec![
-                    ("parentId", AuthoringValue::Uint(1)),
-                    ("name", AuthoringValue::String("headline".to_owned())),
-                    ("text", AuthoringValue::String("duplicate".to_owned())),
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("headline".to_owned())),
+                    ("text", FixtureValue::String("duplicate".to_owned())),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "TextValueRun",
                 vec![
-                    ("parentId", AuthoringValue::Uint(1)),
-                    ("name", AuthoringValue::String("group//headline".to_owned())),
-                    ("text", AuthoringValue::String("literal".to_owned())),
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("group//headline".to_owned())),
+                    ("text", FixtureValue::String("literal".to_owned())),
                 ],
             ),
         ])
@@ -5130,68 +5127,62 @@ mod tests {
     }
 
     fn authored_nested_view_model_session() -> (FlowSession, FlowBootstrap) {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "ViewModel",
-                vec![("name", AuthoringValue::String("Root".to_owned()))],
+                vec![("name", FixtureValue::String("Root".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstance",
                 vec![
-                    ("name", AuthoringValue::String("Root defaults".to_owned())),
-                    ("viewModelId", AuthoringValue::Uint(0)),
+                    ("name", FixtureValue::String("Root defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceViewModel",
                 vec![
-                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
-                    ("propertyValue", AuthoringValue::Uint(0)),
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::Uint(0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyViewModel",
                 vec![
-                    ("name", AuthoringValue::String("paywall".to_owned())),
-                    ("viewModelReferenceId", AuthoringValue::Uint(1)),
+                    ("name", FixtureValue::String("paywall".to_owned())),
+                    ("viewModelReferenceId", FixtureValue::Uint(1)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModel",
-                vec![("name", AuthoringValue::String("Paywall".to_owned()))],
+                vec![("name", FixtureValue::String("Paywall".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstance",
                 vec![
-                    (
-                        "name",
-                        AuthoringValue::String("Paywall defaults".to_owned()),
-                    ),
-                    ("viewModelId", AuthoringValue::Uint(1)),
+                    ("name", FixtureValue::String("Paywall defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(1)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceString",
                 vec![
-                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
-                    ("propertyValue", AuthoringValue::String("pro".to_owned())),
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::String("pro".to_owned())),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyString",
-                vec![(
-                    "name",
-                    AuthoringValue::String("selectedProductId".to_owned()),
-                )],
+                vec![("name", FixtureValue::String("selectedProductId".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "Artboard",
                 vec![
-                    ("name", AuthoringValue::String("Projection".to_owned())),
-                    ("width", AuthoringValue::Double(100.0)),
-                    ("height", AuthoringValue::Double(100.0)),
-                    ("viewModelId", AuthoringValue::Uint(0)),
+                    ("name", FixtureValue::String("Projection".to_owned())),
+                    ("width", FixtureValue::Double(100.0)),
+                    ("height", FixtureValue::Double(100.0)),
+                    ("viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
         ])

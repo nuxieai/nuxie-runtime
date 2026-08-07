@@ -1718,11 +1718,11 @@ impl RuntimeDataContext {
 mod tests {
     use super::*;
     use crate::properties::property_key_for_name;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_schema::definition_by_name;
 
-    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -1731,12 +1731,12 @@ mod tests {
         }
     }
 
-    fn authoring_property(
+    fn fixture_property(
         type_name: &str,
         property_name: &str,
-        value: AuthoringValue,
-    ) -> AuthoringProperty {
-        AuthoringProperty {
+        value: FixtureValue,
+    ) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}")),
             value,
@@ -1748,138 +1748,138 @@ mod tests {
     /// amount=4022, child.offset=95 — the instance-0-vs-defaults shape from
     /// the db_health_tracker scalar divergence.
     fn cell_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
-            authoring_record(
+        RuntimeFile::from_fixture_records(vec![
+            fixture_record(
                 "ViewModel",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyNumber",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("amount".to_owned()),
+                    FixtureValue::String("amount".to_owned()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyTrigger",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModelPropertyTrigger",
                     "name",
-                    AuthoringValue::String("fired".to_owned()),
+                    FixtureValue::String("fired".to_owned()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyViewModel",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
-                    authoring_property(
+                    fixture_property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModel",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyNumber",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("offset".to_owned()),
+                    FixtureValue::String("offset".to_owned()),
                 )],
             ),
-            authoring_record("Backboard", Vec::new()),
+            fixture_record("Backboard", Vec::new()),
             // Real .riv serialization places artboards before backboard-level
             // instances; the nested-instance resolver requires that order.
-            authoring_record("Artboard", Vec::new()),
-            authoring_record(
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
                 "ViewModelInstance",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("child-instance".to_owned()),
+                        FixtureValue::String("child-instance".to_owned()),
                     ),
-                    authoring_property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(1)),
+                    fixture_property("ViewModelInstance", "viewModelId", FixtureValue::Uint(1)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceNumber",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(95.0),
+                        FixtureValue::Double(95.0),
                     ),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstance",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("root-instance".to_owned()),
+                        FixtureValue::String("root-instance".to_owned()),
                     ),
-                    authoring_property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    fixture_property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceNumber",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(4022.0),
+                        FixtureValue::Double(4022.0),
                     ),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceTrigger",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModelInstanceTrigger",
                     "viewModelPropertyId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceViewModel",
                 vec![
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceViewModel",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(2),
+                        FixtureValue::Uint(2),
                     ),
-                    authoring_property(
+                    fixture_property(
                         "ViewModelInstanceViewModel",
                         "propertyValue",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),

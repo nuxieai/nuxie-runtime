@@ -19,10 +19,16 @@ pub use apple::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, S
 pub struct AppleImageAdmission;
 
 impl AppleImageAdmission {
+    // Apple currently adds no stricter product limit, but keeping the policy
+    // here makes its ownership explicit and prevents it from relaxing the
+    // codec's baseline safety ceilings.
+    const POLICY: nuxie_image_codec::ImageAdmissionPolicy =
+        nuxie_image_codec::ImageAdmissionPolicy::BASELINE;
+
     /// Fully decodes a supported image and enforces the Apple-safe 8,192-pixel
     /// dimension and 64 MiB decoded-RGBA ceilings without retaining pixels.
     pub fn validate_image_bytes(data: &[u8]) -> Result<(), nuxie_render_api::ImageDecodeError> {
-        nuxie_image_codec::validate_encoded_image(data)
+        nuxie_image_codec::validate_encoded_image_with_policy(data, Self::POLICY)
             .map(|_| ())
             .ok_or(nuxie_render_api::ImageDecodeError)
     }

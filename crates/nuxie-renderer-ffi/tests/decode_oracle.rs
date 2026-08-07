@@ -17,7 +17,7 @@ struct DecodeDelta {
 
 fn compare_decode(encoded: &[u8], expected_dimensions: (u32, u32)) -> DecodeDelta {
     let cpp = decode_bitmap_rgba(encoded).expect("C++ image decode");
-    let rust = nuxie_renderer::decode_image_rgba_for_oracle(encoded).expect("Rust image decode");
+    let rust = nuxie_image_codec::decode_image_rgba(encoded).expect("Rust image decode");
     assert_eq!((cpp.width, cpp.height), expected_dimensions);
     assert_eq!((rust.width, rust.height), expected_dimensions);
     assert_eq!(cpp.pixels.len(), rust.pixels.len());
@@ -175,7 +175,7 @@ fn jellyfish_mesh_images_decode_exactly() {
         .into_iter()
         .filter_map(|resource| match resource {
             nuxie_render_stream::Resource::Image { data, .. } => {
-                let decoded = nuxie_renderer::decode_image_rgba_for_oracle(&data)
+                let decoded = nuxie_image_codec::decode_image_rgba(&data)
                     .expect("Rust jellyfish image decode");
                 Some(compare_decode(&data, (decoded.width, decoded.height)))
             }

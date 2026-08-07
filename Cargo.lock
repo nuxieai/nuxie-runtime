@@ -1351,6 +1351,7 @@ dependencies = [
  "image-webp",
  "jpeg-decoder",
  "moxcms",
+ "nuxie-render-stream",
  "png",
 ]
 
@@ -1422,10 +1423,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "futures-channel",
- "image-webp",
- "jpeg-decoder",
  "libc",
- "moxcms",
  "naga",
  "nuxie-binary",
  "nuxie-graph",
@@ -1451,9 +1449,9 @@ dependencies = [
  "cc",
  "nuxie-binary",
  "nuxie-graph",
+ "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-render-stream",
- "nuxie-renderer",
  "nuxie-runtime",
  "sha2",
 ]

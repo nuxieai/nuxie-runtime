@@ -7,7 +7,6 @@ publish = false
 
 [features]
 default = []
-decode-oracle = []
 perf-diagnostics = []
 perf-counters = []
 # Exposes a deliberately narrow, doc-hidden seam into production-compiled
@@ -18,14 +17,10 @@ upstream-microbenchmarks = ["dep:libc"]
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
 futures-channel = "0.3"
-image-webp = "0.2.4"
-jpeg-decoder = { version = "0.3", default-features = false }
 libc = { version = "0.2", optional = true }
-moxcms = "0.8.1"
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 naga = { version = "30.0.0", features = ["wgsl-in"] }
-png = "0.18"
 smallvec = "1.15.2"
 # Keep the parity-critical core/HAL patches transitive for git and path
 # consumers. The vendored top-level package wires both patched crates by path.
@@ -47,6 +42,7 @@ nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
+png = "0.18"
 sha2 = "0.10"
 
 [[bench]]

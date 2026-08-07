@@ -614,7 +614,7 @@ decode queue. Bidi and audio retain their separately tracked status below.
 | Layout | `taffy` | **Yes** | 0.12.1 | `RuntimeLayoutEngine` (`draw.rs:4024`) |
 | Text shaping | `harfrust` + `skrifa`/`read-fonts` | **Yes** | harfrust 0.12, skrifa 0.44 | none (concrete in `text.rs`) |
 | Bidi | `unicode-bidi` | No | — | — |
-| Image decode | `png`/`jpeg-decoder`/`image-webp` + `moxcms` | **Yes** | png 0.18, jpeg-decoder 0.3, image-webp 0.2.4, moxcms 0.8.1 | `Factory::decode_image`; `ScriptImageDecoder` (`lua_image_decode.rs`) |
+| Image decode | `nuxie-image-codec` (`png`/`jpeg-decoder`/`image-webp` + `moxcms`; ImageIO/CoreGraphics JPEG on macOS) | **Yes** | png 0.18, jpeg-decoder 0.3, image-webp 0.2.4, moxcms 0.8.1 | canonical `decode_image_rgba`; `Factory::decode_image`; `ScriptImageDecoder` (`lua_image_decode.rs`) |
 | Audio | `cpal`/`rodio`/`kira` | No (schema enums only) | — | — |
 | Scripting | `luaur-rt` (+ common/vm) | **Yes** (feat `luau`, default) | =0.1.8 | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `nuxie-runtime/src/scripting.rs` |
 
@@ -636,12 +636,16 @@ decode queue. Bidi and audio retain their separately tracked status below.
   documented backlog gap (act only if a corpus file hits it). Legacy-kern is
   disabled for advances (`text.rs:916`) and custom line metrics reproduce
   HarfBuzz ascent/descent (`text.rs:927`).
-- **Image decoding.** Only *encoded-header dimension parsing* is implemented in
-  Rust (`nuxie-render-api/src/lib.rs:1327`); real pixel decode is delegated to C++
-  over FFI. Golden streams carry `decodeImage id=… width=… height=…` with **no
-  payload hashes** — cross-runtime image comparison uses decoded dimensions +
-  tolerant pixel sampling (PNG is lossless → exact; JPEG is not bit-identical
-  across decoders → tolerant).
+- **Image decoding.** `nuxie-image-codec` is the single owner of PNG, JPEG, and
+  WebP RGBA decode, ICC conversion, and alpha premultiplication used by the
+  renderer, scripting, validation, and platform admission. The ordinary API
+  enforces baseline encoded-size, dimension, and decoded-allocation ceilings;
+  caller-owned `ImageAdmissionPolicy` may only tighten them. The separately
+  named unbounded entry point exists only for pinned low-level scripting
+  compatibility. On macOS, canonical JPEG decode uses ImageIO/CoreGraphics to
+  preserve the C++ decoder strategy. `make renderer-decoder-oracle` retains the
+  differential proof against the pinned C++ decoder; non-macOS JPEG remains a
+  tolerance-based comparison because the portable decoder is not bit-identical.
 - **luaur (scripting).** Pinned exactly `=0.1.8` (validated against upstream Luau
   commit 8f33df9); it is a faithful port, so scripted files target `exact`, not
   tolerant, and the C++ golden runner (built *with* scripting) is a third oracle

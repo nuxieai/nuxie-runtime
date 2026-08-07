@@ -34,8 +34,8 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 anyhow = "1"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
+nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-runtime = { path = "../nuxie-runtime" }
-nuxie-renderer = { path = "../nuxie-renderer", features = ["decode-oracle"] }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 sha2 = "0.10"
 

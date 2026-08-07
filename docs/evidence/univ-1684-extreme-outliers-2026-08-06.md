@@ -249,6 +249,45 @@ The post-owner external diagnostics are content-addressed as follows:
 - trace table-of-contents SHA-256:
   `5f4913ae1bcf13ea32d42ea58d844a5d62c94af97b89b56b580ba643343cd7b7`
 
+## Shape report opacity-owner reuse
+
+The post-owner profile showed that the public/probe Shape command report still
+called the static resolver for render opacity even though the renderer does not
+consume that compatibility projection. `graph-inspect` bound the cost to the
+fixture exactly. `Main_Artboard` mounts one occurrence each of `G_Meter`,
+`COMPASS`, and `TIRE PRESSURE`; across those four graphs, 730 Shape containers
+own 757 Shape paints. Resolving each self-owned Shape by linearly scanning its
+graph's component list performs 1,309,270 component comparisons per complete
+projection: 52,724 in Main, 344,377 in Tire Pressure, 881,930 in Compass, and
+30,239 in G Meter.
+
+Pinned C++ does not rediscover this relationship while drawing. `Shape::update`
+propagates render opacity through the container to each retained
+`ShapePaintMutator`; draw then consumes the retained ShapePaint and RenderPaint.
+Commit `e5e587bc5f37ca787eb118756c467089a299591d` therefore changes only the
+Shape compatibility report to follow the construction-retained container owner
+index. A real `Node.opacity` mutation test proves identical reported opacity
+and paint state with zero post-construction owner resolutions. Artboard,
+TextStylePaint, layout, and live renderer routing are unchanged.
+
+The scripting-enabled release runner SHA-256 is
+`e51b9a9fa55c3c5bb22750c67e61275251f2ff57a1eb78ec864ba652b9f5d875`.
+The exact 100-frame capture began at one-minute load 26.48, so its timing is not
+an acceptance measurement. Its stack result is decisive: the prior ancestry
+scan held 38 of 42 `runtime_shape_paint_commands` self samples; after reuse,
+the function fell from 55 inclusive/42 leaf samples to 9/4, and none of the
+four remaining self offsets is the former comparison loop. Both
+`opacity_owner_local` and the live inherited-blend wrapper have zero samples.
+
+The post-report external diagnostics are content-addressed as follows:
+
+- Time Profiler export SHA-256:
+  `9a645b04b44ae83027fed72dd3e1e6f13551d86f643908abeec1e276a7e3ca81`
+- Time Sample export SHA-256:
+  `15078f954b45ddef3428ac418567efc25c6f52a87d82dde457a5e37a152d6653`
+- trace table-of-contents SHA-256:
+  `89d8e7371492cd6b576afaf54756d54b13592ae543cc4b60f0cc2a531c116f42`
+
 ## Required authoritative closeout
 
 After the PR is open, run the clean, serialized performance lane with the

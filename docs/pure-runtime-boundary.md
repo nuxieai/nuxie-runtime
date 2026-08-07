@@ -7,7 +7,7 @@ rule for runtime and product work, not a port-phase plan.
 
 ```text
 editor authoring --------+
-nuxieai/nuxie-product ---+---> parity baseline <--- portable C ABI
+nuxie-product crate -----+---> parity baseline <--- portable C ABI
 browser adapter ---------+            ^             replay/oracle tools
 nuxie-ios Apple adapter -+            |
                               general-purpose crates
@@ -42,28 +42,20 @@ including shared-global bytecode evaluation for editor callers, and executes
 imported GPUCanvas userdata through `GpuCanvasPlan`; nuxie-dev owns the source
 and snapshot layer above those contracts.
 
-### Shared product host
+### In-workspace product layer
 
-The dedicated [`nuxieai/nuxie-product`](https://github.com/nuxieai/nuxie-product)
-repository owns the shared product layer: the `.nux` container and trust model,
-FlowSession and player selection, transactional host batches, product
-output/wake/error policy, the private Nuxie Luau module and host effects, and
-ProjectDO vocabulary/programs. It may consume baseline operations but may not
-replace pinned runtime semantics.
+The explicitly separated `nux-container`, `nuxie-product-scripting`,
+`nuxie-project-data`, and `nuxie-product` workspace crates own the optional
+product layer: the `.nux` container and trust model, FlowSession and player
+selection, transactional host batches, product output/wake/error policy, the
+private Nuxie Luau module and host effects, and ProjectDO
+vocabulary/programs. They may consume baseline operations but may not replace
+runtime semantics or become dependencies of protected baseline packages.
 
-`nuxie-product` pins `nuxie-runtime` by an exact Git revision, commits its Cargo
-lockfile, and records every provider or `[patch]` override in its audited root
-manifest. Cargo configuration may not silently replace those providers.
-The runtime repository contains no `nux-container` or
-`nuxie-product-scripting` source. Until the remaining staged product host moves
-under UNIV-1794, it consumes product scripting from one full immutable product
-revision and uses an exact audited self-patch only to preserve one local
-baseline type graph.
-`nuxie-dev` and `nuxie-ios` in turn pin the same exact `nuxie-product` revision;
-they do not independently select product-component revisions. The qualified
-product revision is the cross-repository release unit. Runtime changes advance
-that pin first, product qualification advances the product revision second,
-and consumers advance only to that qualified product revision.
+The crate graph, one lockfile, and the boundary checker make this a layering
+rule inside one qualified `nuxie-runtime` revision. `nuxie-dev` and `nuxie-ios`
+pin that runtime revision independently; neither repository shares editor or
+Apple implementation code through an additional product repository.
 
 ### Editor authoring
 
@@ -87,14 +79,14 @@ CAMetalLayer/drawable lifecycle, presentation
 completion/disposition, trusted-image admission policy, and the Apple ABI and
 binary packaging. Backend-neutral Metal/WebGPU
 mechanics remain in the baseline. Experience/session/product operations cross
-a separately named product ABI owned with `nuxie-product`; they never enter
+a separately named product ABI owned by the in-workspace product layer; they never enter
 the portable ABI merely because an Apple consumer needs them.
 
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
 errors, callbacks, and buffer negotiation. Product operations belong in a
-separately named product ABI owned by `nuxie-product`. Apple surface operations
+separately named product ABI owned by the in-workspace product layer. Apple surface operations
 belong to the `nuxie-ios` ABI. Replay and oracle tools import the baseline
 directly so parity evidence cannot depend on product glue.
 

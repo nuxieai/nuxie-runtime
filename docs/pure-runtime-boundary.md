@@ -120,7 +120,10 @@ forwarding, audited in-workspace provider, and approved baseline symbols.
 Registry, git, alias, duplicate, and target-specific substitutions are
 rejected. Root Cargo path patches are resolved too: non-excluded local providers
 join the protected scan, while excluded providers must be in the exact audited
-third-party set. Deprecated Cargo `[replace]` overrides are rejected outright.
+third-party set. Repository Cargo configuration may not override dependency
+providers through `[patch]`, `paths`, or `[source]`; committed overrides belong
+in the audited root manifest. Deprecated Cargo `[replace]` overrides are
+rejected outright.
 Dependencies below `nuxie` are checked by the normal protected-package rules
 instead of by a facade-specific provider-shape exception.
 

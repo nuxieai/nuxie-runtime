@@ -47,11 +47,11 @@ mod tests {
     use super::*;
     use crate::ArtboardInstance;
     use crate::state_machine::focus_action_clear::RuntimeFocusActionClear;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing {type_name}"))
                 .type_key
@@ -60,8 +60,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
@@ -84,9 +84,9 @@ mod tests {
             records.push(record(
                 "Node",
                 vec![
-                    property("Node", "parentId", AuthoringValue::Uint(0)),
-                    property("Node", "x", AuthoringValue::Double(x)),
-                    property("Node", "y", AuthoringValue::Double(y)),
+                    property("Node", "parentId", FixtureValue::Uint(0)),
+                    property("Node", "x", FixtureValue::Double(x)),
+                    property("Node", "y", FixtureValue::Double(y)),
                 ],
             ));
             records.push(record(
@@ -95,13 +95,13 @@ mod tests {
                     property(
                         "FocusData",
                         "parentId",
-                        AuthoringValue::Uint(node_local_id as u64),
+                        FixtureValue::Uint(node_local_id as u64),
                     ),
-                    property("FocusData", "focusFlags", AuthoringValue::Uint(7)),
+                    property("FocusData", "focusFlags", FixtureValue::Uint(7)),
                 ],
             ));
         }
-        let file = RuntimeFile::from_authoring_records(records).expect("focus action records");
+        let file = RuntimeFile::from_fixture_records(records).expect("focus action records");
         let graph = GraphFile::from_runtime_file(&file).expect("focus action graph");
         let mut artboard = ArtboardInstance::from_graph_with_artboards(
             &file,

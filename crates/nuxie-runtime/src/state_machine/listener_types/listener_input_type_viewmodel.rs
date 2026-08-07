@@ -87,11 +87,11 @@ impl RuntimeListenerInputTypeViewModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
 
     #[test]
     fn imported_definition_retains_exact_authored_path() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -100,7 +100,7 @@ mod tests {
                 vec![property(
                     "StateMachineListener",
                     "targetId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -108,7 +108,7 @@ mod tests {
                 vec![property(
                     "ListenerInputTypeViewModel",
                     "viewModelPathIds",
-                    AuthoringValue::Bytes(vec![3, 5, 8]),
+                    FixtureValue::Bytes(vec![3, 5, 8]),
                 )],
             ),
         ])
@@ -129,8 +129,8 @@ mod tests {
         );
     }
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -139,10 +139,10 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
         let definition = nuxie_schema::definition_by_name(type_name)
             .unwrap_or_else(|| panic!("missing schema definition {type_name}"));
-        AuthoringProperty {
+        FixtureProperty {
             key: definition
                 .properties
                 .iter()

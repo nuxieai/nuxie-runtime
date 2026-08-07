@@ -9631,7 +9631,7 @@ mod tests {
         DATA_BIND_FLAG_DIRECTION_TO_SOURCE, DATA_BIND_FLAG_TWO_WAY,
         RuntimeDataBindGraphFormulaToken,
     };
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, read_runtime_file};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, read_runtime_file};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -10104,14 +10104,14 @@ mod tests {
 
     #[test]
     fn subordinate_formula_token_retains_exact_owned_source_across_clones() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
             record(
@@ -10119,12 +10119,12 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
                 "Artboard",
-                vec![property("Artboard", "viewModelId", AuthoringValue::Uint(0))],
+                vec![property("Artboard", "viewModelId", FixtureValue::Uint(0))],
             ),
         ])
         .expect("subordinate source fixture imports");
@@ -10508,8 +10508,8 @@ mod tests {
         );
     }
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -10518,8 +10518,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -10527,14 +10527,14 @@ mod tests {
     }
 
     fn list_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Items".to_owned()),
+                    FixtureValue::String("Items".to_owned()),
                 )],
             ),
             record(
@@ -10542,7 +10542,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("items".to_owned()),
+                    FixtureValue::String("items".to_owned()),
                 )],
             ),
         ])
@@ -10550,13 +10550,13 @@ mod tests {
     }
 
     fn component_list_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -10564,7 +10564,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("items".to_owned()),
+                    FixtureValue::String("items".to_owned()),
                 )],
             ),
             record(
@@ -10572,7 +10572,7 @@ mod tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Item".to_owned()),
+                    FixtureValue::String("Item".to_owned()),
                 )],
             ),
             record(
@@ -10580,7 +10580,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyString",
                     "name",
-                    AuthoringValue::String("label".to_owned()),
+                    FixtureValue::String("label".to_owned()),
                 )],
             ),
             record("Backboard", Vec::new()),
@@ -10590,9 +10590,9 @@ mod tests {
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("root".to_owned()),
+                        FixtureValue::String("root".to_owned()),
                     ),
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
@@ -10600,7 +10600,7 @@ mod tests {
                 vec![property(
                     "ViewModelInstanceList",
                     "viewModelPropertyId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -10609,9 +10609,9 @@ mod tests {
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("item".to_owned()),
+                        FixtureValue::String("item".to_owned()),
                     ),
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(1)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(1)),
                 ],
             ),
             record(
@@ -10620,12 +10620,12 @@ mod tests {
                     property(
                         "ViewModelInstanceString",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceString",
                         "propertyValue",
-                        AuthoringValue::String("first".to_owned()),
+                        FixtureValue::String("first".to_owned()),
                     ),
                 ],
             ),
@@ -10635,12 +10635,12 @@ mod tests {
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelInstanceId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
@@ -10650,25 +10650,25 @@ mod tests {
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelInstanceId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
             record(
                 "Artboard",
-                vec![property("Artboard", "viewModelId", AuthoringValue::Uint(0))],
+                vec![property("Artboard", "viewModelId", FixtureValue::Uint(0))],
             ),
             record(
                 "ArtboardComponentList",
                 vec![property(
                     "ArtboardComponentList",
                     "parentId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -10676,7 +10676,7 @@ mod tests {
                 vec![property(
                     "DataBindContext",
                     "sourcePathIds",
-                    AuthoringValue::Bytes(vec![0, 0]),
+                    FixtureValue::Bytes(vec![0, 0]),
                 )],
             ),
         ])
@@ -10685,14 +10685,14 @@ mod tests {
 
     #[test]
     fn owned_data_context_retains_the_exact_string_and_font_cells() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Values".to_owned()),
+                    FixtureValue::String("Values".to_owned()),
                 )],
             ),
             record(
@@ -10700,7 +10700,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyString",
                     "name",
-                    AuthoringValue::String("label".to_owned()),
+                    FixtureValue::String("label".to_owned()),
                 )],
             ),
             record(
@@ -10708,7 +10708,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyAssetFont",
                     "name",
-                    AuthoringValue::String("font".to_owned()),
+                    FixtureValue::String("font".to_owned()),
                 )],
             ),
         ])
@@ -10747,14 +10747,14 @@ mod tests {
 
     #[test]
     fn rebuilt_data_context_wrappers_preserve_the_same_retained_binding_identity() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Values".to_owned()),
+                    FixtureValue::String("Values".to_owned()),
                 )],
             ),
         ])
@@ -10774,18 +10774,18 @@ mod tests {
     }
 
     fn font_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "FontAsset",
-                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(7))],
             ),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
             record(
@@ -10793,7 +10793,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyAssetFont",
                     "name",
-                    AuthoringValue::String("font".to_owned()),
+                    FixtureValue::String("font".to_owned()),
                 )],
             ),
             record(
@@ -10801,7 +10801,7 @@ mod tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -10810,37 +10810,37 @@ mod tests {
                     property(
                         "ViewModelInstanceAssetFont",
                         "parentId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceAssetFont",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceAssetFont",
                         "propertyValue",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
             record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(100.0)),
-                    property("Artboard", "height", AuthoringValue::Double(100.0)),
-                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                    property("Artboard", "width", FixtureValue::Double(100.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                    property("Artboard", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
                 "Text",
-                vec![property("Text", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Text", "parentId", FixtureValue::Uint(0))],
             ),
             record(
                 "TextStylePaint",
                 vec![
-                    property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
-                    property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
@@ -10849,7 +10849,7 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("TextStyle", "fontAssetId")
                                 .expect("fontAssetId key"),
                         )),
@@ -10857,7 +10857,7 @@ mod tests {
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
                 ],
             ),
@@ -10866,18 +10866,18 @@ mod tests {
     }
 
     fn image_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ImageAsset",
-                vec![property("ImageAsset", "assetId", AuthoringValue::Uint(7))],
+                vec![property("ImageAsset", "assetId", FixtureValue::Uint(7))],
             ),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
             record(
@@ -10885,7 +10885,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyAssetImage",
                     "name",
-                    AuthoringValue::String("image".to_owned()),
+                    FixtureValue::String("image".to_owned()),
                 )],
             ),
             record(
@@ -10893,7 +10893,7 @@ mod tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -10902,33 +10902,33 @@ mod tests {
                     property(
                         "ViewModelInstanceAssetImage",
                         "parentId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceAssetImage",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceAssetImage",
                         "propertyValue",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
             record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(100.0)),
-                    property("Artboard", "height", AuthoringValue::Double(100.0)),
-                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                    property("Artboard", "width", FixtureValue::Double(100.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                    property("Artboard", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
                 "Image",
                 vec![
-                    property("Image", "parentId", AuthoringValue::Uint(0)),
-                    property("Image", "assetId", AuthoringValue::Uint(0)),
+                    property("Image", "parentId", FixtureValue::Uint(0)),
+                    property("Image", "assetId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
@@ -10937,14 +10937,14 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("Image", "assetId").expect("assetId key"),
                         )),
                     ),
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
                 ],
             ),
@@ -11047,14 +11047,14 @@ mod tests {
     }
 
     fn cross_model_global_slot_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Main".to_owned()),
+                    FixtureValue::String("Main".to_owned()),
                 )],
             ),
             record(
@@ -11063,9 +11063,9 @@ mod tests {
                     property(
                         "ViewModel",
                         "name",
-                        AuthoringValue::String("Declared global".to_owned()),
+                        FixtureValue::String("Declared global".to_owned()),
                     ),
-                    property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                    property("ViewModel", "viewModelType", FixtureValue::Uint(2)),
                 ],
             ),
             record(
@@ -11073,7 +11073,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("width".to_owned()),
+                    FixtureValue::String("width".to_owned()),
                 )],
             ),
             record(
@@ -11081,7 +11081,7 @@ mod tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Compatible override".to_owned()),
+                    FixtureValue::String("Compatible override".to_owned()),
                 )],
             ),
             record(
@@ -11089,27 +11089,27 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("width".to_owned()),
+                    FixtureValue::String("width".to_owned()),
                 )],
             ),
             record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(100.0)),
-                    property("Artboard", "height", AuthoringValue::Double(100.0)),
-                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                    property("Artboard", "width", FixtureValue::Double(100.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                    property("Artboard", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
                 "Shape",
-                vec![property("Shape", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
             ),
             record(
                 "Rectangle",
                 vec![
-                    property("Rectangle", "parentId", AuthoringValue::Uint(1)),
-                    property("Rectangle", "width", AuthoringValue::Double(10.0)),
-                    property("Rectangle", "height", AuthoringValue::Double(10.0)),
+                    property("Rectangle", "parentId", FixtureValue::Uint(1)),
+                    property("Rectangle", "width", FixtureValue::Double(10.0)),
+                    property("Rectangle", "height", FixtureValue::Double(10.0)),
                 ],
             ),
             record(
@@ -11118,14 +11118,14 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("Rectangle", "width").expect("width key"),
                         )),
                     ),
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![1, 0]),
+                        FixtureValue::Bytes(vec![1, 0]),
                     ),
                 ],
             ),
@@ -11167,14 +11167,14 @@ mod tests {
 
     #[test]
     fn data_context_falls_through_partial_same_model_instance_to_parent() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Shared model".to_owned()),
+                    FixtureValue::String("Shared model".to_owned()),
                 )],
             ),
             record(
@@ -11182,7 +11182,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyColor",
                     "name",
-                    AuthoringValue::String("local".to_owned()),
+                    FixtureValue::String("local".to_owned()),
                 )],
             ),
             record(
@@ -11190,68 +11190,60 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyColor",
                     "name",
-                    AuthoringValue::String("fallback".to_owned()),
+                    FixtureValue::String("fallback".to_owned()),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Partial local".to_owned()),
+                        FixtureValue::String("Partial local".to_owned()),
                     ),
                 ],
             ),
             record(
                 "ViewModelInstanceColor",
                 vec![
-                    property(
-                        "ViewModelInstanceColor",
-                        "parentId",
-                        AuthoringValue::Uint(0),
-                    ),
+                    property("ViewModelInstanceColor", "parentId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstanceColor",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceColor",
                         "propertyValue",
-                        AuthoringValue::Color(0xff00_00ff),
+                        FixtureValue::Color(0xff00_00ff),
                     ),
                 ],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Partial parent".to_owned()),
+                        FixtureValue::String("Partial parent".to_owned()),
                     ),
                 ],
             ),
             record(
                 "ViewModelInstanceColor",
                 vec![
-                    property(
-                        "ViewModelInstanceColor",
-                        "parentId",
-                        AuthoringValue::Uint(1),
-                    ),
+                    property("ViewModelInstanceColor", "parentId", FixtureValue::Uint(1)),
                     property(
                         "ViewModelInstanceColor",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceColor",
                         "propertyValue",
-                        AuthoringValue::Color(0xff35_0000),
+                        FixtureValue::Color(0xff35_0000),
                     ),
                 ],
             ),
@@ -11296,14 +11288,14 @@ mod tests {
 
     #[test]
     fn fire_trigger_resolves_the_live_data_context_at_perform_time() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Trigger model".to_owned()),
+                    FixtureValue::String("Trigger model".to_owned()),
                 )],
             ),
             record(
@@ -11311,7 +11303,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyTrigger",
                     "name",
-                    AuthoringValue::String("fire".to_owned()),
+                    FixtureValue::String("fire".to_owned()),
                 )],
             ),
         ])
@@ -11352,14 +11344,14 @@ mod tests {
     fn shape_length_binding_fixture() -> RuntimeFile {
         let shape_length_key =
             property_key_for_name("Shape", "length").expect("shape length property key");
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
             record(
@@ -11367,19 +11359,19 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("length".to_owned()),
+                    FixtureValue::String("length".to_owned()),
                 )],
             ),
             record(
                 "Artboard",
-                vec![property("Artboard", "viewModelId", AuthoringValue::Uint(0))],
+                vec![property("Artboard", "viewModelId", FixtureValue::Uint(0))],
             ),
             record(
                 "Shape",
                 vec![
-                    property("Shape", "parentId", AuthoringValue::Uint(0)),
-                    property("Shape", "scaleX", AuthoringValue::Double(2.0)),
-                    property("Shape", "scaleY", AuthoringValue::Double(3.0)),
+                    property("Shape", "parentId", FixtureValue::Uint(0)),
+                    property("Shape", "scaleX", FixtureValue::Double(2.0)),
+                    property("Shape", "scaleY", FixtureValue::Double(3.0)),
                 ],
             ),
             record(
@@ -11388,22 +11380,22 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(shape_length_key)),
+                        FixtureValue::Uint(u64::from(shape_length_key)),
                     ),
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
-                    property("DataBindContext", "flags", AuthoringValue::Uint(1)),
+                    property("DataBindContext", "flags", FixtureValue::Uint(1)),
                 ],
             ),
             record(
                 "Rectangle",
                 vec![
-                    property("Rectangle", "parentId", AuthoringValue::Uint(1)),
-                    property("Rectangle", "width", AuthoringValue::Double(10.0)),
-                    property("Rectangle", "height", AuthoringValue::Double(20.0)),
+                    property("Rectangle", "parentId", FixtureValue::Uint(1)),
+                    property("Rectangle", "width", FixtureValue::Double(10.0)),
+                    property("Rectangle", "height", FixtureValue::Double(20.0)),
                 ],
             ),
         ])
@@ -11488,14 +11480,14 @@ mod tests {
     }
 
     fn same_artboard_binding_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
             record(
@@ -11503,7 +11495,7 @@ mod tests {
                 vec![property(
                     "ViewModelPropertyArtboard",
                     "name",
-                    AuthoringValue::String("child".to_owned()),
+                    FixtureValue::String("child".to_owned()),
                 )],
             ),
             record(
@@ -11511,7 +11503,7 @@ mod tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -11520,33 +11512,33 @@ mod tests {
                     property(
                         "ViewModelInstanceArtboard",
                         "parentId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceArtboard",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceArtboard",
                         "propertyValue",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
             record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(100.0)),
-                    property("Artboard", "height", AuthoringValue::Double(100.0)),
-                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                    property("Artboard", "width", FixtureValue::Double(100.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                    property("Artboard", "viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
             record(
                 "NestedArtboard",
                 vec![
-                    property("NestedArtboard", "parentId", AuthoringValue::Uint(0)),
-                    property("NestedArtboard", "artboardId", AuthoringValue::Uint(1)),
+                    property("NestedArtboard", "parentId", FixtureValue::Uint(0)),
+                    property("NestedArtboard", "artboardId", FixtureValue::Uint(1)),
                 ],
             ),
             record(
@@ -11555,7 +11547,7 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(
+                        FixtureValue::Uint(u64::from(
                             property_key_for_name("NestedArtboard", "artboardId")
                                 .expect("artboardId key"),
                         )),
@@ -11563,15 +11555,15 @@ mod tests {
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
                 ],
             ),
             record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(50.0)),
-                    property("Artboard", "height", AuthoringValue::Double(50.0)),
+                    property("Artboard", "width", FixtureValue::Double(50.0)),
+                    property("Artboard", "height", FixtureValue::Double(50.0)),
                 ],
             ),
         ])

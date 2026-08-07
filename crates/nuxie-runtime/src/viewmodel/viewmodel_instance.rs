@@ -759,11 +759,11 @@ impl RuntimeOwnedViewModelInstance {
 mod upstream_viewmodel_instance_contract_tests {
     use super::*;
     use crate::properties::property_key_for_name;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_schema::definition_by_name;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -772,8 +772,8 @@ mod upstream_viewmodel_instance_contract_tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -781,14 +781,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn two_number_instance_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Numbers".to_owned()),
+                    FixtureValue::String("Numbers".to_owned()),
                 )],
             ),
             record(
@@ -796,7 +796,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("first".to_owned()),
+                    FixtureValue::String("first".to_owned()),
                 )],
             ),
             record(
@@ -804,7 +804,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("second".to_owned()),
+                    FixtureValue::String("second".to_owned()),
                 )],
             ),
             record(
@@ -812,7 +812,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -821,12 +821,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(1.0),
+                        FixtureValue::Double(1.0),
                     ),
                 ],
             ),
@@ -836,12 +836,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(2.0),
+                        FixtureValue::Double(2.0),
                     ),
                 ],
             ),
@@ -850,14 +850,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn replace_child_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -866,12 +866,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -880,7 +880,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
             record(
@@ -888,7 +888,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
@@ -896,7 +896,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
             record(
@@ -904,7 +904,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
         ])
@@ -912,14 +912,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn generated_custom_enum_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Enums".to_owned()),
+                    FixtureValue::String("Enums".to_owned()),
                 )],
             ),
             record(
@@ -927,7 +927,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyEnumCustom",
                     "name",
-                    AuthoringValue::String("choice".to_owned()),
+                    FixtureValue::String("choice".to_owned()),
                 )],
             ),
         ])
@@ -935,14 +935,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn nested_mixed_value_order_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -951,12 +951,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -965,7 +965,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
             record(
@@ -973,7 +973,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyTrigger",
                     "name",
-                    AuthoringValue::String("trigger".to_owned()),
+                    FixtureValue::String("trigger".to_owned()),
                 )],
             ),
             record(
@@ -981,7 +981,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("list".to_owned()),
+                    FixtureValue::String("list".to_owned()),
                 )],
             ),
             record(
@@ -990,12 +990,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("grandchild".to_owned()),
+                        FixtureValue::String("grandchild".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(2),
+                        FixtureValue::Uint(2),
                     ),
                 ],
             ),
@@ -1004,7 +1004,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Grandchild".to_owned()),
+                    FixtureValue::String("Grandchild".to_owned()),
                 )],
             ),
         ])
@@ -1012,14 +1012,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn ordered_duplicate_number_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Ordered".to_owned()),
+                    FixtureValue::String("Ordered".to_owned()),
                 )],
             ),
             record(
@@ -1027,7 +1027,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("first".to_owned()),
+                    FixtureValue::String("first".to_owned()),
                 )],
             ),
             record(
@@ -1035,7 +1035,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("second".to_owned()),
+                    FixtureValue::String("second".to_owned()),
                 )],
             ),
             record(
@@ -1043,7 +1043,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -1052,12 +1052,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(20.0),
+                        FixtureValue::Double(20.0),
                     ),
                 ],
             ),
@@ -1067,12 +1067,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(10.0),
+                        FixtureValue::Double(10.0),
                     ),
                 ],
             ),
@@ -1082,12 +1082,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(21.0),
+                        FixtureValue::Double(21.0),
                     ),
                 ],
             ),
@@ -1096,14 +1096,14 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     fn duplicate_item_index_symbol_file() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Symbols".to_owned()),
+                    FixtureValue::String("Symbols".to_owned()),
                 )],
             ),
             record(
@@ -1112,12 +1112,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelPropertySymbolListIndex",
                         "name",
-                        AuthoringValue::String("earlier".to_owned()),
+                        FixtureValue::String("earlier".to_owned()),
                     ),
                     property(
                         "ViewModelPropertySymbolListIndex",
                         "symbolTypeValue",
-                        AuthoringValue::Uint(15),
+                        FixtureValue::Uint(15),
                     ),
                 ],
             ),
@@ -1127,12 +1127,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelPropertySymbolListIndex",
                         "name",
-                        AuthoringValue::String("winner".to_owned()),
+                        FixtureValue::String("winner".to_owned()),
                     ),
                     property(
                         "ViewModelPropertySymbolListIndex",
                         "symbolTypeValue",
-                        AuthoringValue::Uint(15),
+                        FixtureValue::Uint(15),
                     ),
                 ],
             ),
@@ -1141,7 +1141,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 vec![property(
                     "ViewModelInstance",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
@@ -1150,12 +1150,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "propertyValue",
-                        AuthoringValue::Uint(4),
+                        FixtureValue::Uint(4),
                     ),
                 ],
             ),
@@ -1165,12 +1165,12 @@ mod upstream_viewmodel_instance_contract_tests {
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "propertyValue",
-                        AuthoringValue::Uint(9),
+                        FixtureValue::Uint(9),
                     ),
                 ],
             ),

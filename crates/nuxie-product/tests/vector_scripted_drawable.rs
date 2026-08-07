@@ -240,36 +240,8 @@ fn imported_single_scripted_file_with_font(source: &[u8], include_external_font:
     bytes
 }
 
-#[allow(clippy::arithmetic_side_effects)]
 fn fixture_font_bytes() -> Vec<u8> {
-    let mut accumulator = 0u32;
-    let mut bit_count = 0u8;
-    let mut decoded = Vec::new();
-    for byte in include_bytes!("fixtures/roboto-a.ttf.base64")
-        .iter()
-        .copied()
-        .filter(|byte| !byte.is_ascii_whitespace())
-    {
-        if byte == b'=' {
-            break;
-        }
-        let value = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => panic!("invalid base64 font fixture"),
-        };
-        accumulator = (accumulator << 6) | u32::from(value);
-        bit_count += 6;
-        if bit_count >= 8 {
-            bit_count -= 8;
-            decoded.push((accumulator >> bit_count) as u8);
-            accumulator &= (1u32 << bit_count) - 1;
-        }
-    }
-    decoded
+    include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec()
 }
 
 fn imported_scripted_listener_file(protocol_source: &[u8]) -> Vec<u8> {

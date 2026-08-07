@@ -37,11 +37,11 @@ impl ViewModelInstanceListIndexRuntime {
 mod upstream_viewmodel_instance_list_index_runtime_tests {
     use super::*;
     use crate::properties::property_key_for_name;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_schema::definition_by_name;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -50,8 +50,8 @@ mod upstream_viewmodel_instance_list_index_runtime_tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -62,14 +62,14 @@ mod upstream_viewmodel_instance_list_index_runtime_tests {
         ViewModelInstanceRuntime,
         ViewModelInstanceListIndexRuntime,
     ) {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Row".to_owned()),
+                    FixtureValue::String("Row".to_owned()),
                 )],
             ),
             record(
@@ -77,7 +77,7 @@ mod upstream_viewmodel_instance_list_index_runtime_tests {
                 vec![property(
                     "ViewModelPropertySymbolListIndex",
                     "name",
-                    AuthoringValue::String("index".to_owned()),
+                    FixtureValue::String("index".to_owned()),
                 )],
             ),
         ])

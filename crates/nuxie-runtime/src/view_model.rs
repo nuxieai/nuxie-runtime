@@ -2340,11 +2340,11 @@ mod owned_context_tests {
     use super::*;
     use crate::properties::property_key_for_name;
     use crate::view_model_cell::{RuntimeCellDirtSink, RuntimeCellNotificationQueue};
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_schema::definition_by_name;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -2353,8 +2353,8 @@ mod owned_context_tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -2366,16 +2366,16 @@ mod owned_context_tests {
         view_model_type: u64,
         view_model_index: u64,
         value: f32,
-    ) -> Vec<AuthoringRecord> {
+    ) -> Vec<FixtureRecord> {
         vec![
             record(
                 "ViewModel",
                 vec![
-                    property("ViewModel", "name", AuthoringValue::String(name.to_owned())),
+                    property("ViewModel", "name", FixtureValue::String(name.to_owned())),
                     property(
                         "ViewModel",
                         "viewModelType",
-                        AuthoringValue::Uint(view_model_type),
+                        FixtureValue::Uint(view_model_type),
                     ),
                 ],
             ),
@@ -2384,7 +2384,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
@@ -2393,12 +2393,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstance",
                         "viewModelId",
-                        AuthoringValue::Uint(view_model_index),
+                        FixtureValue::Uint(view_model_index),
                     ),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Default".to_owned()),
+                        FixtureValue::String("Default".to_owned()),
                     ),
                 ],
             ),
@@ -2408,12 +2408,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(value),
+                        FixtureValue::Double(value),
                     ),
                 ],
             ),
@@ -2427,20 +2427,20 @@ mod owned_context_tests {
         records.extend(view_model_records("Global A", 2, 2, 30.0));
         records.push(record(
             "Artboard",
-            vec![property("Artboard", "viewModelId", AuthoringValue::Uint(1))],
+            vec![property("Artboard", "viewModelId", FixtureValue::Uint(1))],
         ));
-        RuntimeFile::from_authoring_records(records).expect("global context fixture imports")
+        RuntimeFile::from_fixture_records(records).expect("global context fixture imports")
     }
 
     fn symbol_list_index_order_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Rows".to_owned()),
+                    FixtureValue::String("Rows".to_owned()),
                 )],
             ),
             record(
@@ -2448,7 +2448,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertySymbolListIndex",
                     "name",
-                    AuthoringValue::String("first".to_owned()),
+                    FixtureValue::String("first".to_owned()),
                 )],
             ),
             record(
@@ -2456,17 +2456,17 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertySymbolListIndex",
                     "name",
-                    AuthoringValue::String("second".to_owned()),
+                    FixtureValue::String("second".to_owned()),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Default".to_owned()),
+                        FixtureValue::String("Default".to_owned()),
                     ),
                 ],
             ),
@@ -2478,12 +2478,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "propertyValue",
-                        AuthoringValue::Uint(22),
+                        FixtureValue::Uint(22),
                     ),
                 ],
             ),
@@ -2493,12 +2493,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceSymbolListIndex",
                         "propertyValue",
-                        AuthoringValue::Uint(11),
+                        FixtureValue::Uint(11),
                     ),
                 ],
             ),
@@ -2507,14 +2507,14 @@ mod owned_context_tests {
     }
 
     fn nested_trigger_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -2523,12 +2523,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -2537,7 +2537,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
             record(
@@ -2545,7 +2545,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyTrigger",
                     "name",
-                    AuthoringValue::String("fire".to_owned()),
+                    FixtureValue::String("fire".to_owned()),
                 )],
             ),
         ])
@@ -2553,14 +2553,14 @@ mod owned_context_tests {
     }
 
     fn mutable_list_default_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -2568,7 +2568,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("items".to_owned()),
+                    FixtureValue::String("items".to_owned()),
                 )],
             ),
             record(
@@ -2576,7 +2576,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Item".to_owned()),
+                    FixtureValue::String("Item".to_owned()),
                 )],
             ),
             record(
@@ -2584,17 +2584,17 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Root Default".to_owned()),
+                        FixtureValue::String("Root Default".to_owned()),
                     ),
                 ],
             ),
@@ -2603,17 +2603,17 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelInstanceList",
                     "viewModelPropertyId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(1)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(1)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Item Default".to_owned()),
+                        FixtureValue::String("Item Default".to_owned()),
                     ),
                 ],
             ),
@@ -2623,12 +2623,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(10.0),
+                        FixtureValue::Double(10.0),
                     ),
                 ],
             ),
@@ -2638,12 +2638,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceListItem",
                         "viewModelInstanceId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
@@ -2652,14 +2652,14 @@ mod owned_context_tests {
     }
 
     fn mutable_list_trigger_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -2667,7 +2667,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("items".to_owned()),
+                    FixtureValue::String("items".to_owned()),
                 )],
             ),
             record(
@@ -2675,7 +2675,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Item".to_owned()),
+                    FixtureValue::String("Item".to_owned()),
                 )],
             ),
             record(
@@ -2683,7 +2683,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyTrigger",
                     "name",
-                    AuthoringValue::String("fire".to_owned()),
+                    FixtureValue::String("fire".to_owned()),
                 )],
             ),
         ])
@@ -2718,14 +2718,14 @@ mod owned_context_tests {
     }
 
     fn list_row_relink_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -2733,7 +2733,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("items".to_owned()),
+                    FixtureValue::String("items".to_owned()),
                 )],
             ),
             record(
@@ -2741,7 +2741,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Row".to_owned()),
+                    FixtureValue::String("Row".to_owned()),
                 )],
             ),
             record(
@@ -2749,7 +2749,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
@@ -2758,12 +2758,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(2),
+                        FixtureValue::Uint(2),
                     ),
                 ],
             ),
@@ -2772,7 +2772,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyList",
                     "name",
-                    AuthoringValue::String("nested".to_owned()),
+                    FixtureValue::String("nested".to_owned()),
                 )],
             ),
             record(
@@ -2780,7 +2780,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
             record(
@@ -2788,7 +2788,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
@@ -2797,12 +2797,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("leaf".to_owned()),
+                        FixtureValue::String("leaf".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(3),
+                        FixtureValue::Uint(3),
                     ),
                 ],
             ),
@@ -2811,7 +2811,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Leaf".to_owned()),
+                    FixtureValue::String("Leaf".to_owned()),
                 )],
             ),
         ])
@@ -2820,14 +2820,14 @@ mod owned_context_tests {
 
     #[test]
     fn generated_artboard_property_starts_unassigned() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Main".to_owned()),
+                    FixtureValue::String("Main".to_owned()),
                 )],
             ),
             record(
@@ -2835,7 +2835,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyArtboard",
                     "name",
-                    AuthoringValue::String("artboard".to_owned()),
+                    FixtureValue::String("artboard".to_owned()),
                 )],
             ),
         ])
@@ -2851,22 +2851,22 @@ mod owned_context_tests {
 
     #[test]
     fn font_assets_preserve_file_identity_and_private_live_value_without_becoming_images() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "FontAsset",
-                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(7))],
             ),
             record(
                 "ImageAsset",
-                vec![property("ImageAsset", "assetId", AuthoringValue::Uint(8))],
+                vec![property("ImageAsset", "assetId", FixtureValue::Uint(8))],
             ),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Main".to_owned()),
+                    FixtureValue::String("Main".to_owned()),
                 )],
             ),
             record(
@@ -2874,7 +2874,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyAssetFont",
                     "name",
-                    AuthoringValue::String("font".to_owned()),
+                    FixtureValue::String("font".to_owned()),
                 )],
             ),
             record(
@@ -2882,17 +2882,17 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyAssetImage",
                     "name",
-                    AuthoringValue::String("image".to_owned()),
+                    FixtureValue::String("image".to_owned()),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(0)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Default".to_owned()),
+                        FixtureValue::String("Default".to_owned()),
                     ),
                 ],
             ),
@@ -2902,12 +2902,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceAssetFont",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceAssetFont",
                         "propertyValue",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
@@ -2917,12 +2917,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceAssetImage",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                     property(
                         "ViewModelInstanceAssetImage",
                         "propertyValue",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -3170,7 +3170,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -3179,12 +3179,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -3194,12 +3194,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child2".to_owned()),
+                        FixtureValue::String("child2".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -3212,7 +3212,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyAssetFont",
                     "name",
-                    AuthoringValue::String("font".to_owned()),
+                    FixtureValue::String("font".to_owned()),
                 )],
             ),
         );
@@ -3222,28 +3222,28 @@ mod owned_context_tests {
                 property(
                     "ViewModelInstanceAssetFont",
                     "viewModelPropertyId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 ),
                 property(
                     "ViewModelInstanceAssetFont",
                     "propertyValue",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 ),
             ],
         ));
         records.extend(child_records);
-        RuntimeFile::from_authoring_records(records).expect("linked child fixture imports")
+        RuntimeFile::from_fixture_records(records).expect("linked child fixture imports")
     }
 
     fn linked_structural_endpoint_fixture() -> RuntimeFile {
-        RuntimeFile::from_authoring_records(vec![
+        RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
                 "ViewModel",
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Root".to_owned()),
+                    FixtureValue::String("Root".to_owned()),
                 )],
             ),
             record(
@@ -3252,12 +3252,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("child".to_owned()),
+                        FixtureValue::String("child".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(1),
+                        FixtureValue::Uint(1),
                     ),
                 ],
             ),
@@ -3266,7 +3266,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Child".to_owned()),
+                    FixtureValue::String("Child".to_owned()),
                 )],
             ),
             record(
@@ -3275,12 +3275,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelPropertyViewModel",
                         "name",
-                        AuthoringValue::String("leaf".to_owned()),
+                        FixtureValue::String("leaf".to_owned()),
                     ),
                     property(
                         "ViewModelPropertyViewModel",
                         "viewModelReferenceId",
-                        AuthoringValue::Uint(2),
+                        FixtureValue::Uint(2),
                     ),
                 ],
             ),
@@ -3289,7 +3289,7 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Leaf".to_owned()),
+                    FixtureValue::String("Leaf".to_owned()),
                 )],
             ),
             record(
@@ -3297,17 +3297,17 @@ mod owned_context_tests {
                 vec![property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("value".to_owned()),
+                    FixtureValue::String("value".to_owned()),
                 )],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(2)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(2)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("First".to_owned()),
+                        FixtureValue::String("First".to_owned()),
                     ),
                 ],
             ),
@@ -3317,23 +3317,23 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(1.0),
+                        FixtureValue::Double(1.0),
                     ),
                 ],
             ),
             record(
                 "ViewModelInstance",
                 vec![
-                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(2)),
+                    property("ViewModelInstance", "viewModelId", FixtureValue::Uint(2)),
                     property(
                         "ViewModelInstance",
                         "name",
-                        AuthoringValue::String("Second".to_owned()),
+                        FixtureValue::String("Second".to_owned()),
                     ),
                 ],
             ),
@@ -3343,12 +3343,12 @@ mod owned_context_tests {
                     property(
                         "ViewModelInstanceNumber",
                         "viewModelPropertyId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                     property(
                         "ViewModelInstanceNumber",
                         "propertyValue",
-                        AuthoringValue::Double(2.0),
+                        FixtureValue::Double(2.0),
                     ),
                 ],
             ),

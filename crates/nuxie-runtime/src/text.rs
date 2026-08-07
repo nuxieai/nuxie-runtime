@@ -5010,7 +5010,7 @@ pub(crate) fn runtime_font_asset_bytes<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_graph::GraphFile;
 
     #[test]
@@ -5076,8 +5076,8 @@ mod tests {
         );
     }
 
-    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -5086,44 +5086,16 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, property_name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}")),
             value,
         }
     }
 
-    #[allow(clippy::arithmetic_side_effects)]
     fn fixture_font_bytes() -> Vec<u8> {
-        let mut accumulator = 0u32;
-        let mut bit_count = 0u8;
-        let mut decoded = Vec::new();
-        for byte in include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
-            .iter()
-            .copied()
-            .filter(|byte| !byte.is_ascii_whitespace())
-        {
-            if byte == b'=' {
-                break;
-            }
-            let value = match byte {
-                b'A'..=b'Z' => byte - b'A',
-                b'a'..=b'z' => byte - b'a' + 26,
-                b'0'..=b'9' => byte - b'0' + 52,
-                b'+' => 62,
-                b'/' => 63,
-                _ => panic!("invalid base64 font fixture"),
-            };
-            accumulator = (accumulator << 6) | u32::from(value);
-            bit_count += 6;
-            if bit_count >= 8 {
-                bit_count -= 8;
-                decoded.push((accumulator >> bit_count) as u8);
-                accumulator &= (1u32 << bit_count) - 1;
-            }
-        }
-        decoded
+        include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec()
     }
 
     fn font_table_range(bytes: &[u8], tag: &[u8; 4]) -> std::ops::Range<usize> {
@@ -5205,70 +5177,70 @@ mod tests {
         font_bytes: Vec<u8>,
     ) -> (RuntimeFile, GraphFile) {
         let mut style_properties = vec![
-            property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
-            property("TextStylePaint", "fontSize", AuthoringValue::Double(20.0)),
-            property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+            property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+            property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+            property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
         ];
         if let Some(line_height) = line_height {
             style_properties.push(property(
                 "TextStylePaint",
                 "lineHeight",
-                AuthoringValue::Double(line_height),
+                FixtureValue::Double(line_height),
             ));
         }
         let records = vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "FontAsset",
-                vec![property("FontAsset", "assetId", AuthoringValue::Uint(0))],
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(0))],
             ),
-            authoring_record(
+            fixture_record(
                 "FileAssetContents",
                 vec![property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(font_bytes),
+                    FixtureValue::Bytes(font_bytes),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "Artboard",
                 vec![
-                    property("Artboard", "width", AuthoringValue::Double(200.0)),
-                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "width", FixtureValue::Double(200.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "Text",
                 vec![
-                    property("Text", "sizingValue", AuthoringValue::Uint(sizing_value)),
-                    property("Text", "width", AuthoringValue::Double(80.0)),
-                    property("Text", "height", AuthoringValue::Double(50.0)),
+                    property("Text", "sizingValue", FixtureValue::Uint(sizing_value)),
+                    property("Text", "width", FixtureValue::Double(80.0)),
+                    property("Text", "height", FixtureValue::Double(50.0)),
                     property(
                         "Text",
                         "overflowValue",
-                        AuthoringValue::Uint(TEXT_OVERFLOW_CLIPPED),
+                        FixtureValue::Uint(TEXT_OVERFLOW_CLIPPED),
                     ),
-                    property("Text", "verticalAlignValue", AuthoringValue::Uint(1)),
-                    property("Text", "originValue", AuthoringValue::Uint(1)),
-                    property("Text", "originX", AuthoringValue::Double(0.25)),
-                    property("Text", "originY", AuthoringValue::Double(0.5)),
+                    property("Text", "verticalAlignValue", FixtureValue::Uint(1)),
+                    property("Text", "originValue", FixtureValue::Uint(1)),
+                    property("Text", "originX", FixtureValue::Double(0.25)),
+                    property("Text", "originY", FixtureValue::Double(0.5)),
                 ],
             ),
-            authoring_record("TextStylePaint", style_properties),
-            authoring_record(
+            fixture_record("TextStylePaint", style_properties),
+            fixture_record(
                 "TextValueRun",
                 vec![
-                    property("TextValueRun", "parentId", AuthoringValue::Uint(1)),
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
                     property(
                         "TextValueRun",
                         "text",
-                        AuthoringValue::String("a\na".to_owned()),
+                        FixtureValue::String("a\na".to_owned()),
                     ),
-                    property("TextValueRun", "styleId", AuthoringValue::Uint(2)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
                 ],
             ),
         ];
-        let runtime = RuntimeFile::from_authoring_records(records)
+        let runtime = RuntimeFile::from_fixture_records(records)
             .expect("baseline-origin Text records import");
         let graph =
             GraphFile::from_runtime_file(&runtime).expect("baseline-origin Text graph builds");
@@ -6248,36 +6220,36 @@ mod tests {
 
     #[test]
     fn d_st_target_wrong_parent_is_rejected_before_occurrence_registration() {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record("Artboard", Vec::new()),
-            authoring_record("Text", Vec::new()),
-            authoring_record(
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
                 "TextStylePaint",
                 vec![property(
                     "TextStylePaint",
                     "parentId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "TextValueRun",
                 vec![
-                    property("TextValueRun", "parentId", AuthoringValue::Uint(1)),
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
                     property(
                         "TextValueRun",
                         "text",
-                        AuthoringValue::String("wrong parent".to_owned()),
+                        FixtureValue::String("wrong parent".to_owned()),
                     ),
-                    property("TextValueRun", "styleId", AuthoringValue::Uint(2)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "TextFollowPathModifier",
                 vec![property(
                     "TextFollowPathModifier",
                     "parentId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
         ])

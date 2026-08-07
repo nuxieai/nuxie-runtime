@@ -297,10 +297,10 @@ fn runtime_state_machine_data_bind_source(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -309,8 +309,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -321,7 +321,7 @@ mod tests {
     fn templates_retain_base_and_unsupported_targets_in_authored_order() {
         let number_property_key = property_key_for_name("BindablePropertyNumber", "propertyValue")
             .expect("number property key");
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record("StateMachine", Vec::new()),
@@ -338,12 +338,12 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(number_property_key + 1)),
+                        FixtureValue::Uint(u64::from(number_property_key + 1)),
                     ),
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
                 ],
             ),
@@ -354,12 +354,12 @@ mod tests {
                     property(
                         "DataBindContext",
                         "propertyKey",
-                        AuthoringValue::Uint(u64::from(number_property_key)),
+                        FixtureValue::Uint(u64::from(number_property_key)),
                     ),
                     property(
                         "DataBindContext",
                         "sourcePathIds",
-                        AuthoringValue::Bytes(vec![0, 0]),
+                        FixtureValue::Bytes(vec![0, 0]),
                     ),
                 ],
             ),

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -114,9 +114,9 @@ fn emit_fixture(args: FixtureArgs) -> Result<()> {
         "grid-justify-items-bind" => grid_justify_items_bind_fixture(),
         other => bail!("unknown fixture name {other:?}"),
     };
-    RuntimeFile::from_authoring_records(records.clone())
+    RuntimeFile::from_fixture_records(records.clone())
         .with_context(|| format!("validating {} fixture records", args.name))?;
-    let encoded = encode_authoring_records(&records);
+    let encoded = encode_fixture_records(&records);
     if let Some(parent) = args.out.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("creating fixture directory {}", parent.display()))?;
@@ -140,7 +140,7 @@ fn read_fixture_font(args: &FixtureArgs) -> Result<Vec<u8>> {
     fs::read(font).with_context(|| format!("reading fixture font {}", font.display()))
 }
 
-fn fixture_record(type_name: &str, properties: Vec<(&str, AuthoringValue)>) -> AuthoringRecord {
+fn fixture_record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
     let definition = nuxie_schema::definition_by_name(type_name)
         .unwrap_or_else(|| panic!("fixture record type exists: {type_name}"));
     let properties = properties
@@ -152,197 +152,197 @@ fn fixture_record(type_name: &str, properties: Vec<(&str, AuthoringValue)>) -> A
                 .flat_map(|owner| owner.properties)
                 .find(|property| property.name == property_name)
                 .unwrap_or_else(|| panic!("fixture property exists: {type_name}.{property_name}"));
-            AuthoringProperty {
+            FixtureProperty {
                 key: property.key.int,
                 value,
             }
         })
         .collect();
-    AuthoringRecord {
+    FixtureRecord {
         type_key: definition.type_key.int,
         properties,
     }
 }
 
-fn text_fixture_prefix(font: Vec<u8>, name: &str) -> Vec<AuthoringRecord> {
+fn text_fixture_prefix(font: Vec<u8>, name: &str) -> Vec<FixtureRecord> {
     vec![
         fixture_record("Backboard", vec![]),
         fixture_record(
             "FontAsset",
             vec![
-                ("name", AuthoringValue::String(format!("{name} font"))),
-                ("assetId", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String(format!("{name} font"))),
+                ("assetId", FixtureValue::Uint(0)),
             ],
         ),
         fixture_record(
             "FileAssetContents",
-            vec![("bytes", AuthoringValue::Bytes(font))],
+            vec![("bytes", FixtureValue::Bytes(font))],
         ),
         fixture_record(
             "Artboard",
             vec![
-                ("name", AuthoringValue::String(name.to_owned())),
-                ("width", AuthoringValue::Double(420.0)),
-                ("height", AuthoringValue::Double(120.0)),
+                ("name", FixtureValue::String(name.to_owned())),
+                ("width", FixtureValue::Double(420.0)),
+                ("height", FixtureValue::Double(120.0)),
             ],
         ),
         fixture_record(
             "Text",
             vec![
-                ("name", AuthoringValue::String("Static text".to_owned())),
-                ("x", AuthoringValue::Double(16.0)),
-                ("y", AuthoringValue::Double(16.0)),
-                ("sizingValue", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String("Static text".to_owned())),
+                ("x", FixtureValue::Double(16.0)),
+                ("y", FixtureValue::Double(16.0)),
+                ("sizingValue", FixtureValue::Uint(0)),
             ],
         ),
         fixture_record(
             "TextStylePaint",
             vec![
-                ("name", AuthoringValue::String("Fixture style".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("fontSize", AuthoringValue::Double(42.0)),
-                ("fontAssetId", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String("Fixture style".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("fontSize", FixtureValue::Double(42.0)),
+                ("fontAssetId", FixtureValue::Uint(0)),
             ],
         ),
     ]
 }
 
-fn text_style_feature_fixture(font: Vec<u8>) -> Vec<AuthoringRecord> {
+fn text_style_feature_fixture(font: Vec<u8>) -> Vec<FixtureRecord> {
     let mut records = text_fixture_prefix(font, "FL-E8 text style feature");
     records.extend([
         fixture_record(
             "TextStyleFeature",
             vec![
-                ("parentId", AuthoringValue::Uint(2)),
+                ("parentId", FixtureValue::Uint(2)),
                 (
                     "tag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
                 ),
             ],
         ),
         fixture_record(
             "TextStyleFeature",
             vec![
-                ("parentId", AuthoringValue::Uint(2)),
+                ("parentId", FixtureValue::Uint(2)),
                 (
                     "tag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
                 ),
-                ("featureValue", AuthoringValue::Uint(0)),
+                ("featureValue", FixtureValue::Uint(0)),
             ],
         ),
         fixture_record(
             "TextStyleFeature",
             vec![
-                ("parentId", AuthoringValue::Uint(2)),
+                ("parentId", FixtureValue::Uint(2)),
                 (
                     "tag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
                 ),
-                ("featureValue", AuthoringValue::Uint(1)),
+                ("featureValue", FixtureValue::Uint(1)),
             ],
         ),
-        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+        fixture_record("Fill", vec![("parentId", FixtureValue::Uint(2))]),
         fixture_record(
             "SolidColor",
             vec![
-                ("parentId", AuthoringValue::Uint(6)),
-                ("colorValue", AuthoringValue::Color(0xff22_3344)),
+                ("parentId", FixtureValue::Uint(6)),
+                ("colorValue", FixtureValue::Color(0xff22_3344)),
             ],
         ),
         fixture_record(
             "TextValueRun",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
+                ("parentId", FixtureValue::Uint(1)),
                 (
                     "text",
-                    AuthoringValue::String("office affinity ffi".to_owned()),
+                    FixtureValue::String("office affinity ffi".to_owned()),
                 ),
-                ("styleId", AuthoringValue::Uint(2)),
+                ("styleId", FixtureValue::Uint(2)),
             ],
         ),
     ]);
     records
 }
 
-fn text_variation_modifier_fixture(font: Vec<u8>) -> Vec<AuthoringRecord> {
+fn text_variation_modifier_fixture(font: Vec<u8>) -> Vec<FixtureRecord> {
     let mut records = text_fixture_prefix(font, "FL-E8 text variation modifier");
     records.extend([
         fixture_record(
             "TextStyleAxis",
             vec![
-                ("parentId", AuthoringValue::Uint(2)),
+                ("parentId", FixtureValue::Uint(2)),
                 (
                     "tag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
                 ),
-                ("axisValue", AuthoringValue::Double(400.0)),
+                ("axisValue", FixtureValue::Double(400.0)),
             ],
         ),
-        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+        fixture_record("Fill", vec![("parentId", FixtureValue::Uint(2))]),
         fixture_record(
             "SolidColor",
             vec![
-                ("parentId", AuthoringValue::Uint(4)),
-                ("colorValue", AuthoringValue::Color(0xff33_5577)),
+                ("parentId", FixtureValue::Uint(4)),
+                ("colorValue", FixtureValue::Color(0xff33_5577)),
             ],
         ),
         fixture_record(
             "TextValueRun",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
-                ("text", AuthoringValue::String("variable text".to_owned())),
-                ("styleId", AuthoringValue::Uint(2)),
+                ("parentId", FixtureValue::Uint(1)),
+                ("text", FixtureValue::String("variable text".to_owned())),
+                ("styleId", FixtureValue::Uint(2)),
             ],
         ),
         fixture_record(
             "TextModifierGroup",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
-                ("modifierFlags", AuthoringValue::Uint(1 | (1 << 4))),
-                ("originX", AuthoringValue::Double(0.25)),
-                ("originY", AuthoringValue::Double(0.75)),
-                ("scaleX", AuthoringValue::Double(1.2)),
-                ("scaleY", AuthoringValue::Double(0.8)),
+                ("parentId", FixtureValue::Uint(1)),
+                ("modifierFlags", FixtureValue::Uint(1 | (1 << 4))),
+                ("originX", FixtureValue::Double(0.25)),
+                ("originY", FixtureValue::Double(0.75)),
+                ("scaleX", FixtureValue::Double(1.2)),
+                ("scaleY", FixtureValue::Double(0.8)),
             ],
         ),
         fixture_record(
             "TextModifierRange",
             vec![
-                ("parentId", AuthoringValue::Uint(7)),
-                ("typeValue", AuthoringValue::Uint(1)),
-                ("modifyFrom", AuthoringValue::Double(0.0)),
-                ("modifyTo", AuthoringValue::Double(0.65)),
-                ("strength", AuthoringValue::Double(1.25)),
+                ("parentId", FixtureValue::Uint(7)),
+                ("typeValue", FixtureValue::Uint(1)),
+                ("modifyFrom", FixtureValue::Double(0.0)),
+                ("modifyTo", FixtureValue::Double(0.65)),
+                ("strength", FixtureValue::Double(1.25)),
             ],
         ),
         fixture_record(
             "TextVariationModifier",
             vec![
-                ("parentId", AuthoringValue::Uint(7)),
+                ("parentId", FixtureValue::Uint(7)),
                 (
                     "axisTag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
                 ),
-                ("axisValue", AuthoringValue::Double(700.0)),
+                ("axisValue", FixtureValue::Double(700.0)),
             ],
         ),
         fixture_record(
             "TextVariationModifier",
             vec![
-                ("parentId", AuthoringValue::Uint(7)),
+                ("parentId", FixtureValue::Uint(7)),
                 (
                     "axisTag",
-                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
                 ),
-                ("axisValue", AuthoringValue::Double(300.0)),
+                ("axisValue", FixtureValue::Double(300.0)),
             ],
         ),
     ]);
     records
 }
 
-fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
+fn transform_live_write_fixture() -> Vec<FixtureRecord> {
     vec![
         fixture_record("Backboard", vec![]),
         fixture_record(
@@ -350,39 +350,36 @@ fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("UNIV-1275 transform live writes".to_owned()),
+                    FixtureValue::String("UNIV-1275 transform live writes".to_owned()),
                 ),
-                ("width", AuthoringValue::Double(320.0)),
-                ("height", AuthoringValue::Double(240.0)),
+                ("width", FixtureValue::Double(320.0)),
+                ("height", FixtureValue::Double(240.0)),
             ],
         ),
         fixture_record(
             "Shape",
             vec![
-                (
-                    "name",
-                    AuthoringValue::String("Transform parent".to_owned()),
-                ),
-                ("parentId", AuthoringValue::Uint(0)),
-                ("x", AuthoringValue::Double(20.0)),
-                ("y", AuthoringValue::Double(30.0)),
-                ("opacity", AuthoringValue::Double(0.8)),
-                ("rotation", AuthoringValue::Double(0.25)),
-                ("scaleX", AuthoringValue::Double(1.5)),
-                ("scaleY", AuthoringValue::Double(0.75)),
+                ("name", FixtureValue::String("Transform parent".to_owned())),
+                ("parentId", FixtureValue::Uint(0)),
+                ("x", FixtureValue::Double(20.0)),
+                ("y", FixtureValue::Double(30.0)),
+                ("opacity", FixtureValue::Double(0.8)),
+                ("rotation", FixtureValue::Double(0.25)),
+                ("scaleX", FixtureValue::Double(1.5)),
+                ("scaleY", FixtureValue::Double(0.75)),
             ],
         ),
         fixture_record(
             "Shape",
             vec![
-                ("name", AuthoringValue::String("Transform child".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("x", AuthoringValue::Double(5.0)),
-                ("y", AuthoringValue::Double(7.0)),
-                ("opacity", AuthoringValue::Double(0.5)),
-                ("rotation", AuthoringValue::Double(-0.1)),
-                ("scaleX", AuthoringValue::Double(1.2)),
-                ("scaleY", AuthoringValue::Double(0.8)),
+                ("name", FixtureValue::String("Transform child".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("x", FixtureValue::Double(5.0)),
+                ("y", FixtureValue::Double(7.0)),
+                ("opacity", FixtureValue::Double(0.5)),
+                ("rotation", FixtureValue::Double(-0.1)),
+                ("scaleX", FixtureValue::Double(1.2)),
+                ("scaleY", FixtureValue::Double(0.8)),
             ],
         ),
         fixture_record(
@@ -390,95 +387,96 @@ fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("Transform rectangle".to_owned()),
+                    FixtureValue::String("Transform rectangle".to_owned()),
                 ),
-                ("parentId", AuthoringValue::Uint(2)),
-                ("width", AuthoringValue::Double(20.0)),
-                ("height", AuthoringValue::Double(10.0)),
+                ("parentId", FixtureValue::Uint(2)),
+                ("width", FixtureValue::Double(20.0)),
+                ("height", FixtureValue::Double(10.0)),
             ],
         ),
         fixture_record(
             "Fill",
             vec![
-                ("name", AuthoringValue::String("Transform fill".to_owned())),
-                ("parentId", AuthoringValue::Uint(2)),
+                ("name", FixtureValue::String("Transform fill".to_owned())),
+                ("parentId", FixtureValue::Uint(2)),
             ],
         ),
         fixture_record(
             "SolidColor",
             vec![
-                ("name", AuthoringValue::String("Transform color".to_owned())),
-                ("parentId", AuthoringValue::Uint(4)),
-                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+                ("name", FixtureValue::String("Transform color".to_owned())),
+                ("parentId", FixtureValue::Uint(4)),
+                ("colorValue", FixtureValue::Color(0xff33_6699)),
             ],
         ),
         fixture_record(
             "LayoutComponent",
             vec![
-                ("name", AuthoringValue::String("Layout root".to_owned())),
-                ("parentId", AuthoringValue::Uint(0)),
-                ("styleId", AuthoringValue::Uint(12)),
-                ("width", AuthoringValue::Double(160.0)),
-                ("height", AuthoringValue::Double(100.0)),
-                ("x", AuthoringValue::Double(40.0)),
-                ("y", AuthoringValue::Double(25.0)),
-                ("rotation", AuthoringValue::Double(0.15)),
-                ("scaleX", AuthoringValue::Double(1.1)),
-                ("scaleY", AuthoringValue::Double(0.9)),
+                ("name", FixtureValue::String("Layout root".to_owned())),
+                ("parentId", FixtureValue::Uint(0)),
+                ("styleId", FixtureValue::Uint(12)),
+                ("width", FixtureValue::Double(160.0)),
+                ("height", FixtureValue::Double(100.0)),
+                ("x", FixtureValue::Double(40.0)),
+                ("y", FixtureValue::Double(25.0)),
+                ("rotation", FixtureValue::Double(0.15)),
+                ("scaleX", FixtureValue::Double(1.1)),
+                ("scaleY", FixtureValue::Double(0.9)),
             ],
         ),
         fixture_record(
             "LayoutComponent",
             vec![
-                ("name", AuthoringValue::String("Layout nested".to_owned())),
-                ("parentId", AuthoringValue::Uint(6)),
-                ("styleId", AuthoringValue::Uint(13)),
-                ("width", AuthoringValue::Double(80.0)),
-                ("height", AuthoringValue::Double(60.0)),
-                ("x", AuthoringValue::Double(12.0)),
-                ("y", AuthoringValue::Double(8.0)),
+                ("name", FixtureValue::String("Layout nested".to_owned())),
+                ("parentId", FixtureValue::Uint(6)),
+                ("styleId", FixtureValue::Uint(13)),
+                ("width", FixtureValue::Double(80.0)),
+                ("height", FixtureValue::Double(60.0)),
+                ("x", FixtureValue::Double(12.0)),
+                ("y", FixtureValue::Double(8.0)),
             ],
         ),
         fixture_record(
             "Shape",
             vec![
-                (
-                    "name",
-                    AuthoringValue::String("Layout descendant".to_owned()),
-                ),
-                ("parentId", AuthoringValue::Uint(7)),
-                ("x", AuthoringValue::Double(3.0)),
-                ("y", AuthoringValue::Double(4.0)),
-                ("rotation", AuthoringValue::Double(-0.2)),
-                ("scaleX", AuthoringValue::Double(0.9)),
-                ("scaleY", AuthoringValue::Double(1.3)),
+                ("name", FixtureValue::String("Layout descendant".to_owned())),
+                ("parentId", FixtureValue::Uint(7)),
+                ("x", FixtureValue::Double(3.0)),
+                ("y", FixtureValue::Double(4.0)),
+                ("rotation", FixtureValue::Double(-0.2)),
+                ("scaleX", FixtureValue::Double(0.9)),
+                ("scaleY", FixtureValue::Double(1.3)),
             ],
         ),
         fixture_record(
             "Rectangle",
             vec![
-                (
-                    "name",
-                    AuthoringValue::String("Layout rectangle".to_owned()),
-                ),
-                ("parentId", AuthoringValue::Uint(8)),
-                ("width", AuthoringValue::Double(12.0)),
-                ("height", AuthoringValue::Double(8.0)),
+                ("name", FixtureValue::String("Layout rectangle".to_owned())),
+                ("parentId", FixtureValue::Uint(8)),
+                ("width", FixtureValue::Double(12.0)),
+                ("height", FixtureValue::Double(8.0)),
             ],
         ),
         fixture_record(
             "Fill",
             vec![
-                ("name", AuthoringValue::String("Layout fill".to_owned())),
-                ("parentId", AuthoringValue::Uint(8)),
+                ("name", FixtureValue::String("Layout fill".to_owned())),
+                ("parentId", FixtureValue::Uint(8)),
             ],
         ),
         fixture_record(
             "SolidColor",
             vec![
-                ("name", AuthoringValue::String("Layout color".to_owned())),
-                ("parentId", AuthoringValue::Uint(10)),
-                ("colorValue", AuthoringValue::Color(0xff99_6633)),
+                ("name", FixtureValue::String("Layout color".to_owned())),
+                ("parentId", FixtureValue::Uint(10)),
+                ("colorValue", FixtureValue::Color(0xff99_6633)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                ("name", FixtureValue::String("Layout root style".to_owned())),
+                ("parentId", FixtureValue::Uint(6)),
             ],
         ),
         fixture_record(
@@ -486,19 +484,9 @@ fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("Layout root style".to_owned()),
+                    FixtureValue::String("Layout nested style".to_owned()),
                 ),
-                ("parentId", AuthoringValue::Uint(6)),
-            ],
-        ),
-        fixture_record(
-            "LayoutComponentStyle",
-            vec![
-                (
-                    "name",
-                    AuthoringValue::String("Layout nested style".to_owned()),
-                ),
-                ("parentId", AuthoringValue::Uint(7)),
+                ("parentId", FixtureValue::Uint(7)),
             ],
         ),
     ]
@@ -521,31 +509,31 @@ fn schema_property_key(type_name: &str, property_name: &str) -> u64 {
 // type 0) so grid alignment governs their in-track position; a
 // `setVmNumber justify 1` view-model script command at t>0 moves both items
 // from flex-start to center through the LayoutComponentStyle dirt route.
-fn grid_justify_items_bind_fixture() -> Vec<AuthoringRecord> {
+fn grid_justify_items_bind_fixture() -> Vec<FixtureRecord> {
     // Records 0..=4 precede the Artboard, so artboard-local ids below are
     // record index minus 5.
     vec![
         fixture_record("Backboard", vec![]),
         fixture_record(
             "ViewModel",
-            vec![("name", AuthoringValue::String("Grid".to_owned()))],
+            vec![("name", FixtureValue::String("Grid".to_owned()))],
         ),
         fixture_record(
             "ViewModelPropertyNumber",
-            vec![("name", AuthoringValue::String("justify".to_owned()))],
+            vec![("name", FixtureValue::String("justify".to_owned()))],
         ),
         fixture_record(
             "ViewModelInstance",
             vec![
-                ("name", AuthoringValue::String("Defaults".to_owned())),
-                ("viewModelId", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String("Defaults".to_owned())),
+                ("viewModelId", FixtureValue::Uint(0)),
             ],
         ),
         fixture_record(
             "ViewModelInstanceNumber",
             vec![
-                ("viewModelPropertyId", AuthoringValue::Uint(0)),
-                ("propertyValue", AuthoringValue::Double(0.0)),
+                ("viewModelPropertyId", FixtureValue::Uint(0)),
+                ("propertyValue", FixtureValue::Double(0.0)),
             ],
         ),
         fixture_record(
@@ -553,107 +541,107 @@ fn grid_justify_items_bind_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("Grid justify-items bind".to_owned()),
+                    FixtureValue::String("Grid justify-items bind".to_owned()),
                 ),
-                ("width", AuthoringValue::Double(300.0)),
-                ("height", AuthoringValue::Double(150.0)),
-                ("viewModelId", AuthoringValue::Uint(0)),
+                ("width", FixtureValue::Double(300.0)),
+                ("height", FixtureValue::Double(150.0)),
+                ("viewModelId", FixtureValue::Uint(0)),
             ],
         ),
         fixture_record(
             "LayoutComponent",
             vec![
-                ("name", AuthoringValue::String("Grid container".to_owned())),
-                ("parentId", AuthoringValue::Uint(0)),
-                ("styleId", AuthoringValue::Uint(13)),
-                ("width", AuthoringValue::Double(300.0)),
-                ("height", AuthoringValue::Double(150.0)),
+                ("name", FixtureValue::String("Grid container".to_owned())),
+                ("parentId", FixtureValue::Uint(0)),
+                ("styleId", FixtureValue::Uint(13)),
+                ("width", FixtureValue::Double(300.0)),
+                ("height", FixtureValue::Double(150.0)),
             ],
         ),
         fixture_record(
             "GridTrack",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
-                ("trackType", AuthoringValue::Uint(1)),
-                ("trackValue", AuthoringValue::Double(100.0)),
+                ("parentId", FixtureValue::Uint(1)),
+                ("trackType", FixtureValue::Uint(1)),
+                ("trackValue", FixtureValue::Double(100.0)),
             ],
         ),
         fixture_record(
             "GridTrack",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
-                ("trackType", AuthoringValue::Uint(1)),
-                ("trackValue", AuthoringValue::Double(100.0)),
+                ("parentId", FixtureValue::Uint(1)),
+                ("trackType", FixtureValue::Uint(1)),
+                ("trackValue", FixtureValue::Double(100.0)),
             ],
         ),
         fixture_record(
             "GridTrack",
             vec![
-                ("parentId", AuthoringValue::Uint(1)),
-                ("collection", AuthoringValue::Uint(1)),
-                ("trackType", AuthoringValue::Uint(1)),
-                ("trackValue", AuthoringValue::Double(100.0)),
+                ("parentId", FixtureValue::Uint(1)),
+                ("collection", FixtureValue::Uint(1)),
+                ("trackType", FixtureValue::Uint(1)),
+                ("trackValue", FixtureValue::Double(100.0)),
             ],
         ),
         fixture_record(
             "LayoutComponent",
             vec![
-                ("name", AuthoringValue::String("Item A".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("styleId", AuthoringValue::Uint(6)),
-                ("width", AuthoringValue::Double(40.0)),
-                ("height", AuthoringValue::Double(40.0)),
+                ("name", FixtureValue::String("Item A".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("styleId", FixtureValue::Uint(6)),
+                ("width", FixtureValue::Double(40.0)),
+                ("height", FixtureValue::Double(40.0)),
             ],
         ),
         fixture_record(
             "LayoutComponentStyle",
             vec![
-                ("parentId", AuthoringValue::Uint(5)),
-                ("layoutWidthScaleType", AuthoringValue::Uint(0)),
-                ("layoutHeightScaleType", AuthoringValue::Uint(0)),
+                ("parentId", FixtureValue::Uint(5)),
+                ("layoutWidthScaleType", FixtureValue::Uint(0)),
+                ("layoutHeightScaleType", FixtureValue::Uint(0)),
             ],
         ),
-        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(5))]),
+        fixture_record("Fill", vec![("parentId", FixtureValue::Uint(5))]),
         fixture_record(
             "SolidColor",
             vec![
-                ("parentId", AuthoringValue::Uint(7)),
-                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+                ("parentId", FixtureValue::Uint(7)),
+                ("colorValue", FixtureValue::Color(0xff33_6699)),
             ],
         ),
         fixture_record(
             "LayoutComponent",
             vec![
-                ("name", AuthoringValue::String("Item B".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("styleId", AuthoringValue::Uint(10)),
-                ("width", AuthoringValue::Double(40.0)),
-                ("height", AuthoringValue::Double(40.0)),
+                ("name", FixtureValue::String("Item B".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("styleId", FixtureValue::Uint(10)),
+                ("width", FixtureValue::Double(40.0)),
+                ("height", FixtureValue::Double(40.0)),
             ],
         ),
         fixture_record(
             "LayoutComponentStyle",
             vec![
-                ("parentId", AuthoringValue::Uint(9)),
-                ("layoutWidthScaleType", AuthoringValue::Uint(0)),
-                ("layoutHeightScaleType", AuthoringValue::Uint(0)),
+                ("parentId", FixtureValue::Uint(9)),
+                ("layoutWidthScaleType", FixtureValue::Uint(0)),
+                ("layoutHeightScaleType", FixtureValue::Uint(0)),
             ],
         ),
-        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(9))]),
+        fixture_record("Fill", vec![("parentId", FixtureValue::Uint(9))]),
         fixture_record(
             "SolidColor",
             vec![
-                ("parentId", AuthoringValue::Uint(11)),
-                ("colorValue", AuthoringValue::Color(0xff99_6633)),
+                ("parentId", FixtureValue::Uint(11)),
+                ("colorValue", FixtureValue::Color(0xff99_6633)),
             ],
         ),
         fixture_record(
             "LayoutComponentStyle",
             vec![
-                ("name", AuthoringValue::String("Grid style".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("layoutTypeValue", AuthoringValue::Uint(1)),
-                ("justifyItemsValue", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String("Grid style".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("layoutTypeValue", FixtureValue::Uint(1)),
+                ("justifyItemsValue", FixtureValue::Uint(0)),
             ],
         ),
         // The data bind targets the immediately preceding record (the grid
@@ -663,19 +651,19 @@ fn grid_justify_items_bind_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "propertyKey",
-                    AuthoringValue::Uint(schema_property_key(
+                    FixtureValue::Uint(schema_property_key(
                         "LayoutComponentStyle",
                         "justifyItemsValue",
                     )),
                 ),
-                ("flags", AuthoringValue::Uint(0)),
-                ("sourcePathIds", AuthoringValue::Bytes(vec![0, 0])),
+                ("flags", FixtureValue::Uint(0)),
+                ("sourcePathIds", FixtureValue::Bytes(vec![0, 0])),
             ],
         ),
     ]
 }
 
-fn parent_child_opacity_fixture() -> Vec<AuthoringRecord> {
+fn parent_child_opacity_fixture() -> Vec<FixtureRecord> {
     vec![
         fixture_record("Backboard", vec![]),
         fixture_record(
@@ -683,54 +671,54 @@ fn parent_child_opacity_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("UNIV-1278 parent child opacity".to_owned()),
+                    FixtureValue::String("UNIV-1278 parent child opacity".to_owned()),
                 ),
-                ("width", AuthoringValue::Double(100.0)),
-                ("height", AuthoringValue::Double(100.0)),
+                ("width", FixtureValue::Double(100.0)),
+                ("height", FixtureValue::Double(100.0)),
             ],
         ),
         fixture_record(
             "Shape",
             vec![
-                ("name", AuthoringValue::String("Opacity parent".to_owned())),
-                ("parentId", AuthoringValue::Uint(0)),
-                ("x", AuthoringValue::Double(10.0)),
-                ("y", AuthoringValue::Double(10.0)),
-                ("opacity", AuthoringValue::Double(0.8)),
+                ("name", FixtureValue::String("Opacity parent".to_owned())),
+                ("parentId", FixtureValue::Uint(0)),
+                ("x", FixtureValue::Double(10.0)),
+                ("y", FixtureValue::Double(10.0)),
+                ("opacity", FixtureValue::Double(0.8)),
             ],
         ),
         fixture_record(
             "Shape",
             vec![
-                ("name", AuthoringValue::String("Opacity child".to_owned())),
-                ("parentId", AuthoringValue::Uint(1)),
-                ("x", AuthoringValue::Double(5.0)),
-                ("y", AuthoringValue::Double(5.0)),
-                ("opacity", AuthoringValue::Double(0.5)),
+                ("name", FixtureValue::String("Opacity child".to_owned())),
+                ("parentId", FixtureValue::Uint(1)),
+                ("x", FixtureValue::Double(5.0)),
+                ("y", FixtureValue::Double(5.0)),
+                ("opacity", FixtureValue::Double(0.5)),
             ],
         ),
         fixture_record(
             "Rectangle",
             vec![
-                ("name", AuthoringValue::String("Opacity bounds".to_owned())),
-                ("parentId", AuthoringValue::Uint(2)),
-                ("width", AuthoringValue::Double(40.0)),
-                ("height", AuthoringValue::Double(40.0)),
+                ("name", FixtureValue::String("Opacity bounds".to_owned())),
+                ("parentId", FixtureValue::Uint(2)),
+                ("width", FixtureValue::Double(40.0)),
+                ("height", FixtureValue::Double(40.0)),
             ],
         ),
         fixture_record(
             "Fill",
             vec![
-                ("name", AuthoringValue::String("Opacity fill".to_owned())),
-                ("parentId", AuthoringValue::Uint(2)),
+                ("name", FixtureValue::String("Opacity fill".to_owned())),
+                ("parentId", FixtureValue::Uint(2)),
             ],
         ),
         fixture_record(
             "SolidColor",
             vec![
-                ("name", AuthoringValue::String("Opacity color".to_owned())),
-                ("parentId", AuthoringValue::Uint(4)),
-                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+                ("name", FixtureValue::String("Opacity color".to_owned())),
+                ("parentId", FixtureValue::Uint(4)),
+                ("colorValue", FixtureValue::Color(0xff33_6699)),
             ],
         ),
         fixture_record(
@@ -738,30 +726,30 @@ fn parent_child_opacity_fixture() -> Vec<AuthoringRecord> {
             vec![
                 (
                     "name",
-                    AuthoringValue::String("Parent opacity timeline".to_owned()),
+                    FixtureValue::String("Parent opacity timeline".to_owned()),
                 ),
-                ("fps", AuthoringValue::Uint(10)),
-                ("duration", AuthoringValue::Uint(10)),
+                ("fps", FixtureValue::Uint(10)),
+                ("duration", FixtureValue::Uint(10)),
             ],
         ),
-        fixture_record("KeyedObject", vec![("objectId", AuthoringValue::Uint(1))]),
+        fixture_record("KeyedObject", vec![("objectId", FixtureValue::Uint(1))]),
         fixture_record(
             "KeyedProperty",
-            vec![("propertyKey", AuthoringValue::Uint(18))],
+            vec![("propertyKey", FixtureValue::Uint(18))],
         ),
         fixture_record(
             "KeyFrameDouble",
             vec![
-                ("frame", AuthoringValue::Uint(0)),
-                ("interpolationType", AuthoringValue::Uint(1)),
-                ("value", AuthoringValue::Double(0.8)),
+                ("frame", FixtureValue::Uint(0)),
+                ("interpolationType", FixtureValue::Uint(1)),
+                ("value", FixtureValue::Double(0.8)),
             ],
         ),
         fixture_record(
             "KeyFrameDouble",
             vec![
-                ("frame", AuthoringValue::Uint(10)),
-                ("value", AuthoringValue::Double(0.4)),
+                ("frame", FixtureValue::Uint(10)),
+                ("value", FixtureValue::Double(0.4)),
             ],
         ),
     ]
@@ -781,7 +769,7 @@ fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     }
 }
 
-fn encode_authoring_records(records: &[AuthoringRecord]) -> Vec<u8> {
+fn encode_fixture_records(records: &[FixtureRecord]) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     push_var_uint(&mut bytes, 7);
     push_var_uint(&mut bytes, 0);
@@ -792,22 +780,22 @@ fn encode_authoring_records(records: &[AuthoringRecord]) -> Vec<u8> {
         for property in &record.properties {
             push_var_uint(&mut bytes, u64::from(property.key));
             match &property.value {
-                AuthoringValue::Bool(value) => bytes.push(u8::from(*value)),
-                AuthoringValue::Bytes(value) => {
+                FixtureValue::Bool(value) => bytes.push(u8::from(*value)),
+                FixtureValue::Bytes(value) => {
                     push_var_uint(&mut bytes, value.len() as u64);
                     bytes.extend_from_slice(value);
                 }
-                AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
-                AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
-                AuthoringValue::Int(value) => {
+                FixtureValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                FixtureValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                FixtureValue::Int(value) => {
                     let encoded = ((*value as u32) << 1) ^ ((*value >> 31) as u32);
                     push_var_uint(&mut bytes, u64::from(encoded));
                 }
-                AuthoringValue::String(value) => {
+                FixtureValue::String(value) => {
                     push_var_uint(&mut bytes, value.len() as u64);
                     bytes.extend_from_slice(value.as_bytes());
                 }
-                AuthoringValue::Uint(value) => push_var_uint(&mut bytes, *value),
+                FixtureValue::Uint(value) => push_var_uint(&mut bytes, *value),
             }
         }
         push_var_uint(&mut bytes, 0);
@@ -824,12 +812,12 @@ mod fixture_tests {
         let feature = text_style_feature_fixture(vec![0, 1, 2]);
         let variation = text_variation_modifier_fixture(vec![0, 1, 2]);
         assert_eq!(
-            encode_authoring_records(&feature),
-            encode_authoring_records(&feature)
+            encode_fixture_records(&feature),
+            encode_fixture_records(&feature)
         );
         assert_eq!(
-            encode_authoring_records(&variation),
-            encode_authoring_records(&variation)
+            encode_fixture_records(&variation),
+            encode_fixture_records(&variation)
         );
         assert!(feature.iter().any(|record| record.type_key == 164));
         assert!(variation.iter().any(|record| record.type_key == 162));
@@ -850,8 +838,8 @@ mod fixture_tests {
 
         let transform = transform_live_write_fixture();
         assert_eq!(
-            encode_authoring_records(&transform),
-            encode_authoring_records(&transform)
+            encode_fixture_records(&transform),
+            encode_fixture_records(&transform)
         );
         assert!(transform.iter().any(|record| record.type_key == 409));
 

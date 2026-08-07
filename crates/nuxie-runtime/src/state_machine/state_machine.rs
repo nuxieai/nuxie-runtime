@@ -1117,7 +1117,7 @@ mod tests {
     use crate::data_converter::RuntimeDataConverterDataBindDefinition;
     use crate::properties::property_key_for_name;
     use nuxie_binary::{
-        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, read_runtime_file,
+        FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file,
     };
     use nuxie_graph::GraphFile;
     use std::cell::RefCell;
@@ -1343,33 +1343,33 @@ mod tests {
                 .type_key
                 .int
         };
-        let mut file = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let mut file = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: type_key("Backboard"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("Artboard"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("StateMachine"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("StateMachineListener"),
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: property_key_for_name("StateMachineListener", "targetId")
                         .expect("targetId property"),
-                    value: AuthoringValue::Uint(7),
+                    value: FixtureValue::Uint(7),
                 }],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("StateMachineListenerSingle"),
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: property_key_for_name("StateMachineListenerSingle", "targetId")
                         .expect("targetId property"),
-                    value: AuthoringValue::Uint(0),
+                    value: FixtureValue::Uint(0),
                 }],
             },
         ])
@@ -1489,16 +1489,16 @@ mod tests {
                 .type_key
                 .int
         };
-        let error = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let error = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: type_key("Backboard"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("StateMachine"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("Artboard"),
                 properties: Vec::new(),
             },
@@ -1806,24 +1806,24 @@ mod tests {
                 .type_key
                 .int
         };
-        let parent = |owner: &str, value: u64| AuthoringProperty {
+        let parent = |owner: &str, value: u64| FixtureProperty {
             key: property_key_for_name(owner, "parentId").expect("parentId property"),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         };
-        let file = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let file = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: type_key("Backboard"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("Artboard"),
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("Event"),
                 properties: vec![parent("Event", 0)],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: type_key("Event"),
                 properties: vec![parent("Event", 0)],
             },

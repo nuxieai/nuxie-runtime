@@ -7016,7 +7016,7 @@ mod inert_script_import_tests {
 #[cfg(test)]
 mod owned_instance_tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_schema::definition_by_name;
     #[cfg(feature = "scripting")]
@@ -7338,11 +7338,11 @@ mod owned_instance_tests {
         factory.borrow().stream()
     }
 
-    fn authoring_property(
+    fn fixture_property(
         type_name: &str,
         property_name: &str,
-        value: AuthoringValue,
-    ) -> AuthoringProperty {
+        value: FixtureValue,
+    ) -> FixtureProperty {
         let definition = definition_by_name(type_name).expect("fixture type exists");
         let key = std::iter::once(definition)
             .chain(
@@ -7356,76 +7356,70 @@ mod owned_instance_tests {
             .expect("fixture property exists")
             .key
             .int;
-        AuthoringProperty { key, value }
+        FixtureProperty { key, value }
     }
 
-    fn authoring_record(
-        type_name: &str,
-        properties: Vec<(&str, AuthoringValue)>,
-    ) -> AuthoringRecord {
-        AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .expect("fixture type exists")
                 .type_key
                 .int,
             properties: properties
                 .into_iter()
-                .map(|(name, value)| authoring_property(type_name, name, value))
+                .map(|(name, value)| fixture_property(type_name, name, value))
                 .collect(),
         }
     }
 
     fn facade_view_model_file() -> File {
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "ViewModel",
-                vec![("name", AuthoringValue::String("Root".to_owned()))],
+                vec![("name", FixtureValue::String("Root".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyColor",
-                vec![("name", AuthoringValue::String("tint".to_owned()))],
+                vec![("name", FixtureValue::String("tint".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyTrigger",
-                vec![("name", AuthoringValue::String("submit".to_owned()))],
+                vec![("name", FixtureValue::String("submit".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyArtboard",
-                vec![("name", AuthoringValue::String("destination".to_owned()))],
+                vec![("name", FixtureValue::String("destination".to_owned()))],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstance",
                 vec![
-                    (
-                        "name",
-                        AuthoringValue::String("Authored defaults".to_owned()),
-                    ),
-                    ("viewModelId", AuthoringValue::Uint(0)),
+                    ("name", FixtureValue::String("Authored defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(0)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceColor",
                 vec![
-                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
-                    ("propertyValue", AuthoringValue::Color(0xff12_3456)),
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::Color(0xff12_3456)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceTrigger",
                 vec![
-                    ("viewModelPropertyId", AuthoringValue::Uint(1)),
-                    ("propertyValue", AuthoringValue::Uint(3)),
+                    ("viewModelPropertyId", FixtureValue::Uint(1)),
+                    ("propertyValue", FixtureValue::Uint(3)),
                 ],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelInstanceArtboard",
                 vec![
-                    ("viewModelPropertyId", AuthoringValue::Uint(2)),
-                    ("propertyValue", AuthoringValue::Uint(7)),
+                    ("viewModelPropertyId", FixtureValue::Uint(2)),
+                    ("propertyValue", FixtureValue::Uint(7)),
                 ],
             ),
-            authoring_record("Artboard", vec![("viewModelId", AuthoringValue::Uint(0))]),
+            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
         ])
         .expect("facade view-model fixture imports");
         File::from_runtime(runtime).expect("facade view-model graph")
@@ -8165,21 +8159,18 @@ mod owned_instance_tests {
     #[cfg(feature = "scripting")]
     #[test]
     fn file_script_runtime_extracts_prelinked_module_names() {
-        let property = |key, value| AuthoringProperty { key, value };
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let property = |key, value| FixtureProperty { key, value };
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: 23,
                 properties: vec![],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: 529,
                 properties: vec![
-                    property(203, AuthoringValue::String("mesh".to_owned())),
-                    property(
-                        926,
-                        AuthoringValue::String("InnerLib#21@4/config".to_owned()),
-                    ),
-                    property(914, AuthoringValue::Bool(true)),
+                    property(203, FixtureValue::String("mesh".to_owned())),
+                    property(926, FixtureValue::String("InnerLib#21@4/config".to_owned())),
+                    property(914, FixtureValue::Bool(true)),
                 ],
             },
         ])
@@ -8271,7 +8262,7 @@ mod owned_instance_tests {
 #[cfg(test)]
 mod external_image_asset_tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 
     fn file_with_image_and_font_assets() -> File {
         let backboard_type = nuxie_schema::definition_by_name("Backboard")
@@ -8294,23 +8285,23 @@ mod external_image_asset_tests {
             .expect("FileAsset assetId property")
             .key
             .int;
-        let runtime = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            FixtureRecord {
                 type_key: backboard_type,
                 properties: Vec::new(),
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: image_asset_type,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: file_asset_id_key,
-                    value: AuthoringValue::Uint(7),
+                    value: FixtureValue::Uint(7),
                 }],
             },
-            AuthoringRecord {
+            FixtureRecord {
                 type_key: font_asset_type,
-                properties: vec![AuthoringProperty {
+                properties: vec![FixtureProperty {
                     key: file_asset_id_key,
-                    value: AuthoringValue::Uint(8),
+                    value: FixtureValue::Uint(8),
                 }],
             },
         ])
@@ -8318,36 +8309,8 @@ mod external_image_asset_tests {
         File::from_runtime(runtime).expect("asset-only file graph")
     }
 
-    #[allow(clippy::arithmetic_side_effects)]
     fn fixture_font_bytes() -> Vec<u8> {
-        let mut accumulator = 0u32;
-        let mut bit_count = 0u8;
-        let mut decoded = Vec::new();
-        for byte in include_bytes!("../../nuxie-product/tests/fixtures/roboto-a.ttf.base64")
-            .iter()
-            .copied()
-            .filter(|byte| !byte.is_ascii_whitespace())
-        {
-            if byte == b'=' {
-                break;
-            }
-            let value = match byte {
-                b'A'..=b'Z' => byte - b'A',
-                b'a'..=b'z' => byte - b'a' + 26,
-                b'0'..=b'9' => byte - b'0' + 52,
-                b'+' => 62,
-                b'/' => 63,
-                _ => panic!("invalid base64 font fixture"),
-            };
-            accumulator = (accumulator << 6) | u32::from(value);
-            bit_count += 6;
-            if bit_count >= 8 {
-                bit_count -= 8;
-                decoded.push((accumulator >> bit_count) as u8);
-                accumulator &= (1u32 << bit_count) - 1;
-            }
-        }
-        decoded
+        include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec()
     }
 
     #[test]

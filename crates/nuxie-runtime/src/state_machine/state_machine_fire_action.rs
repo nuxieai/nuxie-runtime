@@ -86,7 +86,7 @@ mod tests {
     use crate::state_machine::{
         RuntimeScheduledListenerAction, RuntimeScheduledListenerActionTargetsMut,
     };
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_graph::GraphFile;
 
     struct NoopExecutor;
@@ -102,8 +102,8 @@ mod tests {
         }
     }
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing {type_name}"))
                 .type_key
@@ -112,8 +112,8 @@ mod tests {
         }
     }
 
-    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
             value,
@@ -122,113 +122,105 @@ mod tests {
 
     #[test]
     fn state_fire_event_resolves_the_live_event_when_performed() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(
                 "Event",
                 vec![
-                    property("Event", "parentId", AuthoringValue::Uint(0)),
-                    property(
-                        "Event",
-                        "name",
-                        AuthoringValue::String("imported".to_owned()),
-                    ),
+                    property("Event", "parentId", FixtureValue::Uint(0)),
+                    property("Event", "name", FixtureValue::String("imported".to_owned())),
                 ],
             ),
             record(
                 "CustomPropertyString",
                 vec![
-                    property("CustomPropertyString", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyString", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyString",
                         "name",
-                        AuthoringValue::String("payload".to_owned()),
+                        FixtureValue::String("payload".to_owned()),
                     ),
                     property(
                         "CustomPropertyString",
                         "propertyValue",
-                        AuthoringValue::String("imported".to_owned()),
+                        FixtureValue::String("imported".to_owned()),
                     ),
                 ],
             ),
             record(
                 "CustomPropertyNumber",
                 vec![
-                    property("CustomPropertyNumber", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyNumber", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyNumber",
                         "name",
-                        AuthoringValue::String("number".to_owned()),
+                        FixtureValue::String("number".to_owned()),
                     ),
                     property(
                         "CustomPropertyNumber",
                         "propertyValue",
-                        AuthoringValue::Double(1.0),
+                        FixtureValue::Double(1.0),
                     ),
                 ],
             ),
             record(
                 "CustomPropertyBoolean",
                 vec![
-                    property("CustomPropertyBoolean", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyBoolean", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyBoolean",
                         "name",
-                        AuthoringValue::String("boolean".to_owned()),
+                        FixtureValue::String("boolean".to_owned()),
                     ),
                     property(
                         "CustomPropertyBoolean",
                         "propertyValue",
-                        AuthoringValue::Bool(false),
+                        FixtureValue::Bool(false),
                     ),
                 ],
             ),
             record(
                 "CustomPropertyColor",
                 vec![
-                    property("CustomPropertyColor", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyColor", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyColor",
                         "name",
-                        AuthoringValue::String("color".to_owned()),
+                        FixtureValue::String("color".to_owned()),
                     ),
                     property(
                         "CustomPropertyColor",
                         "propertyValue",
-                        AuthoringValue::Color(0),
+                        FixtureValue::Color(0),
                     ),
                 ],
             ),
             record(
                 "CustomPropertyEnum",
                 vec![
-                    property("CustomPropertyEnum", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyEnum", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyEnum",
                         "name",
-                        AuthoringValue::String("enum".to_owned()),
+                        FixtureValue::String("enum".to_owned()),
                     ),
-                    property(
-                        "CustomPropertyEnum",
-                        "propertyValue",
-                        AuthoringValue::Uint(0),
-                    ),
+                    property("CustomPropertyEnum", "propertyValue", FixtureValue::Uint(0)),
                 ],
             ),
             record(
                 "CustomPropertyTrigger",
                 vec![
-                    property("CustomPropertyTrigger", "parentId", AuthoringValue::Uint(1)),
+                    property("CustomPropertyTrigger", "parentId", FixtureValue::Uint(1)),
                     property(
                         "CustomPropertyTrigger",
                         "name",
-                        AuthoringValue::String("trigger".to_owned()),
+                        FixtureValue::String("trigger".to_owned()),
                     ),
                     property(
                         "CustomPropertyTrigger",
                         "propertyValue",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     ),
                 ],
             ),
@@ -334,19 +326,19 @@ mod tests {
 
     #[test]
     fn state_fire_open_url_reads_live_url_and_target_when_performed() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(
                 "OpenUrlEvent",
                 vec![
-                    property("OpenUrlEvent", "parentId", AuthoringValue::Uint(0)),
+                    property("OpenUrlEvent", "parentId", FixtureValue::Uint(0)),
                     property(
                         "OpenUrlEvent",
                         "url",
-                        AuthoringValue::String("imported".to_owned()),
+                        FixtureValue::String("imported".to_owned()),
                     ),
-                    property("OpenUrlEvent", "targetValue", AuthoringValue::Uint(0)),
+                    property("OpenUrlEvent", "targetValue", FixtureValue::Uint(0)),
                 ],
             ),
         ])
@@ -390,12 +382,12 @@ mod tests {
 
     #[test]
     fn state_fire_action_without_current_layer_component_rejects_import() {
-        let error = RuntimeFile::from_authoring_records(vec![
+        let error = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(
                 "Event",
-                vec![property("Event", "parentId", AuthoringValue::Uint(0))],
+                vec![property("Event", "parentId", FixtureValue::Uint(0))],
             ),
             record("StateMachine", Vec::new()),
             record(
@@ -403,7 +395,7 @@ mod tests {
                 vec![property(
                     "StateMachineFireEvent",
                     "eventId",
-                    AuthoringValue::Uint(1),
+                    FixtureValue::Uint(1),
                 )],
             ),
         ])

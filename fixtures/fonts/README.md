@@ -1,6 +1,6 @@
-# Text authoring font fixture
+# Neutral baseline font fixture
 
-`roboto-a.ttf.base64` is a test-only subset of Roboto Regular 2.137 containing
+`roboto-a.ttf` is a test-only subset of Roboto Regular 2.137 containing
 U+0061 (`a`). The source font came from the published
 `com.formdev:flatlaf-fonts-roboto:2.137` Maven artifact:
 
@@ -19,7 +19,6 @@ unzip -j flatlaf-fonts-roboto-2.137.jar \
 hb-subset Roboto-Regular.ttf \
   --unicodes=U+0061 \
   --output-file=roboto-a.ttf
-openssl base64 -in roboto-a.ttf > roboto-a.ttf.base64
 ```
 
 The decoded subset SHA-256 is

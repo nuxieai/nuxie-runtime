@@ -25838,15 +25838,15 @@ fn runtime_drawable_dispatch_is_nested_artboard(command: &RuntimeDrawableDispatc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 
     #[test]
     fn ellipse_control_matches_upstream_fused_rounding() {
         assert_eq!(ellipse_control(68.5, 68.5, 1.0), 106.331_505);
     }
 
-    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -25855,8 +25855,8 @@ mod tests {
         }
     }
 
-    fn authoring_property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
-        AuthoringProperty {
+    fn fixture_property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
@@ -26621,50 +26621,50 @@ mod tests {
 
     #[test]
     fn scripted_file_assets_displace_pending_image_importers() {
-        let file = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+        let file = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(10),
+                    FixtureValue::Uint(10),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "FileAssetContents",
-                vec![authoring_property(
+                vec![fixture_property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(vec![1]),
+                    FixtureValue::Bytes(vec![1]),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(11),
+                    FixtureValue::Uint(11),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "FileAssetContents",
-                vec![authoring_property(
+                vec![fixture_property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(vec![2]),
+                    FixtureValue::Bytes(vec![2]),
                 )],
             ),
-            authoring_record("ScriptAsset", Vec::new()),
-            authoring_record(
+            fixture_record("ScriptAsset", Vec::new()),
+            fixture_record(
                 "FileAssetContents",
-                vec![authoring_property(
+                vec![fixture_property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(vec![3]),
+                    FixtureValue::Bytes(vec![3]),
                 )],
             ),
-            authoring_record("Artboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
         ])
         .expect("file-asset import-order fixture imports");
         let image_globals = file
@@ -26693,27 +26693,27 @@ mod tests {
         const IMAGE_COUNT: usize = 4_096;
 
         let mut records = Vec::with_capacity(IMAGE_COUNT * 2 + 2);
-        records.push(authoring_record("Backboard", Vec::new()));
+        records.push(fixture_record("Backboard", Vec::new()));
         for ordinal in 0..IMAGE_COUNT {
-            records.push(authoring_record(
+            records.push(fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(ordinal as u64),
+                    FixtureValue::Uint(ordinal as u64),
                 )],
             ));
-            records.push(authoring_record(
+            records.push(fixture_record(
                 "FileAssetContents",
-                vec![authoring_property(
+                vec![fixture_property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(vec![(ordinal & 0xff) as u8]),
+                    FixtureValue::Bytes(vec![(ordinal & 0xff) as u8]),
                 )],
             ));
         }
-        records.push(authoring_record("Artboard", Vec::new()));
-        let file = RuntimeFile::from_authoring_records(records)
+        records.push(fixture_record("Artboard", Vec::new()));
+        let file = RuntimeFile::from_fixture_records(records)
             .expect("large image catalog fixture imports");
         let mut visited_entries = 0;
 
@@ -33278,41 +33278,41 @@ mod tests {
             }),
             "the compressed regression payload must be fully valid"
         );
-        let file = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+        let file = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(10),
+                    FixtureValue::Uint(10),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "FileAssetContents",
-                vec![authoring_property(
+                vec![fixture_property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(encoded.clone()),
+                    FixtureValue::Bytes(encoded.clone()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(11),
+                    FixtureValue::Uint(11),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ImageAsset",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ImageAsset",
                     "assetId",
-                    AuthoringValue::Uint(12),
+                    FixtureValue::Uint(12),
                 )],
             ),
-            authoring_record("Artboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
         ])
         .expect("mixed embedded/external image fixture imports");
         let image_globals = file

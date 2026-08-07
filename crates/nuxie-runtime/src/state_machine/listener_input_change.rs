@@ -94,11 +94,11 @@ impl RuntimeListenerInputTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
 
-    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: nuxie_schema::definition_by_name(type_name)
                 .expect("schema definition")
                 .type_key
@@ -107,17 +107,17 @@ mod tests {
         }
     }
 
-    fn uint(type_name: &str, property_name: &str, value: u64) -> AuthoringProperty {
-        AuthoringProperty {
+    fn uint(type_name: &str, property_name: &str, value: u64) -> FixtureProperty {
+        FixtureProperty {
             key: crate::properties::property_key_for_name(type_name, property_name)
                 .expect("schema property"),
-            value: AuthoringValue::Uint(value),
+            value: FixtureValue::Uint(value),
         }
     }
 
     #[test]
     fn import_validation_uses_nested_type_then_forward_compatible_direct_slot() {
-        let file = RuntimeFile::from_authoring_records(vec![
+        let file = RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record("Artboard", Vec::new()),
             record(

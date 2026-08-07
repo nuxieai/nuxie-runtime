@@ -1,11 +1,11 @@
 use super::*;
 use crate::properties::property_key_for_name;
-use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
 use nuxie_graph::GraphFile;
 
 #[test]
 fn one_listener_occurrence_binds_every_authored_view_model_source() {
-    let file = RuntimeFile::from_authoring_records(vec![
+    let file = RuntimeFile::from_fixture_records(vec![
         record("Backboard", Vec::new()),
         record("Artboard", Vec::new()),
         record("StateMachine", Vec::new()),
@@ -95,8 +95,8 @@ fn one_listener_occurrence_binds_every_authored_view_model_source() {
     assert_eq!(reporting, [0, 0]);
 }
 
-fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-    AuthoringRecord {
+fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+    FixtureRecord {
         type_key: nuxie_schema::definition_by_name(type_name)
             .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
             .type_key
@@ -105,18 +105,18 @@ fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecor
     }
 }
 
-fn uint_property(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
-    AuthoringProperty {
+fn uint_property(type_name: &str, name: &str, value: u64) -> FixtureProperty {
+    FixtureProperty {
         key: property_key_for_name(type_name, name)
             .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
-        value: AuthoringValue::Uint(value),
+        value: FixtureValue::Uint(value),
     }
 }
 
-fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> AuthoringProperty {
-    AuthoringProperty {
+fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> FixtureProperty {
+    FixtureProperty {
         key: property_key_for_name(type_name, name)
             .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
-        value: AuthoringValue::Bytes(value),
+        value: FixtureValue::Bytes(value),
     }
 }

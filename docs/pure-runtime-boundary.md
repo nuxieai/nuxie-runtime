@@ -84,17 +84,22 @@ protected by the ordinary baseline rules.
 
 ## Current migration debt
 
-The repository is not yet physically split at every ownership boundary. The
-guard therefore ratchets, reports, and only permits these audited debt classes:
-
-- test-only authoring builders in exact binary/runtime fixture-owner files.
+The repository is not yet physically split at every ownership boundary, but
+protected baseline consumers have no grandfathered source-debt files.
+Synthetic record construction is available only through `nuxie-binary`'s
+non-default `test-support` feature, and shared binary assets live under the
+neutral root fixture corpus. The default shipping API remains byte-import
+only. One compatibility module in `nuxie-binary` retains the former
+editor-facing names so already-pinned nuxie-dev builds do not break; the guard
+confines those names to that zero-shipping seam and prevents `test-support`
+from entering the default feature set.
 
 ProjectDO evaluation is now physically owned by `nuxie-project-data` and enters
 the baseline through the product-neutral external-data seam documented in
 `docs/project-data-runtime-seam.md`; its former runtime debt class is empty.
 
-Each debt exception names exact files. It may shrink or disappear; it may not
-spread. The approved portable-ABI edge is enforced as permanent architecture
+Any future debt exception must name exact files and is an architecture-policy
+change. The approved portable-ABI edge is enforced as permanent architecture
 policy and is not included in debt reporting. The UNIV-1621 child issues own
 the physical extractions, so this document does not duplicate their sequencing.
 
@@ -132,6 +137,8 @@ scripts and custom-target module trees outside conventional folders. It
 rejects product paths and cross-package compiler source edges, including
 conditional `path` attributes and `include!` forms it cannot prove local. The
 runtime's exact generated-object include is the sole audited dynamic exception.
+Literal `include_bytes!` and `include_str!` data paths may use neutral
+repository fixtures but may not reach into another Cargo package's ownership.
 The check prevents every audited internal-debt family from appearing outside
 its exact files. Comments and literals are stripped before matching. Cleared or
 deleted exceptions fail as stale so debt cannot be silently reintroduced later.

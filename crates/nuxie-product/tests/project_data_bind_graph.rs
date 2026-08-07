@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use nuxie::{OwnedArtboardInstance, host_interfaces::RuntimeFile};
-use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 use nuxie_product::project_data::{
     ProjectDataConverterCatalog, ProjectDataConverterDefinition, ProjectDataConverterEasing,
     ProjectDataConverterKind, ProjectDataConverterOutputType, ProjectDataConverterSpec,
 };
 
-fn property(type_name: &str, property_name: &str, value: AuthoringValue) -> AuthoringProperty {
+fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
     let definition =
         nuxie_schema::definition_by_name(type_name).expect("fixture record type exists");
     let key = std::iter::once(definition.name)
@@ -18,11 +18,11 @@ fn property(type_name: &str, property_name: &str, value: AuthoringValue) -> Auth
         .unwrap_or_else(|| panic!("fixture property exists: {type_name}.{property_name}"))
         .key
         .int;
-    AuthoringProperty { key, value }
+    FixtureProperty { key, value }
 }
 
-fn record(type_name: &str, properties: Vec<(&str, AuthoringValue)>) -> AuthoringRecord {
-    AuthoringRecord {
+fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+    FixtureRecord {
         type_key: nuxie_schema::definition_by_name(type_name)
             .expect("fixture record type exists")
             .type_key
@@ -60,53 +60,53 @@ fn product_data_bind_artifact() -> RuntimeFile {
         .key
         .int;
 
-    RuntimeFile::from_authoring_records(vec![
+    RuntimeFile::from_fixture_records(vec![
         record("Backboard", vec![]),
-        record("ScriptAsset", vec![("assetId", AuthoringValue::Uint(0))]),
+        record("ScriptAsset", vec![("assetId", FixtureValue::Uint(0))]),
         record(
             "FileAssetContents",
-            vec![("bytes", AuthoringValue::Bytes(interpolation_payload()))],
+            vec![("bytes", FixtureValue::Bytes(interpolation_payload()))],
         ),
         record(
             "ScriptedDataConverter",
-            vec![("scriptAssetId", AuthoringValue::Uint(0))],
+            vec![("scriptAssetId", FixtureValue::Uint(0))],
         ),
         record(
             "ViewModel",
-            vec![("name", AuthoringValue::String("Project data".into()))],
+            vec![("name", FixtureValue::String("Project data".into()))],
         ),
         record(
             "ViewModelPropertyNumber",
-            vec![("name", AuthoringValue::String("position".into()))],
+            vec![("name", FixtureValue::String("position".into()))],
         ),
         record(
             "ViewModelInstance",
             vec![
-                ("name", AuthoringValue::String("Defaults".into())),
-                ("viewModelId", AuthoringValue::Uint(0)),
+                ("name", FixtureValue::String("Defaults".into())),
+                ("viewModelId", FixtureValue::Uint(0)),
             ],
         ),
         record(
             "ViewModelInstanceNumber",
             vec![
-                ("viewModelPropertyId", AuthoringValue::Uint(0)),
-                ("propertyValue", AuthoringValue::Double(0.0)),
+                ("viewModelPropertyId", FixtureValue::Uint(0)),
+                ("propertyValue", FixtureValue::Double(0.0)),
             ],
         ),
-        record("Artboard", vec![("viewModelId", AuthoringValue::Uint(0))]),
+        record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
         record(
             "Shape",
             vec![
-                ("parentId", AuthoringValue::Uint(0)),
-                ("x", AuthoringValue::Double(0.0)),
+                ("parentId", FixtureValue::Uint(0)),
+                ("x", FixtureValue::Double(0.0)),
             ],
         ),
         record(
             "DataBindContext",
             vec![
-                ("propertyKey", AuthoringValue::Uint(u64::from(node_x_key))),
-                ("sourcePathIds", AuthoringValue::Bytes(vec![0, 0])),
-                ("converterId", AuthoringValue::Uint(0)),
+                ("propertyKey", FixtureValue::Uint(u64::from(node_x_key))),
+                ("sourcePathIds", FixtureValue::Bytes(vec![0, 0])),
+                ("converterId", FixtureValue::Uint(0)),
             ],
         ),
     ])

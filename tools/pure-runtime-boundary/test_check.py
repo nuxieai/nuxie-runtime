@@ -88,7 +88,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             """,
         )
         (facade / "src/lib.rs").write_text(
-            "#[cfg(test)]\nmod tests { pub struct AuthoringRecord; }\n"
+            "#[cfg(test)]\nmod tests { pub struct SyntheticFixture; }\n"
         )
 
     def write_manifest(self, body: str) -> None:
@@ -573,6 +573,81 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("include! crosses a package boundary", result.stderr)
 
+    def test_package_cannot_include_bytes_from_another_package(self) -> None:
+        product = self.create_package(
+            "crates/nuxie-product", "nuxie-product", ""
+        )
+        fixture = product / "tests/fixtures/product.bin"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(b"product-owned fixture")
+        (self.package / "src/lib.rs").write_text(
+            'const FIXTURE: &[u8] = include_bytes!('
+            '"../../nuxie-product/tests/fixtures/product.bin");\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include_bytes! crosses a package boundary", result.stderr)
+
+    def test_package_cannot_hide_cross_package_bytes_in_concat(self) -> None:
+        product = self.create_package(
+            "crates/nuxie-product", "nuxie-product", ""
+        )
+        fixture = product / "tests/fixtures/product.bin"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(b"product-owned fixture")
+        (self.package / "src/lib.rs").write_text(
+            'const FIXTURE: &[u8] = include_bytes!(concat!('
+            'env!("CARGO_MANIFEST_DIR"), '
+            '"/../nuxie-product/tests/fixtures/product.bin"));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include_bytes! crosses a package boundary", result.stderr)
+
+    def test_package_rejects_unverified_data_include_forms(self) -> None:
+        (self.package / "src/lib.rs").write_text(
+            'const FIXTURE: &[u8] = include_bytes!(concat!("../../../", "secret"));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("data include form could not be verified", result.stderr)
+
+    def test_package_cannot_include_str_from_another_package(self) -> None:
+        product = self.create_package(
+            "crates/nuxie-product", "nuxie-product", ""
+        )
+        fixture = product / "tests/fixtures/product.txt"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_text("product-owned fixture\n")
+        (self.package / "src/lib.rs").write_text(
+            'const FIXTURE: &str = include_str!('
+            'r#"../../nuxie-product/tests/fixtures/product.txt"#);\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("include_str! crosses a package boundary", result.stderr)
+
+    def test_package_can_include_bytes_from_neutral_repository_fixtures(self) -> None:
+        fixture = self.root / "fixtures/neutral.bin"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(b"neutral fixture")
+        (self.package / "src/lib.rs").write_text(
+            'const FIXTURE: &[u8] = include_bytes!('
+            '"../../../fixtures/neutral.bin");\n'
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_root_package_cannot_raw_include_nested_product_source(self) -> None:
         product = self.root / "crates/nuxie-authoring"
         product.mkdir(parents=True)
@@ -955,7 +1030,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             """,
         )
         (facade / "src/lib.rs").write_text(
-            "#[cfg(test)]\nmod tests { pub struct AuthoringRecord; }\n"
+            "#[cfg(test)]\nmod tests { pub struct SyntheticFixture; }\n"
         )
 
         result = self.run_check()
@@ -972,7 +1047,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("binary-authoring test-only boundary debt", result.stderr)
         self.assertIn("escaped its test-only cfg module", result.stderr)
 
-    def test_allows_authoring_marker_in_compound_cfg_test_module(self) -> None:
+    def test_rejects_authoring_marker_in_compound_cfg_test_module(self) -> None:
         facade = self.create_package("crates/nuxie", "nuxie", "")
         (facade / "src/lib.rs").write_text(
             '#[cfg(all(feature = "scripting", test))]\n'
@@ -982,7 +1057,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("binary-authoring boundary debt spread", result.stderr)
 
     def test_rejects_authoring_marker_in_cfg_that_can_build_without_test(self) -> None:
         facade = self.create_package("crates/nuxie", "nuxie", "")
@@ -1823,17 +1899,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
-    def test_rejects_stale_internal_debt_exception(self) -> None:
-        self.write_manifest("")
-        (self.package / "src/draw.rs").write_text(
-            "// debt was removed from this still-allowlisted file\n"
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("stale binary-authoring boundary debt exception", result.stderr)
-
     def test_deleted_internal_debt_exception_fails_in_repository(self) -> None:
         (self.root / ".git").write_text("gitdir: fixture\n")
         missing = "crates/example/src/debt.rs"
@@ -1899,16 +1964,123 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("binary-authoring boundary debt spread", result.stderr)
 
-    def test_current_binary_authoring_file_is_a_ratchet_exception(self) -> None:
-        package = self.create_package(
-            "crates/nuxie-binary", "nuxie-binary", ""
+    def test_binary_authoring_is_reduced_to_the_zero_shipping_compatibility_seam(self) -> None:
+        self.assertEqual(
+            BOUNDARY_TOOL.INTERNAL_DEBT_FILES["binary-authoring"],
+            {"crates/nuxie-binary/src/legacy_test_support.rs"},
         )
-        (package / "src/lib.rs").write_text("pub struct AuthoringRecord;\n")
+
+    def test_binary_authoring_compatibility_requires_the_test_support_gate(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-binary",
+            "nuxie-binary",
+            """
+            [features]
+            default = []
+            test-support = []
+            """,
+        )
+        (package / "src/lib.rs").write_text("mod legacy_test_support;\n")
+        (package / "src/legacy_test_support.rs").write_text(
+            "pub struct AuthoringRecord;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must remain gated", result.stderr)
+
+    def test_commented_and_string_fake_gates_do_not_hide_an_unguarded_module(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-binary",
+            "nuxie-binary",
+            """
+            [features]
+            default = []
+            test-support = []
+            """,
+        )
+        (package / "src/lib.rs").write_text(
+            '// #[cfg(feature = "test-support")]\n'
+            '// mod legacy_test_support;\n'
+            'const FAKE: &str = r#"#[cfg(feature = "test-support")]\n'
+            'mod legacy_test_support;"#;\n'
+            "mod legacy_test_support;\n"
+        )
+        (package / "src/legacy_test_support.rs").write_text(
+            "pub struct AuthoringRecord;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must remain gated", result.stderr)
+
+    def test_live_test_support_gate_allows_the_compatibility_module(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-binary",
+            "nuxie-binary",
+            """
+            [features]
+            default = []
+            test-support = []
+            """,
+        )
+        (package / "src/lib.rs").write_text(
+            '#[cfg(feature = "test-support")]\nmod legacy_test_support;\n'
+        )
+        (package / "src/legacy_test_support.rs").write_text(
+            "pub struct AuthoringRecord;\n"
+        )
 
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("binary-authoring=1", result.stdout)
+
+    def test_binary_authoring_compatibility_cannot_be_a_default_feature(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-binary",
+            "nuxie-binary",
+            """
+            [features]
+            default = ["test-support"]
+            test-support = []
+            """,
+        )
+        (package / "src/lib.rs").write_text(
+            '#[cfg(feature = "test-support")]\nmod legacy_test_support;\n'
+        )
+        (package / "src/legacy_test_support.rs").write_text(
+            "pub struct AuthoringRecord;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("outside the default shipping feature set", result.stderr)
+
+    def test_binary_authoring_compatibility_cannot_hide_behind_default_alias(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-binary",
+            "nuxie-binary",
+            """
+            [features]
+            default = ["compatibility"]
+            compatibility = ["test-support"]
+            test-support = []
+            """,
+        )
+        (package / "src/lib.rs").write_text(
+            '#[cfg(feature = "test-support")]\nmod legacy_test_support;\n'
+        )
+        (package / "src/legacy_test_support.rs").write_text(
+            "pub struct AuthoringRecord;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("outside the default shipping feature set", result.stderr)
 
     def test_rejects_editor_gpu_and_source_tooling_in_baseline_interfaces(self) -> None:
         package = self.create_package(

@@ -22,7 +22,7 @@
         ScriptListenerInvocation, StateMachineInputInstance,
     };
     use nuxie_binary::{
-        AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
+        FixtureProperty, FixtureRecord, FixtureValue, BytesValue, FieldValue, RuntimeObject,
         RuntimeProperty, StringValue, read_runtime_file,
     };
     use nuxie_graph::{DependencyNodeKind, GraphFile};
@@ -929,8 +929,8 @@
         );
     }
 
-    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
-        AuthoringRecord {
+    fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
             type_key: definition_by_name(type_name)
                 .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
                 .type_key
@@ -939,12 +939,12 @@
         }
     }
 
-    fn authoring_property(
+    fn fixture_property(
         type_name: &str,
         property_name: &str,
-        value: AuthoringValue,
-    ) -> AuthoringProperty {
-        AuthoringProperty {
+        value: FixtureValue,
+    ) -> FixtureProperty {
+        FixtureProperty {
             key: property_key_for_name(type_name, property_name)
                 .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}")),
             value,
@@ -1027,15 +1027,15 @@
     }
 
     fn nested_audio_event(local_index: usize) -> (StateMachineReportedEvent, u32) {
-        let file = RuntimeFile::from_authoring_records(vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record("Artboard", Vec::new()),
-            authoring_record(
+        let file = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
                 "AudioEvent",
-                vec![authoring_property(
+                vec![fixture_property(
                     "AudioEvent",
                     "parentId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             ),
         ])
@@ -2291,73 +2291,73 @@
     fn nested_artboard_swap_immediately_inherits_the_active_parent_context() {
         let number_key = property_key_for_name("Rectangle", "width").expect("rectangle width");
         let artboard = || {
-            authoring_record(
+            fixture_record(
                 "Artboard",
-                vec![authoring_property(
+                vec![fixture_property(
                     "Artboard",
                     "viewModelId",
-                    AuthoringValue::Uint(0),
+                    FixtureValue::Uint(0),
                 )],
             )
         };
         let bound_rectangle = |width| {
             vec![
-                authoring_record(
+                fixture_record(
                     "Shape",
-                    vec![authoring_property(
+                    vec![fixture_property(
                         "Shape",
                         "parentId",
-                        AuthoringValue::Uint(0),
+                        FixtureValue::Uint(0),
                     )],
                 ),
-                authoring_record(
+                fixture_record(
                     "Rectangle",
                     vec![
-                        authoring_property("Rectangle", "parentId", AuthoringValue::Uint(1)),
-                        authoring_property("Rectangle", "width", AuthoringValue::Double(width)),
+                        fixture_property("Rectangle", "parentId", FixtureValue::Uint(1)),
+                        fixture_property("Rectangle", "width", FixtureValue::Double(width)),
                     ],
                 ),
-                authoring_record(
+                fixture_record(
                     "DataBindContext",
                     vec![
-                        authoring_property(
+                        fixture_property(
                             "DataBindContext",
                             "propertyKey",
-                            AuthoringValue::Uint(u64::from(number_key)),
+                            FixtureValue::Uint(u64::from(number_key)),
                         ),
-                        authoring_property(
+                        fixture_property(
                             "DataBindContext",
                             "sourcePathIds",
-                            AuthoringValue::Bytes(vec![0, 0]),
+                            FixtureValue::Bytes(vec![0, 0]),
                         ),
                     ],
                 ),
             ]
         };
         let mut records = vec![
-            authoring_record("Backboard", Vec::new()),
-            authoring_record(
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
                 "ViewModel",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModel",
                     "name",
-                    AuthoringValue::String("Model".to_owned()),
+                    FixtureValue::String("Model".to_owned()),
                 )],
             ),
-            authoring_record(
+            fixture_record(
                 "ViewModelPropertyNumber",
-                vec![authoring_property(
+                vec![fixture_property(
                     "ViewModelPropertyNumber",
                     "name",
-                    AuthoringValue::String("width".to_owned()),
+                    FixtureValue::String("width".to_owned()),
                 )],
             ),
             artboard(),
-            authoring_record(
+            fixture_record(
                 "NestedArtboard",
                 vec![
-                    authoring_property("NestedArtboard", "parentId", AuthoringValue::Uint(0)),
-                    authoring_property("NestedArtboard", "artboardId", AuthoringValue::Uint(1)),
+                    fixture_property("NestedArtboard", "parentId", FixtureValue::Uint(0)),
+                    fixture_property("NestedArtboard", "artboardId", FixtureValue::Uint(1)),
                 ],
             ),
             artboard(),
@@ -2365,7 +2365,7 @@
         records.extend(bound_rectangle(1.0));
         records.push(artboard());
         records.extend(bound_rectangle(2.0));
-        let file = RuntimeFile::from_authoring_records(records)
+        let file = RuntimeFile::from_fixture_records(records)
             .expect("nested replacement fixture imports");
         let graphs = GraphFile::from_runtime_file(&file).expect("nested replacement graphs");
         let mut parent = ArtboardInstance::from_graph_with_artboards(

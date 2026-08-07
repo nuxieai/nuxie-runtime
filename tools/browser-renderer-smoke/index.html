@@ -14,9 +14,6 @@
         assert_direct_gpu_canvas_image,
         assert_explicit_readback,
         assert_imported_gpu_canvas,
-        assert_persistent_surface_acquisition_failure,
-        assert_resize,
-        assert_surface_acquisition_retry,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -28,7 +25,6 @@
       const forceCompatibility = search.has("force-webgpu-compatibility");
       const forceNoSsbo = search.has("force-no-ssbo");
       const forceUnavailable = search.has("force-webgpu-unavailable");
-      const forceNoAdapter = search.has("force-webgpu-no-adapter");
       const forceDeviceFailure = search.has("force-webgpu-device-failure");
       let compatibilityProbe = null;
 
@@ -146,60 +142,6 @@
         }
       }
 
-      function installSurfaceAcquisitionLoss(canvas, persistent = false) {
-        const prototype = globalThis.GPUCanvasContext?.prototype;
-        if (!prototype) {
-          throw new Error("browser lacks GPUCanvasContext required by loss proof");
-        }
-        const descriptor = Object.getOwnPropertyDescriptor(
-          prototype,
-          "getCurrentTexture",
-        );
-        if (!descriptor || typeof descriptor.value !== "function") {
-          throw new Error(
-            "browser lacks callable getCurrentTexture required by loss proof",
-          );
-        }
-        const getContext = canvas.getContext;
-        let acquisitions = 0;
-        let surfaces = 0;
-        Object.defineProperty(canvas, "getContext", {
-          configurable: true,
-          value(type, ...args) {
-            if (type === "webgpu") {
-              surfaces += 1;
-            }
-            return getContext.call(this, type, ...args);
-          },
-        });
-        Object.defineProperty(prototype, "getCurrentTexture", {
-          ...descriptor,
-          value(...args) {
-            acquisitions += 1;
-            if (persistent || acquisitions === 1) {
-              throw new Error(
-                persistent
-                  ? "injected persistent surface acquisition loss"
-                  : "injected one-shot surface acquisition loss",
-              );
-            }
-            return descriptor.value.apply(this, args);
-          },
-        });
-        return {
-          get acquisitions() {
-            return acquisitions;
-          },
-          get surfaces() {
-            return surfaces;
-          },
-          restore() {
-            Object.defineProperty(prototype, "getCurrentTexture", descriptor);
-            delete canvas.getContext;
-          },
-        };
-      }
-
       try {
         if (forceNoSsbo && !forceCompatibility) {
           throw new Error("force-no-ssbo requires force-webgpu-compatibility");
@@ -207,7 +149,6 @@
         if (
             Number(forceCompatibility) +
             Number(forceUnavailable) +
-            Number(forceNoAdapter) +
             Number(forceDeviceFailure) >
           1
         ) {
@@ -225,71 +166,14 @@
           } catch (error) {
             const message = String(error);
             if (message.includes("unexpectedly initialized")) throw error;
-            if (!message.includes("WebGPU API is unavailable")) {
+            if (
+              !message.includes("No suitable graphics adapter found") ||
+              !message.includes("webgpu found no adapters")
+            ) {
               throw new Error(`WebGPU-unavailable error lacked actionable context: ${message}`);
             }
           }
           const results = ["webgpu-unavailable=adapter-error"];
-          window.__rendererSmoke = { status: "passed", results };
-          status.textContent = `passed\n${results.join("\n")}`;
-          document.body.dataset.status = "passed";
-        } else if (forceNoAdapter) {
-          const gpu = navigator.gpu;
-          if (!gpu) {
-            throw new Error("forced no-adapter smoke requires navigator.gpu");
-          }
-          const featureLevelsRequested = [];
-          const unavailableGpu = new Proxy(gpu, {
-            get(target, property) {
-              if (property === "requestAdapter") {
-                return async (options = {}) => {
-                  const featureLevel = options.featureLevel ?? "core";
-                  featureLevelsRequested.push(featureLevel);
-                  throw new Error(
-                    `forced ${featureLevel} WebGPU adapter failure`,
-                  );
-                };
-              }
-              const value = Reflect.get(target, property, target);
-              return typeof value === "function" ? value.bind(target) : value;
-            },
-          });
-          Object.defineProperty(navigator, "gpu", {
-            configurable: true,
-            value: unavailableGpu,
-          });
-          try {
-            await run_backend(document.createElement("canvas"));
-            throw new Error("WebGPU no-adapter browser unexpectedly initialized");
-          } catch (error) {
-            const message = String(error);
-            if (message.includes("unexpectedly initialized")) throw error;
-            for (const expected of [
-              "adapter error",
-              "Core probe failed",
-              "forced core WebGPU adapter failure",
-              "Compatibility probe failed",
-              "forced compatibility WebGPU adapter failure",
-            ]) {
-              if (!message.includes(expected)) {
-                throw new Error(
-                  `WebGPU no-adapter error omitted ${expected}: ${message}`,
-                );
-              }
-            }
-          }
-          if (
-            featureLevelsRequested.length !== 2 ||
-            featureLevelsRequested[0] !== "core" ||
-            featureLevelsRequested[1] !== "compatibility"
-          ) {
-            throw new Error(
-              `WebGPU admission order was ${JSON.stringify(featureLevelsRequested)}; expected Core then Compatibility exactly once`,
-            );
-          }
-          const results = [
-            "webgpu-no-adapter=adapter-error order=core,compatibility",
-          ];
           window.__rendererSmoke = { status: "passed", results };
           status.textContent = `passed\n${results.join("\n")}`;
           document.body.dataset.status = "passed";
@@ -528,60 +412,6 @@
                 : `compatibility=selected order=core,compatibility requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
             );
           } else {
-            const resizeCanvas = document.createElement("canvas");
-            const resizeResult = await assert_resize(resizeCanvas);
-            await assertOpaquePresentationPixels(
-              resizeCanvas,
-              [0x65, 0x43, 0x21, 0xff],
-              "resized direct WebGPU presentation",
-            );
-            results.push(resizeResult);
-
-            const retryCanvas = document.createElement("canvas");
-            const acquisitionLoss =
-              installSurfaceAcquisitionLoss(retryCanvas);
-            try {
-              const retryResult = await assert_surface_acquisition_retry(
-                retryCanvas,
-              );
-              if (
-                acquisitionLoss.acquisitions !== 2 ||
-                acquisitionLoss.surfaces !== 2
-              ) {
-                throw new Error(
-                  `surface acquisition recovery observed ${acquisitionLoss.acquisitions} acquisitions and ${acquisitionLoss.surfaces} surfaces`,
-                );
-              }
-              await assertPremultipliedPresentationPixels(retryCanvas);
-              results.push(`${retryResult} acquisitions=2 surfaces=2`);
-            } finally {
-              acquisitionLoss.restore();
-            }
-
-            const persistentLossCanvas = document.createElement("canvas");
-            const persistentAcquisitionLoss = installSurfaceAcquisitionLoss(
-              persistentLossCanvas,
-              true,
-            );
-            try {
-              const persistentResult =
-                await assert_persistent_surface_acquisition_failure(
-                  persistentLossCanvas,
-                );
-              if (
-                persistentAcquisitionLoss.acquisitions !== 2 ||
-                persistentAcquisitionLoss.surfaces !== 2
-              ) {
-                throw new Error(
-                  `persistent surface acquisition failure observed ${persistentAcquisitionLoss.acquisitions} acquisitions and ${persistentAcquisitionLoss.surfaces} surfaces`,
-                );
-              }
-              results.push(
-                `${persistentResult} acquisitions=2 surfaces=2`,
-              );
-            } finally {
-              persistentAcquisitionLoss.restore();
-            }
             results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
             results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));
             results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));

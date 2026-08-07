@@ -15,7 +15,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 nuxie = { path = "../../crates/nuxie" }
-nuxie-browser-adapter = { path = "../../crates/nuxie-browser-adapter" }
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
 nuxie-runtime = { path = "../../crates/nuxie-runtime" }
@@ -29,4 +28,6 @@ luaur-compiler = "=0.1.8"
 nuxie-schema = { path = "../../crates/nuxie-schema" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+nuxie-renderer = { path = "../../crates/nuxie-renderer" }
+raw-window-handle = { version = "0.6", features = ["wasm-bindgen-0-2"] }
 wasm-bindgen-futures = "0.4"

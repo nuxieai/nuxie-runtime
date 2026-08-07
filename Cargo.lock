@@ -201,12 +201,13 @@ dependencies = [
  "luaur-common",
  "luaur-compiler",
  "nuxie",
- "nuxie-browser-adapter",
  "nuxie-render-api",
  "nuxie-render-stream",
+ "nuxie-renderer",
  "nuxie-runtime",
  "nuxie-schema",
  "pixel-compare",
+ "raw-window-handle",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1306,19 +1307,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
-]
-
-[[package]]
-name = "nuxie-browser-adapter"
-version = "0.1.0"
-dependencies = [
- "js-sys",
- "nuxie-render-api",
- "nuxie-renderer",
- "raw-window-handle",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

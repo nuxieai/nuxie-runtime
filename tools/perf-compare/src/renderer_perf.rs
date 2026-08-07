@@ -391,11 +391,13 @@ impl Runner for SubprocessRunner {
             .stdin
             .take()
             .ok_or_else(|| format!("{} did not expose stdin", self.program.display()))?;
-        serde_json::to_writer(&mut stdin, request)
-            .map_err(|error| format!("failed to encode runner request: {error}"))?;
-        stdin
-            .write_all(b"\n")
-            .map_err(|error| format!("failed to send runner request: {error}"))?;
+        let write_result = serde_json::to_writer(&mut stdin, request)
+            .map_err(|error| format!("failed to encode runner request: {error}"))
+            .and_then(|()| {
+                stdin
+                    .write_all(b"\n")
+                    .map_err(|error| format!("failed to send runner request: {error}"))
+            });
         drop(stdin);
 
         let output = child
@@ -409,6 +411,7 @@ impl Runner for SubprocessRunner {
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
         }
+        write_result?;
 
         parse_runner_response(&String::from_utf8_lossy(&output.stdout))
     }

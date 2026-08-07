@@ -38,9 +38,14 @@ dependency only; it is not linked into or shipped with the Nuxie SDK.
 The fixture bootstrap pins and verifies the small upstream test-asset set;
 those `.riv` binaries are intentionally not stored in this repository.
 
-The Apple product FFI boundary and its binary packaging and releases are owned
-by the [nuxie-ios repository](https://github.com/nuxieai/nuxie-ios). This
-repository remains the platform-independent engine and format authority.
+Shared `.nux`, product scripting, ProjectDO, session behavior, and their
+separately named product ABI are owned by the
+[nuxie-product repository](https://github.com/nuxieai/nuxie-product), which
+pins this runtime exactly. The Apple surface ABI, binary packaging, and
+XCFramework releases are owned by the
+[nuxie-ios repository](https://github.com/nuxieai/nuxie-ios). `nux-capi`
+remains a baseline-only portable ABI; this repository remains the
+platform-independent engine and `.riv` format authority.
 
 ## License
 

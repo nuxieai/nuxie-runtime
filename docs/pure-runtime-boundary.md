@@ -7,7 +7,7 @@ rule for runtime and product work, not a port-phase plan.
 
 ```text
 editor authoring --------+
-shared product host -----+---> parity baseline <--- portable C ABI
+nuxieai/nuxie-product ---+---> parity baseline <--- portable C ABI
 browser adapter ---------+            ^             replay/oracle tools
 Apple adapter -----------+            |
                               general-purpose crates
@@ -44,11 +44,21 @@ and snapshot layer above those contracts.
 
 ### Shared product host
 
-The shared product layer owns FlowSession, player selection, transactional host
-batches, product output/wake/error policy, the private Nuxie Luau module and
-host effects, ProjectDO vocabulary/programs, and Nux artifact authentication.
-It may consume baseline operations but may not replace pinned runtime
-semantics.
+The dedicated [`nuxieai/nuxie-product`](https://github.com/nuxieai/nuxie-product)
+repository owns the shared product layer: the `.nux` container and trust model,
+FlowSession and player selection, transactional host batches, product
+output/wake/error policy, the private Nuxie Luau module and host effects, and
+ProjectDO vocabulary/programs. It may consume baseline operations but may not
+replace pinned runtime semantics.
+
+`nuxie-product` pins `nuxie-runtime` by an exact Git revision, commits its Cargo
+lockfile, and records every provider or `[patch]` override in its audited root
+manifest. Cargo configuration may not silently replace those providers.
+`nuxie-dev` and `nuxie-ios` in turn pin the same exact `nuxie-product` revision;
+they do not independently select product-component revisions. The qualified
+product revision is the cross-repository release unit. Runtime changes advance
+that pin first, product qualification advances the product revision second,
+and consumers advance only to that qualified product revision.
 
 ### Editor authoring
 
@@ -66,14 +76,18 @@ render-target mechanics remain in the baseline.
 ### Apple adapter
 
 The Apple adapter owns CAMetalLayer/drawable lifecycle, presentation
-completion/disposition, trusted-image admission policy, and the Apple product
-ABI. Backend-neutral Metal/WebGPU mechanics remain in the baseline.
+completion/disposition, trusted-image admission policy, and the Apple ABI and
+binary packaging. It is owned by `nuxie-ios`; backend-neutral Metal/WebGPU
+mechanics remain in the baseline. Experience/session/product operations cross
+a separately named product ABI owned with `nuxie-product`; they never enter
+the portable ABI merely because an Apple consumer needs them.
 
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
 errors, callbacks, and buffer negotiation. Product operations belong in a
-separately named product ABI. Replay and oracle tools import the baseline
+separately named product ABI owned by `nuxie-product`. Apple surface operations
+belong to the `nuxie-ios` ABI. Replay and oracle tools import the baseline
 directly so parity evidence cannot depend on product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI

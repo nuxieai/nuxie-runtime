@@ -44,7 +44,7 @@ fn static_runner(directory: &Path, name: &str, median_ns: u64) -> PathBuf {
     executable(
         &path,
         &format!(
-            "#!/bin/sh\n# {name}\nset -eu\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":{median_ns},\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\"\n"
+            "#!/bin/sh\n# {name}\nset -eu\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\"selected_adapter\":{{\"backend\":\"metal\",\"name\":\"Integration GPU\",\"vendor\":\"Integration Vendor\",\"device\":\"Integration Device\",\"driver\":\"1.0\"}},\"measured_frame_median_ns\":{median_ns},\"logical_flushes\":3,\"draws\":11,\"atomic_strategy_partitions\":2}}\\n' \"$prefix\"\n"
         ),
     );
     path
@@ -56,7 +56,7 @@ fn drifting_baseline_runner(directory: &Path) -> PathBuf {
     executable(
         &path,
         &format!(
-            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nmedian=100\nif [ \"$count\" -gt {SCENE_SAMPLES_PER_LEG} ]; then median=150; fi\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":%s,\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\" \"$median\"\n",
+            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nmedian=100\nif [ \"$count\" -gt {SCENE_SAMPLES_PER_LEG} ]; then median=150; fi\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\"selected_adapter\":{{\"backend\":\"metal\",\"name\":\"Integration GPU\",\"vendor\":\"Integration Vendor\",\"device\":\"Integration Device\",\"driver\":\"1.0\"}},\"measured_frame_median_ns\":%s,\"logical_flushes\":3,\"draws\":11,\"atomic_strategy_partitions\":2}}\\n' \"$prefix\" \"$median\"\n",
             count.display()
         ),
     );
@@ -69,7 +69,7 @@ fn drifting_candidate_runner(directory: &Path) -> PathBuf {
     executable(
         &path,
         &format!(
-            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nmedian=100\nif [ \"$count\" -gt {SCENE_SAMPLES_PER_LEG} ]; then median=150; fi\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":%s,\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\" \"$median\"\n",
+            "#!/bin/sh\nset -eu\ncount_file='{}'\ncount=0\nif [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$count_file\"\nmedian=100\nif [ \"$count\" -gt {SCENE_SAMPLES_PER_LEG} ]; then median=150; fi\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\"selected_adapter\":{{\"backend\":\"metal\",\"name\":\"Integration GPU\",\"vendor\":\"Integration Vendor\",\"device\":\"Integration Device\",\"driver\":\"1.0\"}},\"measured_frame_median_ns\":%s,\"logical_flushes\":3,\"draws\":11,\"atomic_strategy_partitions\":2}}\\n' \"$prefix\" \"$median\"\n",
             count.display()
         ),
     );
@@ -144,7 +144,7 @@ fn coordinated_runner(
     executable(
         &path,
         &format!(
-            "#!/bin/sh\n# {name}\nset -eu\nrunner_active='{}'\nsampler_active='{}'\noverlap='{}'\ncleanup() {{ rm -f \"$runner_active\"; }}\ntrap cleanup EXIT HUP INT TERM\n: > \"$runner_active\"\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nsleep 0.005\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\\\"selected_adapter\\\":{{\\\"backend\\\":\\\"metal\\\",\\\"name\\\":\\\"Integration GPU\\\",\\\"vendor\\\":\\\"Integration Vendor\\\",\\\"device\\\":\\\"Integration Device\\\",\\\"driver\\\":\\\"1.0\\\"}},\\\"measured_frame_median_ns\\\":100,\\\"logical_flushes\\\":3,\\\"draws\\\":11,\\\"atomic_strategy_partitions\\\":2}}\\n' \"$prefix\"\n",
+            "#!/bin/sh\n# {name}\nset -eu\nrunner_active='{}'\nsampler_active='{}'\noverlap='{}'\ncleanup() {{ rm -f \"$runner_active\"; }}\ntrap cleanup EXIT HUP INT TERM\n: > \"$runner_active\"\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nsleep 0.005\n[ ! -e \"$sampler_active\" ] || : > \"$overlap\"\nIFS= read -r request\nprefix=${{request%?}}\nprintf '%s,\"selected_adapter\":{{\"backend\":\"metal\",\"name\":\"Integration GPU\",\"vendor\":\"Integration Vendor\",\"device\":\"Integration Device\",\"driver\":\"1.0\"}},\"measured_frame_median_ns\":100,\"logical_flushes\":3,\"draws\":11,\"atomic_strategy_partitions\":2}}\\n' \"$prefix\"\n",
             runner_active.display(),
             sampler_active.display(),
             overlap.display()

@@ -19,6 +19,7 @@ steps:
       make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
       make runtime-drawing-port-gate runtime-frame-loop-port-gate
       make lint-gate feature-compile-gate-portable
+      make cpp-probe cpp-probe-scripted
       cargo test --workspace --exclude nuxie-renderer
     agents:
       queue: nuxie-pr

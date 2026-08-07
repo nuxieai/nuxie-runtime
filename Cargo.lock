@@ -1234,6 +1234,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "nux-apple-runtime"
+version = "0.3.0"
+dependencies = [
+ "base64",
+ "cbindgen",
+ "dispatch2",
+ "ed25519-dalek",
+ "nux-container",
+ "nuxie",
+ "nuxie-apple-adapter",
+ "nuxie-product",
+ "nuxie-schema",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
+ "png",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "nux-capi"
 version = "0.1.0"
 dependencies = [
@@ -1273,6 +1295,21 @@ dependencies = [
  "serde_json",
  "sha2",
  "silver-corpus",
+]
+
+[[package]]
+name = "nuxie-apple-adapter"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "nuxie-image-codec",
+ "nuxie-render-api",
+ "nuxie-renderer",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
+ "png",
 ]
 
 [[package]]

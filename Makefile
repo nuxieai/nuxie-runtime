@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-product-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke apple-runtime-check apple-runtime-contract-test apple-runtime-build-identity-test apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-product-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
@@ -202,6 +202,9 @@ crate-seams-browser-check:
 		-p browser-renderer-smoke --target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
+	cargo check -p nuxie-apple-adapter --all-targets
+	cargo test --locked -p nuxie-apple-adapter
+	cargo check -p nux-apple-runtime --all-targets --features apple-product
 	cargo check -p nuxie-size-report-roots --all-targets
 
 crate-seams-full-check:
@@ -700,6 +703,27 @@ capi-smoke: fixtures
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
+
+apple-runtime-header-smoke:
+	cargo build --locked -p nux-apple-runtime --features apple-product
+	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-apple-runtime/include -fsyntax-only crates/nux-apple-runtime/smoke/header_smoke.c
+
+apple-runtime-release-panic-smoke:
+	cargo test --locked --profile release-apple -p nux-apple-runtime --features apple-product panic_firewall_converts_panics_to_the_declared_fallback
+
+apple-runtime-contract-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_apple_runtime_contract.py
+
+apple-runtime-build-identity-test:
+	tools/test-apple-runtime-build-identity.sh
+
+apple-runtime-check: apple-runtime-contract-test apple-runtime-build-identity-test apple-runtime-header-smoke apple-runtime-release-panic-smoke
+	cargo test --locked -p nuxie-apple-adapter
+	cargo test --locked -p nux-apple-runtime --features apple-product
+	cargo clippy --locked -p nux-apple-runtime --lib --no-default-features --features apple-product --no-deps --quiet -- -D warnings
+
+apple-runtime-xcframework:
+	tools/build-apple-xcframework.sh
 
 # SDK binary-size report: builds the post-Phase-R Darwin link closure with the
 # renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also

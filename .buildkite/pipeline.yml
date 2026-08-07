@@ -79,19 +79,20 @@ steps:
         - exit_status: -1
           limit: 1
 
-  # This is the only PR lane that needs macOS: it type-checks the opaque Metal
-  # measurement roots and the host audio feature against the Apple SDK.
-  - label: ":mac: Darwin renderer compile"
+  # This is the only PR lane that needs macOS: it type-checks the complete
+  # Apple distribution leaf, renderer measurement roots, and host audio.
+  - label: ":mac: Apple distribution compile"
     if: "build.pull_request.id != null"
     if_changed:
       - Cargo.{toml,lock}
       - Makefile
-      - crates/{nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
+      - crates/{nux-apple-runtime,nuxie-apple-adapter,nuxie-audio,nuxie-image-codec,nuxie-product,nuxie-render-api,nuxie-renderer}/**
       - tools/size-report-roots/**
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --no-self-update
       make feature-compile-gate-apple
+      make crate-seams-apple-check
     agents:
       queue: nuxie-pr
       nuxie-platform: macos

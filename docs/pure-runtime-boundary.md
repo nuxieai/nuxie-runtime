@@ -9,7 +9,7 @@ rule for runtime and product work, not a port-phase plan.
 editor authoring --------+
 nuxie-product crate -----+---> parity baseline <--- portable C ABI
 browser adapter ---------+            ^             replay/oracle tools
-nuxie-ios Apple adapter -+            |
+Apple distribution leaf +            |
                               general-purpose crates
 ```
 
@@ -74,21 +74,20 @@ tooling remain in the baseline.
 
 ### Apple adapter
 
-The nuxie-ios native workspace owns the Apple adapter package and its
-CAMetalLayer/drawable lifecycle, presentation
-completion/disposition, trusted-image admission policy, and the Apple ABI and
-binary packaging. Backend-neutral Metal/WebGPU
-mechanics remain in the baseline. Experience/session/product operations cross
-a separately named product ABI owned by the in-workspace product layer; they never enter
-the portable ABI merely because an Apple consumer needs them.
+The unprotected `nuxie-apple-adapter` and `nux-apple-runtime` packages own
+CAMetalLayer/drawable lifecycle, presentation completion/disposition,
+trusted-image admission, the product C ABI, and XCFramework packaging.
+Backend-neutral Metal/WebGPU mechanics remain in the protected baseline.
+Protected packages cannot depend on either Apple package. Product operations
+never enter the portable ABI merely because an Apple consumer needs them.
 
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
-errors, callbacks, and buffer negotiation. Product operations belong in a
-separately named product ABI owned by the in-workspace product layer. Apple surface operations
-belong to the `nuxie-ios` ABI. Replay and oracle tools import the baseline
-directly so parity evidence cannot depend on product glue.
+errors, callbacks, and buffer negotiation. Product and Apple operations belong
+to the separately named `nux-apple-runtime` ABI above the baseline. Replay and
+oracle tools import the baseline directly so parity evidence cannot depend on
+product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
 edge rather than migration debt. It reaches only the audited baseline facade:

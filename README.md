@@ -43,11 +43,11 @@ those `.riv` binaries are intentionally not stored in this repository.
 
 Nuxie-specific `.nux`, product scripting, ProjectDO, and session behavior are
 isolated in upper-layer crates in this workspace. Protected baseline crates do
-not depend on them. The Apple surface ABI, binary packaging, and XCFramework
-releases are owned by the
-[nuxie-ios repository](https://github.com/nuxieai/nuxie-ios). `nux-capi`
-remains a baseline-only portable ABI; editor and Apple implementation code
-remain in their respective repositories.
+not depend on them. The Apple adapter, product C ABI, and XCFramework release
+leaf are also co-located here above that protected baseline; see
+[Apple runtime distribution](docs/apple-runtime-release.md). `nux-capi`
+remains the product-neutral portable ABI. The iOS SDK consumes the published
+binary through a pure Swift package layer and does not compile Rust.
 
 ## License
 

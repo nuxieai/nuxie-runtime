@@ -6,7 +6,8 @@
 //! renderer-owned opaque Metal presentation seam. The report verifies the `root!` inventory
 //! against both renderer source files and the committed audited inventory
 //! before accepting a measurement. Product-owned Apple drawable lifecycle and
-//! image-admission policy live in nuxie-ios and are deliberately absent here.
+//! image-admission policy live in separate Apple workspace crates and are
+//! deliberately absent from this portable-renderer measurement.
 
 #![cfg(any(target_os = "ios", target_os = "macos"))]
 

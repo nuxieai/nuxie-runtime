@@ -19,6 +19,7 @@ from collections.abc import Iterator
 
 
 FORBIDDEN_DEPENDENCIES = {
+    "nux-apple-runtime",
     "nuxie",
     "nux-container",
     "nuxie-apple-adapter",
@@ -30,6 +31,7 @@ FORBIDDEN_DEPENDENCIES = {
     "nuxie-project-data",
 }
 FORBIDDEN_DEPENDENCY_PREFIXES = (
+    "nux-apple-",
     "nuxie-apple-",
     "nuxie-authoring-",
     "nuxie-browser-",
@@ -38,9 +40,6 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
-# Platform-specific packages must not return to this workspace even if they
-# happen to avoid a forbidden dependency edge.
-FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES = {"nuxie-apple-adapter"}
 PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
     r"\b(?:UIKit|SwiftUI|AppKit|CAMetal(?:Layer|Drawable)?|MTLDrawable|wgpu)\b|"
@@ -55,7 +54,9 @@ PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
+    "nux-apple-runtime",
     "nux-container",
+    "nuxie-apple-adapter",
     "nuxie-authoring",
     "nuxie-flow",
     "nuxie-product",
@@ -1323,13 +1324,6 @@ def check_repository(
             errors.append(
                 f"{package}/Cargo.toml: package {package_name!r} belongs to its "
                 "external product/platform owner, not nuxie-runtime"
-            )
-
-    for package, package_name, _ in packages:
-        if package_name in FORBIDDEN_RUNTIME_WORKSPACE_PACKAGES:
-            errors.append(
-                f"{package}/Cargo.toml: {package_name} is owned by nuxie-ios, "
-                "not the runtime workspace"
             )
 
     for package, package_name, manifest in packages:

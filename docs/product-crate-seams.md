@@ -15,7 +15,7 @@ nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
 nuxie-product-scripting-+
                         |
 nuxie-dev browser adapter +----> nuxie-renderer
-nuxie-ios Apple adapter +----> nuxie-renderer
+Apple distribution leaf +----> nuxie-renderer
 ```
 
 Flow now lives in `nuxie-product`; Nux artifact trust, the private Nuxie Luau
@@ -57,9 +57,9 @@ the baseline and its optional product crates. The workspace contract is:
   implementation APIs;
 - consumers pin one qualified `nuxie-runtime` revision rather than coordinating
   a second repository revision; and
-- editor authoring/browser code and Apple surfaces, C ABI, XCFramework
-  assembly, and Swift packaging remain in `nuxie-dev` and `nuxie-ios`
-  respectively.
+- editor authoring/browser code remains in `nuxie-dev`; the Apple native leaf
+  and XCFramework remain here; and the ergonomic Swift layer remains in
+  `nuxie-ios`.
 
 ## Package ownership and interface
 
@@ -70,13 +70,13 @@ the baseline and its optional product crates. The workspace contract is:
 | `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
-| nuxie-ios `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | the pinned `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
+| `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
+| `nux-apple-runtime` | Product C ABI, package/session adaptation, generated headers, and XCFramework binary | product crates plus `nuxie-apple-adapter` | C++, Objective-C, or Swift SDK policy |
 
 The browser and Apple interfaces re-export only the existing high-level
-factory/frame or surface lifecycle. The Apple package is built in the
-nuxie-ios native workspace and consumes the runtime repository only through
-the public opaque `WgpuMetalPresenter`; exposing renderer internals to make
-cross-repository ownership easier is not permitted.
+factory/frame or surface lifecycle. The Apple adapter consumes the renderer
+through the public opaque `WgpuMetalPresenter`; exposing renderer internals to
+make platform adaptation easier is not permitted.
 
 ## Build selectors
 
@@ -129,10 +129,10 @@ that repository. Nuxie-runtime retains its WebGPU renderer, opaque presentation
 surface/frame primitives, and backend/parity smoke; it exposes no raw wgpu
 device, queue, surface, or texture state to the browser owner.
 
-UNIV-1792 completed the Apple repository cut: surface lifecycle, CAMetalDrawable
-validation, presentation scheduling/completion, failure disposition, and
-trusted-image admission are owned only by nuxie-ios's
-`native/nuxie-apple-adapter`. The renderer
-retains an opaque `WgpuMetalPresenter` for final blit and shared device health;
-the portable `nux-capi` package has no Apple feature, and runtime size tooling
-retains only renderer-owned measurement roots.
+UNIV-1792 co-located the complete Apple native distribution leaf here. Surface
+lifecycle, CAMetalDrawable validation, presentation scheduling/completion,
+failure disposition, and trusted-image admission live in
+`nuxie-apple-adapter`; package/session adaptation and the stable product C ABI
+live in `nux-apple-runtime`. The renderer retains an opaque
+`WgpuMetalPresenter` for final blit and shared device health. The portable
+`nux-capi` package has no Apple or product feature.

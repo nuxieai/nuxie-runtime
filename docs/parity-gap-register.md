@@ -110,15 +110,15 @@ are merged in.
 
 The runtime behavior often exists; the surface doesn't. Structural finding:
 **capability fragmentation** — events-with-properties, text runs, VM lists,
-multi-touch batches live only in FlowSession. The product C boundary exposing
-them is owned by `nuxie-ios`; portable `nux_capi.h` remains a minimal surface
-in this repository.
+multi-touch batches live only in the Apple product/session boundary. That
+product-shaped C boundary is owned by `nux-apple-runtime`; portable
+`nux_capi.h` remains a minimal surface in this repository.
 
 | id | gap | tier |
 |---|---|---|
 | A1 | **No `FileAssetLoader` callback** — no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1 |
 | A2 | **Native device-output control remains absent** — the Rust Artboard facade now exposes headless engine and volume control, but CPAL start/stop and the portable C boundary remain later work. | 1 |
-| A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the `nuxie-ios` FlowSession boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
+| A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the Apple product/session boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
 | A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |
 | A6 | **RESOLVED 2026-08-05 — Command-server product adoption evaluated (UNIV-1631, `da54bf13`).** The shared `flow_command_equivalence` harness proves scalar mutation equivalence but non-equivalent output phases, atomic rollback, wake scheduling, terminal errors, and host model. `docs/flow-command-equivalence.md` records the decision: CommandServer remains the baseline port, while Flow retains its product transaction machinery. | 2 |

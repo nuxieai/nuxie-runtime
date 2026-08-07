@@ -181,7 +181,7 @@ jobs:
       # feature-compile-gate in the Makefile.
       - name: Compile Apple-only feature-gated code
         working-directory: ${{ github.workspace }}/rive-rust
-        run: make feature-compile-gate-apple
+        run: make feature-compile-gate-apple crate-seams-apple-check
 
       - name: Install Python
         uses: actions/setup-python@v5

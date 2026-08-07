@@ -1,0 +1,10 @@
+module NuxieRuntimeFFI {
+    header "nux_runtime.h"
+    export *
+    link framework "Foundation"
+    link framework "QuartzCore"
+    link framework "Metal"
+    link framework "CoreGraphics"
+    link framework "ImageIO"
+    link framework "Security"
+}

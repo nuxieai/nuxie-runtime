@@ -38,7 +38,7 @@ scripting ON).
 Measured 2026-07-20 at source revision `d8091cd5`, using the then-current
 42-entry core-renderer and Darwin-presentation consumer harness. The active
 harness now audits 43 renderer-owned roots, including the opaque Metal
-presenter used by the SDK-owned Apple adapter.
+presenter used by the runtime-owned Apple adapter.
 The committed baseline snapshot records its exact measurement revision,
 artifact digests, toolchain, public-root inventory, and symbol-size breakdown in
 [`docs/evidence/size-b3-2026-07-20.md`](evidence/size-b3-2026-07-20.md). Two
@@ -100,9 +100,9 @@ artifact mechanically:
 
 This root set models an application consuming the full portable ABI, public
 `WgpuFactory` / `WgpuFrame` renderer surface, and the opaque
-`WgpuMetalPresenter` used by Apple presentation. Product-owned drawable
-lifecycle, completion, and image-admission policy are measured with the
-nuxie-ios artifact rather than retained in this repository. It
+`WgpuMetalPresenter` used by Apple presentation. The shipping XCFramework has
+its own end-to-end artifact verification; this renderer closure intentionally
+measures only the shared portable baseline. It
 deliberately avoids two misleading numbers:
 
 - The raw static archive contains object code that a consuming linker removes,

@@ -85,11 +85,13 @@ class RustAttributionCliTest(unittest.TestCase):
 
     def test_product_crate_sources_are_in_scope(self) -> None:
         expected = (
+            "crates/nux-apple-runtime/src/lib.rs",
             "crates/nux-container/src/lib.rs",
             "crates/nuxie-product/src/lib.rs",
             "crates/nuxie-project-data/src/lib.rs",
             "crates/nuxie-product-scripting/src/lib.rs",
             "crates/nuxie-authoring/src/lib.rs",
+            "crates/nuxie-apple-adapter/src/lib.rs",
         )
         for relative in expected:
             source = self.root / relative

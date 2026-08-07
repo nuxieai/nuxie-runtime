@@ -930,6 +930,18 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("crates/nux-capi/Cargo.toml", result.stderr)
         self.assertIn("nuxie-apple-adapter", result.stderr)
 
+    def test_rejects_apple_adapter_as_a_runtime_workspace_member(self) -> None:
+        self.create_package(
+            "crates/nuxie-apple-adapter",
+            "nuxie-apple-adapter",
+            "",
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is owned by nuxie-ios", result.stderr)
+
     def test_rejects_product_vocabulary_in_portable_abi_header(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         include = package / "include"

@@ -16,7 +16,7 @@ nuxieai/nuxie-product --+----> nuxie baseline facade
 nuxie-project-data -----+----> neutral external-data seam in nuxie-runtime
                         |
 nuxie-dev browser adapter +----> nuxie-renderer
-nuxie-apple-adapter ----+----> nuxie-renderer
+nuxie-ios Apple adapter +----> nuxie-renderer
 ```
 
 Flow currently lives in the staged `nuxie-product` host; Nux artifact trust,
@@ -80,12 +80,13 @@ packaging remain `nuxie-ios` responsibilities.
 | product repo `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | Exact pinned `nuxie`/`nuxie-scripting` provider plus sibling `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
-| `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
+| nuxie-ios `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | the pinned `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
 
 The browser and Apple interfaces re-export only the existing high-level
-factory/frame or surface lifecycle. The moves in UNIV-1625 and UNIV-1626 must
-deepen those packages behind the same interfaces; exposing renderer internals
-to make the move easier is not permitted.
+factory/frame or surface lifecycle. The Apple package is built in the
+nuxie-ios native workspace and consumes the runtime repository only through
+the public opaque `WgpuMetalPresenter`; exposing renderer internals to make
+cross-repository ownership easier is not permitted.
 
 ## Build selectors
 
@@ -143,8 +144,10 @@ that repository. Nuxie-runtime retains its WebGPU renderer, opaque presentation
 surface/frame primitives, and backend/parity smoke; it exposes no raw wgpu
 device, queue, surface, or texture state to the browser owner.
 
-UNIV-1626 completed the Apple cut: surface lifecycle, CAMetalDrawable
+UNIV-1792 completed the Apple repository cut: surface lifecycle, CAMetalDrawable
 validation, presentation scheduling/completion, failure disposition, and
-trusted-image admission are owned only by `nuxie-apple-adapter`. The renderer
+trusted-image admission are owned only by nuxie-ios's
+`native/nuxie-apple-adapter`. The renderer
 retains an opaque `WgpuMetalPresenter` for final blit and shared device health;
-the portable `nux-capi` package has no Apple feature or measurement roots.
+the portable `nux-capi` package has no Apple feature, and runtime size tooling
+retains only renderer-owned measurement roots.

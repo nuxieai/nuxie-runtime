@@ -174,7 +174,7 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make fixtures
 
-      # nux-capi's size-report-roots harness compiles ONLY here and in
+      # The Darwin size-report root harness compiles ONLY here and in
       # tools/size-report.sh, whose inventory check runs before its fat-LTO
       # build -- so before this gate existed, inventory drift kept the
       # harness's compile errors permanently unreached. See

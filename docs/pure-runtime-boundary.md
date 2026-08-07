@@ -9,7 +9,7 @@ rule for runtime and product work, not a port-phase plan.
 editor authoring --------+
 nuxieai/nuxie-product ---+---> parity baseline <--- portable C ABI
 browser adapter ---------+            ^             replay/oracle tools
-Apple adapter -----------+            |
+nuxie-ios Apple adapter -+            |
                               general-purpose crates
 ```
 
@@ -82,9 +82,10 @@ tooling remain in the baseline.
 
 ### Apple adapter
 
-The Apple adapter owns CAMetalLayer/drawable lifecycle, presentation
+The nuxie-ios native workspace owns the Apple adapter package and its
+CAMetalLayer/drawable lifecycle, presentation
 completion/disposition, trusted-image admission policy, and the Apple ABI and
-binary packaging. It is owned by `nuxie-ios`; backend-neutral Metal/WebGPU
+binary packaging. Backend-neutral Metal/WebGPU
 mechanics remain in the baseline. Experience/session/product operations cross
 a separately named product ABI owned with `nuxie-product`; they never enter
 the portable ABI merely because an Apple consumer needs them.

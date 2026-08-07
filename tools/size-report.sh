@@ -298,6 +298,14 @@ build_full_link() { # profile variant features
   elif grep -Eq '^nuxie-scripting v' "$dependency_tree"; then
     echo "scripting dependency leaked into ${variant} feature graph" >&2
     return 1
+  else
+    local forbidden_dependency
+    for forbidden_dependency in nuxie-project-data serde_json zmij; do
+      if grep -Eq "^${forbidden_dependency} v" "$dependency_tree"; then
+        echo "${forbidden_dependency} leaked into ${variant} feature graph" >&2
+        return 1
+      fi
+    done
   fi
 
   nm -gjU "$cargo_dylib" | grep '^_nux_' | sort -u >"$exports"

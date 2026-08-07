@@ -395,6 +395,8 @@ feature-compile-gate-portable:
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
+		"riv-inspect --features inspect" "cargo check -p nuxie-binary --features inspect --bin riv-inspect" \
+		"graph-inspect --features inspect" "cargo check -p nuxie-graph --features inspect --bin graph-inspect" \
 		"product and authoring seams" "$(MAKE) --no-print-directory crate-seams-product-check"
 
 feature-compile-gate-apple:
@@ -409,10 +411,10 @@ feature-compile-gate:
 		"apple tier" "$(MAKE) --no-print-directory feature-compile-gate-apple"
 
 inspect:
-	@cargo run --quiet -p nuxie-binary --bin riv-inspect -- fixtures/graph/dependency_test.riv
+	@cargo run --quiet -p nuxie-binary --features inspect --bin riv-inspect -- fixtures/graph/dependency_test.riv
 
 graph:
-	@cargo run --quiet -p nuxie-graph --bin graph-inspect -- fixtures/graph/dependency_test.riv
+	@cargo run --quiet -p nuxie-graph --features inspect --bin graph-inspect -- fixtures/graph/dependency_test.riv
 
 cpp-probe:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-probe/build.sh "$(CPP_CONFIG)"

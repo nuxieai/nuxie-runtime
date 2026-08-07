@@ -11659,7 +11659,7 @@ impl TaffyRuntimeLayoutEngine {
             .is_none_or(|style_local| instance.runtime_layout_style_is_row(style_local));
         let mut child_nodes = Vec::new();
         let mut child_locals = Vec::new();
-        for child_local in self.layout_provider_children(instance, graph, local)? {
+        for child_local in self.layout_provider_children(instance, local)? {
             // C++ inserts layout-provider children into Yoga even when runtime
             // collapse later suppresses drawing; display:none is represented
             // by the child node's style.
@@ -11762,7 +11762,7 @@ impl TaffyRuntimeLayoutEngine {
                     )
                     .ok()?
             } else if runtime.is_some()
-                && self.layout_component_registers_measure_func(instance, graph, local)?
+                && self.layout_component_registers_measure_func(instance, local)?
             {
                 taffy
                     .new_leaf_with_context(
@@ -11804,8 +11804,8 @@ impl TaffyRuntimeLayoutEngine {
         // row width, exactly as C++ `Artboard::takeLayoutData()` does.
         if let Some(style_local) = item.child.runtime_layout_component_style_local(0) {
             style.size = Size {
-                width: self.axis_dimension(&item.child, item_graph, 0, style_local, true)?,
-                height: self.axis_dimension(&item.child, item_graph, 0, style_local, false)?,
+                width: self.axis_dimension(&item.child, 0, style_local, true)?,
+                height: self.axis_dimension(&item.child, 0, style_local, false)?,
             };
         }
         let Some(override_local) =
@@ -12120,8 +12120,8 @@ impl TaffyRuntimeLayoutEngine {
             } else {
                 let style_local = style_local?;
                 Size {
-                    width: self.axis_dimension(instance, graph, local, style_local, true)?,
-                    height: self.axis_dimension(instance, graph, local, style_local, false)?,
+                    width: self.axis_dimension(instance, local, style_local, true)?,
+                    height: self.axis_dimension(instance, local, style_local, false)?,
                 }
             },
             ..Default::default()
@@ -12797,7 +12797,6 @@ impl TaffyRuntimeLayoutEngine {
     fn axis_dimension(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
         style_local: usize,
         width_axis: bool,
@@ -12806,14 +12805,13 @@ impl TaffyRuntimeLayoutEngine {
             layout_local,
             if width_axis { "width" } else { "height" },
         );
-        let units = self.effective_units(instance, graph, layout_local, style_local, width_axis)?;
+        let units = self.effective_units(instance, layout_local, style_local, width_axis)?;
         self.dimension_from_unit(value.max(0.0), units)
     }
 
     fn effective_units(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
         style_local: usize,
         width_axis: bool,
@@ -12830,7 +12828,7 @@ impl TaffyRuntimeLayoutEngine {
         if matches!(stored, 1 | 2) {
             return Some(stored);
         }
-        if self.is_legacy_hug_encoding(instance, graph, layout_local, style_local)? {
+        if self.is_legacy_hug_encoding(instance, layout_local, style_local)? {
             Some(3)
         } else {
             Some(1)
@@ -12840,7 +12838,6 @@ impl TaffyRuntimeLayoutEngine {
     fn is_legacy_hug_encoding(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
         style_local: usize,
     ) -> Option<bool> {
@@ -12857,7 +12854,7 @@ impl TaffyRuntimeLayoutEngine {
                 && height_fixed
                 && intrinsic
                 && self
-                    .layout_provider_children(instance, graph, layout_local)?
+                    .layout_provider_children(instance, layout_local)?
                     .is_empty(),
         )
     }
@@ -13305,7 +13302,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         };
         if !self
-            .layout_provider_children(instance, graph, layout_local)?
+            .layout_provider_children(instance, layout_local)?
             .is_empty()
         {
             return Some(false);
@@ -13322,7 +13319,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         if runtime.is_some()
-            && self.layout_component_registers_measure_func(instance, graph, layout_local)?
+            && self.layout_component_registers_measure_func(instance, layout_local)?
         {
             return Some(false);
         }
@@ -13370,7 +13367,6 @@ impl TaffyRuntimeLayoutEngine {
     fn layout_component_registers_measure_func(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
     ) -> Option<bool> {
         let style_local = instance.runtime_layout_component_style_local(layout_local)?;
@@ -13384,7 +13380,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         Some(
-            self.layout_provider_children(instance, graph, layout_local)?
+            self.layout_provider_children(instance, layout_local)?
                 .is_empty(),
         )
     }
@@ -13410,7 +13406,6 @@ impl TaffyRuntimeLayoutEngine {
         let fixed_width = style_local.and_then(|style_local| {
             self.fixed_layout_measure_dimension(
                 instance,
-                graph,
                 layout_local,
                 style_local,
                 true,
@@ -13420,7 +13415,6 @@ impl TaffyRuntimeLayoutEngine {
         let fixed_height = style_local.and_then(|style_local| {
             self.fixed_layout_measure_dimension(
                 instance,
-                graph,
                 layout_local,
                 style_local,
                 false,
@@ -13611,7 +13605,6 @@ impl TaffyRuntimeLayoutEngine {
         let style_local = instance.runtime_layout_participant_local(local)?;
         let fixed_width = self.fixed_layout_measure_dimension(
             instance,
-            graph,
             local,
             style_local,
             true,
@@ -13619,7 +13612,6 @@ impl TaffyRuntimeLayoutEngine {
         );
         let fixed_height = self.fixed_layout_measure_dimension(
             instance,
-            graph,
             local,
             style_local,
             false,
@@ -13681,7 +13673,6 @@ impl TaffyRuntimeLayoutEngine {
     fn fixed_layout_measure_dimension(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
         style_local: usize,
         width_axis: bool,
@@ -13696,7 +13687,7 @@ impl TaffyRuntimeLayoutEngine {
                 if width_axis { "width" } else { "height" },
             )
             .max(0.0);
-        match self.effective_units(instance, graph, layout_local, style_local, width_axis)? {
+        match self.effective_units(instance, layout_local, style_local, width_axis)? {
             0 | 1 => Some(value),
             2 => {
                 definite_available_space(available_space).map(|available| available * value / 100.0)
@@ -13797,15 +13788,17 @@ impl TaffyRuntimeLayoutEngine {
         Some((measured.width, measured.height))
     }
 
+    /// Mirrors pinned C++ `forEachLayoutProvider`: walk the occurrence-owned
+    /// `ContainerComponent::children()` hierarchy directly. Keeping
+    /// `ArtboardGraph` out of this interface prevents provider discovery from
+    /// falling back to local-id scans over the static component vector.
     fn layout_provider_children(
         &self,
         instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
         layout_local: usize,
     ) -> Option<Vec<usize>> {
         fn visit(
             instance: &ArtboardInstance,
-            graph: &ArtboardGraph,
             from: usize,
             nested: bool,
             out: &mut Vec<usize>,
@@ -13814,27 +13807,22 @@ impl TaffyRuntimeLayoutEngine {
             if !visiting.insert(from) {
                 return Some(());
             }
-            let component = graph
-                .components
-                .iter()
-                .find(|component| component.local_id == from)?;
-            for child_local in &component.children {
+            let component = instance.component(from)?;
+            for child_handle in &component.children {
+                let child_local = instance.component_local_id(*child_handle)?;
                 if component.type_name == "Solo"
                     && instance
-                        .component(*child_local)
+                        .component(child_local)
                         .is_some_and(RuntimeComponent::is_collapsed)
                 {
                     continue;
                 }
-                let child = graph
-                    .components
-                    .iter()
-                    .find(|component| component.local_id == *child_local)?;
+                let child = instance.component(child_local)?;
                 let provider = matches!(
                     child.type_name,
                     "LayoutComponent" | "NestedArtboardLayout" | "ArtboardComponentList"
                 ) || instance
-                    .runtime_layout_participant_local(*child_local)
+                    .runtime_layout_participant_local(child_local)
                     .is_some();
                 if provider {
                     // S4-38 keeps an ArtboardComponentList behind a transparent
@@ -13844,13 +13832,13 @@ impl TaffyRuntimeLayoutEngine {
                     let joins_through_container = child.type_name != "ArtboardComponentList"
                         || !nested
                         || property_key_for_name("Drawable", "drawableFlags")
-                            .and_then(|key| instance.uint_property(*child_local, key))
+                            .and_then(|key| instance.uint_property(child_local, key))
                             .is_some_and(|flags| flags & (1 << 8) != 0);
                     if joins_through_container {
-                        out.push(*child_local);
+                        out.push(child_local);
                     }
                 } else if matches!(child.type_name, "Node" | "Group" | "Solo") {
-                    visit(instance, graph, *child_local, true, out, visiting)?;
+                    visit(instance, child_local, true, out, visiting)?;
                 }
             }
             visiting.remove(&from);
@@ -13860,7 +13848,6 @@ impl TaffyRuntimeLayoutEngine {
         let mut providers = Vec::new();
         visit(
             instance,
-            graph,
             layout_local,
             false,
             &mut providers,
@@ -31962,7 +31949,7 @@ mod tests {
         let engine = TaffyRuntimeLayoutEngine;
 
         let root_providers = engine
-            .layout_provider_children(&instance, graph, 0)
+            .layout_provider_children(&instance, 0)
             .expect("root layout providers resolve");
         assert!(
             !root_providers.contains(&26),
@@ -31970,7 +31957,7 @@ mod tests {
         );
         assert_eq!(
             engine
-                .layout_provider_children(&instance, graph, 28)
+                .layout_provider_children(&instance, 28)
                 .expect("direct layout providers resolve"),
             vec![31],
             "a direct ArtboardComponentList remains an unconditional provider"
@@ -31981,10 +31968,37 @@ mod tests {
         assert!(instance.set_uint_property(26, flags_key, 1 << 8));
         assert!(
             engine
-                .layout_provider_children(&instance, graph, 0)
+                .layout_provider_children(&instance, 0)
                 .expect("opted-in root providers resolve")
                 .contains(&26),
             "DrawableFlag::ParticipatesInLayout opts a nested list into its owning layout"
+        );
+    }
+
+    #[test]
+    fn solo_layout_provider_selection_follows_retained_hierarchy() {
+        let bytes = cpp_runtime_fixture("layout/solo_participant.riv");
+        let file = read_runtime_file(&bytes).expect("Solo participant fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("Solo participant graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let engine = TaffyRuntimeLayoutEngine;
+
+        assert_eq!(
+            engine
+                .layout_provider_children(&instance, 1)
+                .expect("initial Solo provider resolves"),
+            vec![3],
+            "the first active Solo child is the layout provider"
+        );
+
+        assert!(instance.set_solo_active_child_by_index(2, 1.0));
+        assert_eq!(
+            engine
+                .layout_provider_children(&instance, 1)
+                .expect("switched Solo provider resolves"),
+            vec![6],
+            "provider discovery follows the live Solo selection"
         );
     }
 

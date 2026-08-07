@@ -158,7 +158,10 @@ targetname(runner_name)
 targetdir('%{cfg.system}/bin/%{cfg.buildcfg}')
 objdir('%{cfg.system}/obj/%{cfg.buildcfg}' .. (with_scripting and '/scripting' or '/ordinary'))
 includedirs(include_dirs)
-defines({ '_RIVE_INTERNAL_', 'WITH_RIVE_TEXT', 'WITH_RIVE_LAYOUT', 'RIVE_MACOSX', 'YOGA_EXPORT=' })
+defines({ '_RIVE_INTERNAL_', 'WITH_RIVE_TEXT', 'WITH_RIVE_LAYOUT', 'YOGA_EXPORT=' })
+if os.host() == 'macosx' then
+    defines({ 'RIVE_MACOSX' })
+end
 if with_audio then
     defines({ 'WITH_RIVE_AUDIO', 'EXTERNAL_RIVE_AUDIO_ENGINE', 'MA_NO_DEVICE_IO', 'MA_NO_RESOURCE_MANAGER' })
 end

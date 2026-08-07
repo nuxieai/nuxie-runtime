@@ -5,11 +5,14 @@ env:
   CARGO_PROFILE_TEST_DEBUG: "0"
   RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
   PORT_MANIFEST_RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+  RIVE_PREMAKE_TAG: "v5.0.0-beta7"
 
 steps:
   - label: ":linux: Rust workspace and port contracts"
     command: |
       set -euo pipefail
+      sudo apt-get update -qq
+      sudo apt-get install --no-install-recommends -y zlib1g-dev
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
       git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
@@ -19,6 +22,12 @@ steps:
       make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
       make runtime-drawing-port-gate runtime-frame-loop-port-gate
       make lint-gate feature-compile-gate-portable
+      (
+        cd "$RIVE_RUNTIME_DIR"
+        RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" \
+          build/build_rive.sh nobuild
+      )
+      export PATH="$RIVE_RUNTIME_DIR/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release:$PATH"
       make cpp-probe cpp-probe-scripted
       cargo test --workspace --exclude nuxie-renderer
     agents:

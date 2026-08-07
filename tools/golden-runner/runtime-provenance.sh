@@ -76,12 +76,14 @@ expected_defines() {
     local config="$1"
     local mode="$2"
     local defines=(
-        "RIVE_MACOSX"
         "WITH_RIVE_LAYOUT"
         "WITH_RIVE_TEXT"
         "YOGA_EXPORT="
         "_RIVE_INTERNAL_"
     )
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        defines+=("RIVE_MACOSX")
+    fi
     if [[ "$config" == "debug" ]]; then
         defines+=("DEBUG")
     else

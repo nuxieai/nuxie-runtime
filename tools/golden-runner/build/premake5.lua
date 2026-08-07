@@ -80,9 +80,11 @@ local runner_defines = {
     '_RIVE_INTERNAL_',
     'WITH_RIVE_TEXT',
     'WITH_RIVE_LAYOUT',
-    'RIVE_MACOSX',
     'YOGA_EXPORT=',
 }
+if os.host() == 'macosx' then
+    table.insert(runner_defines, 'RIVE_MACOSX')
+end
 local runner_forceincludes = {
     'rive_yoga_renames.h',
 }

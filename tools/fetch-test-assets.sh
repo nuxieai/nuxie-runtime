@@ -121,6 +121,27 @@ for entry in "${assets[@]}"; do
   fi
 done
 
+raster_font_destination="$repo_root/fixtures/fonts/sbix.ttf"
+raster_font_expected="caf017485804582021c4bf67df4d8e089db5fac7f3e56ef83866ce97b197669c"
+raster_font_url="https://raw.githubusercontent.com/google/skia/750673c775648c29002389a3f56fba459288eea9/resources/fonts/sbix.ttf"
+mkdir -p "$(dirname "$raster_font_destination")"
+if [[ -n "$runtime_dir" \
+  && -f "$runtime_dir/skia/dependencies/skia/resources/fonts/sbix.ttf" ]]; then
+  cp "$runtime_dir/skia/dependencies/skia/resources/fonts/sbix.ttf" \
+    "$raster_font_destination"
+fi
+if [[ ! -f "$raster_font_destination" \
+  || "$(sha256 "$raster_font_destination")" != "$raster_font_expected" ]]; then
+  curl --fail --location --silent --show-error \
+    "$raster_font_url" \
+    --output "$raster_font_destination"
+fi
+raster_font_actual=$(sha256 "$raster_font_destination")
+if [[ "$raster_font_actual" != "$raster_font_expected" ]]; then
+  echo "fixture checksum mismatch: fonts/sbix.ttf (expected $raster_font_expected, got $raster_font_actual)" >&2
+  exit 1
+fi
+
 silver_destination="$repo_root/fixtures/sync/data_bind_blob_test.sriv"
 silver_expected="e3fc7bfbb227bd57c77c63589607616e81f7c7223239eb0d56efebf1d90ce079"
 if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" ]]; then

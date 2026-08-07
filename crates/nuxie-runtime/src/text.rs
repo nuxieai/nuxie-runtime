@@ -6313,9 +6313,11 @@ mod tests {
         );
         assert!(!runtime_extract_color_glyph_layers(&colr_bytes, heart, 0xff12_3456).is_empty());
 
-        let raster_bytes =
-            std::fs::read(root.join("skia/dependencies/skia/resources/fonts/sbix.ttf"))
-                .expect("read raster differential font");
+        let raster_bytes = std::fs::read(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/fonts/sbix.ttf"),
+        )
+        .expect("read raster differential font fixture");
         let raster_glyph = (0..256)
             .find(|glyph| {
                 runtime_classify_color_glyph(&raster_bytes, *glyph)

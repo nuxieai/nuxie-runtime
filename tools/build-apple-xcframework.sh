@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -P "${script_dir}/.." && pwd -P)"
+cd "${repo_root}"
 if [[ $# -gt 0 ]]; then
     requested_output_root="$1"
 else
@@ -31,6 +32,13 @@ rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
 rust_sysroot="$("${rust_compiler}" --print sysroot)"
 rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
 rust_llvm_objcopy="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-objcopy"
+xcodebuild_path="$(command -v xcodebuild)"
+lipo_path="$(command -v lipo)"
+ditto_path="$(command -v ditto)"
+swift_path="$(command -v swift)"
+clang_path="$(xcrun --find clang)"
+rustc_version="$("${rust_compiler}" -vV)"
+cargo_version="$("${rust_cargo}" -Vv)"
 runtime_revision="${NUX_RUNTIME_SOURCE_REVISION:-}"
 runtime_version="$(
     sed -n 's/^version = "\([^"]*\)"/\1/p' \
@@ -47,6 +55,7 @@ macosx_sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
 macosx_sdk_build="$(xcrun --sdk macosx --show-sdk-build-version)"
 build_root="${output_root}/build"
 cargo_target_dir="${build_root}/cargo"
+build_inputs_manifest_path="${build_root}/build-inputs.json"
 headers_dir="${build_root}/Headers"
 simulator_dir="${build_root}/simulator"
 macos_dir="${build_root}/macos"
@@ -179,6 +188,38 @@ mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}" "$
 phase "Prepare deterministic Apple runtime output"
 report_disk
 
+phase "Audit the exact Apple dependency closure and build inputs"
+build_inputs_hash="$(
+    python3 "${script_dir}/apple_runtime_input_digest.py" \
+        write "${build_inputs_manifest_path}" \
+        --repo-root "${repo_root}" \
+        --cargo "${rust_cargo}" \
+        --build-profile "${profile}" \
+        --rust-toolchain "${rust_toolchain}" \
+        --rustc-version "${rustc_version}" \
+        --cargo-version "${cargo_version}" \
+        --xcode-version "${xcode_version}" \
+        --xcode-build "${xcode_build}" \
+        --iphoneos-sdk "${iphoneos_sdk_version} (${iphoneos_sdk_build})" \
+        --iphonesimulator-sdk "${iphonesimulator_sdk_version} (${iphonesimulator_sdk_build})" \
+        --macos-sdk "${macosx_sdk_version} (${macosx_sdk_build})" \
+        --minimum-ios-version "${deployment_target}" \
+        --minimum-macos-version "${macos_deployment_target}" \
+        --tool "cargo=${rust_cargo}" \
+        --tool "rustc=${rust_compiler}" \
+        --tool "llvm-objcopy=${rust_llvm_objcopy}" \
+        --tool "xcodebuild=${xcodebuild_path}" \
+        --tool "lipo=${lipo_path}" \
+        --tool "ditto=${ditto_path}" \
+        --tool "swift=${swift_path}" \
+        --tool "clang=${clang_path}"
+)"
+if [[ ! "${build_inputs_hash}" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "Apple build-input digest is not a lowercase SHA-256: ${build_inputs_hash}" >&2
+    exit 13
+fi
+echo "Build inputs: ${build_inputs_hash}"
+
 targets=(
     aarch64-apple-ios
     aarch64-apple-ios-sim
@@ -197,6 +238,7 @@ for target in "${targets[@]}"; do
     IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
     MACOSX_DEPLOYMENT_TARGET="${macos_deployment_target}" \
     NUX_RUNTIME_BUILD_PROFILE="${profile}" \
+    NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
     NUX_RUNTIME_SOURCE_REVISION="${runtime_revision}" \
     CARGO_TARGET_DIR="${cargo_target_dir}" \
     RUSTC="${rust_compiler}" \
@@ -268,6 +310,7 @@ xcodebuild -create-xcframework \
 phase "Attach license notices"
 cp "${repo_root}/LICENSE" "${license_path}"
 cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${third_party_notices_path}"
+cp "${build_inputs_manifest_path}" "${xcframework_path}/BUILD_INPUTS.json"
 report_disk
 
 phase "Archive the XCFramework"
@@ -276,9 +319,11 @@ checksum="$(swift package compute-checksum "${archive_path}")"
 report_disk
 
 phase "Write artifact provenance"
-printf '{\n  "schemaVersion": 3,\n  "runtimeVersion": "%s",\n  "sourceRevision": "%s",\n  "buildInputsHash": null,\n  "runtimeIdentity": "%s",\n  "contractFingerprint": "%s",\n  "luaurVersion": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "macOSSDKVersion": "%s",\n  "macOSSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "minimumMacOSVersion": "%s",\n  "thirdPartyNoticesPath": "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md",\n  "swiftPackageChecksum": "%s"\n}\n' \
+printf '{\n  "schemaVersion": 5,\n  "runtimeVersion": "%s",\n  "buildSourceRevision": "%s",\n  "releaseRevision": "%s",\n  "buildInputsHash": "%s",\n  "buildInputsManifestPath": "NuxieRuntime.xcframework/BUILD_INPUTS.json",\n  "runtimeIdentity": "%s",\n  "contractFingerprint": "%s",\n  "luaurVersion": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "macOSSDKVersion": "%s",\n  "macOSSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "minimumMacOSVersion": "%s",\n  "thirdPartyNoticesPath": "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md",\n  "swiftPackageChecksum": "%s"\n}\n' \
     "${runtime_version}" \
     "${runtime_revision}" \
+    "${git_revision}" \
+    "${build_inputs_hash}" \
     "${runtime_identity}" \
     "${contract_fingerprint}" \
     "${luaur_version}" \

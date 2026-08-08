@@ -3104,9 +3104,9 @@ mod tests {
         let bytes = unsafe { slice::from_raw_parts(view.data, view.len as usize) };
         let json = std::str::from_utf8(bytes).expect("build provenance must be UTF-8");
         for field in [
-            "\"schemaVersion\":3",
+            "\"schemaVersion\":4",
             "\"runtimeVersion\"",
-            "\"sourceRevision\"",
+            "\"buildSourceRevision\"",
             "\"runtimeIdentity\"",
             "\"contractFingerprint\"",
             "\"target\"",

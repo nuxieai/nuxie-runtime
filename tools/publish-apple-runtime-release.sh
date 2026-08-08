@@ -44,10 +44,31 @@ for path in "${xcframework}" "${archive}" "${metadata}"; do
     fi
 done
 
+build_source_revision="$(
+    "${script_dir}/json-scalar.py" "${metadata}" buildSourceRevision string
+)"
+if [[ ! "${build_source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "release artifact was not produced from a clean source revision" >&2
+    exit 7
+fi
+git -C "${repo_root}" cat-file -e "${build_source_revision}^{commit}"
+git -C "${repo_root}" merge-base --is-ancestor \
+    "${build_source_revision}" "${source_revision}"
+
+qualified_metadata="$(mktemp "${artifact_root}/.artifact-qualified.XXXXXX")"
+cleanup_qualified_metadata() {
+    rm -f "${qualified_metadata}"
+}
+trap cleanup_qualified_metadata EXIT
+cp "${metadata}" "${qualified_metadata}"
+python3 "${script_dir}/apple_runtime_contract.py" \
+    release "${qualified_metadata}" "${source_revision}"
 "${script_dir}/verify-apple-xcframework.sh" \
-    "${xcframework}" "${archive}" "${metadata}"
+    "${xcframework}" "${archive}" "${qualified_metadata}"
+mv "${qualified_metadata}" "${metadata}"
+trap - EXIT
 test "$("${script_dir}/json-scalar.py" "${metadata}" runtimeVersion string)" = "${runtime_version}"
-test "$("${script_dir}/json-scalar.py" "${metadata}" sourceRevision string)" = "${source_revision}"
+test "$("${script_dir}/json-scalar.py" "${metadata}" releaseRevision string)" = "${source_revision}"
 test "$("${script_dir}/json-scalar.py" "${metadata}" buildProfile string)" = "release-apple"
 test "$("${script_dir}/json-scalar.py" "${metadata}" rustToolchain string)" = "1.94.1"
 test "$("${script_dir}/json-scalar.py" "${metadata}" minimumIOSVersion string)" = "15.0"
@@ -71,6 +92,7 @@ trap cleanup EXIT
     echo "Nuxie Apple runtime ${runtime_version}"
     echo
     echo "Source: \`${source_revision}\`"
+    echo "Artifact build source: \`${build_source_revision}\`"
     echo "SwiftPM checksum: \`${checksum}\`"
     echo "Minimum platforms: iOS 15.0, macOS 12.0"
 } > "${notes_path}"

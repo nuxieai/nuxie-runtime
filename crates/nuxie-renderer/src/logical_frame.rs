@@ -1020,6 +1020,7 @@ struct TypedDrawRecord {
     bounds: [f32; 4],
     transform: [f32; 6],
     fill_rule: u32,
+    local_contour_ids_are_dense: u32,
 }
 
 #[derive(Default)]
@@ -1228,6 +1229,10 @@ pub(crate) struct PreparedTypedDrawResources {
         Vec<super::clockwise_atomic_pipeline::ClockwiseAtomicTriangleBatch>,
     pub(crate) has_interior_triangles: bool,
     pub(crate) uses_interior: bool,
+    // Whether the local contour IDs behind `spans`/`contours` are exactly
+    // 1..=contours.len(). Stroke tessellation skips empty butt-cap contours,
+    // so consumers must not infer density from the contour count.
+    pub(crate) local_contour_ids_are_dense: bool,
 }
 
 pub(crate) struct PreparedTypedDrawSelection<'a> {
@@ -1938,7 +1943,7 @@ fn write_resources(
         let contour_start = buffers.contours.len();
         let tessellation_start = buffers.tessellations.len();
         let triangle_start = buffers.triangles.len();
-        write_typed_draw_resources(
+        let local_contour_ids_are_dense = write_typed_draw_resources(
             buffers,
             config,
             draw_index,
@@ -1969,6 +1974,7 @@ fn write_resources(
                     main_triangle_batches: metadata.main_triangle_batches,
                     has_interior_triangles: metadata.has_interior_triangles,
                     uses_interior: metadata.uses_interior,
+                    local_contour_ids_are_dense,
                 }
             }),
         );
@@ -2009,6 +2015,7 @@ fn write_resources(
                 FillRule::EvenOdd => 1,
                 FillRule::Clockwise => 2,
             },
+            local_contour_ids_are_dense: u32::from(local_contour_ids_are_dense),
         });
     }
     prepared
@@ -2131,9 +2138,9 @@ fn write_typed_draw_resources(
     draw: &SolidDraw,
     use_clockwise_atomic_batch: bool,
     gradients: &PreparedGradientSelection<'_>,
-) {
+) -> bool {
     if matches!(draw.role, DrawRole::ClipReset { .. }) || draw.image.is_some() {
-        return;
+        return false;
     }
 
     let path_id = u16::try_from(draw_index + 1).expect("logical path ID overflow");
@@ -2143,18 +2150,23 @@ fn write_typed_draw_resources(
     let mut contours = Vec::new();
     let mut triangles = Vec::new();
     let mut path = gpu::PathData::zeroed();
+    let mut local_contour_ids_are_dense = false;
 
     if draw.paint.feather != 0.0 {
         if let Some(prepared) = draw.prepared_feather(config.mode) {
             spans.clone_from(&prepared.tessellation.spans);
             contours.clone_from(&prepared.tessellation.contours);
             path = prepared.tessellation.path;
+            local_contour_ids_are_dense = prepared.local_contour_ids_are_dense;
         }
     } else if draw.paint.style == RenderPaintStyle::Stroke {
         if let Some(stroke) = draw.prepared_stroke() {
             spans.clone_from(&stroke.tessellation.spans);
             contours.clone_from(&stroke.tessellation.contours);
             path = stroke.tessellation.path;
+            // Stroke tessellation skips empty butt-cap contours; only the
+            // builder knows whether the surviving local IDs stayed dense.
+            local_contour_ids_are_dense = stroke.local_contour_ids_are_dense;
         }
     } else if config.mode == RenderMode::ClockwiseAtomic && draw.authored_should_use_interior() {
         let prepared = draw.authored_atomic_interior_geometry(
@@ -2193,6 +2205,8 @@ fn write_typed_draw_resources(
         spans = tessellation.spans;
         contours = tessellation.contours;
         path = tessellation.path;
+        // Fill tessellation emits every contour record with spans in order.
+        local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
     }
 
     if spans.is_empty()
@@ -2212,10 +2226,11 @@ fn write_typed_draw_resources(
             spans = tessellation.spans;
             contours = tessellation.contours;
             path = tessellation.path;
+            local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
         }
     }
     if spans.is_empty() && contours.is_empty() && triangles.is_empty() {
-        return;
+        return false;
     }
     path.z_index = if config.mode == RenderMode::Msaa {
         path_id.into()
@@ -2309,6 +2324,7 @@ fn write_typed_draw_resources(
     buffers.contours.extend(contours);
     buffers.tessellations.extend(spans);
     buffers.triangles.extend(triangles);
+    local_contour_ids_are_dense
 }
 
 fn push_u8(buffer: &mut Vec<u8>, value: u8) {

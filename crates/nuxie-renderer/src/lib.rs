@@ -1765,6 +1765,7 @@ struct PreparedFeatherGeometry {
     mode: RenderMode,
     tessellation: draw::FillTessellation,
     resources: logical_flush::ResourceCounters,
+    local_contour_ids_are_dense: bool,
 }
 
 #[derive(Clone)]
@@ -3445,6 +3446,7 @@ impl WgpuFrame {
                                     stroke,
                                     fill_direction,
                                 )
+                                .map(|built| built.tessellation)
                             })
                             .expect("atomic eligibility already validated feather tessellation");
                         let patch_index_range = if is_stroke {
@@ -4659,22 +4661,29 @@ impl WgpuFrame {
                     destination_copy_bounds: [u32; 4],
                 }
                 enum PendingPathGeometry {
-                    Shared(draw::FillTessellation),
+                    Shared {
+                        tessellation: draw::FillTessellation,
+                        // Carried from the logical producer: stroke tessellation can
+                        // skip empty butt-cap contours, leaving sparse local IDs even
+                        // when the contour count alone looks dense.
+                        local_contour_ids_are_dense: bool,
+                    },
                     Owned(draw::FillTessellation),
                 }
                 impl PendingPathGeometry {
                     fn tessellation(&self) -> &draw::FillTessellation {
                         match self {
-                            Self::Shared(tessellation) => tessellation,
+                            Self::Shared { tessellation, .. } => tessellation,
                             Self::Owned(tessellation) => tessellation,
                         }
                     }
 
                     fn local_contour_ids_are_dense(&self) -> bool {
                         match self {
-                            Self::Shared(tessellation) => {
-                                tessellation.contours.len() <= gpu::CONTOUR_ID_MASK as usize
-                            }
+                            Self::Shared {
+                                local_contour_ids_are_dense,
+                                ..
+                            } => *local_contour_ids_are_dense,
                             // Owned fallback geometry can include a stroke with skipped
                             // empty contours, so keep the generic scan/sort path.
                             Self::Owned(_) => false,
@@ -4795,6 +4804,12 @@ impl WgpuFrame {
                         instance_count: shared.instance_count,
                     }
                 };
+                let shared_geometry = |shared: &logical_frame::PreparedTypedDrawResources| {
+                    PendingPathGeometry::Shared {
+                        tessellation: shared_tessellation(shared),
+                        local_contour_ids_are_dense: shared.local_contour_ids_are_dense,
+                    }
+                };
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::with_capacity(draws.len());
                 let mut pending_atlas_draws = Vec::new();
@@ -4841,9 +4856,7 @@ impl WgpuFrame {
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
-                        let geometry = shared
-                            .map(shared_tessellation)
-                            .map(PendingPathGeometry::Shared);
+                        let geometry = shared.map(shared_geometry);
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
                             let mut path = tessellation.path;
@@ -4970,6 +4983,7 @@ impl WgpuFrame {
                                     stroke,
                                     fill_direction,
                                 )
+                                .map(|built| built.tessellation)
                             }),
                             feather_atlas_placement(
                                 &draw.path.raw_path,
@@ -5061,9 +5075,9 @@ impl WgpuFrame {
                             ));
                         }
                         let geometry = match draw.paint.style {
-                            RenderPaintStyle::Fill if draw.image.is_none() => shared
-                                .map(shared_tessellation)
-                                .map(PendingPathGeometry::Shared),
+                            RenderPaintStyle::Fill if draw.image.is_none() => {
+                                shared.map(shared_geometry)
+                            }
                             RenderPaintStyle::Fill => draw
                                 .prepared_fill()
                                 .and_then(|prepared| {
@@ -5076,9 +5090,7 @@ impl WgpuFrame {
                                 .map(|prepared| {
                                     PendingPathGeometry::Owned(prepared.tessellation.clone())
                                 }),
-                            RenderPaintStyle::Stroke => shared
-                                .map(shared_tessellation)
-                                .map(PendingPathGeometry::Shared),
+                            RenderPaintStyle::Stroke => shared.map(shared_geometry),
                         };
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
@@ -7389,7 +7401,7 @@ fn prepare_path_draw_with_pixel_bounds(
                 (false, false) => draw::FeatherFillDirection::ReverseThenForward,
             }
         };
-        let tessellation = draw::build_feather_tessellation_with_direction(
+        let built = draw::build_feather_tessellation_with_direction(
             &path.raw_path,
             state.transform,
             paint.feather,
@@ -7403,11 +7415,12 @@ fn prepare_path_draw_with_pixel_bounds(
         } else {
             2
         };
-        let resources = midpoint_resource_counts(&tessellation, pass_count);
+        let resources = midpoint_resource_counts(&built.tessellation, pass_count);
         Some(Arc::new(PreparedFeatherGeometry {
             mode,
-            tessellation,
+            tessellation: built.tessellation,
             resources,
+            local_contour_ids_are_dense: built.local_contour_ids_are_dense,
         }))
     };
     Some(PathDrawPreparation {

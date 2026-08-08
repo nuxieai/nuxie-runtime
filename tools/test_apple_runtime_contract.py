@@ -365,6 +365,18 @@ class MigrationDistributionTests(unittest.TestCase):
             )
 
     def test_size_report_supports_candidate_and_release_budget_modes(self) -> None:
+        full_slices = {
+            "aarch64-apple-darwin": 7,
+            "aarch64-apple-ios": 7,
+            "aarch64-apple-ios-sim": 7,
+            "x86_64-apple-darwin": 7,
+            "x86_64-apple-ios": 7,
+        }
+        ios_slices = {
+            "aarch64-apple-ios": 7,
+            "aarch64-apple-ios-sim": 7,
+            "x86_64-apple-ios": 7,
+        }
         report = {
             "schemaVersion": 1,
             "artifacts": {
@@ -372,13 +384,13 @@ class MigrationDistributionTests(unittest.TestCase):
                     "compressedBytes": 10,
                     "expandedBytes": 20,
                     "representativeLinkedBytes": 4,
-                    "sliceBytes": {"aarch64-apple-ios": 7},
+                    "sliceBytes": full_slices,
                 },
                 "ios-only": {
                     "compressedBytes": 8,
                     "expandedBytes": 12,
                     "representativeLinkedBytes": 4,
-                    "sliceBytes": {"aarch64-apple-ios": 7},
+                    "sliceBytes": ios_slices,
                 },
             },
         }
@@ -399,13 +411,13 @@ class MigrationDistributionTests(unittest.TestCase):
                     "compressedBytes": 9,
                     "expandedBytes": 20,
                     "representativeLinkedBytes": 4,
-                    "sliceBytes": {"aarch64-apple-ios": 7},
+                    "sliceBytes": full_slices,
                 },
                 "ios-only": {
                     "compressedBytes": 8,
                     "expandedBytes": 12,
                     "representativeLinkedBytes": 4,
-                    "sliceBytes": {"aarch64-apple-ios": 7},
+                    "sliceBytes": ios_slices,
                 },
             },
         }

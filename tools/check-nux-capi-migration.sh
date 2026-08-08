@@ -63,4 +63,22 @@ printf '%s\n' \
     '_ = (mature, legacy)' > "${swift_source}"
 xcrun swiftc -typecheck -I "${headers}" "${swift_source}"
 
+xcrun clang \
+    -std=c11 -Wall -Wextra -Werror \
+    -I "${headers}" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.c" \
+    "${stripped_library}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreGraphics -framework ImageIO -framework Security \
+    -o "${work_dir}/c-consumer"
+"${work_dir}/c-consumer"
+
+xcrun swiftc \
+    -parse-as-library \
+    -I "${headers}" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${stripped_library}" \
+    -o "${work_dir}/swift-consumer"
+"${work_dir}/swift-consumer"
+
 echo "nux-capi migration archive and dual-module contract passed"

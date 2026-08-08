@@ -32,8 +32,12 @@ PACKAGING_INPUTS = (
     "tools/apple_runtime_contract.py",
     "tools/apple_runtime_input_digest.py",
     "tools/build-apple-xcframework.sh",
+    "tools/build-nux-capi-xcframeworks.sh",
+    "tools/check-nux-capi-layout.py",
     "tools/json-scalar.py",
+    "tools/publish-nux-capi-release.sh",
     "tools/verify-apple-xcframework.sh",
+    "tools/verify-nux-capi-xcframeworks.sh",
 )
 EXCLUDED_DIRECTORY_NAMES = {".git", "target", "__pycache__"}
 NON_BUILD_PACKAGE_DIRECTORIES = {".github", "benches", "docs", "examples", "smoke", "tests"}

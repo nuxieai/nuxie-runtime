@@ -345,6 +345,9 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
             )
         ):
             raise ContractError(f"{kind} has malformed per-slice measurements")
+        expected_targets = FULL_APPLE_TARGETS if kind == "full-apple" else IOS_TARGETS
+        if set(metrics["sliceBytes"]) != expected_targets:
+            raise ContractError(f"{kind} size report has the wrong slice target set")
 
     if not isinstance(budgets, dict) or set(budgets) != {
         "schemaVersion",
@@ -385,10 +388,17 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
         raise ContractError("build-input manifest has an incomplete or unknown schema")
     if document["schemaVersion"] != 1:
         raise ContractError("build-input manifest schemaVersion must be exactly 1")
-    if document["rootPackage"] != "nux-apple-runtime":
-        raise ContractError("build-input manifest has the wrong root package")
-    if document["features"] != ["apple-product"]:
-        raise ContractError("build-input manifest has the wrong feature set")
+    root_package = document["rootPackage"]
+    features = document["features"]
+    if not isinstance(root_package, str) or not root_package:
+        raise ContractError("build-input manifest has no root package")
+    if (
+        not isinstance(features, list)
+        or not features
+        or features != sorted(set(features))
+        or not all(isinstance(feature, str) and feature for feature in features)
+    ):
+        raise ContractError("build-input manifest has a malformed feature set")
     targets = document["targets"]
     if not isinstance(targets, list) or set(targets) != BUILD_TARGETS or targets != sorted(targets):
         raise ContractError("build-input manifest does not cover the exact Apple target set")
@@ -546,7 +556,10 @@ def _load_json(path: pathlib.Path) -> object:
 
 def qualify_release_metadata(path: pathlib.Path, release_revision: str) -> None:
     document = _load_json(path)
-    validate_metadata(document)
+    if isinstance(document, dict) and document.get("schemaVersion") == 6:
+        validate_distribution_metadata(document)
+    else:
+        validate_metadata(document)
     if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
         raise ContractError("release revision is not an exact clean source identity")
     assert isinstance(document, dict)
@@ -582,6 +595,36 @@ def main(arguments: list[str]) -> int:
             raise ContractError(f"cannot read symbol inputs: {error}") from error
         validate_symbols(header, exported)
         return 0
+    if len(arguments) >= 4 and arguments[0] == "symbol-partitions":
+        try:
+            exported = pathlib.Path(arguments[1]).read_text(encoding="utf-8")
+            manifests = {}
+            for specification in arguments[2:]:
+                name, separator, path = specification.partition("=")
+                if not separator or not name or not path:
+                    raise ContractError(
+                        "symbol partition must be named as NAME=/path/to/manifest"
+                    )
+                manifests[name] = pathlib.Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise ContractError(f"cannot read symbol partition inputs: {error}") from error
+        validate_symbol_partitions(manifests, exported)
+        return 0
+    if len(arguments) == 2 and arguments[0] == "distribution":
+        validate_distribution_metadata(_load_json(pathlib.Path(arguments[1])))
+        return 0
+    if len(arguments) == 2 and arguments[0] == "layout":
+        validate_layout_oracle(_load_json(pathlib.Path(arguments[1])))
+        return 0
+    if len(arguments) in {3, 4} and arguments[0] == "sizes":
+        if len(arguments) == 4 and arguments[3] != "--release":
+            raise ContractError("sizes accepts only the optional --release flag")
+        validate_size_report(
+            _load_json(pathlib.Path(arguments[1])),
+            _load_json(pathlib.Path(arguments[2])),
+            release=len(arguments) == 4,
+        )
+        return 0
     if len(arguments) == 3 and arguments[0] == "inputs":
         path = pathlib.Path(arguments[1])
         try:
@@ -595,7 +638,10 @@ def main(arguments: list[str]) -> int:
         "usage: apple_runtime_contract.py "
         "metadata <artifact.json> | release <artifact.json> <revision> | "
         "inputs <BUILD_INPUTS.json> <sha256> | "
-        "symbols <header> <nm-output>"
+        "symbols <header> <nm-output> | "
+        "symbol-partitions <nm-output> NAME=<manifest>... | "
+        "distribution <artifact-set.json> | layout <layout.json> | "
+        "sizes <report.json> <budgets.json> [--release]"
     )
 
 

@@ -3,6 +3,10 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NUX_RUNTIME_SOURCE_REVISION");
+    println!("cargo:rerun-if-env-changed=NUX_RUNTIME_BUILD_INPUTS_HASH");
+    println!("cargo:rerun-if-env-changed=NUX_RUNTIME_CONTRACT_FINGERPRINT");
+    println!("cargo:rerun-if-env-changed=NUX_RUNTIME_BUILD_PROFILE");
+    println!("cargo:rerun-if-env-changed=NUX_RUNTIME_RUSTC_VERSION");
     println!("cargo:rerun-if-env-changed=NUX_CAPI_UPDATE_HEADER");
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=cbindgen.toml");
@@ -15,8 +19,50 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_owned());
 
     println!("cargo:rustc-env=NUX_RUNTIME_SOURCE_REVISION={revision}");
+    emit_build_provenance(&revision);
 
     verify_generated_header();
+}
+
+fn emit_build_provenance(revision: &str) {
+    let required =
+        |name: &str| std::env::var(name).unwrap_or_else(|_| format!("unqualified:{name}"));
+    let target = required("TARGET");
+    let profile =
+        std::env::var("NUX_RUNTIME_BUILD_PROFILE").unwrap_or_else(|_| required("PROFILE"));
+    let build_inputs_hash = required("NUX_RUNTIME_BUILD_INPUTS_HASH");
+    let contract_fingerprint = required("NUX_RUNTIME_CONTRACT_FINGERPRINT");
+    let rustc = required("NUX_RUNTIME_RUSTC_VERSION");
+    let features = [
+        (
+            "apple-metal",
+            std::env::var_os("CARGO_FEATURE_APPLE_METAL").is_some(),
+        ),
+        (
+            "legacy-migration",
+            std::env::var_os("CARGO_FEATURE_LEGACY_MIGRATION").is_some(),
+        ),
+        (
+            "scripting",
+            std::env::var_os("CARGO_FEATURE_SCRIPTING").is_some(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(name, enabled)| enabled.then_some(name))
+    .collect::<Vec<_>>()
+    .join(",");
+    let provenance = format!(
+        "{{\"schemaVersion\":6,\"rootPackage\":\"nux-capi\",\"runtimeVersion\":\"{}\",\"buildSourceRevision\":\"{}\",\"target\":\"{}\",\"profile\":\"{}\",\"features\":\"{}\",\"rustc\":\"{}\",\"buildInputsHash\":\"{}\",\"contractFingerprint\":\"{}\"}}",
+        std::env::var("CARGO_PKG_VERSION").unwrap_or_default(),
+        revision,
+        target,
+        profile,
+        features,
+        rustc.replace('"', ""),
+        build_inputs_hash,
+        contract_fingerprint,
+    );
+    println!("cargo:rustc-env=NUX_CAPI_BUILD_PROVENANCE={provenance}");
 }
 
 fn verify_generated_header() {

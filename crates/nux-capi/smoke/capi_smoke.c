@@ -117,7 +117,7 @@ int main(int argc, char** argv)
     CHECK(nux_capi_require_abi(NUX_CAPI_ABI_VERSION) == NUX_STATUS_OK);
     CHECK(nux_capi_require_abi(NUX_CAPI_ABI_VERSION + 1) ==
           NUX_STATUS_ABI_MISMATCH);
-    NuxRuntimeInfo runtime_info = {0};
+    NuxRuntimeInfo runtime_info = {.struct_size = sizeof(NuxRuntimeInfo)};
     CHECK(nux_capi_runtime_info(&runtime_info) == NUX_STATUS_OK);
     CHECK(runtime_info.abi_version == NUX_CAPI_ABI_VERSION);
     CHECK(runtime_info.runtime_version.data != NULL);
@@ -129,11 +129,26 @@ int main(int argc, char** argv)
     uint8_t* bytes = read_file(argv[1], &len);
 
     NuxFile* file = NULL;
-    CHECK(nux_file_import(bytes, len, &file) == NUX_STATUS_OK);
+    NuxCapiResult* import_result = NULL;
+    CHECK(nux_file_import_with_result(bytes, len, &file, &import_result) ==
+          NUX_STATUS_OK);
     CHECK(file != NULL);
+    CHECK(import_result != NULL);
+    NuxStatus import_result_status = NUX_STATUS_RUNTIME_ERROR;
+    CHECK(nux_capi_result_status(import_result, &import_result_status) ==
+          NUX_STATUS_OK);
+    CHECK(import_result_status == NUX_STATUS_OK);
+    NuxCapiDiagnosticView import_diagnostic = {
+        .struct_size = sizeof(NuxCapiDiagnosticView)};
+    CHECK(nux_capi_result_diagnostic(import_result, &import_diagnostic) ==
+          NUX_STATUS_OK);
+    CHECK(import_diagnostic.status == NUX_STATUS_OK);
+    CHECK(nux_capi_result_free(import_result) == NUX_STATUS_OK);
     free(bytes);
 
-    CHECK(nux_file_artboard_count(file) > SMOKE_ARTBOARD_INDEX);
+    size_t artboard_count = 0;
+    CHECK(nux_file_artboard_count(file, &artboard_count) == NUX_STATUS_OK);
+    CHECK(artboard_count > SMOKE_ARTBOARD_INDEX);
 
     size_t state_machine_count = 0;
     CHECK(nux_file_artboard_state_machine_count(
@@ -148,6 +163,15 @@ int main(int argc, char** argv)
                  "State Machine 1",
                  state_machine_name.len) == 0);
 
+    size_t animation_count = 0;
+    CHECK(nux_file_artboard_animation_count(
+              file, SMOKE_ARTBOARD_INDEX, &animation_count) == NUX_STATUS_OK);
+    CHECK(animation_count >= 1);
+    NuxStringView animation_name = {NULL, 0};
+    CHECK(nux_file_artboard_animation_name(
+              file, SMOKE_ARTBOARD_INDEX, 0, &animation_name) == NUX_STATUS_OK);
+    CHECK(animation_name.len == strlen("Timeline 1"));
+
     NuxArtboardInstance* instance = NULL;
     CHECK(nux_artboard_instance_new(file, SMOKE_ARTBOARD_INDEX, &instance) ==
           NUX_STATUS_OK);
@@ -157,6 +181,31 @@ int main(int argc, char** argv)
     CHECK(nux_state_machine_instance_new_default(instance, &state_machine) ==
           NUX_STATUS_OK);
     CHECK(state_machine != NULL);
+
+    NuxPlayer* animation_player = NULL;
+    NuxCapiResult* animation_result = NULL;
+    CHECK(nux_player_new_linear_animation_named_with_result(
+              instance, animation_name, &animation_player, &animation_result) ==
+          NUX_STATUS_OK);
+    CHECK(animation_player != NULL);
+    CHECK(animation_result != NULL);
+    CHECK(nux_capi_result_free(animation_result) == NUX_STATUS_OK);
+    NuxPlayerInfo animation_info = {.struct_size = sizeof(NuxPlayerInfo)};
+    CHECK(nux_player_info(animation_player, &animation_info) == NUX_STATUS_OK);
+    CHECK(animation_info.kind == NUX_PLAYER_KIND_LINEAR_ANIMATION);
+    CHECK(nux_player_free(animation_player) == NUX_STATUS_OK);
+
+    NuxPlayer* player = NULL;
+    NuxCapiResult* player_result = NULL;
+    CHECK(nux_player_new_default_with_result(instance, &player, &player_result) ==
+          NUX_STATUS_OK);
+    CHECK(player != NULL);
+    CHECK(player_result != NULL);
+    CHECK(nux_capi_result_free(player_result) == NUX_STATUS_OK);
+    NuxPlayerInfo player_info = {.struct_size = sizeof(NuxPlayerInfo)};
+    CHECK(nux_player_info(player, &player_info) == NUX_STATUS_OK);
+    CHECK(player_info.kind == NUX_PLAYER_KIND_STATE_MACHINE);
+    CHECK(player_info.name.len == strlen("State Machine 1"));
 
     CHECK(nux_state_machine_instance_set_bool(state_machine, "bool", true) ==
           NUX_STATUS_OK);
@@ -210,6 +259,7 @@ int main(int argc, char** argv)
 
     NuxRenderCallbacks callbacks;
     memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.struct_size = sizeof(callbacks);
     callbacks.user_data = &counters;
     callbacks.make_render_path = smoke_make_render_path;
     callbacks.make_empty_render_path = smoke_make_handle;
@@ -230,10 +280,15 @@ int main(int argc, char** argv)
     CHECK(counters.draw_paths > 0);
     CHECK(counters.saves == counters.restores);
     CHECK(counters.made > 0);
-    nux_state_machine_instance_free(state_machine);
-    nux_artboard_instance_free(instance);
+    /* Deliberately release public parents first. The player retains the native
+     * artboard occurrence and renderer binding through its own last release. */
+    CHECK(nux_file_free(file) == NUX_STATUS_OK);
+    CHECK(nux_state_machine_instance_free(state_machine) == NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_free(instance) == NUX_STATUS_OK);
+    CHECK(nux_player_info(player, &player_info) == NUX_STATUS_OK);
+    CHECK(counters.made != counters.released);
+    CHECK(nux_player_free(player) == NUX_STATUS_OK);
     CHECK(counters.made == counters.released);
-    nux_file_free(file);
 
     printf("capi-smoke ok (draw_paths=%zu objects=%zu)\n",
            counters.draw_paths,

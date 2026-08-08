@@ -703,6 +703,22 @@ capi-smoke: fixtures
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
+	@if [ "$$(uname -s)" = Darwin ]; then \
+		$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include \
+			-o target/capi-smoke/capi_smoke_static crates/nux-capi/smoke/capi_smoke.c \
+			target/debug/libnux_capi.a -framework CoreFoundation -framework CoreGraphics -framework ImageIO; \
+		target/capi-smoke/capi_smoke_static "$(CAPI_SMOKE_FIXTURE)"; \
+		xcrun swiftc -I crates/nux-capi/include crates/nux-capi/smoke/capi_lifetime.swift \
+			target/debug/libnux_capi.a -framework CoreGraphics -framework ImageIO \
+			-o target/capi-smoke/capi_lifetime; \
+		target/capi-smoke/capi_lifetime "$(CAPI_SMOKE_FIXTURE)"; \
+	else \
+		$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include \
+			-o target/capi-smoke/capi_smoke_static crates/nux-capi/smoke/capi_smoke.c \
+			target/debug/libnux_capi.a -ldl -lpthread -lm; \
+		target/capi-smoke/capi_smoke_static "$(CAPI_SMOKE_FIXTURE)"; \
+	fi
+	tools/check-nux-capi-exports.sh
 
 apple-runtime-header-smoke:
 	cargo build --locked -p nux-apple-runtime --features apple-product

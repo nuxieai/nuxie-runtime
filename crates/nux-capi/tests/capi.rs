@@ -1,3 +1,9 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    reason = "FFI integration fixtures use bounded test counters and literal CString values"
+)]
+
 use nux_capi::{
     NUX_CAPI_ABI_VERSION, NuxArtboardInstance, NuxFile, NuxRenderCallbacks, NuxRuntimeInfo,
     NuxStateMachineInstance, NuxStatus, NuxStringView, NuxViewModelInstance,
@@ -29,15 +35,8 @@ fn fixture_bytes(name: &str) -> Vec<u8> {
     std::fs::read(&fixture).expect("read fixture")
 }
 
-fn repo_fixture_bytes(relative: &str) -> Vec<u8> {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(relative);
-    std::fs::read(&fixture).expect("read repo fixture")
-}
-
-fn import_repo_fixture(relative: &str) -> *mut NuxFile {
-    let bytes = repo_fixture_bytes(relative);
+fn import_fixture(name: &str) -> *mut NuxFile {
+    let bytes = fixture_bytes(name);
     let mut file: *mut NuxFile = std::ptr::null_mut();
     let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) };
     assert_eq!(status, NuxStatus::Ok);
@@ -86,7 +85,11 @@ fn c_api_imports_file_and_exposes_artboard_metadata() {
     assert_eq!(status, NuxStatus::Ok);
     assert!(!file.is_null());
 
-    let artboard_count = unsafe { nux_file_artboard_count(file) };
+    let mut artboard_count = 0;
+    assert_eq!(
+        unsafe { nux_file_artboard_count(file, &mut artboard_count) },
+        NuxStatus::Ok
+    );
     assert_eq!(artboard_count, 1);
 
     let mut name = NuxStringView {
@@ -130,14 +133,14 @@ fn c_api_rejects_null_arguments_without_writing_handles() {
     assert!(file.is_null());
 }
 
-const SMI_FIXTURE: &str = "fixtures/animation/smi_test.riv";
+const SMI_FIXTURE: &str = "smi_test.riv";
 /// Artboard index of "artboard to nest", whose default state machine has
 /// bool/number/trigger inputs named "bool", "num", and "trig".
 const SMI_INPUT_ARTBOARD: usize = 1;
 
 #[test]
 fn c_api_runs_embed_loop_with_state_machine_inputs() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
 
     let mut state_machine_count = 0usize;
     let status = unsafe {
@@ -207,7 +210,7 @@ fn c_api_runs_embed_loop_with_state_machine_inputs() {
 
 #[test]
 fn c_api_state_machine_instance_by_index_and_missing_index() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
@@ -352,7 +355,7 @@ unsafe extern "C" fn counting_draw_image_mesh(
 
 #[test]
 fn c_api_draw_forwards_render_calls_to_vtable() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
@@ -402,7 +405,7 @@ fn c_api_draw_forwards_render_calls_to_vtable() {
 
 #[test]
 fn c_api_draw_with_empty_vtable_behaves_like_null_renderer() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
@@ -419,7 +422,7 @@ fn c_api_draw_with_empty_vtable_behaves_like_null_renderer() {
 
 #[test]
 fn c_api_retained_draw_reuses_and_releases_render_handles() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     assert_eq!(
         unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) },
@@ -524,7 +527,7 @@ fn c_api_artboard_retries_a_failed_image_decode_without_poisoning() {
 
 #[test]
 fn c_api_instance_functions_reject_null_arguments() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
 
     let status =
         unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, std::ptr::null_mut()) };
@@ -564,7 +567,7 @@ fn c_api_instance_functions_reject_null_arguments() {
 
 #[test]
 fn c_api_pointer_events_dispatch_through_state_machine() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
@@ -622,7 +625,7 @@ fn c_api_pointer_events_dispatch_through_state_machine() {
 
 #[test]
 fn c_api_pointer_events_reject_null_arguments() {
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
@@ -692,8 +695,8 @@ fn every_extern_c_export_is_panic_firewalled() {
         let name_end = rest.find('(').expect("extern fn has parameters");
         let name = &rest["pub unsafe extern \"C\" fn ".len()..name_end];
         assert!(
-            body.starts_with("ffi_guard("),
-            "extern \"C\" fn `{name}` does not open with the ffi_guard panic firewall"
+            body.starts_with("ffi_guard(") || body.starts_with("ffi_guard_with_handle_result("),
+            "extern \"C\" fn `{name}` does not open with a recognized panic firewall"
         );
         checked += 1;
     }
@@ -963,7 +966,7 @@ fn c_api_view_model_setters_report_status_codes() {
 #[test]
 fn c_api_view_model_absent_reports_not_found() {
     // smi_test.riv artboards carry the -1 "no view model" sentinel.
-    let file = import_repo_fixture(SMI_FIXTURE);
+    let file = import_fixture(SMI_FIXTURE);
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     assert_eq!(
         unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) },

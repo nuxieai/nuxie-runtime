@@ -65,7 +65,7 @@ use std::any::Any;
 #[cfg(test)]
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
@@ -338,7 +338,7 @@ struct CachedWgpuImage {
 #[derive(Default)]
 struct DecodedImageCache {
     entries: HashMap<EncodedImageCacheKey, CachedWgpuImage>,
-    loading: HashSet<EncodedImageCacheKey>,
+    loading: HashMap<EncodedImageCacheKey, Arc<DecodedImageFlight>>,
     retained_bytes: u64,
     next_stamp: u64,
 }
@@ -357,10 +357,10 @@ impl DecodedImageCache {
         width: u32,
         height: u32,
         texture: &Arc<WgpuImageTexture>,
-    ) {
+    ) -> bool {
         let retained_bytes = rgba8_mip_chain_byte_len(width, height);
         if retained_bytes > MAX_DECODED_IMAGE_CACHE_BYTES {
-            return;
+            return false;
         }
         if let Some(replaced) = self.entries.remove(&key) {
             self.retained_bytes = self.retained_bytes.saturating_sub(replaced.retained_bytes);
@@ -392,13 +392,14 @@ impl DecodedImageCache {
             },
         );
         self.retained_bytes += retained_bytes;
+        true
     }
 }
 
 enum DecodedImageCacheLookup {
     Hit(u32, u32, Arc<WgpuImageTexture>),
-    Load,
-    Wait,
+    Load(Arc<DecodedImageFlight>),
+    Wait(Arc<DecodedImageFlight>),
 }
 
 impl DecodedImageCache {
@@ -406,10 +407,48 @@ impl DecodedImageCache {
         if let Some((width, height, texture)) = self.get(key) {
             return DecodedImageCacheLookup::Hit(width, height, texture);
         }
-        if self.loading.insert(key) {
-            DecodedImageCacheLookup::Load
-        } else {
-            DecodedImageCacheLookup::Wait
+        if let Some(flight) = self.loading.get(&key) {
+            return DecodedImageCacheLookup::Wait(Arc::clone(flight));
+        }
+        let flight = Arc::new(DecodedImageFlight::default());
+        self.loading.insert(key, Arc::clone(&flight));
+        DecodedImageCacheLookup::Load(flight)
+    }
+}
+
+type DecodedImageFlightResult = Result<(u32, u32, Arc<WgpuImageTexture>), ImageDecodeError>;
+
+#[derive(Default)]
+struct DecodedImageFlight {
+    result: Mutex<Option<DecodedImageFlightResult>>,
+    ready: Condvar,
+}
+
+impl DecodedImageFlight {
+    fn complete(&self, result: DecodedImageFlightResult) {
+        let mut current = self
+            .result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if current.is_none() {
+            *current = Some(result);
+        }
+        self.ready.notify_all();
+    }
+
+    fn wait(&self) -> DecodedImageFlightResult {
+        let mut result = self
+            .result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        loop {
+            if let Some(result) = result.as_ref() {
+                return result.clone();
+            }
+            result = self
+                .ready
+                .wait(result)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
         }
     }
 }
@@ -436,7 +475,6 @@ struct Context {
     // Factories cloned for new sessions share this device context, so decoded
     // textures survive scene-owner replacement without crossing GPU devices.
     decoded_images: Mutex<DecodedImageCache>,
-    decoded_image_ready: Condvar,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
     logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
@@ -465,48 +503,50 @@ struct Context {
 
 impl Context {
     fn lookup_or_claim_decoded_image(&self, key: EncodedImageCacheKey) -> DecodedImageCacheLookup {
-        let mut cache = self
-            .decoded_images
+        self.decoded_images
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        loop {
-            match cache.lookup_or_claim(key) {
-                DecodedImageCacheLookup::Wait => {
-                    cache = self
-                        .decoded_image_ready
-                        .wait(cache)
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                }
-                lookup => return lookup,
-            }
-        }
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .lookup_or_claim(key)
     }
 }
 
 struct DecodedImageLoadGuard {
     context: Arc<Context>,
     key: EncodedImageCacheKey,
+    flight: Arc<DecodedImageFlight>,
+    completed: bool,
 }
 
 impl DecodedImageLoadGuard {
-    fn publish(&self, width: u32, height: u32, texture: &Arc<WgpuImageTexture>) {
+    fn publish(mut self, width: u32, height: u32, texture: &Arc<WgpuImageTexture>) {
         self.context
             .decoded_images
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(self.key, width, height, texture);
+        self.flight
+            .complete(Ok((width, height, Arc::clone(texture))));
+        self.completed = true;
     }
 }
 
 impl Drop for DecodedImageLoadGuard {
     fn drop(&mut self) {
-        self.context
+        if !self.completed {
+            self.flight.complete(Err(ImageDecodeError));
+        }
+        let mut cache = self
+            .context
             .decoded_images
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if cache
             .loading
-            .remove(&self.key);
-        self.context.decoded_image_ready.notify_all();
+            .get(&self.key)
+            .is_some_and(|flight| Arc::ptr_eq(flight, &self.flight))
+        {
+            cache.loading.remove(&self.key);
+        }
     }
 }
 
@@ -1213,7 +1253,6 @@ impl WgpuFactory {
                 device,
                 queue,
                 decoded_images: Mutex::new(DecodedImageCache::default()),
-                decoded_image_ready: Condvar::new(),
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
                 logical_resources: logical_frame::LogicalResourceStore::default(),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
@@ -1532,7 +1571,7 @@ impl Factory for WgpuFactory {
             return Err(ImageDecodeError);
         }
         let cache_key = EncodedImageCacheKey::new(data);
-        match self.context.lookup_or_claim_decoded_image(cache_key) {
+        let flight = match self.context.lookup_or_claim_decoded_image(cache_key) {
             DecodedImageCacheLookup::Hit(width, height, texture) => {
                 return Ok(Box::new(WgpuImage {
                     width,
@@ -1541,12 +1580,22 @@ impl Factory for WgpuFactory {
                     owner: Arc::downgrade(&self.context),
                 }));
             }
-            DecodedImageCacheLookup::Load => {}
-            DecodedImageCacheLookup::Wait => unreachable!("cache lookup resolves waiters"),
-        }
+            DecodedImageCacheLookup::Load(flight) => flight,
+            DecodedImageCacheLookup::Wait(flight) => {
+                let (width, height, texture) = flight.wait()?;
+                return Ok(Box::new(WgpuImage {
+                    width,
+                    height,
+                    texture: Some(texture),
+                    owner: Arc::downgrade(&self.context),
+                }));
+            }
+        };
         let load_guard = DecodedImageLoadGuard {
             context: Arc::clone(&self.context),
             key: cache_key,
+            flight,
+            completed: false,
         };
         let Some(decoded) = decode_image_rgba(data) else {
             return Err(ImageDecodeError);
@@ -11845,6 +11894,58 @@ mod tests {
         assert!(cache.get(second_key).is_some());
         assert!(cache.get(third_key).is_some());
         assert!(cache.retained_bytes <= MAX_DECODED_IMAGE_CACHE_BYTES);
+    }
+
+    #[test]
+    fn decoded_image_flight_shares_unretained_success_and_failure() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255; 4])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let texture = image
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("decode owns a texture");
+        let success_key = EncodedImageCacheKey::new(b"oversized-success");
+        let failure_key = EncodedImageCacheKey::new(b"decode-failure");
+        let mut cache = DecodedImageCache::default();
+
+        let DecodedImageCacheLookup::Load(success_loader) = cache.lookup_or_claim(success_key)
+        else {
+            panic!("first success lookup claims the flight");
+        };
+        let DecodedImageCacheLookup::Wait(success_waiter) = cache.lookup_or_claim(success_key)
+        else {
+            panic!("overlapping success lookup joins the flight");
+        };
+        assert!(Arc::ptr_eq(&success_loader, &success_waiter));
+        assert!(!cache.insert(success_key, 4096, 4096, texture));
+        success_loader.complete(Ok((4096, 4096, Arc::clone(texture))));
+        let (_, _, shared_texture) = success_waiter.wait().expect("waiter receives success");
+        assert!(Arc::ptr_eq(texture, &shared_texture));
+        assert!(cache.get(success_key).is_none());
+
+        let DecodedImageCacheLookup::Load(failure_loader) = cache.lookup_or_claim(failure_key)
+        else {
+            panic!("first failure lookup claims the flight");
+        };
+        let DecodedImageCacheLookup::Wait(failure_waiter) = cache.lookup_or_claim(failure_key)
+        else {
+            panic!("overlapping failure lookup joins the flight");
+        };
+        assert!(Arc::ptr_eq(&failure_loader, &failure_waiter));
+        failure_loader.complete(Err(ImageDecodeError));
+        assert!(matches!(failure_waiter.wait(), Err(ImageDecodeError)));
     }
 
     #[test]

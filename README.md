@@ -43,11 +43,13 @@ those `.riv` binaries are intentionally not stored in this repository.
 
 Nuxie-specific `.nux`, product scripting, ProjectDO, and session behavior are
 isolated in upper-layer crates in this workspace. Protected baseline crates do
-not depend on them. The Apple adapter, product C ABI, and XCFramework release
-leaf are also co-located here above that protected baseline; see
-[Apple runtime distribution](docs/apple-runtime-release.md). `nux-capi`
-remains the product-neutral portable ABI. The iOS SDK consumes the published
-binary through a pure Swift package layer and does not compile Rust.
+not depend on them. `nux-capi` is the product-neutral C distribution: its
+portable base has an Apple-only `apple-metal` extension backed by generic
+renderer-owned Metal presentation mechanics. The compatibility Apple adapter,
+legacy product C ABI, and current XCFramework release leaf are also co-located
+here; see [Apple runtime distribution](docs/apple-runtime-release.md). The iOS
+SDK consumes the published binary through a pure Swift package layer and does
+not compile Rust.
 
 ## License
 

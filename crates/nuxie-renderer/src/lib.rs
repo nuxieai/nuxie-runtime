@@ -27,6 +27,8 @@ mod logical_frame;
 use logical_frame::PreparedGradient;
 #[cfg(test)]
 use logical_frame::{normalize_gradient, prepare_gradient_batch, LogicalFlushAllocations};
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+mod apple_surface;
 mod logical_flush;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod metal;
@@ -80,6 +82,7 @@ pub enum RendererError {
         max_dimension: u32,
     },
     InvalidGpuCanvas(String),
+    InvalidImageUpload(String),
     Map(String),
     Unsupported(&'static str),
 }
@@ -100,6 +103,7 @@ impl fmt::Display for RendererError {
                 "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
             ),
             Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
+            Self::InvalidImageUpload(message) => write!(f, "invalid image upload: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
         }
@@ -607,6 +611,10 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub use apple_surface::{
+    AppleMetalDevice, ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError,
+};
 pub use gpu_canvas::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
@@ -1115,6 +1123,94 @@ impl WgpuFactory {
 
     pub fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    /// Uploads canonical RGBA8 premultiplied-sRGB pixels into this renderer
+    /// domain. Platform bridges decode into caller-owned bytes; native texture
+    /// objects never cross this seam.
+    pub fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        validate_texture_extent(
+            "image",
+            width,
+            height,
+            self.context.device.limits().max_texture_dimension_2d,
+        )?;
+        let packed_row_bytes = width.checked_mul(4).ok_or_else(|| {
+            RendererError::InvalidImageUpload("pixel row byte count overflows u32".into())
+        })?;
+        if row_bytes < packed_row_bytes {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "row_bytes {row_bytes} is smaller than packed RGBA8 width {packed_row_bytes}"
+            )));
+        }
+        let required_len = usize::try_from(row_bytes)
+            .ok()
+            .and_then(|row_bytes| {
+                usize::try_from(height)
+                    .ok()
+                    .and_then(|height| row_bytes.checked_mul(height))
+            })
+            .ok_or_else(|| {
+                RendererError::InvalidImageUpload("pixel buffer byte count overflows usize".into())
+            })?;
+        if pixels.len() < required_len {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "pixel buffer has {} bytes but {required_len} are required",
+                pixels.len()
+            )));
+        }
+
+        let mip_level_count = u32::BITS - (width | height).leading_zeros();
+        let texture = self
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-image"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                // This is the existing Rive image sampling representation:
+                // premultiplied sRGB channel bytes in an unorm texture.
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+        self.context.queue.write_counted_texture(
+            texture.as_image_copy(),
+            &pixels[..required_len],
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(row_bytes),
+                rows_per_image: Some(height),
+            },
+            texture.size(),
+        );
+        self.context.mipmap_pipeline.generate(
+            &self.context.device,
+            &self.context.queue,
+            &texture,
+            mip_level_count,
+        );
+        let view = texture.create_view(&Default::default());
+        Ok(Box::new(WgpuImage {
+            width,
+            height,
+            texture: Some(Arc::new(WgpuImageTexture { texture, view })),
+            owner: Arc::downgrade(&self.context),
+        }))
     }
 
     /// Returns whether this renderer domain has observed a terminal device-loss

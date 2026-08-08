@@ -1063,7 +1063,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_rejects_apple_vocabulary_in_portable_abi_comment(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/lib.rs").write_text(
+        (package / "src/new_host.rs").write_text(
             "// The Apple renderer consumes this callback.\n"
         )
 
@@ -1072,6 +1072,45 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI contains product/Apple vocabulary", result.stderr)
         self.assertIn("'Apple'", result.stderr)
+
+    def test_allows_apple_vocabulary_only_in_exact_platform_extension_files(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "nux_capi_apple.h").write_text(
+            "typedef struct CAMetalDrawable CAMetalDrawable;\n"
+        )
+        (package / "src/apple_metal.rs").write_text(
+            "struct AppleSurface; // CAMetalDrawable is caller-borrowed.\n"
+        )
+        (package / "cbindgen.toml").write_text(
+            '"apple-metal" = "NUX_CAPI_APPLE_METAL"\n'
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_product_vocabulary_in_apple_platform_extension_file(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "nux_capi_apple.h").write_text(
+            "typedef struct NuxExperienceSession NuxExperienceSession;\n"
+            "typedef struct AppleProductSession AppleProductSession;\n"
+            "typedef struct AppleExperienceContext AppleExperienceContext;\n"
+            "void apple_product_session_create(void);\n"
+            "void apple_experience_context_create(void);\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NuxExperienceSession", result.stderr)
+        self.assertIn("AppleProductSession", result.stderr)
+        self.assertIn("AppleExperienceContext", result.stderr)
+        self.assertIn("apple_product_session_create", result.stderr)
+        self.assertIn("apple_experience_context_create", result.stderr)
 
     def test_allows_exact_portable_abi_facade_edge_without_debt_report(self) -> None:
         self.create_portable_abi_facade()
@@ -2111,6 +2150,18 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("apple-presentation boundary debt spread", result.stderr)
+
+    def test_allows_apple_presentation_mechanics_in_exact_approved_files(self) -> None:
+        renderer = self.create_package(
+            "crates/nuxie-renderer", "nuxie-renderer", ""
+        )
+        (renderer / "src/apple_surface.rs").write_text(
+            "pub struct AppleSurface;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_apple_policy_has_no_debt_exceptions(self) -> None:
         self.assertEqual(

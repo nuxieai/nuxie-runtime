@@ -2,11 +2,19 @@
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-expected="$repo_dir/crates/nux-capi/exports-v3.txt"
+features="${NUX_CAPI_FEATURES:-}"
+if [ "$features" = "apple-metal" ]; then
+    expected="$repo_dir/crates/nux-capi/exports-v3-apple-metal.txt"
+    feature_args="--features apple-metal"
+else
+    expected="$repo_dir/crates/nux-capi/exports-v3.txt"
+    feature_args=""
+fi
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
 
-cargo build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi
+# shellcheck disable=SC2086 # an empty or one-feature Cargo argument pair
+cargo build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi $feature_args
 
 case "$(uname -s)" in
     Darwin)
@@ -31,6 +39,10 @@ header_actual="$work_dir/header.txt"
 grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
     "$repo_dir/crates/nux-capi/include/nux_capi.generated.h" | \
     sed -E 's/[[:space:]]*\($//' | sort -u > "$header_actual"
+if [ "$features" != "apple-metal" ]; then
+    grep -v '^nux_renderer_' "$header_actual" > "$work_dir/header-portable.txt"
+    header_actual="$work_dir/header-portable.txt"
+fi
 diff -u "$expected" "$header_actual"
 
-echo "nux-capi ABI-v3 export inventory ok"
+echo "nux-capi ABI-v3 ${features:-portable} export inventory ok"

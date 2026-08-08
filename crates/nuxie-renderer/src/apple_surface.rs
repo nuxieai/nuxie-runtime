@@ -1,10 +1,10 @@
 //! Apple-owned drawable presentation policy for the retained WebGPU renderer.
 
-use block2::RcBlock;
-use nuxie_renderer::{
+use crate::{
     RenderMode, RendererError, WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuFactory,
     WgpuFrame, WgpuFrameMetrics, WgpuMetalPresenter,
 };
+use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{
@@ -127,6 +127,18 @@ pub struct AppleSurface {
     attached: bool,
 }
 
+/// One Objective-C +1 `MTLDevice` copy whose ownership has not yet crossed an
+/// FFI boundary. Dropping it releases the copy; `into_raw` transfers it.
+pub struct AppleMetalDevice {
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
+}
+
+impl AppleMetalDevice {
+    pub fn into_raw(self) -> *mut c_void {
+        Retained::into_raw(self.device).cast()
+    }
+}
+
 impl AppleSurface {
     /// Creates the first renderer domain without touching UIKit-owned state.
     /// Swift configures its `CAMetalLayer` with [`Self::copy_metal_device`] and
@@ -178,6 +190,12 @@ impl AppleSurface {
         self.attached
     }
 
+    /// Reports renderer device state without consulting attachment, viewport,
+    /// or drawable availability policy.
+    pub fn device_health(&self) -> WgpuDeviceHealth {
+        self.presenter.device_health()
+    }
+
     pub fn resize(
         &mut self,
         factory: &mut WgpuFactory,
@@ -214,7 +232,15 @@ impl AppleSurface {
     /// Copies the renderer's `MTLDevice` with Objective-C +1 ownership.
     /// The caller must transfer that ownership to ARC or release it.
     pub fn copy_metal_device(&self) -> *mut c_void {
-        Retained::into_raw(self.device.clone()).cast()
+        self.copy_metal_device_owned().into_raw()
+    }
+
+    /// Keeps the +1 device in an RAII owner until an outer ABI transaction has
+    /// successfully published all other fallible outputs.
+    pub fn copy_metal_device_owned(&self) -> AppleMetalDevice {
+        AppleMetalDevice {
+            device: self.device.clone(),
+        }
     }
 
     /// Checks whether presentation must fail or can finish without building a frame.
@@ -405,7 +431,7 @@ fn metal_failure_kind(error_code: Option<isize>) -> WgpuExternalDeviceFailureKin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use objc2::rc::{Retained, autoreleasepool};
+    use objc2::rc::{autoreleasepool, Retained};
     use objc2_core_foundation::CGSize;
     use std::sync::atomic::{AtomicBool, Ordering};
 

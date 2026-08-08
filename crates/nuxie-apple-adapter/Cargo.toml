@@ -15,13 +15,6 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 nuxie-renderer = { path = "../nuxie-renderer" }
-block2 = "0.6.2"
-objc2 = "0.6.4"
-objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLCommandBuffer", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLPixelFormat", "MTLResource", "MTLTexture"] }
-objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
-
-[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
-objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFCGTypes", "objc2"] }
 
 [dev-dependencies]
 png = "0.18"

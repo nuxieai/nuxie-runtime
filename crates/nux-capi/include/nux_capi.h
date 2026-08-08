@@ -25,7 +25,7 @@
  *    Every later use of a consumed pointer (including a second free) is outside
  *    this API's contract. Registry validation is only a best-effort diagnostic
  *    and is not an ABA-safe stale-pointer capability.
- * 2. File, artboard, player, state-machine, and view-model handles may be
+ * 2. File, artboard, player, state-machine, view-model, and renderer handles may be
  *    released in any order. An artboard occurrence retains its imported file;
  *    a player retains its artboard occurrence and renderer binding. A legacy
  *    state-machine operation that needs an artboard still requires the exact
@@ -60,6 +60,24 @@
  *    rolls back pending external host effects and terminally poisons that
  *    occurrence; every later read, mutate, or draw fails with RUNTIME_ERROR,
  *    while matching frees remain allowed.
+ * 11. On Apple, NuxRenderer owns the wgpu/Metal device domain; it never owns a
+ *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
+ *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is
+ *    borrowed only for the synchronous render call. TIMEOUT and OCCLUDED are
+ *    explicit caller-reported states and require a NULL drawable. A valid
+ *    completion pair is consumed before later validation and runs exactly once
+ *    on a system dispatch queue, never inline. A too-short operation prefix
+ *    cannot transfer a callback that the runtime cannot safely read.
+ * 12. The first drawable-backed Metal draw binds the retained artboard
+ *    occurrence to that renderer's durable domain and current generation.
+ *    Timeout, occlusion, and zero-size skips do not bind it. Another renderer,
+ *    or a reattached generation, returns HANDLE_MISMATCH until
+ *    nux_renderer_reset_player_domain succeeds on a healthy attached renderer.
+ *    The player retains that binding after the public renderer handle is freed.
+ * 13. nux_renderer_render_player treats out_result as optional and failure-only:
+ *    a supplied slot is cleared on entry, remains NULL on success, and owns one
+ *    bounded diagnostic on failure. Renderer control APIs require out_result
+ *    and publish one result on every outcome.
  *
  * PANIC SAFETY
  *
@@ -101,6 +119,18 @@
 #define NUX_PLAYER_EVENT_PROPERTY_VIEW_V3_MIN_SIZE                        \
     (offsetof(NuxPlayerEventPropertyView, integer_value) +                \
      sizeof(((NuxPlayerEventPropertyView*)0)->integer_value))
+
+#if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
+#define NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE                            \
+    (offsetof(NuxMetalRenderOperation, completion_callback) +             \
+     sizeof(((NuxMetalRenderOperation*)0)->completion_callback))
+#define NUX_RENDERER_OUTCOME_V3_MIN_SIZE                                  \
+    (offsetof(NuxRendererOutcome, atomic_strategy_partitions) +           \
+     sizeof(((NuxRendererOutcome*)0)->atomic_strategy_partitions))
+#define NUX_RENDERER_INFO_V3_MIN_SIZE                                     \
+    (offsetof(NuxRendererInfo, generation) +                              \
+     sizeof(((NuxRendererInfo*)0)->generation))
+#endif
 
 /* Stable encodings used by the portable callback-renderer surface. Embedders
  * supply these per-primitive callbacks when they choose that rendering path. */

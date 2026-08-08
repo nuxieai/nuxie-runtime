@@ -88,6 +88,7 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "ColorInt",
     "Factory",
     "File",
+    "FileAsset",
     "FileAssetKind",
     "FillRule",
     "GpuCanvasPassState",
@@ -116,6 +117,11 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "RenderPath",
     "Renderer",
     "RenderShader",
+    "RuntimeOwnedViewModelGraphTransaction",
+    "RuntimeViewModelChange",
+    "RuntimeViewModelChangeCapture",
+    "RuntimeViewModelChangeValue",
+    "RuntimeViewModelGraphTransactionError",
     "StateMachineInstance",
     "StrokeCap",
     "StrokeJoin",
@@ -279,6 +285,14 @@ APPROVED_PLATFORM_MECHANICS_FILES = {
         "crates/nux-capi/src/apple_metal.rs",
         "crates/nuxie-renderer/src/apple_surface.rs",
         "crates/nuxie-renderer/src/lib.rs",
+    },
+    # The Apple-gated composition root names the already-ratified generic host
+    # command import table; its exact integration oracle proves that composition
+    # without granting the exception to portable tests or another owner. Neither
+    # file owns command interpretation or product policy.
+    "product-host-commands": {
+        "crates/nux-capi/src/apple_assets.rs",
+        "crates/nux-capi/tests/apple_metal.rs",
     },
 }
 

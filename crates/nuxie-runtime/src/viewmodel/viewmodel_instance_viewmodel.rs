@@ -1318,7 +1318,11 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         drop(value);
-        list.cell.notify_bindings_value_changed();
+        RuntimeOwnedViewModelListHandle {
+            value: Rc::clone(&list.value),
+            cell: list.cell.clone(),
+        }
+        .notify_value_changed();
         true
     }
 

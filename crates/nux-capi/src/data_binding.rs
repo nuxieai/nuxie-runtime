@@ -10,7 +10,6 @@ use nuxie::host_interfaces::{
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 const MAX_CATALOG_ITEMS: usize = 4_096;
 const MAX_SNAPSHOT_INSTANCES: usize = 1_024;
@@ -20,8 +19,6 @@ const MAX_MUTATIONS: usize = 1_024;
 const MAX_PROPERTY_PATH_BYTES: usize = 4_096;
 const MAX_VALUE_BYTES: usize = 1024 * 1024;
 const MAX_TOTAL_BYTES: usize = 4 * 1024 * 1024;
-
-static NEXT_VIEW_MODEL_IDENTITY: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(test)]
 thread_local! {
@@ -64,14 +61,6 @@ fn maybe_panic_during_text_commit(applied_count: usize) {
 
 #[cfg(not(test))]
 fn maybe_panic_during_text_commit(_applied_count: usize) {}
-
-pub(super) fn next_view_model_identity() -> Option<u64> {
-    NEXT_VIEW_MODEL_IDENTITY
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            (current != u64::MAX).then_some(current + 1)
-        })
-        .ok()
-}
 
 fn owned_string_view(value: &[u8]) -> NuxStringView {
     NuxStringView {
@@ -600,9 +589,7 @@ fn publish_view_model(
     instance: ViewModelInstance,
     out_instance: *mut *mut NuxViewModelInstance,
 ) -> NuxStatus {
-    let Some(identity) = next_view_model_identity() else {
-        return NuxStatus::LimitExceeded;
-    };
+    let identity = instance.identity();
     let handle = Box::into_raw(Box::new(NuxViewModelInstance {
         instance: RefCell::new(instance),
         file: Arc::clone(&file.file),
@@ -1332,6 +1319,8 @@ pub struct NuxViewModelMutationBatch {
     pub struct_size: u32,
     pub mutations: *const NuxViewModelMutation,
     pub mutation_count: usize,
+    /// Opaque caller identity copied into every successful change entry.
+    pub correlation_id: u64,
 }
 
 impl Default for NuxViewModelMutationBatch {
@@ -1340,6 +1329,7 @@ impl Default for NuxViewModelMutationBatch {
             struct_size: std::mem::size_of::<Self>() as u32,
             mutations: ptr::null(),
             mutation_count: 0,
+            correlation_id: 0,
         }
     }
 }
@@ -1374,6 +1364,8 @@ unsafe fn read_view_model_mutation_batch(
 pub struct NuxViewModelMutationResult {
     status: NuxStatus,
     applied_count: usize,
+    correlation_id: u64,
+    changes: Vec<OwnedViewModelChange>,
     code: Box<[u8]>,
     message: Box<[u8]>,
 }
@@ -1388,6 +1380,8 @@ pub struct NuxViewModelMutationResultInfo {
     pub code: NuxStringView,
     /// Bounded diagnostic message bytes borrowed from the result until it is freed.
     pub message: NuxStringView,
+    pub correlation_id: u64,
+    pub change_count: usize,
 }
 
 impl Default for NuxViewModelMutationResultInfo {
@@ -1398,6 +1392,8 @@ impl Default for NuxViewModelMutationResultInfo {
             applied_count: 0,
             code: NuxStringView::default(),
             message: NuxStringView::default(),
+            correlation_id: 0,
+            change_count: 0,
         }
     }
 }
@@ -1405,6 +1401,146 @@ impl Default for NuxViewModelMutationResultInfo {
 pub const NUX_VIEW_MODEL_MUTATION_RESULT_INFO_V3_MIN_SIZE: usize =
     std::mem::offset_of!(NuxViewModelMutationResultInfo, message)
         + std::mem::size_of::<NuxStringView>();
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxViewModelChangeOrigin {
+    Caller = 0,
+    Runtime = 1,
+}
+
+pub const NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER: u32 = NuxViewModelChangeOrigin::Caller as u32;
+pub const NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME: u32 = NuxViewModelChangeOrigin::Runtime as u32;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// One ordered after-value from an owned mutation or player-step result.
+/// Every borrowed field expires when that containing result is freed.
+pub struct NuxViewModelChangeView {
+    pub struct_size: u32,
+    pub origin: u32,
+    pub correlation_id: u64,
+    pub owner_instance_id: u64,
+    pub property_index: usize,
+    pub kind: u32,
+    /// String after-value bytes borrowed from the containing result.
+    /// Absent for other value kinds.
+    pub bytes_value: NuxByteView,
+    pub number_value: f32,
+    pub integer_value: u64,
+    pub bool_value: u32,
+    pub referenced_instance_id: u64,
+    pub list_item_count: usize,
+}
+
+impl Default for NuxViewModelChangeView {
+    fn default() -> Self {
+        Self {
+            struct_size: std::mem::size_of::<Self>() as u32,
+            origin: NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
+            correlation_id: 0,
+            owner_instance_id: 0,
+            property_index: 0,
+            kind: NUX_VIEW_MODEL_VALUE_KIND_UNSUPPORTED,
+            bytes_value: NuxByteView::default(),
+            number_value: 0.0,
+            integer_value: 0,
+            bool_value: 0,
+            referenced_instance_id: 0,
+            list_item_count: 0,
+        }
+    }
+}
+
+pub const NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxViewModelChangeView, list_item_count) + std::mem::size_of::<usize>();
+
+#[derive(Debug)]
+pub(super) struct OwnedViewModelChange {
+    pub(super) origin: u32,
+    pub(super) correlation_id: u64,
+    pub(super) change: RuntimeViewModelChange,
+}
+
+pub(super) fn own_view_model_changes(
+    origin: u32,
+    correlation_id: u64,
+    changes: Vec<RuntimeViewModelChange>,
+) -> Vec<OwnedViewModelChange> {
+    changes
+        .into_iter()
+        .map(|change| OwnedViewModelChange {
+            origin,
+            correlation_id,
+            change,
+        })
+        .collect()
+}
+
+pub(super) fn view_model_change_view(change: &OwnedViewModelChange) -> NuxViewModelChangeView {
+    let mut view = NuxViewModelChangeView {
+        origin: change.origin,
+        correlation_id: change.correlation_id,
+        owner_instance_id: change.change.owner_instance_identity,
+        property_index: change.change.property_index,
+        ..NuxViewModelChangeView::default()
+    };
+    match &change.change.value {
+        RuntimeViewModelChangeValue::Number(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_NUMBER;
+            view.number_value = *value;
+        }
+        RuntimeViewModelChangeValue::Boolean(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_BOOL;
+            view.bool_value = u32::from(*value);
+        }
+        RuntimeViewModelChangeValue::String(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_STRING;
+            view.bytes_value = owned_byte_view(value);
+        }
+        RuntimeViewModelChangeValue::Color(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_COLOR;
+            view.integer_value = u64::from(*value);
+        }
+        RuntimeViewModelChangeValue::Enum(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_ENUM;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::Trigger(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_TRIGGER;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::ListIndex(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_LIST_INDEX;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::Image(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_IMAGE;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::Font(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_FONT;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::Blob(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_BLOB;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::Artboard(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_ARTBOARD;
+            view.integer_value = *value;
+        }
+        RuntimeViewModelChangeValue::List(values) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_LIST;
+            view.list_item_count = values.len();
+        }
+        RuntimeViewModelChangeValue::ViewModel(value) => {
+            view.kind = NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL;
+            view.referenced_instance_id = value.unwrap_or(0);
+        }
+    }
+    view
+}
 
 #[derive(Clone)]
 struct ResolvedMutation {
@@ -1847,6 +1983,8 @@ fn publish_mutation_result(
         NuxViewModelMutationResult {
             status,
             applied_count,
+            correlation_id: 0,
+            changes: Vec::new(),
             code: bounded_diagnostic_bytes(status_code(status)),
             message: bounded_diagnostic_bytes(message),
         },
@@ -1864,12 +2002,16 @@ fn publish_mutation_result(
 fn publish_mutation_success_and_commit(
     out_result: *mut *mut NuxViewModelMutationResult,
     applied_count: usize,
+    correlation_id: u64,
+    changes: Vec<OwnedViewModelChange>,
     transaction: RuntimeOwnedViewModelTransaction,
 ) {
     let pending = PendingHandlePublication::new(
         NuxViewModelMutationResult {
             status: NuxStatus::Ok,
             applied_count,
+            correlation_id,
+            changes,
             code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
             message: Box::default(),
         },
@@ -2045,13 +2187,31 @@ pub unsafe extern "C" fn nux_view_model_mutate(
         // stay buffered until the success result is fully published.
         let commit = panic::catch_unwind(AssertUnwindSafe(|| {
             let mut transaction = RuntimeOwnedViewModelTransaction::begin().ok_or(())?;
+            let capture =
+                RuntimeViewModelChangeCapture::begin_bounded(MAX_MUTATIONS, MAX_TOTAL_BYTES)
+                    .ok_or(())?;
             for (index, mutation) in resolved.iter().enumerate() {
                 if !apply_transaction_mutation(&mut transaction, &live, mutation) {
                     return Err(());
                 }
                 maybe_panic_during_vm_commit(index + 1);
             }
-            publish_mutation_success_and_commit(out_result, resolved.len(), transaction);
+            let roots = live.values().cloned().collect::<Vec<_>>();
+            let changes =
+                RuntimeOwnedViewModelHandle::resolve_change_capture_across(&roots, capture)
+                    .ok_or(())?;
+            let changes = own_view_model_changes(
+                NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER,
+                batch.correlation_id,
+                changes,
+            );
+            publish_mutation_success_and_commit(
+                out_result,
+                resolved.len(),
+                batch.correlation_id,
+                changes,
+                transaction,
+            );
             Ok(())
         }));
         if !matches!(commit, Ok(Ok(()))) {
@@ -2086,6 +2246,8 @@ pub unsafe extern "C" fn nux_view_model_mutation_result_info(
             applied_count: result.applied_count,
             code: owned_string_view(&result.code),
             message: owned_string_view(&result.message),
+            correlation_id: result.correlation_id,
+            change_count: result.changes.len(),
             ..NuxViewModelMutationResultInfo::default()
         };
         unsafe {
@@ -2096,6 +2258,56 @@ pub unsafe extern "C" fn nux_view_model_mutation_result_info(
             )
         }
         .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_view_model_mutation_result_change(
+    result: *const NuxViewModelMutationResult,
+    index: usize,
+    out_change: *mut NuxViewModelChangeView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _call = enter_status_handle!(result, HandleKind::ViewModelMutationResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(change) = result.changes.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        let view = view_model_change_view(change);
+        unsafe { write_caller_struct(out_change, &view, NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_view_model_mutation_result_change_list_item(
+    result: *const NuxViewModelMutationResult,
+    change_index: usize,
+    item_index: usize,
+    out_instance_id: *mut u64,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_instance_id.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe { *out_instance_id = 0 };
+        let _call = enter_status_handle!(result, HandleKind::ViewModelMutationResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(change) = result.changes.get(change_index) else {
+            return NuxStatus::NotFound;
+        };
+        let RuntimeViewModelChangeValue::List(items) = &change.change.value else {
+            return NuxStatus::InvalidArgument;
+        };
+        let Some(identity) = items.get(item_index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe { *out_instance_id = *identity };
+        NuxStatus::Ok
     })
 }
 
@@ -2275,6 +2487,19 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
 mod transaction_tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn legacy_mutation_batch_prefix_defaults_additive_correlation() {
+        let legacy = NuxViewModelMutationBatch {
+            struct_size: u32::try_from(NUX_VIEW_MODEL_MUTATION_BATCH_V3_MIN_SIZE)
+                .expect("minimum fits u32"),
+            correlation_id: u64::MAX,
+            ..NuxViewModelMutationBatch::default()
+        };
+        let copied =
+            unsafe { read_view_model_mutation_batch(&legacy) }.expect("legacy prefix is accepted");
+        assert_eq!(copied.correlation_id, 0);
+    }
 
     fn import_fixture(name: &str) -> *mut NuxFile {
         let root = std::env::var_os("NUX_RUNTIME_DIR")

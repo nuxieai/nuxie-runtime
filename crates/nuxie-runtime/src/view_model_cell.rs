@@ -28,6 +28,136 @@ thread_local! {
     static HOST_MUTATION_NOTIFICATIONS: RefCell<Option<Vec<RuntimeDeferredNotification>>> =
         const { RefCell::new(None) };
     static HOST_MUTATION_CALLBACK_FIREWALL_DEPTH: Cell<u32> = const { Cell::new(0) };
+    static VIEW_MODEL_CHANGE_CAPTURE: RefCell<Option<RuntimeViewModelChangeCaptureState>> =
+        const { RefCell::new(None) };
+}
+
+/// Copied typed after-value for one operation-scoped view-model write.
+///
+/// Structural values are completed by the owning view-model graph after the
+/// operation commits; scalar payloads are copied at the exact write boundary
+/// so repeated writes never collapse into a final-state snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuntimeViewModelChangeValue {
+    Number(f32),
+    Boolean(bool),
+    String(Arc<[u8]>),
+    Color(u32),
+    Enum(u64),
+    Trigger(u64),
+    ListIndex(u64),
+    Image(u64),
+    Font(u64),
+    Blob(u64),
+    Artboard(u64),
+    List(Vec<u64>),
+    ViewModel(Option<u64>),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeViewModelCapturedChange {
+    pub(crate) cell_identity: usize,
+    pub(crate) value: RuntimeViewModelChangeValue,
+}
+
+#[derive(Debug)]
+struct RuntimeViewModelChangeCaptureState {
+    changes: Vec<RuntimeViewModelCapturedChange>,
+    maximum_changes: usize,
+    maximum_value_bytes: usize,
+    value_bytes: usize,
+    overflowed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeViewModelChangeLimitExceeded;
+
+/// RAII owner for one thread-confined, operation-scoped change journal.
+/// Dropping an unfinished capture discards every entry, which lets the caller
+/// align publication with its own transaction commit.
+#[derive(Debug)]
+pub struct RuntimeViewModelChangeCapture {
+    armed: bool,
+}
+
+impl RuntimeViewModelChangeCapture {
+    pub fn begin() -> Option<Self> {
+        Self::begin_bounded(4_096, 8 * 1024 * 1024)
+    }
+
+    pub fn begin_bounded(maximum_changes: usize, maximum_value_bytes: usize) -> Option<Self> {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if slot.is_some() {
+                return None;
+            }
+            *slot = Some(RuntimeViewModelChangeCaptureState {
+                changes: Vec::new(),
+                maximum_changes,
+                maximum_value_bytes,
+                value_bytes: 0,
+                overflowed: false,
+            });
+            Some(Self { armed: true })
+        })
+    }
+
+    pub(crate) fn finish(
+        mut self,
+    ) -> Result<Vec<RuntimeViewModelCapturedChange>, RuntimeViewModelChangeLimitExceeded> {
+        self.armed = false;
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            let state = slot
+                .borrow_mut()
+                .take()
+                .ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            if state.overflowed {
+                Err(RuntimeViewModelChangeLimitExceeded)
+            } else {
+                Ok(state.changes)
+            }
+        })
+    }
+}
+
+impl Drop for RuntimeViewModelChangeCapture {
+    fn drop(&mut self) {
+        if self.armed {
+            VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+                let _ = slot.borrow_mut().take();
+            });
+        }
+    }
+}
+
+fn capture_view_model_change(cell_identity: usize, value: RuntimeViewModelChangeValue) {
+    VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+        if let Some(state) = slot.borrow_mut().as_mut() {
+            if state.overflowed {
+                return;
+            }
+            let value_bytes = match &value {
+                RuntimeViewModelChangeValue::String(value) => value.len(),
+                RuntimeViewModelChangeValue::List(values) => {
+                    values.len().saturating_mul(std::mem::size_of::<u64>())
+                }
+                _ => 0,
+            };
+            let Some(total) = state.value_bytes.checked_add(value_bytes) else {
+                state.overflowed = true;
+                return;
+            };
+            if state.changes.len() >= state.maximum_changes || total > state.maximum_value_bytes {
+                state.overflowed = true;
+                return;
+            }
+            state.value_bytes = total;
+            state.changes.push(RuntimeViewModelCapturedChange {
+                cell_identity,
+                value,
+            });
+        }
+    });
 }
 
 struct RuntimeHostMutationCallbackFirewall;
@@ -689,6 +819,25 @@ impl RuntimeViewModelCellValue {
     fn same_kind(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
     }
+
+    fn captured_value(&self) -> Option<RuntimeViewModelChangeValue> {
+        Some(match self {
+            Self::Number(value) => RuntimeViewModelChangeValue::Number(*value),
+            Self::Boolean(value) => RuntimeViewModelChangeValue::Boolean(*value),
+            Self::String(value) => RuntimeViewModelChangeValue::String(Arc::clone(value)),
+            Self::Color(value) => RuntimeViewModelChangeValue::Color(*value),
+            Self::Enum(value) => RuntimeViewModelChangeValue::Enum(u64::from(*value)),
+            Self::Trigger(value) => RuntimeViewModelChangeValue::Trigger(*value),
+            Self::SymbolListIndex(value) => {
+                RuntimeViewModelChangeValue::ListIndex(u64::from(*value))
+            }
+            Self::AssetImage(value) => RuntimeViewModelChangeValue::Image(u64::from(*value)),
+            Self::AssetFont(value) => RuntimeViewModelChangeValue::Font(value.file_asset_index()),
+            Self::AssetBlob(value) => RuntimeViewModelChangeValue::Blob(value.file_asset_index()),
+            Self::Artboard(value) => RuntimeViewModelChangeValue::Artboard(u64::from(*value)),
+            Self::List | Self::ViewModel => return None,
+        })
+    }
 }
 
 struct RuntimeViewModelCellState {
@@ -799,6 +948,10 @@ impl RuntimeViewModelCell {
         Rc::ptr_eq(&self.state, &other.state)
     }
 
+    pub(crate) fn capture_identity(&self) -> usize {
+        Rc::as_ptr(&self.state) as usize
+    }
+
     pub fn value(&self) -> RuntimeViewModelCellValue {
         self.state.borrow().value.clone()
     }
@@ -881,7 +1034,13 @@ impl RuntimeViewModelCell {
         }
         state.value = value;
         let marks_changed = state.suppress_depth == 0;
+        let captured = marks_changed
+            .then(|| state.value.captured_value())
+            .flatten();
         drop(state);
+        if let Some(value) = captured {
+            capture_view_model_change(self.capture_identity(), value);
+        }
         let cell = self.clone();
         if !defer_host_mutation_notification(move || {
             cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
@@ -907,6 +1066,22 @@ impl RuntimeViewModelCell {
     /// second payload write.
     pub(crate) fn notify_bindings_value_changed(&self) {
         let marks_changed = self.state.borrow().suppress_depth == 0;
+        if marks_changed && let Some(value) = self.state.borrow().value.captured_value() {
+            capture_view_model_change(self.capture_identity(), value);
+        }
+        let cell = self.clone();
+        if !defer_host_mutation_notification(move || {
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+        }) {
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+        }
+    }
+
+    pub(crate) fn notify_structural_value_changed(&self, value: RuntimeViewModelChangeValue) {
+        let marks_changed = self.state.borrow().suppress_depth == 0;
+        if marks_changed {
+            capture_view_model_change(self.capture_identity(), value);
+        }
         let cell = self.clone();
         if !defer_host_mutation_notification(move || {
             cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);

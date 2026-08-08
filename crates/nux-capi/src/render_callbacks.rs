@@ -144,6 +144,66 @@ impl Default for NuxRenderCallbacks {
     }
 }
 
+impl NuxRenderCallbacks {
+    /// Whether two callback tables address the same foreign resource domain.
+    ///
+    /// Descriptor address is deliberately absent: the public ABI binds that
+    /// address per occurrence, while a scripted File needs one stable Factory
+    /// identity. `user_data` is part of the resource domain because callback
+    /// handles are opaque to Rust and may be namespaced by that context.
+    pub(crate) fn same_resource_domain(&self, other: &Self) -> bool {
+        macro_rules! same_callbacks {
+            ($($field:ident),+ $(,)?) => {
+                true $(&& self.$field.map(|callback| callback as usize)
+                    == other.$field.map(|callback| callback as usize))+
+            };
+        }
+
+        self.user_data == other.user_data
+            && same_callbacks!(
+                make_render_path,
+                make_empty_render_path,
+                make_render_paint,
+                make_linear_gradient,
+                make_radial_gradient,
+                make_render_buffer,
+                decode_image,
+                release_render_path,
+                release_render_paint,
+                release_render_shader,
+                release_render_buffer,
+                release_render_image,
+                render_path_rewind,
+                render_path_fill_rule,
+                render_path_move_to,
+                render_path_line_to,
+                render_path_cubic_to,
+                render_path_close,
+                render_path_add_raw_path,
+                render_path_add_render_path,
+                render_path_add_render_path_backwards,
+                render_paint_style,
+                render_paint_color,
+                render_paint_thickness,
+                render_paint_join,
+                render_paint_cap,
+                render_paint_feather,
+                render_paint_blend_mode,
+                render_paint_shader,
+                render_paint_invalidate_stroke,
+                render_buffer_unmap,
+                save,
+                restore,
+                transform,
+                draw_path,
+                clip_path,
+                draw_image,
+                draw_image_mesh,
+                modulate_opacity,
+            )
+    }
+}
+
 /// Invoke an optional callback that returns nothing.
 macro_rules! call {
     ($callbacks:expr, $field:ident $(, $arg:expr)*) => {

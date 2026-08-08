@@ -1115,6 +1115,26 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("apple_product_session_create", result.stderr)
         self.assertIn("apple_experience_context_create", result.stderr)
 
+    def test_allows_generic_host_command_composition_only_in_apple_import_owner_and_oracle(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/apple_assets.rs").write_text(
+            "fn host_commands() {}\n"
+        )
+        tests = package / "tests"
+        tests.mkdir()
+        (tests / "apple_metal.rs").write_text("fn host_commands() {}\n")
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        (tests / "new_command_bridge.rs").write_text(
+            "fn host_commands() {}\n"
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product-host-commands boundary debt spread", result.stderr)
+
     def test_allows_exact_portable_abi_facade_edge_without_debt_report(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(

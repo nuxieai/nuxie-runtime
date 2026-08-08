@@ -71,6 +71,7 @@ fn step(
 ) -> (NuxStatus, *mut NuxPlayerStepResult) {
     let operation = NuxPlayerStep {
         struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+        correlation_id: 0,
         inputs: inputs.as_ptr(),
         input_count: inputs.len(),
         pointers: pointers.as_ptr(),

@@ -145,6 +145,12 @@ int main(int argc, char** argv)
           NUX_STATUS_OK);
     CHECK(empty_result_info.status == NUX_STATUS_OK);
     CHECK(empty_result_info.applied_count == 0);
+    CHECK(empty_result_info.correlation_id == 0);
+    CHECK(empty_result_info.change_count == 0);
+    NuxViewModelChangeView empty_change = {
+        .struct_size = sizeof(NuxViewModelChangeView)};
+    CHECK(nux_view_model_mutation_result_change(
+              empty_result, 0, &empty_change) == NUX_STATUS_NOT_FOUND);
     CHECK(nux_view_model_mutation_result_free(empty_result) == NUX_STATUS_OK);
 
     size_t len = 0;
@@ -167,6 +173,20 @@ int main(int argc, char** argv)
     CHECK(import_diagnostic.status == NUX_STATUS_OK);
     CHECK(nux_capi_result_free(import_result) == NUX_STATUS_OK);
     free(bytes);
+
+    size_t asset_count = 0;
+    CHECK(nux_file_asset_count(file, &asset_count) == NUX_STATUS_OK);
+    NuxFileAssetDescriptorView asset = {
+        .struct_size = sizeof(NuxFileAssetDescriptorView)};
+    if (asset_count == 0)
+    {
+        CHECK(nux_file_asset_descriptor(file, 0, &asset) ==
+              NUX_STATUS_NOT_FOUND);
+    }
+    else
+    {
+        CHECK(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK);
+    }
 
     NuxViewModelCatalog* catalog = NULL;
     CHECK(nux_file_view_model_catalog(file, &catalog) == NUX_STATUS_OK);
@@ -263,6 +283,11 @@ int main(int argc, char** argv)
     NuxPlayerStepInfo step_info = {.struct_size = sizeof(NuxPlayerStepInfo)};
     CHECK(nux_player_step_result_info(step_result, &step_info) == NUX_STATUS_OK);
     CHECK(step_info.pointer_result_count == 0);
+    CHECK(step_info.view_model_change_count == 0);
+    NuxViewModelChangeView step_change = {
+        .struct_size = sizeof(NuxViewModelChangeView)};
+    CHECK(nux_player_step_result_view_model_change(
+              step_result, 0, &step_change) == NUX_STATUS_NOT_FOUND);
     if (step_info.state_change_count != 0)
     {
         NuxPlayerStateChangeView state = {

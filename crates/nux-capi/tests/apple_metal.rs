@@ -15,6 +15,56 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr;
 
+struct AppleDecodeProbe {
+    pixels: Vec<u8>,
+    calls: usize,
+    retains: usize,
+    releases: usize,
+    nested_abi: u32,
+}
+
+unsafe extern "C" fn retain_decode_pixels(owner: *mut c_void) {
+    let probe = unsafe { &mut *owner.cast::<AppleDecodeProbe>() };
+    probe.retains += 1;
+    probe.nested_abi = unsafe { nux_capi_abi_version() };
+}
+
+unsafe extern "C" fn release_decode_pixels(owner: *mut c_void) {
+    let probe = unsafe { &mut *owner.cast::<AppleDecodeProbe>() };
+    probe.releases += 1;
+}
+
+unsafe extern "C" fn decode_apple_image(
+    context: *mut c_void,
+    request: *const NuxImageDecodeRequest,
+    out_image: *mut NuxDecodedImage,
+) -> NuxAssetCallbackStatus {
+    let probe = unsafe { &mut *context.cast::<AppleDecodeProbe>() };
+    let request = unsafe { &*request };
+    let encoded = unsafe { std::slice::from_raw_parts(request.encoded.data, request.encoded.len) };
+    let decoded = nuxie_image_codec::decode_image_rgba(encoded).expect("fixture image decodes");
+    probe.calls += 1;
+    probe.pixels = decoded.pixels;
+    unsafe {
+        *out_image = NuxDecodedImage {
+            width: decoded.width,
+            height: decoded.height,
+            row_bytes: decoded.width * 4,
+            pixel_format: NUX_PIXEL_FORMAT_RGBA8_PREMULTIPLIED_SRGB,
+            pixels: NuxRetainedBytes {
+                data: probe.pixels.as_ptr(),
+                len: probe.pixels.len(),
+                owner: context,
+                retain: Some(retain_decode_pixels),
+                release: Some(release_decode_pixels),
+                ..NuxRetainedBytes::default()
+            },
+            ..NuxDecodedImage::default()
+        };
+    }
+    NUX_ASSET_CALLBACK_STATUS_OK
+}
+
 fn fixture_bytes(name: &str) -> Vec<u8> {
     let path = PathBuf::from(
         std::env::var_os("NUX_RUNTIME_DIR")
@@ -60,6 +110,53 @@ fn player_retaining_released_import_owners(fixture: &str, artboard_index: usize)
     );
     assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     player
+}
+
+fn apple_asset_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
+    let bytes = fixture_bytes(fixture);
+    let mut probe = Box::new(AppleDecodeProbe {
+        pixels: Vec::new(),
+        calls: 0,
+        retains: 0,
+        releases: 0,
+        nested_abi: NUX_CAPI_ABI_VERSION,
+    });
+    let hooks = NuxAppleAssetHooks {
+        context: std::ptr::from_mut(probe.as_mut()).cast(),
+        decode_image: Some(decode_apple_image),
+        ..NuxAppleAssetHooks::default()
+    };
+    let mut file = ptr::null_mut();
+    let mut result = ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_file_import_with_apple_assets(
+                bytes.as_ptr(),
+                bytes.len(),
+                &hooks,
+                &raw mut file,
+                &raw mut result,
+            )
+        },
+        NuxStatus::Ok
+    );
+    unsafe { assert_result(result, NuxStatus::Ok) };
+    let mut artboard = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+        NuxStatus::Ok
+    );
+    let mut player = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(artboard, &raw mut player) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    (player, probe)
 }
 
 fn renderer(width: u32, height: u32) -> *mut NuxRenderer {
@@ -404,6 +501,109 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
         assert_eq!(redecoded.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
         assert!(redecoded.draw_calls > 0);
 
+        assert_eq!(unsafe { nux_renderer_free(second) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+    });
+}
+
+#[test]
+fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
+    autoreleasepool(|_| {
+        let (player, probe) = apple_asset_player("in_band_asset.riv");
+        assert_eq!(probe.calls, 1);
+        assert_eq!((probe.retains, probe.releases), (1, 1));
+        assert_eq!(
+            probe.nested_abi, 0,
+            "callbacks cannot reenter scalar exports"
+        );
+
+        let first = renderer(64, 64);
+        let first_layer = layer(first, 64, 64);
+        let drawable = first_layer
+            .nextDrawable()
+            .expect("first Apple asset drawable");
+        let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
+        let first_outcome = unsafe {
+            render(
+                first,
+                player,
+                operation(NUX_METAL_DRAWABLE_STATE_AVAILABLE, pointer),
+                NuxStatus::Ok,
+            )
+        };
+        assert!(first_outcome.draw_calls > 0);
+        assert_eq!(unsafe { nux_renderer_free(first) }, NuxStatus::Ok);
+
+        let second = renderer(64, 64);
+        let second_layer = layer(second, 64, 64);
+        let drawable = second_layer
+            .nextDrawable()
+            .expect("foreign domain drawable");
+        let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
+        unsafe {
+            render(
+                second,
+                player,
+                operation(NUX_METAL_DRAWABLE_STATE_AVAILABLE, pointer),
+                NuxStatus::HandleMismatch,
+            );
+        }
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let drawable = second_layer.nextDrawable().expect("reset domain drawable");
+        let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
+        let reset = unsafe {
+            render(
+                second,
+                player,
+                operation(NUX_METAL_DRAWABLE_STATE_AVAILABLE, pointer),
+                NuxStatus::Ok,
+            )
+        };
+        assert!(reset.draw_calls > 0);
+
+        let mut control = NuxRendererOutcome::default();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_renderer_detach(second, &raw mut control, &raw mut result) },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_renderer_reattach(second, 64, 64, &raw mut control, &raw mut result) },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let replacement_layer = layer(second, 64, 64);
+        let drawable = replacement_layer
+            .nextDrawable()
+            .expect("reattached drawable");
+        let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
+        let reattached = unsafe {
+            render(
+                second,
+                player,
+                operation(NUX_METAL_DRAWABLE_STATE_AVAILABLE, pointer),
+                NuxStatus::Ok,
+            )
+        };
+        assert!(reattached.draw_calls > 0);
+        assert_eq!(
+            probe.calls, 1,
+            "domain changes reupload canonical CPU pixels"
+        );
+        assert_eq!((probe.retains, probe.releases), (1, 1));
         assert_eq!(unsafe { nux_renderer_free(second) }, NuxStatus::Ok);
         assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
     });

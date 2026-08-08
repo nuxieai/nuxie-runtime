@@ -11,10 +11,11 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [features]
 default = []
 scripting = ["nuxie/scripting"]
-apple-metal = ["nuxie/renderer", "dep:dispatch2", "dep:nuxie-renderer"]
+apple-metal = ["nuxie/renderer", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }
+nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
 
 [dev-dependencies]
 luaur-common = "=0.1.8"

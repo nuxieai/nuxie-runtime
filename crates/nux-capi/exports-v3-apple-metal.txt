@@ -21,6 +21,7 @@ nux_file_artboard_state_machine_name
 nux_file_free
 nux_file_import
 nux_file_import_trusted_with_host_commands
+nux_file_import_with_apple_assets
 nux_file_import_with_result
 nux_file_view_model_catalog
 nux_player_free

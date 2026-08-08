@@ -13,7 +13,13 @@ mod render_callbacks;
 mod apple_metal;
 
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+mod apple_assets;
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_metal::*;
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+pub use apple_assets::*;
 
 pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
@@ -39,6 +45,33 @@ use std::slice;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, ThreadId};
 
+thread_local! {
+    /// True only while Rust is synchronously invoking a platform-supplied
+    /// callback. Every exported boundary checks this before touching caller
+    /// pointers, so a callback cannot reenter any runtime operation.
+    static PLATFORM_CALLBACK_ACTIVE: Cell<bool> = const { Cell::new(false) };
+}
+
+struct PlatformCallbackGuard;
+
+impl Drop for PlatformCallbackGuard {
+    fn drop(&mut self) {
+        PLATFORM_CALLBACK_ACTIVE.with(|active| active.set(false));
+    }
+}
+
+fn platform_callback_active() -> bool {
+    PLATFORM_CALLBACK_ACTIVE.with(Cell::get)
+}
+
+fn with_platform_callback<R>(body: impl FnOnce() -> R) -> R {
+    PLATFORM_CALLBACK_ACTIVE.with(|active| {
+        assert!(!active.replace(true), "nested platform callback invocation");
+    });
+    let _guard = PlatformCallbackGuard;
+    body()
+}
+
 /// Increment only for a breaking change to the exported C contract.
 pub const NUX_CAPI_ABI_VERSION: u32 = 3;
 
@@ -61,7 +94,32 @@ const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
 /// not `UnwindSafe`. Asserting unwind safety is sound here: on a panic we drop
 /// all locals and return a fixed error value without ever letting the caller
 /// observe a half-updated Rust invariant across the boundary.
-fn ffi_guard<R>(default: R, body: impl FnOnce() -> R) -> R {
+trait CallbackReentryFallback {
+    fn callback_reentry(default: Self) -> Self;
+}
+
+impl CallbackReentryFallback for NuxStatus {
+    fn callback_reentry(_default: Self) -> Self {
+        Self::ReentrantCall
+    }
+}
+
+impl CallbackReentryFallback for u32 {
+    fn callback_reentry(default: Self) -> Self {
+        default
+    }
+}
+
+impl CallbackReentryFallback for () {
+    fn callback_reentry(default: Self) -> Self {
+        default
+    }
+}
+
+fn ffi_guard<R: CallbackReentryFallback>(default: R, body: impl FnOnce() -> R) -> R {
+    if platform_callback_active() {
+        return R::callback_reentry(default);
+    }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
         Ok(value) => value,
         Err(_) => default,
@@ -89,10 +147,14 @@ pub struct NuxFile {
     file: Arc<File>,
     owner_thread: ThreadId,
     data_binding_provenance: Arc<()>,
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    apple_assets: Option<Arc<apple_assets::AppleAssetCatalog>>,
 }
 
 struct ArtboardOccurrence {
     instance: RefCell<OwnedArtboardInstance>,
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    apple_assets: Option<Arc<apple_assets::AppleAssetCatalog>>,
     renderer_domain: RefCell<Option<RendererDomainBinding>>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
@@ -1170,6 +1232,9 @@ fn ffi_guard_with_result(
     if !out_result.is_null() {
         unsafe { *out_result = ptr::null_mut() };
     }
+    if platform_callback_active() {
+        return NuxStatus::ReentrantCall;
+    }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status,
         Err(_) => {
@@ -1200,6 +1265,7 @@ fn ffi_guard_with_handle_result<T>(
     handle_kind: HandleKind,
     body: impl FnOnce() -> NuxStatus,
 ) -> NuxStatus {
+    let callback_reentry = platform_callback_active();
     if !out_handle.is_null()
         && !out_result.is_null()
         && out_handle.cast::<c_void>() == out_result.cast::<c_void>()
@@ -1207,13 +1273,20 @@ fn ffi_guard_with_handle_result<T>(
         // Both slots have pointer representation/alignment. Clear the shared
         // storage once and reject before either owned handle can be published.
         unsafe { *out_handle = ptr::null_mut() };
-        return NuxStatus::InvalidArgument;
+        return if callback_reentry {
+            NuxStatus::ReentrantCall
+        } else {
+            NuxStatus::InvalidArgument
+        };
     }
     if !out_handle.is_null() {
         unsafe { *out_handle = ptr::null_mut() };
     }
     if !out_result.is_null() {
         unsafe { *out_result = ptr::null_mut() };
+    }
+    if callback_reentry {
+        return NuxStatus::ReentrantCall;
     }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status,
@@ -1318,6 +1391,11 @@ pub unsafe extern "C" fn nux_file_import(
                     file: Arc::new(file),
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
+                    #[cfg(all(
+                        feature = "apple-metal",
+                        any(target_os = "ios", target_os = "macos")
+                    ))]
+                    apple_assets: None,
                 });
                 unsafe {
                     let handle = Box::into_raw(handle);
@@ -1373,6 +1451,11 @@ pub unsafe extern "C" fn nux_file_import_with_result(
                     file: Arc::new(file),
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
+                    #[cfg(all(
+                        feature = "apple-metal",
+                        any(target_os = "ios", target_os = "macos")
+                    ))]
+                    apple_assets: None,
                 }));
                 register_handle(handle, HandleKind::File, thread::current().id());
                 unsafe { *out_file = handle };
@@ -1562,6 +1645,11 @@ pub unsafe extern "C" fn nux_file_import_trusted_with_host_commands(
                     file: Arc::new(file),
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
+                    #[cfg(all(
+                        feature = "apple-metal",
+                        any(target_os = "ios", target_os = "macos")
+                    ))]
+                    apple_assets: None,
                 }));
                 register_handle(handle, HandleKind::File, thread::current().id());
                 unsafe { *out_file = handle };
@@ -1870,6 +1958,11 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {
                         instance: RefCell::new(instance),
+                        #[cfg(all(
+                            feature = "apple-metal",
+                            any(target_os = "ios", target_os = "macos")
+                        ))]
+                        apple_assets: file.apple_assets.clone(),
                         renderer_domain: RefCell::new(None),
                         active: Cell::new(false),
                         poisoned: Cell::new(false),
@@ -2514,6 +2607,12 @@ fn ffi_guard_with_player_step_result(
     out_result: *mut *mut NuxPlayerStepResult,
     body: impl FnOnce() -> NuxStatus,
 ) -> NuxStatus {
+    if platform_callback_active() {
+        if !out_result.is_null() {
+            unsafe { *out_result = ptr::null_mut() };
+        }
+        return NuxStatus::ReentrantCall;
+    }
     if out_result.is_null() {
         return NuxStatus::NullArgument;
     }
@@ -4270,6 +4369,91 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
 mod firewall_tests {
     use super::*;
 
+    #[test]
+    fn platform_callback_reentry_fails_before_outputs_and_recovers_after_panic() {
+        let mut info = NuxRuntimeInfo {
+            struct_size: u32::MAX,
+            abi_version: u32::MAX,
+            runtime_version: NuxStringView::default(),
+            source_revision: NuxStringView::default(),
+        };
+        with_platform_callback(|| {
+            assert_eq!(
+                unsafe { nux_capi_runtime_info(&mut info) },
+                NuxStatus::ReentrantCall
+            );
+            assert_eq!(
+                info.abi_version,
+                u32::MAX,
+                "nested export did not touch output"
+            );
+            assert_eq!(
+                unsafe { nux_file_free(usize::MAX as *mut NuxFile) },
+                NuxStatus::ReentrantCall
+            );
+            assert_eq!(unsafe { nux_capi_abi_version() }, 0);
+
+            #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+            {
+                let mut nested_file = ptr::dangling_mut();
+                let mut nested_result = ptr::dangling_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_file_import_with_apple_assets(
+                            ptr::dangling(),
+                            1,
+                            ptr::dangling(),
+                            &mut nested_file,
+                            &mut nested_result,
+                        )
+                    },
+                    NuxStatus::ReentrantCall
+                );
+                assert!(nested_file.is_null());
+                assert!(nested_result.is_null());
+
+                let mut shared: *mut c_void = ptr::dangling_mut();
+                let shared_slot = ptr::from_mut(&mut shared);
+                assert_eq!(
+                    unsafe {
+                        nux_file_import_with_apple_assets(
+                            ptr::dangling(),
+                            1,
+                            ptr::dangling(),
+                            shared_slot.cast::<*mut NuxFile>(),
+                            shared_slot.cast::<*mut NuxCapiResult>(),
+                        )
+                    },
+                    NuxStatus::ReentrantCall
+                );
+                assert!(shared.is_null());
+                assert_eq!(
+                    unsafe {
+                        nux_file_import_with_apple_assets(
+                            ptr::dangling(),
+                            1,
+                            ptr::dangling(),
+                            ptr::null_mut(),
+                            ptr::null_mut(),
+                        )
+                    },
+                    NuxStatus::ReentrantCall
+                );
+            }
+        });
+
+        let status = ffi_guard(NuxStatus::RuntimeError, || {
+            with_platform_callback(|| panic!("injected platform callback panic"));
+            NuxStatus::Ok
+        });
+        assert_eq!(status, NuxStatus::RuntimeError);
+        assert_eq!(
+            unsafe { nux_capi_require_abi(NUX_CAPI_ABI_VERSION) },
+            NuxStatus::Ok,
+            "callback guard clears during unwind"
+        );
+    }
+
     #[cfg(feature = "scripting")]
     fn trusted_script_file(name: &str) -> *mut NuxFile {
         let root = std::path::PathBuf::from(
@@ -4286,6 +4470,8 @@ mod firewall_tests {
             file,
             owner_thread: thread::current().id(),
             data_binding_provenance: Arc::new(()),
+            #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+            apple_assets: None,
         }));
         register_handle(handle, HandleKind::File, thread::current().id());
         handle

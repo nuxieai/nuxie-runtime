@@ -1083,6 +1083,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (package / "src/apple_metal.rs").write_text(
             "struct AppleSurface; // CAMetalDrawable is caller-borrowed.\n"
         )
+        (package / "src/apple_assets.rs").write_text(
+            "struct AppleAssetHooks; // Apple-only asset admission.\n"
+        )
         (package / "cbindgen.toml").write_text(
             '"apple-metal" = "NUX_CAPI_APPLE_METAL"\n'
         )

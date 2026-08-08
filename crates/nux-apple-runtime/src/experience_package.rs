@@ -3,16 +3,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use nux_container::{
-    AssetLocation, NUX_MAX_EXTERNAL_ASSET_BYTES, NuxContainerError, SignatureVerification,
-    read_package, verify_signature,
+    AssetLocation, NUX_MAX_ASSET_SOURCE_KEY_BYTES, NUX_MAX_ASSET_UNIQUE_NAME_BYTES,
+    NUX_MAX_EXTERNAL_ASSET_BYTES, NUX_MAX_EXTERNAL_ASSETS, NuxContainerError,
+    SignatureVerification, read_package, verify_signature,
 };
 use nuxie::{File, ScriptExecutionLimits};
 use nuxie_product::scripting::ScriptImportCapability;
 use sha2::{Digest as _, Sha256};
 
-pub(crate) const MAX_EXTERNAL_ASSET_COUNT: usize = 1_024;
-const MAX_ASSET_UNIQUE_NAME_BYTE_LENGTH: usize = 4_096;
-const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = 4_194_304;
+pub(crate) const MAX_EXTERNAL_ASSET_COUNT: usize = NUX_MAX_EXTERNAL_ASSETS as usize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CandidateExperienceSigningKey {
@@ -271,7 +270,9 @@ fn declaration(
 ) -> Result<ExternalAssetDeclaration, PackageImportError> {
     let asset_id = u32::try_from(asset_id)
         .map_err(|_| asset_mismatch(format!("asset '{unique_name}' id does not fit in UInt32")))?;
-    if unique_name.is_empty() || unique_name.len() > MAX_ASSET_UNIQUE_NAME_BYTE_LENGTH {
+    if unique_name.is_empty()
+        || u64::try_from(unique_name.len()).unwrap_or(u64::MAX) > NUX_MAX_ASSET_UNIQUE_NAME_BYTES
+    {
         return Err(asset_mismatch(format!(
             "asset {asset_id} has an invalid unique name"
         )));
@@ -286,7 +287,9 @@ fn declaration(
                     ),
                 ));
             }
-            if key.is_empty() || key.len() > MAX_ASSET_SOURCE_KEY_BYTE_LENGTH {
+            if key.is_empty()
+                || u64::try_from(key.len()).unwrap_or(u64::MAX) > NUX_MAX_ASSET_SOURCE_KEY_BYTES
+            {
                 return Err(asset_mismatch(format!(
                     "asset {asset_id} '{unique_name}' has an invalid external key"
                 )));

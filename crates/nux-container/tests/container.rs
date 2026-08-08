@@ -11,10 +11,14 @@ use common::{
 };
 use nux_container::test_support::{TEST_ONLY_DEV_KEY_ID, TEST_ONLY_DEV_KEYPAIR};
 use nux_container::{
-    AssetLocation, EmbeddedMember, MemberInventoryEntry, MemberRole, NUX_MAX_EXTERNAL_ASSET_BYTES,
-    NUX_MAX_JOURNEY_BYTES, NUX_MAX_MANIFEST_BYTES, NUX_MAX_MEMBERS, NUX_MAX_PACKAGE_BYTES,
-    NUX_MAX_SIGNATURE_BYTES, NuxContainerError, NuxPackageModel, SignatureSource,
-    SignatureVerification, read_package, validate_nux_roundtrip, verify_signature, write_package,
+    AssetLocation, EmbeddedMember, MemberInventoryEntry, MemberRole,
+    NUX_ACQUISITION_CONTRACT_VERSION, NUX_MAX_ASSET_SOURCE_KEY_BYTES,
+    NUX_MAX_ASSET_UNIQUE_NAME_BYTES, NUX_MAX_EXTERNAL_ASSET_BYTES,
+    NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES, NUX_MAX_EXTERNAL_ASSETS, NUX_MAX_JOURNEY_BYTES,
+    NUX_MAX_MANIFEST_BYTES, NUX_MAX_MEMBERS, NUX_MAX_PACKAGE_BYTES, NUX_MAX_SIGNATURE_BYTES,
+    NuxAcquisitionAssetKind, NuxAcquisitionErrorCode, NuxContainerError, NuxPackageModel,
+    SignatureSource, SignatureVerification, read_acquisition_metadata, read_package,
+    validate_nux_roundtrip, verify_signature, write_package,
 };
 
 #[test]
@@ -39,6 +43,258 @@ fn writer_reader_signature_and_roundtrip_form_a_complete_tracer_path() {
     assert_eq!(key_id, TEST_ONLY_DEV_KEY_ID);
     assert_eq!(scene.bytes(), package.member("scene").expect("scene"));
     validate_nux_roundtrip(&bytes).expect("writer output is canonical");
+}
+
+#[test]
+fn acquisition_contract_exposes_only_identity_and_external_fetch_descriptors() {
+    let mut bytes = golden_bytes();
+    let journey_offset = {
+        let package = read_package(&bytes).expect("golden package");
+        usize::try_from(
+            package
+                .toc()
+                .iter()
+                .find(|entry| entry.name == "journey")
+                .expect("journey entry")
+                .offset,
+        )
+        .expect("fixture offset fits usize")
+    };
+    bytes[journey_offset] = b'!';
+
+    let acquisition = read_acquisition_metadata(&bytes)
+        .expect("pre-auth acquisition must not parse journey execution content");
+    assert_eq!(
+        acquisition.contract_version,
+        NUX_ACQUISITION_CONTRACT_VERSION
+    );
+    assert_eq!(acquisition.identity.experience_id, "experience-fixture");
+    assert_eq!(acquisition.identity.build_id, "build-fixture");
+    assert_eq!(acquisition.external_assets.len(), 2);
+    assert_eq!(
+        acquisition.external_assets[0].kind,
+        NuxAcquisitionAssetKind::Image
+    );
+    assert!(
+        read_package(&bytes).is_err(),
+        "full parsing must reject the mutation"
+    );
+}
+
+#[test]
+fn acquisition_contract_rejects_duplicate_external_identity() {
+    let mut source = GoldenSource::new();
+    source.manifest.assets.fonts[0].rive_asset_id = 1;
+    let bytes = write_package(&source.model()).expect("fixture package");
+    assert!(matches!(
+        read_acquisition_metadata(&bytes),
+        Err(NuxContainerError::InvalidAsset(message))
+            if message.contains("unique")
+    ));
+}
+
+#[test]
+fn acquisition_contract_classifies_asset_limits_and_identity_errors() {
+    let mut source = GoldenSource::new();
+    for index in 0..NUX_MAX_EXTERNAL_ASSETS {
+        let mut image = source.manifest.assets.images[0].clone();
+        image.rive_asset_id = u64::from(index) + 10;
+        image.rive_unique_name = format!("asset-{index}");
+        source.manifest.assets.images.push(image);
+    }
+    let bytes = write_package(&source.model()).expect("count-limit fixture");
+    let count_error = read_acquisition_metadata(&bytes).expect_err("count must be bounded");
+    assert_eq!(
+        count_error.acquisition_code(),
+        NuxAcquisitionErrorCode::LimitExceeded
+    );
+
+    let mut source = GoldenSource::new();
+    for index in 0u32..4 {
+        let mut image = source.manifest.assets.images[0].clone();
+        image.rive_asset_id = u64::from(index) + 10;
+        image.rive_unique_name = format!("large-asset-{index}");
+        image.size_bytes = NUX_MAX_EXTERNAL_ASSET_BYTES;
+        source.manifest.assets.images.push(image);
+    }
+    source.manifest.assets.images[0].size_bytes = NUX_MAX_EXTERNAL_ASSET_BYTES;
+    let bytes = write_package(&source.model()).expect("aggregate-limit fixture");
+    let aggregate_error = read_acquisition_metadata(&bytes).expect_err("aggregate must be bounded");
+    assert_eq!(
+        aggregate_error.acquisition_code(),
+        NuxAcquisitionErrorCode::LimitExceeded
+    );
+
+    let mut bytes = golden_bytes();
+    let package = read_package(&bytes).expect("golden package");
+    let manifest = package.member("manifest").expect("manifest");
+    let hero = b"\"riveUniqueName\":\"hero\"";
+    let hero_offset = manifest
+        .windows(hero.len())
+        .position(|window| window == hero)
+        .expect("hero asset");
+    let marker = b"\"sha256\":\"";
+    let relative = hero_offset
+        + manifest[hero_offset..]
+            .windows(marker.len())
+            .position(|window| window == marker)
+            .expect("sha field")
+        + marker.len();
+    let manifest_offset = usize::try_from(
+        package
+            .toc()
+            .iter()
+            .find(|entry| entry.name == "manifest")
+            .expect("manifest entry")
+            .offset,
+    )
+    .expect("manifest offset");
+    bytes[manifest_offset + relative] = b'G';
+    let identity_error = read_acquisition_metadata(&bytes).expect_err("sha must be lowercase hex");
+    assert_eq!(
+        identity_error.acquisition_code(),
+        NuxAcquisitionErrorCode::InvalidExternalAsset
+    );
+
+    let mut source = GoldenSource::new();
+    let image = &mut source.manifest.assets.images[0];
+    image.location = AssetLocation::External {
+        key: format!("assets/sha256/{}.extra.png", image.sha256),
+    };
+    let manifest = serde_json::to_vec(&source.manifest).expect("manifest JSON");
+    let bytes = encode_raw(&[
+        ("manifest", &manifest),
+        ("signature", b"x"),
+        ("scene", b"x"),
+        ("journey", b"x"),
+    ]);
+    let suffix_error = read_acquisition_metadata(&bytes).expect_err("key must name only digest");
+    assert_eq!(
+        suffix_error.acquisition_code(),
+        NuxAcquisitionErrorCode::InvalidExternalAsset
+    );
+
+    let source = GoldenSource::new();
+    let mut manifest = serde_json::to_value(&source.manifest).expect("manifest value");
+    manifest["assets"]["images"][0]["sizeBytes"] = serde_json::json!(-1);
+    let manifest = serde_json::to_vec(&manifest).expect("manifest JSON");
+    let bytes = encode_raw(&[
+        ("manifest", &manifest),
+        ("signature", b"x"),
+        ("scene", b"x"),
+        ("journey", b"x"),
+    ]);
+    let negative_error = read_acquisition_metadata(&bytes).expect_err("size must be unsigned");
+    assert_eq!(
+        negative_error.acquisition_code(),
+        NuxAcquisitionErrorCode::InvalidManifest
+    );
+}
+
+#[test]
+fn checked_in_acquisition_contract_matches_code_constants() {
+    let contract: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/acquisition-contract-v1.json"))
+            .expect("contract JSON");
+    assert_eq!(
+        contract["contractVersion"].as_u64(),
+        Some(u64::from(NUX_ACQUISITION_CONTRACT_VERSION))
+    );
+    assert_eq!(
+        contract["limits"]["packageBytes"].as_u64(),
+        Some(NUX_MAX_PACKAGE_BYTES)
+    );
+    assert_eq!(contract["containerVersion"].as_u64(), Some(1));
+    for (name, actual) in [
+        ("packageBytes", NUX_MAX_PACKAGE_BYTES),
+        ("manifestBytes", NUX_MAX_MANIFEST_BYTES),
+        ("journeyBytes", NUX_MAX_JOURNEY_BYTES),
+        ("signatureBytes", NUX_MAX_SIGNATURE_BYTES),
+        ("memberCount", u64::from(NUX_MAX_MEMBERS)),
+        ("externalAssetBytes", NUX_MAX_EXTERNAL_ASSET_BYTES),
+        ("externalAssetCount", u64::from(NUX_MAX_EXTERNAL_ASSETS)),
+        (
+            "externalAssetTotalBytes",
+            NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES,
+        ),
+        ("assetUniqueNameBytes", NUX_MAX_ASSET_UNIQUE_NAME_BYTES),
+        ("assetSourceKeyBytes", NUX_MAX_ASSET_SOURCE_KEY_BYTES),
+    ] {
+        assert_eq!(contract["limits"][name].as_u64(), Some(actual), "{name}");
+    }
+    assert_eq!(
+        contract["requiredMembers"],
+        serde_json::json!(["manifest", "signature", "scene", "journey"])
+    );
+    assert_eq!(
+        contract["permittedPreAuthenticationFields"],
+        serde_json::json!([
+            "identity.experienceId",
+            "identity.buildId",
+            "assets.images[].location",
+            "assets.images[].riveAssetId",
+            "assets.images[].riveUniqueName",
+            "assets.images[].sha256",
+            "assets.images[].sizeBytes",
+            "assets.images[].required",
+            "assets.fonts[].location",
+            "assets.fonts[].riveAssetId",
+            "assets.fonts[].riveUniqueName",
+            "assets.fonts[].sha256",
+            "assets.fonts[].sizeBytes",
+            "assets.fonts[].required"
+        ])
+    );
+    assert_eq!(
+        contract["forbiddenPreAuthenticationUses"],
+        serde_json::json!([
+            "journey hydration",
+            "product lookup",
+            "script execution",
+            "screen or text-input hydration",
+            "runtime execution"
+        ])
+    );
+    assert_eq!(
+        contract["errors"]["invalidExternalAsset"].as_str(),
+        Some(NuxAcquisitionErrorCode::InvalidExternalAsset.as_str())
+    );
+    for (fixture_key, code) in [
+        ("limitExceeded", NuxAcquisitionErrorCode::LimitExceeded),
+        (
+            "invalidContainer",
+            NuxAcquisitionErrorCode::InvalidContainer,
+        ),
+        (
+            "unsupportedVersion",
+            NuxAcquisitionErrorCode::UnsupportedVersion,
+        ),
+        ("missingMember", NuxAcquisitionErrorCode::MissingMember),
+        ("invalidManifest", NuxAcquisitionErrorCode::InvalidManifest),
+    ] {
+        assert_eq!(
+            contract["errors"][fixture_key].as_str(),
+            Some(code.as_str())
+        );
+    }
+    assert_eq!(
+        contract["errors"]["identityMismatch"],
+        "acquisition.identity_mismatch"
+    );
+    assert_eq!(
+        contract["errors"]["missingRequiredAsset"],
+        "acquisition.required_asset_missing"
+    );
+    assert_eq!(
+        contract["phaseCases"],
+        serde_json::json!([
+            {"name": "valid-package", "acquisition": "success", "authentication": "success"},
+            {"name": "corrupt-package", "acquisition": "acquisition.invalid_container", "authentication": "not_run"},
+            {"name": "oversized-package", "acquisition": "acquisition.limit_exceeded", "authentication": "not_run"},
+            {"name": "identity-mismatch", "acquisition": "acquisition.identity_mismatch", "authentication": "not_run"},
+            {"name": "missing-required-asset", "acquisition": "acquisition.required_asset_missing", "authentication": "not_run"}
+        ])
+    );
 }
 
 #[test]

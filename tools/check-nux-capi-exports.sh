@@ -43,7 +43,7 @@ if [ "$features" != "apple-metal" ]; then
     # cbindgen retains feature-gated declarations in the generated header. The
     # portable ABI excludes the Apple renderer family and this one Apple-only
     # import entry point; keep the latter exact so future imports fail closed.
-    grep -Ev '^(nux_renderer_|nux_file_import_with_apple_assets$)' \
+    grep -Ev '^(nux_renderer_|nux_file_import_(configured|with_apple_assets)$)' \
         "$header_actual" > "$work_dir/header-portable.txt"
     header_actual="$work_dir/header-portable.txt"
 fi

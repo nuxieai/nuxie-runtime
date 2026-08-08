@@ -220,15 +220,27 @@ int main(int argc, char** argv)
         .maximum_decoded_image_bytes = 256 * 1024 * 1024,
         .maximum_total_decoded_image_bytes = 512 * 1024 * 1024,
     };
+    NuxFileImportConfig import_config = {
+        .struct_size = sizeof(NuxFileImportConfig),
+        .apple_assets = &hooks,
+    };
     NuxFile* file = NULL;
     NuxCapiResult* result = NULL;
-    CHECK(nux_file_import_with_apple_assets(
-              bytes, len, &hooks, &file, &result) == NUX_STATUS_OK);
+    CHECK(nux_file_import_configured(
+              bytes, len, &import_config, &file, &result) == NUX_STATUS_OK);
     free_result(result, NUX_STATUS_OK);
     CHECK(decoder.calls == 1);
     CHECK(decoder.retains == 1);
     CHECK(decoder.releases == 1);
     CHECK(decoder.nested_abi == 0);
+    size_t asset_count = 0;
+    CHECK(nux_file_asset_count(file, &asset_count) == NUX_STATUS_OK);
+    CHECK(asset_count == 1);
+    NuxFileAssetDescriptorView asset = {
+        .struct_size = sizeof(NuxFileAssetDescriptorView)};
+    CHECK(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK);
+    CHECK(asset.kind == NUX_FILE_ASSET_KIND_IMAGE);
+    CHECK(asset.required_provider_flags == NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE);
     free(bytes);
     NuxArtboardInstance* artboard = NULL;
     CHECK(nux_artboard_instance_new(file, 0, &artboard) == NUX_STATUS_OK);

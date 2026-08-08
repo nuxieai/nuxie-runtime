@@ -488,19 +488,33 @@ fn shared_identity_and_atomic_batches_preserve_the_live_graph_on_error() {
     let after_failure = snapshot(shared);
     assert_eq!(number(after_failure, "num"), original);
 
-    let mutation = NuxViewModelMutation {
-        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
-        instance,
-        path: NuxStringView {
-            data: valid_path.as_ptr().cast(),
-            len: valid_path.len(),
+    let successful_mutations = [
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            instance,
+            path: NuxStringView {
+                data: valid_path.as_ptr().cast(),
+                len: valid_path.len(),
+            },
+            number_value: 45.0,
+            ..NuxViewModelMutation::default()
         },
-        number_value: 91.0,
-        ..NuxViewModelMutation::default()
-    };
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            instance,
+            path: NuxStringView {
+                data: valid_path.as_ptr().cast(),
+                len: valid_path.len(),
+            },
+            number_value: 91.0,
+            ..NuxViewModelMutation::default()
+        },
+    ];
+    let correlation_id = 0xa11c_eu64;
     let batch = NuxViewModelMutationBatch {
-        mutations: &mutation,
-        mutation_count: 1,
+        mutations: successful_mutations.as_ptr(),
+        mutation_count: successful_mutations.len(),
+        correlation_id,
         ..NuxViewModelMutationBatch::default()
     };
     assert_eq!(
@@ -511,12 +525,27 @@ fn shared_identity_and_atomic_batches_preserve_the_live_graph_on_error() {
         unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
         NuxStatus::Ok
     );
-    assert_eq!(result_info.applied_count, 1);
+    assert_eq!(result_info.applied_count, 2);
+    assert_eq!(result_info.correlation_id, correlation_id);
+    assert_eq!(result_info.change_count, 2);
     let after_success = snapshot(shared);
     assert_eq!(number(after_success, "num"), 91.0);
 
+    for (index, expected) in [45.0, 91.0].into_iter().enumerate() {
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_change(result, index, &mut change) },
+            NuxStatus::Ok
+        );
+        assert_eq!(change.origin, NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER);
+        assert_eq!(change.correlation_id, correlation_id);
+        assert_eq!(change.owner_instance_id, identity);
+        assert_eq!(change.property_index, 1);
+        assert_eq!(change.kind, NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+        assert_eq!(change.number_value, expected);
+    }
+
     unsafe {
-        nux_view_model_mutation_result_free(result);
         nux_view_model_snapshot_free(after_success);
         nux_view_model_snapshot_free(after_failure);
         nux_view_model_snapshot_free(before);
@@ -525,6 +554,16 @@ fn shared_identity_and_atomic_batches_preserve_the_live_graph_on_error() {
         nux_view_model_catalog_free(catalog);
         nux_file_free(file);
     }
+    // The journal owns typed after-values and durable identities rather than
+    // borrowing the file or live view-model graph.
+    let mut retained = NuxViewModelChangeView::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_change(result, 1, &mut retained) },
+        NuxStatus::Ok
+    );
+    assert_eq!(retained.owner_instance_id, identity);
+    assert_eq!(retained.number_value, 91.0);
+    unsafe { nux_view_model_mutation_result_free(result) };
 }
 
 #[test]
@@ -751,6 +790,62 @@ fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology()
         unsafe { nux_view_model_mutate(&success_batch, &mut result) },
         NuxStatus::Ok
     );
+    let mut result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, success.len());
+    let mut replacement_id = 0;
+    let mut third_id = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(replacement, &mut replacement_id) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(third, &mut third_id) },
+        NuxStatus::Ok
+    );
+    let mut linked = NuxViewModelChangeView::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_change(result, 0, &mut linked) },
+        NuxStatus::Ok
+    );
+    assert_eq!(linked.kind, NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL);
+    assert_eq!(linked.referenced_instance_id, replacement_id);
+    for (change_index, expected_items) in [
+        vec![replacement_id],
+        vec![replacement_id, third_id],
+        vec![third_id, replacement_id],
+        vec![replacement_id, third_id],
+        vec![replacement_id],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_change(result, change_index + 1, &mut change) },
+            NuxStatus::Ok
+        );
+        assert_eq!(change.kind, NUX_VIEW_MODEL_VALUE_KIND_LIST);
+        assert_eq!(change.list_item_count, expected_items.len());
+        for (item_index, expected_id) in expected_items.into_iter().enumerate() {
+            let mut item_id = 0;
+            assert_eq!(
+                unsafe {
+                    nux_view_model_mutation_result_change_list_item(
+                        result,
+                        change_index + 1,
+                        item_index,
+                        &mut item_id,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(item_id, expected_id);
+        }
+    }
     unsafe { nux_view_model_mutation_result_free(result) };
     let after_success = snapshot(root);
     let success_ids = nested_and_list_ids(after_success);
@@ -788,6 +883,12 @@ fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology()
         unsafe { nux_view_model_mutate(&invalid_batch, &mut result) },
         NuxStatus::InvalidArgument
     );
+    result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, 0);
     unsafe { nux_view_model_mutation_result_free(result) };
     let after_failure = snapshot(root);
     assert_eq!(nested_and_list_ids(after_failure), success_ids);
@@ -871,6 +972,7 @@ fn scalar_text_trigger_enum_and_image_mutations_round_trip_through_owned_snapsho
         NuxStatus::Ok
     );
     let text = b"updated text";
+    let final_text = b"final text";
     let paths: [&[u8]; 7] = [
         b"text", b"number", b"enabled", b"tint", b"fire", b"image", b"choice",
     ];
@@ -906,9 +1008,33 @@ fn scalar_text_trigger_enum_and_image_mutations_round_trip_through_owned_snapsho
             ..NuxViewModelMutation::default()
         });
     }
+    mutations.push(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+        instance,
+        path: NuxStringView {
+            data: b"text".as_ptr().cast(),
+            len: b"text".len(),
+        },
+        bytes_value: NuxByteView {
+            data: final_text.as_ptr(),
+            len: final_text.len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    mutations.push(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER,
+        instance,
+        path: NuxStringView {
+            data: b"fire".as_ptr().cast(),
+            len: b"fire".len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    let correlation_id = 0x51a1_7u64;
     let batch = NuxViewModelMutationBatch {
         mutations: mutations.as_ptr(),
         mutation_count: mutations.len(),
+        correlation_id,
         ..NuxViewModelMutationBatch::default()
     };
     let mut result = std::ptr::null_mut();
@@ -916,6 +1042,48 @@ fn scalar_text_trigger_enum_and_image_mutations_round_trip_through_owned_snapsho
         unsafe { nux_view_model_mutate(&batch, &mut result) },
         NuxStatus::Ok
     );
+    let mut result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.correlation_id, correlation_id);
+    assert_eq!(result_info.change_count, mutations.len());
+    for (index, kind, expected_bytes, expected_integer) in [
+        (
+            0,
+            NUX_VIEW_MODEL_VALUE_KIND_STRING,
+            Some(text.as_slice()),
+            0,
+        ),
+        (4, NUX_VIEW_MODEL_VALUE_KIND_TRIGGER, None, 3),
+        (
+            7,
+            NUX_VIEW_MODEL_VALUE_KIND_STRING,
+            Some(final_text.as_slice()),
+            0,
+        ),
+        (8, NUX_VIEW_MODEL_VALUE_KIND_TRIGGER, None, 4),
+    ] {
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_change(result, index, &mut change) },
+            NuxStatus::Ok
+        );
+        assert_eq!(change.origin, NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER);
+        assert_eq!(change.correlation_id, correlation_id);
+        assert_eq!(change.kind, kind);
+        if let Some(expected) = expected_bytes {
+            assert_eq!(
+                unsafe {
+                    std::slice::from_raw_parts(change.bytes_value.data, change.bytes_value.len)
+                },
+                expected
+            );
+        } else {
+            assert_eq!(change.integer_value, expected_integer);
+        }
+    }
     let snapshot = snapshot(instance);
     let mut snapshot_info = NuxViewModelSnapshotInfo::default();
     assert_eq!(
@@ -934,7 +1102,7 @@ fn scalar_text_trigger_enum_and_image_mutations_round_trip_through_owned_snapsho
                 let bytes = unsafe {
                     std::slice::from_raw_parts(value.bytes_value.data, value.bytes_value.len)
                 };
-                assert_eq!(bytes, text);
+                assert_eq!(bytes, final_text);
                 observed += 1;
             }
             "number" => {
@@ -950,7 +1118,7 @@ fn scalar_text_trigger_enum_and_image_mutations_round_trip_through_owned_snapsho
                 observed += 1;
             }
             "fire" => {
-                assert_eq!(value.integer_value, 3);
+                assert_eq!(value.integer_value, 4);
                 observed += 1;
             }
             "image" => {

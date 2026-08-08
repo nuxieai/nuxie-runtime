@@ -15,6 +15,12 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr;
 
+#[cfg(feature = "scripting")]
+#[path = "support/composed_import.rs"]
+mod composed_import;
+#[cfg(feature = "scripting")]
+use composed_import::scripted_view_model_asset_fixture;
+
 struct AppleDecodeProbe {
     pixels: Vec<u8>,
     calls: usize,
@@ -633,4 +639,216 @@ fn every_dual_output_renderer_api_rejects_aliasing_before_mutation() {
     assert_alias_rejected!(unsafe { nux_renderer_detach(renderer, slot.cast(), slot) });
     assert_alias_rejected!(unsafe { nux_renderer_reattach(renderer, 2, 2, slot.cast(), slot) });
     assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+}
+
+#[cfg(feature = "scripting")]
+fn string_view(value: &str) -> NuxStringView {
+    NuxStringView {
+        data: value.as_ptr().cast(),
+        len: value.len(),
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn scripted_asset_import(
+    bytes: &[u8],
+    host: &NuxHostCommandImportConfig,
+    probe: &mut AppleDecodeProbe,
+) -> *mut NuxFile {
+    let hooks = NuxAppleAssetHooks {
+        context: std::ptr::from_mut(probe).cast(),
+        decode_image: Some(decode_apple_image),
+        ..NuxAppleAssetHooks::default()
+    };
+    let expected = [
+        NuxExpectedFileAssetDescriptor {
+            ordinal: 0,
+            kind: NUX_FILE_ASSET_KIND_SCRIPT,
+            has_authored_id: 1,
+            authored_id: 0,
+            name: string_view("GenericHostChanges"),
+            file_extension: string_view("lua"),
+            is_embedded: 1,
+            has_contents_record: 1,
+            ..NuxExpectedFileAssetDescriptor::default()
+        },
+        NuxExpectedFileAssetDescriptor {
+            ordinal: 1,
+            kind: NUX_FILE_ASSET_KIND_IMAGE,
+            has_authored_id: 1,
+            authored_id: 7,
+            name: string_view("pixel.png"),
+            file_extension: string_view("png"),
+            is_embedded: 1,
+            has_contents_record: 1,
+            required_provider_flags: NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE,
+            ..NuxExpectedFileAssetDescriptor::default()
+        },
+    ];
+    let config = NuxFileImportConfig {
+        host_commands: host,
+        apple_assets: &hooks,
+        expected_assets: expected.as_ptr(),
+        expected_asset_count: expected.len(),
+        ..NuxFileImportConfig::default()
+    };
+    let mut file = ptr::null_mut();
+    let mut result = ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_file_import_configured(bytes.as_ptr(), bytes.len(), &config, &mut file, &mut result)
+        },
+        NuxStatus::Ok
+    );
+    unsafe { assert_result(result, NuxStatus::Ok) };
+    file
+}
+
+#[cfg(feature = "scripting")]
+fn step_scripted_player(
+    player: *mut NuxPlayer,
+    pointers: &[NuxPlayerPointerEvent],
+    correlation_id: u64,
+    elapsed_seconds: f32,
+) -> *mut NuxPlayerStepResult {
+    let step = NuxPlayerStep {
+        pointers: pointers.as_ptr(),
+        pointer_count: pointers.len(),
+        elapsed_seconds,
+        correlation_id,
+        ..NuxPlayerStep::default()
+    };
+    let mut result = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_step(player, &step, &mut result) },
+        NuxStatus::Ok
+    );
+    result
+}
+
+#[cfg(feature = "scripting")]
+#[test]
+fn configured_script_and_asset_import_hydrates_steps_and_renders_on_metal() {
+    autoreleasepool(|_| {
+        let bytes = scripted_view_model_asset_fixture(
+            br#"
+                local bridge = require("bridge")
+                return function(context)
+                    return {
+                        init = function(_self) return true end,
+                        performAction = function(_self, _invocation)
+                            local root = context:viewModel()
+                            if root ~= nil then
+                                root.amount.value = 10
+                                root.amount.value = 20
+                            end
+                            bridge.command("performed", nil)
+                        end,
+                    }
+                end
+            "#,
+        );
+        let host = NuxHostCommandImportConfig {
+            module_name: string_view("bridge"),
+            ..NuxHostCommandImportConfig::default()
+        };
+        let mut probe = AppleDecodeProbe {
+            pixels: Vec::new(),
+            calls: 0,
+            retains: 0,
+            releases: 0,
+            nested_abi: NUX_CAPI_ABI_VERSION,
+        };
+        let file = scripted_asset_import(&bytes, &host, &mut probe);
+        assert_eq!(probe.calls, 1);
+        assert_eq!((probe.retains, probe.releases), (1, 1));
+        assert_eq!(probe.nested_abi, 0, "callback reentry is rejected");
+
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut view_model = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_player_new_state_machine_named(
+                    artboard,
+                    string_view("HostCommands"),
+                    &mut player,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let renderer = renderer(100, 100);
+        let surface = layer(renderer, 100, 100);
+        let drawable = surface.nextDrawable().expect("Metal drawable");
+        let outcome = unsafe {
+            render(
+                renderer,
+                player,
+                operation(
+                    NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+                    Retained::as_ptr(&drawable).cast_mut().cast(),
+                ),
+                NuxStatus::Ok,
+            )
+        };
+        assert!(outcome.draw_calls > 0);
+
+        let initialized = step_scripted_player(player, &[], 0, 0.0);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(initialized) },
+            NuxStatus::Ok
+        );
+        let click = [
+            NuxPlayerPointerEvent {
+                kind: NUX_PLAYER_POINTER_KIND_DOWN,
+                x: 50.0,
+                y: 50.0,
+                pointer_id: 0,
+                timestamp_seconds: 0.0,
+            },
+            NuxPlayerPointerEvent {
+                kind: NUX_PLAYER_POINTER_KIND_UP,
+                x: 50.0,
+                y: 50.0,
+                pointer_id: 0,
+                timestamp_seconds: 0.0,
+            },
+        ];
+        let stepped = step_scripted_player(player, &click, 44, 0.016);
+        let mut info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_info(stepped, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.host_command_count, 1);
+        assert_eq!(info.view_model_change_count, 2);
+
+        assert_eq!(
+            unsafe { nux_player_step_result_free(stepped) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_view_model_instance_free(view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    });
 }

@@ -18,6 +18,24 @@
  */
 #define NUX_CAPI_ABI_VERSION 3
 
+#define NUX_FILE_ASSET_CATALOG_HARD_MAX 4096
+
+
+
+
+
+
+
+
+
+
+
+
+
+#define NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES (1 << 0)
+
+#define NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE (1 << 1)
+
 #define NUX_HOST_COMMANDS_PER_STEP_HARD_MAX 4096
 
 #define NUX_HOST_COMMAND_BYTES_PER_STEP_HARD_MAX ((32 * 1024) * 1024)
@@ -87,6 +105,10 @@
 #define NUX_SCRIPT_INTERRUPTS_PER_CALLBACK_HARD_MAX 10000000
 
 #define NUX_SCRIPT_VM_MEMORY_BYTES_HARD_MAX ((1024 * 1024) * 1024)
+
+
+
+
 
 
 
@@ -267,6 +289,22 @@ enum NuxPlayerEventPropertyKind
 typedef uint32_t NuxPlayerEventPropertyKind;
 #endif // __cplusplus
 
+enum NuxFileAssetKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_FILE_ASSET_KIND_IMAGE = 0,
+  NUX_FILE_ASSET_KIND_FONT = 1,
+  NUX_FILE_ASSET_KIND_AUDIO = 2,
+  NUX_FILE_ASSET_KIND_BLOB = 3,
+  NUX_FILE_ASSET_KIND_SCRIPT = 4,
+  NUX_FILE_ASSET_KIND_SHADER = 5,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxFileAssetKind;
+#endif // __cplusplus
+
 enum NuxViewModelValueKind
 #ifdef __cplusplus
   : uint32_t
@@ -314,6 +352,18 @@ enum NuxViewModelMutationKind
 };
 #ifndef __cplusplus
 typedef uint32_t NuxViewModelMutationKind;
+#endif // __cplusplus
+
+enum NuxViewModelChangeOrigin
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER = 0,
+  NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME = 1,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxViewModelChangeOrigin;
 #endif // __cplusplus
 
 /**
@@ -526,6 +576,19 @@ typedef struct NuxRuntimeInfo {
   struct NuxStringView source_revision;
 } NuxRuntimeInfo;
 
+typedef struct NuxFileAssetDescriptorView {
+  uint32_t struct_size;
+  size_t ordinal;
+  uint32_t kind;
+  uint32_t has_authored_id;
+  uint32_t authored_id;
+  struct NuxStringView name;
+  struct NuxStringView file_extension;
+  uint32_t is_embedded;
+  uint32_t has_contents_record;
+  uint32_t required_provider_flags;
+} NuxFileAssetDescriptorView;
+
 /**
  * Explicit trust and resource policy for a generic script-host command
  * import. `module_name` is copied during the call and is never interpreted by
@@ -641,6 +704,38 @@ typedef struct NuxAppleAssetHooks {
 #endif
 
 /**
+ * Exact descriptor expected by a configured import. This is a fixed-stride
+ * array element: `struct_size` must equal `sizeof(NuxExpectedFileAssetDescriptor)`.
+ */
+typedef struct NuxExpectedFileAssetDescriptor {
+  uint32_t struct_size;
+  size_t ordinal;
+  uint32_t kind;
+  uint32_t has_authored_id;
+  uint32_t authored_id;
+  struct NuxStringView name;
+  struct NuxStringView file_extension;
+  uint32_t is_embedded;
+  uint32_t has_contents_record;
+  uint32_t required_provider_flags;
+} NuxExpectedFileAssetDescriptor;
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * One deep import surface. Each optional child is copied and validated in
+ * full before file parsing or any platform callback. A null child pointer
+ * leaves that capability inert.
+ */
+typedef struct NuxFileImportConfig {
+  uint32_t struct_size;
+  const struct NuxHostCommandImportConfig *host_commands;
+  const struct NuxAppleAssetHooks *apple_assets;
+  const struct NuxExpectedFileAssetDescriptor *expected_assets;
+  size_t expected_asset_count;
+} NuxFileImportConfig;
+#endif
+
+/**
  * Versioned metadata for a selected runtime-native player.
  */
 typedef struct NuxPlayerInfo {
@@ -698,6 +793,10 @@ typedef struct NuxPlayerStep {
   const struct NuxPlayerPointerEvent *pointers;
   size_t pointer_count;
   float elapsed_seconds;
+  /**
+   * Opaque caller identity copied into runtime-authored change entries.
+   */
+  uint64_t correlation_id;
 } NuxPlayerStep;
 
 /**
@@ -786,6 +885,7 @@ typedef struct NuxPlayerStepInfo {
    * authored events first, then commands in FIFO order.
    */
   size_t host_command_count;
+  size_t view_model_change_count;
 } NuxPlayerStepInfo;
 
 /**
@@ -803,6 +903,29 @@ typedef struct NuxPlayerStateChangeView {
    */
   uint32_t state_global_id;
 } NuxPlayerStateChangeView;
+
+/**
+ * One ordered after-value from an owned mutation or player-step result.
+ * Every borrowed field expires when that containing result is freed.
+ */
+typedef struct NuxViewModelChangeView {
+  uint32_t struct_size;
+  uint32_t origin;
+  uint64_t correlation_id;
+  uint64_t owner_instance_id;
+  size_t property_index;
+  uint32_t kind;
+  /**
+   * String after-value bytes borrowed from the containing result.
+   * Absent for other value kinds.
+   */
+  struct NuxByteView bytes_value;
+  float number_value;
+  uint64_t integer_value;
+  uint32_t bool_value;
+  uint64_t referenced_instance_id;
+  size_t list_item_count;
+} NuxViewModelChangeView;
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef uint32_t NuxRendererDisposition;
@@ -945,6 +1068,10 @@ typedef struct NuxViewModelMutationBatch {
   uint32_t struct_size;
   const struct NuxViewModelMutation *mutations;
   size_t mutation_count;
+  /**
+   * Opaque caller identity copied into every successful change entry.
+   */
+  uint64_t correlation_id;
 } NuxViewModelMutationBatch;
 
 typedef struct NuxViewModelMutationResultInfo {
@@ -959,6 +1086,8 @@ typedef struct NuxViewModelMutationResultInfo {
    * Bounded diagnostic message bytes borrowed from the result until it is freed.
    */
   struct NuxStringView message;
+  uint64_t correlation_id;
+  size_t change_count;
 } NuxViewModelMutationResultInfo;
 
 typedef struct NuxViewModelSnapshotInfo {
@@ -1204,9 +1333,27 @@ NuxStatus nux_file_artboard_state_machine_name(const struct NuxFile *file,
                                                size_t state_machine_index,
                                                struct NuxStringView *out_name);
 
+NuxStatus nux_file_asset_count(const struct NuxFile *file, size_t *out_count);
+
+/**
+ * Returns metadata borrowed from `file`; string views remain valid until the
+ * file handle is freed. Callers must copy them before another runtime call.
+ */
+NuxStatus nux_file_asset_descriptor(const struct NuxFile *file,
+                                    size_t index,
+                                    struct NuxFileAssetDescriptorView *out_descriptor);
+
 NuxStatus nux_file_free(struct NuxFile *file);
 
 NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_file_import_configured(const uint8_t *bytes,
+                                     size_t len,
+                                     const struct NuxFileImportConfig *config,
+                                     struct NuxFile **out_file,
+                                     struct NuxCapiResult **out_result);
+#endif
 
 /**
  * Import exact caller-authenticated bytes and install one generic script
@@ -1225,6 +1372,9 @@ NuxStatus nux_file_import_trusted_with_host_commands(const uint8_t *bytes,
                                                      struct NuxCapiResult **out_result);
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Compatibility wrapper for the Apple-only import added in ABI v3.
+ */
 NuxStatus nux_file_import_with_apple_assets(const uint8_t *bytes,
                                             size_t len,
                                             const struct NuxAppleAssetHooks *hooks,
@@ -1364,6 +1514,15 @@ NuxStatus nux_player_step_result_state_change(const struct NuxPlayerStepResult *
 
 NuxStatus nux_player_step_result_status(const struct NuxPlayerStepResult *result,
                                         NuxStatus *out_status);
+
+NuxStatus nux_player_step_result_view_model_change(const struct NuxPlayerStepResult *result,
+                                                   size_t index,
+                                                   struct NuxViewModelChangeView *out_change);
+
+NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPlayerStepResult *result,
+                                                             size_t change_index,
+                                                             size_t item_index,
+                                                             uint64_t *out_instance_id);
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 /**
@@ -1637,6 +1796,15 @@ NuxStatus nux_view_model_instance_snapshot(const struct NuxViewModelInstance *in
 
 NuxStatus nux_view_model_mutate(const struct NuxViewModelMutationBatch *batch,
                                 struct NuxViewModelMutationResult **out_result);
+
+NuxStatus nux_view_model_mutation_result_change(const struct NuxViewModelMutationResult *result,
+                                                size_t index,
+                                                struct NuxViewModelChangeView *out_change);
+
+NuxStatus nux_view_model_mutation_result_change_list_item(const struct NuxViewModelMutationResult *result,
+                                                          size_t change_index,
+                                                          size_t item_index,
+                                                          uint64_t *out_instance_id);
 
 NuxStatus nux_view_model_mutation_result_free(struct NuxViewModelMutationResult *result);
 

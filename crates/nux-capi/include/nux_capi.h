@@ -58,7 +58,8 @@
  *    host value, and diagnostic. Indexed views expire when
  *    nux_player_step_result_free succeeds. Copy any command/value bytes before
  *    freeing the result or handing them to another thread or asynchronous
- *    task. Optional string fields use NULL+0 for absent and non-NULL+0 for
+ *    task. This includes every view-model change and its bytes_value/list-item
+ *    views. Optional string fields use NULL+0 for absent and non-NULL+0 for
  *    authored present-empty.
  * 10. nux_player_step fully validates the bounded batch before mutation and
  *    executes under the shared artboard-occurrence gate. Reentrant access from
@@ -97,8 +98,10 @@
  *    tables; indexed views remain valid until their catalog/snapshot is freed.
  *    Mutation input arrays and byte/string views are borrowed only for the
  *    synchronous call. Mutation-result code/message views borrow that result
- *    and expire when nux_view_model_mutation_result_free succeeds. A failed
- *    batch reports applied_count=0 and leaves the live view-model graph
+ *    and expire when nux_view_model_mutation_result_free succeeds. Each
+ *    mutation-result change view and its bytes_value/list-item views borrow
+ *    that same result and expire with it. A failed batch reports
+ *    applied_count=0 and leaves the live view-model graph
  *    observationally unchanged: exact retained cells/topology are restored
  *    and buffered dirt, listener, and binding notifications are discarded.
  *    Observer callbacks run only during final publication and are individually
@@ -147,6 +150,9 @@
 #define NUX_CAPI_DIAGNOSTIC_VIEW_V3_MIN_SIZE                              \
     (offsetof(NuxCapiDiagnosticView, message) +                           \
      sizeof(((NuxCapiDiagnosticView*)0)->message))
+#define NUX_FILE_ASSET_DESCRIPTOR_VIEW_V3_MIN_SIZE                        \
+    (offsetof(NuxFileAssetDescriptorView, required_provider_flags) +      \
+     sizeof(((NuxFileAssetDescriptorView*)0)->required_provider_flags))
 #define NUX_RENDER_CALLBACKS_V3_MIN_SIZE                                  \
     (offsetof(NuxRenderCallbacks, modulate_opacity) +                     \
      sizeof(((NuxRenderCallbacks*)0)->modulate_opacity))
@@ -204,6 +210,9 @@
 #define NUX_VIEW_MODEL_MUTATION_RESULT_INFO_V3_MIN_SIZE                   \
     (offsetof(NuxViewModelMutationResultInfo, message) +                  \
      sizeof(((NuxViewModelMutationResultInfo*)0)->message))
+#define NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE                            \
+    (offsetof(NuxViewModelChangeView, list_item_count) +                  \
+     sizeof(((NuxViewModelChangeView*)0)->list_item_count))
 #define NUX_TEXT_RUN_MUTATION_BATCH_V3_MIN_SIZE                           \
     (offsetof(NuxTextRunMutationBatch, mutation_count) +                  \
      sizeof(((NuxTextRunMutationBatch*)0)->mutation_count))
@@ -233,6 +242,35 @@
 #define NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE                                \
     (offsetof(NuxAppleAssetHooks, maximum_total_decoded_image_bytes) +    \
      sizeof(((NuxAppleAssetHooks*)0)->maximum_total_decoded_image_bytes))
+#define NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE                                \
+    (offsetof(NuxFileImportConfig, expected_asset_count) +                \
+     sizeof(((NuxFileImportConfig*)0)->expected_asset_count))
+#endif
+
+#if defined(__cplusplus)
+static_assert(NUX_FILE_ASSET_DESCRIPTOR_VIEW_V3_MIN_SIZE <=
+              sizeof(NuxFileAssetDescriptorView),
+              "NuxFileAssetDescriptorView v3 prefix exceeds its layout");
+static_assert(NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE <=
+              sizeof(NuxViewModelChangeView),
+              "NuxViewModelChangeView v3 prefix exceeds its layout");
+#if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
+static_assert(NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE <=
+              sizeof(NuxFileImportConfig),
+              "NuxFileImportConfig v3 prefix exceeds its layout");
+#endif
+#else
+_Static_assert(NUX_FILE_ASSET_DESCRIPTOR_VIEW_V3_MIN_SIZE <=
+               sizeof(NuxFileAssetDescriptorView),
+               "NuxFileAssetDescriptorView v3 prefix exceeds its layout");
+_Static_assert(NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE <=
+               sizeof(NuxViewModelChangeView),
+               "NuxViewModelChangeView v3 prefix exceeds its layout");
+#if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
+_Static_assert(NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE <=
+               sizeof(NuxFileImportConfig),
+               "NuxFileImportConfig v3 prefix exceeds its layout");
+#endif
 #endif
 
 /* Stable encodings used by the portable callback-renderer surface. Embedders

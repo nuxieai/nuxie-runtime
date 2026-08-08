@@ -182,7 +182,9 @@ impl RuntimeOwnedViewModelEndpoint {
         let mut state = self.state.borrow_mut();
         state.value = value;
         state.linked_instance = None;
-        state.cell.notify_bindings_value_changed();
+        state.cell.notify_structural_value_changed(
+            RuntimeViewModelChangeValue::ViewModel(None),
+        );
     }
 
     fn linked_instance(&self) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
@@ -198,11 +200,14 @@ impl RuntimeOwnedViewModelEndpoint {
 
     fn link_instance(&self, linked_instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
         let mut state = self.state.borrow_mut();
+        let identity = linked_instance.borrow().instance_identity();
         state.linked_instance = Some(linked_instance);
         // The C++ retained pointer setter dirties unconditionally, including
         // same-pointer reassignment. The compatibility pointer projection can
         // remain equal, so emit the property dirt explicitly.
-        state.cell.notify_bindings_value_changed();
+        state.cell.notify_structural_value_changed(
+            RuntimeViewModelChangeValue::ViewModel(Some(identity)),
+        );
     }
 }
 

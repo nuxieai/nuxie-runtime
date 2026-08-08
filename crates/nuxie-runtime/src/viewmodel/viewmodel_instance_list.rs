@@ -36,7 +36,15 @@ impl RuntimeOwnedViewModelListHandle {
         // C++ `ViewModelInstanceList::propertyValueChanged()` dirties the
         // retained property for every successful structural mutation. The
         // list itself, not this DependencyHelper-shaped cell, owns the items.
-        self.cell.notify_bindings_value_changed();
+        let identities = self
+            .value
+            .borrow()
+            .items
+            .iter()
+            .map(|item| item.instance.borrow().instance_identity())
+            .collect();
+        self.cell
+            .notify_structural_value_changed(RuntimeViewModelChangeValue::List(identities));
     }
 
     pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelHandle> {

@@ -543,6 +543,50 @@ unsafe extern "C" fn count_zero_handle_release(user_data: *mut c_void, _handle: 
     unsafe { &mut *user_data.cast::<ReentrantFree>() }.zero_handle_releases += 1;
 }
 
+unsafe extern "C" fn count_save(user_data: *mut c_void) {
+    unsafe { *user_data.cast::<usize>() += 1 };
+}
+
+#[test]
+fn sibling_visual_occurrences_bind_distinct_callback_contexts_independently() {
+    let file = import(SMI_FIXTURE);
+    let first = artboard(file, SMI_ARTBOARD);
+    let second = artboard(file, SMI_ARTBOARD);
+    let mut first_saves = 0usize;
+    let mut second_saves = 0usize;
+    let first_callbacks = NuxRenderCallbacks {
+        user_data: std::ptr::from_mut(&mut first_saves).cast(),
+        save: Some(count_save),
+        ..NuxRenderCallbacks::default()
+    };
+    let second_callbacks = NuxRenderCallbacks {
+        user_data: std::ptr::from_mut(&mut second_saves).cast(),
+        save: Some(count_save),
+        ..NuxRenderCallbacks::default()
+    };
+
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(first, &first_callbacks) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(second, &second_callbacks) },
+        NuxStatus::Ok
+    );
+    assert!(first_saves > 0);
+    assert!(second_saves > 0);
+
+    assert_eq!(unsafe { nux_artboard_instance_free(first) }, NuxStatus::Ok);
+    let before = second_saves;
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(second, &second_callbacks) },
+        NuxStatus::Ok
+    );
+    assert!(second_saves > before);
+    assert_eq!(unsafe { nux_artboard_instance_free(second) }, NuxStatus::Ok);
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+}
+
 #[test]
 fn callback_time_free_is_rejected_and_second_callback_binding_must_match() {
     let file = import(SMI_FIXTURE);

@@ -29,6 +29,18 @@ check(file != nil && importResult != nil, "import outputs")
 check(nux_capi_result_free(importResult) == NUX_STATUS_OK.rawValue, "free import result")
 bytes = nil // The runtime must own everything it needs after import returns.
 
+var assetCount = 0
+check(nux_file_asset_count(file, &assetCount) == NUX_STATUS_OK.rawValue, "asset catalog count")
+var asset = NuxFileAssetDescriptorView()
+asset.struct_size = UInt32(MemoryLayout<NuxFileAssetDescriptorView>.size)
+if assetCount == 0 {
+    check(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_NOT_FOUND.rawValue,
+          "empty asset catalog")
+} else {
+    check(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK.rawValue,
+          "first asset descriptor")
+}
+
 var catalog: OpaquePointer?
 check(nux_file_view_model_catalog(file, &catalog) == NUX_STATUS_OK.rawValue, "catalog")
 var catalogInfo = NuxViewModelCatalogInfo()

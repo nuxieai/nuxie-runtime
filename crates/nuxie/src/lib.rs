@@ -73,10 +73,13 @@ pub use nuxie_runtime::{
     GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance, NoopScriptHost,
     RuntimeBlobAsset, RuntimeEventPropertyValue, RuntimeFileAsset, RuntimeFileAssetKind,
     RuntimeFileAssetLoader, RuntimeHitResult, RuntimeLayerState, RuntimeOwnedViewModelContext,
-    RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
-    ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
-    ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
-    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
+    RuntimeOwnedViewModelGraphTransaction, RuntimeScrollConstraintSnapshot,
+    RuntimeStateMachineInput, RuntimeViewModelChange, RuntimeViewModelChangeCapture,
+    RuntimeViewModelChangeLimitExceeded, RuntimeViewModelChangeValue,
+    RuntimeViewModelGraphTransactionError, ScriptCoreString, ScriptError, ScriptHost,
+    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
+    SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole, SemanticState,
+    SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
     SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
     StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
@@ -3940,6 +3943,7 @@ async fn mount_scripted_artboard_tree_async(
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
+    root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     {
         let scripts = file.scripts.borrow();
@@ -3961,8 +3965,10 @@ async fn mount_scripted_artboard_tree_async(
                 &file.file_asset_owners,
                 &groups,
                 factory,
-                None,
-                None,
+                root_view_model.and_then(|view_model| {
+                    nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
+                }),
+                root_view_model.map(ViewModelInstance::handle),
             )
             .await?
     };
@@ -3979,6 +3985,17 @@ async fn mount_scripted_artboard_tree_async(
         )));
     }
     Ok(has_script_target)
+}
+
+#[cfg(feature = "scripting")]
+fn retained_artboard_root_view_model(
+    instance: &RuntimeArtboardInstance,
+) -> Option<ViewModelInstance> {
+    instance
+        .owned_view_model_context()
+        .and_then(RuntimeOwnedViewModelContext::main_handle)
+        .cloned()
+        .map(ViewModelInstance::from_raw_handle)
 }
 
 #[cfg(feature = "scripting")]
@@ -4007,8 +4024,14 @@ fn prepare_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let has_script_target =
-        mount_scripted_artboard_tree(file, root_graph, instance, factory, None)?;
+    let root_view_model = retained_artboard_root_view_model(instance);
+    let has_script_target = mount_scripted_artboard_tree(
+        file,
+        root_graph,
+        instance,
+        factory,
+        root_view_model.as_ref(),
+    )?;
     let changed = if has_script_target {
         flush_scripted_artboard_tree(instance, factory)?
     } else {
@@ -4029,8 +4052,15 @@ async fn prepare_scripted_artboard_tree_async(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let has_script_target =
-        mount_scripted_artboard_tree_async(file, root_graph, instance, factory).await?;
+    let root_view_model = retained_artboard_root_view_model(instance);
+    let has_script_target = mount_scripted_artboard_tree_async(
+        file,
+        root_graph,
+        instance,
+        factory,
+        root_view_model.as_ref(),
+    )
+    .await?;
     let changed = if has_script_target {
         flush_scripted_artboard_tree(instance, factory)?
     } else {
@@ -5954,12 +5984,14 @@ impl<'a> ArtboardInstance<'a> {
         }
         nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             try_prepare_state_machine_scripted_data_context_without_factory(
                 &self.script_file,
                 &self.raw,
                 state_machine,
-                None,
+                root_view_model.as_ref(),
             )?;
         }
         #[cfg(feature = "scripting")]
@@ -5999,12 +6031,14 @@ impl<'a> ArtboardInstance<'a> {
         nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             let prepared = try_prepare_state_machine_scripted_data_context_without_factory(
                 &self.script_file,
                 &self.raw,
                 state_machine,
-                None,
+                root_view_model.as_ref(),
             );
             if prepared.is_err() {
                 return false;
@@ -7120,12 +7154,14 @@ impl OwnedArtboardInstance {
         }
         nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             try_prepare_state_machine_scripted_data_context_without_factory(
                 &self.file,
                 &self.raw,
                 state_machine,
-                None,
+                root_view_model.as_ref(),
             )?;
         }
         #[cfg(feature = "scripting")]
@@ -7161,12 +7197,14 @@ impl OwnedArtboardInstance {
         nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             let prepared = try_prepare_state_machine_scripted_data_context_without_factory(
                 &self.file,
                 &self.raw,
                 state_machine,
-                None,
+                root_view_model.as_ref(),
             );
             if prepared.is_err() {
                 return false;
@@ -7464,6 +7502,17 @@ impl ViewModelInstance {
     /// Shared low-level handle for binding this exact mutable graph.
     pub fn handle(&self) -> &RuntimeOwnedViewModelHandle {
         &self.raw
+    }
+
+    pub fn identity(&self) -> u64 {
+        self.raw.instance_identity()
+    }
+
+    pub fn resolve_change_capture(
+        &self,
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<RuntimeViewModelChange>> {
+        self.raw.resolve_change_capture(capture)
     }
 
     /// Set a number property by name path. Returns whether the property existed
@@ -9013,6 +9062,35 @@ mod owned_instance_tests {
                 )
                 .expect("pointer up succeeds")
         );
+    }
+
+    #[test]
+    fn facade_change_capture_preserves_repeated_writes_and_durable_identity() {
+        let file = facade_view_model_file();
+        let mut view_model = file
+            .view_model(0)
+            .expect("root view-model schema")
+            .instantiate_default()
+            .expect("authored root instance");
+        let identity = view_model.identity();
+        let capture = RuntimeViewModelChangeCapture::begin().expect("operation capture");
+        assert!(view_model.fire_trigger("submit"));
+        assert!(view_model.fire_trigger("submit"));
+        let changes = view_model
+            .resolve_change_capture(capture)
+            .expect("capture resolves against the exact retained graph");
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().all(|change| {
+            change.owner_instance_identity == identity && change.property_index == 1
+        }));
+        let values = changes
+            .iter()
+            .map(|change| match &change.value {
+                RuntimeViewModelChangeValue::Trigger(value) => *value,
+                other => panic!("unexpected captured value: {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(values[1], values[0].wrapping_add(1));
     }
 
     #[cfg(not(feature = "scripting"))]

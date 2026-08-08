@@ -5,14 +5,16 @@
 )]
 
 use nux_capi::{
-    NUX_CAPI_ABI_VERSION, NuxArtboardInstance, NuxFile, NuxRenderCallbacks, NuxRuntimeInfo,
+    NUX_CAPI_ABI_VERSION, NUX_FILE_ASSET_KIND_IMAGE, NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE,
+    NuxArtboardInstance, NuxFile, NuxFileAssetDescriptorView, NuxRenderCallbacks, NuxRuntimeInfo,
     NuxStateMachineInstance, NuxStatus, NuxStringView, NuxViewModelInstance,
     nux_artboard_instance_advance, nux_artboard_instance_bind_view_model,
     nux_artboard_instance_draw, nux_artboard_instance_free, nux_artboard_instance_new,
     nux_capi_abi_version, nux_capi_require_abi, nux_capi_runtime_info,
     nux_file_artboard_animation_count, nux_file_artboard_count, nux_file_artboard_name,
-    nux_file_artboard_state_machine_count, nux_file_artboard_state_machine_name, nux_file_free,
-    nux_file_import, nux_state_machine_instance_advance, nux_state_machine_instance_fire_trigger,
+    nux_file_artboard_state_machine_count, nux_file_artboard_state_machine_name,
+    nux_file_asset_count, nux_file_asset_descriptor, nux_file_free, nux_file_import,
+    nux_state_machine_instance_advance, nux_state_machine_instance_fire_trigger,
     nux_state_machine_instance_free, nux_state_machine_instance_new,
     nux_state_machine_instance_new_default, nux_state_machine_instance_pointer_down,
     nux_state_machine_instance_pointer_move, nux_state_machine_instance_pointer_up,
@@ -119,6 +121,40 @@ fn c_api_imports_file_and_exposes_artboard_metadata() {
     unsafe {
         nux_file_free(file);
     }
+}
+
+#[test]
+fn c_api_exposes_the_exact_dense_file_asset_catalog() {
+    let file = import_fixture("in_band_asset.riv");
+    let mut count = usize::MAX;
+    assert_eq!(
+        unsafe { nux_file_asset_count(file, &mut count) },
+        NuxStatus::Ok
+    );
+    assert_eq!(count, 1);
+
+    let mut descriptor = NuxFileAssetDescriptorView::default();
+    assert_eq!(
+        unsafe { nux_file_asset_descriptor(file, 0, &mut descriptor) },
+        NuxStatus::Ok
+    );
+    assert_eq!(descriptor.ordinal, 0);
+    assert_eq!(descriptor.kind, NUX_FILE_ASSET_KIND_IMAGE);
+    assert_eq!(descriptor.has_authored_id, 1);
+    assert_eq!(descriptor.authored_id, 45_022);
+    assert_eq!(string_view_to_owned(descriptor.name), "1x1.png");
+    assert_eq!(string_view_to_owned(descriptor.file_extension), "png");
+    assert_eq!(descriptor.is_embedded, 1);
+    assert_eq!(descriptor.has_contents_record, 1);
+    assert_eq!(
+        descriptor.required_provider_flags,
+        NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE
+    );
+    assert_eq!(
+        unsafe { nux_file_asset_descriptor(file, 1, &mut descriptor) },
+        NuxStatus::NotFound
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
 }
 
 #[test]

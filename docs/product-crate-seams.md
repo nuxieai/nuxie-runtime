@@ -90,6 +90,27 @@ upload after reset or reattach. Callbacks may not call back into the runtime;
 the table contains no experience, session, package, build, scheduling, UIKit,
 AppKit, CAMetalLayer, or MTLTexture policy.
 
+The Apple-gated configured import is the single composition root for optional
+exact-artifact generic host commands, the Apple asset-host table, and an exact
+expected file-asset catalog. Each child table is independently versioned and
+copied before parsing or callbacks. The portable catalog inspection and
+expected-descriptor types do not depend on Apple; they expose only authored file
+metadata and the generic provider capabilities an import requires. The older
+host-command and Apple-asset imports remain compatibility wrappers around the
+same implementation, while ordinary trusted and untrusted imports install no
+callbacks and perform no expected-catalog validation.
+
+View-model change reporting is operation-scoped runtime evidence, not a shared
+event queue. A direct mutation result owns the ordered repeated writes made by
+that mutation and labels them with caller origin and the caller's opaque
+correlation value. A player-step result owns only the writes authored during
+that exact step, labels them with runtime origin and that step's correlation,
+and never drains changes from another player sharing the same view model.
+Typed after-values and durable instance/property identities remain readable
+until the owned result is freed. Failed operations discard the complete journal
+and restore the bound view-model graph before poisoning the failed occurrence;
+the interface adds no session, experience, screen, package, or SDK policy.
+
 ## Build selectors
 
 Each cut has a named selector:

@@ -9,6 +9,10 @@ use luaur_compiler::functions::luau_compile::luau_compile;
 use nux_capi::*;
 use nuxie_schema::definition_by_name;
 
+#[path = "support/composed_import.rs"]
+mod composed_import;
+use composed_import::scripted_view_model_asset_fixture;
+
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
     let mut output_size = 0;
@@ -72,6 +76,11 @@ fn push_f32(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: f32) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+fn push_color(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
     push_var_uint(bytes, u64::from(property_key(type_name, name)));
     push_var_uint(bytes, value.len() as u64);
@@ -125,6 +134,13 @@ fn scripted_fixture(source: &[u8]) -> Vec<u8> {
     push_object(&mut bytes, "Shape", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);
     });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Component", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+    });
     push_object(&mut bytes, "Rectangle", |bytes| {
         push_uint(bytes, "Node", "parentId", 1);
         push_f32(bytes, "ParametricPath", "width", 100.0);
@@ -142,7 +158,6 @@ fn scripted_fixture(source: &[u8]) -> Vec<u8> {
     });
     bytes
 }
-
 fn scripted_drawable_fixture(source: &[u8]) -> Vec<u8> {
     let mut payload = vec![0];
     payload.extend(compile_luau(source));
@@ -253,6 +268,43 @@ fn raw_step(
     (status, result)
 }
 
+fn correlated_step(
+    player: *mut NuxPlayer,
+    pointers: &[NuxPlayerPointerEvent],
+    correlation_id: u64,
+) -> *mut NuxPlayerStepResult {
+    correlated_step_with_delta(player, pointers, correlation_id, 0.016)
+}
+
+fn correlated_step_with_delta(
+    player: *mut NuxPlayer,
+    pointers: &[NuxPlayerPointerEvent],
+    correlation_id: u64,
+    elapsed_seconds: f32,
+) -> *mut NuxPlayerStepResult {
+    let operation = NuxPlayerStep {
+        pointers: pointers.as_ptr(),
+        pointer_count: pointers.len(),
+        elapsed_seconds,
+        correlation_id,
+        ..NuxPlayerStep::default()
+    };
+    let mut result = std::ptr::null_mut();
+    let status = unsafe { nux_player_step(player, &operation, &mut result) };
+    if status != NuxStatus::Ok {
+        let mut diagnostic = NuxCapiDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_diagnostic(result, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        panic!(
+            "correlated step failed: {status:?}: {}",
+            copy(diagnostic.message)
+        );
+    }
+    result
+}
+
 fn step(player: *mut NuxPlayer, pointers: &[NuxPlayerPointerEvent]) -> *mut NuxPlayerStepResult {
     let (status, result) = raw_step(player, pointers);
     if status != NuxStatus::Ok {
@@ -306,6 +358,92 @@ fn trusted_import(bytes: &[u8], config: &NuxHostCommandImportConfig) -> *mut Nux
     );
     assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
     file
+}
+
+fn view_model_number(instance: *const NuxViewModelInstance, name: &str) -> f32 {
+    let mut snapshot = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_snapshot(instance, &mut snapshot) },
+        NuxStatus::Ok
+    );
+    let mut info = NuxViewModelSnapshotInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_info(snapshot, &mut info) },
+        NuxStatus::Ok
+    );
+    let mut found = None;
+    for index in 0..info.value_count {
+        let mut value = NuxViewModelSnapshotValueView::default();
+        assert_eq!(
+            unsafe { nux_view_model_snapshot_value(snapshot, index, &mut value) },
+            NuxStatus::Ok
+        );
+        if copy(value.name) == name {
+            assert_eq!(value.kind, NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+            found = Some(value.number_value);
+            break;
+        }
+    }
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_free(snapshot) },
+        NuxStatus::Ok
+    );
+    found.unwrap_or_else(|| panic!("missing view-model number {name}"))
+}
+
+fn view_model_link_identity(instance: *const NuxViewModelInstance, name: &str) -> u64 {
+    let mut snapshot = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_snapshot(instance, &mut snapshot) },
+        NuxStatus::Ok
+    );
+    let mut info = NuxViewModelSnapshotInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_info(snapshot, &mut info) },
+        NuxStatus::Ok
+    );
+    let mut found = None;
+    for index in 0..info.value_count {
+        let mut value = NuxViewModelSnapshotValueView::default();
+        assert_eq!(
+            unsafe { nux_view_model_snapshot_value(snapshot, index, &mut value) },
+            NuxStatus::Ok
+        );
+        if copy(value.name) == name {
+            assert_eq!(value.kind, NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL);
+            found = Some(value.referenced_instance_id);
+            break;
+        }
+    }
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_free(snapshot) },
+        NuxStatus::Ok
+    );
+    found.unwrap_or_else(|| panic!("missing view-model link {name}"))
+}
+
+fn mutate_view_model_number(instance: *mut NuxViewModelInstance, path: &str, value: f32) {
+    let mutation = NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+        instance,
+        path: view(path),
+        number_value: value,
+        ..NuxViewModelMutation::default()
+    };
+    let batch = NuxViewModelMutationBatch {
+        mutations: &mutation,
+        mutation_count: 1,
+        ..NuxViewModelMutationBatch::default()
+    };
+    let mut result = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_mutate(&batch, &mut result) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_free(result) },
+        NuxStatus::Ok
+    );
 }
 
 fn listener_player(
@@ -507,6 +645,430 @@ fn ordinary_import_keeps_the_same_authored_module_inert() {
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
     }
+}
+
+#[test]
+fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_models() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            local bridge = require("bridge")
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local root = context:viewModel()
+                        if root ~= nil and root.amount.value == 0 then
+                            root.amount.value = 10
+                            root.amount.value = 20
+                        end
+                        bridge.command("performed", nil)
+                    end,
+                }
+            end
+        "#,
+    );
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut asset_count = 0;
+    assert_eq!(
+        unsafe { nux_file_asset_count(file, &mut asset_count) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        asset_count, 2,
+        "the configured script and image remain first-class file assets"
+    );
+
+    let mut first_artboard = std::ptr::null_mut();
+    let mut second_artboard = std::ptr::null_mut();
+    let mut unbound_artboard = std::ptr::null_mut();
+    for out in [
+        &mut first_artboard,
+        &mut second_artboard,
+        &mut unbound_artboard,
+    ] {
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, out) },
+            NuxStatus::Ok
+        );
+    }
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    let mut instance_identity = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(view_model, &mut instance_identity) },
+        NuxStatus::Ok
+    );
+    assert_ne!(instance_identity, 0);
+    for artboard in [first_artboard, second_artboard] {
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+    }
+    let callbacks = NuxRenderCallbacks::default();
+    for artboard in [first_artboard, second_artboard, unbound_artboard] {
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
+            NuxStatus::Ok
+        );
+    }
+    let mut first_player = std::ptr::null_mut();
+    let mut second_player = std::ptr::null_mut();
+    let mut unbound_player = std::ptr::null_mut();
+    for (artboard, out) in [
+        (first_artboard, &mut first_player),
+        (second_artboard, &mut second_player),
+        (unbound_artboard, &mut unbound_player),
+    ] {
+        assert_eq!(
+            unsafe { nux_player_new_state_machine_named(artboard, view("HostCommands"), out) },
+            NuxStatus::Ok
+        );
+        let initialized = correlated_step_with_delta(*out, &[], 0, 0.0);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(initialized) },
+            NuxStatus::Ok
+        );
+    }
+
+    let correlation_id = 0xc0ff_eeu64;
+    let first_result = correlated_step(first_player, &pointer_click(), correlation_id);
+    let mut first_info = NuxPlayerStepInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_info(first_result, &mut first_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(first_info.host_command_count, 1);
+    assert_eq!(first_info.view_model_change_count, 2);
+    for (index, expected) in [10.0, 20.0].into_iter().enumerate() {
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_view_model_change(first_result, index, &mut change) },
+            NuxStatus::Ok
+        );
+        assert_eq!(change.origin, NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME);
+        assert_eq!(change.correlation_id, correlation_id);
+        assert_eq!(change.owner_instance_id, instance_identity);
+        assert_eq!(change.property_index, 0);
+        assert_eq!(change.kind, NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+        assert_eq!(change.number_value, expected);
+    }
+
+    let second_result = correlated_step_with_delta(second_player, &[], 22, 0.0);
+    let mut second_info = NuxPlayerStepInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_info(second_result, &mut second_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        second_info.view_model_change_count, 0,
+        "a second player cannot drain another operation"
+    );
+
+    let unbound_result = correlated_step(unbound_player, &pointer_click(), 33);
+    let mut unbound_info = NuxPlayerStepInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_info(unbound_result, &mut unbound_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unbound_info.host_command_count, 1);
+    assert_eq!(
+        unbound_info.view_model_change_count, 0,
+        "an unbound occurrence never leaves a latent journal"
+    );
+
+    unsafe {
+        nux_player_step_result_free(second_result);
+        nux_player_step_result_free(unbound_result);
+        nux_player_free(first_player);
+        nux_player_free(second_player);
+        nux_player_free(unbound_player);
+        nux_artboard_instance_free(first_artboard);
+        nux_artboard_instance_free(second_artboard);
+        nux_artboard_instance_free(unbound_artboard);
+        nux_view_model_instance_free(view_model);
+        nux_file_free(file);
+    }
+    let mut retained = NuxViewModelChangeView::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_view_model_change(first_result, 1, &mut retained) },
+        NuxStatus::Ok
+    );
+    assert_eq!(retained.owner_instance_id, instance_identity);
+    assert_eq!(retained.number_value, 20.0);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(first_result) },
+        NuxStatus::Ok
+    );
+}
+
+#[test]
+fn scripted_sibling_occurrences_share_only_one_foreign_resource_domain() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            return function(_context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+    );
+    let host = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &host);
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    let mut occurrences = [std::ptr::null_mut(); 3];
+    for occurrence in &mut occurrences {
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, occurrence) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(*occurrence, view_model) },
+            NuxStatus::Ok
+        );
+    }
+
+    let callbacks = NuxRenderCallbacks::default();
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(occurrences[0], &callbacks) },
+        NuxStatus::Ok
+    );
+    let same_domain_callbacks = callbacks;
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(occurrences[1], &same_domain_callbacks) },
+        NuxStatus::Ok,
+        "a distinct descriptor for the same resource domain reuses the stable File VM factory"
+    );
+
+    let mut distinct_context = ();
+    let distinct_callbacks = NuxRenderCallbacks {
+        user_data: std::ptr::from_mut(&mut distinct_context).cast(),
+        ..callbacks
+    };
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(occurrences[2], &distinct_callbacks) },
+        NuxStatus::RuntimeError,
+        "a different scripted factory domain fails precisely during scripted hydration, not as a blanket occurrence binding mismatch"
+    );
+
+    for occurrence in occurrences {
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(occurrence) },
+            NuxStatus::Ok
+        );
+    }
+    assert_eq!(
+        unsafe { nux_view_model_instance_free(view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+}
+
+#[test]
+fn scripted_failure_rolls_back_bound_view_model_and_poisons_the_occurrence() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            local bridge = require("bridge")
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local root = context:viewModel()
+                        root.amount.value = 10
+                        root.amount.value = 20
+                        root.child.value = Data.Child.new("temporary-child")
+                        root.child.value.score.value = 99
+                        bridge.command("not-committed", nil)
+                        error("rollback requested")
+                    end,
+                }
+            end
+        "#,
+    );
+    let host = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &host);
+    let mut artboard = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+        NuxStatus::Ok
+    );
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+        NuxStatus::Ok
+    );
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_state_machine_named(artboard, view("HostCommands"), &mut player) },
+        NuxStatus::Ok
+    );
+    let initialized = correlated_step_with_delta(player, &[], 0, 0.0);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(initialized) },
+        NuxStatus::Ok
+    );
+    let original_child = view_model_link_identity(view_model, "child");
+    assert_ne!(original_child, 0);
+    assert_eq!(view_model_number(view_model, "score"), 4.0);
+
+    let (status, failed) = raw_step(player, &pointer_click());
+    assert_eq!(status, NuxStatus::RuntimeError);
+    let mut failed_status = NuxStatus::Ok;
+    assert_eq!(
+        unsafe { nux_player_step_result_status(failed, &mut failed_status) },
+        NuxStatus::Ok
+    );
+    assert_eq!(failed_status, NuxStatus::RuntimeError);
+    let mut failed_change = NuxViewModelChangeView::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_view_model_change(failed, 0, &mut failed_change) },
+        NuxStatus::NotFound
+    );
+    assert_eq!(
+        unsafe { nux_player_step_result_free(failed) },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 0.0);
+    assert_eq!(
+        view_model_link_identity(view_model, "child"),
+        original_child
+    );
+    assert_eq!(view_model_number(view_model, "score"), 4.0);
+
+    mutate_view_model_number(view_model, "amount", 7.0);
+    assert_eq!(view_model_number(view_model, "amount"), 7.0);
+
+    let (status, poisoned) = raw_step(player, &[]);
+    assert_eq!(status, NuxStatus::RuntimeError);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(poisoned) },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 7.0);
+
+    assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_free(view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+}
+
+#[test]
+fn journal_limit_failure_rolls_back_shared_view_model_and_leaves_handle_usable() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local root = context:viewModel()
+                        for index = 1, 4097 do
+                            root.amount.value = index
+                        end
+                    end,
+                }
+            end
+        "#,
+    );
+    let host = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &host);
+    let mut artboard = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+        NuxStatus::Ok
+    );
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+        NuxStatus::Ok
+    );
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_state_machine_named(artboard, view("HostCommands"), &mut player) },
+        NuxStatus::Ok
+    );
+    let initialized = correlated_step_with_delta(player, &[], 0, 0.0);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(initialized) },
+        NuxStatus::Ok
+    );
+
+    let (status, failed) = raw_step(player, &pointer_click());
+    assert_eq!(status, NuxStatus::LimitExceeded);
+    let mut change = NuxViewModelChangeView::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_view_model_change(failed, 0, &mut change) },
+        NuxStatus::NotFound
+    );
+    assert_eq!(
+        unsafe { nux_player_step_result_free(failed) },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 0.0);
+
+    mutate_view_model_number(view_model, "amount", 8.0);
+    assert_eq!(view_model_number(view_model, "amount"), 8.0);
+
+    let (status, poisoned) = raw_step(player, &[]);
+    assert_eq!(status, NuxStatus::RuntimeError);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(poisoned) },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 8.0);
+
+    assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_free(view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
 }
 
 #[test]

@@ -10,7 +10,10 @@ use nuxie_binary::{
     RuntimeViewModelInstanceReference,
 };
 
-pub use crate::view_model_cell::{RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeFontAssetValue};
+pub use crate::view_model_cell::{
+    RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeViewModelChangeCapture,
+    RuntimeViewModelChangeLimitExceeded, RuntimeViewModelChangeValue,
+};
 use crate::view_model_cell::{
     RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeHostMutationNotifications,
     RuntimeViewModelCell, RuntimeViewModelCellValue, defer_host_mutation_notification,
@@ -1615,12 +1618,14 @@ pub use authored_viewmodel::{
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
     RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelFontAssetSourceHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
-    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
-    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTransaction,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    RuntimeViewModelLinkError, runtime_global_view_model_indices, runtime_global_view_model_names,
+    RuntimeOwnedViewModelGraphTransaction, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
+    RuntimeOwnedViewModelListStringMatchBooleanHandle, RuntimeOwnedViewModelNumberSourceHandle,
+    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
+    RuntimeOwnedViewModelTransaction, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelChange,
+    RuntimeViewModelGraphTransactionError, RuntimeViewModelLinkError,
+    runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

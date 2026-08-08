@@ -186,6 +186,15 @@ pub struct RuntimeOwnedViewModelHandle {
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
 }
 
+/// One ordered, operation-owned write resolved against its durable retained
+/// view-model instance and authored property identity.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeViewModelChange {
+    pub owner_instance_identity: u64,
+    pub property_index: usize,
+    pub value: RuntimeViewModelChangeValue,
+}
+
 /// Identity-preserving, runtime-owned transaction for a bounded host batch.
 ///
 /// Mutation methods retain the exact runtime cells and list/view-model
@@ -197,6 +206,24 @@ pub struct RuntimeOwnedViewModelTransaction {
     undo: RuntimeOwnedViewModelUndoLog,
     notifications: Option<RuntimeHostMutationNotifications>,
     armed: bool,
+}
+
+/// Reversible snapshot of one or more retained view-model graphs around a
+/// runtime-authored operation. Unlike the host mutation transaction, this
+/// captures every reachable property before script execution because the
+/// runtime—not the caller—chooses which cells and topology to mutate.
+#[derive(Debug)]
+pub struct RuntimeOwnedViewModelGraphTransaction {
+    undo: RuntimeOwnedViewModelUndoLog,
+    notifications: Option<RuntimeHostMutationNotifications>,
+    armed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeViewModelGraphTransactionError {
+    Reentrant,
+    BorrowConflict,
+    LimitExceeded,
 }
 
 #[derive(Debug, Default)]
@@ -248,6 +275,42 @@ impl RuntimeOwnedViewModelHandle {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.instance, &other.instance)
+    }
+
+    pub fn instance_identity(&self) -> u64 {
+        self.instance.borrow().instance_identity()
+    }
+
+    /// Resolve every captured cell against this exact retained graph. The
+    /// capture is consumed even when a changed cell is foreign, so callers
+    /// cannot accidentally publish a partial journal.
+    pub fn resolve_change_capture(
+        &self,
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<RuntimeViewModelChange>> {
+        Self::resolve_change_capture_across(std::slice::from_ref(self), capture)
+    }
+
+    pub fn resolve_change_capture_across(
+        roots: &[Self],
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<RuntimeViewModelChange>> {
+        let captured = capture.finish().ok()?;
+        let mut changes = Vec::with_capacity(captured.len());
+        for change in captured {
+            let (owner_instance_identity, property_index) = roots.iter().find_map(|root| {
+                let mut visited = BTreeSet::new();
+                root.instance
+                    .borrow()
+                    .change_identity_for_cell(change.cell_identity, &mut visited)
+            })?;
+            changes.push(RuntimeViewModelChange {
+                owner_instance_identity,
+                property_index,
+                value: change.value,
+            });
+        }
+        Some(changes)
     }
 
     pub(crate) fn add_rebind_dependent(&self, sink: &RuntimeCellDirtSink) {
@@ -623,6 +686,18 @@ impl RuntimeOwnedViewModelHandle {
 }
 
 impl RuntimeOwnedViewModelUndoLog {
+    fn push_bounded(
+        &mut self,
+        entry: RuntimeOwnedViewModelUndo,
+        maximum_entries: usize,
+    ) -> Result<(), RuntimeViewModelGraphTransactionError> {
+        if self.entries.len() >= maximum_entries {
+            return Err(RuntimeViewModelGraphTransactionError::LimitExceeded);
+        }
+        self.entries.push(entry);
+        Ok(())
+    }
+
     fn record_cell(&mut self, cell: RuntimeViewModelCell) {
         let value = cell.value();
         self.entries.push(RuntimeOwnedViewModelUndo::Cell(cell, value));
@@ -716,6 +791,123 @@ impl RuntimeOwnedViewModelUndoLog {
 
     fn commit(&mut self) {
         self.entries.clear();
+    }
+}
+
+impl RuntimeOwnedViewModelGraphTransaction {
+    pub fn begin(
+        roots: &[RuntimeOwnedViewModelHandle],
+        maximum_entries: usize,
+    ) -> Result<Self, RuntimeViewModelGraphTransactionError> {
+        let notifications = RuntimeHostMutationNotifications::begin()
+            .ok_or(RuntimeViewModelGraphTransactionError::Reentrant)?;
+        let mut transaction = Self {
+            undo: RuntimeOwnedViewModelUndoLog::default(),
+            notifications: Some(notifications),
+            armed: true,
+        };
+        let mut visited = BTreeSet::new();
+        for root in roots {
+            transaction.snapshot_instance(&root.instance, &mut visited, maximum_entries)?;
+        }
+        Ok(transaction)
+    }
+
+    fn snapshot_instance(
+        &mut self,
+        shared: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        visited: &mut BTreeSet<u64>,
+        maximum_entries: usize,
+    ) -> Result<(), RuntimeViewModelGraphTransactionError> {
+        let instance = shared
+            .try_borrow()
+            .map_err(|_| RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+        if !visited.insert(instance.allocation_identity) {
+            return Ok(());
+        }
+        let mut descendants = Vec::new();
+        for occurrence in &instance.value_order {
+            match occurrence.kind {
+                RuntimeOwnedViewModelValueKind::List => {
+                    let list = instance
+                        .lists
+                        .get(occurrence.slot_index)
+                        .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+                    let handle = RuntimeOwnedViewModelListHandle {
+                        value: Rc::clone(&list.value),
+                        cell: list.cell.clone(),
+                    };
+                    let items = handle.transaction_snapshot_items();
+                    descendants.extend(items.iter().map(|item| Rc::clone(&item.instance)));
+                    self.undo.push_bounded(
+                        RuntimeOwnedViewModelUndo::List(handle, items),
+                        maximum_entries,
+                    )?;
+                }
+                RuntimeOwnedViewModelValueKind::ViewModel => {
+                    let property = instance
+                        .view_models
+                        .get(occurrence.slot_index)
+                        .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+                    let linked_instance = property.endpoint.linked_instance();
+                    if let Some(linked) = linked_instance.as_ref() {
+                        descendants.push(Rc::clone(linked));
+                    }
+                    self.undo.push_bounded(
+                        RuntimeOwnedViewModelUndo::ViewModel(RuntimeOwnedViewModelLinkSnapshot {
+                            endpoint: RuntimeOwnedViewModelEndpoint {
+                                state: Rc::clone(&property.endpoint.state),
+                            },
+                            parent_relay: Rc::clone(&instance.parent_relay),
+                            value: property.endpoint.value(),
+                            linked_instance,
+                        }),
+                        maximum_entries,
+                    )?;
+                }
+                _ => {
+                    let cell = instance
+                        .scalar_cell_by_property_index(occurrence.property_index)
+                        .ok_or(RuntimeViewModelGraphTransactionError::BorrowConflict)?;
+                    let value = cell.value();
+                    self.undo.push_bounded(
+                        RuntimeOwnedViewModelUndo::Cell(cell, value),
+                        maximum_entries,
+                    )?;
+                }
+            }
+        }
+        drop(instance);
+        for descendant in descendants {
+            self.snapshot_instance(&descendant, visited, maximum_entries)?;
+        }
+        Ok(())
+    }
+
+    pub fn commit(mut self) {
+        self.notifications
+            .take()
+            .expect("active graph transaction")
+            .commit();
+        self.undo.commit();
+        self.armed = false;
+    }
+
+    fn rollback(&mut self) {
+        if !self.armed {
+            return;
+        }
+        self.undo.rollback();
+        if let Some(notifications) = self.notifications.take() {
+            notifications.discard();
+        }
+        self.armed = false;
+    }
+}
+
+impl Drop for RuntimeOwnedViewModelGraphTransaction {
+    fn drop(&mut self) {
+        self.rollback();
     }
 }
 
@@ -1130,6 +1322,63 @@ impl From<RuntimeOwnedViewModelInstance> for RuntimeOwnedViewModelHandle {
 }
 
 impl RuntimeOwnedViewModelInstance {
+    fn change_identity_for_cell(
+        &self,
+        cell_identity: usize,
+        visited: &mut BTreeSet<u64>,
+    ) -> Option<(u64, usize)> {
+        if !visited.insert(self.allocation_identity) {
+            return None;
+        }
+        macro_rules! scalar_cells {
+            ($($values:expr),+ $(,)?) => {
+                $(
+                    if let Some(value) = $values
+                        .iter()
+                        .find(|value| value.cell.capture_identity() == cell_identity)
+                    {
+                        return Some((self.instance_identity, value.property_index));
+                    }
+                )+
+            };
+        }
+        scalar_cells!(
+            self.numbers,
+            self.booleans,
+            self.strings,
+            self.colors,
+            self.enums,
+            self.symbol_list_indices,
+            self.lists,
+            self.assets,
+            self.font_assets,
+            self.blob_assets,
+            self.artboards,
+            self.triggers,
+        );
+        for child in &self.view_models {
+            if child.endpoint.cell().capture_identity() == cell_identity {
+                return Some((self.instance_identity, child.property_index));
+            }
+            if let Some(linked) = child.endpoint.linked_instance()
+                && let Ok(linked) = linked.try_borrow()
+                && let Some(found) = linked.change_identity_for_cell(cell_identity, visited)
+            {
+                return Some(found);
+            }
+        }
+        for list in &self.lists {
+            for item in &list.value.borrow().items {
+                if let Ok(item) = item.instance.try_borrow()
+                    && let Some(found) = item.change_identity_for_cell(cell_identity, visited)
+                {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
     /// Whether this retained instance is currently reachable through another
     /// instance's ViewModel or list property.
     ///
@@ -1181,6 +1430,31 @@ mod upstream_viewmodel_instance_contract_tests {
     use crate::properties::property_key_for_name;
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_schema::definition_by_name;
+
+    #[test]
+    fn operation_change_capture_preserves_repeated_scalar_writes() {
+        let file = two_number_instance_file();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let capture = RuntimeViewModelChangeCapture::begin().expect("one active capture");
+
+        assert!(root
+            .borrow_mut()
+            .set_number_by_property_name("first", 10.0));
+        assert!(root
+            .borrow_mut()
+            .set_number_by_property_name("first", 20.0));
+
+        let changes = root
+            .resolve_change_capture(capture)
+            .expect("every changed cell belongs to the retained graph");
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0].owner_instance_identity, changes[1].owner_instance_identity);
+        assert_eq!(changes[0].property_index, changes[1].property_index);
+        assert_eq!(changes[0].value, RuntimeViewModelChangeValue::Number(10.0));
+        assert_eq!(changes[1].value, RuntimeViewModelChangeValue::Number(20.0));
+    }
 
     fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
         FixtureRecord {
@@ -2322,14 +2596,23 @@ impl RuntimeOwnedViewModelInstance {
     // explicit allocation-independent identity for compatibility entrypoints.
     fn next_instance_identity() -> u64 {
         use std::sync::atomic::{AtomicU64, Ordering};
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        NEXT.fetch_add(1, Ordering::Relaxed)
+        // Zero is the stable C-ABI sentinel for "no instance". Semantic
+        // instance identities therefore begin at one and are never derived
+        // from an allocation address.
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            (current != u64::MAX).then_some(current + 1)
+        })
+        .expect("view-model instance identity exhausted")
     }
 
     fn next_allocation_identity() -> u64 {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(1);
-        NEXT.fetch_add(1, Ordering::Relaxed)
+        NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            (current != u64::MAX).then_some(current + 1)
+        })
+        .expect("view-model allocation identity exhausted")
     }
 
     fn mark_structurally_mutated(&mut self) {
@@ -3759,7 +4042,11 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         drop(value);
-        list.cell.notify_bindings_value_changed();
+        RuntimeOwnedViewModelListHandle {
+            value: Rc::clone(&list.value),
+            cell: list.cell.clone(),
+        }
+        .notify_value_changed();
         true
     }
 

@@ -122,15 +122,36 @@ hooks.maximum_total_external_asset_bytes = 256 * 1024 * 1024
 hooks.maximum_image_dimension = 8192
 hooks.maximum_decoded_image_bytes = 256 * 1024 * 1024
 hooks.maximum_total_decoded_image_bytes = 512 * 1024 * 1024
+var importConfig = NuxFileImportConfig()
+importConfig.struct_size = UInt32(MemoryLayout<NuxFileImportConfig>.size)
 var result: OpaquePointer?
-check(bytes.withUnsafeBytes {
-    nux_file_import_with_apple_assets(
-        $0.bindMemory(to: UInt8.self).baseAddress, $0.count, &hooks, &file, &result)
+check(bytes.withUnsafeBytes { rawBytes in
+    withUnsafePointer(to: &hooks) { hooksPointer in
+        importConfig.apple_assets = hooksPointer
+        return nux_file_import_configured(
+            rawBytes.bindMemory(to: UInt8.self).baseAddress,
+            rawBytes.count,
+            &importConfig,
+            &file,
+            &result
+        )
+    }
 } == NUX_STATUS_OK.rawValue, "import")
 freeResult(result, NUX_STATUS_OK.rawValue)
 check(decoder.calls == 1, "one image decode")
 check(decoder.retains == 1 && decoder.releases == 1, "balanced decoded pixels")
 check(decoder.nestedABI == 0, "callback reentry rejected")
+var assetCount = 0
+check(nux_file_asset_count(file, &assetCount) == NUX_STATUS_OK.rawValue, "asset count")
+check(assetCount == 1, "one image asset")
+var asset = NuxFileAssetDescriptorView()
+asset.struct_size = UInt32(MemoryLayout<NuxFileAssetDescriptorView>.size)
+check(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK.rawValue, "asset descriptor")
+check(asset.kind == NUX_FILE_ASSET_KIND_IMAGE.rawValue, "image catalog kind")
+check(
+    asset.required_provider_flags == UInt32(NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE),
+    "image decode provider requirement"
+)
 var artboard: OpaquePointer?
 check(nux_artboard_instance_new(file, 0, &artboard) == NUX_STATUS_OK.rawValue, "artboard")
 var player: OpaquePointer?

@@ -60,10 +60,12 @@ use nuxie_render_api::{
     RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
     StrokeJoin, Vec2D,
 };
+use sha2::{Digest, Sha256};
 use std::any::Any;
 #[cfg(test)]
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
@@ -307,6 +309,103 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
     }
 }
 
+const MAX_DECODED_IMAGE_CACHE_ENTRIES: usize = 256;
+const MAX_DECODED_IMAGE_CACHE_BYTES: u64 = 64 * 1024 * 1024;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+struct EncodedImageCacheKey {
+    digest: [u8; 32],
+    encoded_len: usize,
+}
+
+impl EncodedImageCacheKey {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            digest: Sha256::digest(data).into(),
+            encoded_len: data.len(),
+        }
+    }
+}
+
+struct CachedWgpuImage {
+    width: u32,
+    height: u32,
+    retained_bytes: u64,
+    last_used: u64,
+    texture: Arc<WgpuImageTexture>,
+}
+
+#[derive(Default)]
+struct DecodedImageCache {
+    entries: HashMap<EncodedImageCacheKey, CachedWgpuImage>,
+    retained_bytes: u64,
+    next_stamp: u64,
+}
+
+impl DecodedImageCache {
+    fn get(&mut self, key: EncodedImageCacheKey) -> Option<(u32, u32, Arc<WgpuImageTexture>)> {
+        self.next_stamp = self.next_stamp.saturating_add(1);
+        let cached = self.entries.get_mut(&key)?;
+        cached.last_used = self.next_stamp;
+        Some((cached.width, cached.height, Arc::clone(&cached.texture)))
+    }
+
+    fn insert(
+        &mut self,
+        key: EncodedImageCacheKey,
+        width: u32,
+        height: u32,
+        texture: &Arc<WgpuImageTexture>,
+    ) {
+        let retained_bytes = rgba8_mip_chain_byte_len(width, height);
+        if retained_bytes > MAX_DECODED_IMAGE_CACHE_BYTES {
+            return;
+        }
+        if let Some(replaced) = self.entries.remove(&key) {
+            self.retained_bytes = self.retained_bytes.saturating_sub(replaced.retained_bytes);
+        }
+        while self.entries.len() >= MAX_DECODED_IMAGE_CACHE_ENTRIES
+            || self.retained_bytes.saturating_add(retained_bytes) > MAX_DECODED_IMAGE_CACHE_BYTES
+        {
+            let Some(oldest_key) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, cached)| cached.last_used)
+                .map(|(key, _)| *key)
+            else {
+                break;
+            };
+            if let Some(evicted) = self.entries.remove(&oldest_key) {
+                self.retained_bytes = self.retained_bytes.saturating_sub(evicted.retained_bytes);
+            }
+        }
+        self.next_stamp = self.next_stamp.saturating_add(1);
+        self.entries.insert(
+            key,
+            CachedWgpuImage {
+                width,
+                height,
+                retained_bytes,
+                last_used: self.next_stamp,
+                texture: Arc::clone(texture),
+            },
+        );
+        self.retained_bytes += retained_bytes;
+    }
+}
+
+fn rgba8_mip_chain_byte_len(mut width: u32, mut height: u32) -> u64 {
+    let mut bytes = 0u64;
+    loop {
+        bytes = bytes.saturating_add(u64::from(width) * u64::from(height) * 4);
+        if width == 1 && height == 1 {
+            return bytes;
+        }
+        width = (width / 2).max(1);
+        height = (height / 2).max(1);
+    }
+}
+
 struct Context {
     #[allow(dead_code)]
     instance: wgpu::Instance,
@@ -314,6 +413,9 @@ struct Context {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    // Factories cloned for new sessions share this device context, so decoded
+    // textures survive scene-owner replacement without crossing GPU devices.
+    decoded_images: Mutex<DecodedImageCache>,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
     logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
@@ -1042,6 +1144,7 @@ impl WgpuFactory {
                 adapter,
                 device,
                 queue,
+                decoded_images: Mutex::new(DecodedImageCache::default()),
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
                 logical_resources: logical_frame::LogicalResourceStore::default(),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
@@ -1359,6 +1462,21 @@ impl Factory for WgpuFactory {
         ) {
             return Err(ImageDecodeError);
         }
+        let cache_key = EncodedImageCacheKey::new(data);
+        if let Some((width, height, texture)) = self
+            .context
+            .decoded_images
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(cache_key)
+        {
+            return Ok(Box::new(WgpuImage {
+                width,
+                height,
+                texture: Some(texture),
+                owner: Arc::downgrade(&self.context),
+            }));
+        }
         let Some(decoded) = decode_image_rgba(data) else {
             return Err(ImageDecodeError);
         };
@@ -1403,10 +1521,16 @@ impl Factory for WgpuFactory {
             mip_level_count,
         );
         let view = texture.create_view(&Default::default());
+        let texture = Arc::new(WgpuImageTexture { texture, view });
+        self.context
+            .decoded_images
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(cache_key, width, height, &texture);
         Ok(Box::new(WgpuImage {
             width,
             height,
-            texture: Some(Arc::new(WgpuImageTexture { texture, view })),
+            texture: Some(texture),
             owner: Arc::downgrade(&self.context),
         }))
     }
@@ -11476,6 +11600,161 @@ mod tests {
             .unwrap()
             .texture
             .is_some());
+    }
+
+    #[test]
+    fn repeated_image_decode_reuses_the_renderer_domain_texture() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 4, 4);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255; 4 * 4 * 4])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+
+        let first = factory.decode_image(&encoded).expect("first image decodes");
+        let second = factory
+            .decode_image(&encoded)
+            .expect("repeat image decodes");
+        let first_texture = first
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("first decode owns a texture");
+        let second_texture = second
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("repeat decode owns a texture");
+
+        assert!(
+            Arc::ptr_eq(first_texture, second_texture),
+            "exact encoded bytes decoded through one renderer domain should reuse their retained GPU texture"
+        );
+    }
+
+    #[test]
+    fn decoded_image_cache_retains_a_recent_texture_across_owner_replacement() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 4, 4);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255; 4 * 4 * 4])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+
+        let first = factory.decode_image(&encoded).expect("first image decodes");
+        let first_texture = Arc::downgrade(
+            first
+                .as_any()
+                .downcast_ref::<WgpuImage>()
+                .and_then(|image| image.texture.as_ref())
+                .expect("first decode owns a texture"),
+        );
+        drop(first);
+
+        assert!(
+            first_texture.upgrade().is_some(),
+            "bounded renderer cache should retain a recent texture across owner replacement"
+        );
+        let second = factory
+            .decode_image(&encoded)
+            .expect("replacement owner decodes image");
+        let second_texture = second
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("replacement owner has a texture");
+        assert!(Arc::ptr_eq(
+            &first_texture.upgrade().expect("cache retains texture"),
+            second_texture
+        ));
+    }
+
+    #[test]
+    fn decoded_image_cache_evicts_lru_to_stay_within_gpu_byte_budget() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255; 4])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let texture = image
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("decode owns a texture");
+        let first_key = EncodedImageCacheKey::new(b"first");
+        let second_key = EncodedImageCacheKey::new(b"second");
+        let third_key = EncodedImageCacheKey::new(b"third");
+        let mut cache = DecodedImageCache::default();
+
+        cache.insert(first_key, 2300, 2300, texture);
+        cache.insert(second_key, 2300, 2300, texture);
+        cache.insert(third_key, 2300, 2300, texture);
+
+        assert!(cache.get(first_key).is_none());
+        assert!(cache.get(second_key).is_some());
+        assert!(cache.get(third_key).is_some());
+        assert!(cache.retained_bytes <= MAX_DECODED_IMAGE_CACHE_BYTES);
+    }
+
+    #[test]
+    fn repeated_image_decode_does_not_cross_renderer_devices() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 4, 4);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255; 4 * 4 * 4])
+                .unwrap();
+        }
+        let mut first_factory =
+            WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let mut second_factory =
+            WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+
+        let first = first_factory
+            .decode_image(&encoded)
+            .expect("first device decodes image");
+        let second = second_factory
+            .decode_image(&encoded)
+            .expect("second device decodes image");
+        let first_texture = first
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("first device owns a texture");
+        let second_texture = second
+            .as_any()
+            .downcast_ref::<WgpuImage>()
+            .and_then(|image| image.texture.as_ref())
+            .expect("second device owns a texture");
+
+        assert!(
+            !Arc::ptr_eq(first_texture, second_texture),
+            "decoded image textures must remain isolated to one renderer device"
+        );
     }
 
     #[test]

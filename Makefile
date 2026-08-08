@@ -425,6 +425,12 @@ cpp-probe:
 cpp-probe-scripted:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE_WITH_SCRIPTING=1 RIVE_CPP_PROBE_RUNNER_NAME=rive_cpp_probe_scripted tools/cpp-probe/build.sh "$(CPP_CONFIG)"
 
+.PHONY: capi-player-step-oracle
+# Live three-way ABI conformance check: C entry point and direct Rust facade
+# against the provenance-checked pinned C++ Scene oracle.
+capi-player-step-oracle: cpp-probe
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nux-capi --test player_step live_pinned_cpp_player_step_oracle_matches_c_and_rust -- --exact
+
 blob-differential: cpp-probe-scripted
 	NUXIE_CPP_BLOB_ORACLE="$(SCRIPTED_CPP_PROBE)" cargo test -p nuxie-scripting vm::view_model::tests::context_blob_positive_lookup_matches_live_cpp_oracle --lib -- --ignored --exact
 

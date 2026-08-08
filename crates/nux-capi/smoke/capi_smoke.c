@@ -207,6 +207,38 @@ int main(int argc, char** argv)
     CHECK(player_info.kind == NUX_PLAYER_KIND_STATE_MACHINE);
     CHECK(player_info.name.len == strlen("State Machine 1"));
 
+    NuxPlayerInputChange step_inputs[] = {
+        {.kind = NUX_PLAYER_INPUT_KIND_BOOL,
+         .name = {.data = "bool", .len = 4},
+         .bool_value = 1},
+        {.kind = NUX_PLAYER_INPUT_KIND_NUMBER,
+         .name = {.data = "num", .len = 3},
+         .number_value = 42.0f},
+        {.kind = NUX_PLAYER_INPUT_KIND_TRIGGER,
+         .name = {.data = "trig", .len = 4}},
+    };
+    NuxPlayerStep player_step = {
+        .struct_size = sizeof(NuxPlayerStep),
+        .inputs = step_inputs,
+        .input_count = sizeof(step_inputs) / sizeof(step_inputs[0]),
+        .elapsed_seconds = 0.016f,
+    };
+    NuxPlayerStepResult* step_result = NULL;
+    CHECK(nux_player_step(player, &player_step, &step_result) == NUX_STATUS_OK);
+    CHECK(step_result != NULL);
+    NuxPlayerStepInfo step_info = {.struct_size = sizeof(NuxPlayerStepInfo)};
+    CHECK(nux_player_step_result_info(step_result, &step_info) == NUX_STATUS_OK);
+    CHECK(step_info.pointer_result_count == 0);
+    if (step_info.state_change_count != 0)
+    {
+        NuxPlayerStateChangeView state = {
+            .struct_size = sizeof(NuxPlayerStateChangeView)};
+        CHECK(nux_player_step_result_state_change(step_result, 0, &state) ==
+              NUX_STATUS_OK);
+        CHECK(state.state_core_type != 0);
+    }
+    CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+
     CHECK(nux_state_machine_instance_set_bool(state_machine, "bool", true) ==
           NUX_STATUS_OK);
     CHECK(nux_state_machine_instance_set_number(state_machine, "num", 42.0f) ==

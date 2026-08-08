@@ -23,6 +23,18 @@ impl RuntimeLayerState {
     const RANDOM: u64 = 1 << 0;
     const RESET: u64 = 1 << 1;
 
+    /// Authored Core object id of this state, when the binary supplies one.
+    pub fn global_id(&self) -> Option<u32> {
+        self.global_id
+    }
+
+    /// Pinned Core schema type key for this authored state. A state without a
+    /// more-derived record is the base `LayerState`, matching C++ `typeKey`.
+    pub fn core_type(&self) -> Option<u32> {
+        nuxie_schema::definition_by_name(self.type_name.unwrap_or("LayerState"))
+            .map(|definition| u32::from(definition.type_key.int))
+    }
+
     pub(super) fn uses_random_transition_selection(&self) -> bool {
         self.flags & Self::RANDOM == Self::RANDOM
     }
@@ -61,5 +73,47 @@ impl RuntimeLayerState {
             targets,
             executor,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state(type_name: Option<&'static str>) -> RuntimeLayerState {
+        RuntimeLayerState {
+            global_id: None,
+            type_name,
+            animation: None,
+            blend_state_1d: None,
+            blend_state_direct: None,
+            speed: 1.0,
+            flags: 0,
+            fire_actions: Vec::new(),
+            listener_actions: Vec::new(),
+            transitions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn core_type_distinguishes_base_and_derived_layer_states() {
+        let base = state(None).core_type().expect("LayerState schema key");
+        let animation = state(Some("AnimationState"))
+            .core_type()
+            .expect("AnimationState schema key");
+        let exit = state(Some("ExitState"))
+            .core_type()
+            .expect("ExitState schema key");
+        assert_ne!(base, animation);
+        assert_ne!(animation, exit);
+        assert_eq!(
+            base,
+            u32::from(
+                nuxie_schema::definition_by_name("LayerState")
+                    .expect("LayerState definition")
+                    .type_key
+                    .int
+            )
+        );
     }
 }

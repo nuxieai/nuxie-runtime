@@ -3533,6 +3533,18 @@ impl StateMachineInstance {
         None
     }
 
+    /// Return the authored layer index corresponding to the Nth changed state.
+    /// The ordering matches [`Self::changed_state`] and pinned C++
+    /// `stateChangedByIndex`.
+    pub fn changed_state_layer_index(&self, index: usize) -> Option<usize> {
+        self.layers
+            .iter()
+            .enumerate()
+            .filter(|(_, layer)| layer.state_changed_on_advance())
+            .nth(index)
+            .map(|(layer_index, _)| layer_index)
+    }
+
     /// Re-enter every layer's retained EntryState occurrence.
     ///
     /// This mirrors pinned C++ `StateMachineInstance::resetState` and is
@@ -5713,6 +5725,31 @@ impl StateMachineInstance {
         self.retain_script_result(result)
     }
 
+    /// Timestamp-bearing, fallible tri-state pointer-down seam for atomic
+    /// foreign-function adapters. It preserves the exact C++ HitResult while
+    /// keeping script failures explicit until the operation commits.
+    pub fn try_pointer_down_hit_result_with_timestamp_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeHitResult, ScriptError> {
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Down,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            None,
+            None,
+            host,
+        )
+    }
+
     /// Tri-state twin of `pointer_move`/
     /// `pointer_move_with_owned_view_model_context` (`scene.hpp:56-58`). The
     /// owned-context chain validates the timestamp exactly like the `bool`
@@ -5748,6 +5785,29 @@ impl StateMachineInstance {
         self.retain_script_result(result)
     }
 
+    /// Timestamp-bearing, fallible tri-state pointer-move seam.
+    pub fn try_pointer_move_hit_result_with_timestamp_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeHitResult, ScriptError> {
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Move,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            None,
+            None,
+            host,
+        )
+    }
+
     /// Tri-state twin of `pointer_up`/
     /// `pointer_up_with_owned_view_model_context` (`scene.hpp:59`).
     pub fn pointer_up_hit_result(
@@ -5772,6 +5832,29 @@ impl StateMachineInstance {
         self.retain_script_result(result)
     }
 
+    /// Timestamp-bearing, fallible tri-state pointer-up seam.
+    pub fn try_pointer_up_hit_result_with_timestamp_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeHitResult, ScriptError> {
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Up,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            None,
+            None,
+            host,
+        )
+    }
+
     /// Tri-state twin of `pointer_exit`/
     /// `pointer_exit_with_owned_view_model_context` (`scene.hpp:60`).
     pub fn pointer_exit_hit_result(
@@ -5794,6 +5877,29 @@ impl StateMachineInstance {
             &mut NoopScriptHost,
         );
         self.retain_script_result(result)
+    }
+
+    /// Timestamp-bearing, fallible tri-state pointer-exit seam.
+    pub fn try_pointer_exit_hit_result_with_timestamp_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeHitResult, ScriptError> {
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Exit,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            None,
+            None,
+            host,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]

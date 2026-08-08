@@ -676,12 +676,17 @@ fn c_api_pointer_events_reject_null_arguments() {
 }
 
 /// Panic firewall coverage: every `extern "C"` entry point in the crate must
-/// route its body through `ffi_guard` so a panic can never unwind into C.
+/// route its body through a recognized guard so a panic can never unwind into C.
 /// This scans the source so a newly added export cannot silently skip the
 /// firewall. (The behavioral half — a deliberately panicking path returning
 /// the error status in debug — lives in the crate's `firewall_tests` module.)
 #[test]
 fn every_extern_c_export_is_panic_firewalled() {
+    const FIREWALL_PREFIXES: &[&str] = &[
+        "ffi_guard(",
+        "ffi_guard_with_handle_result(",
+        "ffi_guard_with_player_step_result(",
+    ];
     let source = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
     )
@@ -695,7 +700,9 @@ fn every_extern_c_export_is_panic_firewalled() {
         let name_end = rest.find('(').expect("extern fn has parameters");
         let name = &rest["pub unsafe extern \"C\" fn ".len()..name_end];
         assert!(
-            body.starts_with("ffi_guard(") || body.starts_with("ffi_guard_with_handle_result("),
+            FIREWALL_PREFIXES
+                .iter()
+                .any(|prefix| body.starts_with(prefix)),
             "extern \"C\" fn `{name}` does not open with a recognized panic firewall"
         );
         checked += 1;

@@ -14,6 +14,44 @@
  */
 #define NUX_CAPI_ABI_VERSION 3
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#define NUX_PLAYER_STEP_MAX_INPUTS (4 * 1024)
+
+#define NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES (4 * 1024)
+
+#define NUX_PLAYER_STEP_MAX_POINTERS (4 * 1024)
+
 enum NuxStatus
 #ifdef __cplusplus
   : uint32_t
@@ -30,6 +68,7 @@ enum NuxStatus
   NUX_STATUS_INVALID_STRUCT_SIZE = 8,
   NUX_STATUS_HANDLE_MISMATCH = 9,
   NUX_STATUS_REENTRANT_CALL = 10,
+  NUX_STATUS_LIMIT_EXCEEDED = 11,
 };
 #ifndef __cplusplus
 typedef uint32_t NuxStatus;
@@ -52,6 +91,73 @@ typedef uint32_t NuxPlayerKind;
 #endif // __cplusplus
 
 /**
+ * One fixed-stride state-machine input mutation in a player step. The
+ * selected value field is determined by `kind`; Trigger ignores both values.
+ */
+enum NuxPlayerInputKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_INPUT_KIND_BOOL = 0,
+  NUX_PLAYER_INPUT_KIND_NUMBER = 1,
+  NUX_PLAYER_INPUT_KIND_TRIGGER = 2,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerInputKind;
+#endif // __cplusplus
+
+/**
+ * Pinned C++ Scene pointer operation. Application-level cancellation policy
+ * is intentionally absent: C++ exposes Down, Move, Up, and Exit.
+ */
+enum NuxPlayerPointerKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_POINTER_KIND_DOWN = 0,
+  NUX_PLAYER_POINTER_KIND_MOVE = 1,
+  NUX_PLAYER_POINTER_KIND_UP = 2,
+  NUX_PLAYER_POINTER_KIND_EXIT = 3,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerPointerKind;
+#endif // __cplusplus
+
+/**
+ * Exact C++ HitResult strength in pointer submission order.
+ */
+enum NuxPlayerPointerHit
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_POINTER_HIT_NONE = 0,
+  NUX_PLAYER_POINTER_HIT_HIT = 1,
+  NUX_PLAYER_POINTER_HIT_HIT_OPAQUE = 2,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerPointerHit;
+#endif // __cplusplus
+
+enum NuxPlayerEventPropertyKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER = 0,
+  NUX_PLAYER_EVENT_PROPERTY_KIND_BOOL = 1,
+  NUX_PLAYER_EVENT_PROPERTY_KIND_STRING = 2,
+  NUX_PLAYER_EVENT_PROPERTY_KIND_COLOR = 3,
+  NUX_PLAYER_EVENT_PROPERTY_KIND_ENUM = 4,
+  NUX_PLAYER_EVENT_PROPERTY_KIND_TRIGGER = 5,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerEventPropertyKind;
+#endif // __cplusplus
+
+/**
  * Owned artboard occurrence. It retains the imported [`File`] through native
  * shared ownership and therefore remains valid after its [`NuxFile`] handle
  * is released.
@@ -70,6 +176,11 @@ typedef struct NuxFile NuxFile;
  * ownership, and metadata; playback operations are exposed separately.
  */
 typedef struct NuxPlayer NuxPlayer;
+
+/**
+ * Bounded library-owned result of one player step.
+ */
+typedef struct NuxPlayerStepResult NuxPlayerStepResult;
 
 /**
  * Owned state machine instance. Advance it through the
@@ -232,6 +343,121 @@ typedef struct NuxPlayerInfo {
    */
   struct NuxStringView name;
 } NuxPlayerInfo;
+
+typedef struct NuxPlayerInputChange {
+  /**
+   * One of the `NuxPlayerInputKind` constants. Stored as an integer so an
+   * invalid C bit pattern is rejected rather than becoming a Rust enum.
+   */
+  uint32_t kind;
+  struct NuxStringView name;
+  /**
+   * Canonical C boolean encoding: exactly 0 or 1. Other values reject the
+   * whole batch before mutation.
+   */
+  uint32_t bool_value;
+  float number_value;
+} NuxPlayerInputChange;
+
+typedef struct NuxPlayerPointerEvent {
+  /**
+   * One of the `NuxPlayerPointerKind` constants. Invalid values are
+   * rejected during whole-batch validation.
+   */
+  uint32_t kind;
+  float x;
+  float y;
+  int32_t pointer_id;
+  float timestamp_seconds;
+} NuxPlayerPointerEvent;
+
+/**
+ * One atomic, product-neutral player operation. Input and pointer arrays use
+ * ABI-v3 fixed element strides; future element layouts require a new entry
+ * point rather than appending fields and silently changing array stride.
+ */
+typedef struct NuxPlayerStep {
+  uint32_t struct_size;
+  const struct NuxPlayerInputChange *inputs;
+  size_t input_count;
+  const struct NuxPlayerPointerEvent *pointers;
+  size_t pointer_count;
+  float elapsed_seconds;
+} NuxPlayerStep;
+
+/**
+ * Owned reported-event projection. All string views borrow the owning step
+ * result and remain valid until its successful free.
+ */
+typedef struct NuxPlayerEventView {
+  uint32_t struct_size;
+  size_t event_local_index;
+  uint32_t event_core_type;
+  struct NuxStringView name;
+  struct NuxStringView url;
+  struct NuxStringView target;
+  float seconds_delay;
+  size_t property_count;
+} NuxPlayerEventView;
+
+/**
+ * Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
+ * promise. Its owner and lifetime are documented by the containing API.
+ */
+typedef struct NuxByteView {
+  const uint8_t *data;
+  size_t len;
+} NuxByteView;
+
+/**
+ * Fixed projection of one typed custom Event property. Only the value field
+ * selected by `kind` is meaningful.
+ */
+typedef struct NuxPlayerEventPropertyView {
+  uint32_t struct_size;
+  /**
+   * One of the `NUX_PLAYER_EVENT_PROPERTY_KIND_*` constants.
+   */
+  uint32_t kind;
+  struct NuxStringView name;
+  float number_value;
+  bool bool_value;
+  /**
+   * Exact authored/script bytes for a String property; not necessarily UTF-8.
+   */
+  struct NuxByteView string_value;
+  uint32_t color_value;
+  uint64_t integer_value;
+} NuxPlayerEventPropertyView;
+
+/**
+ * Summary of one owned step result. `keep_going` is the runtime's
+ * advanceAndApply continuation result; it is not a host render/scheduling
+ * request.
+ */
+typedef struct NuxPlayerStepInfo {
+  uint32_t struct_size;
+  bool keep_going;
+  size_t pointer_result_count;
+  size_t state_change_count;
+  size_t event_count;
+} NuxPlayerStepInfo;
+
+/**
+ * C++ `stateChangedByIndex` projection in compressed authored-layer order.
+ */
+typedef struct NuxPlayerStateChangeView {
+  uint32_t struct_size;
+  size_t layer_index;
+  /**
+   * Pinned Core schema type key (`Core::typeKey`).
+   */
+  uint32_t state_core_type;
+  /**
+   * Authored Core id, or `UINT32_MAX` when absent.
+   */
+  uint32_t state_global_id;
+} NuxPlayerStateChangeView;
 
 #ifdef __cplusplus
 extern "C" {
@@ -422,6 +648,45 @@ NuxStatus nux_player_new_static(struct NuxArtboardInstance *instance,
 NuxStatus nux_player_new_static_with_result(struct NuxArtboardInstance *instance,
                                             struct NuxPlayer **out_player,
                                             struct NuxCapiResult **out_result);
+
+/**
+ * Apply all input changes and pointer events, then advance exactly once. The
+ * operation validates the complete batch before mutation. Any unexpected
+ * post-mutation failure rolls back pending script-host effects and terminally
+ * poisons the shared occurrence, so no artboard/player operation can observe
+ * partially committed runtime state.
+ */
+NuxStatus nux_player_step(struct NuxPlayer *player,
+                          const struct NuxPlayerStep *step,
+                          struct NuxPlayerStepResult **out_result);
+
+NuxStatus nux_player_step_result_diagnostic(const struct NuxPlayerStepResult *result,
+                                            struct NuxCapiDiagnosticView *out_diagnostic);
+
+NuxStatus nux_player_step_result_event(const struct NuxPlayerStepResult *result,
+                                       size_t index,
+                                       struct NuxPlayerEventView *out_event);
+
+NuxStatus nux_player_step_result_event_property(const struct NuxPlayerStepResult *result,
+                                                size_t event_index,
+                                                size_t property_index,
+                                                struct NuxPlayerEventPropertyView *out_property);
+
+NuxStatus nux_player_step_result_free(struct NuxPlayerStepResult *result);
+
+NuxStatus nux_player_step_result_info(const struct NuxPlayerStepResult *result,
+                                      struct NuxPlayerStepInfo *out_info);
+
+NuxStatus nux_player_step_result_pointer(const struct NuxPlayerStepResult *result,
+                                         size_t index,
+                                         uint32_t *out_hit);
+
+NuxStatus nux_player_step_result_state_change(const struct NuxPlayerStepResult *result,
+                                              size_t index,
+                                              struct NuxPlayerStateChangeView *out_change);
+
+NuxStatus nux_player_step_result_status(const struct NuxPlayerStepResult *result,
+                                        NuxStatus *out_status);
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must

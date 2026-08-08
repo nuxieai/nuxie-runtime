@@ -10,9 +10,15 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]
 default = []
+scripting = ["nuxie/scripting"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }
+
+[dev-dependencies]
+nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
+nuxie-schema = { path = "../nuxie-schema" }
+serde_json = "1"
 
 [build-dependencies]
 cbindgen = "=0.29.2"

@@ -29,7 +29,14 @@ fi
 tagged_revision="$(git -C "${repo_root}" rev-list -n 1 "refs/tags/${release_tag}")"
 test "${tagged_revision}" = "${source_revision}"
 git -C "${repo_root}" fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
-git -C "${repo_root}" merge-base --is-ancestor "${source_revision}" refs/remotes/origin/main
+test "${source_revision}" = "$(git -C "${repo_root}" rev-parse refs/remotes/origin/main)"
+remote_tag_records="$(git -C "${repo_root}" ls-remote --exit-code origin \
+    "refs/tags/${release_tag}" "refs/tags/${release_tag}^{}")"
+remote_tag_revision="$(awk '$2 ~ /\^\{\}$/ { print $1 }' <<< "${remote_tag_records}")"
+if [[ -z "${remote_tag_revision}" ]]; then
+    remote_tag_revision="$(awk '$2 !~ /\^\{\}$/ { print $1 }' <<< "${remote_tag_records}")"
+fi
+test "${remote_tag_revision}" = "${source_revision}"
 for path in "${full_archive}" "${ios_archive}" "${metadata}" "${size_report}"; do
     test -f "${path}"
 done
@@ -75,6 +82,7 @@ gh release create "${release_tag}" \
     "${metadata}#artifact-set.json" \
     "${size_report}#SIZE_REPORT.json" \
     --repo nuxieai/nuxie-runtime \
+    --draft \
     --verify-tag \
     --title "Nuxie runtime ${runtime_version}" \
     --notes-file "${notes}"
@@ -97,4 +105,7 @@ ditto -x -k "${downloads}/NuxieRuntime-iOS.xcframework.zip" "${downloads}/ios"
     "${downloads}" "${downloads}/artifact-set.json" \
     "$(python3 "${script_dir}/json-scalar.py" "${downloads}/artifact-set.json" buildInputsHash string)" \
     "${downloads}/SIZE_REPORT.json"
+gh release edit "${release_tag}" \
+    --repo nuxieai/nuxie-runtime \
+    --draft=false
 echo "Published immutable ${release_tag} with both Apple artifacts"

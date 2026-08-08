@@ -11,6 +11,8 @@ from tools.apple_runtime_contract import validate_metadata
 from tools.apple_runtime_contract import qualify_release_metadata
 from tools.apple_runtime_contract import validate_distribution_metadata
 from tools.apple_runtime_contract import validate_layout_oracle
+from tools.apple_runtime_contract import validate_header_symbol_partitions
+from tools.apple_runtime_contract import validate_slice_provenance
 from tools.apple_runtime_contract import validate_size_report
 from tools.apple_runtime_contract import validate_symbol_partitions
 from tools.apple_runtime_contract import validate_symbols
@@ -99,6 +101,49 @@ def valid_metadata() -> dict[str, object]:
             "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md"
         ),
         "swiftPackageChecksum": "c" * 64,
+    }
+
+
+def valid_distribution_metadata() -> dict[str, object]:
+    revision = "a" * 40
+    return {
+        "schemaVersion": 6,
+        "runtimeVersion": "0.4.0",
+        "buildSourceRevision": revision,
+        "releaseRevision": revision,
+        "runtimeIdentity": f"0.4.0@{revision}",
+        "contractFingerprint": "b" * 64,
+        "buildInputsHash": "c" * 64,
+        "artifacts": [
+            {
+                "kind": "full-apple",
+                "archiveName": "NuxieRuntime.xcframework.zip",
+                "bundleName": "NuxieRuntime.xcframework",
+                "swiftPackageChecksum": "d" * 64,
+                "targets": sorted(
+                    {
+                        "aarch64-apple-darwin",
+                        "aarch64-apple-ios",
+                        "aarch64-apple-ios-sim",
+                        "x86_64-apple-darwin",
+                        "x86_64-apple-ios",
+                    }
+                ),
+            },
+            {
+                "kind": "ios-only",
+                "archiveName": "NuxieRuntime-iOS.xcframework.zip",
+                "bundleName": "NuxieRuntime.xcframework",
+                "swiftPackageChecksum": "e" * 64,
+                "targets": sorted(
+                    {
+                        "aarch64-apple-ios",
+                        "aarch64-apple-ios-sim",
+                        "x86_64-apple-ios",
+                    }
+                ),
+            },
+        ],
     }
 
 
@@ -280,47 +325,69 @@ class MigrationDistributionTests(unittest.TestCase):
                 "_nux_file_free\n_nux_unlisted\n",
             )
 
-    def test_schema_six_describes_both_artifacts_from_one_input_identity(self) -> None:
-        revision = "a" * 40
-        document = {
-            "schemaVersion": 6,
-            "runtimeVersion": "0.4.0",
-            "buildSourceRevision": revision,
-            "releaseRevision": revision,
-            "runtimeIdentity": f"0.4.0@{revision}",
-            "contractFingerprint": "b" * 64,
-            "buildInputsHash": "c" * 64,
-            "artifacts": [
+    def test_mature_header_must_equal_portable_and_apple_manifests(self) -> None:
+        header = """
+NuxStatus nux_file_free(struct NuxFile *file);
+NuxStatus nux_renderer_free(struct NuxRenderer *renderer);
+"""
+        manifests = {
+            "portable": "nux_file_free\n",
+            "appleExtension": "nux_renderer_free\n",
+        }
+        validate_header_symbol_partitions(header, manifests)
+        with self.assertRaisesRegex(ContractError, "missing=.*nux_player_step"):
+            validate_header_symbol_partitions(
+                header,
+                {**manifests, "extra": "nux_player_step\n"},
+            )
+
+    def test_slice_provenance_is_unique_and_bound_to_release_evidence(self) -> None:
+        metadata = valid_distribution_metadata()
+        target = "aarch64-apple-ios"
+        build_inputs = {
+            "configuration": {
+                "buildProfile": "release-apple",
+                "rustc": "rustc 1.94.1",
+            },
+            "packages": [
                 {
-                    "kind": "full-apple",
-                    "archiveName": "NuxieRuntime.xcframework.zip",
-                    "bundleName": "NuxieRuntime.xcframework",
-                    "swiftPackageChecksum": "d" * 64,
-                    "targets": sorted(
-                        [
-                            "aarch64-apple-darwin",
-                            "aarch64-apple-ios",
-                            "aarch64-apple-ios-sim",
-                            "x86_64-apple-darwin",
-                            "x86_64-apple-ios",
-                        ]
-                    ),
-                },
-                {
-                    "kind": "ios-only",
-                    "archiveName": "NuxieRuntime-iOS.xcframework.zip",
-                    "bundleName": "NuxieRuntime.xcframework",
-                    "swiftPackageChecksum": "e" * 64,
-                    "targets": sorted(
-                        [
-                            "aarch64-apple-ios",
-                            "aarch64-apple-ios-sim",
-                            "x86_64-apple-ios",
-                        ]
-                    ),
-                },
+                    "name": "nux-capi",
+                    "targets": {
+                        target: ["apple-metal", "legacy-migration", "scripting"]
+                    },
+                }
             ],
         }
+        provenance = {
+            "schemaVersion": 6,
+            "rootPackage": "nux-capi",
+            "runtimeVersion": "0.4.0",
+            "buildSourceRevision": "a" * 40,
+            "target": target,
+            "profile": "release-apple",
+            "features": "apple-metal,legacy-migration,scripting",
+            "rustc": "rustc 1.94.1",
+            "buildInputsHash": "c" * 64,
+            "contractFingerprint": "b" * 64,
+        }
+        encoded = json.dumps(provenance, separators=(",", ":"))
+        validate_slice_provenance(f"noise\n{encoded}\n", metadata, build_inputs, target)
+
+        stale = dict(provenance, buildSourceRevision="f" * 40)
+        with self.assertRaisesRegex(ContractError, "buildSourceRevision"):
+            validate_slice_provenance(
+                json.dumps(stale, separators=(",", ":")),
+                metadata,
+                build_inputs,
+                target,
+            )
+        with self.assertRaisesRegex(ContractError, "exactly one"):
+            validate_slice_provenance(
+                f"{encoded}\n{encoded}\n", metadata, build_inputs, target
+            )
+
+    def test_schema_six_describes_both_artifacts_from_one_input_identity(self) -> None:
+        document = valid_distribution_metadata()
         validate_distribution_metadata(document)
 
         document["artifacts"][1]["swiftPackageChecksum"] = "d" * 64

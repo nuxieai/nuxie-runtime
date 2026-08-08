@@ -47,6 +47,15 @@ rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
 rust_sysroot="$("${rust_compiler}" --print sysroot)"
 rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
 rust_llvm_readobj="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-readobj"
+rust_llvm_objcopy="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-objcopy"
+rustc_version="$("${rust_compiler}" -vV)"
+rust_cargo="$(rustup which --toolchain "${rust_toolchain}" cargo)"
+cargo_version="$("${rust_cargo}" -Vv)"
+xcodebuild_path="$(command -v xcodebuild)"
+lipo_path="$(command -v lipo)"
+ditto_path="$(command -v ditto)"
+swift_path="$(command -v swift)"
+clang_path="$(xcrun --find clang)"
 for rust_llvm_tool in "${rust_llvm_nm}" "${rust_llvm_readobj}"; do
     if [[ ! -x "${rust_llvm_tool}" ]]; then
         echo "missing $(basename "${rust_llvm_tool}") for Rust toolchain ${rust_toolchain}" >&2
@@ -71,6 +80,18 @@ ditto -x -k "${archive_path}" "${verification_temp_dir}"
 archived_framework="$(find "${verification_temp_dir}" -maxdepth 1 -name '*.xcframework' -print -quit)"
 test -n "${archived_framework}"
 diff -rq "${xcframework_path}" "${archived_framework}" >/dev/null
+
+phase "validate the audited dependency closure"
+build_inputs_hash="$(metadata_scalar buildInputsHash string)"
+build_inputs_manifest_path="$(metadata_scalar buildInputsManifestPath string)"
+test "${build_inputs_manifest_path}" = "NuxieRuntime.xcframework/BUILD_INPUTS.json"
+build_inputs_manifest="${xcframework_path}/BUILD_INPUTS.json"
+archived_build_inputs_manifest="${verification_temp_dir}/${build_inputs_manifest_path}"
+require_file "${build_inputs_manifest}"
+require_file "${archived_build_inputs_manifest}"
+cmp "${build_inputs_manifest}" "${archived_build_inputs_manifest}"
+python3 "${repo_root}/tools/apple_runtime_contract.py" \
+    inputs "${build_inputs_manifest}" "${build_inputs_hash}"
 
 phase "validate packaged license notices"
 third_party_notices_path="$(metadata_scalar thirdPartyNoticesPath string)"
@@ -182,7 +203,8 @@ for library in "${symbol_libraries[@]}"; do
 done
 
 phase "validate toolchain and embedded provenance"
-source_revision="$(metadata_scalar sourceRevision string)"
+build_source_revision="$(metadata_scalar buildSourceRevision string)"
+release_revision="$(metadata_scalar releaseRevision string)"
 build_profile="$(metadata_scalar buildProfile string)"
 minimum_ios_version="$(metadata_scalar minimumIOSVersion string)"
 minimum_macos_version="$(metadata_scalar minimumMacOSVersion string)"
@@ -198,11 +220,26 @@ iphonesimulator_sdk_version="$(metadata_scalar iphoneSimulatorSDKVersion string)
 iphonesimulator_sdk_build="$(metadata_scalar iphoneSimulatorSDKBuild string)"
 macosx_sdk_version="$(metadata_scalar macOSSDKVersion string)"
 macosx_sdk_build="$(metadata_scalar macOSSDKBuild string)"
-test "$(metadata_scalar schemaVersion integer)" = "3"
-if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}(-dirty\.[0-9a-f]{64})?$ ]]; then
-    echo "artifact source revision is not an exact clean or diagnostic-dirty identity: ${source_revision}" >&2
+test "$(metadata_scalar schemaVersion integer)" = "5"
+if [[ ! "${build_source_revision}" =~ ^[0-9a-f]{40}(-dirty\.[0-9a-f]{64})?$ ]]; then
+    echo "artifact build source revision is not exact: ${build_source_revision}" >&2
     exit 1
 fi
+if [[ ! "${release_revision}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "artifact release revision is not an exact clean identity: ${release_revision}" >&2
+    exit 1
+fi
+checkout_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
+if [[ "${release_revision}" != "${checkout_revision}" ]]; then
+    echo "artifact release revision does not match the verification checkout" >&2
+    echo "artifact: ${release_revision}" >&2
+    echo "checkout: ${checkout_revision}" >&2
+    exit 1
+fi
+clean_build_source_revision="${build_source_revision%%-dirty.*}"
+git -C "${repo_root}" cat-file -e "${clean_build_source_revision}^{commit}"
+git -C "${repo_root}" merge-base --is-ancestor \
+    "${clean_build_source_revision}" "${release_revision}"
 expected_runtime_version="$(
     sed -n 's/^version = "\([^"]*\)"/\1/p' \
         "${repo_root}/crates/nux-apple-runtime/Cargo.toml" |
@@ -210,7 +247,7 @@ expected_runtime_version="$(
 )"
 test -n "${expected_runtime_version}"
 test "${runtime_version}" = "${expected_runtime_version}"
-test "${runtime_identity}" = "${runtime_version}@${source_revision}"
+test "${runtime_identity}" = "${runtime_version}@${build_source_revision}"
 expected_contract_fingerprint="$(
     shasum -a 256 "${headers_dir}/nux_runtime.generated.h" |
         awk '{ print $1 }'
@@ -244,6 +281,39 @@ test "$(xcrun --sdk iphonesimulator --show-sdk-version)" = "${iphonesimulator_sd
 test "$(xcrun --sdk iphonesimulator --show-sdk-build-version)" = "${iphonesimulator_sdk_build}"
 test "$(xcrun --sdk macosx --show-sdk-version)" = "${macosx_sdk_version}"
 test "$(xcrun --sdk macosx --show-sdk-build-version)" = "${macosx_sdk_build}"
+recomputed_manifest="${verification_temp_dir}/BUILD_INPUTS.recomputed.json"
+recomputed_build_inputs_hash="$(
+    python3 "${script_dir}/apple_runtime_input_digest.py" \
+        write "${recomputed_manifest}" \
+        --repo-root "${repo_root}" \
+        --cargo "${rust_cargo}" \
+        --build-profile "${build_profile}" \
+        --rust-toolchain "${rust_toolchain}" \
+        --rustc-version "${rustc_version}" \
+        --cargo-version "${cargo_version}" \
+        --xcode-version "${xcode_version}" \
+        --xcode-build "${xcode_build}" \
+        --iphoneos-sdk "${iphoneos_sdk_version} (${iphoneos_sdk_build})" \
+        --iphonesimulator-sdk "${iphonesimulator_sdk_version} (${iphonesimulator_sdk_build})" \
+        --macos-sdk "${macosx_sdk_version} (${macosx_sdk_build})" \
+        --minimum-ios-version "${minimum_ios_version}" \
+        --minimum-macos-version "${minimum_macos_version}" \
+        --tool "cargo=${rust_cargo}" \
+        --tool "rustc=${rust_compiler}" \
+        --tool "llvm-objcopy=${rust_llvm_objcopy}" \
+        --tool "xcodebuild=${xcodebuild_path}" \
+        --tool "lipo=${lipo_path}" \
+        --tool "ditto=${ditto_path}" \
+        --tool "swift=${swift_path}" \
+        --tool "clang=${clang_path}"
+)"
+if [[ "${recomputed_build_inputs_hash}" != "${build_inputs_hash}" ]]; then
+    echo "artifact build-input digest does not match the current audited closure" >&2
+    echo "artifact:  ${build_inputs_hash}" >&2
+    echo "recomputed: ${recomputed_build_inputs_hash}" >&2
+    exit 1
+fi
+cmp "${build_inputs_manifest}" "${recomputed_manifest}"
 for target_and_library in \
     "aarch64-apple-ios:${device_library}" \
     "aarch64-apple-ios-sim:${verification_temp_dir}/libnux_apple_runtime-simulator-arm64.a" \
@@ -254,12 +324,12 @@ for target_and_library in \
     library="${target_and_library#*:}"
     provenance="$(strings "${library}" | grep -F "\"target\":\"${target}\"" | head -1)"
     test -n "${provenance}"
-    grep -Fq "\"sourceRevision\":\"${source_revision}\"" <<< "${provenance}"
+    grep -Fq "\"buildSourceRevision\":\"${build_source_revision}\"" <<< "${provenance}"
     grep -Fq "\"runtimeVersion\":\"${runtime_version}\"" <<< "${provenance}"
     grep -Fq "\"runtimeIdentity\":\"${runtime_identity}\"" <<< "${provenance}"
     grep -Fq "\"contractFingerprint\":\"${contract_fingerprint}\"" <<< "${provenance}"
-    grep -Fq '"schemaVersion":3' <<< "${provenance}"
-    grep -Fq '"buildInputsHash":null' <<< "${provenance}"
+    grep -Fq '"schemaVersion":4' <<< "${provenance}"
+    grep -Fq "\"buildInputsHash\":\"${build_inputs_hash}\"" <<< "${provenance}"
     grep -Fq "\"profile\":\"${build_profile}\"" <<< "${provenance}"
     grep -Fq "\"rustc\":\"rustc ${rust_toolchain}" <<< "${provenance}"
     grep -Fq '"features":"apple-product"' <<< "${provenance}"

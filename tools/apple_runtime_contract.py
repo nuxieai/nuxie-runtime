@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 
+import hashlib
 import json
 import pathlib
 import re
 import sys
+import tempfile
 import unicodedata
 
 
 METADATA_KEYS = {
     "schemaVersion",
     "runtimeVersion",
-    "sourceRevision",
+    "buildSourceRevision",
+    "releaseRevision",
     "buildInputsHash",
+    "buildInputsManifestPath",
     "runtimeIdentity",
     "contractFingerprint",
     "luaurVersion",
@@ -29,6 +33,22 @@ METADATA_KEYS = {
     "minimumMacOSVersion",
     "thirdPartyNoticesPath",
     "swiftPackageChecksum",
+}
+BUILD_INPUT_KEYS = {
+    "configuration",
+    "features",
+    "files",
+    "packages",
+    "rootPackage",
+    "schemaVersion",
+    "targets",
+}
+BUILD_TARGETS = {
+    "aarch64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "x86_64-apple-darwin",
+    "x86_64-apple-ios",
 }
 SEMVER = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\Z")
 SOURCE_REVISION = re.compile(r"[0-9a-f]{40}(?:-dirty\.[0-9a-f]{64})?\Z")
@@ -72,30 +92,33 @@ def validate_metadata(document: object) -> None:
         missing = sorted(METADATA_KEYS - actual_keys)
         extra = sorted(actual_keys - METADATA_KEYS)
         raise ContractError(f"metadata keys differ: missing={missing}, extra={extra}")
-    if document["schemaVersion"] != 3:
-        raise ContractError("schemaVersion must be exactly 3")
+    if document["schemaVersion"] != 5:
+        raise ContractError("schemaVersion must be exactly 5")
 
     runtime_version = _string(document, "runtimeVersion")
-    source_revision = _string(document, "sourceRevision")
+    build_source_revision = _string(document, "buildSourceRevision")
+    release_revision = _string(document, "releaseRevision")
     runtime_identity = _string(document, "runtimeIdentity")
     contract_fingerprint = _string(document, "contractFingerprint")
     swift_package_checksum = _string(document, "swiftPackageChecksum")
-    for key in METADATA_KEYS - {"schemaVersion", "buildInputsHash"}:
+    build_inputs_manifest_path = _string(document, "buildInputsManifestPath")
+    for key in METADATA_KEYS - {"schemaVersion"}:
         _string(document, key)
 
     build_inputs_hash = document["buildInputsHash"]
-    if build_inputs_hash is not None and (
-        not isinstance(build_inputs_hash, str)
-        or SHA256.fullmatch(build_inputs_hash) is None
-    ):
-        raise ContractError("buildInputsHash must be null or a lowercase SHA-256")
+    if not isinstance(build_inputs_hash, str) or SHA256.fullmatch(build_inputs_hash) is None:
+        raise ContractError("buildInputsHash must be a lowercase SHA-256")
+    if build_inputs_manifest_path != "NuxieRuntime.xcframework/BUILD_INPUTS.json":
+        raise ContractError("buildInputsManifestPath is not the canonical artifact path")
 
     if SEMVER.fullmatch(runtime_version) is None:
         raise ContractError("runtimeVersion is not canonical SemVer")
-    if SOURCE_REVISION.fullmatch(source_revision) is None:
-        raise ContractError("sourceRevision is not an exact source identity")
-    if runtime_identity != f"{runtime_version}@{source_revision}":
-        raise ContractError("runtimeIdentity does not match version and revision")
+    if SOURCE_REVISION.fullmatch(build_source_revision) is None:
+        raise ContractError("buildSourceRevision is not an exact source identity")
+    if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
+        raise ContractError("releaseRevision is not an exact clean source identity")
+    if runtime_identity != f"{runtime_version}@{build_source_revision}":
+        raise ContractError("runtimeIdentity does not match version and build revision")
     if SHA256.fullmatch(contract_fingerprint) is None:
         raise ContractError("contractFingerprint is not a lowercase SHA-256")
     if SHA256.fullmatch(swift_package_checksum) is None:
@@ -130,6 +153,162 @@ def validate_symbols(header: str, exported: str) -> None:
         )
 
 
+def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) -> None:
+    if not isinstance(document, dict) or set(document) != BUILD_INPUT_KEYS:
+        raise ContractError("build-input manifest has an incomplete or unknown schema")
+    if document["schemaVersion"] != 1:
+        raise ContractError("build-input manifest schemaVersion must be exactly 1")
+    if document["rootPackage"] != "nux-apple-runtime":
+        raise ContractError("build-input manifest has the wrong root package")
+    if document["features"] != ["apple-product"]:
+        raise ContractError("build-input manifest has the wrong feature set")
+    targets = document["targets"]
+    if not isinstance(targets, list) or set(targets) != BUILD_TARGETS or targets != sorted(targets):
+        raise ContractError("build-input manifest does not cover the exact Apple target set")
+    configuration = document["configuration"]
+    if not isinstance(configuration, dict) or set(configuration) != {
+        "buildProfile",
+        "buildEnvironment",
+        "cargo",
+        "minimumIOSVersion",
+        "minimumMacOSVersion",
+        "rustToolchain",
+        "rustc",
+        "hostTarget",
+        "rustLibraries",
+        "toolBinaries",
+        "sdk",
+        "xcode",
+    }:
+        raise ContractError("build-input manifest has incomplete toolchain configuration")
+    if not all(
+        isinstance(value, str) and value
+        for key, value in configuration.items()
+        if key
+        not in {"buildEnvironment", "rustLibraries", "sdk", "toolBinaries", "xcode"}
+    ):
+        raise ContractError("build-input manifest has an empty toolchain value")
+    if configuration["buildEnvironment"] != {}:
+        raise ContractError("build-input manifest contains forbidden environment overrides")
+    if (
+        not isinstance(configuration["toolBinaries"], dict)
+        or not configuration["toolBinaries"]
+        or not all(
+            isinstance(role, str)
+            and role
+            and isinstance(digest, str)
+            and SHA256.fullmatch(digest) is not None
+            for role, digest in configuration["toolBinaries"].items()
+        )
+    ):
+        raise ContractError("build-input manifest has malformed tool-binary provenance")
+    if (
+        not isinstance(configuration["rustLibraries"], dict)
+        or not configuration["rustLibraries"]
+        or not all(
+            isinstance(target, str)
+            and target
+            and isinstance(digest, str)
+            and SHA256.fullmatch(digest) is not None
+            for target, digest in configuration["rustLibraries"].items()
+        )
+    ):
+        raise ContractError("build-input manifest has malformed Rust-library provenance")
+    if not isinstance(configuration["sdk"], dict) or set(configuration["sdk"]) != {
+        "iphoneOS",
+        "iphoneSimulator",
+        "macOS",
+    }:
+        raise ContractError("build-input manifest has incomplete SDK provenance")
+    if not isinstance(configuration["xcode"], dict) or set(configuration["xcode"]) != {
+        "build",
+        "version",
+    }:
+        raise ContractError("build-input manifest has incomplete Xcode provenance")
+
+    files = document["files"]
+    if not isinstance(files, list) or not files:
+        raise ContractError("build-input manifest has no file inputs")
+    paths: list[str] = []
+    for record in files:
+        if not isinstance(record, dict) or set(record) != {"kind", "path", "sha256"}:
+            raise ContractError("build-input manifest has a malformed file record")
+        path = record["path"]
+        if not isinstance(path, str) or not path or path.startswith("/") or ".." in pathlib.PurePosixPath(path).parts:
+            raise ContractError("build-input manifest has an unsafe file path")
+        if not isinstance(record["kind"], str) or not record["kind"]:
+            raise ContractError("build-input manifest has an empty file classification")
+        if (
+            not isinstance(record["sha256"], str)
+            or SHA256.fullmatch(record["sha256"]) is None
+        ):
+            raise ContractError("build-input manifest has a malformed file hash")
+        paths.append(path)
+    if paths != sorted(set(paths)):
+        raise ContractError("build-input manifest file paths are not unique and sorted")
+
+    packages = document["packages"]
+    if not isinstance(packages, list) or not packages:
+        raise ContractError("build-input manifest has no dependency closure")
+    for package in packages:
+        if not isinstance(package, dict) or set(package) != {
+            "checksum",
+            "lockEntryHash",
+            "manifestPath",
+            "name",
+            "resolvedSourceHash",
+            "source",
+            "targets",
+            "version",
+        }:
+            raise ContractError("build-input manifest has a malformed package record")
+        if not all(isinstance(package[key], str) and package[key] for key in ("name", "version")):
+            raise ContractError("build-input manifest has an unnamed dependency")
+        if package["source"] is None:
+            if not isinstance(package["manifestPath"], str) or not package["manifestPath"]:
+                raise ContractError("local dependency is missing its manifest path")
+        elif not isinstance(package["source"], str) or not package["source"]:
+            raise ContractError("dependency source is malformed")
+        else:
+            if package["source"].startswith("registry+") and (
+                not isinstance(package["checksum"], str)
+                or SHA256.fullmatch(package["checksum"]) is None
+            ):
+                raise ContractError("registry dependency is missing its lockfile checksum")
+            if (
+                not isinstance(package["lockEntryHash"], str)
+                or SHA256.fullmatch(package["lockEntryHash"]) is None
+            ):
+                raise ContractError("external dependency is missing its lock-entry hash")
+            if (
+                not isinstance(package["resolvedSourceHash"], str)
+                or SHA256.fullmatch(package["resolvedSourceHash"]) is None
+            ):
+                raise ContractError("external dependency is missing its resolved-source hash")
+        if package["source"] is None and package["resolvedSourceHash"] is not None:
+            raise ContractError("local dependency has an unexpected resolved-source hash")
+        if package["source"] is None and package["lockEntryHash"] is not None and (
+            not isinstance(package["lockEntryHash"], str)
+            or SHA256.fullmatch(package["lockEntryHash"]) is None
+        ):
+            raise ContractError("local dependency has a malformed lock-entry hash")
+        package_targets = package["targets"]
+        if (
+            not isinstance(package_targets, dict)
+            or not package_targets
+            or not set(package_targets) <= BUILD_TARGETS | {"host"}
+        ):
+            raise ContractError("dependency has an invalid target closure")
+
+    canonical = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if canonical != encoded:
+        raise ContractError("build-input manifest is not canonical JSON")
+    if SHA256.fullmatch(expected_hash) is None:
+        raise ContractError("expected build-input hash is malformed")
+    if hashlib.sha256(encoded).hexdigest() != expected_hash:
+        raise ContractError("build-input manifest does not match buildInputsHash")
+
+
 def _load_json(path: pathlib.Path) -> object:
     try:
         with path.open(encoding="utf-8") as source:
@@ -138,9 +317,35 @@ def _load_json(path: pathlib.Path) -> object:
         raise ContractError(f"cannot read {path}: {error}") from error
 
 
+def qualify_release_metadata(path: pathlib.Path, release_revision: str) -> None:
+    document = _load_json(path)
+    validate_metadata(document)
+    if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
+        raise ContractError("release revision is not an exact clean source identity")
+    assert isinstance(document, dict)
+    document["releaseRevision"] = release_revision
+    encoded = (json.dumps(document, indent=2) + "\n").encode()
+    temporary_path: pathlib.Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{path.name}.", dir=path.parent, delete=False
+        ) as destination:
+            destination.write(encoded)
+            temporary_path = pathlib.Path(destination.name)
+        temporary_path.replace(path)
+    except OSError as error:
+        raise ContractError(f"cannot qualify release metadata {path}: {error}") from error
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def main(arguments: list[str]) -> int:
     if len(arguments) == 2 and arguments[0] == "metadata":
         validate_metadata(_load_json(pathlib.Path(arguments[1])))
+        return 0
+    if len(arguments) == 3 and arguments[0] == "release":
+        qualify_release_metadata(pathlib.Path(arguments[1]), arguments[2])
         return 0
     if len(arguments) == 3 and arguments[0] == "symbols":
         try:
@@ -150,9 +355,20 @@ def main(arguments: list[str]) -> int:
             raise ContractError(f"cannot read symbol inputs: {error}") from error
         validate_symbols(header, exported)
         return 0
+    if len(arguments) == 3 and arguments[0] == "inputs":
+        path = pathlib.Path(arguments[1])
+        try:
+            encoded = path.read_bytes()
+            document = json.loads(encoded)
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ContractError(f"cannot read {path}: {error}") from error
+        validate_build_inputs(document, encoded, arguments[2])
+        return 0
     raise ContractError(
         "usage: apple_runtime_contract.py "
-        "metadata <artifact.json> | symbols <header> <nm-output>"
+        "metadata <artifact.json> | release <artifact.json> <revision> | "
+        "inputs <BUILD_INPUTS.json> <sha256> | "
+        "symbols <header> <nm-output>"
     )
 
 

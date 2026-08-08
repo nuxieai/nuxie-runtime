@@ -29,10 +29,11 @@ negotiate, or branch on a separate ABI version.
    generic operation is exactly 48 bytes on supported 64-bit Apple targets.
 6. Configured sessions always use the current typed `player_kind` contract.
    There is no ABI-1.5 fallback interpretation.
-7. Artifact metadata and embedded build provenance contain runtime version,
-   source revision, one exact runtime identity, a tooling-only public-contract
-   fingerprint, artifact checksum, and toolchain provenance, but no
-   client-facing ABI version fields.
+7. Embedded build provenance contains runtime version, build source revision,
+   and one exact runtime identity. Artifact metadata additionally distinguishes
+   that build source from the clean release revision that qualified the bytes.
+   It includes a tooling-only public-contract fingerprint, artifact checksum,
+   and toolchain provenance, but no client-facing ABI version fields.
 8. Published SDK and XCFramework releases are atomic: the SDK pins the exact
    artifact URL/checksum. No compatible-minor range is accepted.
 9. A host may check in an expected identity independently from the

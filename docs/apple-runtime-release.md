@@ -45,16 +45,40 @@ the same `NuxieRuntimeFFI` module map, `nux_runtime.h`, generated header, and
 complete public `nux_*` symbol contract. The archive root also contains
 `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
-`artifact.json` schema 3 binds the archive to the runtime version, exact
-source revision, public-header fingerprint, SwiftPM checksum, Rust/Xcode/SDK
-versions, build profile, Luaur version, and minimum platforms. Each static
-library embeds the same runtime identity and build provenance.
+`artifact.json` schema 5 binds the archive to the runtime version, exact
+build-source and release revisions, audited build-input digest, public-header fingerprint,
+SwiftPM checksum, Rust/Xcode/SDK versions, build profile, Luaur version, and
+minimum platforms. Each static library embeds the same runtime identity,
+build-input digest, and build provenance. `BUILD_INPUTS.json` is canonical JSON
+inside the XCFramework; it enumerates the non-dev Cargo dependency closure for
+all five Apple targets, each local package input, registry checksums and
+resolved features, Cargo provider/patch/lock inputs, distribution scripts,
+headers, notices, deployment targets, and toolchain identities.
+Build-affecting Cargo, Rust, compiler, linker, and profile environment
+overrides are rejected. Repository Cargo configuration and recursive includes
+are audited; configuration discovered from Cargo home or a parent checkout is
+rejected. Cargo metadata is always resolved from the repository root, and the
+actual build-tool executables are hashed, so discovery cannot depend silently
+on the caller's current directory or PATH. Resolved external-provider package
+payloads and the host/target Rust sysroot libraries are hashed as well.
+
+`buildInputsHash` is the SHA-256 of that canonical manifest and is the
+functional build-input identity. The SwiftPM checksum, not the closure digest,
+is the artifact-byte identity. `buildSourceRevision` records the commit that
+produced the bytes and remains part of the compiled runtime identity;
+`releaseRevision` records the clean tagged commit qualifying those bytes. They
+may differ when an intervening commit changes only files outside the audited
+closure. The publisher recomputes and byte-compares the canonical closure
+before advancing `releaseRevision`; a mismatch requires a rebuild. Thus an
+unrelated documentation or tool change can reuse the existing archive and its
+checksum, while any closure, provider, target-specific, header, notice, or
+toolchain change requires a new artifact.
 
 The Apple C boundary has no compatible-minor negotiation. A Swift consumer
 pins one atomic artifact tuple:
 
 - `runtimeVersion`;
-- the full `sourceRevision`;
+- the full artifact `buildSourceRevision`;
 - the versioned release asset URL; and
 - the exact `swiftPackageChecksum`.
 
@@ -88,7 +112,9 @@ artifacts carry a content-distinct dirty source identity and cannot be
 published. The verifier checks the exact public symbol manifest, all
 architectures, identical headers, Swift import/link smoke tests, iOS 15 and
 macOS 12 load commands, panic-unwind support, absence of embedded LLVM bitcode,
-notices, provenance, and archive checksum.
+notices, the canonical dependency-closure manifest, its recomputed digest,
+embedded provenance, and archive checksum. Missing, null, noncanonical, stale,
+or incompletely described build-input provenance fails verification.
 
 ## Release
 
@@ -108,11 +134,22 @@ tools/publish-apple-runtime-release.sh apple-runtime-v0.3.0
 ```
 
 The publisher rejects a version mismatch, dirty checkout, tag/HEAD mismatch,
-commit not reachable from `origin/main`, missing or invalid artifacts, or an
-existing release. It verifies before upload, creates the GitHub release with
+commit not reachable from `origin/main`, missing or invalid artifacts, a
+changed audited closure, or an existing release. It stamps the tagged commit
+as `releaseRevision` in a temporary metadata candidate without changing the
+archive or its compiled runtime identity, then verifies the candidate against
+the recomputed closure. Only a successful verification atomically replaces
+the original metadata.
+The producing revision must itself be clean and an ancestor of the tagged
+release revision. It creates the GitHub release with
 exactly the zip and `artifact.json`, downloads both, byte-compares them, and
 verifies the downloaded artifact again. Existing published assets are never
 replaced.
+
+Verification is source-qualified: `releaseRevision` must equal the current
+clean checkout and the artifact's clean build-source commit must be its
+ancestor. This preserves build-at-A/release-at-B reuse without accepting a
+fabricated or stale release coordinate.
 
 The stable SwiftPM URL is:
 

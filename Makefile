@@ -712,7 +712,9 @@ apple-runtime-release-panic-smoke:
 	cargo test --locked --profile release-apple -p nux-apple-runtime --features apple-product panic_firewall_converts_panics_to_the_declared_fallback
 
 apple-runtime-contract-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_apple_runtime_contract.py
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+		tools/test_apple_runtime_contract.py \
+		tools/test_apple_runtime_input_digest.py
 
 apple-runtime-build-identity-test:
 	tools/test-apple-runtime-build-identity.sh

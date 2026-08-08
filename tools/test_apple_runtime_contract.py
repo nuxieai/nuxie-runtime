@@ -1,21 +1,81 @@
+import hashlib
+import json
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 
 from tools.apple_runtime_contract import ContractError
+from tools.apple_runtime_contract import validate_build_inputs
 from tools.apple_runtime_contract import validate_metadata
+from tools.apple_runtime_contract import qualify_release_metadata
 from tools.apple_runtime_contract import validate_symbols
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
+    document = {
+        "configuration": {
+            "buildEnvironment": {},
+            "buildProfile": "release-apple",
+            "cargo": "cargo 1.94.1",
+            "hostTarget": "aarch64-apple-darwin",
+            "minimumIOSVersion": "15.0",
+            "minimumMacOSVersion": "12.0",
+            "rustToolchain": "1.94.1",
+            "rustc": "rustc 1.94.1",
+            "rustLibraries": {"aarch64-apple-ios": "1" * 64},
+            "toolBinaries": {"cargo": "e" * 64, "rustc": "f" * 64},
+            "sdk": {
+                "iphoneOS": "26.2 (23C53)",
+                "iphoneSimulator": "26.2 (23C53)",
+                "macOS": "26.2 (25C56)",
+            },
+            "xcode": {"build": "17C52", "version": "26.2"},
+        },
+        "features": ["apple-product"],
+        "files": [
+            {"kind": "cargo-resolution", "path": "Cargo.lock", "sha256": "a" * 64}
+        ],
+        "packages": [
+            {
+                "checksum": None,
+                "lockEntryHash": None,
+                "manifestPath": "crates/nux-apple-runtime/Cargo.toml",
+                "name": "nux-apple-runtime",
+                "resolvedSourceHash": None,
+                "source": None,
+                "targets": {"aarch64-apple-ios": ["apple-product"]},
+                "version": "0.3.0",
+            }
+        ],
+        "rootPackage": "nux-apple-runtime",
+        "schemaVersion": 1,
+        "targets": sorted(
+            (
+                "aarch64-apple-darwin",
+                "aarch64-apple-ios",
+                "aarch64-apple-ios-sim",
+                "x86_64-apple-darwin",
+                "x86_64-apple-ios",
+            )
+        ),
+    }
+    encoded = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return document, encoded, hashlib.sha256(encoded).hexdigest()
+
+
 def valid_metadata() -> dict[str, object]:
     revision = "a" * 40
     return {
-        "schemaVersion": 3,
+        "schemaVersion": 5,
         "runtimeVersion": "0.3.0",
-        "sourceRevision": revision,
-        "buildInputsHash": None,
+        "buildSourceRevision": revision,
+        "releaseRevision": revision,
+        "buildInputsHash": "d" * 64,
+        "buildInputsManifestPath": "NuxieRuntime.xcframework/BUILD_INPUTS.json",
         "runtimeIdentity": f"0.3.0@{revision}",
         "contractFingerprint": "b" * 64,
         "luaurVersion": "0.1.8",
@@ -39,12 +99,12 @@ def valid_metadata() -> dict[str, object]:
 
 
 class MetadataTests(unittest.TestCase):
-    def test_exact_schema_three_metadata_passes(self) -> None:
+    def test_exact_schema_five_metadata_passes(self) -> None:
         validate_metadata(valid_metadata())
 
     def test_wrong_schema_or_hidden_abi_field_fails(self) -> None:
         wrong_schema = valid_metadata()
-        wrong_schema["schemaVersion"] = 2
+        wrong_schema["schemaVersion"] = 3
         with self.assertRaisesRegex(ContractError, "schemaVersion"):
             validate_metadata(wrong_schema)
 
@@ -69,21 +129,92 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "swiftPackageChecksum"):
             validate_metadata(malformed_checksum)
 
-    def test_build_inputs_hash_is_null_or_a_digest(self) -> None:
+    def test_build_inputs_hash_and_manifest_path_fail_closed(self) -> None:
         metadata = valid_metadata()
-        metadata["buildInputsHash"] = "d" * 64
-        validate_metadata(metadata)
-
         metadata["buildInputsHash"] = "not-a-digest"
         with self.assertRaisesRegex(ContractError, "buildInputsHash"):
             validate_metadata(metadata)
 
+        missing_hash = valid_metadata()
+        missing_hash["buildInputsHash"] = None
+        with self.assertRaisesRegex(ContractError, "buildInputsHash"):
+            validate_metadata(missing_hash)
+
+        wrong_path = valid_metadata()
+        wrong_path["buildInputsManifestPath"] = "BUILD_INPUTS.json"
+        with self.assertRaisesRegex(ContractError, "buildInputsManifestPath"):
+            validate_metadata(wrong_path)
+
     def test_unverifiable_source_revision_fails(self) -> None:
         metadata = valid_metadata()
-        metadata["sourceRevision"] = "unknown"
+        metadata["buildSourceRevision"] = "unknown"
         metadata["runtimeIdentity"] = "0.3.0@unknown"
-        with self.assertRaisesRegex(ContractError, "sourceRevision"):
+        with self.assertRaisesRegex(ContractError, "buildSourceRevision"):
             validate_metadata(metadata)
+
+    def test_release_revision_can_advance_without_changing_build_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            metadata = valid_metadata()
+            path.write_text(json.dumps(metadata))
+            release_revision = "f" * 40
+            qualify_release_metadata(path, release_revision)
+            qualified = json.loads(path.read_text())
+            self.assertEqual(qualified["releaseRevision"], release_revision)
+            self.assertEqual(
+                qualified["buildSourceRevision"], metadata["buildSourceRevision"]
+            )
+            self.assertEqual(qualified["runtimeIdentity"], metadata["runtimeIdentity"])
+            self.assertEqual(
+                qualified["swiftPackageChecksum"], metadata["swiftPackageChecksum"]
+            )
+
+    def test_failed_release_candidate_preserves_original_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "artifact.json"
+            candidate = Path(directory) / ".artifact-qualified"
+            original.write_text(json.dumps(valid_metadata()))
+            original_bytes = original.read_bytes()
+            shutil.copyfile(original, candidate)
+            qualify_release_metadata(candidate, "f" * 40)
+
+            # A verifier failure stops before the publisher's final atomic move.
+            self.assertNotEqual(candidate.read_bytes(), original_bytes)
+            self.assertEqual(original.read_bytes(), original_bytes)
+
+
+class BuildInputManifestTests(unittest.TestCase):
+    def test_exact_canonical_manifest_and_digest_pass(self) -> None:
+        document, encoded, digest = valid_build_inputs()
+        validate_build_inputs(document, encoded, digest)
+
+    def test_missing_closure_or_stale_digest_fails_closed(self) -> None:
+        document, encoded, digest = valid_build_inputs()
+        incomplete = dict(document)
+        incomplete["packages"] = []
+        with self.assertRaisesRegex(ContractError, "dependency closure"):
+            validate_build_inputs(incomplete, encoded, digest)
+
+        with self.assertRaisesRegex(ContractError, "buildInputsHash"):
+            validate_build_inputs(document, encoded, "f" * 64)
+
+    def test_noncanonical_or_incomplete_target_manifest_fails(self) -> None:
+        document, encoded, digest = valid_build_inputs()
+        pretty = json.dumps(document, indent=2).encode()
+        with self.assertRaisesRegex(ContractError, "canonical JSON"):
+            validate_build_inputs(document, pretty, hashlib.sha256(pretty).hexdigest())
+
+        missing_target = dict(document)
+        missing_target["targets"] = document["targets"][:-1]
+        with self.assertRaisesRegex(ContractError, "exact Apple target set"):
+            validate_build_inputs(missing_target, encoded, digest)
+
+    def test_environment_override_manifest_fails_closed(self) -> None:
+        document, _, _ = valid_build_inputs()
+        document["configuration"]["buildEnvironment"] = {"CC": "/tmp/compiler"}
+        encoded = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with self.assertRaisesRegex(ContractError, "forbidden environment overrides"):
+            validate_build_inputs(document, encoded, hashlib.sha256(encoded).hexdigest())
 
 
 class SymbolTests(unittest.TestCase):
@@ -142,6 +273,22 @@ class ReleaseToolSourcePolicyTests(unittest.TestCase):
     def test_publisher_verifies_before_and_after_upload(self) -> None:
         verifier = '"${script_dir}/verify-apple-xcframework.sh"'
         self.assertEqual(self.publisher.count(verifier), 2)
+        self.assertIn('release "${qualified_metadata}" "${source_revision}"', self.publisher)
+        self.assertIn('cp "${metadata}" "${qualified_metadata}"', self.publisher)
+        self.assertIn('mv "${qualified_metadata}" "${metadata}"', self.publisher)
+        qualify = self.publisher.index('release "${qualified_metadata}"')
+        verify = self.publisher.index(verifier, qualify)
+        replace = self.publisher.index('mv "${qualified_metadata}" "${metadata}"')
+        self.assertLess(qualify, verify)
+        self.assertLess(verify, replace)
+        self.assertIn('releaseRevision string)" = "${source_revision}"', self.publisher)
+        self.assertNotIn(
+            'buildSourceRevision string)" = "${source_revision}"', self.publisher
+        )
+        self.assertIn('[[ ! "${build_source_revision}" =~ ^[0-9a-f]{40}$ ]]', self.publisher)
+        self.assertIn('"${build_source_revision}" "${source_revision}"', self.publisher)
+        self.assertIn('"${release_revision}" != "${checkout_revision}"', self.verifier)
+        self.assertIn('"${clean_build_source_revision}" "${release_revision}"', self.verifier)
         self.assertIn('gh release create "${release_tag}"', self.publisher)
         self.assertIn('gh release download "${release_tag}"', self.publisher)
         self.assertIn('cmp "${archive}" "${download_root}/NuxieRuntime.xcframework.zip"', self.publisher)

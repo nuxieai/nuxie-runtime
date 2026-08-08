@@ -64,8 +64,8 @@ fn main() {
     };
     let provenance = format!(
         concat!(
-            "{{\"schemaVersion\":3,\"runtimeVersion\":\"{}\",",
-            "\"sourceRevision\":\"{}\",\"buildInputsHash\":{},",
+            "{{\"schemaVersion\":4,\"runtimeVersion\":\"{}\",",
+            "\"buildSourceRevision\":\"{}\",\"buildInputsHash\":{},",
             "\"runtimeIdentity\":\"{}\",",
             "\"contractFingerprint\":\"{}\",\"target\":\"{}\",",
             "\"profile\":\"{}\",\"rustc\":\"{}\",",

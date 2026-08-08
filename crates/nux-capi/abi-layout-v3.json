@@ -3,6 +3,49 @@
   "dataModel": "apple-lp64",
   "types": [
     {
+      "name": "NuxAppleAssetHooks",
+      "size": 72,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "context",
+          "offset": 8
+        },
+        {
+          "name": "lookup_external_asset",
+          "offset": 16
+        },
+        {
+          "name": "decode_image",
+          "offset": 24
+        },
+        {
+          "name": "maximum_external_asset_bytes",
+          "offset": 32
+        },
+        {
+          "name": "maximum_total_external_asset_bytes",
+          "offset": 40
+        },
+        {
+          "name": "maximum_image_dimension",
+          "offset": 48
+        },
+        {
+          "name": "maximum_decoded_image_bytes",
+          "offset": 56
+        },
+        {
+          "name": "maximum_total_decoded_image_bytes",
+          "offset": 64
+        }
+      ]
+    },
+    {
       "name": "NuxByteView",
       "size": 16,
       "alignment": 8,
@@ -37,6 +80,211 @@
         {
           "name": "message",
           "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxDecodedImage",
+      "size": 72,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "width",
+          "offset": 4
+        },
+        {
+          "name": "height",
+          "offset": 8
+        },
+        {
+          "name": "row_bytes",
+          "offset": 12
+        },
+        {
+          "name": "pixel_format",
+          "offset": 16
+        },
+        {
+          "name": "pixels",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxExternalAssetRequest",
+      "size": 56,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "kind",
+          "offset": 4
+        },
+        {
+          "name": "asset_index",
+          "offset": 8
+        },
+        {
+          "name": "asset_id",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        },
+        {
+          "name": "file_extension",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxHostCommandImportConfig",
+      "size": 96,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "module_name",
+          "offset": 8
+        },
+        {
+          "name": "max_script_memory_bytes",
+          "offset": 24
+        },
+        {
+          "name": "max_script_interrupts_per_callback",
+          "offset": 32
+        },
+        {
+          "name": "max_commands_per_step",
+          "offset": 40
+        },
+        {
+          "name": "max_value_depth",
+          "offset": 48
+        },
+        {
+          "name": "max_value_nodes",
+          "offset": 56
+        },
+        {
+          "name": "max_identifier_bytes",
+          "offset": 64
+        },
+        {
+          "name": "max_string_bytes",
+          "offset": 72
+        },
+        {
+          "name": "max_value_bytes",
+          "offset": 80
+        },
+        {
+          "name": "max_command_bytes_per_step",
+          "offset": 88
+        }
+      ]
+    },
+    {
+      "name": "NuxHostCommandView",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "name",
+          "offset": 8
+        },
+        {
+          "name": "root_value_index",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxHostValueChildView",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "key",
+          "offset": 8
+        },
+        {
+          "name": "value_index",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxHostValueView",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "kind",
+          "offset": 4
+        },
+        {
+          "name": "bool_value",
+          "offset": 8
+        },
+        {
+          "name": "number_value",
+          "offset": 16
+        },
+        {
+          "name": "string_value",
+          "offset": 24
+        },
+        {
+          "name": "child_count",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxImageDecodeRequest",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "encoded",
+          "offset": 8
+        },
+        {
+          "name": "maximum_dimension",
+          "offset": 24
+        },
+        {
+          "name": "maximum_decoded_bytes",
+          "offset": 32
         }
       ]
     },
@@ -297,7 +545,7 @@
     },
     {
       "name": "NuxPlayerStepInfo",
-      "size": 32,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -319,6 +567,10 @@
         {
           "name": "event_count",
           "offset": 24
+        },
+        {
+          "name": "host_command_count",
+          "offset": 32
         }
       ]
     },
@@ -582,6 +834,37 @@
         },
         {
           "name": "atomic_strategy_partitions",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxRetainedBytes",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "data",
+          "offset": 8
+        },
+        {
+          "name": "len",
+          "offset": 16
+        },
+        {
+          "name": "owner",
+          "offset": 24
+        },
+        {
+          "name": "retain",
+          "offset": 32
+        },
+        {
+          "name": "release",
           "offset": 40
         }
       ]

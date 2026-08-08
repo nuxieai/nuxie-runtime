@@ -9090,6 +9090,38 @@
     }
 
     #[test]
+    fn construction_reuses_prevalidated_file_font_owners() {
+        let bytes = include_bytes!("../../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let owners = crate::RuntimeFileAssetOwners::from_runtime(&file, None);
+        let expected_fonts = owners.font_assets();
+
+        let instance =
+            ArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
+                &file,
+                artboard,
+                &graph.artboards,
+                &BTreeMap::new(),
+                RuntimeFileViewModelInstanceCatalog::new(&file),
+                RuntimeFileStateMachineActionCatalog::new(&file),
+                &owners,
+            )
+            .expect("instance builds with prevalidated file assets");
+
+        assert!(Arc::ptr_eq(&instance.runtime_font_assets, &expected_fonts));
+        assert!(Arc::ptr_eq(
+            &instance
+                .build_context
+                .as_ref()
+                .expect("root build context")
+                .runtime_font_assets,
+            &expected_fonts,
+        ));
+    }
+
+    #[test]
     fn replacing_file_owned_fonts_updates_existing_nested_children() {
         let mut instance = synthetic_instance(Vec::new(), Vec::new());
         instance

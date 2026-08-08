@@ -208,6 +208,38 @@ fn empty_source_first_records() -> Vec<FixtureRecord> {
     ]
 }
 
+fn embedded_font_records(bytes: Vec<u8>) -> Vec<FixtureRecord> {
+    vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "FontAsset",
+            vec![
+                ("name", FixtureValue::String("Evidence font".into())),
+                ("assetId", FixtureValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "FileAssetContents",
+            vec![("bytes", FixtureValue::Bytes(bytes))],
+        ),
+    ]
+}
+
+#[test]
+fn embedded_font_import_uses_the_decoded_owner_as_validation_authority() {
+    let valid = encode_fixture_records(&embedded_font_records(fixture_font_bytes()));
+    assert!(File::import(&valid).is_ok());
+
+    let invalid = encode_fixture_records(&embedded_font_records(b"not a font".to_vec()));
+    let error = File::import(&invalid).expect_err("invalid embedded font must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("embedded FontAsset bytes are not a valid font"),
+        "unexpected import error: {error:#}"
+    );
+}
+
 #[test]
 fn empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw() -> Result<()> {
     let records = empty_source_first_records();

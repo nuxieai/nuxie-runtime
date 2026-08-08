@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-fixture="${NUX_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}/tests/unit_tests/assets/smi_test.riv"
+fixture="${NUX_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}/tests/unit_tests/assets/in_band_asset.riv"
 profile="${NUX_CAPI_APPLE_PROFILE:-dev}"
 target_root="${CARGO_TARGET_DIR:-${repo_dir}/target}"
 work_dir=$(mktemp -d)
@@ -130,6 +130,11 @@ for target in "${targets[@]}"; do
         "$c_output" "$fixture"
         "$swift_output" "$fixture"
         echo "$target: C and Swift link-and-render hosts executed natively"
+    elif [[ "$target" == aarch64-apple-ios-sim ]] \
+        && xcrun simctl list devices booted | grep -q '(Booted)'; then
+        xcrun simctl spawn booted "$c_output" "$fixture"
+        xcrun simctl spawn booted "$swift_output" "$fixture"
+        echo "$target: C and Swift link-and-render hosts executed in the booted iOS simulator"
     else
         echo "$target: C and Swift render hosts compiled and statically linked; execution unavailable without a matching connected/booted runtime or host architecture"
     fi
@@ -138,4 +143,4 @@ for target in "${targets[@]}"; do
 done
 
 NUX_CAPI_FEATURES=apple-metal "$repo_dir/tools/check-nux-capi-exports.sh"
-echo "nux-capi Apple five-slice C/Swift link and native render smoke ok"
+echo "nux-capi Apple five-slice C/Swift link and executable render smoke ok"

@@ -891,9 +891,16 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;
-            artboard
-                .draw(factory, &mut frame)
-                .map_err(|error| ApiFailure::new(NuxStatus::RuntimeError, error.to_string()))?;
+            if let Some(assets) = player.artboard.apple_assets.as_ref() {
+                let mut factory = assets.wrap_factory(factory);
+                artboard
+                    .draw(&mut factory, &mut frame)
+                    .map_err(|error| ApiFailure::new(NuxStatus::RuntimeError, error.to_string()))?;
+            } else {
+                artboard
+                    .draw(factory, &mut frame)
+                    .map_err(|error| ApiFailure::new(NuxStatus::RuntimeError, error.to_string()))?;
+            }
             drop(artboard);
             let completion = completion.into_renderer_completion();
             let (disposition, metrics) =

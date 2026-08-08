@@ -71,7 +71,7 @@ the baseline and its optional product crates. The workspace contract is:
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
 | `nuxie-renderer` Apple module | Generic validation/presentation of a caller-borrowed CAMetalDrawable and renderer device health | Apple-gated Objective-C/Metal bindings | CAMetalLayer ownership, drawable acquisition, product scheduling, or SDK concepts |
-| `nux-capi` `apple-metal` feature | Product-neutral renderer handles, Metal device copy, player render/reset, and fixed-width platform outcomes | `nuxie` renderer feature and `nuxie-renderer` on Apple | UIKit/AppKit, sessions, experiences, screens, or image-provider ABI |
+| `nux-capi` `apple-metal` feature | Product-neutral renderer handles, Metal device copy, player render/reset, fixed-width platform outcomes, and one bounded asset-host import table for external bytes plus host-decoded canonical pixels | `nuxie` renderer feature, `nuxie-renderer`, and the image preflight codec on Apple | UIKit/AppKit, sessions, experiences, screens, package/build policy, native texture imports, or a renderer mega-vtable |
 | `nuxie-apple-adapter` | Compatibility re-exports plus trusted-image admission | `nuxie-renderer` on Apple | Independent drawable lifecycle/presentation implementation or product API |
 | `nux-apple-runtime` | Product C ABI, package/session adaptation, generated headers, and XCFramework binary | product crates plus `nuxie-apple-adapter` | C++, Objective-C, or Swift SDK policy |
 
@@ -80,6 +80,15 @@ lifecycle. The generic Apple surface lives beside the opaque
 `WgpuMetalPresenter`, while the C feature exposes no raw wgpu device, queue,
 surface, or texture. The compatibility adapter must not grow a second copy of
 that lifecycle.
+
+The Apple asset-host table is an import-time platform seam, not an SDK/product
+service. The host may synchronously look up generic image/font/audio bytes and
+decode encoded images into bounded RGBA8 premultiplied-sRGB CPU pixels. Rust
+copies every accepted buffer under explicit retain/release ownership, keeps the
+canonical pixels across renderer-domain changes, and recreates only the GPU
+upload after reset or reattach. Callbacks may not call back into the runtime;
+the table contains no experience, session, package, build, scheduling, UIKit,
+AppKit, CAMetalLayer, or MTLTexture policy.
 
 ## Build selectors
 

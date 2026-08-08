@@ -104,6 +104,20 @@
  *    Observer callbacks run only during final publication and are individually
  *    panic-isolated; a panicking observer falls back to ordinary dirt delivery
  *    and does not change a successfully committed batch into a failure.
+ * 16. Apple asset hooks are borrowed only for the synchronous import call.
+ *    Request byte/string views expire when their callback returns and callbacks
+ *    must not call back into any nux-capi export. Every successful callback
+ *    output whose struct_size covers a complete retain/release pair transfers
+ *    ownership: the runtime calls retain exactly once before inspecting the
+ *    buffer and release exactly once after copying or rejecting it.
+ *    Failure/unknown outcomes with a complete readable pair are balanced the
+ *    same way; short prefixes and incomplete pairs transfer no ownership and
+ *    neither function is called. Zero-length data may be NULL. Rust preflights
+ *    encoded dimensions and supplies the exact remaining per-item/aggregate
+ *    decode ceiling before invoking the host. Decoded images must be RGBA8
+ *    premultiplied-sRGB within every advertised bound.
+ *    Canonical CPU pixels remain file/occurrence-owned across renderer resets;
+ *    only renderer-domain GPU resources are invalidated and recreated.
  *
  * PANIC SAFETY
  *
@@ -204,6 +218,21 @@
 #define NUX_RENDERER_INFO_V3_MIN_SIZE                                     \
     (offsetof(NuxRendererInfo, generation) +                              \
      sizeof(((NuxRendererInfo*)0)->generation))
+#define NUX_RETAINED_BYTES_V3_MIN_SIZE                                    \
+    (offsetof(NuxRetainedBytes, release) +                                \
+     sizeof(((NuxRetainedBytes*)0)->release))
+#define NUX_DECODED_IMAGE_V3_MIN_SIZE                                     \
+    (offsetof(NuxDecodedImage, pixels) +                                  \
+     sizeof(((NuxDecodedImage*)0)->pixels))
+#define NUX_IMAGE_DECODE_REQUEST_V3_MIN_SIZE                              \
+    (offsetof(NuxImageDecodeRequest, maximum_decoded_bytes) +             \
+     sizeof(((NuxImageDecodeRequest*)0)->maximum_decoded_bytes))
+#define NUX_EXTERNAL_ASSET_REQUEST_V3_MIN_SIZE                            \
+    (offsetof(NuxExternalAssetRequest, file_extension) +                  \
+     sizeof(((NuxExternalAssetRequest*)0)->file_extension))
+#define NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE                                \
+    (offsetof(NuxAppleAssetHooks, maximum_total_decoded_image_bytes) +    \
+     sizeof(((NuxAppleAssetHooks*)0)->maximum_total_decoded_image_bytes))
 #endif
 
 /* Stable encodings used by the portable callback-renderer surface. Embedders

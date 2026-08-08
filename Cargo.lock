@@ -1277,6 +1277,7 @@ dependencies = [
  "luaur-common",
  "luaur-compiler",
  "nuxie",
+ "nuxie-image-codec",
  "nuxie-renderer",
  "nuxie-schema",
  "objc2",

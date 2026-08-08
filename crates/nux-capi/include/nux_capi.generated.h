@@ -9,6 +9,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_ID_NONE UINT32_MAX
+#endif
+
 /**
  * Increment only for a breaking change to the exported C contract.
  */
@@ -542,6 +546,100 @@ typedef struct NuxHostCommandImportConfig {
   size_t max_command_bytes_per_step;
 } NuxHostCommandImportConfig;
 
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxAssetCallbackStatus;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxAssetKind;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef struct NuxExternalAssetRequest {
+  uint32_t struct_size;
+  NuxAssetKind kind;
+  size_t asset_index;
+  uint32_t asset_id;
+  struct NuxStringView name;
+  struct NuxStringView file_extension;
+} NuxExternalAssetRequest;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Callback-produced bytes with an explicit borrowed-owner retain cycle.
+ *
+ * When `struct_size` covers the callback fields and both callbacks are
+ * present, Rust invokes `retain(owner)` exactly once before inspecting `data`,
+ * and `release(owner)` exactly once after copying or rejecting it. A short
+ * prefix or a missing half of the pair transfers no ownership and is rejected
+ * without invoking either callback.
+ */
+typedef struct NuxRetainedBytes {
+  uint32_t struct_size;
+  const uint8_t *data;
+  size_t len;
+  void *owner;
+  void (*retain)(void *owner);
+  void (*release)(void *owner);
+} NuxRetainedBytes;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef struct NuxImageDecodeRequest {
+  uint32_t struct_size;
+  /**
+   * Encoded bytes borrowed only for the synchronous callback invocation.
+   */
+  struct NuxByteView encoded;
+  uint32_t maximum_dimension;
+  size_t maximum_decoded_bytes;
+} NuxImageDecodeRequest;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxPixelFormat;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Host-decoded image pixels. The only accepted format is RGBA8,
+ * premultiplied-alpha, sRGB; Rust validates and tightly repacks each row before
+ * any renderer upload.
+ */
+typedef struct NuxDecodedImage {
+  uint32_t struct_size;
+  uint32_t width;
+  uint32_t height;
+  uint32_t row_bytes;
+  NuxPixelFormat pixel_format;
+  struct NuxRetainedBytes pixels;
+} NuxDecodedImage;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * One synchronous, versioned Apple asset import surface. The table and all
+ * request views are borrowed only until `nux_file_import_with_apple_assets`
+ * returns; callback-owned outputs use `NuxRetainedBytes` instead.
+ */
+typedef struct NuxAppleAssetHooks {
+  uint32_t struct_size;
+  void *context;
+  NuxAssetCallbackStatus (*lookup_external_asset)(void *context,
+                                                  const struct NuxExternalAssetRequest *request,
+                                                  struct NuxRetainedBytes *out_bytes);
+  NuxAssetCallbackStatus (*decode_image)(void *context,
+                                         const struct NuxImageDecodeRequest *request,
+                                         struct NuxDecodedImage *out_image);
+  size_t maximum_external_asset_bytes;
+  size_t maximum_total_external_asset_bytes;
+  uint32_t maximum_image_dimension;
+  size_t maximum_decoded_image_bytes;
+  size_t maximum_total_decoded_image_bytes;
+} NuxAppleAssetHooks;
+#endif
+
 /**
  * Versioned metadata for a selected runtime-native player.
  */
@@ -895,6 +993,30 @@ typedef struct NuxViewModelSnapshotValueView {
 } NuxViewModelSnapshotValueView;
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_CALLBACK_STATUS_FAILED 2
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_CALLBACK_STATUS_NOT_FOUND 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_CALLBACK_STATUS_OK 0
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_KIND_AUDIO 3
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_KIND_FONT 2
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_ASSET_KIND_IMAGE 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_METAL_DRAWABLE_STATE_AVAILABLE 0
 #endif
 
@@ -904,6 +1026,10 @@ typedef struct NuxViewModelSnapshotValueView {
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_METAL_DRAWABLE_STATE_TIMEOUT 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_PIXEL_FORMAT_RGBA8_PREMULTIPLIED_SRGB 1
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
@@ -1097,6 +1223,14 @@ NuxStatus nux_file_import_trusted_with_host_commands(const uint8_t *bytes,
                                                      const struct NuxHostCommandImportConfig *config,
                                                      struct NuxFile **out_file,
                                                      struct NuxCapiResult **out_result);
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_file_import_with_apple_assets(const uint8_t *bytes,
+                                            size_t len,
+                                            const struct NuxAppleAssetHooks *hooks,
+                                            struct NuxFile **out_file,
+                                            struct NuxCapiResult **out_result);
+#endif
 
 /**
  * Diagnostic import path for production consumers. `out_file` is published

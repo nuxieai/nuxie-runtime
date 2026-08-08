@@ -53,10 +53,10 @@ pub use nuxie_render_api::{
     GpuCanvasShaderEntrySelection, GpuCanvasShaderLoad, GpuCanvasShaderResourceKind,
     GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
     GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError,
-    ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
-    StrokeJoin, Vec2D,
+    ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, PersistentFactory,
+    PersistentFactoryContext, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
@@ -4464,6 +4464,9 @@ pub enum ExternalAssetError {
     InvalidFont {
         asset_id: u32,
     },
+    InvalidAudio {
+        asset_id: u32,
+    },
 }
 
 impl std::fmt::Display for ExternalAssetError {
@@ -4479,6 +4482,9 @@ impl std::fmt::Display for ExternalAssetError {
             } => write!(formatter, "asset {asset_id} is {actual}, not {expected}"),
             Self::InvalidFont { asset_id } => {
                 write!(formatter, "asset {asset_id} bytes are not a valid font")
+            }
+            Self::InvalidAudio { asset_id } => {
+                write!(formatter, "asset {asset_id} bytes are not valid audio")
             }
         }
     }
@@ -5166,6 +5172,29 @@ impl File {
             .map(|_| ())
     }
 
+    /// Attach and decode already-loaded bytes for an external `AudioAsset`.
+    /// The decoded source owns its encoded bytes; no host callback lifetime is
+    /// retained after this method returns.
+    pub fn attach_external_audio_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalAssetError> {
+        self.validate_external_asset_kind(asset_id, "AudioAsset")?;
+        let resource = self
+            .assets()
+            .find(|asset| asset.asset_id() == Some(asset_id))
+            .and_then(FileAsset::resource)
+            .ok_or(ExternalAssetError::UnknownAsset { asset_id })?;
+        let mut factory = nuxie_render_api::NullFactory::new();
+        let _ = resource.decode(&bytes, &mut factory);
+        if resource.audio_source().is_some() {
+            Ok(())
+        } else {
+            Err(ExternalAssetError::InvalidAudio { asset_id })
+        }
+    }
+
     fn attach_external_font_asset_bytes_shared(
         &self,
         asset_id: u32,
@@ -5242,6 +5271,12 @@ impl File {
                         actual: "FontAsset",
                     }
                 }
+                ExternalAssetError::InvalidAudio { asset_id } => {
+                    ExternalImageAssetError::WrongAssetKind {
+                        asset_id,
+                        actual: "AudioAsset",
+                    }
+                }
             })
     }
 
@@ -5261,6 +5296,12 @@ impl File {
                 } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
                 ExternalAssetError::InvalidFont { asset_id } => {
                     ExternalFontAssetError::InvalidFont { asset_id }
+                }
+                ExternalAssetError::InvalidAudio { asset_id } => {
+                    ExternalFontAssetError::WrongAssetKind {
+                        asset_id,
+                        actual: "AudioAsset",
+                    }
                 }
             })
     }
@@ -6589,6 +6630,12 @@ impl OwnedArtboardInstance {
                 } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
                 ExternalAssetError::InvalidFont { asset_id } => {
                     ExternalFontAssetError::InvalidFont { asset_id }
+                }
+                ExternalAssetError::InvalidAudio { asset_id } => {
+                    ExternalFontAssetError::WrongAssetKind {
+                        asset_id,
+                        actual: "AudioAsset",
+                    }
                 }
             })?;
         let external_font_assets = self.file.external_font_assets.snapshot();

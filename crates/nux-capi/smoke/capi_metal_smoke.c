@@ -2,12 +2,13 @@
  * ABI (including the Objective-C C runtime) to configure a CAMetalLayer,
  * render a retained drawable, and exercise the complete handle lifecycle.
  *
- * Usage: capi_metal_smoke <path-to-smi_test.riv>
+ * Usage: capi_metal_smoke <path-to-in_band_asset.riv>
  */
 
 #include "nux_capi_apple.h"
 
 #include <CoreGraphics/CoreGraphics.h>
+#include <ImageIO/ImageIO.h>
 #include <dispatch/dispatch.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
@@ -56,6 +57,89 @@ static void free_result(NuxCapiResult* result, NuxStatus expected)
 }
 
 typedef void* ObjcObject;
+
+typedef struct DecodeProbe
+{
+    uint8_t* pixels;
+    size_t pixel_len;
+    unsigned calls;
+    unsigned retains;
+    unsigned releases;
+    uint32_t nested_abi;
+} DecodeProbe;
+
+static void retain_pixels(void* owner)
+{
+    DecodeProbe* probe = owner;
+    probe->retains += 1;
+    probe->nested_abi = nux_capi_abi_version();
+}
+
+static void release_pixels(void* owner)
+{
+    DecodeProbe* probe = owner;
+    probe->releases += 1;
+}
+
+static NuxAssetCallbackStatus decode_image(void* context,
+                                           const NuxImageDecodeRequest* request,
+                                           NuxDecodedImage* out_image)
+{
+    DecodeProbe* probe = context;
+    CHECK(request != NULL);
+    CHECK(request->struct_size >= NUX_IMAGE_DECODE_REQUEST_V3_MIN_SIZE);
+    CFDataRef encoded = CFDataCreateWithBytesNoCopy(
+        kCFAllocatorDefault, request->encoded.data, (CFIndex)request->encoded.len,
+        kCFAllocatorNull);
+    CHECK(encoded != NULL);
+    CGImageSourceRef source = CGImageSourceCreateWithData(encoded, NULL);
+    CHECK(source != NULL);
+    CGImageRef image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+    CHECK(image != NULL);
+    size_t width = CGImageGetWidth(image);
+    size_t height = CGImageGetHeight(image);
+    CHECK(width > 0 && height > 0);
+    CHECK(width <= request->maximum_dimension &&
+          height <= request->maximum_dimension);
+    CHECK(width <= UINT32_MAX / 4);
+    size_t row_bytes = width * 4;
+    CHECK(height <= SIZE_MAX / row_bytes);
+    size_t pixel_len = row_bytes * height;
+    CHECK(pixel_len <= request->maximum_decoded_bytes);
+    free(probe->pixels);
+    probe->pixels = calloc(1, pixel_len);
+    CHECK(probe->pixels != NULL);
+    probe->pixel_len = pixel_len;
+    CGColorSpaceRef colors = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CHECK(colors != NULL);
+    CGContextRef bitmap = CGBitmapContextCreate(
+        probe->pixels, width, height, 8, row_bytes, colors,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CHECK(bitmap != NULL);
+    CGContextDrawImage(bitmap, CGRectMake(0, 0, (CGFloat)width, (CGFloat)height), image);
+    CGContextRelease(bitmap);
+    CGColorSpaceRelease(colors);
+    CGImageRelease(image);
+    CFRelease(source);
+    CFRelease(encoded);
+    probe->calls += 1;
+    *out_image = (NuxDecodedImage){
+        .struct_size = sizeof(NuxDecodedImage),
+        .width = (uint32_t)width,
+        .height = (uint32_t)height,
+        .row_bytes = (uint32_t)row_bytes,
+        .pixel_format = NUX_PIXEL_FORMAT_RGBA8_PREMULTIPLIED_SRGB,
+        .pixels = {
+            .struct_size = sizeof(NuxRetainedBytes),
+            .data = probe->pixels,
+            .len = probe->pixel_len,
+            .owner = probe,
+            .retain = retain_pixels,
+            .release = release_pixels,
+        },
+    };
+    return NUX_ASSET_CALLBACK_STATUS_OK;
+}
 
 static ObjcObject send_object(ObjcObject receiver, const char* selector)
 {
@@ -125,18 +209,36 @@ int main(int argc, char** argv)
     CHECK(argc == 2);
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
+    DecodeProbe decoder = {0};
+    NuxAppleAssetHooks hooks = {
+        .struct_size = sizeof(NuxAppleAssetHooks),
+        .context = &decoder,
+        .decode_image = decode_image,
+        .maximum_external_asset_bytes = 64 * 1024 * 1024,
+        .maximum_total_external_asset_bytes = 256 * 1024 * 1024,
+        .maximum_image_dimension = 8192,
+        .maximum_decoded_image_bytes = 256 * 1024 * 1024,
+        .maximum_total_decoded_image_bytes = 512 * 1024 * 1024,
+    };
     NuxFile* file = NULL;
-    CHECK(nux_file_import(bytes, len, &file) == NUX_STATUS_OK);
+    NuxCapiResult* result = NULL;
+    CHECK(nux_file_import_with_apple_assets(
+              bytes, len, &hooks, &file, &result) == NUX_STATUS_OK);
+    free_result(result, NUX_STATUS_OK);
+    CHECK(decoder.calls == 1);
+    CHECK(decoder.retains == 1);
+    CHECK(decoder.releases == 1);
+    CHECK(decoder.nested_abi == 0);
     free(bytes);
     NuxArtboardInstance* artboard = NULL;
-    CHECK(nux_artboard_instance_new(file, 1, &artboard) == NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_new(file, 0, &artboard) == NUX_STATUS_OK);
     NuxPlayer* player = NULL;
     CHECK(nux_player_new_static(artboard, &player) == NUX_STATUS_OK);
     CHECK(nux_file_free(file) == NUX_STATUS_OK);
     CHECK(nux_artboard_instance_free(artboard) == NUX_STATUS_OK);
 
     NuxRenderer* renderer = NULL;
-    NuxCapiResult* result = NULL;
+    result = NULL;
     CHECK(nux_renderer_new_metal(4, 3, &renderer, &result) == NUX_STATUS_OK);
     free_result(result, NUX_STATUS_OK);
 
@@ -211,6 +313,8 @@ int main(int argc, char** argv)
 
     CHECK(nux_renderer_free(renderer) == NUX_STATUS_OK);
     CHECK(nux_player_free(player) == NUX_STATUS_OK);
+    CHECK(decoder.calls == 1);
+    free(decoder.pixels);
     puts("capi-metal-smoke ok");
     return 0;
 }

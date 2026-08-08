@@ -52,6 +52,64 @@
 
 #define NUX_PLAYER_STEP_MAX_POINTERS (4 * 1024)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 enum NuxStatus
 #ifdef __cplusplus
   : uint32_t
@@ -157,6 +215,55 @@ enum NuxPlayerEventPropertyKind
 typedef uint32_t NuxPlayerEventPropertyKind;
 #endif // __cplusplus
 
+enum NuxViewModelValueKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_VIEW_MODEL_VALUE_KIND_UNSUPPORTED = 0,
+  NUX_VIEW_MODEL_VALUE_KIND_STRING = 1,
+  NUX_VIEW_MODEL_VALUE_KIND_NUMBER = 2,
+  NUX_VIEW_MODEL_VALUE_KIND_BOOL = 3,
+  NUX_VIEW_MODEL_VALUE_KIND_COLOR = 4,
+  NUX_VIEW_MODEL_VALUE_KIND_ENUM = 5,
+  NUX_VIEW_MODEL_VALUE_KIND_TRIGGER = 6,
+  NUX_VIEW_MODEL_VALUE_KIND_LIST_INDEX = 7,
+  NUX_VIEW_MODEL_VALUE_KIND_LIST = 8,
+  NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL = 9,
+  NUX_VIEW_MODEL_VALUE_KIND_IMAGE = 10,
+  NUX_VIEW_MODEL_VALUE_KIND_FONT = 11,
+  NUX_VIEW_MODEL_VALUE_KIND_BLOB = 12,
+  NUX_VIEW_MODEL_VALUE_KIND_ARTBOARD = 13,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxViewModelValueKind;
+#endif // __cplusplus
+
+enum NuxViewModelMutationKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING = 0,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER = 1,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL = 2,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR = 3,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM = 4,
+  NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER = 5,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX = 6,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE = 7,
+  NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL = 8,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT = 9,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE = 10,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP = 11,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE = 12,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET = 13,
+  NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR = 14,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxViewModelMutationKind;
+#endif // __cplusplus
+
 /**
  * Owned artboard occurrence. It retains the imported [`File`] through native
  * shared ownership and therefore remains valid after its [`NuxFile`] handle
@@ -197,16 +304,24 @@ typedef struct NuxRenderer NuxRenderer;
 typedef struct NuxStateMachineInstance NuxStateMachineInstance;
 
 /**
+ * Immutable owned projection of every data-binding schema in one file.
+ */
+typedef struct NuxViewModelCatalog NuxViewModelCatalog;
+
+/**
  * Owned view-model context for driving an artboard's data binds.
  *
- * Unlike [`NuxArtboardInstance`], this handle owns a private copy of the
- * view model's values and does **not** borrow the [`NuxFile`] it came from,
- * so it participates in no liveness ordering: it may be freed before or after
- * its originating file and artboard instance. It is only meaningful when bound
- * back (via `nux_artboard_instance_bind_view_model`) to the artboard instance
- * it was created from, which must still be alive at bind time.
+ * This handle retains its imported file and one shared runtime graph. Handles
+ * returned by `nux_view_model_instance_share` preserve graph identity and
+ * observe the same mutations. Generic file-level instances may bind to a
+ * compatible artboard occurrence from the same file; legacy instances created
+ * from an artboard retain the exact originating-occurrence restriction.
  */
 typedef struct NuxViewModelInstance NuxViewModelInstance;
+
+typedef struct NuxViewModelMutationResult NuxViewModelMutationResult;
+
+typedef struct NuxViewModelSnapshot NuxViewModelSnapshot;
 
 /**
  * Borrowed view of a [`RawPath`]: `verbs` holds `NuxPathVerb` values and
@@ -305,6 +420,32 @@ typedef struct NuxStringView {
   const char *data;
   size_t len;
 } NuxStringView;
+
+/**
+ * Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
+ * promise. Its owner and lifetime are documented by the containing API.
+ */
+typedef struct NuxByteView {
+  const uint8_t *data;
+  size_t len;
+} NuxByteView;
+
+typedef struct NuxTextRunMutation {
+  /**
+   * Exact, case-sensitive authored root `TextValueRun` name.
+   */
+  struct NuxStringView name;
+  /**
+   * Replacement text bytes, borrowed only for the synchronous call.
+   */
+  struct NuxByteView text;
+} NuxTextRunMutation;
+
+typedef struct NuxTextRunMutationBatch {
+  uint32_t struct_size;
+  const struct NuxTextRunMutation *mutations;
+  size_t mutation_count;
+} NuxTextRunMutationBatch;
 
 /**
  * Caller-sized view into one owned C-ABI result. `code` and `message` remain
@@ -407,15 +548,6 @@ typedef struct NuxPlayerEventView {
   float seconds_delay;
   size_t property_count;
 } NuxPlayerEventView;
-
-/**
- * Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
- * promise. Its owner and lifetime are documented by the containing API.
- */
-typedef struct NuxByteView {
-  const uint8_t *data;
-  size_t len;
-} NuxByteView;
 
 /**
  * Fixed projection of one typed custom Event property. Only the value field
@@ -541,6 +673,114 @@ typedef struct NuxMetalRenderOperation {
 } NuxMetalRenderOperation;
 #endif
 
+typedef struct NuxViewModelAuthoredInstanceView {
+  uint32_t struct_size;
+  size_t schema_index;
+  size_t instance_index;
+  /**
+   * NULL+0 means the authored instance has no name.
+   */
+  struct NuxStringView name;
+} NuxViewModelAuthoredInstanceView;
+
+typedef struct NuxViewModelCatalogInfo {
+  uint32_t struct_size;
+  size_t schema_count;
+  size_t property_count;
+  size_t authored_instance_count;
+  size_t enum_label_count;
+} NuxViewModelCatalogInfo;
+
+typedef struct NuxViewModelPropertyView {
+  uint32_t struct_size;
+  size_t schema_index;
+  size_t property_index;
+  struct NuxStringView name;
+  uint32_t kind;
+  /**
+   * `SIZE_MAX` when this is not a nested view-model property.
+   */
+  size_t referenced_schema_index;
+  size_t first_enum_label;
+  size_t enum_label_count;
+} NuxViewModelPropertyView;
+
+typedef struct NuxViewModelSchemaView {
+  uint32_t struct_size;
+  size_t schema_index;
+  struct NuxStringView name;
+  size_t first_property;
+  size_t property_count;
+  size_t first_authored_instance;
+  size_t authored_instance_count;
+  /**
+   * Catalog-authored-instance index, or `SIZE_MAX` when generated defaults apply.
+   */
+  size_t default_authored_instance;
+  uint32_t is_global;
+} NuxViewModelSchemaView;
+
+typedef struct NuxViewModelMutation {
+  uint32_t kind;
+  struct NuxViewModelInstance *instance;
+  struct NuxStringView path;
+  struct NuxViewModelInstance *related_instance;
+  struct NuxByteView bytes_value;
+  float number_value;
+  uint64_t integer_value;
+  /**
+   * Canonical C boolean: exactly 0 or 1.
+   */
+  uint32_t bool_value;
+  size_t index;
+  size_t second_index;
+} NuxViewModelMutation;
+
+typedef struct NuxViewModelMutationBatch {
+  uint32_t struct_size;
+  const struct NuxViewModelMutation *mutations;
+  size_t mutation_count;
+} NuxViewModelMutationBatch;
+
+typedef struct NuxViewModelMutationResultInfo {
+  uint32_t struct_size;
+  NuxStatus status;
+  size_t applied_count;
+  struct NuxStringView code;
+  struct NuxStringView message;
+} NuxViewModelMutationResultInfo;
+
+typedef struct NuxViewModelSnapshotInfo {
+  uint32_t struct_size;
+  uint64_t root_instance_id;
+  size_t instance_count;
+  size_t value_count;
+  size_t list_item_count;
+} NuxViewModelSnapshotInfo;
+
+typedef struct NuxViewModelSnapshotInstanceView {
+  uint32_t struct_size;
+  uint64_t instance_id;
+  size_t schema_index;
+  size_t first_value;
+  size_t value_count;
+} NuxViewModelSnapshotInstanceView;
+
+typedef struct NuxViewModelSnapshotValueView {
+  uint32_t struct_size;
+  uint64_t owner_instance_id;
+  size_t property_index;
+  struct NuxStringView name;
+  uint32_t kind;
+  float number_value;
+  uint64_t integer_value;
+  uint32_t bool_value;
+  struct NuxByteView bytes_value;
+  uint64_t referenced_instance_id;
+  size_t first_list_item;
+  size_t list_item_count;
+} NuxViewModelSnapshotValueView;
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_METAL_DRAWABLE_STATE_AVAILABLE 0
 #endif
@@ -620,9 +860,9 @@ NuxStatus nux_artboard_instance_advance(struct NuxArtboardInstance *instance,
 /**
  * Bind `view_model` to `instance`'s own data binds and nested-artboard
  * contexts (mirrors `artboard->bindViewModelInstance(...)`). The context is
- * copied in, so call this again after mutating `view_model` to propagate the
- * change on the next advance. `view_model` must have been created from
- * `instance`.
+ * retained by the artboard, so later mutations remain shared. Generic file-level
+ * instances must have a compatible schema and source file; legacy instances
+ * created from an artboard must come from this exact occurrence.
  */
 NuxStatus nux_artboard_instance_bind_view_model(struct NuxArtboardInstance *instance,
                                                 const struct NuxViewModelInstance *view_model);
@@ -666,6 +906,17 @@ NuxStatus nux_artboard_instance_new_named_with_result(const struct NuxFile *file
                                                       struct NuxStringView name,
                                                       struct NuxArtboardInstance **out_instance,
                                                       struct NuxCapiResult **out_result);
+
+/**
+ * Atomically replace a bounded batch of exact-name root text runs.
+ *
+ * Every name and buffer is validated before the first write. `out_changed` is
+ * optional and receives canonical 0/1. An unexpected commit divergence or
+ * panic poisons the occurrence, preserving observational atomicity.
+ */
+NuxStatus nux_artboard_instance_set_text_runs(struct NuxArtboardInstance *instance,
+                                              const struct NuxTextRunMutationBatch *batch,
+                                              uint32_t *out_changed);
 
 uint32_t nux_capi_abi_version(void);
 
@@ -726,6 +977,9 @@ NuxStatus nux_file_import_with_result(const uint8_t *bytes,
                                       size_t len,
                                       struct NuxFile **out_file,
                                       struct NuxCapiResult **out_result);
+
+NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
+                                      struct NuxViewModelCatalog **out_catalog);
 
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
@@ -1007,7 +1261,40 @@ NuxStatus nux_state_machine_instance_set_number(struct NuxStateMachineInstance *
                                                 const char *name,
                                                 float value);
 
+NuxStatus nux_view_model_catalog_authored_instance(const struct NuxViewModelCatalog *catalog,
+                                                   size_t index,
+                                                   struct NuxViewModelAuthoredInstanceView *out_instance);
+
+NuxStatus nux_view_model_catalog_enum_label(const struct NuxViewModelCatalog *catalog,
+                                            size_t index,
+                                            struct NuxStringView *out_label);
+
+NuxStatus nux_view_model_catalog_free(struct NuxViewModelCatalog *catalog);
+
+NuxStatus nux_view_model_catalog_info(const struct NuxViewModelCatalog *catalog,
+                                      struct NuxViewModelCatalogInfo *out_info);
+
+NuxStatus nux_view_model_catalog_property(const struct NuxViewModelCatalog *catalog,
+                                          size_t index,
+                                          struct NuxViewModelPropertyView *out_property);
+
+NuxStatus nux_view_model_catalog_schema(const struct NuxViewModelCatalog *catalog,
+                                        size_t index,
+                                        struct NuxViewModelSchemaView *out_schema);
+
 NuxStatus nux_view_model_instance_free(struct NuxViewModelInstance *view_model);
+
+NuxStatus nux_view_model_instance_identity(const struct NuxViewModelInstance *instance,
+                                           uint64_t *out_identity);
+
+NuxStatus nux_view_model_instance_new(const struct NuxFile *file,
+                                      size_t schema_index,
+                                      struct NuxViewModelInstance **out_instance);
+
+NuxStatus nux_view_model_instance_new_authored(const struct NuxFile *file,
+                                               size_t schema_index,
+                                               size_t authored_instance_index,
+                                               struct NuxViewModelInstance **out_instance);
 
 /**
  * Instantiate the artboard's view model with generated defaults (mirrors
@@ -1026,6 +1313,14 @@ NuxStatus nux_view_model_instance_new_default(const struct NuxArtboardInstance *
 NuxStatus nux_view_model_instance_new_instance(const struct NuxArtboardInstance *instance,
                                                size_t instance_index,
                                                struct NuxViewModelInstance **out_view_model);
+
+/**
+ * Instantiate the schema's first authored instance, falling back to generated
+ * property defaults when the schema has no authored instances.
+ */
+NuxStatus nux_view_model_instance_new_schema_default(const struct NuxFile *file,
+                                                     size_t schema_index,
+                                                     struct NuxViewModelInstance **out_instance);
 
 /**
  * Set a boolean property by NUL-terminated UTF-8 name path (`/`-separated for
@@ -1056,6 +1351,37 @@ NuxStatus nux_view_model_instance_set_number(struct NuxViewModelInstance *view_m
 NuxStatus nux_view_model_instance_set_string(struct NuxViewModelInstance *view_model,
                                              const char *name_path,
                                              const char *value);
+
+NuxStatus nux_view_model_instance_share(const struct NuxViewModelInstance *instance,
+                                        struct NuxViewModelInstance **out_instance);
+
+NuxStatus nux_view_model_instance_snapshot(const struct NuxViewModelInstance *instance,
+                                           struct NuxViewModelSnapshot **out_snapshot);
+
+NuxStatus nux_view_model_mutate(const struct NuxViewModelMutationBatch *batch,
+                                struct NuxViewModelMutationResult **out_result);
+
+NuxStatus nux_view_model_mutation_result_free(struct NuxViewModelMutationResult *result);
+
+NuxStatus nux_view_model_mutation_result_info(const struct NuxViewModelMutationResult *result,
+                                              struct NuxViewModelMutationResultInfo *out_info);
+
+NuxStatus nux_view_model_snapshot_free(struct NuxViewModelSnapshot *snapshot);
+
+NuxStatus nux_view_model_snapshot_info(const struct NuxViewModelSnapshot *snapshot,
+                                       struct NuxViewModelSnapshotInfo *out_info);
+
+NuxStatus nux_view_model_snapshot_instance(const struct NuxViewModelSnapshot *snapshot,
+                                           size_t index,
+                                           struct NuxViewModelSnapshotInstanceView *out_instance);
+
+NuxStatus nux_view_model_snapshot_list_item(const struct NuxViewModelSnapshot *snapshot,
+                                            size_t index,
+                                            uint64_t *out_instance_id);
+
+NuxStatus nux_view_model_snapshot_value(const struct NuxViewModelSnapshot *snapshot,
+                                        size_t index,
+                                        struct NuxViewModelSnapshotValueView *out_value);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -125,6 +125,22 @@ int main(int argc, char** argv)
     CHECK(runtime_info.source_revision.data != NULL);
     CHECK(runtime_info.source_revision.len > 0);
 
+    NuxViewModelMutationBatch empty_batch = {
+        .struct_size = sizeof(NuxViewModelMutationBatch),
+        .mutations = NULL,
+        .mutation_count = 0,
+    };
+    NuxViewModelMutationResult* empty_result = NULL;
+    CHECK(nux_view_model_mutate(&empty_batch, &empty_result) == NUX_STATUS_OK);
+    CHECK(empty_result != NULL);
+    NuxViewModelMutationResultInfo empty_result_info = {
+        .struct_size = sizeof(NuxViewModelMutationResultInfo)};
+    CHECK(nux_view_model_mutation_result_info(empty_result, &empty_result_info) ==
+          NUX_STATUS_OK);
+    CHECK(empty_result_info.status == NUX_STATUS_OK);
+    CHECK(empty_result_info.applied_count == 0);
+    CHECK(nux_view_model_mutation_result_free(empty_result) == NUX_STATUS_OK);
+
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
 
@@ -145,6 +161,18 @@ int main(int argc, char** argv)
     CHECK(import_diagnostic.status == NUX_STATUS_OK);
     CHECK(nux_capi_result_free(import_result) == NUX_STATUS_OK);
     free(bytes);
+
+    NuxViewModelCatalog* catalog = NULL;
+    CHECK(nux_file_view_model_catalog(file, &catalog) == NUX_STATUS_OK);
+    CHECK(catalog != NULL);
+    NuxViewModelCatalogInfo catalog_info = {
+        .struct_size = sizeof(NuxViewModelCatalogInfo)};
+    CHECK(nux_view_model_catalog_info(catalog, &catalog_info) == NUX_STATUS_OK);
+    CHECK(nux_view_model_catalog_schema(catalog,
+                                        catalog_info.schema_count,
+                                        &(NuxViewModelSchemaView){
+                                            .struct_size = sizeof(NuxViewModelSchemaView)}) ==
+          NUX_STATUS_NOT_FOUND);
 
     size_t artboard_count = 0;
     CHECK(nux_file_artboard_count(file, &artboard_count) == NUX_STATUS_OK);
@@ -320,6 +348,8 @@ int main(int argc, char** argv)
     CHECK(nux_player_info(player, &player_info) == NUX_STATUS_OK);
     CHECK(counters.made != counters.released);
     CHECK(nux_player_free(player) == NUX_STATUS_OK);
+    CHECK(nux_view_model_catalog_info(catalog, &catalog_info) == NUX_STATUS_OK);
+    CHECK(nux_view_model_catalog_free(catalog) == NUX_STATUS_OK);
     CHECK(counters.made == counters.released);
 
     printf("capi-smoke ok (draw_paths=%zu objects=%zu)\n",

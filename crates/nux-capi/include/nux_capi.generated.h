@@ -746,7 +746,13 @@ typedef struct NuxViewModelMutationResultInfo {
   uint32_t struct_size;
   NuxStatus status;
   size_t applied_count;
+  /**
+   * Bounded diagnostic code bytes borrowed from the result until it is freed.
+   */
   struct NuxStringView code;
+  /**
+   * Bounded diagnostic message bytes borrowed from the result until it is freed.
+   */
   struct NuxStringView message;
 } NuxViewModelMutationResultInfo;
 
@@ -912,7 +918,7 @@ NuxStatus nux_artboard_instance_new_named_with_result(const struct NuxFile *file
  *
  * Every name and buffer is validated before the first write. `out_changed` is
  * optional and receives canonical 0/1. An unexpected commit divergence or
- * panic poisons the occurrence, preserving observational atomicity.
+ * panic restores every earlier write through the runtime undo journal.
  */
 NuxStatus nux_artboard_instance_set_text_runs(struct NuxArtboardInstance *instance,
                                               const struct NuxTextRunMutationBatch *batch,

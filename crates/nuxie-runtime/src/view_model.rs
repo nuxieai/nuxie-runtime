@@ -1619,8 +1619,8 @@ pub use authored_viewmodel::{
     RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
     RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
     RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
-    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelLinkError,
-    runtime_global_view_model_indices, runtime_global_view_model_names,
+    RuntimeOwnedViewModelUndoLog, RuntimeOwnedViewModelViewModelSourceHandle,
+    RuntimeViewModelLinkError, runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

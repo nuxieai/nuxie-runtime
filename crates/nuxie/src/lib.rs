@@ -90,7 +90,7 @@ pub mod host_interfaces {
     pub use nuxie_binary::{RuntimeFile, RuntimeObject};
     pub use nuxie_runtime::{
         RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-        RuntimeViewModelLinkError, StateMachineReportedEvent,
+        RuntimeOwnedViewModelUndoLog, RuntimeViewModelLinkError, StateMachineReportedEvent,
     };
 }
 

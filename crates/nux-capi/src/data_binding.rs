@@ -6,7 +6,9 @@
 //! behind this module's interface.
 
 use super::*;
-use nuxie::host_interfaces::{RuntimeOwnedViewModelHandle, RuntimeViewModelLinkError};
+use nuxie::host_interfaces::{
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelUndoLog, RuntimeViewModelLinkError,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -20,6 +22,42 @@ const MAX_VALUE_BYTES: usize = 1024 * 1024;
 const MAX_TOTAL_BYTES: usize = 4 * 1024 * 1024;
 
 static NEXT_VIEW_MODEL_IDENTITY: AtomicU64 = AtomicU64::new(1);
+
+#[cfg(test)]
+thread_local! {
+    static TEST_VM_COMMIT_PANIC_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
+    static TEST_TEXT_COMMIT_PANIC_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
+}
+
+#[cfg(test)]
+fn inject_vm_commit_panic_after(applied_count: Option<usize>) {
+    TEST_VM_COMMIT_PANIC_AFTER.set(applied_count);
+}
+
+#[cfg(test)]
+fn inject_text_commit_panic_after(applied_count: Option<usize>) {
+    TEST_TEXT_COMMIT_PANIC_AFTER.set(applied_count);
+}
+
+#[cfg(test)]
+fn maybe_panic_during_vm_commit(applied_count: usize) {
+    if TEST_VM_COMMIT_PANIC_AFTER.get() == Some(applied_count) {
+        panic!("injected view-model commit failure");
+    }
+}
+
+#[cfg(not(test))]
+fn maybe_panic_during_vm_commit(_applied_count: usize) {}
+
+#[cfg(test)]
+fn maybe_panic_during_text_commit(applied_count: usize) {
+    if TEST_TEXT_COMMIT_PANIC_AFTER.get() == Some(applied_count) {
+        panic!("injected text-run commit failure");
+    }
+}
+
+#[cfg(not(test))]
+fn maybe_panic_during_text_commit(_applied_count: usize) {}
 
 pub(super) fn next_view_model_identity() -> Option<u64> {
     NEXT_VIEW_MODEL_IDENTITY
@@ -1303,6 +1341,30 @@ impl Default for NuxViewModelMutationBatch {
 pub const NUX_VIEW_MODEL_MUTATION_BATCH_V3_MIN_SIZE: usize =
     std::mem::offset_of!(NuxViewModelMutationBatch, mutation_count) + std::mem::size_of::<usize>();
 
+unsafe fn read_view_model_mutation_batch(
+    batch: *const NuxViewModelMutationBatch,
+) -> Result<NuxViewModelMutationBatch, NuxStatus> {
+    if batch.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let caller_size = unsafe { batch.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, NUX_VIEW_MODEL_MUTATION_BATCH_V3_MIN_SIZE) {
+        return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut value = NuxViewModelMutationBatch::default();
+    let read_len = usize::try_from(caller_size)
+        .unwrap_or(usize::MAX)
+        .min(std::mem::size_of::<NuxViewModelMutationBatch>());
+    unsafe {
+        ptr::copy_nonoverlapping(
+            batch.cast::<u8>(),
+            (&mut value as *mut NuxViewModelMutationBatch).cast::<u8>(),
+            read_len,
+        );
+    }
+    Ok(value)
+}
+
 pub struct NuxViewModelMutationResult {
     status: NuxStatus,
     applied_count: usize,
@@ -1316,7 +1378,9 @@ pub struct NuxViewModelMutationResultInfo {
     pub struct_size: u32,
     pub status: NuxStatus,
     pub applied_count: usize,
+    /// Bounded diagnostic code bytes borrowed from the result until it is freed.
     pub code: NuxStringView,
+    /// Bounded diagnostic message bytes borrowed from the result until it is freed.
     pub message: NuxStringView,
 }
 
@@ -1703,6 +1767,38 @@ fn apply_mutation(
     Ok(())
 }
 
+fn record_mutation_undo(
+    undo: &mut RuntimeOwnedViewModelUndoLog,
+    instances: &BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    mutation: &ResolvedMutation,
+) -> bool {
+    let Some(owner) = instances.get(&mutation.instance) else {
+        return false;
+    };
+    match mutation.kind {
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => undo.record_string(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => undo.record_number(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => undo.record_boolean(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => undo.record_color(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => undo.record_enum(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => undo.record_trigger(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => {
+            undo.record_list_index(owner, &mutation.path)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => undo.record_asset(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL => {
+            undo.record_view_model(owner, &mutation.path)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => undo.record_list(owner, &mutation.path),
+        _ => false,
+    }
+}
+
 fn publish_mutation_result(
     out_result: *mut *mut NuxViewModelMutationResult,
     status: NuxStatus,
@@ -1733,21 +1829,22 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             return NuxStatus::NullArgument;
         }
         unsafe { *out_result = ptr::null_mut() };
-        if batch.is_null() {
-            publish_mutation_result(out_result, NuxStatus::NullArgument, 0, "batch is null");
-            return NuxStatus::NullArgument;
-        }
-        let caller_size = unsafe { batch.cast::<u32>().read() };
-        if !struct_size_supports(caller_size, NUX_VIEW_MODEL_MUTATION_BATCH_V3_MIN_SIZE) {
-            publish_mutation_result(
-                out_result,
-                NuxStatus::InvalidStructSize,
-                0,
-                "batch prefix is too small",
-            );
-            return NuxStatus::InvalidStructSize;
-        }
-        let batch = unsafe { &*batch };
+        let batch = match unsafe { read_view_model_mutation_batch(batch) } {
+            Ok(batch) => batch,
+            Err(status) => {
+                publish_mutation_result(
+                    out_result,
+                    status,
+                    0,
+                    if status == NuxStatus::NullArgument {
+                        "batch is null"
+                    } else {
+                        "batch prefix is too small"
+                    },
+                );
+                return status;
+            }
+        };
         if batch.mutation_count > MAX_MUTATIONS {
             publish_mutation_result(
                 out_result,
@@ -1869,20 +1966,38 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 return status;
             }
         }
-        // Cell writes only enqueue dirt; they execute no host callback. With
-        // every handle gated and the same graph/order already proven above,
-        // this commit phase contains no remaining caller-controlled failure.
-        for mutation in &resolved {
-            if apply_mutation(&live, mutation).is_err() {
-                publish_mutation_result(
-                    out_result,
-                    NuxStatus::RuntimeError,
-                    0,
-                    "validated mutation diverged during commit",
-                );
-                return NuxStatus::RuntimeError;
+        // Record every inverse before its corresponding write. The journal
+        // retains exact runtime handles, so rollback preserves identities
+        // already observed through artboards, scripts, and shared C handles.
+        let mut undo = RuntimeOwnedViewModelUndoLog::new();
+        let commit = panic::catch_unwind(AssertUnwindSafe(|| {
+            for (index, mutation) in resolved.iter().enumerate() {
+                if !record_mutation_undo(&mut undo, &live, mutation) {
+                    return Err(());
+                }
+                if apply_mutation(&live, mutation).is_err() {
+                    return Err(());
+                }
+                maybe_panic_during_vm_commit(index + 1);
             }
+            Ok(())
+        }));
+        if !matches!(commit, Ok(Ok(()))) {
+            let restored = panic::catch_unwind(AssertUnwindSafe(|| undo.rollback()))
+                .is_ok_and(|restored| restored);
+            publish_mutation_result(
+                out_result,
+                NuxStatus::RuntimeError,
+                0,
+                if restored {
+                    "validated mutation diverged during commit; live graph restored"
+                } else {
+                    "validated mutation diverged and rollback failed"
+                },
+            );
+            return NuxStatus::RuntimeError;
         }
+        undo.commit();
         drop(guards);
         publish_mutation_result(out_result, NuxStatus::Ok, resolved.len(), "");
         NuxStatus::Ok
@@ -1963,11 +2078,35 @@ impl Default for NuxTextRunMutationBatch {
 pub const NUX_TEXT_RUN_MUTATION_BATCH_V3_MIN_SIZE: usize =
     std::mem::offset_of!(NuxTextRunMutationBatch, mutation_count) + std::mem::size_of::<usize>();
 
+unsafe fn read_text_run_mutation_batch(
+    batch: *const NuxTextRunMutationBatch,
+) -> Result<NuxTextRunMutationBatch, NuxStatus> {
+    if batch.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let caller_size = unsafe { batch.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, NUX_TEXT_RUN_MUTATION_BATCH_V3_MIN_SIZE) {
+        return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut value = NuxTextRunMutationBatch::default();
+    let read_len = usize::try_from(caller_size)
+        .unwrap_or(usize::MAX)
+        .min(std::mem::size_of::<NuxTextRunMutationBatch>());
+    unsafe {
+        ptr::copy_nonoverlapping(
+            batch.cast::<u8>(),
+            (&mut value as *mut NuxTextRunMutationBatch).cast::<u8>(),
+            read_len,
+        );
+    }
+    Ok(value)
+}
+
 /// Atomically replace a bounded batch of exact-name root text runs.
 ///
 /// Every name and buffer is validated before the first write. `out_changed` is
 /// optional and receives canonical 0/1. An unexpected commit divergence or
-/// panic poisons the occurrence, preserving observational atomicity.
+/// panic restores every earlier write through the runtime undo journal.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
     instance: *mut NuxArtboardInstance,
@@ -1982,14 +2121,10 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if batch.is_null() {
-            return NuxStatus::NullArgument;
-        }
-        let caller_size = unsafe { batch.cast::<u32>().read() };
-        if !struct_size_supports(caller_size, NUX_TEXT_RUN_MUTATION_BATCH_V3_MIN_SIZE) {
-            return NuxStatus::InvalidStructSize;
-        }
-        let batch = unsafe { &*batch };
+        let batch = match unsafe { read_text_run_mutation_batch(batch) } {
+            Ok(batch) => batch,
+            Err(status) => return status,
+        };
         if batch.mutation_count > MAX_MUTATIONS {
             return NuxStatus::LimitExceeded;
         }
@@ -2037,23 +2172,221 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
         let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
-        if resolved
+        let names = resolved
             .iter()
-            .any(|(name, _)| !artboard.raw().has_root_text_value_run(name))
-        {
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        let Some(undo) = artboard.raw().root_text_value_run_undo_log(&names) else {
             return NuxStatus::NotFound;
-        }
-        let mut changed = false;
-        for (name, text) in resolved {
-            let Some(did_change) = artboard.raw_mut().set_root_text_value_run(&name, text) else {
-                instance.occurrence.poisoned.set(true);
+        };
+        let commit = panic::catch_unwind(AssertUnwindSafe(|| {
+            let mut changed = false;
+            for (index, (name, text)) in resolved.into_iter().enumerate() {
+                let Some(did_change) = artboard.raw_mut().set_root_text_value_run(&name, text)
+                else {
+                    return Err(());
+                };
+                changed |= did_change;
+                maybe_panic_during_text_commit(index + 1);
+            }
+            Ok(changed)
+        }));
+        let changed = match commit {
+            Ok(Ok(changed)) => changed,
+            Ok(Err(())) | Err(_) => {
+                let restored =
+                    panic::catch_unwind(AssertUnwindSafe(|| undo.rollback(artboard.raw_mut())))
+                        .is_ok_and(|restored| restored);
+                if !restored {
+                    instance.occurrence.poisoned.set(true);
+                }
                 return NuxStatus::RuntimeError;
-            };
-            changed |= did_change;
-        }
+            }
+        };
         if !out_changed.is_null() {
             unsafe { *out_changed = u32::from(changed) };
         }
         NuxStatus::Ok
     })
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn import_fixture(name: &str) -> *mut NuxFile {
+        let root = std::env::var_os("NUX_RUNTIME_DIR")
+            .or_else(|| std::env::var_os("RIVE_RUNTIME_DIR"))
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            PathBuf::from(root)
+                .join("tests/unit_tests/assets")
+                .join(name),
+        )
+        .expect("read upstream fixture");
+        let mut file = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+            NuxStatus::Ok
+        );
+        file
+    }
+
+    fn schema_with_property(file: *const NuxFile, name: &str) -> usize {
+        let mut catalog = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_view_model_catalog(file, &mut catalog) },
+            NuxStatus::Ok
+        );
+        let catalog_ref = unsafe { &*catalog };
+        let schema = catalog_ref
+            .properties
+            .iter()
+            .find(|property| property.name.as_ref() == name.as_bytes())
+            .expect("fixture property")
+            .schema_index;
+        assert_eq!(
+            unsafe { nux_view_model_catalog_free(catalog) },
+            NuxStatus::Ok
+        );
+        schema
+    }
+
+    fn number_value(instance: *const NuxViewModelInstance, path: &str) -> f32 {
+        let instance = unsafe { &*instance };
+        instance
+            .instance
+            .borrow()
+            .raw()
+            .number_value_by_property_name_path(path)
+            .expect("number value")
+    }
+
+    #[test]
+    fn late_view_model_commit_panic_restores_shared_observer_and_handle_remains_usable() {
+        let file = import_fixture("data_binding_test_2.riv");
+        let schema = schema_with_property(file, "num");
+        let mut instance = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new(file, schema, &mut instance) },
+            NuxStatus::Ok
+        );
+        let mut shared = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_share(instance, &mut shared) },
+            NuxStatus::Ok
+        );
+        let original = number_value(shared, "num");
+        let path = b"num";
+        let mutations = [91.0, 92.0].map(|number_value| NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            instance,
+            path: NuxStringView {
+                data: path.as_ptr().cast(),
+                len: path.len(),
+            },
+            number_value,
+            ..NuxViewModelMutation::default()
+        });
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        inject_vm_commit_panic_after(Some(1));
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&batch, &mut result) },
+            NuxStatus::RuntimeError
+        );
+        inject_vm_commit_panic_after(None);
+        assert_eq!(number_value(shared, "num"), original);
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_free(result) },
+            NuxStatus::Ok
+        );
+
+        let one = NuxViewModelMutationBatch {
+            mutation_count: 1,
+            ..batch
+        };
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&one, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(number_value(shared, "num"), 91.0);
+        unsafe {
+            nux_view_model_mutation_result_free(result);
+            nux_view_model_instance_free(shared);
+            nux_view_model_instance_free(instance);
+            nux_file_free(file);
+        }
+    }
+
+    #[test]
+    fn late_text_run_commit_panic_restores_occurrence_and_it_remains_usable() {
+        let file = import_fixture("background_measure.riv");
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+            NuxStatus::Ok
+        );
+        let name = b"nameRun";
+        let first = b"first";
+        let second = b"second";
+        let original = unsafe { &*artboard }
+            .occurrence
+            .instance
+            .borrow()
+            .raw()
+            .root_text_value_run("nameRun")
+            .expect("text run")
+            .to_vec();
+        let mutations = [first.as_slice(), second.as_slice()].map(|text| NuxTextRunMutation {
+            name: NuxStringView {
+                data: name.as_ptr().cast(),
+                len: name.len(),
+            },
+            text: NuxByteView {
+                data: text.as_ptr(),
+                len: text.len(),
+            },
+        });
+        let batch = NuxTextRunMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxTextRunMutationBatch::default()
+        };
+        inject_text_commit_panic_after(Some(1));
+        assert_eq!(
+            unsafe { nux_artboard_instance_set_text_runs(artboard, &batch, ptr::null_mut()) },
+            NuxStatus::RuntimeError
+        );
+        inject_text_commit_panic_after(None);
+        assert_eq!(
+            unsafe { &*artboard }
+                .occurrence
+                .instance
+                .borrow()
+                .raw()
+                .root_text_value_run("nameRun"),
+            Some(original.as_slice())
+        );
+
+        let one = NuxTextRunMutationBatch {
+            mutation_count: 1,
+            ..batch
+        };
+        let mut changed = 0;
+        assert_eq!(
+            unsafe { nux_artboard_instance_set_text_runs(artboard, &one, &mut changed) },
+            NuxStatus::Ok
+        );
+        assert_eq!(changed, 1);
+        unsafe {
+            nux_artboard_instance_free(artboard);
+            nux_file_free(file);
+        }
+    }
 }

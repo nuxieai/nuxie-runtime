@@ -301,6 +301,40 @@ fn snapshot(instance: *const NuxViewModelInstance) -> *mut NuxViewModelSnapshot 
     snapshot
 }
 
+fn nested_and_list_ids(snapshot: *const NuxViewModelSnapshot) -> (u64, Vec<u64>) {
+    let mut info = NuxViewModelSnapshotInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_info(snapshot, &mut info) },
+        NuxStatus::Ok
+    );
+    let mut nested = 0;
+    let mut list = Vec::new();
+    for index in 0..info.value_count {
+        let mut value = NuxViewModelSnapshotValueView::default();
+        assert_eq!(
+            unsafe { nux_view_model_snapshot_value(snapshot, index, &mut value) },
+            NuxStatus::Ok
+        );
+        match owned_string(value.name).as_str() {
+            "child" => nested = value.referenced_instance_id,
+            "items" => {
+                for list_index in
+                    value.first_list_item..value.first_list_item + value.list_item_count
+                {
+                    let mut id = 0;
+                    assert_eq!(
+                        unsafe { nux_view_model_snapshot_list_item(snapshot, list_index, &mut id) },
+                        NuxStatus::Ok
+                    );
+                    list.push(id);
+                }
+            }
+            _ => {}
+        }
+    }
+    (nested, list)
+}
+
 #[test]
 fn catalog_and_snapshot_are_owned_flat_projections() {
     let file = import("data_binding_test_2.riv");
@@ -615,6 +649,190 @@ fn flattened_snapshot_preserves_shared_nested_and_list_identity() {
     unsafe {
         nux_view_model_snapshot_free(snapshot);
         nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology() {
+    let bytes = shared_nested_list_fixture();
+    let file = import_bytes(&bytes);
+    let mut root = std::ptr::null_mut();
+    let mut replacement = std::ptr::null_mut();
+    let mut third = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 1, 0, &mut replacement) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 1, &mut third) },
+        NuxStatus::Ok
+    );
+
+    let child = b"child";
+    let items = b"items";
+    let success = [
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: root,
+            related_instance: replacement,
+            path: NuxStringView {
+                data: child.as_ptr().cast(),
+                len: child.len(),
+            },
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET,
+            instance: root,
+            related_instance: replacement,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 0,
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: root,
+            related_instance: third,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 1,
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP,
+            instance: root,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 0,
+            second_index: 1,
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE,
+            instance: root,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 0,
+            second_index: 1,
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: root,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 1,
+            ..NuxViewModelMutation::default()
+        },
+    ];
+    let mut result = std::ptr::null_mut();
+    let success_batch = NuxViewModelMutationBatch {
+        mutations: success.as_ptr(),
+        mutation_count: success.len(),
+        ..NuxViewModelMutationBatch::default()
+    };
+    assert_eq!(
+        unsafe { nux_view_model_mutate(&success_batch, &mut result) },
+        NuxStatus::Ok
+    );
+    unsafe { nux_view_model_mutation_result_free(result) };
+    let after_success = snapshot(root);
+    let success_ids = nested_and_list_ids(after_success);
+    assert_eq!(success_ids.1.len(), 1);
+    assert_eq!(success_ids.0, success_ids.1[0]);
+
+    let invalid = [
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: root,
+            related_instance: third,
+            path: NuxStringView {
+                data: child.as_ptr().cast(),
+                len: child.len(),
+            },
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: root,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 99,
+            ..NuxViewModelMutation::default()
+        },
+    ];
+    let invalid_batch = NuxViewModelMutationBatch {
+        mutations: invalid.as_ptr(),
+        mutation_count: invalid.len(),
+        ..NuxViewModelMutationBatch::default()
+    };
+    assert_eq!(
+        unsafe { nux_view_model_mutate(&invalid_batch, &mut result) },
+        NuxStatus::InvalidArgument
+    );
+    unsafe { nux_view_model_mutation_result_free(result) };
+    let after_failure = snapshot(root);
+    assert_eq!(nested_and_list_ids(after_failure), success_ids);
+
+    unsafe {
+        nux_view_model_snapshot_free(after_failure);
+        nux_view_model_snapshot_free(after_success);
+        nux_view_model_instance_free(third);
+        nux_view_model_instance_free(replacement);
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn released_instance_identity_is_never_reused() {
+    let bytes = shared_nested_list_fixture();
+    let file = import_bytes(&bytes);
+    let mut first = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 1, &mut first) },
+        NuxStatus::Ok
+    );
+    let mut first_id = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(first, &mut first_id) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_free(first) },
+        NuxStatus::Ok
+    );
+    let mut second = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 1, &mut second) },
+        NuxStatus::Ok
+    );
+    let mut second_id = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(second, &mut second_id) },
+        NuxStatus::Ok
+    );
+    assert_ne!(first_id, second_id);
+    unsafe {
+        nux_view_model_instance_free(second);
         nux_file_free(file);
     }
 }

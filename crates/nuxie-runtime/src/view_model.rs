@@ -12,8 +12,8 @@ use nuxie_binary::{
 
 pub use crate::view_model_cell::{RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeFontAssetValue};
 use crate::view_model_cell::{
-    RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeViewModelCell,
-    RuntimeViewModelCellValue,
+    RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeHostMutationNotifications,
+    RuntimeViewModelCell, RuntimeViewModelCellValue, defer_host_mutation_notification,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1618,8 +1618,8 @@ pub use authored_viewmodel::{
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
     RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
     RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
-    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
-    RuntimeOwnedViewModelUndoLog, RuntimeOwnedViewModelViewModelSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTransaction,
+    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
     RuntimeViewModelLinkError, runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 
@@ -3823,6 +3823,153 @@ mod owned_context_tests {
                 .take_dirt()
                 .contains(RuntimeCellDirt::BINDINGS)
         );
+    }
+
+    #[test]
+    fn host_transaction_drop_restores_exact_list_occurrence_and_publishes_no_dirt() {
+        let file = list_row_relink_fixture();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let first = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("first row"),
+        );
+        let second = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("second row"),
+        );
+        assert!(root.insert_list_item_by_property_name_path("items", 0, &first));
+        let list = {
+            let root = root.borrow();
+            let source = root
+                .list_source_handle_by_property_name_path("items")
+                .expect("items source");
+            root.list_handle_by_property_path(source.path())
+                .expect("items list")
+        };
+        let before = list.item_entries();
+        let list_dirt = RuntimeCellDirtSink::new();
+        list.cell.add_dependent(&list_dirt);
+
+        let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+            assert!(transaction.list_set(&root, "items", 0, &second));
+            assert!(
+                transaction.set_number(&first, "value", 17.0),
+                "a later write follows the staged structural graph"
+            );
+            assert!(
+                list_dirt.take_dirt().is_empty(),
+                "dirt must remain buffered"
+            );
+            panic!("injected late structural transaction failure");
+        }));
+        assert!(unwind.is_err());
+
+        let after = list.item_entries();
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].occurrence_identity, before[0].occurrence_identity);
+        assert!(after[0].instance.ptr_eq(&first));
+        assert!(
+            list_dirt.take_dirt().is_empty(),
+            "rollback publishes no dirt"
+        );
+
+        let cell = first
+            .borrow()
+            .cell_by_property_path(&[0])
+            .expect("row value cell");
+        let scalar_dirt = RuntimeCellDirtSink::new();
+        cell.add_dependent(&scalar_dirt);
+        let original = first
+            .borrow()
+            .number_value_by_property_name_path("value")
+            .expect("row value");
+        let was_changed = cell.has_changed();
+        let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+        assert!(transaction.set_number(&first, "value", 42.0));
+        assert!(scalar_dirt.take_dirt().is_empty());
+        drop(transaction);
+        assert_eq!(
+            first.borrow().number_value_by_property_name_path("value"),
+            Some(original)
+        );
+        assert_eq!(cell.has_changed(), was_changed);
+        assert!(scalar_dirt.take_dirt().is_empty());
+
+        let panicking_observer = RuntimeCellDirtSink::new();
+        panicking_observer.set_before_notify(Some(std::rc::Rc::new(|_| {
+            panic!("injected host observer panic")
+        })));
+        cell.add_dependent(&panicking_observer);
+        let later_observer = RuntimeCellDirtSink::new();
+        cell.add_dependent(&later_observer);
+        let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+        assert!(transaction.set_number(&first, "value", 43.0));
+        transaction.commit();
+        assert_eq!(
+            first.borrow().number_value_by_property_name_path("value"),
+            Some(43.0)
+        );
+        assert!(
+            later_observer
+                .take_dirt()
+                .contains(RuntimeCellDirt::BINDINGS),
+            "a panicking host observer is isolated and later dirt still publishes"
+        );
+
+        let first_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("first child"),
+        );
+        let second_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("second child"),
+        );
+        assert_eq!(
+            first.link_view_model_by_property_name_path("child", &first_child),
+            Ok(true)
+        );
+        let nested_owner = second.clone();
+        let nested_observer = RuntimeCellDirtSink::new();
+        nested_observer.set_before_notify(Some(std::rc::Rc::new(move |_| {
+            let mut nested =
+                RuntimeOwnedViewModelTransaction::begin().expect("nested callback transaction");
+            assert!(nested.set_number(&nested_owner, "value", 29.0));
+            nested.commit();
+            false
+        })));
+        root.add_rebind_dependent(&nested_observer);
+        let panicking_structural_observer = RuntimeCellDirtSink::new();
+        panicking_structural_observer.set_before_notify(Some(std::rc::Rc::new(|_| {
+            panic!("injected structural observer panic")
+        })));
+        root.add_rebind_dependent(&panicking_structural_observer);
+        let later_structural_observer = RuntimeCellDirtSink::new();
+        root.add_rebind_dependent(&later_structural_observer);
+        let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+        assert_eq!(
+            transaction.link_view_model(&first, "child", &second_child),
+            Ok(true)
+        );
+        transaction.commit();
+        assert_eq!(
+            second.borrow().number_value_by_property_name_path("value"),
+            Some(29.0),
+            "nested callback transaction commits under a nested firewall"
+        );
+        assert!(
+            later_structural_observer
+                .take_dirt()
+                .contains(RuntimeCellDirt::BINDINGS),
+            "nested firewall depth preserves isolation for later structural observers"
+        );
+
+        let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+        assert!(transaction.list_set(&root, "items", 0, &second));
+        transaction.commit();
+        assert!(
+            list_dirt.take_dirt().contains(RuntimeCellDirt::BINDINGS),
+            "the restored graph remains usable and publishes on commit"
+        );
+        assert!(list.item_entries()[0].instance.ptr_eq(&second));
     }
 
     #[test]

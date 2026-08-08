@@ -918,7 +918,8 @@ NuxStatus nux_artboard_instance_new_named_with_result(const struct NuxFile *file
  *
  * Every name and buffer is validated before the first write. `out_changed` is
  * optional and receives canonical 0/1. An unexpected commit divergence or
- * panic restores every earlier write through the runtime undo journal.
+ * panic drops the runtime-owned transaction, restoring every staged write
+ * and discarding every deferred invalidation before this call returns.
  */
 NuxStatus nux_artboard_instance_set_text_runs(struct NuxArtboardInstance *instance,
                                               const struct NuxTextRunMutationBatch *batch,

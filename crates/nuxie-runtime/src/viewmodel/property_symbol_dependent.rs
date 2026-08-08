@@ -57,6 +57,14 @@ impl RuntimeOwnedViewModelParentRelay {
     }
 
     fn rebind_dependents(this: &Rc<Self>) {
+        let relay = Rc::clone(this);
+        if defer_host_mutation_notification(move || Self::rebind_dependents_now(&relay)) {
+            return;
+        }
+        Self::rebind_dependents_now(this);
+    }
+
+    fn rebind_dependents_now(this: &Rc<Self>) {
         fn visit(relay: &Rc<RuntimeOwnedViewModelParentRelay>, visited: &mut BTreeSet<usize>) {
             let identity = Rc::as_ptr(relay) as usize;
             if !visited.insert(identity) {

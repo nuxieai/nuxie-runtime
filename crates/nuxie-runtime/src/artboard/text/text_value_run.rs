@@ -2,38 +2,108 @@ use super::super::ArtboardInstance;
 use crate::properties::property_key_for_name;
 use std::collections::BTreeSet;
 
-/// Undo journal for exact-name root text-run writes on one occurrence.
-///
-/// The journal owns the original bytes and restores through the same runtime
-/// setter, so a host can contain a late error or panic without replacing the
-/// artboard occurrence or any of its observable identities.
-pub struct RuntimeTextRunUndoLog {
-    entries: Vec<(String, Vec<u8>)>,
+/// RAII transaction for exact-name root text-run writes on one occurrence.
+/// Payload writes are staged directly in the existing object cells; every
+/// invalidation is deferred until commit, while drop restores the original
+/// bytes silently and without schema lookup.
+pub struct RuntimeTextRunTransaction<'a> {
+    artboard: &'a mut ArtboardInstance,
+    text_property_key: u16,
+    originals: Vec<(usize, Vec<u8>)>,
+    notifications: Vec<usize>,
+    armed: bool,
 }
 
-impl RuntimeTextRunUndoLog {
-    pub fn rollback(self, artboard: &mut ArtboardInstance) -> bool {
-        let mut restored = true;
-        for (name, text) in self.entries {
-            restored &= artboard.set_root_text_value_run(&name, text).is_some();
+impl RuntimeTextRunTransaction<'_> {
+    pub fn set(&mut self, name: &str, value: Vec<u8>) -> Option<bool> {
+        let local_id = self.artboard.root_text_value_run_local_id(name)?;
+        if self
+            .artboard
+            .string_property(local_id, self.text_property_key)
+            == Some(value.as_slice())
+        {
+            return Some(false);
         }
-        restored
+        let changed =
+            self.artboard
+                .objects
+                .set_string_property(local_id, self.text_property_key, value);
+        debug_assert!(changed, "validated text-run transaction write");
+        self.notifications.push(local_id);
+        Some(changed)
+    }
+
+    /// All operations below are runtime-owned dirt bookkeeping; host code is
+    /// never invoked inline. Publishing them only after the complete batch is
+    /// staged makes rollback observationally silent.
+    pub fn commit(mut self) {
+        for local_id in self.notifications.drain(..) {
+            self.artboard
+                .apply_string_property_changed(local_id, self.text_property_key);
+            self.artboard
+                .notify_artboard_data_bind_target_property_changed(
+                    local_id,
+                    self.text_property_key,
+                );
+            self.artboard
+                .mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
+            self.artboard
+                .mark_changed_unless_view_model_instance(local_id);
+            self.artboard.mark_text_changed_for_local(local_id);
+            self.artboard
+                .mark_prepared_changed_for_property(local_id, self.text_property_key);
+            self.artboard
+                .refresh_retained_focusables_for_property(local_id, self.text_property_key);
+        }
+        self.originals.clear();
+        self.armed = false;
+    }
+}
+
+impl Drop for RuntimeTextRunTransaction<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        for (local_id, text) in self.originals.drain(..).rev() {
+            let _ =
+                self.artboard
+                    .objects
+                    .set_string_property(local_id, self.text_property_key, text);
+        }
+        self.notifications.clear();
+        self.armed = false;
     }
 }
 
 impl ArtboardInstance {
-    /// Capture the original value of each unique exact-name root text run.
-    /// Returns `None` before any write when one of the names does not exist.
-    pub fn root_text_value_run_undo_log(&self, names: &[String]) -> Option<RuntimeTextRunUndoLog> {
+    /// Resolve and retain every exact root text-run cell before the first
+    /// staged write. Duplicate names share one inverse but retain mutation
+    /// order in the transaction's deferred notification list.
+    pub fn root_text_value_run_transaction(
+        &mut self,
+        names: &[String],
+    ) -> Option<RuntimeTextRunTransaction<'_>> {
+        let text_property_key = property_key_for_name("TextValueRun", "text")?;
         let mut seen = BTreeSet::new();
-        let mut entries = Vec::new();
+        let mut originals = Vec::new();
         for name in names {
             if !seen.insert(name.as_str()) {
                 continue;
             }
-            entries.push((name.clone(), self.root_text_value_run(name)?.to_vec()));
+            let local_id = self.root_text_value_run_local_id(name)?;
+            originals.push((
+                local_id,
+                self.string_property(local_id, text_property_key)?.to_vec(),
+            ));
         }
-        Some(RuntimeTextRunUndoLog { entries })
+        Some(RuntimeTextRunTransaction {
+            artboard: self,
+            text_property_key,
+            originals,
+            notifications: Vec::new(),
+            armed: true,
+        })
     }
 
     /// Set the first root-artboard `TextValueRun` with the exact authored

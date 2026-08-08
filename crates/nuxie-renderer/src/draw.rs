@@ -271,6 +271,7 @@ pub(crate) fn build_feather_tessellation(
         stroke,
         FeatherFillDirection::ReverseThenForward,
     )
+    .map(|built| built.tessellation)
 }
 
 #[cfg(test)]
@@ -287,6 +288,7 @@ pub(crate) fn build_feather_atlas_tessellation(
         stroke,
         FeatherFillDirection::Forward,
     )
+    .map(|built| built.tessellation)
 }
 
 pub(crate) fn build_feather_tessellation_with_direction(
@@ -295,7 +297,7 @@ pub(crate) fn build_feather_tessellation_with_direction(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     fill_direction: FeatherFillDirection,
-) -> Option<FillTessellation> {
+) -> Option<StrokeTessellation> {
     #[cfg(test)]
     FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     let feather_radius = paint_feather * 1.5;
@@ -320,7 +322,7 @@ pub(crate) fn build_feather_tessellation_with_direction(
             }
         }
     }
-    Some(tessellation.tessellation)
+    Some(tessellation)
 }
 
 pub(crate) fn feather_requires_atlas(
@@ -3425,7 +3427,8 @@ mod tests {
             None,
             FeatherFillDirection::ForwardThenReverse,
         )
-        .unwrap();
+        .unwrap()
+        .tessellation;
         assert_eq!(direct.contours[0].vertex_index0, 8);
         assert!(direct
             .spans
@@ -3440,7 +3443,8 @@ mod tests {
             None,
             FeatherFillDirection::Reverse,
         )
-        .unwrap();
+        .unwrap()
+        .tessellation;
         let base = atlas.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let end = base + atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         assert_eq!(atlas.contours[0].vertex_index0, end - 1);
@@ -3470,7 +3474,8 @@ mod tests {
             None,
             FeatherFillDirection::Reverse,
         )
-        .unwrap();
+        .unwrap()
+        .tessellation;
         assert!(
             atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
                 > TESS_TEXTURE_WIDTH as u32

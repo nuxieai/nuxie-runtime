@@ -7,9 +7,16 @@ mod format;
 mod manifest;
 mod signature;
 
+mod acquisition;
+
+pub use acquisition::{
+    NUX_ACQUISITION_CONTRACT_VERSION, NuxAcquisitionAssetKind, NuxAcquisitionErrorCode,
+    NuxAcquisitionExternalAsset, NuxAcquisitionIdentity, NuxAcquisitionMetadataV1,
+};
+
 pub use format::{
-    EmbeddedMember, NuxPackage, NuxPackageModel, SignatureSource, TocEntry, read_package,
-    validate_nux_roundtrip, write_package,
+    EmbeddedMember, NuxPackage, NuxPackageModel, SignatureSource, TocEntry,
+    read_acquisition_metadata, read_package, validate_nux_roundtrip, write_package,
 };
 pub use manifest::{
     AssetLocation, Assets, Entry, FontAsset, FontContentType, FontFormat, FontStyle,
@@ -30,6 +37,10 @@ pub const NUX_MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const NUX_MAX_JOURNEY_BYTES: u64 = 8 * 1024 * 1024;
 pub const NUX_MAX_SIGNATURE_BYTES: u64 = 64 * 1024;
 pub const NUX_MAX_EXTERNAL_ASSET_BYTES: u64 = 32 * 1024 * 1024;
+pub const NUX_MAX_EXTERNAL_ASSETS: u32 = 1024;
+pub const NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES: u64 = 128 * 1024 * 1024;
+pub const NUX_MAX_ASSET_UNIQUE_NAME_BYTES: u64 = 4 * 1024;
+pub const NUX_MAX_ASSET_SOURCE_KEY_BYTES: u64 = 4 * 1024 * 1024;
 pub const NUX_MAX_MEMBERS: u32 = 4096;
 
 /// Known scene/runtime capabilities a package may require.
@@ -113,4 +124,26 @@ pub enum NuxContainerError {
     SizeOverflow,
     #[error("package is not in canonical writer form")]
     NonCanonicalPackage,
+}
+
+impl NuxContainerError {
+    /// Stable cross-SDK classification for failures in the untrusted
+    /// acquisition phase. Detailed messages remain diagnostic only.
+    pub const fn acquisition_code(&self) -> NuxAcquisitionErrorCode {
+        match self {
+            Self::PackageTooLarge { .. }
+            | Self::TooManyMembers { .. }
+            | Self::MemberTooLarge { .. }
+            | Self::SizeOverflow => NuxAcquisitionErrorCode::LimitExceeded,
+            Self::UnsupportedVersion(_) => NuxAcquisitionErrorCode::UnsupportedVersion,
+            Self::MissingMember(_) | Self::ZeroLengthMember(_) => {
+                NuxAcquisitionErrorCode::MissingMember
+            }
+            Self::ManifestJson(_) | Self::InvalidManifest(_) => {
+                NuxAcquisitionErrorCode::InvalidManifest
+            }
+            Self::InvalidAsset(_) => NuxAcquisitionErrorCode::InvalidExternalAsset,
+            _ => NuxAcquisitionErrorCode::InvalidContainer,
+        }
+    }
 }

@@ -1,14 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 
 use crate::manifest::{AssetLocation, MemberInventoryEntry, MemberRole};
 use crate::signature::SignatureEnvelopeV1;
 use crate::{
-    FORMAT_VERSION, MAGIC, ManifestSigner, NUX_MAX_JOURNEY_BYTES, NUX_MAX_MANIFEST_BYTES,
-    NUX_MAX_MEMBERS, NUX_MAX_PACKAGE_BYTES, NUX_MAX_SIGNATURE_BYTES, NuxContainerError,
-    NuxPackageManifestV1, Result,
+    FORMAT_VERSION, MAGIC, ManifestSigner, NUX_ACQUISITION_CONTRACT_VERSION,
+    NUX_MAX_ASSET_SOURCE_KEY_BYTES, NUX_MAX_ASSET_UNIQUE_NAME_BYTES, NUX_MAX_EXTERNAL_ASSET_BYTES,
+    NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES, NUX_MAX_EXTERNAL_ASSETS, NUX_MAX_JOURNEY_BYTES,
+    NUX_MAX_MANIFEST_BYTES, NUX_MAX_MEMBERS, NUX_MAX_PACKAGE_BYTES, NUX_MAX_SIGNATURE_BYTES,
+    NuxAcquisitionAssetKind, NuxAcquisitionExternalAsset, NuxAcquisitionIdentity,
+    NuxAcquisitionMetadataV1, NuxContainerError, NuxPackageManifestV1, Result,
 };
 
 const ALIGNMENT: u64 = 16;
@@ -80,6 +84,198 @@ pub struct NuxPackageModel<'a> {
     pub journey: &'a [u8],
     pub embedded_assets: Vec<EmbeddedMember<'a>>,
     pub signature: SignatureSource<'a>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionManifestV1 {
+    version: u32,
+    identity: AcquisitionIdentity,
+    assets: AcquisitionAssets,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionIdentity {
+    experience_id: String,
+    build_id: String,
+}
+
+#[derive(Deserialize)]
+struct AcquisitionAssets {
+    images: Vec<AcquisitionAsset>,
+    fonts: Vec<AcquisitionAsset>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionAsset {
+    location: AcquisitionLocation,
+    rive_asset_id: u64,
+    rive_unique_name: String,
+    sha256: String,
+    size_bytes: u64,
+    required: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum AcquisitionLocation {
+    External {
+        key: String,
+    },
+    Embedded {
+        #[serde(rename = "member")]
+        _member: String,
+    },
+}
+
+/// Reads only the untrusted metadata required to acquire external assets.
+///
+/// This validates the bounded container envelope and required member identity,
+/// but deliberately does not decode the journey or expose product/runtime
+/// metadata. [`read_package`] and [`crate::verify_signature`] remain the
+/// authoritative post-acquisition path.
+pub fn read_acquisition_metadata(bytes: &[u8]) -> Result<NuxAcquisitionMetadataV1> {
+    enforce_package_limit(bytes)?;
+    let (toc, toc_end) = parse_toc(bytes)?;
+    let manifest_index = required_member_index(&toc, MANIFEST_MEMBER)?;
+    required_member_index(&toc, SIGNATURE_MEMBER)?;
+    required_member_index(&toc, SCENE_MEMBER)?;
+    required_member_index(&toc, JOURNEY_MEMBER)?;
+    validate_ranges_and_padding(bytes, &toc, toc_end)?;
+    enforce_named_member_limits(&toc)?;
+
+    let manifest_bytes = member_slice(
+        bytes,
+        toc.get(manifest_index)
+            .ok_or(NuxContainerError::MissingMember(MANIFEST_MEMBER))?,
+    )?;
+    let manifest: AcquisitionManifestV1 =
+        serde_json::from_slice(manifest_bytes).map_err(NuxContainerError::ManifestJson)?;
+    if manifest.version != FORMAT_VERSION {
+        return Err(NuxContainerError::InvalidManifest(format!(
+            "manifest version {} is not {FORMAT_VERSION}",
+            manifest.version
+        )));
+    }
+    if manifest.identity.experience_id.is_empty() || manifest.identity.build_id.is_empty() {
+        return Err(NuxContainerError::InvalidManifest(
+            "acquisition identity must not be empty".to_owned(),
+        ));
+    }
+
+    let mut external_assets = Vec::new();
+    let mut ids = HashSet::new();
+    let mut names = HashSet::new();
+    let mut total_bytes = 0u64;
+    for (kind, asset) in manifest
+        .assets
+        .images
+        .into_iter()
+        .map(|asset| (NuxAcquisitionAssetKind::Image, asset))
+        .chain(
+            manifest
+                .assets
+                .fonts
+                .into_iter()
+                .map(|asset| (NuxAcquisitionAssetKind::Font, asset)),
+        )
+    {
+        let key = match &asset.location {
+            AcquisitionLocation::External { key } => key.clone(),
+            AcquisitionLocation::Embedded { .. } => continue,
+        };
+        let asset_id = u32::try_from(asset.rive_asset_id).map_err(|_| {
+            NuxContainerError::InvalidAsset("external asset id does not fit in u32".to_owned())
+        })?;
+        if !ids.insert(asset_id) || !names.insert(asset.rive_unique_name.clone()) {
+            return Err(NuxContainerError::InvalidAsset(
+                "external asset ids and unique names must be unique".to_owned(),
+            ));
+        }
+        validate_acquisition_asset(&key, &asset)?;
+        total_bytes = total_bytes
+            .checked_add(asset.size_bytes)
+            .ok_or(NuxContainerError::SizeOverflow)?;
+        external_assets.push(NuxAcquisitionExternalAsset {
+            kind,
+            asset_id,
+            unique_name: asset.rive_unique_name,
+            key,
+            sha256: asset.sha256,
+            size_bytes: asset.size_bytes,
+            required: asset.required,
+        });
+    }
+    let asset_count =
+        u32::try_from(external_assets.len()).map_err(|_| NuxContainerError::SizeOverflow)?;
+    if asset_count > NUX_MAX_EXTERNAL_ASSETS {
+        return Err(NuxContainerError::MemberTooLarge {
+            name: "external asset count".to_owned(),
+            actual: u64::from(asset_count),
+            max: u64::from(NUX_MAX_EXTERNAL_ASSETS),
+        });
+    }
+    if total_bytes > NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES {
+        return Err(NuxContainerError::MemberTooLarge {
+            name: "aggregate external assets".to_owned(),
+            actual: total_bytes,
+            max: NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES,
+        });
+    }
+
+    Ok(NuxAcquisitionMetadataV1 {
+        contract_version: NUX_ACQUISITION_CONTRACT_VERSION,
+        package_version: manifest.version,
+        identity: NuxAcquisitionIdentity {
+            experience_id: manifest.identity.experience_id,
+            build_id: manifest.identity.build_id,
+        },
+        external_assets,
+    })
+}
+
+fn validate_acquisition_asset(key: &str, asset: &AcquisitionAsset) -> Result<()> {
+    let name_bytes =
+        u64::try_from(asset.rive_unique_name.len()).map_err(|_| NuxContainerError::SizeOverflow)?;
+    let key_bytes = u64::try_from(key.len()).map_err(|_| NuxContainerError::SizeOverflow)?;
+    if asset.rive_unique_name.is_empty() || name_bytes > NUX_MAX_ASSET_UNIQUE_NAME_BYTES {
+        return Err(NuxContainerError::InvalidAsset(
+            "external asset unique name is invalid".to_owned(),
+        ));
+    }
+    if key.is_empty() || key_bytes > NUX_MAX_ASSET_SOURCE_KEY_BYTES {
+        return Err(NuxContainerError::InvalidAsset(
+            "external asset source key is invalid".to_owned(),
+        ));
+    }
+    if asset.size_bytes > NUX_MAX_EXTERNAL_ASSET_BYTES {
+        return Err(NuxContainerError::MemberTooLarge {
+            name: key.to_owned(),
+            actual: asset.size_bytes,
+            max: NUX_MAX_EXTERNAL_ASSET_BYTES,
+        });
+    }
+    if asset.sha256.len() != 64
+        || !asset
+            .sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(NuxContainerError::InvalidAsset(asset.sha256.clone()));
+    }
+    let Some(rest) = key.strip_prefix("assets/sha256/") else {
+        return Err(NuxContainerError::InvalidAsset(key.to_owned()));
+    };
+    let Some((hash, extension)) = rest.rsplit_once('.') else {
+        return Err(NuxContainerError::InvalidAsset(key.to_owned()));
+    };
+    if hash != asset.sha256 || !matches!(extension, "png" | "jpg" | "jpeg" | "webp" | "ttf" | "otf")
+    {
+        return Err(NuxContainerError::InvalidAsset(key.to_owned()));
+    }
+    Ok(())
 }
 
 pub fn read_package(bytes: &[u8]) -> Result<NuxPackage<'_>> {

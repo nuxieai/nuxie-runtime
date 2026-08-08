@@ -1,7 +1,34 @@
-# Apple runtime distribution
+# Apple runtime distributions
 
-The complete native Apple distribution leaf is owned by this repository.
-Portable runtime crates remain platform-neutral and cannot depend on it.
+The native Apple distribution is built from this repository. Product policy
+does not enter the product-neutral C ABI merely because its consumer is Apple.
+
+## Product-neutral destination
+
+`nux-capi` is one C distribution with an Apple-only build feature; it does not
+produce or link a second Rust archive.
+
+```text
+nuxie-renderer AppleSurface (generic Metal mechanics)
+                  |
+                  v
+       nux-capi + apple-metal
+                  |
+                  v
+ product-neutral XCFramework (packaging follow-up)
+                  |
+                  v
+        pure Swift SDK wrapper
+```
+
+Swift owns CAMetalLayer configuration, retained drawable acquisition, actor and
+frame scheduling, and SDK/product concepts. Rust owns the renderer domain,
+draw/presentation mechanics, and device health. It never calls UIKit/AppKit or
+acquires a drawable.
+
+## Legacy product distribution
+
+The existing product-shaped release remains during migration:
 
 ```text
 portable runtime + optional product crates
@@ -16,17 +43,17 @@ portable runtime + optional product crates
  NuxieRuntime.xcframework (C module NuxieRuntimeFFI)
 ```
 
-`nuxie-apple-adapter` owns CAMetalDrawable validation, surface lifecycle,
-presentation completion/disposition, and Apple image admission.
+`nuxie-apple-adapter` compatibility-re-exports the renderer-owned generic
+surface types and owns Apple image admission.
 `nux-apple-runtime` owns the product-shaped C ABI, package authentication,
 experience/screen sessions, panic containment, generated header, and module
-map. It exports C only. Objective-C, C++, and Swift SDK policy are not part of
-the artifact interface.
+map. It exports C only. This compatibility graph is not the destination for
+new renderer APIs and is retired by later migration work.
 
 The iOS SDK consumes the binary from a pure Swift package target and supplies
 the ergonomic Swift API. It does not compile Rust or own another native crate.
 
-## Artifact contract
+## Legacy artifact contract
 
 `make apple-runtime-xcframework` creates:
 

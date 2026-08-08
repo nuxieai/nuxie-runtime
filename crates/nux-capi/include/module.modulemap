@@ -1,4 +1,4 @@
 module NuxieRuntimeInternal {
-    umbrella header "nux_capi.h"
+    umbrella header "nux_capi_apple.h"
     export *
 }

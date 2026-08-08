@@ -1,14 +1,13 @@
-//! Apple drawable-presentation adapter.
+//! Compatibility facade for the former Apple drawable adapter.
 //!
-//! This package owns drawable validation and wrapping, surface lifecycle,
-//! presentation scheduling/completion policy, and trusted Apple image
-//! admission. The renderer remains behind an opaque Metal-capable seam.
+//! Generic drawable validation and presentation mechanics now live beside the
+//! renderer's Metal presenter and are re-exported here for the legacy product
+//! runtime. This package owns only trusted Apple image admission policy.
 
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-mod apple;
-
-#[cfg(any(target_os = "ios", target_os = "macos"))]
-pub use apple::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};
+pub use nuxie_renderer::{
+    ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError,
+};
 
 /// Trusted-artifact image admission for Apple product imports.
 pub struct AppleImageAdmission;

@@ -26,9 +26,12 @@ embedder operations. Host-safety adaptations remain baseline only when they
 are product-neutral and explicitly recorded.
 
 The baseline must not know about Nuxie flows, authored transactions, ProjectDO
-identities, Nux artifact manifests, product host commands, or platform
-presentation lifecycles. A product requirement enters through a small
-baseline-owned interface implemented by an adapter above the boundary.
+identities, Nux artifact manifests, product host commands, or host/UI
+presentation lifecycle policy. Product-neutral backend mechanics may validate
+and present a caller-borrowed native target as described by the Apple platform
+extension below; layer ownership, target acquisition, actor choice, and frame
+scheduling remain above the boundary. A product requirement enters through a
+small baseline-owned interface implemented by an adapter above the boundary.
 
 `nuxie` is the protected, general-purpose facade over this baseline. Its own
 manifest, sources, and first-party dependency closure follow the same downward
@@ -72,22 +75,31 @@ the exact nuxie-runtime gitlink pinned by that repository. Backend-neutral
 renderer factory, frame, presentation-target mechanics, and parity/oracle
 tooling remain in the baseline.
 
-### Apple adapter
+### Apple platform extension
 
-The unprotected `nuxie-apple-adapter` and `nux-apple-runtime` packages own
-CAMetalLayer/drawable lifecycle, presentation completion/disposition,
-trusted-image admission, the product C ABI, and XCFramework packaging.
-Backend-neutral Metal/WebGPU mechanics remain in the protected baseline.
-Protected packages cannot depend on either Apple package. Product operations
-never enter the portable ABI merely because an Apple consumer needs them.
+The protected `nuxie-renderer` package owns product-neutral Metal mechanics,
+including validation and presentation of a caller-borrowed CAMetalDrawable and
+device-health reporting. It never owns CAMetalLayer, acquires a drawable, or
+imports UIKit/AppKit policy. The Apple-only `nux-capi/apple-metal` feature
+exposes those mechanics through product-neutral C handles and fixed-width
+outcomes. The caller owns layer configuration, drawable acquisition, actor and
+frame scheduling, and every product concept.
+
+`nuxie-apple-adapter` is a compatibility re-export for the legacy product
+runtime and retains only trusted-image admission policy of its own.
+`nux-apple-runtime` continues to own package/session adaptation and the legacy
+product XCFramework until that compatibility distribution is retired. Product
+operations never enter `nux-capi` merely because an Apple consumer needs them.
 
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
-errors, callbacks, and buffer negotiation. Product and Apple operations belong
-to the separately named `nux-apple-runtime` ABI above the baseline. Replay and
-oracle tools import the baseline directly so parity evidence cannot depend on
-product glue.
+errors, callbacks, and buffer negotiation. Its Apple feature is a platform
+extension of that same product-neutral distribution, not a product facade.
+Package, experience, screen, and session operations belong to the separately
+named legacy `nux-apple-runtime` ABI above the baseline. Replay and oracle
+tools import the baseline directly so parity evidence cannot depend on product
+glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
 edge rather than migration debt. It reaches only the audited baseline facade:
@@ -135,6 +147,11 @@ resolves package aliases and workspace-inherited specifications using Cargo's
 path and default-feature behavior. The approved portable-ABI facade edge is
 constrained to its exact dependency table, key, effective defaults, feature
 forwarding, audited in-workspace provider, and approved baseline symbols.
+Apple vocabulary and generic presentation markers are likewise confined to an
+exact audited set of extension manifests, headers, sources, tests, and renderer
+implementation files; product vocabulary remains forbidden there, and a new
+file fails closed. This is platform-backend policy, not a product-layer or
+portable-build exemption.
 Registry, git, alias, duplicate, and target-specific substitutions are
 rejected. Root Cargo path patches are resolved too: non-excluded local providers
 join the protected scan, while excluded providers must be in the exact audited

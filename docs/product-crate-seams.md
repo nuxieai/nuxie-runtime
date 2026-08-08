@@ -70,13 +70,16 @@ the baseline and its optional product crates. The workspace contract is:
 | `nuxie-product-scripting` | Nux package vocabulary, exact-artifact verification, private Luau module, host effects, and product quotas | `nuxie`, `nuxie-scripting`, and `nux-container` | Rive bytecode validation, VM memory/safepoints, or imported Rive bindings |
 | nuxie-dev `nuxie-authoring` | Scene/SceneTx as one deep authoring module | imported `nuxie` with defaults disabled plus binary test-support construction | A second runtime scene facade or product host policy |
 | nuxie-dev `nuxie-browser-adapter` | Browser canvas presentation | pinned `nuxie-renderer` and `nuxie-render-api` on wasm only | `wgpu`, device, queue, surface, or texture state |
-| `nuxie-apple-adapter` | Apple drawable presentation and trusted-image admission | `nuxie-renderer` on Apple plus Objective-C/Metal platform bindings | `wgpu`, renderer device/queue objects, or texture state |
+| `nuxie-renderer` Apple module | Generic validation/presentation of a caller-borrowed CAMetalDrawable and renderer device health | Apple-gated Objective-C/Metal bindings | CAMetalLayer ownership, drawable acquisition, product scheduling, or SDK concepts |
+| `nux-capi` `apple-metal` feature | Product-neutral renderer handles, Metal device copy, player render/reset, and fixed-width platform outcomes | `nuxie` renderer feature and `nuxie-renderer` on Apple | UIKit/AppKit, sessions, experiences, screens, or image-provider ABI |
+| `nuxie-apple-adapter` | Compatibility re-exports plus trusted-image admission | `nuxie-renderer` on Apple | Independent drawable lifecycle/presentation implementation or product API |
 | `nux-apple-runtime` | Product C ABI, package/session adaptation, generated headers, and XCFramework binary | product crates plus `nuxie-apple-adapter` | C++, Objective-C, or Swift SDK policy |
 
-The browser and Apple interfaces re-export only the existing high-level
-factory/frame or surface lifecycle. The Apple adapter consumes the renderer
-through the public opaque `WgpuMetalPresenter`; exposing renderer internals to
-make platform adaptation easier is not permitted.
+The browser interface re-exports only the existing high-level factory/frame
+lifecycle. The generic Apple surface lives beside the opaque
+`WgpuMetalPresenter`, while the C feature exposes no raw wgpu device, queue,
+surface, or texture. The compatibility adapter must not grow a second copy of
+that lifecycle.
 
 ## Build selectors
 
@@ -129,10 +132,10 @@ that repository. Nuxie-runtime retains its WebGPU renderer, opaque presentation
 surface/frame primitives, and backend/parity smoke; it exposes no raw wgpu
 device, queue, surface, or texture state to the browser owner.
 
-UNIV-1792 co-located the complete Apple native distribution leaf here. Surface
-lifecycle, CAMetalDrawable validation, presentation scheduling/completion,
-failure disposition, and trusted-image admission live in
-`nuxie-apple-adapter`; package/session adaptation and the stable product C ABI
-live in `nux-apple-runtime`. The renderer retains an opaque
-`WgpuMetalPresenter` for final blit and shared device health. The portable
-`nux-capi` package has no Apple or product feature.
+UNIV-1792 co-located the complete legacy Apple native distribution leaf here.
+UNIV-1823 then moved generic surface lifecycle, caller-borrowed
+CAMetalDrawable validation, presentation completion, and failure disposition
+beside `WgpuMetalPresenter` in `nuxie-renderer`, and exposed them through the
+Apple-only `nux-capi/apple-metal` feature. `nuxie-apple-adapter` remains a thin
+compatibility layer with trusted-image admission; package/session adaptation
+and the legacy product C ABI remain in `nux-apple-runtime` during migration.

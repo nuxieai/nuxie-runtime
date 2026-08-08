@@ -16,3 +16,11 @@ exclude = ["__nuxie_size_report_renderer_roots"]
 
 [parse]
 parse_deps = false
+
+# The committed header describes both distribution variants. Portable builds
+# omit the renderer symbols; Apple archives are built with `apple-metal` and
+# expose the declarations automatically under the platform macro.
+[defines]
+"feature = apple-metal" = "NUX_CAPI_APPLE_METAL"
+"target_os = ios" = "__APPLE__"
+"target_os = macos" = "__APPLE__"

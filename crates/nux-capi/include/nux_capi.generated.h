@@ -182,6 +182,14 @@ typedef struct NuxPlayer NuxPlayer;
  */
 typedef struct NuxPlayerStepResult NuxPlayerStepResult;
 
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Product-neutral native renderer. The handle owns one wgpu/Metal domain and
+ * is affine to its creator thread like the other portable C handles.
+ */
+typedef struct NuxRenderer NuxRenderer;
+#endif
+
 /**
  * Owned state machine instance. Advance it through the
  * [`NuxArtboardInstance`] it was created from.
@@ -459,6 +467,144 @@ typedef struct NuxPlayerStateChangeView {
   uint32_t state_global_id;
 } NuxPlayerStateChangeView;
 
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxRendererDisposition;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxRendererHealth;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef struct NuxRendererOutcome {
+  /**
+   * Must be initialized to `sizeof(NuxRendererOutcome)`.
+   */
+  uint32_t struct_size;
+  NuxRendererDisposition disposition;
+  NuxRendererHealth health;
+  uint32_t pixel_width;
+  uint32_t pixel_height;
+  uint64_t draw_calls;
+  uint64_t logical_flushes;
+  uint64_t atomic_strategy_partitions;
+} NuxRendererOutcome;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef struct NuxRendererInfo {
+  /**
+   * Must be initialized to `sizeof(NuxRendererInfo)`.
+   */
+  uint32_t struct_size;
+  uint32_t pixel_width;
+  uint32_t pixel_height;
+  bool attached;
+  NuxRendererHealth health;
+  /**
+   * Changes whenever reattach replaces native renderer resources.
+   */
+  uint64_t generation;
+} NuxRendererInfo;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxMetalDrawableState;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef struct NuxMetalRenderOperation {
+  /**
+   * Must be initialized to `sizeof(NuxMetalRenderOperation)`.
+   */
+  uint32_t struct_size;
+  /**
+   * Swift-reported drawable availability; Rust never queries UI state.
+   */
+  NuxMetalDrawableState drawable_state;
+  /**
+   * Synchronously borrowed live `id<CAMetalDrawable>` when AVAILABLE.
+   */
+  void *drawable;
+  /**
+   * Premultiplied ARGB clear color.
+   */
+  uint32_t clear_color;
+  /**
+   * Caller-owned context consumed by `completion_callback`.
+   */
+  void *completion_context;
+  /**
+   * Both completion fields must be null or non-null together.
+   */
+  void (*completion_callback)(void *context);
+} NuxMetalRenderOperation;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_METAL_DRAWABLE_STATE_AVAILABLE 0
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_METAL_DRAWABLE_STATE_OCCLUDED 2
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_METAL_DRAWABLE_STATE_TIMEOUT 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_DEVICE_LOST 7
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_NONE 0
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_OUT_OF_MEMORY 8
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_PRESENTED 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_RECONFIGURED 5
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_RECREATED 6
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_SKIPPED_OCCLUDED 4
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_SKIPPED_TIMEOUT 3
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE 2
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_HEALTH_DEVICE_LOST 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_HEALTH_FAILED 3
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_HEALTH_HEALTHY 0
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#define NUX_RENDERER_HEALTH_OUT_OF_MEMORY 2
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -687,6 +833,84 @@ NuxStatus nux_player_step_result_state_change(const struct NuxPlayerStepResult *
 
 NuxStatus nux_player_step_result_status(const struct NuxPlayerStepResult *result,
                                         NuxStatus *out_status);
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Copies the renderer's MTLDevice with Objective-C +1 ownership.
+ */
+NuxStatus nux_renderer_copy_metal_device(const struct NuxRenderer *renderer,
+                                         void **out_device,
+                                         struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_renderer_detach(struct NuxRenderer *renderer,
+                              struct NuxRendererOutcome *out_outcome,
+                              struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_renderer_free(struct NuxRenderer *renderer);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_renderer_info(const struct NuxRenderer *renderer,
+                            struct NuxRendererInfo *out_info,
+                            struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Creates a Metal renderer without touching UIKit, AppKit, or CAMetalLayer.
+ */
+NuxStatus nux_renderer_new_metal(uint32_t pixel_width,
+                                 uint32_t pixel_height,
+                                 struct NuxRenderer **out_renderer,
+                                 struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Reattaches with a fresh native device domain. Players bound to an older
+ * generation return HANDLE_MISMATCH until reset explicitly.
+ */
+NuxStatus nux_renderer_reattach(struct NuxRenderer *renderer,
+                                uint32_t pixel_width,
+                                uint32_t pixel_height,
+                                struct NuxRendererOutcome *out_outcome,
+                                struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Renders the player's retained artboard into a caller-acquired
+ * CAMetalDrawable and schedules presentation. The drawable is borrowed only
+ * until this synchronous function returns.
+ */
+NuxStatus nux_renderer_render_player(struct NuxRenderer *renderer,
+                                     struct NuxPlayer *player,
+                                     const struct NuxMetalRenderOperation *operation,
+                                     struct NuxRendererOutcome *out_outcome,
+                                     struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Drops renderer-owned resources from the player's retained artboard and
+ * binds it to this renderer's current generation.
+ */
+NuxStatus nux_renderer_reset_player_domain(const struct NuxRenderer *renderer,
+                                           struct NuxPlayer *player,
+                                           struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+NuxStatus nux_renderer_resize(struct NuxRenderer *renderer,
+                              uint32_t pixel_width,
+                              uint32_t pixel_height,
+                              struct NuxRendererOutcome *out_outcome,
+                              struct NuxCapiResult **out_result);
+#endif
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must

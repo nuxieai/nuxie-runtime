@@ -150,8 +150,41 @@ PORTABLE_ABI_CONTRACT_SUFFIXES = {
     ".mm",
     ".modulemap",
     ".rs",
+    ".swift",
     ".toml",
 }
+# Apple vocabulary is allowed only in the exact files that declare, implement,
+# or exercise the product-neutral Apple platform extension. Product vocabulary
+# remains forbidden even in these files, and Apple terms in any new portable
+# ABI file still fail closed.
+APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
+    "crates/nux-capi/Cargo.toml",
+    "crates/nux-capi/cbindgen.toml",
+    "crates/nux-capi/include/module.modulemap",
+    "crates/nux-capi/include/nux_capi.generated.h",
+    "crates/nux-capi/include/nux_capi.h",
+    "crates/nux-capi/include/nux_capi_apple.h",
+    "crates/nux-capi/smoke/capi_metal_smoke.c",
+    "crates/nux-capi/smoke/capi_metal_smoke.swift",
+    "crates/nux-capi/src/apple_metal.rs",
+    "crates/nux-capi/src/lib.rs",
+    "crates/nux-capi/tests/apple_metal.rs",
+}
+APPLE_PLATFORM_EXTENSION_VOCABULARY = re.compile(
+    r"(?i:(?:[A-Za-z0-9_-]*apple[A-Za-z0-9_-]*)|CAMetal(?:Layer|Drawable)?)"
+)
+# This precedence check prevents a platform-qualified product term (for
+# example AppleProductSession or apple_experience_context) from hiding inside
+# an otherwise approved Apple token.
+PORTABLE_ABI_PRODUCT_VOCABULARY = re.compile(
+    r"(?-i:(?:FlowSession|NuxExperience|Experience(?:Context|Package|Session)|"
+    r"Project(?:DO|Data)|PackageSession|NuxPackage|NuxArtifact|"
+    r"NuxProduct[A-Za-z0-9_]*|Product(?:Session|Context|Package|ABI|Api|Host|"
+    r"Runtime|Operation|Result|Value)))|"
+    r"(?i:(?:flow_session|experience|project_(?:do|data)|package_session|"
+    r"nux_package|nux_artifact|product_(?:session|context|package|abi|api|host|"
+    r"runtime|operation|result|value)))"
+)
 DIRECT_NUXIE_PATH = re.compile(r"\bnuxie\s*::\s*(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)")
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
@@ -229,6 +262,17 @@ INTERNAL_DEBT_MARKERS = {
         r"\bScriptResourceLimit::(?:Host(?:Identifier|String|Depth|Nodes|Edges|ValueBytes)|"
         r"Commands|CommandContent)\b"
     ),
+}
+
+# These exact files own approved generic presentation mechanics rather than
+# grandfathered architecture debt. The marker still rejects those mechanics in
+# every other protected source file.
+APPROVED_PLATFORM_MECHANICS_FILES = {
+    "apple-presentation": {
+        "crates/nux-capi/src/apple_metal.rs",
+        "crates/nuxie-renderer/src/apple_surface.rs",
+        "crates/nuxie-renderer/src/lib.rs",
+    },
 }
 
 EXPLICIT_PRODUCT_PATH = re.compile(
@@ -973,6 +1017,12 @@ def portable_abi_vocabulary_errors(
             errors.append(f"{relative}: cannot read portable ABI contract: {error}")
             continue
         for match in PORTABLE_ABI_FORBIDDEN_VOCABULARY.finditer(source):
+            if (
+                relative in APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES
+                and APPLE_PLATFORM_EXTENSION_VOCABULARY.fullmatch(match.group(0))
+                and PORTABLE_ABI_PRODUCT_VOCABULARY.search(match.group(0)) is None
+            ):
+                continue
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
                 f"{relative}:{line}: portable ABI contains product/Apple vocabulary "
@@ -1476,6 +1526,8 @@ def check_repository(
             for family, marker in INTERNAL_DEBT_MARKERS.items():
                 matches = list(marker.finditer(source))
                 if not matches:
+                    continue
+                if relative in APPROVED_PLATFORM_MECHANICS_FILES.get(family, set()):
                     continue
                 observed_debt[family].add(relative)
                 spread = (family, relative)

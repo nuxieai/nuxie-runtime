@@ -1273,8 +1273,14 @@ name = "nux-capi"
 version = "0.1.0"
 dependencies = [
  "cbindgen",
+ "dispatch2",
  "nuxie",
+ "nuxie-renderer",
  "nuxie-schema",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
  "serde_json",
 ]
 
@@ -1316,14 +1322,9 @@ dependencies = [
 name = "nuxie-apple-adapter"
 version = "0.1.0"
 dependencies = [
- "block2",
  "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-renderer",
- "objc2",
- "objc2-core-foundation",
- "objc2-metal",
- "objc2-quartz-core",
  "png",
 ]
 
@@ -1444,6 +1445,7 @@ dependencies = [
 name = "nuxie-renderer"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "bytemuck",
  "criterion",
  "futures-channel",
@@ -1456,7 +1458,9 @@ dependencies = [
  "nuxie-render-stream",
  "nuxie-runtime",
  "objc2",
+ "objc2-core-foundation",
  "objc2-metal",
+ "objc2-quartz-core",
  "png",
  "pollster",
  "raw-window-handle",

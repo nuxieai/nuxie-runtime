@@ -9,6 +9,12 @@
 
 mod render_callbacks;
 
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+mod apple_metal;
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+pub use apple_metal::*;
+
 pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
 };
@@ -82,7 +88,7 @@ pub struct NuxFile {
 
 struct ArtboardOccurrence {
     instance: RefCell<OwnedArtboardInstance>,
-    renderer_domain: Cell<Option<RendererDomainBinding>>,
+    renderer_domain: RefCell<Option<RendererDomainBinding>>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
 }
@@ -90,12 +96,44 @@ struct ArtboardOccurrence {
 /// Renderer-owned resources cached by an occurrence belong to exactly one
 /// backend domain. Additional backend variants can be added here without
 /// changing the public lifecycle model.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum RendererDomainBinding {
     Callbacks {
         descriptor: *const NuxRenderCallbacks,
-        table: NuxRenderCallbacks,
+        table: Arc<NuxRenderCallbacks>,
     },
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    Metal {
+        domain: Arc<RendererDomain>,
+        generation: u64,
+    },
+}
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+struct RendererDomain {
+    id: u64,
+    generation: std::sync::atomic::AtomicU64,
+}
+
+/// Durable cache identity for renderer-owned resources that outlive one
+/// public handle operation. Provider/file caches introduced by UNIV-1824 must
+/// retain this key beside every uploaded resource and invalidate/redecode on
+/// any mismatch; native Metal textures are never migrated between keys.
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RendererDomainCacheKey {
+    id: u64,
+    generation: u64,
+}
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+impl RendererDomain {
+    fn cache_key(&self) -> RendererDomainCacheKey {
+        RendererDomainCacheKey {
+            id: self.id,
+            generation: self.generation.load(std::sync::atomic::Ordering::Relaxed),
+        }
+    }
 }
 
 struct OccurrenceCallGuard<'a> {
@@ -290,6 +328,8 @@ enum HandleKind {
     ViewModel,
     Result,
     PlayerStepResult,
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    Renderer,
 }
 
 struct HandleRecord {
@@ -876,8 +916,75 @@ fn publish_result(
         message: bounded_diagnostic_bytes(message),
     });
     let result = Box::into_raw(result);
-    register_handle(result, HandleKind::Result, thread::current().id());
+    // Publish before registry insertion so a surrounding typed-result
+    // firewall can reclaim this allocation if registry growth panics.
     unsafe { *out_result = result };
+    register_handle(result, HandleKind::Result, thread::current().id());
+    #[cfg(test)]
+    PANIC_AFTER_RESULT_PUBLICATION.with(|armed| {
+        if armed.replace(false) {
+            panic!("injected panic after owned result publication");
+        }
+    });
+}
+
+#[cfg(test)]
+thread_local! {
+    static PANIC_AFTER_RESULT_PUBLICATION: Cell<bool> = const { Cell::new(false) };
+}
+
+#[cfg(test)]
+fn panic_after_next_result_publication() {
+    PANIC_AFTER_RESULT_PUBLICATION.with(|armed| armed.set(true));
+}
+
+fn reclaim_published_result(out_result: *mut *mut NuxCapiResult) {
+    if out_result.is_null() {
+        return;
+    }
+    let result = unsafe { *out_result };
+    unsafe { *out_result = ptr::null_mut() };
+    if result.is_null() {
+        return;
+    }
+    // The firewall clears the caller slot before invoking its internal body,
+    // so any non-null value here is an owned result publication. It may or may
+    // not have reached the registry when a panic interrupted publication.
+    let _ = remove_handle(result, HandleKind::Result);
+    unsafe { drop(Box::from_raw(result)) };
+}
+
+/// Panic firewall for APIs whose only owned publication is a diagnostic.
+/// A panic reclaims any partial result, then makes one bounded best-effort
+/// attempt to publish the generic runtime failure without allowing a second
+/// allocation panic to cross the C boundary.
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+fn ffi_guard_with_result(
+    out_result: *mut *mut NuxCapiResult,
+    body: impl FnOnce() -> NuxStatus,
+) -> NuxStatus {
+    if !out_result.is_null() {
+        unsafe { *out_result = ptr::null_mut() };
+    }
+    match panic::catch_unwind(AssertUnwindSafe(body)) {
+        Ok(status) => status,
+        Err(_) => {
+            reclaim_published_result(out_result);
+            if !out_result.is_null()
+                && panic::catch_unwind(AssertUnwindSafe(|| {
+                    publish_result(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        "Rust panic contained at nux-capi boundary",
+                    );
+                }))
+                .is_err()
+            {
+                reclaim_published_result(out_result);
+            }
+            NuxStatus::RuntimeError
+        }
+    }
 }
 
 /// Panic firewall for the one API that publishes both a file handle and an
@@ -898,31 +1005,35 @@ fn ffi_guard_with_handle_result<T>(
         unsafe { *out_handle = ptr::null_mut() };
         return NuxStatus::InvalidArgument;
     }
+    if !out_handle.is_null() {
+        unsafe { *out_handle = ptr::null_mut() };
+    }
+    if !out_result.is_null() {
+        unsafe { *out_result = ptr::null_mut() };
+    }
     match panic::catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status,
         Err(_) => {
             if !out_handle.is_null() {
                 let published_handle = unsafe { *out_handle };
-                if !published_handle.is_null()
-                    && remove_handle(published_handle, handle_kind).is_ok()
-                {
+                unsafe { *out_handle = ptr::null_mut() };
+                if !published_handle.is_null() {
+                    let _ = remove_handle(published_handle, handle_kind);
                     unsafe { drop(Box::from_raw(published_handle)) };
                 }
-                unsafe { *out_handle = ptr::null_mut() };
             }
-            if !out_result.is_null() {
-                let published_result = unsafe { *out_result };
-                if !published_result.is_null()
-                    && remove_handle(published_result, HandleKind::Result).is_ok()
-                {
-                    unsafe { drop(Box::from_raw(published_result)) };
-                }
-                unsafe { *out_result = ptr::null_mut() };
-                publish_result(
-                    out_result,
-                    NuxStatus::RuntimeError,
-                    "Rust panic contained at nux-capi boundary",
-                );
+            reclaim_published_result(out_result);
+            if !out_result.is_null()
+                && panic::catch_unwind(AssertUnwindSafe(|| {
+                    publish_result(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        "Rust panic contained at nux-capi boundary",
+                    );
+                }))
+                .is_err()
+            {
+                reclaim_published_result(out_result);
             }
             NuxStatus::RuntimeError
         }
@@ -1363,7 +1474,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {
                         instance: RefCell::new(instance),
-                        renderer_domain: Cell::new(None),
+                        renderer_domain: RefCell::new(None),
                         active: Cell::new(false),
                         poisoned: Cell::new(false),
                     }),
@@ -1493,21 +1604,24 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
             Ok(guard) => guard,
             Err(status) => return status,
         };
-        let retained_callbacks = match instance.occurrence.renderer_domain.get() {
+        // End the immutable RefCell borrow before the first-draw arm installs
+        // the callback renderer domain.
+        let existing_domain = { instance.occurrence.renderer_domain.borrow().clone() };
+        let retained_callbacks = match existing_domain {
             Some(RendererDomainBinding::Callbacks { descriptor, table }) => {
                 if descriptor != callbacks_source {
                     return NuxStatus::HandleMismatch;
                 }
-                table
+                *table
             }
+            #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+            Some(RendererDomainBinding::Metal { .. }) => return NuxStatus::HandleMismatch,
             None => {
-                instance
-                    .occurrence
-                    .renderer_domain
-                    .set(Some(RendererDomainBinding::Callbacks {
+                *instance.occurrence.renderer_domain.borrow_mut() =
+                    Some(RendererDomainBinding::Callbacks {
                         descriptor: callbacks_source,
-                        table: callbacks,
-                    }));
+                        table: Arc::new(callbacks),
+                    });
                 callbacks
             }
         };
@@ -1921,11 +2035,10 @@ const MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL: usize = 4 * 1024;
 const MAX_PLAYER_STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
 
 #[cfg(test)]
-static PANIC_AFTER_STEP_RESULT_PUBLICATION: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-#[cfg(test)]
-static PANIC_BEFORE_STEP_RESULT_REGISTRATION: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+thread_local! {
+    static PANIC_AFTER_STEP_RESULT_PUBLICATION: Cell<bool> = const { Cell::new(false) };
+    static PANIC_BEFORE_STEP_RESULT_REGISTRATION: Cell<bool> = const { Cell::new(false) };
+}
 
 fn byte_view(value: &[u8]) -> NuxStringView {
     NuxStringView {
@@ -1951,7 +2064,7 @@ fn publish_player_step_result(
 ) {
     let pending = PendingHandlePublication::new(result, HandleKind::PlayerStepResult);
     #[cfg(test)]
-    if PANIC_BEFORE_STEP_RESULT_REGISTRATION.swap(false, std::sync::atomic::Ordering::SeqCst) {
+    if PANIC_BEFORE_STEP_RESULT_REGISTRATION.with(|armed| armed.replace(false)) {
         panic!("injected panic before player-step result registration");
     }
     register_handle(
@@ -1961,7 +2074,7 @@ fn publish_player_step_result(
     );
     unsafe { *out_result = pending.handle };
     #[cfg(test)]
-    if PANIC_AFTER_STEP_RESULT_PUBLICATION.swap(false, std::sync::atomic::Ordering::SeqCst) {
+    if PANIC_AFTER_STEP_RESULT_PUBLICATION.with(|armed| armed.replace(false)) {
         panic!("injected panic after player-step result publication");
     }
     let _ = pending.finish();
@@ -3638,7 +3751,7 @@ mod firewall_tests {
     #[test]
     fn player_step_firewall_reclaims_a_result_published_before_panic() {
         let mut result = ptr::null_mut();
-        PANIC_AFTER_STEP_RESULT_PUBLICATION.store(true, std::sync::atomic::Ordering::SeqCst);
+        PANIC_AFTER_STEP_RESULT_PUBLICATION.with(|armed| armed.set(true));
         let status = ffi_guard_with_player_step_result(&mut result, || {
             publish_player_step_result(&mut result, player_step_failure(NuxStatus::Ok, ""));
             NuxStatus::Ok
@@ -3660,7 +3773,7 @@ mod firewall_tests {
     #[test]
     fn player_step_publication_guard_reclaims_a_box_before_registration() {
         let mut result = ptr::null_mut();
-        PANIC_BEFORE_STEP_RESULT_REGISTRATION.store(true, std::sync::atomic::Ordering::SeqCst);
+        PANIC_BEFORE_STEP_RESULT_REGISTRATION.with(|armed| armed.set(true));
         let status = ffi_guard_with_player_step_result(&mut result, || {
             publish_player_step_result(&mut result, player_step_failure(NuxStatus::Ok, ""));
             NuxStatus::Ok

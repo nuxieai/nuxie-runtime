@@ -306,13 +306,27 @@ class ReleaseToolSourcePolicyTests(unittest.TestCase):
             )
 
     def test_documentation_names_the_stable_consumer_coordinates(self) -> None:
-        self.assertIn("apple-runtime-v0.3.0", self.documentation)
+        self.assertIn("apple-runtime-v0.3.1", self.documentation)
         self.assertIn(
             "releases/download/apple-runtime-v<crate-version>/"
             "NuxieRuntime.xcframework.zip",
             self.documentation,
         )
         self.assertIn("swift package compute-checksum", self.documentation)
+
+    def test_documentation_builds_from_the_exact_landed_commit(self) -> None:
+        checkout = self.documentation.index(
+            "git checkout --detach <exact-landed-origin-main-sha>"
+        )
+        build = self.documentation.index("make apple-runtime-xcframework", checkout)
+        tag = self.documentation.index("git tag -a apple-runtime-v0.3.1", build)
+        publish = self.documentation.index(
+            "tools/publish-apple-runtime-release.sh apple-runtime-v0.3.1", tag
+        )
+        self.assertLess(checkout, build)
+        self.assertLess(build, tag)
+        self.assertLess(tag, publish)
+        self.assertIn("Do not reuse a pre-merge artifact", self.documentation)
 
     def test_module_map_autolinks_every_apple_system_dependency(self) -> None:
         for framework in (

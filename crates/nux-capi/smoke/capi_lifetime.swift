@@ -29,6 +29,12 @@ check(file != nil && importResult != nil, "import outputs")
 check(nux_capi_result_free(importResult) == NUX_STATUS_OK.rawValue, "free import result")
 bytes = nil // The runtime must own everything it needs after import returns.
 
+var catalog: OpaquePointer?
+check(nux_file_view_model_catalog(file, &catalog) == NUX_STATUS_OK.rawValue, "catalog")
+var catalogInfo = NuxViewModelCatalogInfo()
+catalogInfo.struct_size = UInt32(MemoryLayout<NuxViewModelCatalogInfo>.size)
+check(nux_view_model_catalog_info(catalog, &catalogInfo) == NUX_STATUS_OK.rawValue, "catalog info")
+
 var artboard: OpaquePointer?
 check(nux_artboard_instance_new(file, 1, &artboard) == NUX_STATUS_OK.rawValue, "artboard")
 var player: OpaquePointer?
@@ -44,6 +50,9 @@ check(nux_capi_result_free(playerResult) == NUX_STATUS_OK.rawValue, "free player
 // artboard occurrence and copied metadata, so this order must remain valid.
 check(nux_file_free(file) == NUX_STATUS_OK.rawValue, "file-first release")
 check(nux_artboard_instance_free(artboard) == NUX_STATUS_OK.rawValue, "artboard-second release")
+check(nux_view_model_catalog_info(catalog, &catalogInfo) == NUX_STATUS_OK.rawValue,
+      "owned catalog after file release")
+check(nux_view_model_catalog_free(catalog) == NUX_STATUS_OK.rawValue, "catalog release")
 
 var info = NuxPlayerInfo()
 info.struct_size = UInt32(MemoryLayout<NuxPlayerInfo>.size)

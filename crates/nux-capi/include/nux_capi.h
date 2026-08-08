@@ -36,8 +36,11 @@
  * 4. Every handle is affine to its creation thread. Use or free from another
  *    thread returns WRONG_THREAD without consuming the handle. Concurrent or
  *    callback-time reentrant use returns REENTRANT_CALL without consuming it.
- * 5. NuxViewModelInstance owns its value copy and does not borrow NuxFile, but
- *    it is only meaningful when bound to the artboard that created it.
+ * 5. NuxViewModelInstance retains its imported file and shared runtime graph.
+ *    A handle returned by `_share` has the same stable identity and observes
+ *    the same values. Generic file-level instances may bind to a compatible
+ *    artboard from that file; legacy artboard-created instances retain their
+ *    exact-occurrence restriction.
  * 6. The first accepted draw attempt binds one NuxRenderCallbacks descriptor
  *    address to the occurrence, including when drawing later returns an error;
  *    later draws must pass that same descriptor address.
@@ -78,6 +81,11 @@
  *    a supplied slot is cleared on entry, remains NULL on success, and owns one
  *    bounded diagnostic on failure. Renderer control APIs require out_result
  *    and publish one result on every outcome.
+ * 14. View-model catalogs and snapshots own all returned bytes and flat
+ *    tables; indexed views remain valid until their catalog/snapshot is freed.
+ *    Mutation input arrays and byte/string views are borrowed only for the
+ *    synchronous call. A failed batch reports applied_count=0 and leaves the
+ *    live view-model graph observationally unchanged.
  *
  * PANIC SAFETY
  *
@@ -119,6 +127,36 @@
 #define NUX_PLAYER_EVENT_PROPERTY_VIEW_V3_MIN_SIZE                        \
     (offsetof(NuxPlayerEventPropertyView, integer_value) +                \
      sizeof(((NuxPlayerEventPropertyView*)0)->integer_value))
+#define NUX_VIEW_MODEL_CATALOG_INFO_V3_MIN_SIZE                           \
+    (offsetof(NuxViewModelCatalogInfo, enum_label_count) +                \
+     sizeof(((NuxViewModelCatalogInfo*)0)->enum_label_count))
+#define NUX_VIEW_MODEL_SCHEMA_VIEW_V3_MIN_SIZE                            \
+    (offsetof(NuxViewModelSchemaView, is_global) +                        \
+     sizeof(((NuxViewModelSchemaView*)0)->is_global))
+#define NUX_VIEW_MODEL_PROPERTY_VIEW_V3_MIN_SIZE                          \
+    (offsetof(NuxViewModelPropertyView, enum_label_count) +               \
+     sizeof(((NuxViewModelPropertyView*)0)->enum_label_count))
+#define NUX_VIEW_MODEL_AUTHORED_INSTANCE_VIEW_V3_MIN_SIZE                 \
+    (offsetof(NuxViewModelAuthoredInstanceView, name) +                   \
+     sizeof(((NuxViewModelAuthoredInstanceView*)0)->name))
+#define NUX_VIEW_MODEL_SNAPSHOT_INFO_V3_MIN_SIZE                          \
+    (offsetof(NuxViewModelSnapshotInfo, list_item_count) +                \
+     sizeof(((NuxViewModelSnapshotInfo*)0)->list_item_count))
+#define NUX_VIEW_MODEL_SNAPSHOT_INSTANCE_VIEW_V3_MIN_SIZE                 \
+    (offsetof(NuxViewModelSnapshotInstanceView, value_count) +            \
+     sizeof(((NuxViewModelSnapshotInstanceView*)0)->value_count))
+#define NUX_VIEW_MODEL_SNAPSHOT_VALUE_VIEW_V3_MIN_SIZE                    \
+    (offsetof(NuxViewModelSnapshotValueView, list_item_count) +           \
+     sizeof(((NuxViewModelSnapshotValueView*)0)->list_item_count))
+#define NUX_VIEW_MODEL_MUTATION_BATCH_V3_MIN_SIZE                         \
+    (offsetof(NuxViewModelMutationBatch, mutation_count) +                \
+     sizeof(((NuxViewModelMutationBatch*)0)->mutation_count))
+#define NUX_VIEW_MODEL_MUTATION_RESULT_INFO_V3_MIN_SIZE                   \
+    (offsetof(NuxViewModelMutationResultInfo, message) +                  \
+     sizeof(((NuxViewModelMutationResultInfo*)0)->message))
+#define NUX_TEXT_RUN_MUTATION_BATCH_V3_MIN_SIZE                           \
+    (offsetof(NuxTextRunMutationBatch, mutation_count) +                  \
+     sizeof(((NuxTextRunMutationBatch*)0)->mutation_count))
 
 #if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
 #define NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE                            \

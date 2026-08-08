@@ -84,6 +84,7 @@ pub enum NuxStatus {
 pub struct NuxFile {
     file: Arc<File>,
     owner_thread: ThreadId,
+    data_binding_provenance: Arc<()>,
 }
 
 struct ArtboardOccurrence {
@@ -165,6 +166,8 @@ fn enter_occurrence(occurrence: &ArtboardOccurrence) -> Result<OccurrenceCallGua
 pub struct NuxArtboardInstance {
     occurrence: Rc<ArtboardOccurrence>,
     owner_thread: ThreadId,
+    file_provenance: Arc<()>,
+    view_model_index: Option<usize>,
     provenance: Arc<()>,
 }
 
@@ -233,15 +236,21 @@ pub struct NuxPlayer {
 
 /// Owned view-model context for driving an artboard's data binds.
 ///
-/// Unlike [`NuxArtboardInstance`], this handle owns a private copy of the
-/// view model's values and does **not** borrow the [`NuxFile`] it came from,
-/// so it participates in no liveness ordering: it may be freed before or after
-/// its originating file and artboard instance. It is only meaningful when bound
-/// back (via `nux_artboard_instance_bind_view_model`) to the artboard instance
-/// it was created from, which must still be alive at bind time.
+/// This handle retains its imported file and one shared runtime graph. Handles
+/// returned by `nux_view_model_instance_share` preserve graph identity and
+/// observe the same mutations. Generic file-level instances may bind to a
+/// compatible artboard occurrence from the same file; legacy instances created
+/// from an artboard retain the exact originating-occurrence restriction.
 pub struct NuxViewModelInstance {
     instance: RefCell<ViewModelInstance>,
+    file: Arc<File>,
+    schema_index: usize,
+    identity: u64,
     owner_thread: ThreadId,
+    file_provenance: Arc<()>,
+    /// Legacy occurrence lineage. Generic file-level instances leave this
+    /// empty and may bind to any compatible occurrence from the same file.
+    binding_provenance: Option<Arc<()>>,
     provenance: Arc<()>,
 }
 
@@ -330,6 +339,9 @@ enum HandleKind {
     PlayerStepResult,
     #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
     Renderer,
+    ViewModelCatalog,
+    ViewModelSnapshot,
+    ViewModelMutationResult,
 }
 
 struct HandleRecord {
@@ -463,6 +475,10 @@ macro_rules! enter_status_handle {
         }
     };
 }
+
+mod data_binding;
+
+pub use data_binding::*;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -1113,6 +1129,7 @@ pub unsafe extern "C" fn nux_file_import(
                 let handle = Box::new(NuxFile {
                     file: Arc::new(file),
                     owner_thread: thread::current().id(),
+                    data_binding_provenance: Arc::new(()),
                 });
                 unsafe {
                     let handle = Box::into_raw(handle);
@@ -1167,6 +1184,7 @@ pub unsafe extern "C" fn nux_file_import_with_result(
                 let handle = Box::into_raw(Box::new(NuxFile {
                     file: Arc::new(file),
                     owner_thread: thread::current().id(),
+                    data_binding_provenance: Arc::new(()),
                 }));
                 register_handle(handle, HandleKind::File, thread::current().id());
                 unsafe { *out_file = handle };
@@ -1471,6 +1489,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
         }
         match OwnedArtboardInstance::instantiate(Arc::clone(&file.file), artboard_index) {
             Ok(instance) => {
+                let view_model_index = instance.view_model_index();
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {
                         instance: RefCell::new(instance),
@@ -1479,6 +1498,8 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         poisoned: Cell::new(false),
                     }),
                     owner_thread: file.owner_thread,
+                    file_provenance: Arc::clone(&file.data_binding_provenance),
+                    view_model_index,
                     provenance: Arc::new(()),
                 };
                 unsafe {
@@ -3440,10 +3461,22 @@ fn view_model_instance_new(
     let Some(view_model) = build(&artboard_instance) else {
         return NuxStatus::NotFound;
     };
+    let Some(schema_index) = artboard_instance.view_model_index() else {
+        return NuxStatus::NotFound;
+    };
+    let file = Arc::clone(artboard_instance.file());
+    let Some(identity) = data_binding::next_view_model_identity() else {
+        return NuxStatus::LimitExceeded;
+    };
     unsafe {
         let handle = Box::into_raw(Box::new(NuxViewModelInstance {
             instance: RefCell::new(view_model),
+            file,
+            schema_index,
+            identity,
             owner_thread: artboard.owner_thread,
+            file_provenance: Arc::clone(&artboard.file_provenance),
+            binding_provenance: Some(Arc::clone(&artboard.provenance)),
             provenance: Arc::clone(&artboard.provenance),
         }));
         register_handle(handle, HandleKind::ViewModel, artboard.owner_thread);
@@ -3575,9 +3608,9 @@ fn view_model_set(
 
 /// Bind `view_model` to `instance`'s own data binds and nested-artboard
 /// contexts (mirrors `artboard->bindViewModelInstance(...)`). The context is
-/// copied in, so call this again after mutating `view_model` to propagate the
-/// change on the next advance. `view_model` must have been created from
-/// `instance`.
+/// retained by the artboard, so later mutations remain shared. Generic file-level
+/// instances must have a compatible schema and source file; legacy instances
+/// created from an artboard must come from this exact occurrence.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
     instance: *mut NuxArtboardInstance,
@@ -3598,7 +3631,14 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         if let Err(status) = require_owner_thread(view_model.owner_thread) {
             return status;
         }
-        if let Err(status) = require_same_artboard(&instance.provenance, &view_model.provenance) {
+        if !Arc::ptr_eq(&instance.file_provenance, &view_model.file_provenance)
+            || instance.view_model_index != Some(view_model.schema_index)
+        {
+            return NuxStatus::HandleMismatch;
+        }
+        if let Some(binding_provenance) = view_model.binding_provenance.as_ref()
+            && let Err(status) = require_same_artboard(&instance.provenance, binding_provenance)
+        {
             return status;
         }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
@@ -3635,6 +3675,7 @@ mod firewall_tests {
         let handle = Box::into_raw(Box::new(NuxFile {
             file,
             owner_thread: thread::current().id(),
+            data_binding_provenance: Arc::new(()),
         }));
         register_handle(handle, HandleKind::File, thread::current().id());
         handle
@@ -3790,6 +3831,39 @@ mod firewall_tests {
             unsafe { nux_player_step_result_free(result) },
             NuxStatus::Ok
         );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn trusted_script_file_uses_the_same_data_binding_catalog_and_snapshot_surface() {
+        let file = trusted_script_file("script_create_viewmodel_instance.riv");
+        let mut catalog = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_view_model_catalog(file, &mut catalog) },
+            NuxStatus::Ok
+        );
+        let mut info = NuxViewModelCatalogInfo::default();
+        assert_eq!(
+            unsafe { nux_view_model_catalog_info(catalog, &mut info) },
+            NuxStatus::Ok
+        );
+        assert!(info.schema_count > 0);
+        let mut instance = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_schema_default(file, 0, &mut instance) },
+            NuxStatus::Ok
+        );
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_snapshot(instance, &mut snapshot) },
+            NuxStatus::Ok
+        );
+        unsafe {
+            nux_file_free(file);
+            nux_view_model_catalog_free(catalog);
+            nux_view_model_instance_free(instance);
+            nux_view_model_snapshot_free(snapshot);
+        }
     }
 
     #[cfg(feature = "scripting")]

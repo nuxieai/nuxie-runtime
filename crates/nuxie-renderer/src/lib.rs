@@ -65,11 +65,11 @@ use std::any::Any;
 #[cfg(test)]
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
 #[derive(Debug)]
@@ -338,6 +338,7 @@ struct CachedWgpuImage {
 #[derive(Default)]
 struct DecodedImageCache {
     entries: HashMap<EncodedImageCacheKey, CachedWgpuImage>,
+    loading: HashSet<EncodedImageCacheKey>,
     retained_bytes: u64,
     next_stamp: u64,
 }
@@ -394,6 +395,25 @@ impl DecodedImageCache {
     }
 }
 
+enum DecodedImageCacheLookup {
+    Hit(u32, u32, Arc<WgpuImageTexture>),
+    Load,
+    Wait,
+}
+
+impl DecodedImageCache {
+    fn lookup_or_claim(&mut self, key: EncodedImageCacheKey) -> DecodedImageCacheLookup {
+        if let Some((width, height, texture)) = self.get(key) {
+            return DecodedImageCacheLookup::Hit(width, height, texture);
+        }
+        if self.loading.insert(key) {
+            DecodedImageCacheLookup::Load
+        } else {
+            DecodedImageCacheLookup::Wait
+        }
+    }
+}
+
 fn rgba8_mip_chain_byte_len(mut width: u32, mut height: u32) -> u64 {
     let mut bytes = 0u64;
     loop {
@@ -416,6 +436,7 @@ struct Context {
     // Factories cloned for new sessions share this device context, so decoded
     // textures survive scene-owner replacement without crossing GPU devices.
     decoded_images: Mutex<DecodedImageCache>,
+    decoded_image_ready: Condvar,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
     logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
@@ -440,6 +461,53 @@ struct Context {
     msaa_image_mesh_pipeline: msaa_image_mesh_pipeline::MsaaImageMeshPipeline,
     msaa_stencil_pipeline: msaa_stencil_pipeline::MsaaStencilPipeline,
     feather_lut: feather_lut::FeatherLut,
+}
+
+impl Context {
+    fn lookup_or_claim_decoded_image(&self, key: EncodedImageCacheKey) -> DecodedImageCacheLookup {
+        let mut cache = self
+            .decoded_images
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        loop {
+            match cache.lookup_or_claim(key) {
+                DecodedImageCacheLookup::Wait => {
+                    cache = self
+                        .decoded_image_ready
+                        .wait(cache)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                }
+                lookup => return lookup,
+            }
+        }
+    }
+}
+
+struct DecodedImageLoadGuard {
+    context: Arc<Context>,
+    key: EncodedImageCacheKey,
+}
+
+impl DecodedImageLoadGuard {
+    fn publish(&self, width: u32, height: u32, texture: &Arc<WgpuImageTexture>) {
+        self.context
+            .decoded_images
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(self.key, width, height, texture);
+    }
+}
+
+impl Drop for DecodedImageLoadGuard {
+    fn drop(&mut self) {
+        self.context
+            .decoded_images
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .loading
+            .remove(&self.key);
+        self.context.decoded_image_ready.notify_all();
+    }
 }
 
 struct FrameAttachments {
@@ -1145,6 +1213,7 @@ impl WgpuFactory {
                 device,
                 queue,
                 decoded_images: Mutex::new(DecodedImageCache::default()),
+                decoded_image_ready: Condvar::new(),
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
                 logical_resources: logical_frame::LogicalResourceStore::default(),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
@@ -1463,20 +1532,22 @@ impl Factory for WgpuFactory {
             return Err(ImageDecodeError);
         }
         let cache_key = EncodedImageCacheKey::new(data);
-        if let Some((width, height, texture)) = self
-            .context
-            .decoded_images
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(cache_key)
-        {
-            return Ok(Box::new(WgpuImage {
-                width,
-                height,
-                texture: Some(texture),
-                owner: Arc::downgrade(&self.context),
-            }));
+        match self.context.lookup_or_claim_decoded_image(cache_key) {
+            DecodedImageCacheLookup::Hit(width, height, texture) => {
+                return Ok(Box::new(WgpuImage {
+                    width,
+                    height,
+                    texture: Some(texture),
+                    owner: Arc::downgrade(&self.context),
+                }));
+            }
+            DecodedImageCacheLookup::Load => {}
+            DecodedImageCacheLookup::Wait => unreachable!("cache lookup resolves waiters"),
         }
+        let load_guard = DecodedImageLoadGuard {
+            context: Arc::clone(&self.context),
+            key: cache_key,
+        };
         let Some(decoded) = decode_image_rgba(data) else {
             return Err(ImageDecodeError);
         };
@@ -1522,11 +1593,7 @@ impl Factory for WgpuFactory {
         );
         let view = texture.create_view(&Default::default());
         let texture = Arc::new(WgpuImageTexture { texture, view });
-        self.context
-            .decoded_images
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(cache_key, width, height, &texture);
+        load_guard.publish(width, height, &texture);
         Ok(Box::new(WgpuImage {
             width,
             height,
@@ -9739,7 +9806,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::mpsc;
+    use std::sync::{mpsc, Barrier};
 
     // Keep these synchronized with tools/cpp-atlas-mask-oracle/runtime-src/main.cpp.
     const ATLAS_ORACLE_FRAME_SIZE: u32 = 64;
@@ -11635,6 +11702,70 @@ mod tests {
         assert!(
             Arc::ptr_eq(first_texture, second_texture),
             "exact encoded bytes decoded through one renderer domain should reuse their retained GPU texture"
+        );
+    }
+
+    #[test]
+    fn concurrent_image_decode_single_flights_one_renderer_domain_texture() {
+        const SESSION_COUNT: usize = 4;
+        let mut encoded = Vec::new();
+        let pixels = (0..512 * 512 * 4)
+            .map(|index| {
+                (index as u32)
+                    .wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223) as u8
+            })
+            .collect::<Vec<_>>();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 512, 512);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&pixels)
+                .unwrap();
+        }
+        let factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let sessions = (0..SESSION_COUNT)
+            .map(|_| {
+                factory
+                    .new_session_factory(16, 16, RenderMode::ClockwiseAtomic)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let encoded = Arc::new(encoded);
+        let barrier = Arc::new(Barrier::new(SESSION_COUNT));
+
+        let handles = sessions
+            .into_iter()
+            .map(|mut session| {
+                let encoded = Arc::clone(&encoded);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    let image = session.decode_image(&encoded).expect("image decodes");
+                    Arc::clone(
+                        image
+                            .as_any()
+                            .downcast_ref::<WgpuImage>()
+                            .and_then(|image| image.texture.as_ref())
+                            .expect("decode owns a texture"),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let textures = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("decode thread completes"))
+            .collect::<Vec<_>>();
+
+        assert!(
+            textures
+                .iter()
+                .skip(1)
+                .all(|texture| Arc::ptr_eq(&textures[0], texture)),
+            "concurrent exact-byte misses should single-flight one GPU upload"
         );
     }
 

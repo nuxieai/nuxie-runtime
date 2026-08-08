@@ -20,9 +20,13 @@ pub use render_callbacks::{
 };
 
 use nuxie::{
-    File, LinearAnimationInstance, NoopScriptHost, OwnedArtboardInstance,
-    RuntimeEventPropertyValue, RuntimeHitResult, StateMachineInstance, StateMachineReportedEvent,
-    ViewModelInstance,
+    File, LinearAnimationInstance, OwnedArtboardInstance, PersistentFactory,
+    RuntimeEventPropertyValue, RuntimeHitResult, ScriptHost, StateMachineInstance,
+    StateMachineReportedEvent, ViewModelInstance,
+};
+#[cfg(feature = "scripting")]
+use nuxie::{
+    HostCommand, HostCommandImportConfig, HostCommandLimits, HostValue, ScriptExecutionLimits,
 };
 use render_callbacks::{CallbackFactory, CallbackRenderer};
 use std::cell::{Cell, RefCell};
@@ -102,6 +106,7 @@ enum RendererDomainBinding {
     Callbacks {
         descriptor: *const NuxRenderCallbacks,
         table: Arc<NuxRenderCallbacks>,
+        factory: PersistentFactory<CallbackFactory>,
     },
     #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
     Metal {
@@ -198,6 +203,15 @@ enum DefaultSceneSelection<S, A> {
     StateMachine { index: usize, instance: S },
     LinearAnimation { index: usize, instance: A },
     StaticArtboard,
+}
+
+#[derive(Debug, Default)]
+struct TransactionalScriptHost;
+
+impl ScriptHost for TransactionalScriptHost {
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        true
+    }
 }
 
 /// Pinned C++ `defaultScene` order. Keeping the decision in this small generic
@@ -546,6 +560,59 @@ impl Default for NuxRuntimeInfo {
     }
 }
 
+/// Explicit trust and resource policy for a generic script-host command
+/// import. `module_name` is copied during the call and is never interpreted by
+/// the runtime. Every numeric limit must be non-zero and no greater than the
+/// corresponding `NUX_HOST_*_HARD_MAX` constant.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxHostCommandImportConfig {
+    pub struct_size: u32,
+    pub module_name: NuxStringView,
+    pub max_script_memory_bytes: usize,
+    pub max_script_interrupts_per_callback: u32,
+    pub max_commands_per_step: usize,
+    pub max_value_depth: usize,
+    pub max_value_nodes: usize,
+    pub max_identifier_bytes: usize,
+    pub max_string_bytes: usize,
+    pub max_value_bytes: usize,
+    pub max_command_bytes_per_step: usize,
+}
+
+pub const NUX_HOST_COMMAND_IMPORT_CONFIG_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxHostCommandImportConfig, max_command_bytes_per_step)
+        + std::mem::size_of::<usize>();
+
+pub const NUX_HOST_MODULE_NAME_HARD_MAX: usize = 4_096;
+pub const NUX_SCRIPT_VM_MEMORY_BYTES_HARD_MAX: usize = 1024 * 1024 * 1024;
+pub const NUX_SCRIPT_INTERRUPTS_PER_CALLBACK_HARD_MAX: u32 = 10_000_000;
+pub const NUX_HOST_COMMANDS_PER_STEP_HARD_MAX: usize = 4_096;
+pub const NUX_HOST_VALUE_DEPTH_HARD_MAX: usize = 64;
+pub const NUX_HOST_VALUE_NODES_HARD_MAX: usize = 65_536;
+pub const NUX_HOST_IDENTIFIER_BYTES_HARD_MAX: usize = 4_096;
+pub const NUX_HOST_STRING_BYTES_HARD_MAX: usize = 4 * 1024 * 1024;
+pub const NUX_HOST_VALUE_BYTES_HARD_MAX: usize = 16 * 1024 * 1024;
+pub const NUX_HOST_COMMAND_BYTES_PER_STEP_HARD_MAX: usize = 32 * 1024 * 1024;
+
+impl Default for NuxHostCommandImportConfig {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            module_name: NuxStringView::default(),
+            max_script_memory_bytes: 64 * 1024 * 1024,
+            max_script_interrupts_per_callback: 50_000,
+            max_commands_per_step: 256,
+            max_value_depth: 32,
+            max_value_nodes: 4_096,
+            max_identifier_bytes: 4_096,
+            max_string_bytes: 1024 * 1024,
+            max_value_bytes: 4 * 1024 * 1024,
+            max_command_bytes_per_step: 4 * 1024 * 1024,
+        }
+    }
+}
+
 /// Versioned metadata for a selected runtime-native player.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -672,6 +739,9 @@ pub struct NuxPlayerStepInfo {
     pub pointer_result_count: usize,
     pub state_change_count: usize,
     pub event_count: usize,
+    /// Commands are exposed only after the transaction commits. Hosts copy
+    /// authored events first, then commands in FIFO order.
+    pub host_command_count: usize,
 }
 
 pub const NUX_PLAYER_STEP_INFO_V3_MIN_SIZE: usize =
@@ -685,6 +755,101 @@ impl Default for NuxPlayerStepInfo {
             pointer_result_count: 0,
             state_change_count: 0,
             event_count: 0,
+            host_command_count: 0,
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxHostValueKind {
+    Null = 0,
+    Bool = 1,
+    Number = 2,
+    String = 3,
+    List = 4,
+    Object = 5,
+}
+
+pub const NUX_HOST_VALUE_KIND_NULL: u32 = NuxHostValueKind::Null as u32;
+pub const NUX_HOST_VALUE_KIND_BOOL: u32 = NuxHostValueKind::Bool as u32;
+pub const NUX_HOST_VALUE_KIND_NUMBER: u32 = NuxHostValueKind::Number as u32;
+pub const NUX_HOST_VALUE_KIND_STRING: u32 = NuxHostValueKind::String as u32;
+pub const NUX_HOST_VALUE_KIND_LIST: u32 = NuxHostValueKind::List as u32;
+pub const NUX_HOST_VALUE_KIND_OBJECT: u32 = NuxHostValueKind::Object as u32;
+
+/// One command in transaction FIFO order. `root_value_index` addresses the
+/// owning step result's flattened value graph.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxHostCommandView {
+    pub struct_size: u32,
+    pub name: NuxStringView,
+    pub root_value_index: usize,
+}
+
+pub const NUX_HOST_COMMAND_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxHostCommandView, root_value_index) + std::mem::size_of::<usize>();
+
+impl Default for NuxHostCommandView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            name: NuxStringView::default(),
+            root_value_index: 0,
+        }
+    }
+}
+
+/// One flattened host value. Scalars use their matching value field. Lists
+/// and objects expose `child_count` edges through
+/// `nux_player_step_result_host_value_child`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxHostValueView {
+    pub struct_size: u32,
+    pub kind: u32,
+    pub bool_value: bool,
+    pub number_value: f64,
+    pub string_value: NuxStringView,
+    pub child_count: usize,
+}
+
+pub const NUX_HOST_VALUE_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxHostValueView, child_count) + std::mem::size_of::<usize>();
+
+impl Default for NuxHostValueView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            kind: NUX_HOST_VALUE_KIND_NULL,
+            bool_value: false,
+            number_value: 0.0,
+            string_value: NuxStringView::default(),
+            child_count: 0,
+        }
+    }
+}
+
+/// One edge in a list or object. Object edges have a present UTF-8 `key`;
+/// list edges use NULL+0. `value_index` addresses the same owned result.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxHostValueChildView {
+    pub struct_size: u32,
+    pub key: NuxStringView,
+    pub value_index: usize,
+}
+
+pub const NUX_HOST_VALUE_CHILD_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxHostValueChildView, value_index) + std::mem::size_of::<usize>();
+
+impl Default for NuxHostValueChildView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            key: NuxStringView::default(),
+            value_index: 0,
         }
     }
 }
@@ -844,6 +1009,27 @@ struct OwnedPlayerStateChange {
     state_global_id: u32,
 }
 
+#[derive(Debug)]
+struct OwnedHostValueChild {
+    key: Option<Box<[u8]>>,
+    value_index: usize,
+}
+
+#[derive(Debug)]
+struct OwnedHostValue {
+    kind: NuxHostValueKind,
+    bool_value: bool,
+    number_value: f64,
+    string_value: Option<Box<[u8]>>,
+    children: Vec<OwnedHostValueChild>,
+}
+
+#[derive(Debug)]
+struct OwnedHostCommand {
+    name: Box<[u8]>,
+    root_value_index: usize,
+}
+
 /// Bounded library-owned result of one player step.
 pub struct NuxPlayerStepResult {
     status: NuxStatus,
@@ -853,6 +1039,8 @@ pub struct NuxPlayerStepResult {
     pointer_results: Vec<NuxPlayerPointerHit>,
     state_changes: Vec<OwnedPlayerStateChange>,
     events: Vec<OwnedPlayerEvent>,
+    host_commands: Vec<OwnedHostCommand>,
+    host_values: Vec<OwnedHostValue>,
 }
 
 /// Caller-sized view into one owned C-ABI result. `code` and `message` remain
@@ -1180,6 +1368,195 @@ pub unsafe extern "C" fn nux_file_import_with_result(
             unsafe { slice::from_raw_parts(bytes, len) }
         };
         match File::import(bytes) {
+            Ok(file) => {
+                let handle = Box::into_raw(Box::new(NuxFile {
+                    file: Arc::new(file),
+                    owner_thread: thread::current().id(),
+                    data_binding_provenance: Arc::new(()),
+                }));
+                register_handle(handle, HandleKind::File, thread::current().id());
+                unsafe { *out_file = handle };
+                publish_result(out_result, NuxStatus::Ok, "");
+                NuxStatus::Ok
+            }
+            Err(error) => {
+                publish_result(out_result, NuxStatus::ImportError, error.to_string());
+                NuxStatus::ImportError
+            }
+        }
+    })
+}
+
+unsafe fn read_host_command_import_config(
+    config: *const NuxHostCommandImportConfig,
+) -> Result<NuxHostCommandImportConfig, NuxStatus> {
+    if config.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let caller_size = unsafe { config.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, NUX_HOST_COMMAND_IMPORT_CONFIG_V3_MIN_SIZE) {
+        return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut value = NuxHostCommandImportConfig::default();
+    let read_len = usize::try_from(caller_size)
+        .unwrap_or(usize::MAX)
+        .min(std::mem::size_of::<NuxHostCommandImportConfig>());
+    unsafe {
+        ptr::copy_nonoverlapping(
+            config.cast::<u8>(),
+            (&mut value as *mut NuxHostCommandImportConfig).cast::<u8>(),
+            read_len,
+        );
+    }
+    Ok(value)
+}
+
+/// Import exact caller-authenticated bytes and install one generic script
+/// module named by `config`. The module exposes only
+/// `command(name, payload)`. This function performs no package/signature
+/// authentication; choosing this explicit import path is the caller's trust
+/// assertion. Ordinary `nux_file_import` remains script-inert.
+///
+/// No foreign callback is installed. Commands are returned only through a
+/// successful `NuxPlayerStepResult` after its runtime transaction commits.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_import_trusted_with_host_commands(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxHostCommandImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || {
+        if out_file.is_null() || out_result.is_null() {
+            if !out_result.is_null() {
+                publish_result(
+                    out_result,
+                    NuxStatus::NullArgument,
+                    "an output pointer is null",
+                );
+            }
+            return NuxStatus::NullArgument;
+        }
+        unsafe {
+            *out_file = ptr::null_mut();
+            *out_result = ptr::null_mut();
+        }
+        if bytes.is_null() && len != 0 {
+            publish_result(out_result, NuxStatus::NullArgument, "bytes is null");
+            return NuxStatus::NullArgument;
+        }
+        let config = match unsafe { read_host_command_import_config(config) } {
+            Ok(config) => config,
+            Err(status) => {
+                publish_result(out_result, status, status_code(status));
+                return status;
+            }
+        };
+        let module_name = match with_utf8_view(config.module_name, str::to_owned) {
+            Ok(module_name) if !module_name.is_empty() => module_name,
+            Ok(_) => {
+                publish_result(
+                    out_result,
+                    NuxStatus::InvalidArgument,
+                    "host module name must not be empty",
+                );
+                return NuxStatus::InvalidArgument;
+            }
+            Err(status) => {
+                publish_result(out_result, status, "host module name is not valid UTF-8");
+                return status;
+            }
+        };
+        if module_name.len() > NUX_HOST_MODULE_NAME_HARD_MAX {
+            publish_result(
+                out_result,
+                NuxStatus::LimitExceeded,
+                "host module name exceeds its hard bound",
+            );
+            return NuxStatus::LimitExceeded;
+        }
+        let limits = [
+            (
+                config.max_commands_per_step,
+                NUX_HOST_COMMANDS_PER_STEP_HARD_MAX,
+            ),
+            (config.max_value_depth, NUX_HOST_VALUE_DEPTH_HARD_MAX),
+            (config.max_value_nodes, NUX_HOST_VALUE_NODES_HARD_MAX),
+            (
+                config.max_identifier_bytes,
+                NUX_HOST_IDENTIFIER_BYTES_HARD_MAX,
+            ),
+            (config.max_string_bytes, NUX_HOST_STRING_BYTES_HARD_MAX),
+            (config.max_value_bytes, NUX_HOST_VALUE_BYTES_HARD_MAX),
+            (
+                config.max_command_bytes_per_step,
+                NUX_HOST_COMMAND_BYTES_PER_STEP_HARD_MAX,
+            ),
+        ];
+        if limits.iter().any(|(value, _)| *value == 0)
+            || config.max_script_memory_bytes == 0
+            || config.max_script_interrupts_per_callback == 0
+        {
+            publish_result(
+                out_result,
+                NuxStatus::InvalidArgument,
+                "trusted script and host command limits must be non-zero",
+            );
+            return NuxStatus::InvalidArgument;
+        }
+        if limits.iter().any(|(value, maximum)| value > maximum) {
+            publish_result(
+                out_result,
+                NuxStatus::LimitExceeded,
+                "host command limit exceeds the runtime hard bound",
+            );
+            return NuxStatus::LimitExceeded;
+        }
+        if config.max_script_memory_bytes > NUX_SCRIPT_VM_MEMORY_BYTES_HARD_MAX
+            || config.max_script_interrupts_per_callback
+                > NUX_SCRIPT_INTERRUPTS_PER_CALLBACK_HARD_MAX
+        {
+            publish_result(
+                out_result,
+                NuxStatus::LimitExceeded,
+                "trusted script limit exceeds the runtime hard bound",
+            );
+            return NuxStatus::LimitExceeded;
+        }
+        let bytes = if len == 0 {
+            &[]
+        } else {
+            unsafe { slice::from_raw_parts(bytes, len) }
+        };
+        #[cfg(feature = "scripting")]
+        let imported = {
+            let execution_limits = ScriptExecutionLimits::new()
+                .with_max_memory_bytes(config.max_script_memory_bytes)
+                .with_max_interrupts_per_callback(config.max_script_interrupts_per_callback);
+            let command_limits = HostCommandLimits::new()
+                .with_max_commands_per_cycle(config.max_commands_per_step)
+                .with_max_value_depth(config.max_value_depth)
+                .with_max_value_nodes(config.max_value_nodes)
+                .with_max_identifier_bytes(config.max_identifier_bytes)
+                .with_max_string_bytes(config.max_string_bytes)
+                .with_max_value_bytes(config.max_value_bytes)
+                .with_max_command_bytes_per_cycle(config.max_command_bytes_per_step);
+            HostCommandImportConfig::new(module_name, execution_limits, command_limits)
+                .and_then(|config| {
+                    // SAFETY: the C function's explicit contract requires the
+                    // caller to authenticate these exact bytes.
+                    unsafe { File::import_trusted_with_host_commands(bytes, config) }
+                })
+                .map_err(|error| error.to_string())
+        };
+        #[cfg(not(feature = "scripting"))]
+        let imported: Result<File, String> = {
+            let _ = module_name;
+            let _ = bytes;
+            Err("this nux-capi binary was built without scripting support".to_owned())
+        };
+        match imported {
             Ok(file) => {
                 let handle = Box::into_raw(Box::new(NuxFile {
                     file: Arc::new(file),
@@ -1628,28 +2005,34 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
         // End the immutable RefCell borrow before the first-draw arm installs
         // the callback renderer domain.
         let existing_domain = { instance.occurrence.renderer_domain.borrow().clone() };
-        let retained_callbacks = match existing_domain {
-            Some(RendererDomainBinding::Callbacks { descriptor, table }) => {
+        let (retained_callbacks, mut factory) = match existing_domain {
+            Some(RendererDomainBinding::Callbacks {
+                descriptor,
+                table,
+                factory,
+            }) => {
                 if descriptor != callbacks_source {
                     return NuxStatus::HandleMismatch;
                 }
-                *table
+                (*table, factory)
             }
             #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
             Some(RendererDomainBinding::Metal { .. }) => return NuxStatus::HandleMismatch,
             None => {
+                let table = Arc::new(callbacks);
+                let factory = PersistentFactory::new(CallbackFactory::new(*table));
                 *instance.occurrence.renderer_domain.borrow_mut() =
                     Some(RendererDomainBinding::Callbacks {
                         descriptor: callbacks_source,
-                        table: Arc::new(callbacks),
+                        table,
+                        factory: factory.clone(),
                     });
-                callbacks
+                (callbacks, factory)
             }
         };
         let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
-        let mut factory = CallbackFactory::new(retained_callbacks);
         let mut renderer = CallbackRenderer::new(retained_callbacks);
         match artboard.draw(&mut factory, &mut renderer) {
             Ok(()) => NuxStatus::Ok,
@@ -2110,6 +2493,8 @@ fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlaye
         pointer_results: Vec::new(),
         state_changes: Vec::new(),
         events: Vec::new(),
+        host_commands: Vec::new(),
+        host_values: Vec::new(),
     }
 }
 
@@ -2357,8 +2742,8 @@ fn apply_player_pointer(
     machine: &mut StateMachineInstance,
     artboard: &mut OwnedArtboardInstance,
     pointer: PreparedPlayerPointer,
+    host: &mut dyn ScriptHost,
 ) -> Result<NuxPlayerPointerHit, nuxie::ScriptError> {
-    let mut host = NoopScriptHost;
     let result = match pointer.kind {
         PreparedPointerKind::Down => machine
             .try_pointer_down_hit_result_with_timestamp_and_script_host(
@@ -2367,7 +2752,7 @@ fn apply_player_pointer(
                 pointer.y,
                 pointer.pointer_id,
                 pointer.timestamp_seconds,
-                &mut host,
+                host,
             ),
         PreparedPointerKind::Move => machine
             .try_pointer_move_hit_result_with_timestamp_and_script_host(
@@ -2376,7 +2761,7 @@ fn apply_player_pointer(
                 pointer.y,
                 pointer.pointer_id,
                 pointer.timestamp_seconds,
-                &mut host,
+                host,
             ),
         PreparedPointerKind::Up => machine
             .try_pointer_up_hit_result_with_timestamp_and_script_host(
@@ -2385,7 +2770,7 @@ fn apply_player_pointer(
                 pointer.y,
                 pointer.pointer_id,
                 pointer.timestamp_seconds,
-                &mut host,
+                host,
             ),
         PreparedPointerKind::Exit => machine
             .try_pointer_exit_hit_result_with_timestamp_and_script_host(
@@ -2394,7 +2779,7 @@ fn apply_player_pointer(
                 pointer.y,
                 pointer.pointer_id,
                 pointer.timestamp_seconds,
-                &mut host,
+                host,
             ),
     }?;
     Ok(pointer_hit(result))
@@ -2515,6 +2900,83 @@ fn own_reported_events(
     Ok(events)
 }
 
+#[cfg(feature = "scripting")]
+fn flatten_host_value(value: HostValue, values: &mut Vec<OwnedHostValue>) -> usize {
+    let index = values.len();
+    let (kind, bool_value, number_value, string_value, children) = match value {
+        HostValue::Null => (NuxHostValueKind::Null, false, 0.0, None, Vec::new()),
+        HostValue::Bool(value) => (NuxHostValueKind::Bool, value, 0.0, None, Vec::new()),
+        HostValue::Number(value) => (NuxHostValueKind::Number, false, value, None, Vec::new()),
+        HostValue::String(value) => (
+            NuxHostValueKind::String,
+            false,
+            0.0,
+            Some(value.into_bytes().into_boxed_slice()),
+            Vec::new(),
+        ),
+        HostValue::List(children) => {
+            values.push(OwnedHostValue {
+                kind: NuxHostValueKind::List,
+                bool_value: false,
+                number_value: 0.0,
+                string_value: None,
+                children: Vec::new(),
+            });
+            let children = children
+                .into_iter()
+                .map(|value| OwnedHostValueChild {
+                    key: None,
+                    value_index: flatten_host_value(value, values),
+                })
+                .collect();
+            values[index].children = children;
+            return index;
+        }
+        HostValue::Object(children) => {
+            values.push(OwnedHostValue {
+                kind: NuxHostValueKind::Object,
+                bool_value: false,
+                number_value: 0.0,
+                string_value: None,
+                children: Vec::new(),
+            });
+            let children = children
+                .into_iter()
+                .map(|(key, value)| OwnedHostValueChild {
+                    key: Some(key.into_bytes().into_boxed_slice()),
+                    value_index: flatten_host_value(value, values),
+                })
+                .collect();
+            values[index].children = children;
+            return index;
+        }
+    };
+    values.push(OwnedHostValue {
+        kind,
+        bool_value,
+        number_value,
+        string_value,
+        children,
+    });
+    index
+}
+
+#[cfg(feature = "scripting")]
+fn flatten_host_commands(
+    commands: Vec<HostCommand>,
+) -> (Vec<OwnedHostCommand>, Vec<OwnedHostValue>) {
+    let mut owned_commands = Vec::with_capacity(commands.len());
+    let mut values = Vec::new();
+    for command in commands {
+        let root_value_index = flatten_host_value(command.payload, &mut values);
+        owned_commands.push(OwnedHostCommand {
+            name: command.name.into_bytes().into_boxed_slice(),
+            root_value_index,
+        });
+    }
+    (owned_commands, values)
+}
+
 fn player_step_body(
     player: *mut NuxPlayer,
     step: *const NuxPlayerStep,
@@ -2623,6 +3085,7 @@ fn player_step_body(
     let mut pointer_results = Vec::with_capacity(prepared.pointers.len());
     let mut state_changes = Vec::new();
     let mut reported_events = Vec::new();
+    let mut script_host = TransactionalScriptHost;
     let keep_going = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
             for input in prepared.inputs {
@@ -2639,7 +3102,7 @@ fn player_step_body(
                 }
             }
             for pointer in prepared.pointers.iter().copied() {
-                match apply_player_pointer(machine, &mut artboard, pointer) {
+                match apply_player_pointer(machine, &mut artboard, pointer, &mut script_host) {
                     Ok(result) => pointer_results.push(result),
                     Err(error) => {
                         player.artboard.poisoned.set(true);
@@ -2651,22 +3114,41 @@ fn player_step_body(
                     }
                 }
             }
+            if let Some(error) = machine.script_error().cloned() {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    format!("scripted pointer dispatch failed: {error}"),
+                );
+            }
             // Pointer callbacks can report authored events immediately. Drain
             // those before advancement, then append events authored by the
             // advance itself so the result preserves C++ production order.
             reported_events = machine.take_reported_events(artboard.raw());
-            let keep_going =
-                match artboard.try_advance_with_state_machine(machine, prepared.elapsed_seconds) {
-                    Ok(keep_going) => keep_going,
-                    Err(error) => {
-                        player.artboard.poisoned.set(true);
-                        return publish_player_step_failure(
-                            out_result,
-                            NuxStatus::RuntimeError,
-                            format!("player advance failed: {error:#}"),
-                        );
-                    }
-                };
+            let keep_going = match artboard.try_advance_with_state_machines_and_script_host(
+                std::slice::from_mut(machine),
+                prepared.elapsed_seconds,
+                &mut script_host,
+            ) {
+                Ok(keep_going) => keep_going,
+                Err(error) => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        format!("player advance failed: {error:#}"),
+                    );
+                }
+            };
+            if let Some(error) = machine.script_error().cloned() {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    format!("player advance failed: {error}"),
+                );
+            }
             let state_change_count = machine.changed_state_count();
             if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
                 player.artboard.poisoned.set(true);
@@ -2716,7 +3198,17 @@ fn player_step_body(
             let _ = artboard
                 .raw_mut()
                 .apply_linear_animation_instance(animation, 1.0);
-            let artboard_more = artboard.advance(prepared.elapsed_seconds);
+            let artboard_more = match artboard.try_advance(prepared.elapsed_seconds) {
+                Ok(changed) => changed,
+                Err(error) => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        format!("player advance failed: {error:#}"),
+                    );
+                }
+            };
             more || artboard_more
                 || artboard
                     .raw()
@@ -2724,7 +3216,14 @@ fn player_step_body(
         }
         PlayerInstance::StaticArtboard => {
             pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
-            let _ = artboard.advance(0.0);
+            if let Err(error) = artboard.try_advance(0.0) {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    format!("player advance failed: {error:#}"),
+                );
+            }
             true
         }
     };
@@ -2737,6 +3236,19 @@ fn player_step_body(
                 return publish_player_step_failure(out_result, status, message);
             }
         };
+    #[cfg(feature = "scripting")]
+    let commands = match transaction.commit_host_commands() {
+        Ok(commands) => commands,
+        Err(error) => {
+            player.artboard.poisoned.set(true);
+            return publish_player_step_failure(
+                out_result,
+                NuxStatus::RuntimeError,
+                format!("player step cannot project host effects: {error}"),
+            );
+        }
+    };
+    #[cfg(not(feature = "scripting"))]
     if let Err(error) = transaction.commit_without_host_effects() {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(
@@ -2745,6 +3257,10 @@ fn player_step_body(
             format!("player step cannot project host effects: {error}"),
         );
     }
+    #[cfg(feature = "scripting")]
+    let (host_commands, host_values) = flatten_host_commands(commands);
+    #[cfg(not(feature = "scripting"))]
+    let (host_commands, host_values) = (Vec::new(), Vec::new());
     publish_player_step_result(
         out_result,
         NuxPlayerStepResult {
@@ -2755,6 +3271,8 @@ fn player_step_body(
             pointer_results,
             state_changes,
             events,
+            host_commands,
+            host_values,
         },
     );
     NuxStatus::Ok
@@ -2834,6 +3352,7 @@ pub unsafe extern "C" fn nux_player_step_result_info(
             pointer_result_count: result.pointer_results.len(),
             state_change_count: result.state_changes.len(),
             event_count: result.events.len(),
+            host_command_count: result.host_commands.len(),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_STEP_INFO_V3_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -2977,6 +3496,97 @@ pub unsafe extern "C" fn nux_player_step_result_event_property(
             )
         }
         .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_host_command(
+    result: *const NuxPlayerStepResult,
+    index: usize,
+    out_command: *mut NuxHostCommandView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let Some(command) = result.host_commands.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxHostCommandView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxHostCommandView>())
+                .unwrap_or(u32::MAX),
+            name: byte_view(&command.name),
+            root_value_index: command.root_value_index,
+        };
+        unsafe { write_caller_struct(out_command, &value, NUX_HOST_COMMAND_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_host_value(
+    result: *const NuxPlayerStepResult,
+    value_index: usize,
+    out_value: *mut NuxHostValueView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let Some(host_value) = result.host_values.get(value_index) else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxHostValueView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxHostValueView>()).unwrap_or(u32::MAX),
+            kind: host_value.kind as u32,
+            bool_value: host_value.bool_value,
+            number_value: host_value.number_value,
+            string_value: optional_byte_view(host_value.string_value.as_deref()),
+            child_count: host_value.children.len(),
+        };
+        unsafe { write_caller_struct(out_value, &value, NUX_HOST_VALUE_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_host_value_child(
+    result: *const NuxPlayerStepResult,
+    value_index: usize,
+    child_index: usize,
+    out_child: *mut NuxHostValueChildView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let Some(child) = result
+            .host_values
+            .get(value_index)
+            .and_then(|value| value.children.get(child_index))
+        else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxHostValueChildView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxHostValueChildView>())
+                .unwrap_or(u32::MAX),
+            key: optional_byte_view(child.key.as_deref()),
+            value_index: child.value_index,
+        };
+        unsafe { write_caller_struct(out_child, &value, NUX_HOST_VALUE_CHILD_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
     })
 }
 

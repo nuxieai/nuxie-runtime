@@ -54,16 +54,28 @@
  *    that result and expire when nux_capi_result_free succeeds.
  * 9. NuxPlayerStep input/pointer arrays and their input-name bytes are borrowed
  *    only for the synchronous call. NuxPlayerStepResult owns every returned
- *    event, property, state-change, pointer outcome, and diagnostic. Indexed
- *    views expire when nux_player_step_result_free succeeds. Optional string
- *    fields use NULL+0 for absent and non-NULL+0 for authored present-empty.
+ *    event, property, state-change, pointer outcome, host command, flattened
+ *    host value, and diagnostic. Indexed views expire when
+ *    nux_player_step_result_free succeeds. Copy any command/value bytes before
+ *    freeing the result or handing them to another thread or asynchronous
+ *    task. Optional string fields use NULL+0 for absent and non-NULL+0 for
+ *    authored present-empty.
  * 10. nux_player_step fully validates the bounded batch before mutation and
  *    executes under the shared artboard-occurrence gate. Reentrant access from
  *    any callback returns REENTRANT_CALL. An unexpected post-mutation failure
  *    rolls back pending external host effects and terminally poisons that
  *    occurrence; every later read, mutate, or draw fails with RUNTIME_ERROR,
- *    while matching frees remain allowed.
- * 11. On Apple, NuxRenderer owns the wgpu/Metal device domain; it never owns a
+ *    while matching frees remain allowed. On success, state-machine inputs and
+ *    pointer events are applied in array order, pointer-authored events are
+ *    copied before advancement-authored events, and host commands become
+ *    observable only after commit in their script FIFO. Hosts that combine
+ *    the separate arrays deliver authored events before host commands.
+ * 11. nux_file_import_trusted_with_host_commands is an explicit trust boundary
+ *    for the exact byte range passed to that call. Its caller-sized config and
+ *    module name are copied synchronously. It installs no foreign callback;
+ *    scripts only enqueue bounded owned values for the active player step.
+ *    Ordinary nux_file_import remains script-inert.
+ * 12. On Apple, NuxRenderer owns the wgpu/Metal device domain; it never owns a
  *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
  *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is
  *    borrowed only for the synchronous render call. TIMEOUT and OCCLUDED are
@@ -71,17 +83,17 @@
  *    completion pair is consumed before later validation and runs exactly once
  *    on a system dispatch queue, never inline. A too-short operation prefix
  *    cannot transfer a callback that the runtime cannot safely read.
- * 12. The first drawable-backed Metal draw binds the retained artboard
+ * 13. The first drawable-backed Metal draw binds the retained artboard
  *    occurrence to that renderer's durable domain and current generation.
  *    Timeout, occlusion, and zero-size skips do not bind it. Another renderer,
  *    or a reattached generation, returns HANDLE_MISMATCH until
  *    nux_renderer_reset_player_domain succeeds on a healthy attached renderer.
  *    The player retains that binding after the public renderer handle is freed.
- * 13. nux_renderer_render_player treats out_result as optional and failure-only:
+ * 14. nux_renderer_render_player treats out_result as optional and failure-only:
  *    a supplied slot is cleared on entry, remains NULL on success, and owns one
  *    bounded diagnostic on failure. Renderer control APIs require out_result
  *    and publish one result on every outcome.
- * 14. View-model catalogs and snapshots own all returned bytes and flat
+ * 15. View-model catalogs and snapshots own all returned bytes and flat
  *    tables; indexed views remain valid until their catalog/snapshot is freed.
  *    Mutation input arrays and byte/string views are borrowed only for the
  *    synchronous call. Mutation-result code/message views borrow that result
@@ -130,6 +142,18 @@
 #define NUX_PLAYER_STEP_INFO_V3_MIN_SIZE                                  \
     (offsetof(NuxPlayerStepInfo, event_count) +                           \
      sizeof(((NuxPlayerStepInfo*)0)->event_count))
+#define NUX_HOST_COMMAND_IMPORT_CONFIG_V3_MIN_SIZE                        \
+    (offsetof(NuxHostCommandImportConfig, max_command_bytes_per_step) +   \
+     sizeof(((NuxHostCommandImportConfig*)0)->max_command_bytes_per_step))
+#define NUX_HOST_COMMAND_VIEW_V3_MIN_SIZE                                 \
+    (offsetof(NuxHostCommandView, root_value_index) +                     \
+     sizeof(((NuxHostCommandView*)0)->root_value_index))
+#define NUX_HOST_VALUE_VIEW_V3_MIN_SIZE                                   \
+    (offsetof(NuxHostValueView, child_count) +                            \
+     sizeof(((NuxHostValueView*)0)->child_count))
+#define NUX_HOST_VALUE_CHILD_VIEW_V3_MIN_SIZE                             \
+    (offsetof(NuxHostValueChildView, value_index) +                       \
+     sizeof(((NuxHostValueChildView*)0)->value_index))
 #define NUX_PLAYER_STATE_CHANGE_VIEW_V3_MIN_SIZE                          \
     (offsetof(NuxPlayerStateChangeView, state_global_id) +                \
      sizeof(((NuxPlayerStateChangeView*)0)->state_global_id))

@@ -719,6 +719,7 @@ impl LuaScriptInstance {
 
     fn script_error(&self, error: Error) -> ScriptError {
         self.logging.log_error(&error);
+        self.resource_limits.observe_callback_failure(&error);
         tracked_script_error(error, &self.resource_limits)
     }
 

@@ -95,11 +95,128 @@ pub mod host_interfaces {
 }
 
 #[cfg(feature = "scripting")]
+pub use nuxie_scripting::host_commands::{HostCommand, HostCommandLimits, HostValue};
+#[cfg(feature = "scripting")]
 use nuxie_scripting::vm::ScriptProgram;
 #[cfg(feature = "scripting")]
 pub use nuxie_scripting::vm::{
     LuaScriptInstance, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
 };
+
+/// Explicit configuration for an exact-artifact import that exposes one
+/// caller-named, product-neutral script module.
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostCommandImportConfig {
+    module_name: String,
+    execution_limits: ScriptExecutionLimits,
+    command_limits: HostCommandLimits,
+}
+
+#[cfg(feature = "scripting")]
+impl HostCommandImportConfig {
+    pub fn new(
+        module_name: impl Into<String>,
+        execution_limits: ScriptExecutionLimits,
+        command_limits: HostCommandLimits,
+    ) -> Result<Self> {
+        let module_name = module_name.into();
+        anyhow::ensure!(
+            !module_name.is_empty()
+                && module_name.len() <= nuxie_scripting::host_commands::MAX_HOST_MODULE_NAME_BYTES,
+            "host module name must contain 1 to {} UTF-8 bytes",
+            nuxie_scripting::host_commands::MAX_HOST_MODULE_NAME_BYTES
+        );
+        execution_limits
+            .validate()
+            .context("invalid trusted script execution limits")?;
+        command_limits
+            .validate()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))
+            .context("invalid host command limits")?;
+        Ok(Self {
+            module_name,
+            execution_limits,
+            command_limits,
+        })
+    }
+
+    pub fn module_name(&self) -> &str {
+        &self.module_name
+    }
+
+    pub const fn execution_limits(&self) -> ScriptExecutionLimits {
+        self.execution_limits
+    }
+
+    pub const fn command_limits(&self) -> HostCommandLimits {
+        self.command_limits
+    }
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug)]
+struct GenericHostCommandExtension {
+    module_name: String,
+    limits: HostCommandLimits,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptHostExtension for GenericHostCommandExtension {
+    fn install(
+        &self,
+        vm: &ScriptVm,
+    ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError> {
+        nuxie_scripting::host_commands::HostCommandHost::install(vm, &self.module_name, self.limits)
+            .map(|host| Box::new(host) as Box<dyn ScriptHostExtensionInstance>)
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptHostExtensionInstance for nuxie_scripting::host_commands::HostCommandHost {
+    fn effects_type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Vec<HostCommand>>()
+    }
+
+    fn begin_cycle(&self) -> Box<dyn Any> {
+        Box::new(self.begin_cycle())
+    }
+
+    fn rollback_cycle(
+        &self,
+        checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        let checkpoint = checkpoint
+            .downcast::<nuxie_scripting::host_commands::HostCycleCheckpoint>()
+            .map_err(|_| nuxie_runtime::ScriptError::new("host command checkpoint mismatch"))?;
+        self.rollback_cycle(*checkpoint);
+        Ok(())
+    }
+
+    fn checkpoint_effects(&self) -> Box<dyn Any> {
+        Box::new(self.checkpoint_effects())
+    }
+
+    fn rollback_effects(
+        &self,
+        checkpoint: Box<dyn Any>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        let checkpoint = checkpoint
+            .downcast::<nuxie_scripting::host_commands::HostEffectCheckpoint>()
+            .map_err(|_| nuxie_runtime::ScriptError::new("host command checkpoint mismatch"))?;
+        self.rollback_effects(*checkpoint);
+        Ok(())
+    }
+
+    fn drain_effects(&self) -> ScriptHostEffects {
+        ScriptHostEffects::new(self.drain_effects())
+    }
+
+    fn commit_error(&self) -> Option<nuxie_runtime::ScriptError> {
+        self.callback_failure().map(nuxie_runtime::ScriptError::new)
+    }
+}
 
 /// Baseline-owned injection point for product-specific VM modules and effects.
 #[cfg(feature = "scripting")]
@@ -170,6 +287,12 @@ pub trait ScriptHostExtensionInstance: std::fmt::Debug {
         checkpoint: Box<dyn Any>,
     ) -> std::result::Result<(), nuxie_runtime::ScriptError>;
     fn drain_effects(&self) -> ScriptHostEffects;
+
+    /// A transaction-level failure side channel for protected callback
+    /// errors that the pinned runtime intentionally consumes internally.
+    fn commit_error(&self) -> Option<nuxie_runtime::ScriptError> {
+        None
+    }
 }
 
 #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
@@ -350,6 +473,26 @@ impl std::fmt::Display for UnexpectedHostEffects {
 }
 
 impl std::error::Error for UnexpectedHostEffects {}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone)]
+pub enum HostCommandCommitError {
+    UnexpectedEffects,
+    Script(nuxie_runtime::ScriptError),
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Display for HostCommandCommitError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedEffects => UnexpectedHostEffects.fmt(formatter),
+            Self::Script(error) => write!(formatter, "authored script callback failed: {error}"),
+        }
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl std::error::Error for HostCommandCommitError {}
 
 #[cfg(feature = "scripting")]
 enum ArtboardTransactionCheckpoint {
@@ -862,6 +1005,12 @@ impl FileScriptRuntime {
         self.ready
             .as_ref()
             .map(|ready| ready.host.effects_type_id())
+    }
+
+    fn host_effect_commit_error(&self) -> Option<nuxie_runtime::ScriptError> {
+        self.ready
+            .as_ref()
+            .and_then(|ready| ready.host.commit_error())
     }
 }
 
@@ -4803,6 +4952,35 @@ impl File {
         )
     }
 
+    /// Import caller-authenticated bytes with a generic command module.
+    ///
+    /// The capability is bound to these exact bytes. Ordinary [`Self::import`]
+    /// remains inert. The module exposes only `command(name, payload)` and
+    /// queues owned values for the enclosing runtime transaction; it never
+    /// calls the embedding host synchronously.
+    ///
+    /// # Safety
+    ///
+    /// The caller must have authenticated `bytes` according to its trust
+    /// policy. This function does not authenticate packages or signatures.
+    #[cfg(feature = "scripting")]
+    pub unsafe fn import_trusted_with_host_commands(
+        bytes: &[u8],
+        config: HostCommandImportConfig,
+    ) -> Result<Self> {
+        let execution_limits = config.execution_limits();
+        let extension = Arc::new(GenericHostCommandExtension {
+            module_name: config.module_name,
+            limits: config.command_limits,
+        });
+        // SAFETY: upheld by this function's caller contract. The capability
+        // itself remains cryptographically bound to the exact input bytes.
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_artifact_unchecked(bytes, extension)?
+        };
+        Self::import_with_execution_capability(bytes, capability, execution_limits)
+    }
+
     /// Construct a facade from a decoded runtime assembled by a trusted local
     /// product authoring process.
     #[cfg(feature = "scripting")]
@@ -5417,7 +5595,17 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        self.raw.advance(elapsed_seconds).unwrap_or(false)
+        self.try_advance(elapsed_seconds).unwrap_or(false)
+    }
+
+    /// Fallible artboard advance for transaction-oriented hosts.
+    /// Compatibility callers may continue to use [`Self::advance`].
+    #[doc(hidden)]
+    pub fn try_advance(&mut self, elapsed_seconds: f32) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
+        self.raw
+            .advance(elapsed_seconds)
+            .context("failed to advance retained artboard components")
     }
 
     /// Advance with a renderer factory available to every script lifecycle
@@ -5700,6 +5888,22 @@ impl<'a> ArtboardInstance<'a> {
         state_machines: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        self.try_advance_with_state_machines_and_script_host(
+            state_machines,
+            elapsed_seconds,
+            &mut NoopScriptHost,
+        )
+    }
+
+    /// Fallible batched advance using the caller's script-host policy for the
+    /// whole operation.
+    #[doc(hidden)]
+    pub fn try_advance_with_state_machines_and_script_host(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool> {
         if state_machines.is_empty() {
             bail!("fallible state-machine advance requires at least one state machine");
         }
@@ -5720,11 +5924,12 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(feature = "scripting")]
         let file = self.file;
         Ok(
-            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host(
                 &mut self.raw,
                 state_machines,
                 elapsed_seconds,
                 true,
+                host,
                 || {
                     #[cfg(feature = "scripting")]
                     {
@@ -6066,6 +6271,31 @@ impl ArtboardTransaction {
             .map_err(|_| UnexpectedHostEffects)
     }
 
+    /// Commit the product-neutral host-command adapter used by the portable C
+    /// player. Visual-only files and the baseline no-effect test host return an
+    /// empty batch; any other extension type is rejected rather than silently
+    /// discarded.
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn commit_host_commands(self) -> Result<Vec<HostCommand>, HostCommandCommitError> {
+        if let Some(error) = self.scripts.borrow().host_effect_commit_error() {
+            return Err(HostCommandCommitError::Script(error));
+        }
+        let effects_type = self.scripts.borrow().host_effects_type_id();
+        if effects_type.is_none() || effects_type == Some(std::any::TypeId::of::<()>()) {
+            return self
+                .commit_without_host_effects()
+                .map(|()| Vec::new())
+                .map_err(|_| HostCommandCommitError::UnexpectedEffects);
+        }
+        if effects_type != Some(std::any::TypeId::of::<Vec<HostCommand>>()) {
+            return Err(HostCommandCommitError::UnexpectedEffects);
+        }
+        self.try_commit_host_effects::<Vec<HostCommand>>()
+            .map(|commands| commands.unwrap_or_default())
+            .map_err(|_| HostCommandCommitError::UnexpectedEffects)
+    }
+
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
     pub fn bootstrap_player(
@@ -6372,7 +6602,17 @@ impl OwnedArtboardInstance {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        self.raw.advance(elapsed_seconds).unwrap_or(false)
+        self.try_advance(elapsed_seconds).unwrap_or(false)
+    }
+
+    /// Fallible owning artboard advance for transaction-oriented hosts.
+    /// Compatibility callers may continue to use [`Self::advance`].
+    #[doc(hidden)]
+    pub fn try_advance(&mut self, elapsed_seconds: f32) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
+        self.raw
+            .advance(elapsed_seconds)
+            .context("failed to advance retained artboard components")
     }
 
     /// Owning mirror of [`ArtboardInstance::try_advance_with_factory`],
@@ -6808,6 +7048,22 @@ impl OwnedArtboardInstance {
         state_machines: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        self.try_advance_with_state_machines_and_script_host(
+            state_machines,
+            elapsed_seconds,
+            &mut NoopScriptHost,
+        )
+    }
+
+    /// Fallible batched owning advance using the caller's script-host policy
+    /// for the whole operation.
+    #[doc(hidden)]
+    pub fn try_advance_with_state_machines_and_script_host(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool> {
         if state_machines.is_empty() {
             bail!("fallible state-machine advance requires at least one state machine");
         }
@@ -6828,11 +7084,12 @@ impl OwnedArtboardInstance {
         #[cfg(feature = "scripting")]
         let file = Arc::clone(&self.file);
         Ok(
-            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host(
                 &mut self.raw,
                 state_machines,
                 elapsed_seconds,
                 true,
+                host,
                 || {
                     #[cfg(feature = "scripting")]
                     {
@@ -7245,6 +7502,18 @@ mod inert_script_import_tests {
         rolled_back: Arc<AtomicBool>,
     }
 
+    #[derive(Debug)]
+    struct FailingCommitExtension {
+        rolled_back: Arc<AtomicBool>,
+        drained: Arc<AtomicBool>,
+    }
+
+    #[derive(Debug)]
+    struct FailingCommitHost {
+        rolled_back: Arc<AtomicBool>,
+        drained: Arc<AtomicBool>,
+    }
+
     impl ScriptHostExtension for InconsistentEffectsExtension {
         fn install(
             &self,
@@ -7290,6 +7559,60 @@ mod inert_script_import_tests {
             // Deliberately violates the preflight declaration. The envelope's
             // payload-derived witness must catch this after drain.
             ScriptHostEffects::new(Vec::<u8>::new())
+        }
+    }
+
+    impl ScriptHostExtension for FailingCommitExtension {
+        fn install(
+            &self,
+            _vm: &ScriptVm,
+        ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError>
+        {
+            Ok(Box::new(FailingCommitHost {
+                rolled_back: Arc::clone(&self.rolled_back),
+                drained: Arc::clone(&self.drained),
+            }))
+        }
+    }
+
+    impl ScriptHostExtensionInstance for FailingCommitHost {
+        fn effects_type_id(&self) -> std::any::TypeId {
+            std::any::TypeId::of::<Vec<HostCommand>>()
+        }
+
+        fn begin_cycle(&self) -> Box<dyn Any> {
+            Box::new(())
+        }
+
+        fn rollback_cycle(
+            &self,
+            _checkpoint: Box<dyn Any>,
+        ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+            self.rolled_back.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn checkpoint_effects(&self) -> Box<dyn Any> {
+            Box::new(())
+        }
+
+        fn rollback_effects(
+            &self,
+            _checkpoint: Box<dyn Any>,
+        ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+            self.rolled_back.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn drain_effects(&self) -> ScriptHostEffects {
+            self.drained.store(true, Ordering::SeqCst);
+            ScriptHostEffects::new(Vec::<HostCommand>::new())
+        }
+
+        fn commit_error(&self) -> Option<nuxie_runtime::ScriptError> {
+            Some(nuxie_runtime::ScriptError::new(
+                "callback failed after enqueue",
+            ))
         }
     }
 
@@ -7888,6 +8211,51 @@ mod inert_script_import_tests {
         assert!(
             rolled_back.load(Ordering::SeqCst),
             "the live checkpoint rolls back an inconsistent drained batch"
+        );
+    }
+
+    #[test]
+    fn callback_failure_vetoes_before_drain_and_rolls_back_the_live_checkpoint() {
+        let bytes = external_fixture("script_inputs_test_1.riv");
+        let rolled_back = Arc::new(AtomicBool::new(false));
+        let drained = Arc::new(AtomicBool::new(false));
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_artifact_unchecked(
+                &bytes,
+                Arc::new(FailingCommitExtension {
+                    rolled_back: Arc::clone(&rolled_back),
+                    drained: Arc::clone(&drained),
+                }),
+            )
+            .expect("test authority")
+        };
+        let runtime = read_runtime_file_for_facade(&bytes).expect("script fixture parses");
+        let file = File::from_runtime_with_script_policy_and_limits(
+            runtime,
+            Some(capability),
+            Some(ScriptExecutionLimits::new()),
+            FileImportLimits::new(),
+            true,
+        )
+        .expect("custom host file");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        file.prepare_scripting_runtime(&mut factory)
+            .expect("custom host prepares");
+        let instance = OwnedArtboardInstance::instantiate(Arc::new(file), 0)
+            .expect("default artboard instantiates");
+
+        let error = instance
+            .begin_transaction()
+            .commit_host_commands()
+            .expect_err("callback failure must veto host-command commit");
+        assert!(matches!(error, HostCommandCommitError::Script(_)));
+        assert!(
+            !drained.load(Ordering::SeqCst),
+            "commit failure must be checked before effect ownership is drained"
+        );
+        assert!(
+            rolled_back.load(Ordering::SeqCst),
+            "returning the commit error must drop and roll back the live checkpoint"
         );
     }
 }

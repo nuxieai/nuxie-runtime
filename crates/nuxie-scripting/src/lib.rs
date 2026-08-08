@@ -16,6 +16,9 @@ pub mod envelope;
 pub mod gpu_canvas;
 
 #[cfg(feature = "luau")]
+pub mod host_commands;
+
+#[cfg(feature = "luau")]
 mod shader_asset;
 
 #[cfg(feature = "luau")]

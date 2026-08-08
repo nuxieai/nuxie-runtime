@@ -48,6 +48,14 @@ impl ScriptResourceGuard {
         self.tracker
             .fail_with_message(ScriptResourceLimit::Extension(code), message)
     }
+
+    /// First authored callback failure observed in the active script cycle.
+    /// Module-registration retries are intentionally excluded: only live
+    /// [`LuaScriptInstance`](crate::vm::LuaScriptInstance) callbacks record
+    /// this side channel.
+    pub fn callback_failure(&self) -> Option<String> {
+        self.tracker.callback_failure()
+    }
 }
 
 /// Per-VM, per-cycle terminal resource state. Nuxie-owned limit sites trip this
@@ -58,12 +66,14 @@ impl ScriptResourceGuard {
 pub(super) struct ResourceLimitTracker {
     tripped: Rc<Cell<Option<ScriptResourceLimit>>>,
     message: Rc<RefCell<Option<String>>>,
+    callback_failure: Rc<RefCell<Option<String>>>,
 }
 
 impl ResourceLimitTracker {
     pub(super) fn begin_cycle(&self) {
         self.tripped.set(None);
         self.message.borrow_mut().take();
+        self.callback_failure.borrow_mut().take();
     }
 
     pub(super) fn terminal_limit(&self) -> Option<ScriptResourceLimit> {
@@ -106,6 +116,17 @@ impl ResourceLimitTracker {
             Error::CallbackError { cause, .. } => self.observe_vm_error(cause),
             _ => {}
         }
+    }
+
+    pub(super) fn observe_callback_failure(&self, error: &Error) {
+        let mut failure = self.callback_failure.borrow_mut();
+        if failure.is_none() {
+            *failure = Some(error.to_string());
+        }
+    }
+
+    fn callback_failure(&self) -> Option<String> {
+        self.callback_failure.borrow().clone()
     }
 
     fn record(&self, limit: ScriptResourceLimit) -> ScriptResourceLimit {

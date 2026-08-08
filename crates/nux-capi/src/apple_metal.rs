@@ -11,6 +11,7 @@ use super::{
     remove_handle, struct_size_supports, write_caller_struct,
 };
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
+use nuxie::PersistentFactory;
 use nuxie_renderer::{
     AppleMetalDevice, ApplePresentationCompletion, AppleSurface, RenderMode, RendererError,
     SurfaceDisposition, SurfaceError, WgpuDeviceHealth, WgpuFactory, WgpuFrameMetrics,
@@ -146,7 +147,7 @@ impl Default for NuxRendererInfo {
 }
 
 pub(crate) struct RendererState {
-    factory: WgpuFactory,
+    factory: PersistentFactory<WgpuFactory>,
     surface: AppleSurface,
 }
 
@@ -162,6 +163,7 @@ impl RendererState {
         pixels: &[u8],
     ) -> Result<Box<dyn nuxie::RenderImage>, RendererError> {
         self.factory
+            .borrow_mut()
             .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
     }
 }
@@ -548,7 +550,10 @@ pub unsafe extern "C" fn nux_renderer_new_metal(
                 }
             };
         let renderer = Box::into_raw(Box::new(NuxRenderer {
-            state: RefCell::new(RendererState { factory, surface }),
+            state: RefCell::new(RendererState {
+                factory: PersistentFactory::new(factory),
+                surface,
+            }),
             domain,
         }));
         unsafe { *out_renderer = renderer };
@@ -653,7 +658,7 @@ pub unsafe extern "C" fn nux_renderer_resize(
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
         let RendererState { factory, surface } = &mut *state;
         let disposition = surface
-            .resize(factory, pixel_width, pixel_height)
+            .resize(&mut *factory.borrow_mut(), pixel_width, pixel_height)
             .map_err(surface_failure)?;
         write_outcome(
             out_outcome,
@@ -735,7 +740,8 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             })?
             .saturating_add(1);
         debug_assert_ne!(next_generation, 0);
-        *state = RendererState { factory, surface };
+        *state.factory.borrow_mut() = factory;
+        state.surface = surface;
         write_outcome(
             out_outcome,
             &outcome(&state, NUX_RENDERER_DISPOSITION_RECREATED, None),
@@ -881,7 +887,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 }
             }
             let RendererState { factory, surface } = &mut *state;
-            let mut frame = factory.begin_frame(operation.clear_color);
+            let mut frame = factory.borrow().begin_frame(operation.clear_color);
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;

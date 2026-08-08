@@ -132,6 +132,10 @@ pub(crate) trait RuntimeScheduledListenerActionExecutor {
         false
     }
 
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        false
+    }
+
     fn perform_instance_action(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -332,7 +336,12 @@ pub(crate) fn perform_scheduled_listener_actions(
                 // resource fence is the only error allowed to escape.
                 match executor.perform_instance_action(artboard, action, targets.reborrow()) {
                     Ok(action_changed) => changed |= action_changed,
-                    Err(error) if error.resource_code().is_some() => return Err(error),
+                    Err(error)
+                        if error.resource_code().is_some()
+                            || executor.requires_atomic_script_callbacks() =>
+                    {
+                        return Err(error);
+                    }
                     Err(_) => {}
                 }
             }

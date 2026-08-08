@@ -124,6 +124,12 @@ int main(int argc, char** argv)
     CHECK(runtime_info.runtime_version.len > 0);
     CHECK(runtime_info.source_revision.data != NULL);
     CHECK(runtime_info.source_revision.len > 0);
+    CHECK(NUX_HOST_COMMAND_IMPORT_CONFIG_V3_MIN_SIZE <=
+          sizeof(NuxHostCommandImportConfig));
+    CHECK(NUX_HOST_COMMAND_VIEW_V3_MIN_SIZE <= sizeof(NuxHostCommandView));
+    CHECK(NUX_HOST_VALUE_VIEW_V3_MIN_SIZE <= sizeof(NuxHostValueView));
+    CHECK(NUX_HOST_VALUE_CHILD_VIEW_V3_MIN_SIZE <=
+          sizeof(NuxHostValueChildView));
 
     NuxViewModelMutationBatch empty_batch = {
         .struct_size = sizeof(NuxViewModelMutationBatch),

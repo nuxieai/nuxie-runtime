@@ -2170,6 +2170,58 @@ impl ArtboardInstance {
         file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
         state_machine_actions: RuntimeFileStateMachineActionCatalog,
     ) -> Result<Self> {
+        let runtime_font_assets = Arc::new(
+            crate::RuntimeFontAssetOwners::from_runtime_with_external_fonts(
+                file,
+                external_font_assets,
+            ),
+        );
+        Self::from_graph_with_artboards_file_catalogs_and_font_assets(
+            file,
+            graph,
+            artboards,
+            external_font_assets,
+            file_view_model_instances,
+            state_machine_actions,
+            runtime_font_assets,
+        )
+    }
+
+    /// Instantiate from file-owned catalogs and their already-decoded asset owners.
+    ///
+    /// Callers must keep `file_asset_owners` synchronized with
+    /// `external_font_assets`. This avoids decoding the same validated fonts a
+    /// second time before the complete artboard tree adopts the file owners.
+    #[doc(hidden)]
+    pub fn from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+        file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+        state_machine_actions: RuntimeFileStateMachineActionCatalog,
+        file_asset_owners: &crate::RuntimeFileAssetOwners,
+    ) -> Result<Self> {
+        Self::from_graph_with_artboards_file_catalogs_and_font_assets(
+            file,
+            graph,
+            artboards,
+            external_font_assets,
+            file_view_model_instances,
+            state_machine_actions,
+            file_asset_owners.font_assets(),
+        )
+    }
+
+    fn from_graph_with_artboards_file_catalogs_and_font_assets(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+        file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+        state_machine_actions: RuntimeFileStateMachineActionCatalog,
+        runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
+    ) -> Result<Self> {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             file_view_model_instances,
@@ -2179,12 +2231,7 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(external_font_assets.clone()),
-            runtime_font_assets: Arc::new(
-                crate::RuntimeFontAssetOwners::from_runtime_with_external_fonts(
-                    file,
-                    external_font_assets,
-                ),
-            ),
+            runtime_font_assets,
         };
         Self::from_graph_inner(
             file,

@@ -30,7 +30,7 @@ use nuxie_binary::{
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, StateMachineEventContext, embedded_fonts_are_parseable,
+    RuntimeOwnedViewModelInstance, StateMachineEventContext,
 };
 
 pub mod command_queue;
@@ -2837,14 +2837,14 @@ impl FileScriptArtboard {
             ))
         })?;
         let external_font_assets = file.external_font_assets.snapshot();
-        let mut instance =
-            RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs(
+        let mut instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
                 &file.runtime,
                 graph,
                 &file.graph.artboards,
                 &external_font_assets,
                 file.file_view_model_instances.clone(),
                 file.state_machine_actions.clone(),
+                &file.file_asset_owners,
             )
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         instance.set_frame_origin(false);
@@ -4643,12 +4643,6 @@ impl File {
                 bail!("Rive FileAssets contain more than {maximum} aggregate content bytes");
             }
         }
-        if validate_embedded_fonts {
-            anyhow::ensure!(
-                embedded_fonts_are_parseable(&runtime),
-                "embedded FontAsset bytes are not a valid font"
-            );
-        }
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         let file_view_model_instances = RuntimeFileViewModelInstanceCatalog::new(&runtime);
         let state_machine_actions = RuntimeFileStateMachineActionCatalog::new(&runtime);
@@ -4656,6 +4650,19 @@ impl File {
             &runtime,
             limits.max_retained_decoded_image_bytes(),
         ));
+        if validate_embedded_fonts {
+            let font_assets = file_asset_owners.font_assets();
+            anyhow::ensure!(
+                runtime
+                    .file_assets()
+                    .into_iter()
+                    .filter(|asset| asset.type_name == "FontAsset")
+                    .all(|asset| runtime
+                        .imported_file_asset_contents(asset.id)
+                        .is_none_or(|_| font_assets.get(asset.id).is_some())),
+                "embedded FontAsset bytes are not a valid font"
+            );
+        }
         Ok(Self {
             #[cfg(feature = "scripting")]
             scripts: Rc::new(RefCell::new(FileScriptRuntime::import(
@@ -5010,14 +5017,14 @@ impl<'a> Artboard<'a> {
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
         let external_font_assets = self.file.external_font_assets.snapshot();
-        let mut raw =
-            RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs(
+        let mut raw = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
                 &self.file.runtime,
                 self.graph(),
                 &self.file.graph.artboards,
                 &external_font_assets,
                 self.file.file_view_model_instances.clone(),
                 self.file.state_machine_actions.clone(),
+                &self.file.file_asset_owners,
             )
             .with_context(|| {
                 format!(
@@ -5820,13 +5827,14 @@ impl OwnedArtboardInstance {
             let artboard = file
                 .artboard(artboard_index)
                 .with_context(|| format!("artboard index {artboard_index} out of range"))?;
-            RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs(
+            RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
                 &file.runtime,
                 artboard.graph(),
                 &file.graph.artboards,
                 &external_font_assets,
                 file.file_view_model_instances.clone(),
                 file.state_machine_actions.clone(),
+                &file.file_asset_owners,
             )
             .with_context(|| {
                 format!(

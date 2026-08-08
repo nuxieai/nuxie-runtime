@@ -82,6 +82,8 @@ pub const NUX_CAPI_ABI_VERSION: u32 = 3;
 
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
+#[used]
+static BUILD_PROVENANCE: &str = env!("NUX_CAPI_BUILD_PROVENANCE");
 
 // This is the only retention edge from the mature distribution root to the
 // temporary product-shaped migration surface. Removing the feature, this

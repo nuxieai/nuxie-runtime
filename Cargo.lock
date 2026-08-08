@@ -1276,6 +1276,7 @@ dependencies = [
  "dispatch2",
  "luaur-common",
  "luaur-compiler",
+ "nux-apple-runtime",
  "nuxie",
  "nuxie-image-codec",
  "nuxie-renderer",

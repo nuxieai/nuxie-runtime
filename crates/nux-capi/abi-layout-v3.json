@@ -1,0 +1,996 @@
+{
+  "schemaVersion": 1,
+  "dataModel": "apple-lp64",
+  "types": [
+    {
+      "name": "NuxByteView",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "data",
+          "offset": 0
+        },
+        {
+          "name": "len",
+          "offset": 8
+        }
+      ]
+    },
+    {
+      "name": "NuxCapiDiagnosticView",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "status",
+          "offset": 4
+        },
+        {
+          "name": "code",
+          "offset": 8
+        },
+        {
+          "name": "message",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxImageSampler",
+      "size": 3,
+      "alignment": 1,
+      "fields": [
+        {
+          "name": "wrap_x",
+          "offset": 0
+        },
+        {
+          "name": "wrap_y",
+          "offset": 1
+        },
+        {
+          "name": "filter",
+          "offset": 2
+        }
+      ]
+    },
+    {
+      "name": "NuxMetalRenderOperation",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "drawable_state",
+          "offset": 4
+        },
+        {
+          "name": "drawable",
+          "offset": 8
+        },
+        {
+          "name": "clear_color",
+          "offset": 16
+        },
+        {
+          "name": "completion_context",
+          "offset": 24
+        },
+        {
+          "name": "completion_callback",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerEventPropertyView",
+      "size": 64,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "kind",
+          "offset": 4
+        },
+        {
+          "name": "name",
+          "offset": 8
+        },
+        {
+          "name": "number_value",
+          "offset": 24
+        },
+        {
+          "name": "bool_value",
+          "offset": 28
+        },
+        {
+          "name": "string_value",
+          "offset": 32
+        },
+        {
+          "name": "color_value",
+          "offset": 48
+        },
+        {
+          "name": "integer_value",
+          "offset": 56
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerEventView",
+      "size": 88,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "event_local_index",
+          "offset": 8
+        },
+        {
+          "name": "event_core_type",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        },
+        {
+          "name": "url",
+          "offset": 40
+        },
+        {
+          "name": "target",
+          "offset": 56
+        },
+        {
+          "name": "seconds_delay",
+          "offset": 72
+        },
+        {
+          "name": "property_count",
+          "offset": 80
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerInfo",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "kind",
+          "offset": 4
+        },
+        {
+          "name": "index",
+          "offset": 8
+        },
+        {
+          "name": "name",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerInputChange",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0
+        },
+        {
+          "name": "name",
+          "offset": 8
+        },
+        {
+          "name": "bool_value",
+          "offset": 24
+        },
+        {
+          "name": "number_value",
+          "offset": 28
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerPointerEvent",
+      "size": 20,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0
+        },
+        {
+          "name": "x",
+          "offset": 4
+        },
+        {
+          "name": "y",
+          "offset": 8
+        },
+        {
+          "name": "pointer_id",
+          "offset": 12
+        },
+        {
+          "name": "timestamp_seconds",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerStateChangeView",
+      "size": 24,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "layer_index",
+          "offset": 8
+        },
+        {
+          "name": "state_core_type",
+          "offset": 16
+        },
+        {
+          "name": "state_global_id",
+          "offset": 20
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerStep",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "inputs",
+          "offset": 8
+        },
+        {
+          "name": "input_count",
+          "offset": 16
+        },
+        {
+          "name": "pointers",
+          "offset": 24
+        },
+        {
+          "name": "pointer_count",
+          "offset": 32
+        },
+        {
+          "name": "elapsed_seconds",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerStepInfo",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "keep_going",
+          "offset": 4
+        },
+        {
+          "name": "pointer_result_count",
+          "offset": 8
+        },
+        {
+          "name": "state_change_count",
+          "offset": 16
+        },
+        {
+          "name": "event_count",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxRawPathView",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "verbs",
+          "offset": 0
+        },
+        {
+          "name": "verb_count",
+          "offset": 8
+        },
+        {
+          "name": "points",
+          "offset": 16
+        },
+        {
+          "name": "point_count",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxRenderCallbacks",
+      "size": 328,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "user_data",
+          "offset": 8
+        },
+        {
+          "name": "make_render_path",
+          "offset": 16
+        },
+        {
+          "name": "make_empty_render_path",
+          "offset": 24
+        },
+        {
+          "name": "make_render_paint",
+          "offset": 32
+        },
+        {
+          "name": "make_linear_gradient",
+          "offset": 40
+        },
+        {
+          "name": "make_radial_gradient",
+          "offset": 48
+        },
+        {
+          "name": "make_render_buffer",
+          "offset": 56
+        },
+        {
+          "name": "decode_image",
+          "offset": 64
+        },
+        {
+          "name": "release_render_path",
+          "offset": 72
+        },
+        {
+          "name": "release_render_paint",
+          "offset": 80
+        },
+        {
+          "name": "release_render_shader",
+          "offset": 88
+        },
+        {
+          "name": "release_render_buffer",
+          "offset": 96
+        },
+        {
+          "name": "release_render_image",
+          "offset": 104
+        },
+        {
+          "name": "render_path_rewind",
+          "offset": 112
+        },
+        {
+          "name": "render_path_fill_rule",
+          "offset": 120
+        },
+        {
+          "name": "render_path_move_to",
+          "offset": 128
+        },
+        {
+          "name": "render_path_line_to",
+          "offset": 136
+        },
+        {
+          "name": "render_path_cubic_to",
+          "offset": 144
+        },
+        {
+          "name": "render_path_close",
+          "offset": 152
+        },
+        {
+          "name": "render_path_add_raw_path",
+          "offset": 160
+        },
+        {
+          "name": "render_path_add_render_path",
+          "offset": 168
+        },
+        {
+          "name": "render_path_add_render_path_backwards",
+          "offset": 176
+        },
+        {
+          "name": "render_paint_style",
+          "offset": 184
+        },
+        {
+          "name": "render_paint_color",
+          "offset": 192
+        },
+        {
+          "name": "render_paint_thickness",
+          "offset": 200
+        },
+        {
+          "name": "render_paint_join",
+          "offset": 208
+        },
+        {
+          "name": "render_paint_cap",
+          "offset": 216
+        },
+        {
+          "name": "render_paint_feather",
+          "offset": 224
+        },
+        {
+          "name": "render_paint_blend_mode",
+          "offset": 232
+        },
+        {
+          "name": "render_paint_shader",
+          "offset": 240
+        },
+        {
+          "name": "render_paint_invalidate_stroke",
+          "offset": 248
+        },
+        {
+          "name": "render_buffer_unmap",
+          "offset": 256
+        },
+        {
+          "name": "save",
+          "offset": 264
+        },
+        {
+          "name": "restore",
+          "offset": 272
+        },
+        {
+          "name": "transform",
+          "offset": 280
+        },
+        {
+          "name": "draw_path",
+          "offset": 288
+        },
+        {
+          "name": "clip_path",
+          "offset": 296
+        },
+        {
+          "name": "draw_image",
+          "offset": 304
+        },
+        {
+          "name": "draw_image_mesh",
+          "offset": 312
+        },
+        {
+          "name": "modulate_opacity",
+          "offset": 320
+        }
+      ]
+    },
+    {
+      "name": "NuxRendererInfo",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "pixel_width",
+          "offset": 4
+        },
+        {
+          "name": "pixel_height",
+          "offset": 8
+        },
+        {
+          "name": "attached",
+          "offset": 12
+        },
+        {
+          "name": "health",
+          "offset": 16
+        },
+        {
+          "name": "generation",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxRendererOutcome",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "disposition",
+          "offset": 4
+        },
+        {
+          "name": "health",
+          "offset": 8
+        },
+        {
+          "name": "pixel_width",
+          "offset": 12
+        },
+        {
+          "name": "pixel_height",
+          "offset": 16
+        },
+        {
+          "name": "draw_calls",
+          "offset": 24
+        },
+        {
+          "name": "logical_flushes",
+          "offset": 32
+        },
+        {
+          "name": "atomic_strategy_partitions",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxRuntimeInfo",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "abi_version",
+          "offset": 4
+        },
+        {
+          "name": "runtime_version",
+          "offset": 8
+        },
+        {
+          "name": "source_revision",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxStringView",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "data",
+          "offset": 0
+        },
+        {
+          "name": "len",
+          "offset": 8
+        }
+      ]
+    },
+    {
+      "name": "NuxTextRunMutation",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "name",
+          "offset": 0
+        },
+        {
+          "name": "text",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxTextRunMutationBatch",
+      "size": 24,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "mutations",
+          "offset": 8
+        },
+        {
+          "name": "mutation_count",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelAuthoredInstanceView",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "schema_index",
+          "offset": 8
+        },
+        {
+          "name": "instance_index",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelCatalogInfo",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "schema_count",
+          "offset": 8
+        },
+        {
+          "name": "property_count",
+          "offset": 16
+        },
+        {
+          "name": "authored_instance_count",
+          "offset": 24
+        },
+        {
+          "name": "enum_label_count",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelMutation",
+      "size": 96,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0
+        },
+        {
+          "name": "instance",
+          "offset": 8
+        },
+        {
+          "name": "path",
+          "offset": 16
+        },
+        {
+          "name": "related_instance",
+          "offset": 32
+        },
+        {
+          "name": "bytes_value",
+          "offset": 40
+        },
+        {
+          "name": "number_value",
+          "offset": 56
+        },
+        {
+          "name": "integer_value",
+          "offset": 64
+        },
+        {
+          "name": "bool_value",
+          "offset": 72
+        },
+        {
+          "name": "index",
+          "offset": 80
+        },
+        {
+          "name": "second_index",
+          "offset": 88
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelMutationBatch",
+      "size": 24,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "mutations",
+          "offset": 8
+        },
+        {
+          "name": "mutation_count",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelMutationResultInfo",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "status",
+          "offset": 4
+        },
+        {
+          "name": "applied_count",
+          "offset": 8
+        },
+        {
+          "name": "code",
+          "offset": 16
+        },
+        {
+          "name": "message",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelPropertyView",
+      "size": 72,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "schema_index",
+          "offset": 8
+        },
+        {
+          "name": "property_index",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        },
+        {
+          "name": "kind",
+          "offset": 40
+        },
+        {
+          "name": "referenced_schema_index",
+          "offset": 48
+        },
+        {
+          "name": "first_enum_label",
+          "offset": 56
+        },
+        {
+          "name": "enum_label_count",
+          "offset": 64
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelSchemaView",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "schema_index",
+          "offset": 8
+        },
+        {
+          "name": "name",
+          "offset": 16
+        },
+        {
+          "name": "first_property",
+          "offset": 32
+        },
+        {
+          "name": "property_count",
+          "offset": 40
+        },
+        {
+          "name": "first_authored_instance",
+          "offset": 48
+        },
+        {
+          "name": "authored_instance_count",
+          "offset": 56
+        },
+        {
+          "name": "default_authored_instance",
+          "offset": 64
+        },
+        {
+          "name": "is_global",
+          "offset": 72
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelSnapshotInfo",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "root_instance_id",
+          "offset": 8
+        },
+        {
+          "name": "instance_count",
+          "offset": 16
+        },
+        {
+          "name": "value_count",
+          "offset": 24
+        },
+        {
+          "name": "list_item_count",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelSnapshotInstanceView",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "instance_id",
+          "offset": 8
+        },
+        {
+          "name": "schema_index",
+          "offset": 16
+        },
+        {
+          "name": "first_value",
+          "offset": 24
+        },
+        {
+          "name": "value_count",
+          "offset": 32
+        }
+      ]
+    },
+    {
+      "name": "NuxViewModelSnapshotValueView",
+      "size": 104,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "owner_instance_id",
+          "offset": 8
+        },
+        {
+          "name": "property_index",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        },
+        {
+          "name": "kind",
+          "offset": 40
+        },
+        {
+          "name": "number_value",
+          "offset": 44
+        },
+        {
+          "name": "integer_value",
+          "offset": 48
+        },
+        {
+          "name": "bool_value",
+          "offset": 56
+        },
+        {
+          "name": "bytes_value",
+          "offset": 64
+        },
+        {
+          "name": "referenced_instance_id",
+          "offset": 80
+        },
+        {
+          "name": "first_list_item",
+          "offset": 88
+        },
+        {
+          "name": "list_item_count",
+          "offset": 96
+        }
+      ]
+    }
+  ]
+}

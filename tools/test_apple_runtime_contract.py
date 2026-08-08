@@ -9,6 +9,10 @@ from tools.apple_runtime_contract import ContractError
 from tools.apple_runtime_contract import validate_build_inputs
 from tools.apple_runtime_contract import validate_metadata
 from tools.apple_runtime_contract import qualify_release_metadata
+from tools.apple_runtime_contract import validate_distribution_metadata
+from tools.apple_runtime_contract import validate_layout_oracle
+from tools.apple_runtime_contract import validate_size_report
+from tools.apple_runtime_contract import validate_symbol_partitions
 from tools.apple_runtime_contract import validate_symbols
 
 
@@ -245,6 +249,168 @@ void nux_operation_result_free(struct NuxOperationResult *result);
         symbols = self.SYMBOLS + "_nux_runtime_abi_minor\n"
         with self.assertRaisesRegex(ContractError, "removed client ABI identifiers"):
             validate_symbols(header, symbols)
+
+
+class MigrationDistributionTests(unittest.TestCase):
+    def test_three_independent_symbol_partitions_are_exact_and_disjoint(self) -> None:
+        validate_symbol_partitions(
+            {
+                "portable": "nux_file_free\nnux_player_step\n",
+                "appleExtension": "nux_renderer_free\n",
+                "legacyMigration": "nux_screen_session_free\n",
+            },
+            "_nux_file_free\n_nux_player_step\n_nux_renderer_free\n"
+            "_nux_screen_session_free\n_rust_eh_personality\n",
+        )
+
+    def test_symbol_partitions_reject_overlap_unsorted_and_unlisted_exports(self) -> None:
+        with self.assertRaisesRegex(ContractError, "overlap"):
+            validate_symbol_partitions(
+                {"portable": "nux_file_free\n", "appleExtension": "nux_file_free\n"},
+                "_nux_file_free\n",
+            )
+        with self.assertRaisesRegex(ContractError, "sorted"):
+            validate_symbol_partitions(
+                {"portable": "nux_player_step\nnux_file_free\n"},
+                "_nux_file_free\n_nux_player_step\n",
+            )
+        with self.assertRaisesRegex(ContractError, "extra=.*nux_unlisted"):
+            validate_symbol_partitions(
+                {"portable": "nux_file_free\n"},
+                "_nux_file_free\n_nux_unlisted\n",
+            )
+
+    def test_schema_six_describes_both_artifacts_from_one_input_identity(self) -> None:
+        revision = "a" * 40
+        document = {
+            "schemaVersion": 6,
+            "runtimeVersion": "0.4.0",
+            "buildSourceRevision": revision,
+            "releaseRevision": revision,
+            "runtimeIdentity": f"0.4.0@{revision}",
+            "contractFingerprint": "b" * 64,
+            "buildInputsHash": "c" * 64,
+            "artifacts": [
+                {
+                    "kind": "full-apple",
+                    "archiveName": "NuxieRuntime.xcframework.zip",
+                    "bundleName": "NuxieRuntime.xcframework",
+                    "swiftPackageChecksum": "d" * 64,
+                    "targets": sorted(
+                        [
+                            "aarch64-apple-darwin",
+                            "aarch64-apple-ios",
+                            "aarch64-apple-ios-sim",
+                            "x86_64-apple-darwin",
+                            "x86_64-apple-ios",
+                        ]
+                    ),
+                },
+                {
+                    "kind": "ios-only",
+                    "archiveName": "NuxieRuntime-iOS.xcframework.zip",
+                    "bundleName": "NuxieRuntime.xcframework",
+                    "swiftPackageChecksum": "e" * 64,
+                    "targets": sorted(
+                        [
+                            "aarch64-apple-ios",
+                            "aarch64-apple-ios-sim",
+                            "x86_64-apple-ios",
+                        ]
+                    ),
+                },
+            ],
+        }
+        validate_distribution_metadata(document)
+
+        document["artifacts"][1]["swiftPackageChecksum"] = "d" * 64
+        with self.assertRaisesRegex(ContractError, "distinct archive checksums"):
+            validate_distribution_metadata(document)
+
+    def test_layout_oracle_is_complete_sorted_and_lp64(self) -> None:
+        validate_layout_oracle(
+            {
+                "schemaVersion": 1,
+                "dataModel": "apple-lp64",
+                "types": [
+                    {
+                        "name": "NuxStringView",
+                        "size": 16,
+                        "alignment": 8,
+                        "fields": [
+                            {"name": "data", "offset": 0},
+                            {"name": "len", "offset": 8},
+                        ],
+                    }
+                ],
+            }
+        )
+        with self.assertRaisesRegex(ContractError, "field offsets"):
+            validate_layout_oracle(
+                {
+                    "schemaVersion": 1,
+                    "dataModel": "apple-lp64",
+                    "types": [
+                        {
+                            "name": "NuxStringView",
+                            "size": 16,
+                            "alignment": 8,
+                            "fields": [
+                                {"name": "len", "offset": 8},
+                                {"name": "data", "offset": 0},
+                            ],
+                        }
+                    ],
+                }
+            )
+
+    def test_size_report_supports_candidate_and_release_budget_modes(self) -> None:
+        report = {
+            "schemaVersion": 1,
+            "artifacts": {
+                "full-apple": {
+                    "compressedBytes": 10,
+                    "expandedBytes": 20,
+                    "representativeLinkedBytes": 4,
+                    "sliceBytes": {"aarch64-apple-ios": 7},
+                },
+                "ios-only": {
+                    "compressedBytes": 8,
+                    "expandedBytes": 12,
+                    "representativeLinkedBytes": 4,
+                    "sliceBytes": {"aarch64-apple-ios": 7},
+                },
+            },
+        }
+        candidate = {
+            "schemaVersion": 1,
+            "mode": "candidate",
+            "maximums": None,
+        }
+        validate_size_report(report, candidate, release=False)
+        with self.assertRaisesRegex(ContractError, "release size budgets"):
+            validate_size_report(report, candidate, release=True)
+
+        release = {
+            "schemaVersion": 1,
+            "mode": "release",
+            "maximums": {
+                "full-apple": {
+                    "compressedBytes": 9,
+                    "expandedBytes": 20,
+                    "representativeLinkedBytes": 4,
+                    "sliceBytes": {"aarch64-apple-ios": 7},
+                },
+                "ios-only": {
+                    "compressedBytes": 8,
+                    "expandedBytes": 12,
+                    "representativeLinkedBytes": 4,
+                    "sliceBytes": {"aarch64-apple-ios": 7},
+                },
+            },
+        }
+        with self.assertRaisesRegex(ContractError, "full-apple.compressedBytes"):
+            validate_size_report(report, release, release=True)
 
 
 class ReleaseToolSourcePolicyTests(unittest.TestCase):

@@ -417,6 +417,8 @@ def build_manifest(
     host_target: str | None = None,
     host_cfg: set[tuple[str, str | None]] | None = None,
     resolutions_by_context: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
+    root_package: str = ROOT_PACKAGE,
+    features: Sequence[str] = DEFAULT_FEATURES,
 ) -> dict[str, object]:
     repo_root = repo_root.resolve()
     lock_packages = _lock_packages(repo_root)
@@ -447,7 +449,7 @@ def build_manifest(
         reachable = (
             set(resolution)
             if resolution is not None
-            else _reachable_package_ids(metadata, ROOT_PACKAGE, target, target_cfg)
+            else _reachable_package_ids(metadata, root_package, target, target_cfg)
         )
         packages_by_id = {package["id"]: package for package in metadata["packages"]}
         nodes_by_id = {node["id"]: node for node in metadata["resolve"]["nodes"]}
@@ -525,17 +527,21 @@ def build_manifest(
 
     return {
         "configuration": dict(configuration),
-        "features": list(DEFAULT_FEATURES),
+        "features": sorted(features),
         "files": [file_records[path] for path in sorted(file_records)],
         "packages": [package_records[key] for key in sorted(package_records)],
-        "rootPackage": ROOT_PACKAGE,
+        "rootPackage": root_package,
         "schemaVersion": SCHEMA_VERSION,
         "targets": sorted(metadata_by_target),
     }
 
 
 def _cargo_metadata(
-    cargo: str, repo_root: pathlib.Path, target: str
+    cargo: str,
+    repo_root: pathlib.Path,
+    target: str,
+    root_package: str = ROOT_PACKAGE,
+    features: Sequence[str] = DEFAULT_FEATURES,
 ) -> Mapping[str, Any]:
     command = [
         cargo,
@@ -547,7 +553,7 @@ def _cargo_metadata(
         str(repo_root / "Cargo.toml"),
         "--no-default-features",
         "--features",
-        f"{ROOT_PACKAGE}/{DEFAULT_FEATURES[0]}",
+        ",".join(f"{root_package}/{feature}" for feature in features),
         "--filter-platform",
         target,
     ]
@@ -571,6 +577,8 @@ def _cargo_tree_resolution(
     repo_root: pathlib.Path,
     target: str,
     metadata: Mapping[str, Any],
+    root_package: str = ROOT_PACKAGE,
+    features: Sequence[str] = DEFAULT_FEATURES,
 ) -> dict[str, list[str]]:
     command = [
         cargo,
@@ -579,10 +587,10 @@ def _cargo_tree_resolution(
         "--manifest-path",
         str(repo_root / "Cargo.toml"),
         "--package",
-        ROOT_PACKAGE,
+        root_package,
         "--no-default-features",
         "--features",
-        DEFAULT_FEATURES[0],
+        ",".join(features),
         "--target",
         target,
         "--edges",
@@ -689,7 +697,9 @@ def _rustc_host_target(cargo: str) -> str:
     raise InputDigestError("pinned rustc did not report a host target")
 
 
-def _configuration(arguments: argparse.Namespace) -> dict[str, object]:
+def _configuration(
+    arguments: argparse.Namespace, targets: Sequence[str]
+) -> dict[str, object]:
     return {
         "buildEnvironment": _build_environment(),
         "buildProfile": arguments.build_profile,
@@ -700,7 +710,7 @@ def _configuration(arguments: argparse.Namespace) -> dict[str, object]:
         "rustc": arguments.rustc_version,
         "hostTarget": _rustc_host_target(arguments.cargo),
         "rustLibraries": _rust_library_identities(
-            arguments.cargo, (*DEFAULT_TARGETS, _rustc_host_target(arguments.cargo))
+            arguments.cargo, (*targets, _rustc_host_target(arguments.cargo))
         ),
         "toolBinaries": _tool_identities(arguments.tool),
         "sdk": {
@@ -721,6 +731,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("manifest", type=pathlib.Path)
     parser.add_argument("--repo-root", required=True, type=pathlib.Path)
     parser.add_argument("--cargo", required=True)
+    parser.add_argument("--root-package", default=ROOT_PACKAGE)
+    parser.add_argument("--feature", action="append", dest="features")
+    parser.add_argument("--target", action="append", dest="targets")
     parser.add_argument("--build-profile", required=True)
     parser.add_argument("--rust-toolchain", required=True)
     parser.add_argument("--rustc-version", required=True)
@@ -744,34 +757,52 @@ def _parser() -> argparse.ArgumentParser:
 def main(arguments: Sequence[str]) -> int:
     parsed = _parser().parse_args(arguments)
     repo_root = parsed.repo_root.resolve()
+    features = tuple(parsed.features or DEFAULT_FEATURES)
+    targets = tuple(parsed.targets or DEFAULT_TARGETS)
     metadata_by_target = {
-        target: _cargo_metadata(parsed.cargo, repo_root, target)
-        for target in DEFAULT_TARGETS
+        target: _cargo_metadata(
+            parsed.cargo, repo_root, target, parsed.root_package, features
+        )
+        for target in targets
     }
     target_cfg_by_target = {
-        target: _rustc_target_cfg(parsed.cargo, target) for target in DEFAULT_TARGETS
+        target: _rustc_target_cfg(parsed.cargo, target) for target in targets
     }
     host_target = _rustc_host_target(parsed.cargo)
-    host_metadata = _cargo_metadata(parsed.cargo, repo_root, host_target)
+    host_metadata = _cargo_metadata(
+        parsed.cargo, repo_root, host_target, parsed.root_package, features
+    )
     host_cfg = _rustc_target_cfg(parsed.cargo, host_target)
     resolutions_by_context = {
         target: _cargo_tree_resolution(
-            parsed.cargo, repo_root, target, metadata_by_target[target]
+            parsed.cargo,
+            repo_root,
+            target,
+            metadata_by_target[target],
+            parsed.root_package,
+            features,
         )
-        for target in DEFAULT_TARGETS
+        for target in targets
     }
     resolutions_by_context["host"] = _cargo_tree_resolution(
-        parsed.cargo, repo_root, host_target, host_metadata
+        parsed.cargo,
+        repo_root,
+        host_target,
+        host_metadata,
+        parsed.root_package,
+        features,
     )
     manifest = build_manifest(
         repo_root,
         metadata_by_target,
-        _configuration(parsed),
+        _configuration(parsed, targets),
         target_cfg_by_target,
         host_metadata,
         host_target,
         host_cfg,
         resolutions_by_context,
+        parsed.root_package,
+        features,
     )
     encoded = _canonical_json(manifest)
     digest = _sha256(encoded)

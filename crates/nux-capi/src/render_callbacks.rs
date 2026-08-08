@@ -57,6 +57,8 @@ impl From<ImageSampler> for NuxImageSampler {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxRenderCallbacks {
+    /// Must be initialized to `sizeof(NuxRenderCallbacks)` by the caller.
+    pub struct_size: u32,
     pub user_data: *mut c_void,
 
     // Factory calls.
@@ -124,12 +126,21 @@ pub struct NuxRenderCallbacks {
     pub modulate_opacity: Option<unsafe extern "C" fn(*mut c_void, f32)>,
 }
 
+/// ABI-v3 prefix that every callback table must provide. Future additive tail
+/// fields do not change this minimum.
+pub const NUX_RENDER_CALLBACKS_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxRenderCallbacks, modulate_opacity)
+        + std::mem::size_of::<Option<unsafe extern "C" fn(*mut c_void, f32)>>();
+
 impl Default for NuxRenderCallbacks {
     /// Empty vtable: every callback NULL, which draws like a null renderer.
     fn default() -> Self {
-        // SAFETY: every field is nullable (a raw pointer or `Option` of a
-        // function pointer), so the all-zero bit pattern is valid.
-        unsafe { std::mem::zeroed() }
+        // SAFETY: except for `struct_size`, every field is nullable (a raw
+        // pointer or `Option` of a function pointer), so the all-zero bit
+        // pattern is valid.
+        let mut callbacks: Self = unsafe { std::mem::zeroed() };
+        callbacks.struct_size = u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX);
+        callbacks
     }
 }
 
@@ -210,7 +221,9 @@ pub(crate) struct CallbackRenderPath {
 
 impl Drop for CallbackRenderPath {
     fn drop(&mut self) {
-        call!(self.callbacks, release_render_path, self.handle);
+        if self.handle != 0 {
+            call!(self.callbacks, release_render_path, self.handle);
+        }
     }
 }
 
@@ -292,7 +305,9 @@ pub(crate) struct CallbackRenderPaint {
 
 impl Drop for CallbackRenderPaint {
     fn drop(&mut self) {
-        call!(self.callbacks, release_render_paint, self.handle);
+        if self.handle != 0 {
+            call!(self.callbacks, release_render_paint, self.handle);
+        }
     }
 }
 
@@ -359,7 +374,9 @@ pub(crate) struct CallbackRenderShader {
 
 impl Drop for CallbackRenderShader {
     fn drop(&mut self) {
-        call!(self.callbacks, release_render_shader, self.handle);
+        if self.handle != 0 {
+            call!(self.callbacks, release_render_shader, self.handle);
+        }
     }
 }
 
@@ -378,7 +395,9 @@ pub(crate) struct CallbackRenderImage {
 
 impl Drop for CallbackRenderImage {
     fn drop(&mut self) {
-        call!(self.callbacks, release_render_image, self.handle);
+        if self.handle != 0 {
+            call!(self.callbacks, release_render_image, self.handle);
+        }
     }
 }
 
@@ -406,7 +425,9 @@ pub(crate) struct CallbackRenderBuffer {
 
 impl Drop for CallbackRenderBuffer {
     fn drop(&mut self) {
-        call!(self.callbacks, release_render_buffer, self.handle);
+        if self.handle != 0 {
+            call!(self.callbacks, release_render_buffer, self.handle);
+        }
     }
 }
 

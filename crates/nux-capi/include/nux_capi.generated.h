@@ -12,9 +12,13 @@
 /**
  * Increment only for a breaking change to the exported C contract.
  */
-#define NUX_CAPI_ABI_VERSION 2
+#define NUX_CAPI_ABI_VERSION 3
 
-typedef enum NuxStatus {
+enum NuxStatus
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
   NUX_STATUS_OK = 0,
   NUX_STATUS_NULL_ARGUMENT = 1,
   NUX_STATUS_IMPORT_ERROR = 2,
@@ -22,15 +26,50 @@ typedef enum NuxStatus {
   NUX_STATUS_RUNTIME_ERROR = 4,
   NUX_STATUS_INVALID_ARGUMENT = 5,
   NUX_STATUS_ABI_MISMATCH = 6,
-} NuxStatus;
+  NUX_STATUS_WRONG_THREAD = 7,
+  NUX_STATUS_INVALID_STRUCT_SIZE = 8,
+  NUX_STATUS_HANDLE_MISMATCH = 9,
+  NUX_STATUS_REENTRANT_CALL = 10,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxStatus;
+#endif // __cplusplus
 
 /**
- * Owned artboard instance. The [`NuxFile`] it was created from must stay
- * alive (not freed) for as long as this instance exists.
+ * Owned linear-animation occurrence selected from an artboard.
+ */
+enum NuxPlayerKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_KIND_STATIC_ARTBOARD = 0,
+  NUX_PLAYER_KIND_STATE_MACHINE = 1,
+  NUX_PLAYER_KIND_LINEAR_ANIMATION = 2,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerKind;
+#endif // __cplusplus
+
+/**
+ * Owned artboard occurrence. It retains the imported [`File`] through native
+ * shared ownership and therefore remains valid after its [`NuxFile`] handle
+ * is released.
  */
 typedef struct NuxArtboardInstance NuxArtboardInstance;
 
+/**
+ * Bounded, library-owned diagnostic/result storage.
+ */
+typedef struct NuxCapiResult NuxCapiResult;
+
 typedef struct NuxFile NuxFile;
+
+/**
+ * Product-neutral selected player. This surface establishes selection,
+ * ownership, and metadata; playback operations are exposed separately.
+ */
+typedef struct NuxPlayer NuxPlayer;
 
 /**
  * Owned state machine instance. Advance it through the
@@ -81,6 +120,10 @@ typedef struct NuxImageSampler {
  * NULL.
  */
 typedef struct NuxRenderCallbacks {
+  /**
+   * Must be initialized to `sizeof(NuxRenderCallbacks)` by the caller.
+   */
+  uint32_t struct_size;
   void *user_data;
   uint64_t (*make_render_path)(void*, const struct NuxRawPathView*, uint8_t);
   uint64_t (*make_empty_render_path)(void*);
@@ -145,16 +188,50 @@ typedef struct NuxStringView {
 } NuxStringView;
 
 /**
+ * Caller-sized view into one owned C-ABI result. `code` and `message` remain
+ * valid until the owning `NuxCapiResult` is released.
+ */
+typedef struct NuxCapiDiagnosticView {
+  uint32_t struct_size;
+  NuxStatus status;
+  struct NuxStringView code;
+  struct NuxStringView message;
+} NuxCapiDiagnosticView;
+
+/**
  * Immutable identity embedded into the shipped runtime binary.
  *
  * Both strings have process-static lifetime and are not NUL-terminated; C
  * callers must respect their explicit lengths.
  */
 typedef struct NuxRuntimeInfo {
+  /**
+   * Must be initialized to `sizeof(NuxRuntimeInfo)` by the caller.
+   */
+  uint32_t struct_size;
   uint32_t abi_version;
   struct NuxStringView runtime_version;
   struct NuxStringView source_revision;
 } NuxRuntimeInfo;
+
+/**
+ * Versioned metadata for a selected runtime-native player.
+ */
+typedef struct NuxPlayerInfo {
+  /**
+   * Must be initialized to `sizeof(NuxPlayerInfo)` by the caller.
+   */
+  uint32_t struct_size;
+  NuxPlayerKind kind;
+  /**
+   * Authored index within the selected kind, or `SIZE_MAX` for static.
+   */
+  size_t index;
+  /**
+   * Copied UTF-8 metadata owned by `NuxPlayer`; valid until player free.
+   */
+  struct NuxStringView name;
+} NuxPlayerInfo;
 
 #ifdef __cplusplus
 extern "C" {
@@ -164,9 +241,9 @@ extern "C" {
  * Advance the artboard timeline without a state machine. `out_changed` is
  * optional and reports whether anything changed.
  */
-enum NuxStatus nux_artboard_instance_advance(struct NuxArtboardInstance *instance,
-                                             float elapsed_seconds,
-                                             bool *out_changed);
+NuxStatus nux_artboard_instance_advance(struct NuxArtboardInstance *instance,
+                                        float elapsed_seconds,
+                                        bool *out_changed);
 
 /**
  * Bind `view_model` to `instance`'s own data binds and nested-artboard
@@ -175,159 +252,281 @@ enum NuxStatus nux_artboard_instance_advance(struct NuxArtboardInstance *instanc
  * change on the next advance. `view_model` must have been created from
  * `instance`.
  */
-enum NuxStatus nux_artboard_instance_bind_view_model(struct NuxArtboardInstance *instance,
-                                                     const struct NuxViewModelInstance *view_model);
+NuxStatus nux_artboard_instance_bind_view_model(struct NuxArtboardInstance *instance,
+                                                const struct NuxViewModelInstance *view_model);
 
 /**
  * Draw the artboard through the caller-provided render vtable. See
  * `NuxRenderCallbacks` for the ownership and handle contract. The first
- * draw's binding is retained by the Artboard occurrence, even if that draw
- * returns an error; its `user_data` must remain valid until the instance is
- * freed.
+ * draw's renderer domain is retained by the Artboard occurrence, even if that
+ * draw returns an error. A different descriptor/domain returns
+ * `NUX_STATUS_HANDLE_MISMATCH`; a future explicit reset can make switching
+ * domains safe. Callback functions and `user_data` must remain valid until
+ * the last artboard/player retaining the occurrence is freed.
  */
-enum NuxStatus nux_artboard_instance_draw(struct NuxArtboardInstance *instance,
-                                          const struct NuxRenderCallbacks *callbacks);
+NuxStatus nux_artboard_instance_draw(struct NuxArtboardInstance *instance,
+                                     const struct NuxRenderCallbacks *callbacks);
 
-void nux_artboard_instance_free(struct NuxArtboardInstance *instance);
+NuxStatus nux_artboard_instance_free(struct NuxArtboardInstance *instance);
 
 /**
- * Instantiate the artboard at `artboard_index`. The file must outlive the
- * returned instance; free it with `nux_artboard_instance_free` before
- * freeing the file.
+ * Instantiate the artboard at `artboard_index`. The returned occurrence
+ * retains the imported file and may outlive the `NuxFile` handle.
  */
-enum NuxStatus nux_artboard_instance_new(const struct NuxFile *file,
-                                         size_t artboard_index,
-                                         struct NuxArtboardInstance **out_instance);
+NuxStatus nux_artboard_instance_new(const struct NuxFile *file,
+                                    size_t artboard_index,
+                                    struct NuxArtboardInstance **out_instance);
+
+/**
+ * Instantiate the first artboard whose authored name exactly matches the
+ * length-delimited UTF-8 `name`. Matching is case-sensitive and has no
+ * fallback; an empty name is a valid selector.
+ */
+NuxStatus nux_artboard_instance_new_named(const struct NuxFile *file,
+                                          struct NuxStringView name,
+                                          struct NuxArtboardInstance **out_instance);
+
+/**
+ * Result-bearing exact artboard selection for consumers that need an owned
+ * diagnostic on every outcome.
+ */
+NuxStatus nux_artboard_instance_new_named_with_result(const struct NuxFile *file,
+                                                      struct NuxStringView name,
+                                                      struct NuxArtboardInstance **out_instance,
+                                                      struct NuxCapiResult **out_result);
 
 uint32_t nux_capi_abi_version(void);
 
-enum NuxStatus nux_capi_require_abi(uint32_t required_version);
+NuxStatus nux_capi_require_abi(uint32_t required_version);
 
-enum NuxStatus nux_capi_runtime_info(struct NuxRuntimeInfo *out_info);
+NuxStatus nux_capi_result_diagnostic(const struct NuxCapiResult *result,
+                                     struct NuxCapiDiagnosticView *out_diagnostic);
 
-enum NuxStatus nux_file_artboard_animation_count(const struct NuxFile *file,
-                                                 size_t index,
-                                                 size_t *out_count);
+NuxStatus nux_capi_result_free(struct NuxCapiResult *result);
 
-size_t nux_file_artboard_count(const struct NuxFile *file);
+NuxStatus nux_capi_result_status(const struct NuxCapiResult *result, NuxStatus *out_status);
 
-enum NuxStatus nux_file_artboard_name(const struct NuxFile *file,
-                                      size_t index,
-                                      struct NuxStringView *out_name);
+NuxStatus nux_capi_runtime_info(struct NuxRuntimeInfo *out_info);
 
-enum NuxStatus nux_file_artboard_state_machine_count(const struct NuxFile *file,
-                                                     size_t index,
-                                                     size_t *out_count);
+NuxStatus nux_file_artboard_animation_count(const struct NuxFile *file,
+                                            size_t index,
+                                            size_t *out_count);
+
+/**
+ * Name of one of an artboard's linear animations. The returned
+ * length-delimited UTF-8 view borrows `file` and expires when the file handle
+ * is freed.
+ */
+NuxStatus nux_file_artboard_animation_name(const struct NuxFile *file,
+                                           size_t artboard_index,
+                                           size_t animation_index,
+                                           struct NuxStringView *out_name);
+
+NuxStatus nux_file_artboard_count(const struct NuxFile *file, size_t *out_count);
+
+NuxStatus nux_file_artboard_name(const struct NuxFile *file,
+                                 size_t index,
+                                 struct NuxStringView *out_name);
+
+NuxStatus nux_file_artboard_state_machine_count(const struct NuxFile *file,
+                                                size_t index,
+                                                size_t *out_count);
 
 /**
  * Name of one of an artboard's state machines. The returned view borrows the
  * file and is valid until the file is freed.
  */
-enum NuxStatus nux_file_artboard_state_machine_name(const struct NuxFile *file,
-                                                    size_t artboard_index,
-                                                    size_t state_machine_index,
-                                                    struct NuxStringView *out_name);
+NuxStatus nux_file_artboard_state_machine_name(const struct NuxFile *file,
+                                               size_t artboard_index,
+                                               size_t state_machine_index,
+                                               struct NuxStringView *out_name);
 
-void nux_file_free(struct NuxFile *file);
+NuxStatus nux_file_free(struct NuxFile *file);
 
-enum NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
+NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
+
+/**
+ * Diagnostic import path for production consumers. `out_file` is published
+ * only on success. `out_result` is always published and owns a bounded status
+ * code/message until released with `nux_capi_result_free`.
+ */
+NuxStatus nux_file_import_with_result(const uint8_t *bytes,
+                                      size_t len,
+                                      struct NuxFile **out_file,
+                                      struct NuxCapiResult **out_result);
+
+NuxStatus nux_player_free(struct NuxPlayer *player);
+
+/**
+ * Read selected-player metadata into a versioned caller-owned struct.
+ */
+NuxStatus nux_player_info(const struct NuxPlayer *player, struct NuxPlayerInfo *out_info);
+
+/**
+ * Select the artboard's default scene using the pinned C++ order: authored
+ * valid default state machine, state machine zero, animation zero, then a
+ * static artboard when it has no playable animation.
+ */
+NuxStatus nux_player_new_default(struct NuxArtboardInstance *instance,
+                                 struct NuxPlayer **out_player);
+
+/**
+ * Result-bearing default-scene selection.
+ */
+NuxStatus nux_player_new_default_with_result(struct NuxArtboardInstance *instance,
+                                             struct NuxPlayer **out_player,
+                                             struct NuxCapiResult **out_result);
+
+/**
+ * Select a linear animation by exact, case-sensitive, length-delimited UTF-8
+ * name. No state-machine or index fallback is performed.
+ */
+NuxStatus nux_player_new_linear_animation_named(struct NuxArtboardInstance *instance,
+                                                struct NuxStringView name,
+                                                struct NuxPlayer **out_player);
+
+/**
+ * Result-bearing exact linear-animation selection.
+ */
+NuxStatus nux_player_new_linear_animation_named_with_result(struct NuxArtboardInstance *instance,
+                                                            struct NuxStringView name,
+                                                            struct NuxPlayer **out_player,
+                                                            struct NuxCapiResult **out_result);
+
+/**
+ * Select a state machine by exact, case-sensitive, length-delimited UTF-8
+ * name. No default, index-zero, or animation fallback is performed.
+ */
+NuxStatus nux_player_new_state_machine_named(struct NuxArtboardInstance *instance,
+                                             struct NuxStringView name,
+                                             struct NuxPlayer **out_player);
+
+/**
+ * Result-bearing exact state-machine selection.
+ */
+NuxStatus nux_player_new_state_machine_named_with_result(struct NuxArtboardInstance *instance,
+                                                         struct NuxStringView name,
+                                                         struct NuxPlayer **out_player,
+                                                         struct NuxCapiResult **out_result);
+
+/**
+ * Explicitly select a static artboard even when it also contains authored
+ * state machines or linear animations.
+ */
+NuxStatus nux_player_new_static(struct NuxArtboardInstance *instance,
+                                struct NuxPlayer **out_player);
+
+/**
+ * Result-bearing explicit static-artboard selection.
+ */
+NuxStatus nux_player_new_static_with_result(struct NuxArtboardInstance *instance,
+                                            struct NuxPlayer **out_player,
+                                            struct NuxCapiResult **out_result);
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must
  * have been created from the same artboard instance. `out_changed` is
  * optional and reports whether anything changed.
  */
-enum NuxStatus nux_state_machine_instance_advance(struct NuxArtboardInstance *instance,
-                                                  struct NuxStateMachineInstance *state_machine,
-                                                  float elapsed_seconds,
-                                                  bool *out_changed);
+NuxStatus nux_state_machine_instance_advance(struct NuxArtboardInstance *instance,
+                                             struct NuxStateMachineInstance *state_machine,
+                                             float elapsed_seconds,
+                                             bool *out_changed);
 
 /**
  * Fire a trigger input by name (NUL-terminated UTF-8). Returns
  * `NUX_STATUS_NOT_FOUND` when no input has that name and
  * `NUX_STATUS_INVALID_ARGUMENT` when the input is not a trigger.
  */
-enum NuxStatus nux_state_machine_instance_fire_trigger(struct NuxStateMachineInstance *state_machine,
-                                                       const char *name);
+NuxStatus nux_state_machine_instance_fire_trigger(struct NuxStateMachineInstance *state_machine,
+                                                  const char *name);
 
-void nux_state_machine_instance_free(struct NuxStateMachineInstance *state_machine);
+NuxStatus nux_state_machine_instance_free(struct NuxStateMachineInstance *state_machine);
 
 /**
  * Instantiate the state machine at `state_machine_index` on the instance's
  * artboard. Free with `nux_state_machine_instance_free`.
  */
-enum NuxStatus nux_state_machine_instance_new(struct NuxArtboardInstance *instance,
-                                              size_t state_machine_index,
-                                              struct NuxStateMachineInstance **out_state_machine);
+NuxStatus nux_state_machine_instance_new(struct NuxArtboardInstance *instance,
+                                         size_t state_machine_index,
+                                         struct NuxStateMachineInstance **out_state_machine);
 
 /**
- * Instantiate the artboard's default state machine: the one flagged in the
- * source file when present, otherwise the first state machine. Returns
- * `NUX_STATUS_NOT_FOUND` when the artboard has no state machines.
+ * Instantiate only the artboard's authored, valid default state machine.
+ * Returns `NUX_STATUS_NOT_FOUND` when no valid default was authored; this
+ * function does not fall back to state-machine zero.
  */
-enum NuxStatus nux_state_machine_instance_new_default(struct NuxArtboardInstance *instance,
-                                                      struct NuxStateMachineInstance **out_state_machine);
+NuxStatus nux_state_machine_instance_new_default(struct NuxArtboardInstance *instance,
+                                                 struct NuxStateMachineInstance **out_state_machine);
+
+/**
+ * Instantiate the first state machine with an exact, case-sensitive authored
+ * name. There is no default or cross-kind fallback.
+ */
+NuxStatus nux_state_machine_instance_new_named(struct NuxArtboardInstance *instance,
+                                               struct NuxStringView name,
+                                               struct NuxStateMachineInstance **out_state_machine);
 
 /**
  * Deliver a pointer-down at artboard coordinates `(x, y)` to `state_machine`,
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_down(struct NuxArtboardInstance *instance,
-                                                       struct NuxStateMachineInstance *state_machine,
-                                                       float x,
-                                                       float y,
-                                                       bool *out_hit);
+NuxStatus nux_state_machine_instance_pointer_down(struct NuxArtboardInstance *instance,
+                                                  struct NuxStateMachineInstance *state_machine,
+                                                  float x,
+                                                  float y,
+                                                  bool *out_hit);
 
 /**
  * Deliver a pointer-move at artboard coordinates `(x, y)` to `state_machine`,
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_move(struct NuxArtboardInstance *instance,
-                                                       struct NuxStateMachineInstance *state_machine,
-                                                       float x,
-                                                       float y,
-                                                       bool *out_hit);
+NuxStatus nux_state_machine_instance_pointer_move(struct NuxArtboardInstance *instance,
+                                                  struct NuxStateMachineInstance *state_machine,
+                                                  float x,
+                                                  float y,
+                                                  bool *out_hit);
 
 /**
  * Deliver a pointer-up at artboard coordinates `(x, y)` to `state_machine`,
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_up(struct NuxArtboardInstance *instance,
-                                                     struct NuxStateMachineInstance *state_machine,
-                                                     float x,
-                                                     float y,
-                                                     bool *out_hit);
+NuxStatus nux_state_machine_instance_pointer_up(struct NuxArtboardInstance *instance,
+                                                struct NuxStateMachineInstance *state_machine,
+                                                float x,
+                                                float y,
+                                                bool *out_hit);
 
 /**
  * Set a bool input by name (NUL-terminated UTF-8). Returns
  * `NUX_STATUS_NOT_FOUND` when no input has that name and
  * `NUX_STATUS_INVALID_ARGUMENT` when the input is not a bool.
  */
-enum NuxStatus nux_state_machine_instance_set_bool(struct NuxStateMachineInstance *state_machine,
-                                                   const char *name,
-                                                   bool value);
+NuxStatus nux_state_machine_instance_set_bool(struct NuxStateMachineInstance *state_machine,
+                                              const char *name,
+                                              bool value);
 
 /**
  * Set a number input by name (NUL-terminated UTF-8). Returns
  * `NUX_STATUS_NOT_FOUND` when no input has that name and
  * `NUX_STATUS_INVALID_ARGUMENT` when the input is not a number.
  */
-enum NuxStatus nux_state_machine_instance_set_number(struct NuxStateMachineInstance *state_machine,
-                                                     const char *name,
-                                                     float value);
+NuxStatus nux_state_machine_instance_set_number(struct NuxStateMachineInstance *state_machine,
+                                                const char *name,
+                                                float value);
 
-void nux_view_model_instance_free(struct NuxViewModelInstance *view_model);
+NuxStatus nux_view_model_instance_free(struct NuxViewModelInstance *view_model);
 
 /**
  * Instantiate the artboard's view model with generated defaults (mirrors
  * `createDefaultViewModelInstance`). Returns `NUX_STATUS_NOT_FOUND` when the
  * artboard declares no view model. Free with `nux_view_model_instance_free`.
  */
-enum NuxStatus nux_view_model_instance_new_default(const struct NuxArtboardInstance *instance,
-                                                   struct NuxViewModelInstance **out_view_model);
+NuxStatus nux_view_model_instance_new_default(const struct NuxArtboardInstance *instance,
+                                              struct NuxViewModelInstance **out_view_model);
 
 /**
  * Instantiate the artboard's view model from the source instance at
@@ -335,18 +534,18 @@ enum NuxStatus nux_view_model_instance_new_default(const struct NuxArtboardInsta
  * `NUX_STATUS_NOT_FOUND` when the artboard declares no view model or the
  * index is out of range. Free with `nux_view_model_instance_free`.
  */
-enum NuxStatus nux_view_model_instance_new_instance(const struct NuxArtboardInstance *instance,
-                                                    size_t instance_index,
-                                                    struct NuxViewModelInstance **out_view_model);
+NuxStatus nux_view_model_instance_new_instance(const struct NuxArtboardInstance *instance,
+                                               size_t instance_index,
+                                               struct NuxViewModelInstance **out_view_model);
 
 /**
  * Set a boolean property by NUL-terminated UTF-8 name path (`/`-separated for
  * nested view models). Returns `NUX_STATUS_NOT_FOUND` when no settable
  * boolean property matches the path.
  */
-enum NuxStatus nux_view_model_instance_set_bool(struct NuxViewModelInstance *view_model,
-                                                const char *name_path,
-                                                bool value);
+NuxStatus nux_view_model_instance_set_bool(struct NuxViewModelInstance *view_model,
+                                           const char *name_path,
+                                           bool value);
 
 /**
  * Set a number property by NUL-terminated UTF-8 name path (`/`-separated for
@@ -356,18 +555,18 @@ enum NuxStatus nux_view_model_instance_set_bool(struct NuxViewModelInstance *vie
  * Note: for the mutation to reach the artboard, call
  * `nux_artboard_instance_bind_view_model` after setting and before advancing.
  */
-enum NuxStatus nux_view_model_instance_set_number(struct NuxViewModelInstance *view_model,
-                                                  const char *name_path,
-                                                  float value);
+NuxStatus nux_view_model_instance_set_number(struct NuxViewModelInstance *view_model,
+                                             const char *name_path,
+                                             float value);
 
 /**
  * Set a string property by NUL-terminated UTF-8 name path (`/`-separated for
  * nested view models). `value` is a NUL-terminated UTF-8 string. Returns
  * `NUX_STATUS_NOT_FOUND` when no settable string property matches the path.
  */
-enum NuxStatus nux_view_model_instance_set_string(struct NuxViewModelInstance *view_model,
-                                                  const char *name_path,
-                                                  const char *value);
+NuxStatus nux_view_model_instance_set_string(struct NuxViewModelInstance *view_model,
+                                             const char *name_path,
+                                             const char *value);
 
 #ifdef __cplusplus
 }  // extern "C"

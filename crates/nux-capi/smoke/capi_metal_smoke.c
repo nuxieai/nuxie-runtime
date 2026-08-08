@@ -2,7 +2,7 @@
  * ABI (including the Objective-C C runtime) to configure a CAMetalLayer,
  * render a retained drawable, and exercise the complete handle lifecycle.
  *
- * Usage: capi_metal_smoke <path-to-in_band_asset.riv>
+ * Usage: capi_metal_smoke <path-to-riv> [--composed]
  */
 
 #include "nux_capi_apple.h"
@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* MTLPixelFormatBGRA8Unorm's stable Objective-C ABI value. Metal's public
  * header is Objective-C-only, while this host intentionally remains C11. */
@@ -54,6 +55,14 @@ static void free_result(NuxCapiResult* result, NuxStatus expected)
     CHECK(nux_capi_result_status(result, &status) == NUX_STATUS_OK);
     CHECK(status == expected);
     CHECK(nux_capi_result_free(result) == NUX_STATUS_OK);
+}
+
+static NuxStringView string_view(const char* value)
+{
+    return (NuxStringView){
+        .data = value,
+        .len = strlen(value),
+    };
 }
 
 typedef void* ObjcObject;
@@ -206,7 +215,8 @@ static void render_completed(void* context)
 
 int main(int argc, char** argv)
 {
-    CHECK(argc == 2);
+    CHECK(argc == 2 || (argc == 3 && strcmp(argv[2], "--composed") == 0));
+    const bool composed = argc == 3;
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
     DecodeProbe decoder = {0};
@@ -220,9 +230,50 @@ int main(int argc, char** argv)
         .maximum_decoded_image_bytes = 256 * 1024 * 1024,
         .maximum_total_decoded_image_bytes = 512 * 1024 * 1024,
     };
+    NuxHostCommandImportConfig host = {
+        .struct_size = sizeof(NuxHostCommandImportConfig),
+        .module_name = {"bridge", 6},
+        .max_script_memory_bytes = 64 * 1024 * 1024,
+        .max_script_interrupts_per_callback = 50000,
+        .max_commands_per_step = 256,
+        .max_value_depth = 32,
+        .max_value_nodes = 4096,
+        .max_identifier_bytes = 4096,
+        .max_string_bytes = 1024 * 1024,
+        .max_value_bytes = 4 * 1024 * 1024,
+        .max_command_bytes_per_step = 4 * 1024 * 1024,
+    };
+    NuxExpectedFileAssetDescriptor expected[] = {
+        {
+            .struct_size = sizeof(NuxExpectedFileAssetDescriptor),
+            .ordinal = 0,
+            .kind = NUX_FILE_ASSET_KIND_SCRIPT,
+            .has_authored_id = 1,
+            .authored_id = 0,
+            .name = {"GenericHostChanges", 18},
+            .file_extension = {"lua", 3},
+            .is_embedded = 1,
+            .has_contents_record = 1,
+        },
+        {
+            .struct_size = sizeof(NuxExpectedFileAssetDescriptor),
+            .ordinal = 1,
+            .kind = NUX_FILE_ASSET_KIND_IMAGE,
+            .has_authored_id = 1,
+            .authored_id = 7,
+            .name = {"pixel.png", 9},
+            .file_extension = {"png", 3},
+            .is_embedded = 1,
+            .has_contents_record = 1,
+            .required_provider_flags = NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE,
+        },
+    };
     NuxFileImportConfig import_config = {
         .struct_size = sizeof(NuxFileImportConfig),
+        .host_commands = composed ? &host : NULL,
         .apple_assets = &hooks,
+        .expected_assets = composed ? expected : NULL,
+        .expected_asset_count = composed ? 2 : 0,
     };
     NuxFile* file = NULL;
     NuxCapiResult* result = NULL;
@@ -235,17 +286,41 @@ int main(int argc, char** argv)
     CHECK(decoder.nested_abi == 0);
     size_t asset_count = 0;
     CHECK(nux_file_asset_count(file, &asset_count) == NUX_STATUS_OK);
-    CHECK(asset_count == 1);
+    CHECK(asset_count == (composed ? 2 : 1));
     NuxFileAssetDescriptorView asset = {
         .struct_size = sizeof(NuxFileAssetDescriptorView)};
     CHECK(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK);
-    CHECK(asset.kind == NUX_FILE_ASSET_KIND_IMAGE);
+    CHECK(asset.kind == (composed ? NUX_FILE_ASSET_KIND_SCRIPT :
+                                   NUX_FILE_ASSET_KIND_IMAGE));
+    if (composed)
+    {
+        CHECK(asset.required_provider_flags == 0);
+        asset.struct_size = sizeof(NuxFileAssetDescriptorView);
+        CHECK(nux_file_asset_descriptor(file, 1, &asset) == NUX_STATUS_OK);
+        CHECK(asset.kind == NUX_FILE_ASSET_KIND_IMAGE);
+    }
     CHECK(asset.required_provider_flags == NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE);
     free(bytes);
     NuxArtboardInstance* artboard = NULL;
     CHECK(nux_artboard_instance_new(file, 0, &artboard) == NUX_STATUS_OK);
+    NuxViewModelInstance* view_model = NULL;
+    if (composed)
+    {
+        CHECK(nux_view_model_instance_new_authored(file, 0, 0, &view_model) ==
+              NUX_STATUS_OK);
+        CHECK(nux_artboard_instance_bind_view_model(artboard, view_model) ==
+              NUX_STATUS_OK);
+    }
     NuxPlayer* player = NULL;
-    CHECK(nux_player_new_static(artboard, &player) == NUX_STATUS_OK);
+    if (composed)
+    {
+        CHECK(nux_player_new_state_machine_named(
+                  artboard, string_view("HostCommands"), &player) == NUX_STATUS_OK);
+    }
+    else
+    {
+        CHECK(nux_player_new_static(artboard, &player) == NUX_STATUS_OK);
+    }
     CHECK(nux_file_free(file) == NUX_STATUS_OK);
     CHECK(nux_artboard_instance_free(artboard) == NUX_STATUS_OK);
 
@@ -311,6 +386,92 @@ int main(int argc, char** argv)
     CHECK(!atomic_load_explicit(
         &completion.called_inline, memory_order_acquire));
 
+    if (composed)
+    {
+        NuxViewModelMutation mutation = {
+            .kind = NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            .instance = view_model,
+            .path = {"amount", 6},
+            .number_value = 5.0f,
+        };
+        NuxViewModelMutationBatch batch = {
+            .struct_size = sizeof(NuxViewModelMutationBatch),
+            .mutations = &mutation,
+            .mutation_count = 1,
+            .correlation_id = 43,
+        };
+        NuxViewModelMutationResult* mutation_result = NULL;
+        CHECK(nux_view_model_mutate(&batch, &mutation_result) == NUX_STATUS_OK);
+        NuxViewModelMutationResultInfo mutation_info = {
+            .struct_size = sizeof(NuxViewModelMutationResultInfo)};
+        CHECK(nux_view_model_mutation_result_info(
+                  mutation_result, &mutation_info) == NUX_STATUS_OK);
+        CHECK(mutation_info.applied_count == 1);
+        CHECK(mutation_info.correlation_id == 43);
+        CHECK(mutation_info.change_count == 1);
+        NuxViewModelChangeView caller_change = {
+            .struct_size = sizeof(NuxViewModelChangeView)};
+        CHECK(nux_view_model_mutation_result_change(
+                  mutation_result, 0, &caller_change) == NUX_STATUS_OK);
+        CHECK(caller_change.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER);
+        CHECK(caller_change.correlation_id == 43);
+        CHECK(caller_change.kind == NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+        CHECK(caller_change.number_value == 5.0f);
+        CHECK(nux_view_model_mutation_result_free(mutation_result) == NUX_STATUS_OK);
+
+        NuxPlayerStep initial = {
+            .struct_size = sizeof(NuxPlayerStep),
+            .elapsed_seconds = 0.0f,
+        };
+        NuxPlayerStepResult* step_result = NULL;
+        CHECK(nux_player_step(player, &initial, &step_result) == NUX_STATUS_OK);
+        CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+        NuxPlayerPointerEvent pointers[] = {
+            {
+                .kind = NUX_PLAYER_POINTER_KIND_DOWN,
+                .x = 50.0f,
+                .y = 50.0f,
+            },
+            {
+                .kind = NUX_PLAYER_POINTER_KIND_UP,
+                .x = 50.0f,
+                .y = 50.0f,
+            },
+        };
+        NuxPlayerStep step = {
+            .struct_size = sizeof(NuxPlayerStep),
+            .pointers = pointers,
+            .pointer_count = 2,
+            .elapsed_seconds = 0.016f,
+            .correlation_id = 44,
+        };
+        step_result = NULL;
+        CHECK(nux_player_step(player, &step, &step_result) == NUX_STATUS_OK);
+        NuxPlayerStepInfo step_info = {
+            .struct_size = sizeof(NuxPlayerStepInfo)};
+        CHECK(nux_player_step_result_info(step_result, &step_info) == NUX_STATUS_OK);
+        CHECK(step_info.host_command_count == 1);
+        CHECK(step_info.view_model_change_count == 2);
+        NuxHostCommandView command = {.struct_size = sizeof(NuxHostCommandView)};
+        CHECK(nux_player_step_result_host_command(step_result, 0, &command) ==
+              NUX_STATUS_OK);
+        CHECK(command.name.len == 9);
+        CHECK(memcmp(command.name.data, "performed", 9) == 0);
+        const float expected_values[] = {10.0f, 20.0f};
+        for (size_t index = 0; index < 2; index++)
+        {
+            NuxViewModelChangeView change = {
+                .struct_size = sizeof(NuxViewModelChangeView)};
+            CHECK(nux_player_step_result_view_model_change(
+                      step_result, index, &change) == NUX_STATUS_OK);
+            CHECK(change.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME);
+            CHECK(change.correlation_id == 44);
+            CHECK(change.kind == NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+            CHECK(change.number_value == expected_values[index]);
+        }
+        CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+    }
+
     result = NULL;
     CHECK(nux_renderer_resize(renderer, 0, 0, &outcome, &result) == NUX_STATUS_OK);
     free_result(result, NUX_STATUS_OK);
@@ -325,6 +486,7 @@ int main(int argc, char** argv)
 
     CHECK(nux_renderer_free(renderer) == NUX_STATUS_OK);
     CHECK(nux_player_free(player) == NUX_STATUS_OK);
+    CHECK(nux_view_model_instance_free(view_model) == NUX_STATUS_OK);
     CHECK(decoder.calls == 1);
     free(decoder.pixels);
     puts("capi-metal-smoke ok");

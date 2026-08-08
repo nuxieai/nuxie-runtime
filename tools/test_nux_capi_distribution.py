@@ -13,6 +13,9 @@ class DistributionToolTests(unittest.TestCase):
         self.publisher = (
             REPO_ROOT / "tools/publish-nux-capi-release.sh"
         ).read_text()
+        self.verifier = (
+            REPO_ROOT / "tools/verify-nux-capi-xcframeworks.sh"
+        ).read_text()
 
     def test_five_thin_builds_are_reused_by_both_artifacts(self) -> None:
         self.assertEqual(self.builder.count('"${rust_cargo}" build'), 1)
@@ -42,6 +45,16 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('NuxieRuntime-iOS.xcframework.zip', self.publisher)
         self.assertIn('SIZE_REPORT.json', self.publisher)
         self.assertIn('--release', self.publisher)
+        self.assertIn('expected_tag="apple-runtime-v${runtime_version}"', self.publisher)
+
+    def test_packaged_consumers_cover_composed_behavior_and_legacy_lane(self) -> None:
+        self.assertIn("composed_script_asset.riv.base64", self.verifier)
+        self.assertGreaterEqual(self.verifier.count("capi_metal_smoke.c"), 2)
+        self.assertGreaterEqual(self.verifier.count("capi_metal_smoke.swift"), 2)
+        self.assertIn('"${composed_fixture}" --composed', self.verifier)
+        self.assertGreaterEqual(
+            self.verifier.count("distribution_legacy_consumer.c"), 2
+        )
 
 
 if __name__ == "__main__":

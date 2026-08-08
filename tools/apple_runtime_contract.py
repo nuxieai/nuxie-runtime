@@ -55,6 +55,12 @@ SOURCE_REVISION = re.compile(r"[0-9a-f]{40}(?:-dirty\.[0-9a-f]{64})?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 HEADER_FUNCTION = re.compile(r"\b(nux_[a-z0-9_]+)\s*\(")
 EXPORTED_FUNCTION = re.compile(r"_nux_[a-z0-9_]+\Z")
+FULL_APPLE_TARGETS = BUILD_TARGETS
+IOS_TARGETS = {
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "x86_64-apple-ios",
+}
 FORBIDDEN_HEADER_IDENTIFIERS = {
     "NUX_FLOW_SESSION_ABI_MINOR",
     "NUX_RUNTIME_ABI_MAJOR",
@@ -151,6 +157,227 @@ def validate_symbols(header: str, exported: str) -> None:
         raise ContractError(
             f"public symbol set differs: missing={missing}, extra={extra}"
         )
+
+
+def validate_symbol_partitions(
+    manifests: dict[str, str], exported: str
+) -> None:
+    if not manifests:
+        raise ContractError("symbol partitions are empty")
+    partitions: dict[str, set[str]] = {}
+    owner: dict[str, str] = {}
+    for name, encoded in manifests.items():
+        lines = encoded.splitlines()
+        if not lines or lines != sorted(set(lines)):
+            raise ContractError(f"symbol partition {name} is not unique and sorted")
+        if any(re.fullmatch(r"nux_[a-z0-9_]+", symbol) is None for symbol in lines):
+            raise ContractError(f"symbol partition {name} has a malformed export")
+        partition = set(lines)
+        for symbol in partition:
+            previous = owner.get(symbol)
+            if previous is not None:
+                raise ContractError(
+                    f"symbol partition overlap: {symbol} belongs to {previous} and {name}"
+                )
+            owner[symbol] = name
+        partitions[name] = partition
+
+    expected = {f"_{symbol}" for partition in partitions.values() for symbol in partition}
+    actual = {
+        line.strip()
+        for line in exported.splitlines()
+        if EXPORTED_FUNCTION.fullmatch(line.strip()) is not None
+    }
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ContractError(
+            f"partitioned public symbol set differs: missing={missing}, extra={extra}"
+        )
+
+
+def validate_distribution_metadata(document: object) -> None:
+    if not isinstance(document, dict):
+        raise ContractError("distribution metadata must be a top-level object")
+    expected_keys = {
+        "schemaVersion",
+        "runtimeVersion",
+        "buildSourceRevision",
+        "releaseRevision",
+        "runtimeIdentity",
+        "contractFingerprint",
+        "buildInputsHash",
+        "artifacts",
+    }
+    if set(document) != expected_keys:
+        raise ContractError("distribution metadata has an incomplete or unknown schema")
+    if document["schemaVersion"] != 6:
+        raise ContractError("distribution schemaVersion must be exactly 6")
+    runtime_version = _string(document, "runtimeVersion")
+    build_revision = _string(document, "buildSourceRevision")
+    release_revision = _string(document, "releaseRevision")
+    if SEMVER.fullmatch(runtime_version) is None:
+        raise ContractError("runtimeVersion is not canonical SemVer")
+    if SOURCE_REVISION.fullmatch(build_revision) is None:
+        raise ContractError("buildSourceRevision is not an exact source identity")
+    if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
+        raise ContractError("releaseRevision is not an exact clean source identity")
+    if document["runtimeIdentity"] != f"{runtime_version}@{build_revision}":
+        raise ContractError("runtimeIdentity does not match version and build revision")
+    for key in ("contractFingerprint", "buildInputsHash"):
+        if not isinstance(document[key], str) or SHA256.fullmatch(document[key]) is None:
+            raise ContractError(f"{key} must be a lowercase SHA-256")
+
+    artifacts = document["artifacts"]
+    if not isinstance(artifacts, list) or len(artifacts) != 2:
+        raise ContractError("distribution must describe exactly two artifacts")
+    expected = {
+        "full-apple": (
+            "NuxieRuntime.xcframework.zip",
+            FULL_APPLE_TARGETS,
+        ),
+        "ios-only": (
+            "NuxieRuntime-iOS.xcframework.zip",
+            IOS_TARGETS,
+        ),
+    }
+    if [artifact.get("kind") for artifact in artifacts if isinstance(artifact, dict)] != [
+        "full-apple",
+        "ios-only",
+    ]:
+        raise ContractError("distribution artifacts must be ordered full-apple then ios-only")
+    checksums: set[str] = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict) or set(artifact) != {
+            "kind",
+            "archiveName",
+            "bundleName",
+            "swiftPackageChecksum",
+            "targets",
+        }:
+            raise ContractError("distribution artifact has a malformed schema")
+        kind = artifact["kind"]
+        if kind not in expected:
+            raise ContractError(f"unknown distribution artifact kind: {kind}")
+        archive_name, targets = expected[kind]
+        if artifact["archiveName"] != archive_name:
+            raise ContractError(f"{kind} has a noncanonical archive name")
+        if artifact["bundleName"] != "NuxieRuntime.xcframework":
+            raise ContractError(f"{kind} has a noncanonical bundle name")
+        checksum = artifact["swiftPackageChecksum"]
+        if not isinstance(checksum, str) or SHA256.fullmatch(checksum) is None:
+            raise ContractError(f"{kind} has a malformed SwiftPM checksum")
+        checksums.add(checksum)
+        artifact_targets = artifact["targets"]
+        if not isinstance(artifact_targets, list) or artifact_targets != sorted(targets):
+            raise ContractError(f"{kind} does not contain its exact target set")
+    if len(checksums) != 2:
+        raise ContractError("distribution artifacts must have distinct archive checksums")
+
+
+def validate_layout_oracle(document: object) -> None:
+    if not isinstance(document, dict) or set(document) != {
+        "schemaVersion",
+        "dataModel",
+        "types",
+    }:
+        raise ContractError("layout oracle has an incomplete or unknown schema")
+    if document["schemaVersion"] != 1 or document["dataModel"] != "apple-lp64":
+        raise ContractError("layout oracle must describe schema 1 Apple LP64")
+    types = document["types"]
+    if not isinstance(types, list) or not types:
+        raise ContractError("layout oracle has no public value types")
+    names = [record.get("name") for record in types if isinstance(record, dict)]
+    if len(names) != len(types) or names != sorted(set(names)):
+        raise ContractError("layout oracle type names are not unique and sorted")
+    for record in types:
+        if set(record) != {"name", "size", "alignment", "fields"}:
+            raise ContractError("layout oracle has a malformed type record")
+        if not isinstance(record["size"], int) or record["size"] <= 0:
+            raise ContractError(f"{record['name']} has an invalid size")
+        if not isinstance(record["alignment"], int) or record["alignment"] <= 0:
+            raise ContractError(f"{record['name']} has an invalid alignment")
+        fields = record["fields"]
+        if not isinstance(fields, list) or not fields:
+            raise ContractError(f"{record['name']} has no field layout")
+        field_names = [field.get("name") for field in fields if isinstance(field, dict)]
+        offsets = [field.get("offset") for field in fields if isinstance(field, dict)]
+        if (
+            len(field_names) != len(fields)
+            or len(set(field_names)) != len(fields)
+            or not all(isinstance(offset, int) and offset >= 0 for offset in offsets)
+            or offsets != sorted(offsets)
+        ):
+            raise ContractError(f"{record['name']} field offsets are malformed")
+        if any(set(field) != {"name", "offset"} for field in fields):
+            raise ContractError(f"{record['name']} has a malformed field record")
+
+
+def validate_size_report(report: object, budgets: object, *, release: bool) -> None:
+    if not isinstance(report, dict) or set(report) != {"schemaVersion", "artifacts"}:
+        raise ContractError("size report has an incomplete or unknown schema")
+    if report["schemaVersion"] != 1 or not isinstance(report["artifacts"], dict):
+        raise ContractError("size report must use schema 1")
+    if set(report["artifacts"]) != {"full-apple", "ios-only"}:
+        raise ContractError("size report must contain both distribution artifacts")
+    metric_keys = {
+        "compressedBytes",
+        "expandedBytes",
+        "representativeLinkedBytes",
+        "sliceBytes",
+    }
+    for kind, metrics in report["artifacts"].items():
+        if not isinstance(metrics, dict) or set(metrics) != metric_keys:
+            raise ContractError(f"{kind} size record is malformed")
+        if not all(
+            isinstance(metrics[key], int) and metrics[key] >= 0
+            for key in metric_keys - {"sliceBytes"}
+        ):
+            raise ContractError(f"{kind} has an invalid byte measurement")
+        if (
+            not isinstance(metrics["sliceBytes"], dict)
+            or not metrics["sliceBytes"]
+            or not all(
+                isinstance(target, str)
+                and isinstance(value, int)
+                and value >= 0
+                for target, value in metrics["sliceBytes"].items()
+            )
+        ):
+            raise ContractError(f"{kind} has malformed per-slice measurements")
+
+    if not isinstance(budgets, dict) or set(budgets) != {
+        "schemaVersion",
+        "mode",
+        "maximums",
+    } or budgets["schemaVersion"] != 1:
+        raise ContractError("size budgets have an incomplete or unknown schema")
+    if budgets["mode"] == "candidate" and budgets["maximums"] is None:
+        if release:
+            raise ContractError("release size budgets have not been frozen")
+        return
+    if budgets["mode"] != "release" or not isinstance(budgets["maximums"], dict):
+        raise ContractError("size budgets have an invalid mode")
+    if set(budgets["maximums"]) != {"full-apple", "ios-only"}:
+        raise ContractError("size budgets must cover both distribution artifacts")
+    for kind, measured in report["artifacts"].items():
+        maximum = budgets["maximums"][kind]
+        if not isinstance(maximum, dict) or set(maximum) != metric_keys:
+            raise ContractError(f"{kind} size budget is malformed")
+        for metric in metric_keys - {"sliceBytes"}:
+            limit = maximum[metric]
+            if not isinstance(limit, int) or limit < 0:
+                raise ContractError(f"{kind}.{metric} budget is invalid")
+            if measured[metric] > limit:
+                raise ContractError(
+                    f"{kind}.{metric} exceeds budget: {measured[metric]} > {limit}"
+                )
+        if set(maximum["sliceBytes"]) != set(measured["sliceBytes"]):
+            raise ContractError(f"{kind}.sliceBytes budget target set differs")
+        for target, value in measured["sliceBytes"].items():
+            limit = maximum["sliceBytes"][target]
+            if not isinstance(limit, int) or value > limit:
+                raise ContractError(f"{kind}.sliceBytes.{target} exceeds budget")
 
 
 def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) -> None:

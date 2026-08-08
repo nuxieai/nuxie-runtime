@@ -1,0 +1,9 @@
+nux_renderer_copy_metal_device
+nux_renderer_detach
+nux_renderer_free
+nux_renderer_info
+nux_renderer_new_metal
+nux_renderer_reattach
+nux_renderer_render_player
+nux_renderer_reset_player_domain
+nux_renderer_resize

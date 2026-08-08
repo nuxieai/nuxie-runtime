@@ -83,6 +83,14 @@ pub const NUX_CAPI_ABI_VERSION: u32 = 3;
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
 
+// This is the only retention edge from the mature distribution root to the
+// temporary product-shaped migration surface. Removing the feature, this
+// anchor, its header module, and its committed allowlist removes that surface
+// without changing the product-neutral C interface or its packaging root.
+#[cfg(feature = "legacy-migration")]
+#[used]
+static LEGACY_MIGRATION_LINK_ANCHOR: fn() = nux_apple_runtime::retain_legacy_migration_exports;
+
 /// Panic firewall for the C ABI boundary.
 ///
 /// Every `extern "C"` entry point runs its body through this guard so a Rust

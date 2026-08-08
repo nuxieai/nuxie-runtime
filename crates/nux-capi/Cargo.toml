@@ -17,6 +17,8 @@ apple-metal = ["nuxie/renderer", "dep:dispatch2", "dep:nuxie-renderer"]
 nuxie = { path = "../nuxie", default-features = false }
 
 [dev-dependencies]
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"
 nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"

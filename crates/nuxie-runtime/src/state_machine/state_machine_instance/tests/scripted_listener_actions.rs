@@ -76,6 +76,14 @@ enum ListenerFailure {
     Terminal(&'static str),
 }
 
+struct AtomicScriptHost;
+
+impl crate::ScriptHost for AtomicScriptHost {
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        true
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProjectionFailure {
     Ordinary,
@@ -5155,6 +5163,54 @@ fn fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor() {
         *total_order.borrow(),
         ["leaf-local", "parent-local", "parent-audio", "leaf-audio"],
         "the two-level owner seam uses the same depth-first unwind policy"
+    );
+}
+
+#[test]
+fn atomic_nested_event_settlement_propagates_an_ordinary_callback_failure() {
+    let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    let mut listener = scripted_test_listener(
+        &mut machine,
+        986,
+        "nested ordinary",
+        ListenerFailure::Ordinary,
+        vec![RuntimeListenerType::Event],
+        &calls,
+    );
+    listener.target_local_id = 7;
+    listener.event_local_indices = vec![7];
+    machine.listener_definitions = Arc::new(vec![listener]);
+    machine
+        .nested_event_registrations
+        .push(RuntimeNestedEventRegistration {
+            source_local_id: 7,
+            notifier_local_id: 70,
+            kind: RuntimeNestedEventNotifierKind::StateMachine,
+        });
+    let event = fl_c5_test_reported_event(7);
+
+    let error = StateMachineInstance::advance_artboard_frame_components_with_script_host(
+        &mut artboard,
+        std::slice::from_mut(&mut machine),
+        0.0,
+        None,
+        &mut AtomicScriptHost,
+        |artboard, _elapsed_seconds, nested_event_dispatch| {
+            assert!(!nested_event_dispatch(artboard, 7, &[event.clone()]));
+            Ok(false)
+        },
+    )
+    .expect_err("atomic nested dispatch must not consume an ordinary callback error");
+
+    assert!(error.to_string().contains("nested ordinary failed"));
+    assert_eq!(
+        calls
+            .borrow()
+            .iter()
+            .map(|call| call.label)
+            .collect::<Vec<_>>(),
+        ["nested ordinary"]
     );
 }
 

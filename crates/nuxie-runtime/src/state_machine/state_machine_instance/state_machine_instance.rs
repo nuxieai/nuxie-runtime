@@ -1442,6 +1442,10 @@ impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActio
         )
     }
 
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        self.host.requires_atomic_script_callbacks()
+    }
+
     fn perform_instance_action(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -1959,7 +1963,12 @@ pub(super) fn apply_scripted_input_update(
                 .resolve_script_artboard(artboard_id, artboard_parent_context)
             {
                 Ok(artboard) => artboard,
-                Err(error) if error.resource_code().is_some() => return Err(error),
+                Err(error)
+                    if error.resource_code().is_some()
+                        || host.requires_atomic_script_callbacks() =>
+                {
+                    return Err(error);
+                }
                 Err(_) => return Ok(false),
             };
             instance
@@ -1969,7 +1978,11 @@ pub(super) fn apply_scripted_input_update(
     };
     match result {
         Ok(()) => Ok(true),
-        Err(error) if error.resource_code().is_some() => Err(error),
+        Err(error)
+            if error.resource_code().is_some() || host.requires_atomic_script_callbacks() =>
+        {
+            Err(error)
+        }
         // Pinned C++ treats an ordinary ScriptInput projection failure as an
         // inert occurrence and continues updating later authored inputs.
         Err(_) => Ok(false),
@@ -6912,6 +6925,24 @@ impl StateMachineInstance {
         new_frame: bool,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
+        let result = self.advance_on_artboard_with_script_host(
+            artboard,
+            elapsed_seconds,
+            new_frame,
+            owned_context.as_deref_mut(),
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    pub(crate) fn advance_on_artboard_with_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        new_frame: bool,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
         let semantic_scroll_changed = self
             .semantic_tree
             .as_mut()
@@ -6921,18 +6952,19 @@ impl StateMachineInstance {
             });
         let definitions = artboard.state_machine_definition_owner(self);
         let Some(state_machine) = definitions.get(self.state_machine_index) else {
-            return false;
+            return Ok(semantic_scroll_changed);
         };
         if new_frame && let Some(context) = owned_context.as_deref_mut() {
             self.bind_owned_view_model_context_mut(context);
         }
-        let advanced = self.advance(
+        let advanced = self.advance_with_report_mode(
             artboard,
             state_machine,
             elapsed_seconds,
             new_frame,
             owned_context,
-        );
+            host,
+        )?;
         #[cfg(test)]
         if !new_frame
             && elapsed_seconds == 0.0
@@ -6940,7 +6972,7 @@ impl StateMachineInstance {
         {
             total_order.borrow_mut().push(phase);
         }
-        advanced | semantic_scroll_changed
+        Ok(advanced | semantic_scroll_changed)
     }
 
     pub(crate) fn advance(
@@ -7766,50 +7798,88 @@ impl StateMachineInstance {
             &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
         ) -> Result<bool, ScriptError>,
     ) -> Result<bool, ScriptError> {
+        Self::advance_artboard_frame_components_with_script_host(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            owned_context.as_deref_mut(),
+            &mut NoopScriptHost,
+            advance_artboard,
+        )
+    }
+
+    pub(crate) fn advance_artboard_frame_components_with_script_host(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        host: &mut dyn ScriptHost,
+        mut advance_artboard: impl FnMut(
+            &mut ArtboardInstance,
+            f32,
+            &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
+        ) -> Result<bool, ScriptError>,
+    ) -> Result<bool, ScriptError> {
         let mut changed = false;
         for state_machine in state_machines.iter_mut() {
-            changed |= state_machine.advance_on_artboard(
+            changed |= state_machine.advance_on_artboard_with_script_host(
                 artboard,
                 elapsed_seconds,
                 true,
                 owned_context.as_deref_mut(),
-            );
+                host,
+            )?;
             state_machine.drop_hidden_focus_target(artboard);
             changed |= state_machine.sync_text_input_focus(artboard);
         }
         changed |= artboard.sync_stateful_nested_view_model_contexts();
 
+        let mut nested_error = None;
         let mut dispatch_nested_source =
             |artboard: &mut ArtboardInstance,
              host_local: usize,
              events: &[StateMachineReportedEvent]| {
+                if nested_error.is_some() {
+                    return false;
+                }
                 let mut callback_changed = false;
                 for state_machine in state_machines.iter_mut() {
                     let accepts_source = !events.is_empty()
                         && state_machine.script_error.is_none()
                         && state_machine.nested_event_source_registered(host_local);
-                    let notified = match owned_context.as_deref_mut() {
-                        Some(context) => state_machine.notify_events_with_owned_view_model_context(
-                            artboard,
-                            Some(host_local),
-                            events,
-                            context,
-                        ),
-                        None => state_machine.notify_events(artboard, Some(host_local), events),
+                    let notified = match state_machine.notify_events_with_context_and_script_host(
+                        artboard,
+                        Some(host_local),
+                        events,
+                        owned_context.as_deref_mut(),
+                        host,
+                    ) {
+                        Ok(notified) => notified,
+                        Err(error) => {
+                            nested_error = Some(error);
+                            return callback_changed;
+                        }
                     };
                     callback_changed |= notified;
                     if accepts_source {
-                        let settlement = state_machine.update_data_binds_false(
+                        if let Err(error) = state_machine.update_data_binds_false(
                             artboard,
                             owned_context.as_deref(),
-                            &mut NoopScriptHost,
-                        );
-                        state_machine.retain_script_result(settlement.map(|()| false));
+                            host,
+                        ) {
+                            nested_error = Some(error);
+                            return callback_changed;
+                        }
                     }
                 }
                 callback_changed
             };
-        changed |= advance_artboard(artboard, elapsed_seconds, &mut dispatch_nested_source)?;
+        let artboard_changed =
+            advance_artboard(artboard, elapsed_seconds, &mut dispatch_nested_source);
+        if let Some(error) = nested_error {
+            return Err(error);
+        }
+        changed |= artboard_changed?;
         Ok(changed)
     }
 
@@ -7858,8 +7928,38 @@ impl StateMachineInstance {
         advance_view_models: bool,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
-        let component_result =
-            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds);
+        Self::advance_and_apply_state_machines_with_view_models_and_script_host(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            advance_view_models,
+            &mut NoopScriptHost,
+            advance_detached_view_models,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn advance_and_apply_state_machines_with_view_models_and_script_host(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        advance_view_models: bool,
+        host: &mut dyn ScriptHost,
+        advance_detached_view_models: impl FnOnce() -> bool,
+    ) -> Result<bool, ScriptError> {
+        let component_result = Self::advance_artboard_frame_components_with_script_host(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            None,
+            host,
+            |artboard, elapsed_seconds, nested_event_dispatch| {
+                artboard.advance_components_after_root_state_machines(
+                    elapsed_seconds,
+                    nested_event_dispatch,
+                )
+            },
+        );
         let mut changed = component_result.as_ref().copied().unwrap_or(false);
         let settlement_result = if advance_view_models {
             artboard.settle_state_machine_update_passes_after_main_advance_with_script_errors(

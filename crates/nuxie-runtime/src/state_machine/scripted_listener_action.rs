@@ -1773,7 +1773,12 @@ fn advance_converter_in_authored_order_with_observer(
                 host,
             ) {
                 Ok(needs_advance) => needs_advance,
-                Err(error) if error.resource_code().is_some() => return Err(error),
+                Err(error)
+                    if error.resource_code().is_some()
+                        || host.requires_atomic_script_callbacks() =>
+                {
+                    return Err(error);
+                }
                 // C++'s protected call consumes an ordinary script error and
                 // the enclosing DataConverterGroup continues to its next
                 // authored item.
@@ -1956,7 +1961,11 @@ pub(crate) fn perform_scripted_listener_action(
     })();
     match result {
         Ok(changed) => Ok(changed),
-        Err(error) if error.resource_code().is_some() => Err(error),
+        Err(error)
+            if error.resource_code().is_some() || host.requires_atomic_script_callbacks() =>
+        {
+            Err(error)
+        }
         Err(_) => Ok(false),
     }
 }

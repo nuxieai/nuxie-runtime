@@ -14,6 +14,34 @@
  */
 #define NUX_CAPI_ABI_VERSION 3
 
+#define NUX_HOST_COMMANDS_PER_STEP_HARD_MAX 4096
+
+#define NUX_HOST_COMMAND_BYTES_PER_STEP_HARD_MAX ((32 * 1024) * 1024)
+
+#define NUX_HOST_IDENTIFIER_BYTES_HARD_MAX 4096
+
+#define NUX_HOST_MODULE_NAME_HARD_MAX 4096
+
+#define NUX_HOST_STRING_BYTES_HARD_MAX ((4 * 1024) * 1024)
+
+#define NUX_HOST_VALUE_BYTES_HARD_MAX ((16 * 1024) * 1024)
+
+#define NUX_HOST_VALUE_DEPTH_HARD_MAX 64
+
+
+
+
+
+
+
+
+
+
+
+
+
+#define NUX_HOST_VALUE_NODES_HARD_MAX 65536
+
 
 
 
@@ -51,6 +79,10 @@
 #define NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES (4 * 1024)
 
 #define NUX_PLAYER_STEP_MAX_POINTERS (4 * 1024)
+
+#define NUX_SCRIPT_INTERRUPTS_PER_CALLBACK_HARD_MAX 10000000
+
+#define NUX_SCRIPT_VM_MEMORY_BYTES_HARD_MAX ((1024 * 1024) * 1024)
 
 
 
@@ -197,6 +229,22 @@ enum NuxPlayerPointerHit
 };
 #ifndef __cplusplus
 typedef uint32_t NuxPlayerPointerHit;
+#endif // __cplusplus
+
+enum NuxHostValueKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_HOST_VALUE_KIND_NULL = 0,
+  NUX_HOST_VALUE_KIND_BOOL = 1,
+  NUX_HOST_VALUE_KIND_NUMBER = 2,
+  NUX_HOST_VALUE_KIND_STRING = 3,
+  NUX_HOST_VALUE_KIND_LIST = 4,
+  NUX_HOST_VALUE_KIND_OBJECT = 5,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxHostValueKind;
 #endif // __cplusplus
 
 enum NuxPlayerEventPropertyKind
@@ -475,6 +523,26 @@ typedef struct NuxRuntimeInfo {
 } NuxRuntimeInfo;
 
 /**
+ * Explicit trust and resource policy for a generic script-host command
+ * import. `module_name` is copied during the call and is never interpreted by
+ * the runtime. Every numeric limit must be non-zero and no greater than the
+ * corresponding `NUX_HOST_*_HARD_MAX` constant.
+ */
+typedef struct NuxHostCommandImportConfig {
+  uint32_t struct_size;
+  struct NuxStringView module_name;
+  size_t max_script_memory_bytes;
+  uint32_t max_script_interrupts_per_callback;
+  size_t max_commands_per_step;
+  size_t max_value_depth;
+  size_t max_value_nodes;
+  size_t max_identifier_bytes;
+  size_t max_string_bytes;
+  size_t max_value_bytes;
+  size_t max_command_bytes_per_step;
+} NuxHostCommandImportConfig;
+
+/**
  * Versioned metadata for a selected runtime-native player.
  */
 typedef struct NuxPlayerInfo {
@@ -571,6 +639,40 @@ typedef struct NuxPlayerEventPropertyView {
 } NuxPlayerEventPropertyView;
 
 /**
+ * One command in transaction FIFO order. `root_value_index` addresses the
+ * owning step result's flattened value graph.
+ */
+typedef struct NuxHostCommandView {
+  uint32_t struct_size;
+  struct NuxStringView name;
+  size_t root_value_index;
+} NuxHostCommandView;
+
+/**
+ * One flattened host value. Scalars use their matching value field. Lists
+ * and objects expose `child_count` edges through
+ * `nux_player_step_result_host_value_child`.
+ */
+typedef struct NuxHostValueView {
+  uint32_t struct_size;
+  uint32_t kind;
+  bool bool_value;
+  double number_value;
+  struct NuxStringView string_value;
+  size_t child_count;
+} NuxHostValueView;
+
+/**
+ * One edge in a list or object. Object edges have a present UTF-8 `key`;
+ * list edges use NULL+0. `value_index` addresses the same owned result.
+ */
+typedef struct NuxHostValueChildView {
+  uint32_t struct_size;
+  struct NuxStringView key;
+  size_t value_index;
+} NuxHostValueChildView;
+
+/**
  * Summary of one owned step result. `keep_going` is the runtime's
  * advanceAndApply continuation result; it is not a host render/scheduling
  * request.
@@ -581,6 +683,11 @@ typedef struct NuxPlayerStepInfo {
   size_t pointer_result_count;
   size_t state_change_count;
   size_t event_count;
+  /**
+   * Commands are exposed only after the transaction commits. Hosts copy
+   * authored events first, then commands in FIFO order.
+   */
+  size_t host_command_count;
 } NuxPlayerStepInfo;
 
 /**
@@ -976,6 +1083,22 @@ NuxStatus nux_file_free(struct NuxFile *file);
 NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
 
 /**
+ * Import exact caller-authenticated bytes and install one generic script
+ * module named by `config`. The module exposes only
+ * `command(name, payload)`. This function performs no package/signature
+ * authentication; choosing this explicit import path is the caller's trust
+ * assertion. Ordinary `nux_file_import` remains script-inert.
+ *
+ * No foreign callback is installed. Commands are returned only through a
+ * successful `NuxPlayerStepResult` after its runtime transaction commits.
+ */
+NuxStatus nux_file_import_trusted_with_host_commands(const uint8_t *bytes,
+                                                     size_t len,
+                                                     const struct NuxHostCommandImportConfig *config,
+                                                     struct NuxFile **out_file,
+                                                     struct NuxCapiResult **out_result);
+
+/**
  * Diagnostic import path for production consumers. `out_file` is published
  * only on success. `out_result` is always published and owns a bounded status
  * code/message until released with `nux_capi_result_free`.
@@ -1080,6 +1203,19 @@ NuxStatus nux_player_step_result_event_property(const struct NuxPlayerStepResult
                                                 struct NuxPlayerEventPropertyView *out_property);
 
 NuxStatus nux_player_step_result_free(struct NuxPlayerStepResult *result);
+
+NuxStatus nux_player_step_result_host_command(const struct NuxPlayerStepResult *result,
+                                              size_t index,
+                                              struct NuxHostCommandView *out_command);
+
+NuxStatus nux_player_step_result_host_value(const struct NuxPlayerStepResult *result,
+                                            size_t value_index,
+                                            struct NuxHostValueView *out_value);
+
+NuxStatus nux_player_step_result_host_value_child(const struct NuxPlayerStepResult *result,
+                                                  size_t value_index,
+                                                  size_t child_index,
+                                                  struct NuxHostValueChildView *out_child);
 
 NuxStatus nux_player_step_result_info(const struct NuxPlayerStepResult *result,
                                       struct NuxPlayerStepInfo *out_info);

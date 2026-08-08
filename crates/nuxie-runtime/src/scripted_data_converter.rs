@@ -1243,7 +1243,11 @@ pub(crate) fn advance(
         // tables, functions, userdata, and threads all request another
         // advance.
         Ok(needs_advance) => Ok(needs_advance),
-        Err(error) if error.resource_code().is_some() => Err(error),
+        Err(error)
+            if error.resource_code().is_some() || host.requires_atomic_script_callbacks() =>
+        {
+            Err(error)
+        }
         Err(_) => Ok(false),
     }
 }

@@ -2250,6 +2250,14 @@ pub(crate) fn owned_script_input_source_value_for_scope(
 /// as the C++ `src/lua/` glue is ported.
 pub trait ScriptHost {
     fn mark_script_update(&mut self) {}
+
+    /// Whether an ordinary protected script-callback failure must abort the
+    /// enclosing host transaction. The baseline runtime preserves pinned C++
+    /// behavior by default; result-based transactional adapters opt in so
+    /// effects emitted earlier in the failed callback can be rolled back.
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Default)]

@@ -196,6 +196,94 @@ def validate_symbol_partitions(
         )
 
 
+def validate_header_symbol_partitions(header: str, manifests: dict[str, str]) -> None:
+    """Require a generated header to declare exactly the manifest union.
+
+    This intentionally does not apply the retired product-header identifier
+    policy used by ``validate_symbols``: the mature C ABI has its own status
+    vocabulary and is compared only with its portable and Apple partitions.
+    """
+    declared = set(HEADER_FUNCTION.findall(header))
+    if not declared:
+        raise ContractError("generated mature header declares no public nux_* functions")
+    expected: set[str] = set()
+    for name, encoded in manifests.items():
+        lines = encoded.splitlines()
+        if not lines or lines != sorted(set(lines)):
+            raise ContractError(f"header symbol partition {name} is not unique and sorted")
+        if any(re.fullmatch(r"nux_[a-z0-9_]+", symbol) is None for symbol in lines):
+            raise ContractError(f"header symbol partition {name} has a malformed export")
+        overlap = expected.intersection(lines)
+        if overlap:
+            raise ContractError(f"header symbol partitions overlap: {sorted(overlap)}")
+        expected.update(lines)
+    if declared != expected:
+        missing = sorted(expected - declared)
+        extra = sorted(declared - expected)
+        raise ContractError(
+            f"generated mature header differs from manifests: missing={missing}, extra={extra}"
+        )
+
+
+def validate_slice_provenance(
+    strings_output: str,
+    metadata: object,
+    build_inputs: object,
+    target: str,
+) -> None:
+    """Bind one thin archive's embedded schema-6 identity to release evidence."""
+    validate_distribution_metadata(metadata)
+    if not isinstance(build_inputs, dict):
+        raise ContractError("build inputs must be an object")
+    occurrences = re.findall(
+        r'\{"schemaVersion":6,"rootPackage":"nux-capi"[^{}]*\}',
+        strings_output,
+    )
+    if len(occurrences) != 1:
+        raise ContractError(
+            f"{target} must contain exactly one nux-capi provenance record, found {len(occurrences)}"
+        )
+    try:
+        provenance = json.loads(occurrences[0])
+    except json.JSONDecodeError as error:
+        raise ContractError(f"{target} provenance is malformed JSON") from error
+    packages = build_inputs.get("packages")
+    configuration = build_inputs.get("configuration")
+    if not isinstance(packages, list) or not isinstance(configuration, dict):
+        raise ContractError("build inputs do not expose package/configuration identity")
+    roots = [
+        package
+        for package in packages
+        if isinstance(package, dict) and package.get("name") == "nux-capi"
+    ]
+    if len(roots) != 1 or not isinstance(roots[0].get("targets"), dict):
+        raise ContractError("build inputs do not contain exactly one nux-capi package")
+    target_features = roots[0]["targets"].get(target)
+    if not isinstance(target_features, list) or not all(
+        isinstance(feature, str) for feature in target_features
+    ):
+        raise ContractError(f"build inputs do not describe nux-capi features for {target}")
+    expected = {
+        "schemaVersion": 6,
+        "rootPackage": "nux-capi",
+        "runtimeVersion": metadata["runtimeVersion"],
+        "buildSourceRevision": metadata["buildSourceRevision"],
+        "target": target,
+        "profile": configuration.get("buildProfile"),
+        "features": ",".join(sorted(target_features)),
+        "rustc": configuration.get("rustc"),
+        "buildInputsHash": metadata["buildInputsHash"],
+        "contractFingerprint": metadata["contractFingerprint"],
+    }
+    if provenance != expected:
+        differing = sorted(
+            key
+            for key in set(provenance).union(expected)
+            if provenance.get(key) != expected.get(key)
+        )
+        raise ContractError(f"{target} provenance differs from release evidence: {differing}")
+
+
 def validate_distribution_metadata(document: object) -> None:
     if not isinstance(document, dict):
         raise ContractError("distribution metadata must be a top-level object")
@@ -617,6 +705,36 @@ def main(arguments: list[str]) -> int:
             raise ContractError(f"cannot read symbol partition inputs: {error}") from error
         validate_symbol_partitions(manifests, exported)
         return 0
+    if len(arguments) >= 4 and arguments[0] == "header-symbols":
+        try:
+            header = pathlib.Path(arguments[1]).read_text(encoding="utf-8")
+            manifests = {}
+            for specification in arguments[2:]:
+                name, separator, path = specification.partition("=")
+                if not separator or not name or not path:
+                    raise ContractError(
+                        "header symbol partition must be named as NAME=/path/to/manifest"
+                    )
+                manifests[name] = pathlib.Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise ContractError(f"cannot read header symbol inputs: {error}") from error
+        validate_header_symbol_partitions(header, manifests)
+        return 0
+    if len(arguments) == 5 and arguments[0] == "slice-provenance":
+        strings_path = pathlib.Path(arguments[1])
+        metadata_path = pathlib.Path(arguments[2])
+        inputs_path = pathlib.Path(arguments[3])
+        try:
+            strings_output = strings_path.read_text(encoding="utf-8")
+            metadata = _load_json(metadata_path)
+            inputs_encoded = inputs_path.read_bytes()
+            inputs = json.loads(inputs_encoded)
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ContractError(f"cannot read slice provenance inputs: {error}") from error
+        validate_distribution_metadata(metadata)
+        validate_build_inputs(inputs, inputs_encoded, metadata.get("buildInputsHash", ""))
+        validate_slice_provenance(strings_output, metadata, inputs, arguments[4])
+        return 0
     if len(arguments) == 2 and arguments[0] == "distribution":
         validate_distribution_metadata(_load_json(pathlib.Path(arguments[1])))
         return 0
@@ -647,6 +765,8 @@ def main(arguments: list[str]) -> int:
         "inputs <BUILD_INPUTS.json> <sha256> | "
         "symbols <header> <nm-output> | "
         "symbol-partitions <nm-output> NAME=<manifest>... | "
+        "header-symbols <header> NAME=<manifest>... | "
+        "slice-provenance <strings> <artifact-set.json> <BUILD_INPUTS.json> <target> | "
         "distribution <artifact-set.json> | layout <layout.json> | "
         "sizes <report.json> <budgets.json> [--release]"
     )

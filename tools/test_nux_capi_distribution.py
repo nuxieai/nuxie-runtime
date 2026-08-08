@@ -42,9 +42,18 @@ class DistributionToolTests(unittest.TestCase):
 
     def test_publisher_is_guarded_and_uploads_both_assets_atomically(self) -> None:
         self.assertIn('status --porcelain', self.publisher)
-        self.assertIn('merge-base --is-ancestor', self.publisher)
+        self.assertIn('rev-parse refs/remotes/origin/main', self.publisher)
+        self.assertIn('ls-remote --exit-code origin', self.publisher)
+        self.assertIn('test "${remote_tag_revision}" = "${source_revision}"', self.publisher)
         self.assertIn('gh release view', self.publisher)
         self.assertIn('gh release create', self.publisher)
+        self.assertIn('--draft', self.publisher)
+        self.assertIn('gh release edit "${release_tag}"', self.publisher)
+        self.assertIn('--draft=false', self.publisher)
+        self.assertLess(
+            self.publisher.index('gh release download "${release_tag}"'),
+            self.publisher.index('gh release edit "${release_tag}"'),
+        )
         self.assertIn('NuxieRuntime.xcframework.zip', self.publisher)
         self.assertIn('NuxieRuntime-iOS.xcframework.zip', self.publisher)
         self.assertIn('SIZE_REPORT.json', self.publisher)
@@ -60,8 +69,13 @@ class DistributionToolTests(unittest.TestCase):
             self.verifier.count("distribution_legacy_consumer.c"), 2
         )
         self.assertIn(
-            'find "${full_framework}/macos-arm64_x86_64"', self.verifier
+            'single_library "${full_framework}/macos-arm64_x86_64"', self.verifier
         )
+        self.assertIn('= "arm64 x86_64"', self.verifier)
+        self.assertIn("root_entries", self.verifier)
+        self.assertIn('test "${entry_count}" = 2', self.verifier)
+        self.assertIn("header-symbols", self.verifier)
+        self.assertIn("slice-provenance", self.verifier)
         self.assertNotIn("-lnux_capi", self.verifier)
 
     def test_release_size_budgets_are_frozen_for_both_artifacts(self) -> None:

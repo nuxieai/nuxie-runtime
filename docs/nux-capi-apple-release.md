@@ -50,8 +50,8 @@ Tag the landed commit as `apple-runtime-v<crate-version>`, then run:
 tools/publish-nux-capi-release.sh apple-runtime-v<crate-version>
 ```
 
-The publisher requires a clean tagged commit already contained in
-`origin/main`, re-verifies both artifacts and release size budgets, refuses an
-existing release, uploads all four assets in one `gh release create` operation,
-downloads them, compares every byte, and re-verifies the downloaded archives.
-Published assets are never replaced.
+The publisher requires a clean commit that is exactly `origin/main` and whose
+local and remote tag both resolve to that commit. It re-verifies both artifacts
+and release size budgets, refuses an existing release, uploads all four assets
+to a draft, downloads them, compares every byte, and re-verifies the downloaded
+archives before making the draft public. Published assets are never replaced.

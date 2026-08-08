@@ -51,22 +51,44 @@ ditto -x -k "${ios_archive}" "${verification_root}/ios"
 diff -rq "${full_framework}" "${verification_root}/full/NuxieRuntime.xcframework" >/dev/null
 diff -rq "${ios_framework}" "${verification_root}/ios/NuxieRuntime.xcframework" >/dev/null
 
-full_device="$(find "${full_framework}/ios-arm64" -maxdepth 1 -type f -name '*.a' -print -quit)"
-full_simulator="$(find "${full_framework}/ios-arm64_x86_64-simulator" -maxdepth 1 -type f -name '*.a' -print -quit)"
-full_macos="$(find "${full_framework}/macos-arm64_x86_64" -maxdepth 1 -type f -name '*.a' -print -quit)"
-ios_device="$(find "${ios_framework}/ios-arm64" -maxdepth 1 -type f -name '*.a' -print -quit)"
-ios_simulator="$(find "${ios_framework}/ios-arm64_x86_64-simulator" -maxdepth 1 -type f -name '*.a' -print -quit)"
-for library in "${full_device}" "${full_simulator}" "${full_macos}" "${ios_device}" "${ios_simulator}"; do
-    test -f "${library}"
-done
+platform_directories() {
+    find "$1" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort
+}
+root_entries() {
+    find "$1" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort
+}
+expected_full_platforms="$(printf '%s\n' ios-arm64 ios-arm64_x86_64-simulator macos-arm64_x86_64 | LC_ALL=C sort)"
+expected_ios_platforms="$(printf '%s\n' ios-arm64 ios-arm64_x86_64-simulator | LC_ALL=C sort)"
+test "$(platform_directories "${full_framework}")" = "${expected_full_platforms}"
+test "$(platform_directories "${ios_framework}")" = "${expected_ios_platforms}"
+expected_full_entries="$(printf '%s\n' BUILD_INPUTS.json Info.plist LICENSE THIRD_PARTY_NOTICES.md ${expected_full_platforms} | LC_ALL=C sort)"
+expected_ios_entries="$(printf '%s\n' BUILD_INPUTS.json Info.plist LICENSE THIRD_PARTY_NOTICES.md ${expected_ios_platforms} | LC_ALL=C sort)"
+test "$(root_entries "${full_framework}")" = "${expected_full_entries}"
+test "$(root_entries "${ios_framework}")" = "${expected_ios_entries}"
+
+single_library() {
+    directory="$1"
+    test -d "${directory}/Headers"
+    entry_count="$(find "${directory}" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d '[:space:]')"
+    test "${entry_count}" = 2
+    count="$(find "${directory}" -maxdepth 1 -type f -name '*.a' -print | wc -l | tr -d '[:space:]')"
+    test "${count}" = 1
+    find "${directory}" -maxdepth 1 -type f -name '*.a' -print
+}
+full_device="$(single_library "${full_framework}/ios-arm64")"
+full_simulator="$(single_library "${full_framework}/ios-arm64_x86_64-simulator")"
+full_macos="$(single_library "${full_framework}/macos-arm64_x86_64")"
+ios_device="$(single_library "${ios_framework}/ios-arm64")"
+ios_simulator="$(single_library "${ios_framework}/ios-arm64_x86_64-simulator")"
 cmp "${full_device}" "${ios_device}"
 cmp "${full_simulator}" "${ios_simulator}"
-test "$(lipo -archs "${full_device}")" = "arm64"
-test "$(lipo -archs "${ios_device}")" = "arm64"
+normalized_archs() {
+    lipo -archs "$1" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | paste -sd ' ' -
+}
+test "$(normalized_archs "${full_device}")" = "arm64"
+test "$(normalized_archs "${ios_device}")" = "arm64"
 for universal in "${full_simulator}" "${full_macos}" "${ios_simulator}"; do
-    archs="$(lipo -archs "${universal}")"
-    [[ "${archs}" == *arm64* ]]
-    [[ "${archs}" == *x86_64* ]]
+    test "$(normalized_archs "${universal}")" = "arm64 x86_64"
 done
 
 declare -a thin_libraries=()
@@ -88,6 +110,11 @@ for specification in \
     target_libraries+=("${target}:${thin}")
 done
 
+python3 "${script_dir}/apple_runtime_contract.py" header-symbols \
+    "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
+    "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
+    "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
+
 for library in "${thin_libraries[@]}"; do
     sections="$("${rust_llvm_readobj}" --sections "${library}")"
     if grep -q 'Segment: __LLVM' <<< "${sections}"; then
@@ -103,16 +130,6 @@ for library in "${thin_libraries[@]}"; do
         "legacyMigration=${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt"
 done
 
-for target_and_library in "${target_libraries[@]}"; do
-    target="${target_and_library%%:*}"
-    library="${target_and_library#*:}"
-    provenance="$(strings "${library}" | grep -F "\"target\":\"${target}\"" | head -1)"
-    test -n "${provenance}"
-    grep -Fq '"schemaVersion":6' <<< "${provenance}"
-    grep -Fq '"rootPackage":"nux-capi"' <<< "${provenance}"
-    grep -Fq "\"buildInputsHash\":\"${build_inputs_hash}\"" <<< "${provenance}"
-done
-
 for framework in "${full_framework}" "${ios_framework}"; do
     test -f "${framework}/LICENSE"
     test -f "${framework}/THIRD_PARTY_NOTICES.md"
@@ -121,6 +138,16 @@ for framework in "${full_framework}" "${ios_framework}"; do
         "${framework}/BUILD_INPUTS.json" "${build_inputs_hash}"
 done
 cmp "${full_framework}/BUILD_INPUTS.json" "${ios_framework}/BUILD_INPUTS.json"
+
+for target_and_library in "${target_libraries[@]}"; do
+    target="${target_and_library%%:*}"
+    library="${target_and_library#*:}"
+    provenance_strings="${verification_root}/$(basename "${library}").provenance-strings"
+    strings "${library}" > "${provenance_strings}"
+    python3 "${script_dir}/apple_runtime_contract.py" slice-provenance \
+        "${provenance_strings}" "${metadata_path}" \
+        "${full_framework}/BUILD_INPUTS.json" "${target}"
+done
 "${script_dir}/check-nux-capi-layout.py"
 
 headers_dir="$(dirname "${full_macos}")/Headers"

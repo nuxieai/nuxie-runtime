@@ -84,8 +84,10 @@
  * 14. View-model catalogs and snapshots own all returned bytes and flat
  *    tables; indexed views remain valid until their catalog/snapshot is freed.
  *    Mutation input arrays and byte/string views are borrowed only for the
- *    synchronous call. A failed batch reports applied_count=0 and leaves the
- *    live view-model graph observationally unchanged.
+ *    synchronous call. Mutation-result code/message views borrow that result
+ *    and expire when nux_view_model_mutation_result_free succeeds. A failed
+ *    batch reports applied_count=0 and leaves the live view-model graph
+ *    observationally unchanged.
  *
  * PANIC SAFETY
  *

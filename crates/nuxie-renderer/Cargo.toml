@@ -22,6 +22,7 @@ nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 naga = { version = "30.0.0", features = ["wgsl-in"] }
 smallvec = "1.15.2"
+sha2 = "0.10"
 # Keep the parity-critical core/HAL patches transitive for git and path
 # consumers. The vendored top-level package wires both patched crates by path.
 wgpu = { version = "=30.0.0", path = "../../vendor/wgpu-30.0.0" }
@@ -48,7 +49,6 @@ nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 png = "0.18"
-sha2 = "0.10"
 
 [[bench]]
 name = "upstream_microbenchmarks"

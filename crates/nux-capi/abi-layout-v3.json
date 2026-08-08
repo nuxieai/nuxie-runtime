@@ -115,6 +115,53 @@
       ]
     },
     {
+      "name": "NuxExpectedFileAssetDescriptor",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "ordinal",
+          "offset": 8
+        },
+        {
+          "name": "kind",
+          "offset": 16
+        },
+        {
+          "name": "has_authored_id",
+          "offset": 20
+        },
+        {
+          "name": "authored_id",
+          "offset": 24
+        },
+        {
+          "name": "name",
+          "offset": 32
+        },
+        {
+          "name": "file_extension",
+          "offset": 48
+        },
+        {
+          "name": "is_embedded",
+          "offset": 64
+        },
+        {
+          "name": "has_contents_record",
+          "offset": 68
+        },
+        {
+          "name": "required_provider_flags",
+          "offset": 72
+        }
+      ]
+    },
+    {
       "name": "NuxExternalAssetRequest",
       "size": 56,
       "alignment": 8,
@@ -142,6 +189,80 @@
         {
           "name": "file_extension",
           "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxFileAssetDescriptorView",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "ordinal",
+          "offset": 8
+        },
+        {
+          "name": "kind",
+          "offset": 16
+        },
+        {
+          "name": "has_authored_id",
+          "offset": 20
+        },
+        {
+          "name": "authored_id",
+          "offset": 24
+        },
+        {
+          "name": "name",
+          "offset": 32
+        },
+        {
+          "name": "file_extension",
+          "offset": 48
+        },
+        {
+          "name": "is_embedded",
+          "offset": 64
+        },
+        {
+          "name": "has_contents_record",
+          "offset": 68
+        },
+        {
+          "name": "required_provider_flags",
+          "offset": 72
+        }
+      ]
+    },
+    {
+      "name": "NuxFileImportConfig",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "host_commands",
+          "offset": 8
+        },
+        {
+          "name": "apple_assets",
+          "offset": 16
+        },
+        {
+          "name": "expected_assets",
+          "offset": 24
+        },
+        {
+          "name": "expected_asset_count",
+          "offset": 32
         }
       ]
     },
@@ -514,7 +635,7 @@
     },
     {
       "name": "NuxPlayerStep",
-      "size": 48,
+      "size": 56,
       "alignment": 8,
       "fields": [
         {
@@ -540,12 +661,16 @@
         {
           "name": "elapsed_seconds",
           "offset": 40
+        },
+        {
+          "name": "correlation_id",
+          "offset": 48
         }
       ]
     },
     {
       "name": "NuxPlayerStepInfo",
-      "size": 40,
+      "size": 48,
       "alignment": 8,
       "fields": [
         {
@@ -571,6 +696,10 @@
         {
           "name": "host_command_count",
           "offset": 32
+        },
+        {
+          "name": "view_model_change_count",
+          "offset": 40
         }
       ]
     },
@@ -992,6 +1121,61 @@
       ]
     },
     {
+      "name": "NuxViewModelChangeView",
+      "size": 96,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "origin",
+          "offset": 4
+        },
+        {
+          "name": "correlation_id",
+          "offset": 8
+        },
+        {
+          "name": "owner_instance_id",
+          "offset": 16
+        },
+        {
+          "name": "property_index",
+          "offset": 24
+        },
+        {
+          "name": "kind",
+          "offset": 32
+        },
+        {
+          "name": "bytes_value",
+          "offset": 40
+        },
+        {
+          "name": "number_value",
+          "offset": 56
+        },
+        {
+          "name": "integer_value",
+          "offset": 64
+        },
+        {
+          "name": "bool_value",
+          "offset": 72
+        },
+        {
+          "name": "referenced_instance_id",
+          "offset": 80
+        },
+        {
+          "name": "list_item_count",
+          "offset": 88
+        }
+      ]
+    },
+    {
       "name": "NuxViewModelMutation",
       "size": 96,
       "alignment": 8,
@@ -1040,7 +1224,7 @@
     },
     {
       "name": "NuxViewModelMutationBatch",
-      "size": 24,
+      "size": 32,
       "alignment": 8,
       "fields": [
         {
@@ -1054,12 +1238,16 @@
         {
           "name": "mutation_count",
           "offset": 16
+        },
+        {
+          "name": "correlation_id",
+          "offset": 24
         }
       ]
     },
     {
       "name": "NuxViewModelMutationResultInfo",
-      "size": 48,
+      "size": 64,
       "alignment": 8,
       "fields": [
         {
@@ -1081,6 +1269,14 @@
         {
           "name": "message",
           "offset": 32
+        },
+        {
+          "name": "correlation_id",
+          "offset": 48
+        },
+        {
+          "name": "change_count",
+          "offset": 56
         }
       ]
     },

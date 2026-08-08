@@ -39,10 +39,10 @@ publisher fails closed while those values are unfrozen.
 
 ## Immutable release
 
-Tag the landed commit as `nuxie-runtime-v<crate-version>`, then run:
+Tag the landed commit as `apple-runtime-v<crate-version>`, then run:
 
 ```sh
-tools/publish-nux-capi-release.sh nuxie-runtime-v<crate-version>
+tools/publish-nux-capi-release.sh apple-runtime-v<crate-version>
 ```
 
 The publisher requires a clean tagged commit already contained in

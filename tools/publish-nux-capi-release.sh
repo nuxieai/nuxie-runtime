@@ -11,11 +11,11 @@ metadata="${artifact_root}/artifact-set.json"
 size_report="${artifact_root}/SIZE_REPORT.json"
 
 if [[ -z "${release_tag}" || $# -gt 2 ]]; then
-    echo "usage: $0 nuxie-runtime-v<crate-version> [artifact-directory]" >&2
+    echo "usage: $0 apple-runtime-v<crate-version> [artifact-directory]" >&2
     exit 2
 fi
 runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-capi/Cargo.toml" | head -1)"
-expected_tag="nuxie-runtime-v${runtime_version}"
+expected_tag="apple-runtime-v${runtime_version}"
 if [[ "${release_tag}" != "${expected_tag}" ]]; then
     echo "release tag ${release_tag} does not match ${expected_tag}" >&2
     exit 3

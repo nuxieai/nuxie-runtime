@@ -3,7 +3,11 @@ import CoreGraphics
 import ImageIO
 import Metal
 import QuartzCore
+#if canImport(NuxieRuntimeC)
+import NuxieRuntimeC
+#else
 import NuxieRuntimeInternal
+#endif
 
 final class CompletionBox {
     let semaphore = DispatchSemaphore(value: 0)
@@ -105,10 +109,131 @@ func freeResult(_ result: OpaquePointer?, _ expected: UInt32) {
     check(nux_capi_result_free(result) == NUX_STATUS_OK.rawValue, "free result")
 }
 
-guard CommandLine.arguments.count == 2 else {
-    FileHandle.standardError.write(Data("usage: capi_metal_smoke <in_band_asset.riv>\n".utf8))
+func stringView(_ pointer: UnsafePointer<CChar>, count: Int) -> NuxStringView {
+    var view = NuxStringView()
+    view.data = pointer
+    view.len = count
+    return view
+}
+
+func copiedString(_ view: NuxStringView) -> String {
+    guard let data = view.data else { return "" }
+    return String(
+        decoding: UnsafeBufferPointer(
+            start: UnsafeRawPointer(data).assumingMemoryBound(to: UInt8.self),
+            count: view.len
+        ),
+        as: UTF8.self
+    )
+}
+
+func importConfigured(
+    bytes: Data,
+    hooks: inout NuxAppleAssetHooks,
+    composed: Bool,
+    file: inout OpaquePointer?,
+    result: inout OpaquePointer?
+) -> UInt32 {
+    func call(
+        _ config: inout NuxFileImportConfig
+    ) -> UInt32 {
+        bytes.withUnsafeBytes { rawBytes in
+            nux_file_import_configured(
+                rawBytes.bindMemory(to: UInt8.self).baseAddress,
+                rawBytes.count,
+                &config,
+                &file,
+                &result
+            )
+        }
+    }
+
+    guard composed else {
+        return withUnsafePointer(to: &hooks) { hooksPointer in
+            var config = NuxFileImportConfig()
+            config.struct_size = UInt32(MemoryLayout<NuxFileImportConfig>.size)
+            config.apple_assets = hooksPointer
+            return call(&config)
+        }
+    }
+    return "bridge".withCString { moduleName in
+        "GenericHostChanges".withCString { scriptName in
+            "lua".withCString { luaExtension in
+                "pixel.png".withCString { imageName in
+                    "png".withCString { pngExtension in
+                        var host = NuxHostCommandImportConfig()
+                        host.struct_size = UInt32(
+                            MemoryLayout<NuxHostCommandImportConfig>.size
+                        )
+                        host.module_name = stringView(moduleName, count: 6)
+                        host.max_script_memory_bytes = 64 * 1024 * 1024
+                        host.max_script_interrupts_per_callback = 50_000
+                        host.max_commands_per_step = 256
+                        host.max_value_depth = 32
+                        host.max_value_nodes = 4_096
+                        host.max_identifier_bytes = 4_096
+                        host.max_string_bytes = 1024 * 1024
+                        host.max_value_bytes = 4 * 1024 * 1024
+                        host.max_command_bytes_per_step = 4 * 1024 * 1024
+
+                        var script = NuxExpectedFileAssetDescriptor()
+                        script.struct_size = UInt32(
+                            MemoryLayout<NuxExpectedFileAssetDescriptor>.size
+                        )
+                        script.ordinal = 0
+                        script.kind = NUX_FILE_ASSET_KIND_SCRIPT.rawValue
+                        script.has_authored_id = 1
+                        script.authored_id = 0
+                        script.name = stringView(scriptName, count: 18)
+                        script.file_extension = stringView(luaExtension, count: 3)
+                        script.is_embedded = 1
+                        script.has_contents_record = 1
+
+                        var image = NuxExpectedFileAssetDescriptor()
+                        image.struct_size = UInt32(
+                            MemoryLayout<NuxExpectedFileAssetDescriptor>.size
+                        )
+                        image.ordinal = 1
+                        image.kind = NUX_FILE_ASSET_KIND_IMAGE.rawValue
+                        image.has_authored_id = 1
+                        image.authored_id = 7
+                        image.name = stringView(imageName, count: 9)
+                        image.file_extension = stringView(pngExtension, count: 3)
+                        image.is_embedded = 1
+                        image.has_contents_record = 1
+                        image.required_provider_flags = UInt32(
+                            NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE
+                        )
+                        let expected = [script, image]
+                        return expected.withUnsafeBufferPointer { expectedBuffer in
+                            withUnsafePointer(to: &host) { hostPointer in
+                                withUnsafePointer(to: &hooks) { hooksPointer in
+                                    var config = NuxFileImportConfig()
+                                    config.struct_size = UInt32(
+                                        MemoryLayout<NuxFileImportConfig>.size
+                                    )
+                                    config.host_commands = hostPointer
+                                    config.apple_assets = hooksPointer
+                                    config.expected_assets = expectedBuffer.baseAddress
+                                    config.expected_asset_count = expectedBuffer.count
+                                    return call(&config)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+guard CommandLine.arguments.count == 2 ||
+        (CommandLine.arguments.count == 3 && CommandLine.arguments[2] == "--composed") else {
+    FileHandle.standardError.write(Data("usage: capi_metal_smoke <file.riv> [--composed]\n".utf8))
     exit(2)
 }
+
+let composed = CommandLine.arguments.count == 3
 
 let bytes = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
 var file: OpaquePointer?
@@ -122,40 +247,67 @@ hooks.maximum_total_external_asset_bytes = 256 * 1024 * 1024
 hooks.maximum_image_dimension = 8192
 hooks.maximum_decoded_image_bytes = 256 * 1024 * 1024
 hooks.maximum_total_decoded_image_bytes = 512 * 1024 * 1024
-var importConfig = NuxFileImportConfig()
-importConfig.struct_size = UInt32(MemoryLayout<NuxFileImportConfig>.size)
 var result: OpaquePointer?
-check(bytes.withUnsafeBytes { rawBytes in
-    withUnsafePointer(to: &hooks) { hooksPointer in
-        importConfig.apple_assets = hooksPointer
-        return nux_file_import_configured(
-            rawBytes.bindMemory(to: UInt8.self).baseAddress,
-            rawBytes.count,
-            &importConfig,
-            &file,
-            &result
-        )
-    }
-} == NUX_STATUS_OK.rawValue, "import")
+check(
+    importConfigured(
+        bytes: bytes,
+        hooks: &hooks,
+        composed: composed,
+        file: &file,
+        result: &result
+    ) == NUX_STATUS_OK.rawValue,
+    "import"
+)
 freeResult(result, NUX_STATUS_OK.rawValue)
 check(decoder.calls == 1, "one image decode")
 check(decoder.retains == 1 && decoder.releases == 1, "balanced decoded pixels")
 check(decoder.nestedABI == 0, "callback reentry rejected")
 var assetCount = 0
 check(nux_file_asset_count(file, &assetCount) == NUX_STATUS_OK.rawValue, "asset count")
-check(assetCount == 1, "one image asset")
+check(assetCount == (composed ? 2 : 1), "file asset catalog")
 var asset = NuxFileAssetDescriptorView()
 asset.struct_size = UInt32(MemoryLayout<NuxFileAssetDescriptorView>.size)
 check(nux_file_asset_descriptor(file, 0, &asset) == NUX_STATUS_OK.rawValue, "asset descriptor")
-check(asset.kind == NUX_FILE_ASSET_KIND_IMAGE.rawValue, "image catalog kind")
+check(
+    asset.kind == (composed ? NUX_FILE_ASSET_KIND_SCRIPT.rawValue :
+                              NUX_FILE_ASSET_KIND_IMAGE.rawValue),
+    "first catalog kind"
+)
+if composed {
+    check(asset.required_provider_flags == 0, "script provider requirements")
+    asset.struct_size = UInt32(MemoryLayout<NuxFileAssetDescriptorView>.size)
+    check(nux_file_asset_descriptor(file, 1, &asset) == NUX_STATUS_OK.rawValue, "image descriptor")
+    check(asset.kind == NUX_FILE_ASSET_KIND_IMAGE.rawValue, "image catalog kind")
+}
 check(
     asset.required_provider_flags == UInt32(NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE),
     "image decode provider requirement"
 )
 var artboard: OpaquePointer?
 check(nux_artboard_instance_new(file, 0, &artboard) == NUX_STATUS_OK.rawValue, "artboard")
+var viewModel: OpaquePointer?
+if composed {
+    check(
+        nux_view_model_instance_new_authored(file, 0, 0, &viewModel) == NUX_STATUS_OK.rawValue,
+        "authored view model"
+    )
+    check(
+        nux_artboard_instance_bind_view_model(artboard, viewModel) == NUX_STATUS_OK.rawValue,
+        "bind view model"
+    )
+}
 var player: OpaquePointer?
-check(nux_player_new_static(artboard, &player) == NUX_STATUS_OK.rawValue, "player")
+if composed {
+    check(
+        "HostCommands".withCString { name in
+            let view = stringView(name, count: 12)
+            return nux_player_new_state_machine_named(artboard, view, &player)
+        } == NUX_STATUS_OK.rawValue,
+        "state-machine player"
+    )
+} else {
+    check(nux_player_new_static(artboard, &player) == NUX_STATUS_OK.rawValue, "player")
+}
 check(nux_file_free(file) == NUX_STATUS_OK.rawValue, "release file before player")
 check(nux_artboard_instance_free(artboard) == NUX_STATUS_OK.rawValue, "release artboard before player")
 
@@ -211,7 +363,106 @@ check(
     "deferred Metal completion"
 )
 
+if composed {
+    var mutationResult: OpaquePointer?
+    let mutationStatus = "amount".withCString { path in
+        var mutation = NuxViewModelMutation()
+        mutation.kind = NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER.rawValue
+        mutation.instance = viewModel
+        mutation.path = stringView(path, count: 6)
+        mutation.number_value = 5
+        return withUnsafePointer(to: &mutation) { mutationPointer in
+            var batch = NuxViewModelMutationBatch()
+            batch.struct_size = UInt32(MemoryLayout<NuxViewModelMutationBatch>.size)
+            batch.mutations = mutationPointer
+            batch.mutation_count = 1
+            batch.correlation_id = 43
+            return nux_view_model_mutate(&batch, &mutationResult)
+        }
+    }
+    check(mutationStatus == NUX_STATUS_OK.rawValue, "caller mutation")
+    var mutationInfo = NuxViewModelMutationResultInfo()
+    mutationInfo.struct_size = UInt32(MemoryLayout<NuxViewModelMutationResultInfo>.size)
+    check(
+        nux_view_model_mutation_result_info(mutationResult, &mutationInfo) == NUX_STATUS_OK.rawValue,
+        "mutation info"
+    )
+    check(mutationInfo.applied_count == 1, "one applied caller mutation")
+    check(mutationInfo.correlation_id == 43, "caller correlation")
+    check(mutationInfo.change_count == 1, "one caller journal entry")
+    var callerChange = NuxViewModelChangeView()
+    callerChange.struct_size = UInt32(MemoryLayout<NuxViewModelChangeView>.size)
+    check(
+        nux_view_model_mutation_result_change(mutationResult, 0, &callerChange) == NUX_STATUS_OK.rawValue,
+        "caller journal"
+    )
+    check(callerChange.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER.rawValue, "caller origin")
+    check(callerChange.correlation_id == 43, "caller journal correlation")
+    check(callerChange.kind == NUX_VIEW_MODEL_VALUE_KIND_NUMBER.rawValue, "caller number kind")
+    check(callerChange.number_value == 5, "caller number value")
+    check(
+        nux_view_model_mutation_result_free(mutationResult) == NUX_STATUS_OK.rawValue,
+        "free mutation journal"
+    )
+
+    var initial = NuxPlayerStep()
+    initial.struct_size = UInt32(MemoryLayout<NuxPlayerStep>.size)
+    var stepResult: OpaquePointer?
+    check(nux_player_step(player, &initial, &stepResult) == NUX_STATUS_OK.rawValue, "initialize player")
+    check(nux_player_step_result_free(stepResult) == NUX_STATUS_OK.rawValue, "free initial step")
+
+    var down = NuxPlayerPointerEvent()
+    down.kind = NUX_PLAYER_POINTER_KIND_DOWN.rawValue
+    down.x = 50
+    down.y = 50
+    var up = NuxPlayerPointerEvent()
+    up.kind = NUX_PLAYER_POINTER_KIND_UP.rawValue
+    up.x = 50
+    up.y = 50
+    let pointers = [down, up]
+    stepResult = nil
+    let stepStatus = pointers.withUnsafeBufferPointer { pointerBuffer in
+        var step = NuxPlayerStep()
+        step.struct_size = UInt32(MemoryLayout<NuxPlayerStep>.size)
+        step.pointers = pointerBuffer.baseAddress
+        step.pointer_count = pointerBuffer.count
+        step.elapsed_seconds = 0.016
+        step.correlation_id = 44
+        return nux_player_step(player, &step, &stepResult)
+    }
+    check(stepStatus == NUX_STATUS_OK.rawValue, "scripted player step")
+    var stepInfo = NuxPlayerStepInfo()
+    stepInfo.struct_size = UInt32(MemoryLayout<NuxPlayerStepInfo>.size)
+    check(
+        nux_player_step_result_info(stepResult, &stepInfo) == NUX_STATUS_OK.rawValue,
+        "step info"
+    )
+    check(stepInfo.host_command_count == 1, "one host command")
+    check(stepInfo.view_model_change_count == 2, "two ordered runtime changes")
+    var command = NuxHostCommandView()
+    command.struct_size = UInt32(MemoryLayout<NuxHostCommandView>.size)
+    check(
+        nux_player_step_result_host_command(stepResult, 0, &command) == NUX_STATUS_OK.rawValue,
+        "host command"
+    )
+    check(copiedString(command.name) == "performed", "host command name")
+    for (index, expected) in [Float(10), Float(20)].enumerated() {
+        var change = NuxViewModelChangeView()
+        change.struct_size = UInt32(MemoryLayout<NuxViewModelChangeView>.size)
+        check(
+            nux_player_step_result_view_model_change(stepResult, index, &change) == NUX_STATUS_OK.rawValue,
+            "runtime journal \(index)"
+        )
+        check(change.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME.rawValue, "runtime origin")
+        check(change.correlation_id == 44, "runtime correlation")
+        check(change.kind == NUX_VIEW_MODEL_VALUE_KIND_NUMBER.rawValue, "runtime number kind")
+        check(change.number_value == expected, "ordered runtime number \(index)")
+    }
+    check(nux_player_step_result_free(stepResult) == NUX_STATUS_OK.rawValue, "free scripted step")
+}
+
 check(nux_renderer_free(renderer) == NUX_STATUS_OK.rawValue, "free renderer")
 check(nux_player_free(player) == NUX_STATUS_OK.rawValue, "free player")
+check(nux_view_model_instance_free(viewModel) == NUX_STATUS_OK.rawValue, "free view model")
 check(decoder.calls == 1, "render does not call host decoder again")
 print("swift-metal-smoke ok")

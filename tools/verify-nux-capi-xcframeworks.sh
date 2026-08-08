@@ -135,6 +135,16 @@ done < <(find "${full_framework}" "${ios_framework}" -type d -name Headers -prin
 
 consumer_root="${verification_root}/consumers"
 mkdir -p "${consumer_root}"
+composed_fixture="${verification_root}/composed_script_asset.riv"
+python3 - "${repo_root}/crates/nux-capi/smoke/composed_script_asset.riv.base64" \
+    "${composed_fixture}" <<'PY'
+import base64
+import pathlib
+import sys
+
+source, output = map(pathlib.Path, sys.argv[1:])
+output.write_bytes(base64.b64decode(source.read_text().strip(), validate=True))
+PY
 macos_sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
 xcrun --sdk macosx clang \
     -std=c11 -Wall -Wextra -Werror \
@@ -148,6 +158,19 @@ xcrun --sdk macosx clang \
     -o "${consumer_root}/c-consumer"
 "${consumer_root}/c-consumer"
 
+xcrun --sdk macosx clang \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${macos_sdk_path}" \
+    -mmacosx-version-min="${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
+    -I"${headers_dir}" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_legacy_consumer.c" \
+    "${full_macos}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework Security -liconv \
+    -o "${consumer_root}/c-legacy-consumer"
+"${consumer_root}/c-legacy-consumer"
+
 xcrun --sdk macosx swiftc \
     -parse-as-library \
     -sdk "${macos_sdk_path}" \
@@ -158,6 +181,33 @@ xcrun --sdk macosx swiftc \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
+
+xcrun --sdk macosx clang \
+    -std=c11 -Wall -Wextra -Werror \
+    -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
+    -isysroot "${macos_sdk_path}" \
+    -I"${headers_dir}" \
+    "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.c" \
+    "${full_macos}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework Security -liconv \
+    -o "${consumer_root}/c-behavior-consumer"
+"${consumer_root}/c-behavior-consumer" "${composed_fixture}" --composed
+
+xcrun --sdk macosx swiftc \
+    -warnings-as-errors \
+    -sdk "${macos_sdk_path}" \
+    -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
+    -I "${headers_dir}" \
+    -L "$(dirname "${full_macos}")" \
+    -lnux_capi \
+    "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework QuartzCore -framework Metal -framework Foundation -framework Security \
+    -Xlinker -liconv \
+    -o "${consumer_root}/swift-behavior-consumer"
+"${consumer_root}/swift-behavior-consumer" "${composed_fixture}" --composed
 
 device_headers="$(dirname "${full_device}")/Headers"
 iphoneos_sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
@@ -171,6 +221,17 @@ xcrun --sdk iphoneos clang \
     -framework Foundation -framework QuartzCore -framework Metal \
     -framework CoreGraphics -framework ImageIO -framework Security \
     -o "${consumer_root}/c-consumer-ios"
+xcrun --sdk iphoneos clang \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${iphoneos_sdk_path}" \
+    -I"${device_headers}" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_legacy_consumer.c" \
+    "${full_device}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework Security -liconv \
+    -o "${consumer_root}/c-legacy-consumer-ios"
 xcrun --sdk iphoneos swiftc \
     -parse-as-library \
     -sdk "${iphoneos_sdk_path}" \
@@ -181,10 +242,34 @@ xcrun --sdk iphoneos swiftc \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
     -o "${consumer_root}/swift-consumer-ios"
 
+xcrun --sdk iphoneos clang \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${iphoneos_sdk_path}" \
+    -I"${device_headers}" \
+    "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.c" \
+    "${full_device}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework Security -liconv \
+    -o "${consumer_root}/c-behavior-consumer-ios"
+xcrun --sdk iphoneos swiftc \
+    -warnings-as-errors \
+    -sdk "${iphoneos_sdk_path}" \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -I "${device_headers}" \
+    -L "$(dirname "${full_device}")" \
+    -lnux_capi \
+    "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework QuartzCore -framework Metal -framework Foundation -framework Security \
+    -Xlinker -liconv \
+    -o "${consumer_root}/swift-behavior-consumer-ios"
+
 python3 - "${size_report_path}" "${full_archive}" "${ios_archive}" \
     "${full_framework}" "${ios_framework}" \
-    "${consumer_root}/c-consumer" "${consumer_root}/swift-consumer" \
-    "${consumer_root}/c-consumer-ios" "${consumer_root}/swift-consumer-ios" \
+    "${consumer_root}/c-behavior-consumer" "${consumer_root}/swift-behavior-consumer" \
+    "${consumer_root}/c-behavior-consumer-ios" "${consumer_root}/swift-behavior-consumer-ios" \
     "${target_libraries[@]}" <<'PY'
 import json
 import pathlib

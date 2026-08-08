@@ -58,7 +58,7 @@ cargo_version="$("${rust_cargo}" -Vv | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-capi/Cargo.toml" | head -1)"
 source_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
 
-if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" && "${NUX_APPLE_ALLOW_DIRTY:-0}" != "1" ]]; then
+if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]]; then
     echo "refusing to package a dirty runtime tree" >&2
     exit 4
 fi

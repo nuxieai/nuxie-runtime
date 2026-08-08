@@ -326,25 +326,29 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
         "representativeLinkedBytes",
         "sliceBytes",
     }
+    scalar_metric_keys = {"compressedBytes", "expandedBytes"}
+    mapped_metric_keys = {"representativeLinkedBytes", "sliceBytes"}
     for kind, metrics in report["artifacts"].items():
         if not isinstance(metrics, dict) or set(metrics) != metric_keys:
             raise ContractError(f"{kind} size record is malformed")
         if not all(
             isinstance(metrics[key], int) and metrics[key] >= 0
-            for key in metric_keys - {"sliceBytes"}
+            for key in scalar_metric_keys
         ):
             raise ContractError(f"{kind} has an invalid byte measurement")
-        if (
-            not isinstance(metrics["sliceBytes"], dict)
-            or not metrics["sliceBytes"]
-            or not all(
-                isinstance(target, str)
-                and isinstance(value, int)
-                and value >= 0
-                for target, value in metrics["sliceBytes"].items()
-            )
-        ):
-            raise ContractError(f"{kind} has malformed per-slice measurements")
+        for metric in mapped_metric_keys:
+            if (
+                not isinstance(metrics[metric], dict)
+                or not metrics[metric]
+                or not all(
+                    isinstance(label, str)
+                    and label
+                    and isinstance(value, int)
+                    and value >= 0
+                    for label, value in metrics[metric].items()
+                )
+            ):
+                raise ContractError(f"{kind} has malformed {metric} measurements")
         expected_targets = FULL_APPLE_TARGETS if kind == "full-apple" else IOS_TARGETS
         if set(metrics["sliceBytes"]) != expected_targets:
             raise ContractError(f"{kind} size report has the wrong slice target set")
@@ -367,7 +371,7 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
         maximum = budgets["maximums"][kind]
         if not isinstance(maximum, dict) or set(maximum) != metric_keys:
             raise ContractError(f"{kind} size budget is malformed")
-        for metric in metric_keys - {"sliceBytes"}:
+        for metric in scalar_metric_keys:
             limit = maximum[metric]
             if not isinstance(limit, int) or limit < 0:
                 raise ContractError(f"{kind}.{metric} budget is invalid")
@@ -375,12 +379,15 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
                 raise ContractError(
                     f"{kind}.{metric} exceeds budget: {measured[metric]} > {limit}"
                 )
-        if set(maximum["sliceBytes"]) != set(measured["sliceBytes"]):
-            raise ContractError(f"{kind}.sliceBytes budget target set differs")
-        for target, value in measured["sliceBytes"].items():
-            limit = maximum["sliceBytes"][target]
-            if not isinstance(limit, int) or value > limit:
-                raise ContractError(f"{kind}.sliceBytes.{target} exceeds budget")
+        for metric in mapped_metric_keys:
+            if not isinstance(maximum[metric], dict) or set(maximum[metric]) != set(
+                measured[metric]
+            ):
+                raise ContractError(f"{kind}.{metric} budget label set differs")
+            for label, value in measured[metric].items():
+                limit = maximum[metric][label]
+                if not isinstance(limit, int) or value > limit:
+                    raise ContractError(f"{kind}.{metric}.{label} exceeds budget")
 
 
 def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) -> None:

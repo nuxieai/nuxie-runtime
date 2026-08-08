@@ -59,6 +59,8 @@ ios_simulator="$(find "${ios_framework}" -path '*ios-arm64_x86_64-simulator/libn
 for library in "${full_device}" "${full_simulator}" "${full_macos}" "${ios_device}" "${ios_simulator}"; do
     test -f "${library}"
 done
+cmp "${full_device}" "${ios_device}"
+cmp "${full_simulator}" "${ios_simulator}"
 test "$(lipo -archs "${full_device}")" = "arm64"
 test "$(lipo -archs "${ios_device}")" = "arm64"
 for universal in "${full_simulator}" "${full_macos}" "${ios_simulator}"; do
@@ -123,8 +125,13 @@ cmp "${full_framework}/BUILD_INPUTS.json" "${ios_framework}/BUILD_INPUTS.json"
 
 headers_dir="$(dirname "${full_macos}")/Headers"
 expected_headers="$(printf '%s\n' module.modulemap nux_capi.generated.h nux_capi.h nux_capi_apple.h nux_runtime.generated.h nux_runtime.h)"
-actual_headers="$(cd "${headers_dir}" && find . -mindepth 1 -maxdepth 1 -print | sed 's#^./##' | LC_ALL=C sort)"
-test "${actual_headers}" = "${expected_headers}"
+while IFS= read -r packaged_headers; do
+    actual_headers="$(cd "${packaged_headers}" && find . -mindepth 1 -maxdepth 1 -print | sed 's#^./##' | LC_ALL=C sort)"
+    test "${actual_headers}" = "${expected_headers}"
+    for header in ${expected_headers}; do
+        cmp "${headers_dir}/${header}" "${packaged_headers}/${header}"
+    done
+done < <(find "${full_framework}" "${ios_framework}" -type d -name Headers -print | LC_ALL=C sort)
 
 consumer_root="${verification_root}/consumers"
 mkdir -p "${consumer_root}"
@@ -152,14 +159,41 @@ xcrun --sdk macosx swiftc \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
 
+device_headers="$(dirname "${full_device}")/Headers"
+iphoneos_sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
+xcrun --sdk iphoneos clang \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${iphoneos_sdk_path}" \
+    -I"${device_headers}" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.c" \
+    "${full_device}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreGraphics -framework ImageIO -framework Security \
+    -o "${consumer_root}/c-consumer-ios"
+xcrun --sdk iphoneos swiftc \
+    -parse-as-library \
+    -sdk "${iphoneos_sdk_path}" \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -I "${device_headers}" \
+    -L "$(dirname "${full_device}")" \
+    -lnux_capi \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    -o "${consumer_root}/swift-consumer-ios"
+
 python3 - "${size_report_path}" "${full_archive}" "${ios_archive}" \
-    "${full_framework}" "${ios_framework}" "${consumer_root}/swift-consumer" \
+    "${full_framework}" "${ios_framework}" \
+    "${consumer_root}/c-consumer" "${consumer_root}/swift-consumer" \
+    "${consumer_root}/c-consumer-ios" "${consumer_root}/swift-consumer-ios" \
     "${target_libraries[@]}" <<'PY'
 import json
 import pathlib
 import sys
 
-output, full_archive, ios_archive, full_framework, ios_framework, linked, *specs = sys.argv[1:]
+(
+    output, full_archive, ios_archive, full_framework, ios_framework,
+    c_macos, swift_macos, c_ios, swift_ios, *specs
+) = sys.argv[1:]
 slice_bytes = {}
 for specification in specs:
     target, path = specification.split(":", 1)
@@ -168,20 +202,25 @@ for specification in specs:
 def expanded(path):
     return sum(item.stat().st_size for item in pathlib.Path(path).rglob("*") if item.is_file())
 
-linked_bytes = pathlib.Path(linked).stat().st_size
 document = {
     "schemaVersion": 1,
     "artifacts": {
         "full-apple": {
             "compressedBytes": pathlib.Path(full_archive).stat().st_size,
             "expandedBytes": expanded(full_framework),
-            "representativeLinkedBytes": linked_bytes,
+            "representativeLinkedBytes": {
+                "c-macos-arm64": pathlib.Path(c_macos).stat().st_size,
+                "swift-macos-arm64": pathlib.Path(swift_macos).stat().st_size,
+            },
             "sliceBytes": dict(sorted(slice_bytes.items())),
         },
         "ios-only": {
             "compressedBytes": pathlib.Path(ios_archive).stat().st_size,
             "expandedBytes": expanded(ios_framework),
-            "representativeLinkedBytes": linked_bytes,
+            "representativeLinkedBytes": {
+                "c-ios-arm64": pathlib.Path(c_ios).stat().st_size,
+                "swift-ios-arm64": pathlib.Path(swift_ios).stat().st_size,
+            },
             "sliceBytes": {key: slice_bytes[key] for key in sorted(slice_bytes) if "darwin" not in key},
         },
     },

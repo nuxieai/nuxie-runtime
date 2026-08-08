@@ -29,6 +29,8 @@ DEFAULT_TARGETS = (
 PACKAGING_INPUTS = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "crates/nux-capi/smoke/distribution_consumer.c",
+    "crates/nux-capi/smoke/distribution_consumer.swift",
     "tools/apple_runtime_contract.py",
     "tools/apple_runtime_input_digest.py",
     "tools/build-apple-xcframework.sh",

@@ -37,6 +37,11 @@ Before release, replace the candidate sentinel in
 `crates/nux-capi/size-budgets-v3.json` with reviewed release maxima. The
 publisher fails closed while those values are unfrozen.
 
+The v0.4.0 maxima are the qualified measurements rounded up independently to
+the next 1 MiB boundary. This keeps a narrow allowance for provenance-only
+rebuild variation while still ratcheting archives, expanded bundles, every
+thin slice, and representative C and Swift linked binaries.
+
 ## Immutable release
 
 Tag the landed commit as `apple-runtime-v<crate-version>`, then run:

@@ -1,5 +1,34 @@
 {
   "schemaVersion": 1,
-  "mode": "candidate",
-  "maximums": null
+  "mode": "release",
+  "maximums": {
+    "full-apple": {
+      "compressedBytes": 82837504,
+      "expandedBytes": 252706816,
+      "representativeLinkedBytes": {
+        "c-macos-arm64": 32505856,
+        "swift-macos-arm64": 32505856
+      },
+      "sliceBytes": {
+        "aarch64-apple-darwin": 50331648,
+        "aarch64-apple-ios": 50331648,
+        "aarch64-apple-ios-sim": 50331648,
+        "x86_64-apple-darwin": 51380224,
+        "x86_64-apple-ios": 50331648
+      }
+    },
+    "ios-only": {
+      "compressedBytes": 49283072,
+      "expandedBytes": 150994944,
+      "representativeLinkedBytes": {
+        "c-ios-arm64": 31457280,
+        "swift-ios-arm64": 32505856
+      },
+      "sliceBytes": {
+        "aarch64-apple-ios": 50331648,
+        "aarch64-apple-ios-sim": 50331648,
+        "x86_64-apple-ios": 50331648
+      }
+    }
+  }
 }

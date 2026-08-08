@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -16,6 +17,9 @@ class DistributionToolTests(unittest.TestCase):
         self.verifier = (
             REPO_ROOT / "tools/verify-nux-capi-xcframeworks.sh"
         ).read_text()
+        self.size_budgets = json.loads(
+            (REPO_ROOT / "crates/nux-capi/size-budgets-v3.json").read_text()
+        )
 
     def test_five_thin_builds_are_reused_by_both_artifacts(self) -> None:
         self.assertEqual(self.builder.count('"${rust_cargo}" build'), 1)
@@ -54,6 +58,16 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('"${composed_fixture}" --composed', self.verifier)
         self.assertGreaterEqual(
             self.verifier.count("distribution_legacy_consumer.c"), 2
+        )
+        self.assertIn(
+            'find "${full_framework}/macos-arm64_x86_64"', self.verifier
+        )
+        self.assertNotIn("-lnux_capi", self.verifier)
+
+    def test_release_size_budgets_are_frozen_for_both_artifacts(self) -> None:
+        self.assertEqual(self.size_budgets["mode"], "release")
+        self.assertEqual(
+            set(self.size_budgets["maximums"]), {"full-apple", "ios-only"}
         )
 
 

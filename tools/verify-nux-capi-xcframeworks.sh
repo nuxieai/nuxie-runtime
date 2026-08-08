@@ -51,11 +51,11 @@ ditto -x -k "${ios_archive}" "${verification_root}/ios"
 diff -rq "${full_framework}" "${verification_root}/full/NuxieRuntime.xcframework" >/dev/null
 diff -rq "${ios_framework}" "${verification_root}/ios/NuxieRuntime.xcframework" >/dev/null
 
-full_device="$(find "${full_framework}" -path '*ios-arm64/libnux_capi.a' -print -quit)"
-full_simulator="$(find "${full_framework}" -path '*ios-arm64_x86_64-simulator/libnux_capi.a' -print -quit)"
-full_macos="$(find "${full_framework}" -path '*macos-arm64_x86_64/libnux_capi.a' -print -quit)"
-ios_device="$(find "${ios_framework}" -path '*ios-arm64/libnux_capi.a' -print -quit)"
-ios_simulator="$(find "${ios_framework}" -path '*ios-arm64_x86_64-simulator/libnux_capi.a' -print -quit)"
+full_device="$(find "${full_framework}/ios-arm64" -maxdepth 1 -type f -name '*.a' -print -quit)"
+full_simulator="$(find "${full_framework}/ios-arm64_x86_64-simulator" -maxdepth 1 -type f -name '*.a' -print -quit)"
+full_macos="$(find "${full_framework}/macos-arm64_x86_64" -maxdepth 1 -type f -name '*.a' -print -quit)"
+ios_device="$(find "${ios_framework}/ios-arm64" -maxdepth 1 -type f -name '*.a' -print -quit)"
+ios_simulator="$(find "${ios_framework}/ios-arm64_x86_64-simulator" -maxdepth 1 -type f -name '*.a' -print -quit)"
 for library in "${full_device}" "${full_simulator}" "${full_macos}" "${ios_device}" "${ios_simulator}"; do
     test -f "${library}"
 done
@@ -176,9 +176,8 @@ xcrun --sdk macosx swiftc \
     -sdk "${macos_sdk_path}" \
     -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
     -I "${headers_dir}" \
-    -L "$(dirname "${full_macos}")" \
-    -lnux_capi \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${full_macos}" \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
 
@@ -200,9 +199,8 @@ xcrun --sdk macosx swiftc \
     -sdk "${macos_sdk_path}" \
     -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
     -I "${headers_dir}" \
-    -L "$(dirname "${full_macos}")" \
-    -lnux_capi \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
+    "${full_macos}" \
     -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
     -framework QuartzCore -framework Metal -framework Foundation -framework Security \
     -Xlinker -liconv \
@@ -237,9 +235,8 @@ xcrun --sdk iphoneos swiftc \
     -sdk "${iphoneos_sdk_path}" \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
     -I "${device_headers}" \
-    -L "$(dirname "${full_device}")" \
-    -lnux_capi \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${full_device}" \
     -o "${consumer_root}/swift-consumer-ios"
 
 xcrun --sdk iphoneos clang \
@@ -258,9 +255,8 @@ xcrun --sdk iphoneos swiftc \
     -sdk "${iphoneos_sdk_path}" \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
     -I "${device_headers}" \
-    -L "$(dirname "${full_device}")" \
-    -lnux_capi \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
+    "${full_device}" \
     -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
     -framework QuartzCore -framework Metal -framework Foundation -framework Security \
     -Xlinker -liconv \

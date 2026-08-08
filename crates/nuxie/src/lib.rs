@@ -71,13 +71,13 @@ pub use nuxie_runtime::{
     AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
     AudioSound, AudioSource, ExternalFontAssetError, GAMEPAD_BATCH_MAX_AXES,
     GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance, NoopScriptHost,
-    RuntimeBlobAsset, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
-    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot,
-    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm, SemanticActionType,
-    SemanticBounds, SemanticDrainError, SemanticRole, SemanticState, SemanticTrait,
-    SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    RuntimeBlobAsset, RuntimeEventPropertyValue, RuntimeFileAsset, RuntimeFileAssetKind,
+    RuntimeFileAssetLoader, RuntimeHitResult, RuntimeLayerState, RuntimeOwnedViewModelContext,
+    RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
+    ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
+    ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
+    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
+    SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
     StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
@@ -110,9 +110,55 @@ pub trait ScriptHostExtension: std::fmt::Debug {
     ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError>;
 }
 
+/// Dynamically typed host-effect payload with a type witness derived from the
+/// payload itself. Construction is generic so implementations cannot pair an
+/// arbitrary type id with a different boxed value.
+#[cfg(feature = "scripting")]
+pub struct ScriptHostEffects {
+    value: Box<dyn Any>,
+    type_id: std::any::TypeId,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptHostEffects {
+    pub fn new<T: 'static>(value: T) -> Self {
+        Self {
+            value: Box::new(value),
+            type_id: std::any::TypeId::of::<T>(),
+        }
+    }
+
+    fn type_id(&self) -> std::any::TypeId {
+        self.type_id
+    }
+
+    fn downcast<T: 'static>(self) -> Result<T, Self> {
+        match self.value.downcast::<T>() {
+            Ok(value) => Ok(*value),
+            Err(value) => Err(Self {
+                value,
+                type_id: self.type_id,
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for ScriptHostEffects {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ScriptHostEffects")
+            .field("type_id", &self.type_id)
+            .finish_non_exhaustive()
+    }
+}
+
 /// One installed host extension associated with a single script VM.
 #[cfg(feature = "scripting")]
 pub trait ScriptHostExtensionInstance: std::fmt::Debug {
+    /// Concrete type returned by [`Self::drain_effects`]. Transactions inspect
+    /// this before draining so a mismatched projector cannot consume effects.
+    fn effects_type_id(&self) -> std::any::TypeId;
     fn begin_cycle(&self) -> Box<dyn Any>;
     fn rollback_cycle(
         &self,
@@ -123,7 +169,7 @@ pub trait ScriptHostExtensionInstance: std::fmt::Debug {
         &self,
         checkpoint: Box<dyn Any>,
     ) -> std::result::Result<(), nuxie_runtime::ScriptError>;
-    fn drain_effects(&self) -> Box<dyn Any>;
+    fn drain_effects(&self) -> ScriptHostEffects;
 }
 
 #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
@@ -146,6 +192,10 @@ impl ScriptHostExtension for TestNoopScriptHostExtension {
 
 #[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
 impl ScriptHostExtensionInstance for TestNoopScriptHostExtensionInstance {
+    fn effects_type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<()>()
+    }
+
     fn begin_cycle(&self) -> Box<dyn Any> {
         Box::new(())
     }
@@ -168,8 +218,8 @@ impl ScriptHostExtensionInstance for TestNoopScriptHostExtensionInstance {
         Ok(())
     }
 
-    fn drain_effects(&self) -> Box<dyn Any> {
-        Box::new(())
+    fn drain_effects(&self) -> ScriptHostEffects {
+        ScriptHostEffects::new(())
     }
 }
 
@@ -269,7 +319,7 @@ impl ScriptExecutionCapability {
 /// One atomic baseline operation over an owned artboard.
 ///
 /// The transaction owns the script-effect checkpoint. Dropping it before
-/// [`Self::commit_host_effects`] rolls every still-pending effect back to the
+/// [`Self::try_commit_host_effects`] rolls every still-pending effect back to the
 /// operation boundary; callers never receive or coordinate checkpoint tokens.
 #[doc(hidden)]
 pub struct ArtboardTransaction {
@@ -278,6 +328,28 @@ pub struct ArtboardTransaction {
     #[cfg(feature = "scripting")]
     checkpoint: Option<ArtboardTransactionCheckpoint>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HostEffectTypeMismatch;
+
+impl std::fmt::Display for HostEffectTypeMismatch {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("script host effects do not match the requested transaction type")
+    }
+}
+
+impl std::error::Error for HostEffectTypeMismatch {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnexpectedHostEffects;
+
+impl std::fmt::Display for UnexpectedHostEffects {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("atomic operation produced host effects it cannot project")
+    }
+}
+
+impl std::error::Error for UnexpectedHostEffects {}
 
 #[cfg(feature = "scripting")]
 enum ArtboardTransactionCheckpoint {
@@ -778,12 +850,18 @@ impl FileScriptRuntime {
         }
     }
 
-    fn drain_host_effects(&self) -> Option<Box<dyn Any>> {
+    fn drain_host_effects(&self) -> Option<ScriptHostEffects> {
         self.ready.as_ref().map(|ready| {
             let effects = ready.host.drain_effects();
             ready.vm.end_script_cycle();
             effects
         })
+    }
+
+    fn host_effects_type_id(&self) -> Option<std::any::TypeId> {
+        self.ready
+            .as_ref()
+            .map(|ready| ready.host.effects_type_id())
     }
 }
 
@@ -5230,6 +5308,8 @@ impl<'a> Artboard<'a> {
             script_file: self.file.shared_script_runtime_handle(),
             artboard_index: self.index,
             raw,
+            #[cfg(any(test, feature = "test-support"))]
+            fail_next_fallible_state_machine_advance: false,
         })
     }
 }
@@ -5242,9 +5322,18 @@ pub struct ArtboardInstance<'a> {
     script_file: Arc<File>,
     artboard_index: usize,
     raw: RuntimeArtboardInstance,
+    #[cfg(any(test, feature = "test-support"))]
+    fail_next_fallible_state_machine_advance: bool,
 }
 
 impl<'a> ArtboardInstance<'a> {
+    /// Inject one non-retained fallible-advance error on this occurrence.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn fail_next_fallible_state_machine_advance_for_test(&mut self) {
+        self.fail_next_fallible_state_machine_advance = true;
+    }
+
     pub fn artboard(&self) -> Artboard<'a> {
         Artboard {
             file: self.file,
@@ -5461,16 +5550,21 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
-        let mut machine = self.raw.state_machine_instance(index)?;
+        let machine = self.raw.state_machine_instance(index)?;
         #[cfg(feature = "scripting")]
-        let _ = try_prepare_state_machine_scripted_data_context_without_factory(
-            &self.script_file,
-            &self.raw,
-            &mut machine,
-            None,
-        );
-        // W41 O1: C++ construction cannot fail after the machine exists.
-        // Preparation retains any terminal failure in `script_error`.
+        {
+            let mut machine = machine;
+            let _ = try_prepare_state_machine_scripted_data_context_without_factory(
+                &self.script_file,
+                &self.raw,
+                &mut machine,
+                None,
+            );
+            // W41 O1: C++ construction cannot fail after the machine exists.
+            // Preparation retains any terminal failure in `script_error`.
+            return Some(machine);
+        }
+        #[cfg(not(feature = "scripting"))]
         Some(machine)
     }
 
@@ -5585,7 +5679,62 @@ impl<'a> ArtboardInstance<'a> {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+        self.try_advance_with_state_machine(state_machine, elapsed_seconds)
+            .unwrap_or(false)
+    }
+
+    /// Fallible state-machine advance. Unlike the compatibility bool
+    /// wrapper, this preserves every runtime/script failure for transactional
+    /// hosts such as the C ABI.
+    pub fn try_advance_with_state_machine(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        self.try_advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+    }
+
+    /// Batched form of [`Self::try_advance_with_state_machine`].
+    pub fn try_advance_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            bail!("fallible state-machine advance requires at least one state machine");
+        }
+        #[cfg(any(test, feature = "test-support"))]
+        if std::mem::take(&mut self.fail_next_fallible_state_machine_advance) {
+            bail!("injected non-retained fallible state-machine advance failure");
+        }
+        nuxie_runtime::poll_async_work();
+        #[cfg(feature = "scripting")]
+        for state_machine in state_machines.iter_mut() {
+            try_prepare_state_machine_scripted_data_context_without_factory(
+                &self.script_file,
+                &self.raw,
+                state_machine,
+                None,
+            )?;
+        }
+        #[cfg(feature = "scripting")]
+        let file = self.file;
+        Ok(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )?,
+        )
     }
 
     /// Batched state-machine advance for one retained artboard instance.
@@ -5864,34 +6013,57 @@ pub struct OwnedArtboardInstance {
     raw: RuntimeArtboardInstance,
     file: Arc<File>,
     artboard_index: usize,
+    #[cfg(any(test, feature = "test-support"))]
+    fail_next_fallible_state_machine_advance: bool,
 }
 
 impl ArtboardTransaction {
-    fn take_host_effects<T: 'static>(&self) -> Option<T> {
-        #[cfg(feature = "scripting")]
-        {
-            return self
-                .scripts
-                .borrow()
-                .drain_host_effects()?
-                .downcast::<T>()
-                .ok()
-                .map(|effects| *effects);
-        }
-        #[cfg(not(feature = "scripting"))]
-        None
-    }
-
-    /// Commit this operation and return its final ordered host effects.
+    /// Commit this operation and return its final ordered host effects. The
+    /// extension's type declaration is checked before draining, and the
+    /// mechanically witnessed payload is checked again afterward. Any
+    /// mismatch leaves the checkpoint live so Drop performs rollback.
     #[doc(hidden)]
     #[allow(unused_mut)]
-    pub fn commit_host_effects<T: 'static>(mut self) -> Option<T> {
-        let effects = self.take_host_effects();
+    pub fn try_commit_host_effects<T: 'static>(
+        mut self,
+    ) -> std::result::Result<Option<T>, HostEffectTypeMismatch> {
+        #[cfg(feature = "scripting")]
+        let effects = {
+            let Some(type_id) = self.scripts.borrow().host_effects_type_id() else {
+                self.checkpoint = None;
+                return Ok(None);
+            };
+            if type_id != std::any::TypeId::of::<T>() {
+                return Err(HostEffectTypeMismatch);
+            }
+            let Some(effects) = self.scripts.borrow().drain_host_effects() else {
+                return Err(HostEffectTypeMismatch);
+            };
+            if effects.type_id() != std::any::TypeId::of::<T>() {
+                return Err(HostEffectTypeMismatch);
+            }
+            match effects.downcast::<T>() {
+                Ok(effects) => Some(effects),
+                Err(_) => return Err(HostEffectTypeMismatch),
+            }
+        };
+        #[cfg(not(feature = "scripting"))]
+        let effects = None;
         #[cfg(feature = "scripting")]
         {
             self.checkpoint = None;
         }
-        effects
+        Ok(effects)
+    }
+
+    /// Commit only when this transaction is attached to the no-effect host.
+    /// Product hosts with a real command batch must project it through
+    /// [`Self::try_commit_host_effects`] instead of silently discarding it.
+    #[doc(hidden)]
+    pub fn commit_without_host_effects(self) -> Result<(), UnexpectedHostEffects> {
+        self.try_commit_host_effects::<()>()
+            .map(|_| ())
+            .map_err(|_| UnexpectedHostEffects)
     }
 
     #[cfg(feature = "scripting")]
@@ -6062,6 +6234,8 @@ impl OwnedArtboardInstance {
             raw,
             file,
             artboard_index,
+            #[cfg(any(test, feature = "test-support"))]
+            fail_next_fallible_state_machine_advance: false,
         })
     }
 
@@ -6076,6 +6250,13 @@ impl OwnedArtboardInstance {
 
     pub fn file(&self) -> &Arc<File> {
         &self.file
+    }
+
+    /// Inject one non-retained fallible-advance error on this occurrence.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn fail_next_fallible_state_machine_advance_for_test(&mut self) {
+        self.fail_next_fallible_state_machine_advance = true;
     }
 
     pub fn artboard(&self) -> Artboard<'_> {
@@ -6413,7 +6594,6 @@ impl OwnedArtboardInstance {
             .drain_host_effects()?
             .downcast::<T>()
             .ok()
-            .map(|effects| *effects)
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
@@ -6511,16 +6691,21 @@ impl OwnedArtboardInstance {
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
-        let mut machine = self.raw.state_machine_instance(index)?;
+        let machine = self.raw.state_machine_instance(index)?;
         #[cfg(feature = "scripting")]
-        let _ = try_prepare_state_machine_scripted_data_context_without_factory(
-            &self.file,
-            &self.raw,
-            &mut machine,
-            None,
-        );
-        // W41 O1: C++ construction cannot fail after the machine exists.
-        // Preparation retains any terminal failure in `script_error`.
+        {
+            let mut machine = machine;
+            let _ = try_prepare_state_machine_scripted_data_context_without_factory(
+                &self.file,
+                &self.raw,
+                &mut machine,
+                None,
+            );
+            // W41 O1: C++ construction cannot fail after the machine exists.
+            // Preparation retains any terminal failure in `script_error`.
+            return Some(machine);
+        }
+        #[cfg(not(feature = "scripting"))]
         Some(machine)
     }
 
@@ -6604,7 +6789,60 @@ impl OwnedArtboardInstance {
         state_machine: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+        self.try_advance_with_state_machine(state_machine, elapsed_seconds)
+            .unwrap_or(false)
+    }
+
+    /// Fallible owning state-machine advance for transactional hosts.
+    pub fn try_advance_with_state_machine(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        self.try_advance_with_state_machines(std::slice::from_mut(state_machine), elapsed_seconds)
+    }
+
+    /// Batched form of [`Self::try_advance_with_state_machine`].
+    pub fn try_advance_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            bail!("fallible state-machine advance requires at least one state machine");
+        }
+        #[cfg(any(test, feature = "test-support"))]
+        if std::mem::take(&mut self.fail_next_fallible_state_machine_advance) {
+            bail!("injected non-retained fallible state-machine advance failure");
+        }
+        nuxie_runtime::poll_async_work();
+        #[cfg(feature = "scripting")]
+        for state_machine in state_machines.iter_mut() {
+            try_prepare_state_machine_scripted_data_context_without_factory(
+                &self.file,
+                &self.raw,
+                state_machine,
+                None,
+            )?;
+        }
+        #[cfg(feature = "scripting")]
+        let file = Arc::clone(&self.file);
+        Ok(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )?,
+        )
     }
 
     /// Owning mirror of [`ArtboardInstance::advance_with_state_machines`].
@@ -6995,6 +7233,65 @@ mod inert_script_import_tests {
     use super::*;
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_schema::definition_by_name;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[derive(Debug)]
+    struct InconsistentEffectsExtension {
+        rolled_back: Arc<AtomicBool>,
+    }
+
+    #[derive(Debug)]
+    struct InconsistentEffectsHost {
+        rolled_back: Arc<AtomicBool>,
+    }
+
+    impl ScriptHostExtension for InconsistentEffectsExtension {
+        fn install(
+            &self,
+            _vm: &ScriptVm,
+        ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError>
+        {
+            Ok(Box::new(InconsistentEffectsHost {
+                rolled_back: Arc::clone(&self.rolled_back),
+            }))
+        }
+    }
+
+    impl ScriptHostExtensionInstance for InconsistentEffectsHost {
+        fn effects_type_id(&self) -> std::any::TypeId {
+            std::any::TypeId::of::<()>()
+        }
+
+        fn begin_cycle(&self) -> Box<dyn Any> {
+            Box::new(())
+        }
+
+        fn rollback_cycle(
+            &self,
+            _checkpoint: Box<dyn Any>,
+        ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+            self.rolled_back.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn checkpoint_effects(&self) -> Box<dyn Any> {
+            Box::new(())
+        }
+
+        fn rollback_effects(
+            &self,
+            _checkpoint: Box<dyn Any>,
+        ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+            self.rolled_back.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn drain_effects(&self) -> ScriptHostEffects {
+            // Deliberately violates the preflight declaration. The envelope's
+            // payload-derived witness must catch this after drain.
+            ScriptHostEffects::new(Vec::<u8>::new())
+        }
+    }
 
     fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
         loop {
@@ -7532,6 +7829,66 @@ mod inert_script_import_tests {
                 .expect("a scriptless file needs no VM")
         );
         assert!(!file.scripting_runtime_is_ready());
+    }
+
+    #[test]
+    fn transaction_type_mismatch_does_not_drain_or_commit_host_effects() {
+        let bytes = external_fixture("script_inputs_test_1.riv");
+        let file = File::import_with_unsigned_scripts(&bytes).expect("trusted script fixture");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        file.prepare_scripting_runtime(&mut factory)
+            .expect("trusted script runtime prepares");
+        let instance = OwnedArtboardInstance::instantiate(Arc::new(file), 0)
+            .expect("default artboard instantiates");
+
+        assert_eq!(
+            instance
+                .begin_transaction()
+                .try_commit_host_effects::<Vec<u8>>(),
+            Err(HostEffectTypeMismatch)
+        );
+        instance
+            .begin_transaction()
+            .commit_without_host_effects()
+            .expect("mismatch rollback leaves the next no-effect cycle usable");
+    }
+
+    #[test]
+    fn inconsistent_effect_declaration_rolls_back_after_drain() {
+        let bytes = external_fixture("script_inputs_test_1.riv");
+        let rolled_back = Arc::new(AtomicBool::new(false));
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_artifact_unchecked(
+                &bytes,
+                Arc::new(InconsistentEffectsExtension {
+                    rolled_back: Arc::clone(&rolled_back),
+                }),
+            )
+            .expect("test authority")
+        };
+        let runtime = read_runtime_file_for_facade(&bytes).expect("script fixture parses");
+        let file = File::from_runtime_with_script_policy_and_limits(
+            runtime,
+            Some(capability),
+            Some(ScriptExecutionLimits::new()),
+            FileImportLimits::new(),
+            true,
+        )
+        .expect("custom host file");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        file.prepare_scripting_runtime(&mut factory)
+            .expect("custom host prepares");
+        let instance = OwnedArtboardInstance::instantiate(Arc::new(file), 0)
+            .expect("default artboard instantiates");
+
+        assert_eq!(
+            instance.begin_transaction().commit_without_host_effects(),
+            Err(UnexpectedHostEffects)
+        );
+        assert!(
+            rolled_back.load(Ordering::SeqCst),
+            "the live checkpoint rolls back an inconsistent drained batch"
+        );
     }
 }
 

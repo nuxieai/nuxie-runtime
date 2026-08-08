@@ -84,6 +84,10 @@ impl std::fmt::Debug for NuxieScriptHost {
 }
 
 impl ScriptHostExtensionInstance for NuxieScriptHost {
+    fn effects_type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Vec<HostCommand>>()
+    }
+
     fn begin_cycle(&self) -> Box<dyn std::any::Any> {
         Box::new(self.begin_cycle())
     }
@@ -114,8 +118,8 @@ impl ScriptHostExtensionInstance for NuxieScriptHost {
         Ok(())
     }
 
-    fn drain_effects(&self) -> Box<dyn std::any::Any> {
-        Box::new(self.drain())
+    fn drain_effects(&self) -> nuxie::ScriptHostEffects {
+        nuxie::ScriptHostEffects::new(self.drain())
     }
 }
 

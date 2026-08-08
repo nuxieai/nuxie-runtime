@@ -49,6 +49,17 @@
  *    larger caller are ignored and preserved.
  * 8. NuxCapiResult owns its bounded diagnostic bytes. Diagnostic views borrow
  *    that result and expire when nux_capi_result_free succeeds.
+ * 9. NuxPlayerStep input/pointer arrays and their input-name bytes are borrowed
+ *    only for the synchronous call. NuxPlayerStepResult owns every returned
+ *    event, property, state-change, pointer outcome, and diagnostic. Indexed
+ *    views expire when nux_player_step_result_free succeeds. Optional string
+ *    fields use NULL+0 for absent and non-NULL+0 for authored present-empty.
+ * 10. nux_player_step fully validates the bounded batch before mutation and
+ *    executes under the shared artboard-occurrence gate. Reentrant access from
+ *    any callback returns REENTRANT_CALL. An unexpected post-mutation failure
+ *    rolls back pending external host effects and terminally poisons that
+ *    occurrence; every later read, mutate, or draw fails with RUNTIME_ERROR,
+ *    while matching frees remain allowed.
  *
  * PANIC SAFETY
  *
@@ -75,6 +86,21 @@
 #define NUX_RENDER_CALLBACKS_V3_MIN_SIZE                                  \
     (offsetof(NuxRenderCallbacks, modulate_opacity) +                     \
      sizeof(((NuxRenderCallbacks*)0)->modulate_opacity))
+#define NUX_PLAYER_STEP_V3_MIN_SIZE                                       \
+    (offsetof(NuxPlayerStep, elapsed_seconds) +                           \
+     sizeof(((NuxPlayerStep*)0)->elapsed_seconds))
+#define NUX_PLAYER_STEP_INFO_V3_MIN_SIZE                                  \
+    (offsetof(NuxPlayerStepInfo, event_count) +                           \
+     sizeof(((NuxPlayerStepInfo*)0)->event_count))
+#define NUX_PLAYER_STATE_CHANGE_VIEW_V3_MIN_SIZE                          \
+    (offsetof(NuxPlayerStateChangeView, state_global_id) +                \
+     sizeof(((NuxPlayerStateChangeView*)0)->state_global_id))
+#define NUX_PLAYER_EVENT_VIEW_V3_MIN_SIZE                                 \
+    (offsetof(NuxPlayerEventView, property_count) +                       \
+     sizeof(((NuxPlayerEventView*)0)->property_count))
+#define NUX_PLAYER_EVENT_PROPERTY_VIEW_V3_MIN_SIZE                        \
+    (offsetof(NuxPlayerEventPropertyView, integer_value) +                \
+     sizeof(((NuxPlayerEventPropertyView*)0)->integer_value))
 
 /* Stable encodings used by the portable callback-renderer surface. Embedders
  * supply these per-primitive callbacks when they choose that rendering path. */

@@ -14,7 +14,9 @@ pub use render_callbacks::{
 };
 
 use nuxie::{
-    File, LinearAnimationInstance, OwnedArtboardInstance, StateMachineInstance, ViewModelInstance,
+    File, LinearAnimationInstance, NoopScriptHost, OwnedArtboardInstance,
+    RuntimeEventPropertyValue, RuntimeHitResult, StateMachineInstance, StateMachineReportedEvent,
+    ViewModelInstance,
 };
 use render_callbacks::{CallbackFactory, CallbackRenderer};
 use std::cell::{Cell, RefCell};
@@ -70,6 +72,7 @@ pub enum NuxStatus {
     InvalidStructSize = 8,
     HandleMismatch = 9,
     ReentrantCall = 10,
+    LimitExceeded = 11,
 }
 
 pub struct NuxFile {
@@ -286,6 +289,7 @@ enum HandleKind {
     Player,
     ViewModel,
     Result,
+    PlayerStepResult,
 }
 
 struct HandleRecord {
@@ -321,6 +325,38 @@ fn register_handle<T>(handle: *mut T, kind: HandleKind, owner_thread: ThreadId) 
 
 struct HandleCallGuard {
     address: usize,
+}
+
+struct PendingHandlePublication<T> {
+    handle: *mut T,
+    kind: HandleKind,
+    armed: bool,
+}
+
+impl<T> PendingHandlePublication<T> {
+    fn new(value: T, kind: HandleKind) -> Self {
+        Self {
+            handle: Box::into_raw(Box::new(value)),
+            kind,
+            armed: true,
+        }
+    }
+
+    fn finish(mut self) -> *mut T {
+        self.armed = false;
+        self.handle
+    }
+}
+
+impl<T> Drop for PendingHandlePublication<T> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                let _ = remove_handle(self.handle, self.kind);
+            }));
+            unsafe { drop(Box::from_raw(self.handle)) };
+        }
+    }
 }
 
 impl Drop for HandleCallGuard {
@@ -470,6 +506,299 @@ pub struct NuxPlayerInfo {
 pub const NUX_PLAYER_INFO_V3_MIN_SIZE: usize =
     std::mem::offset_of!(NuxPlayerInfo, name) + std::mem::size_of::<NuxStringView>();
 
+/// One fixed-stride state-machine input mutation in a player step. The
+/// selected value field is determined by `kind`; Trigger ignores both values.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxPlayerInputKind {
+    Bool = 0,
+    Number = 1,
+    Trigger = 2,
+}
+
+pub const NUX_PLAYER_INPUT_KIND_BOOL: u32 = NuxPlayerInputKind::Bool as u32;
+pub const NUX_PLAYER_INPUT_KIND_NUMBER: u32 = NuxPlayerInputKind::Number as u32;
+pub const NUX_PLAYER_INPUT_KIND_TRIGGER: u32 = NuxPlayerInputKind::Trigger as u32;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerInputChange {
+    /// One of the `NuxPlayerInputKind` constants. Stored as an integer so an
+    /// invalid C bit pattern is rejected rather than becoming a Rust enum.
+    pub kind: u32,
+    pub name: NuxStringView,
+    /// Canonical C boolean encoding: exactly 0 or 1. Other values reject the
+    /// whole batch before mutation.
+    pub bool_value: u32,
+    pub number_value: f32,
+}
+
+/// Pinned C++ Scene pointer operation. Application-level cancellation policy
+/// is intentionally absent: C++ exposes Down, Move, Up, and Exit.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxPlayerPointerKind {
+    Down = 0,
+    Move = 1,
+    Up = 2,
+    Exit = 3,
+}
+
+pub const NUX_PLAYER_POINTER_KIND_DOWN: u32 = NuxPlayerPointerKind::Down as u32;
+pub const NUX_PLAYER_POINTER_KIND_MOVE: u32 = NuxPlayerPointerKind::Move as u32;
+pub const NUX_PLAYER_POINTER_KIND_UP: u32 = NuxPlayerPointerKind::Up as u32;
+pub const NUX_PLAYER_POINTER_KIND_EXIT: u32 = NuxPlayerPointerKind::Exit as u32;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerPointerEvent {
+    /// One of the `NuxPlayerPointerKind` constants. Invalid values are
+    /// rejected during whole-batch validation.
+    pub kind: u32,
+    pub x: f32,
+    pub y: f32,
+    pub pointer_id: i32,
+    pub timestamp_seconds: f32,
+}
+
+/// One atomic, product-neutral player operation. Input and pointer arrays use
+/// ABI-v3 fixed element strides; future element layouts require a new entry
+/// point rather than appending fields and silently changing array stride.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerStep {
+    pub struct_size: u32,
+    pub inputs: *const NuxPlayerInputChange,
+    pub input_count: usize,
+    pub pointers: *const NuxPlayerPointerEvent,
+    pub pointer_count: usize,
+    pub elapsed_seconds: f32,
+}
+
+pub const NUX_PLAYER_STEP_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerStep, elapsed_seconds) + std::mem::size_of::<f32>();
+
+impl Default for NuxPlayerStep {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            inputs: ptr::null(),
+            input_count: 0,
+            pointers: ptr::null(),
+            pointer_count: 0,
+            elapsed_seconds: 0.0,
+        }
+    }
+}
+
+/// Exact C++ HitResult strength in pointer submission order.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NuxPlayerPointerHit {
+    #[default]
+    None = 0,
+    Hit = 1,
+    HitOpaque = 2,
+}
+
+pub const NUX_PLAYER_POINTER_HIT_NONE: u32 = NuxPlayerPointerHit::None as u32;
+pub const NUX_PLAYER_POINTER_HIT_HIT: u32 = NuxPlayerPointerHit::Hit as u32;
+pub const NUX_PLAYER_POINTER_HIT_HIT_OPAQUE: u32 = NuxPlayerPointerHit::HitOpaque as u32;
+
+/// Summary of one owned step result. `keep_going` is the runtime's
+/// advanceAndApply continuation result; it is not a host render/scheduling
+/// request.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerStepInfo {
+    pub struct_size: u32,
+    pub keep_going: bool,
+    pub pointer_result_count: usize,
+    pub state_change_count: usize,
+    pub event_count: usize,
+}
+
+pub const NUX_PLAYER_STEP_INFO_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerStepInfo, event_count) + std::mem::size_of::<usize>();
+
+impl Default for NuxPlayerStepInfo {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            keep_going: false,
+            pointer_result_count: 0,
+            state_change_count: 0,
+            event_count: 0,
+        }
+    }
+}
+
+/// C++ `stateChangedByIndex` projection in compressed authored-layer order.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerStateChangeView {
+    pub struct_size: u32,
+    pub layer_index: usize,
+    /// Pinned Core schema type key (`Core::typeKey`).
+    pub state_core_type: u32,
+    /// Authored Core id, or `UINT32_MAX` when absent.
+    pub state_global_id: u32,
+}
+
+pub const NUX_PLAYER_STATE_CHANGE_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerStateChangeView, state_global_id) + std::mem::size_of::<u32>();
+
+impl Default for NuxPlayerStateChangeView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            layer_index: 0,
+            state_core_type: 0,
+            state_global_id: u32::MAX,
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxPlayerEventPropertyKind {
+    Number = 0,
+    Bool = 1,
+    String = 2,
+    Color = 3,
+    Enum = 4,
+    Trigger = 5,
+}
+
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER: u32 = NuxPlayerEventPropertyKind::Number as u32;
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_BOOL: u32 = NuxPlayerEventPropertyKind::Bool as u32;
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_STRING: u32 = NuxPlayerEventPropertyKind::String as u32;
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_COLOR: u32 = NuxPlayerEventPropertyKind::Color as u32;
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_ENUM: u32 = NuxPlayerEventPropertyKind::Enum as u32;
+pub const NUX_PLAYER_EVENT_PROPERTY_KIND_TRIGGER: u32 = NuxPlayerEventPropertyKind::Trigger as u32;
+
+/// Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
+/// promise. Its owner and lifetime are documented by the containing API.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NuxByteView {
+    pub data: *const u8,
+    pub len: usize,
+}
+
+/// Fixed projection of one typed custom Event property. Only the value field
+/// selected by `kind` is meaningful.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerEventPropertyView {
+    pub struct_size: u32,
+    /// One of the `NUX_PLAYER_EVENT_PROPERTY_KIND_*` constants.
+    pub kind: u32,
+    pub name: NuxStringView,
+    pub number_value: f32,
+    pub bool_value: bool,
+    /// Exact authored/script bytes for a String property; not necessarily UTF-8.
+    pub string_value: NuxByteView,
+    pub color_value: u32,
+    pub integer_value: u64,
+}
+
+pub const NUX_PLAYER_EVENT_PROPERTY_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerEventPropertyView, integer_value) + std::mem::size_of::<u64>();
+
+impl Default for NuxPlayerEventPropertyView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            kind: NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER,
+            name: NuxStringView::default(),
+            number_value: 0.0,
+            bool_value: false,
+            string_value: NuxByteView::default(),
+            color_value: 0,
+            integer_value: 0,
+        }
+    }
+}
+
+/// Owned reported-event projection. All string views borrow the owning step
+/// result and remain valid until its successful free.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerEventView {
+    pub struct_size: u32,
+    pub event_local_index: usize,
+    pub event_core_type: u32,
+    pub name: NuxStringView,
+    pub url: NuxStringView,
+    pub target: NuxStringView,
+    pub seconds_delay: f32,
+    pub property_count: usize,
+}
+
+pub const NUX_PLAYER_EVENT_VIEW_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerEventView, property_count) + std::mem::size_of::<usize>();
+
+impl Default for NuxPlayerEventView {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            event_local_index: 0,
+            event_core_type: 0,
+            name: NuxStringView::default(),
+            url: NuxStringView::default(),
+            target: NuxStringView::default(),
+            seconds_delay: 0.0,
+            property_count: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum OwnedPlayerEventPropertyValue {
+    Number(f32),
+    Bool(bool),
+    String(Box<[u8]>),
+    Color(u32),
+    Enum(u64),
+    Trigger(u64),
+}
+
+#[derive(Debug)]
+struct OwnedPlayerEventProperty {
+    name: Option<Box<[u8]>>,
+    value: OwnedPlayerEventPropertyValue,
+}
+
+#[derive(Debug)]
+struct OwnedPlayerEvent {
+    event_local_index: usize,
+    event_core_type: u32,
+    name: Option<Box<[u8]>>,
+    url: Option<Box<[u8]>>,
+    target: Option<Box<[u8]>>,
+    seconds_delay: f32,
+    properties: Vec<OwnedPlayerEventProperty>,
+}
+
+#[derive(Debug)]
+struct OwnedPlayerStateChange {
+    layer_index: usize,
+    state_core_type: u32,
+    state_global_id: u32,
+}
+
+/// Bounded library-owned result of one player step.
+pub struct NuxPlayerStepResult {
+    status: NuxStatus,
+    code: Box<[u8]>,
+    message: Box<[u8]>,
+    keep_going: bool,
+    pointer_results: Vec<NuxPlayerPointerHit>,
+    state_changes: Vec<OwnedPlayerStateChange>,
+    events: Vec<OwnedPlayerEvent>,
+}
+
 /// Caller-sized view into one owned C-ABI result. `code` and `message` remain
 /// valid until the owning `NuxCapiResult` is released.
 #[repr(C)]
@@ -532,6 +861,7 @@ fn status_code(status: NuxStatus) -> &'static str {
         NuxStatus::InvalidStructSize => "nux_capi.invalid_struct_size",
         NuxStatus::HandleMismatch => "nux_capi.handle_mismatch",
         NuxStatus::ReentrantCall => "nux_capi.reentrant_call",
+        NuxStatus::LimitExceeded => "nux_capi.limit_exceeded",
     }
 }
 
@@ -1550,6 +1880,10 @@ pub unsafe extern "C" fn nux_player_info(
         if let Err(status) = require_owner_thread(player.owner_thread) {
             return status;
         }
+        let _occurrence_call = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
         let Ok(player_instance) = player.instance.try_borrow() else {
             return NuxStatus::ReentrantCall;
         };
@@ -1573,6 +1907,958 @@ pub unsafe extern "C" fn nux_player_info(
         };
         unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_INFO_V3_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+pub const NUX_PLAYER_STEP_MAX_INPUTS: usize = 4 * 1024;
+pub const NUX_PLAYER_STEP_MAX_POINTERS: usize = 4 * 1024;
+pub const NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES: usize = 4 * 1024;
+const MAX_PLAYER_STEP_INPUT_NAME_BYTES_TOTAL: usize = 4 * 1024 * 1024;
+const MAX_PLAYER_STEP_EVENTS: usize = 4 * 1024;
+const MAX_PLAYER_STEP_STATE_CHANGES: usize = 4 * 1024;
+const MAX_PLAYER_EVENT_PROPERTIES: usize = 256;
+const MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL: usize = 4 * 1024;
+const MAX_PLAYER_STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
+
+#[cfg(test)]
+static PANIC_AFTER_STEP_RESULT_PUBLICATION: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+static PANIC_BEFORE_STEP_RESULT_REGISTRATION: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn byte_view(value: &[u8]) -> NuxStringView {
+    NuxStringView {
+        data: value.as_ptr().cast(),
+        len: value.len(),
+    }
+}
+
+fn optional_byte_view(value: Option<&[u8]>) -> NuxStringView {
+    value.map_or_else(NuxStringView::default, byte_view)
+}
+
+fn byte_slice_view(value: &[u8]) -> NuxByteView {
+    NuxByteView {
+        data: value.as_ptr(),
+        len: value.len(),
+    }
+}
+
+fn publish_player_step_result(
+    out_result: *mut *mut NuxPlayerStepResult,
+    result: NuxPlayerStepResult,
+) {
+    let pending = PendingHandlePublication::new(result, HandleKind::PlayerStepResult);
+    #[cfg(test)]
+    if PANIC_BEFORE_STEP_RESULT_REGISTRATION.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        panic!("injected panic before player-step result registration");
+    }
+    register_handle(
+        pending.handle,
+        HandleKind::PlayerStepResult,
+        thread::current().id(),
+    );
+    unsafe { *out_result = pending.handle };
+    #[cfg(test)]
+    if PANIC_AFTER_STEP_RESULT_PUBLICATION.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        panic!("injected panic after player-step result publication");
+    }
+    let _ = pending.finish();
+}
+
+fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlayerStepResult {
+    NuxPlayerStepResult {
+        status,
+        code: bounded_diagnostic_bytes(status_code(status)),
+        message: bounded_diagnostic_bytes(message),
+        keep_going: false,
+        pointer_results: Vec::new(),
+        state_changes: Vec::new(),
+        events: Vec::new(),
+    }
+}
+
+fn publish_player_step_failure(
+    out_result: *mut *mut NuxPlayerStepResult,
+    status: NuxStatus,
+    message: impl AsRef<[u8]>,
+) -> NuxStatus {
+    publish_player_step_result(out_result, player_step_failure(status, message));
+    status
+}
+
+/// Panic firewall for the atomic step's single owned output. Publication is
+/// itself inside the firewall: a panic after registration is reclaimed before
+/// a best-effort failure result is published under a second nested firewall.
+fn ffi_guard_with_player_step_result(
+    out_result: *mut *mut NuxPlayerStepResult,
+    body: impl FnOnce() -> NuxStatus,
+) -> NuxStatus {
+    if out_result.is_null() {
+        return NuxStatus::NullArgument;
+    }
+    unsafe { *out_result = ptr::null_mut() };
+    match panic::catch_unwind(AssertUnwindSafe(body)) {
+        Ok(status) => status,
+        Err(_) => {
+            let published = unsafe { *out_result };
+            if !published.is_null()
+                && remove_handle(published, HandleKind::PlayerStepResult).is_ok()
+            {
+                unsafe { drop(Box::from_raw(published)) };
+            }
+            unsafe { *out_result = ptr::null_mut() };
+            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    "Rust panic contained during atomic player step",
+                )
+            }));
+            NuxStatus::RuntimeError
+        }
+    }
+}
+
+unsafe fn read_player_step(step: *const NuxPlayerStep) -> Result<NuxPlayerStep, NuxStatus> {
+    if step.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let caller_size = unsafe { step.cast::<u32>().read() };
+    if !struct_size_supports(caller_size, NUX_PLAYER_STEP_V3_MIN_SIZE) {
+        return Err(NuxStatus::InvalidStructSize);
+    }
+    let mut value = NuxPlayerStep::default();
+    let read_len = usize::try_from(caller_size)
+        .unwrap_or(usize::MAX)
+        .min(std::mem::size_of::<NuxPlayerStep>());
+    unsafe {
+        ptr::copy_nonoverlapping(
+            step.cast::<u8>(),
+            (&mut value as *mut NuxPlayerStep).cast::<u8>(),
+            read_len,
+        );
+    }
+    Ok(value)
+}
+
+#[derive(Debug)]
+enum PlannedPlayerInput {
+    Bool { index: usize, value: bool },
+    Number { index: usize, value: f32 },
+    Trigger { index: usize },
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PreparedPointerKind {
+    Down,
+    Move,
+    Up,
+    Exit,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PreparedPlayerPointer {
+    kind: PreparedPointerKind,
+    x: f32,
+    y: f32,
+    pointer_id: i32,
+    timestamp_seconds: f32,
+}
+
+/// Product-neutral validated operation boundary. UNIV-1822 can append its
+/// detached VM mutation candidate here after extending the caller-sized step
+/// prefix, without changing the transaction/commit path below.
+struct PreparedPlayerOperation {
+    inputs: Vec<PlannedPlayerInput>,
+    pointers: Vec<PreparedPlayerPointer>,
+    elapsed_seconds: f32,
+}
+
+fn validate_player_inputs(
+    machine: &StateMachineInstance,
+    inputs: &[NuxPlayerInputChange],
+) -> Result<Vec<PlannedPlayerInput>, (NuxStatus, &'static str)> {
+    let mut planned = Vec::with_capacity(inputs.len());
+    let mut total_name_bytes = 0usize;
+    for input in inputs {
+        if input.name.len > NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES {
+            return Err((
+                NuxStatus::LimitExceeded,
+                "player input name exceeds the per-name byte bound",
+            ));
+        }
+        total_name_bytes = total_name_bytes
+            .checked_add(input.name.len)
+            .filter(|total| *total <= MAX_PLAYER_STEP_INPUT_NAME_BYTES_TOTAL)
+            .ok_or((
+                NuxStatus::LimitExceeded,
+                "player input names exceed the aggregate byte bound",
+            ))?;
+        if input.kind == NuxPlayerInputKind::Bool as u32 && input.bool_value > 1 {
+            return Err((
+                NuxStatus::InvalidArgument,
+                "player bool input must be encoded as 0 or 1",
+            ));
+        }
+        let name = with_utf8_view(input.name, ToOwned::to_owned).map_err(|status| {
+            (
+                status,
+                "player input name is not valid length-delimited UTF-8",
+            )
+        })?;
+        let index = match input.kind {
+            kind if kind == NuxPlayerInputKind::Bool as u32 => {
+                machine.get_bool(&name).map(|input| input.index())
+            }
+            kind if kind == NuxPlayerInputKind::Number as u32 => {
+                machine.get_number(&name).map(|input| input.index())
+            }
+            kind if kind == NuxPlayerInputKind::Trigger as u32 => {
+                machine.get_trigger(&name).map(|input| input.index())
+            }
+            _ => {
+                return Err((
+                    NuxStatus::InvalidArgument,
+                    "player input kind is not an ABI-v3 constant",
+                ));
+            }
+        };
+        let Some(index) = index else {
+            let status = if machine.input_named(&name).is_some() {
+                NuxStatus::InvalidArgument
+            } else {
+                NuxStatus::NotFound
+            };
+            return Err((status, "player input name or type does not match"));
+        };
+        let mutation = match input.kind {
+            kind if kind == NuxPlayerInputKind::Bool as u32 => PlannedPlayerInput::Bool {
+                index,
+                value: input.bool_value != 0,
+            },
+            kind if kind == NuxPlayerInputKind::Number as u32 && input.number_value.is_finite() => {
+                PlannedPlayerInput::Number {
+                    index,
+                    value: input.number_value,
+                }
+            }
+            kind if kind == NuxPlayerInputKind::Number as u32 => {
+                return Err((
+                    NuxStatus::InvalidArgument,
+                    "player number input must be finite",
+                ));
+            }
+            kind if kind == NuxPlayerInputKind::Trigger as u32 => {
+                PlannedPlayerInput::Trigger { index }
+            }
+            _ => {
+                return Err((
+                    NuxStatus::InvalidArgument,
+                    "player input kind is not an ABI-v3 constant",
+                ));
+            }
+        };
+        planned.push(mutation);
+    }
+    Ok(planned)
+}
+
+fn validate_player_pointers(
+    pointers: &[NuxPlayerPointerEvent],
+) -> Result<Vec<PreparedPlayerPointer>, (NuxStatus, &'static str)> {
+    let mut prepared = Vec::with_capacity(pointers.len());
+    for pointer in pointers {
+        if !pointer.x.is_finite() || !pointer.y.is_finite() {
+            return Err((
+                NuxStatus::InvalidArgument,
+                "pointer coordinates must be finite",
+            ));
+        }
+        if !pointer.timestamp_seconds.is_finite() || pointer.timestamp_seconds < 0.0 {
+            return Err((
+                NuxStatus::InvalidArgument,
+                "pointer timestamp must be finite and nonnegative",
+            ));
+        }
+        let kind = match pointer.kind {
+            kind if kind == NuxPlayerPointerKind::Down as u32 => PreparedPointerKind::Down,
+            kind if kind == NuxPlayerPointerKind::Move as u32 => PreparedPointerKind::Move,
+            kind if kind == NuxPlayerPointerKind::Up as u32 => PreparedPointerKind::Up,
+            kind if kind == NuxPlayerPointerKind::Exit as u32 => PreparedPointerKind::Exit,
+            _ => {
+                return Err((
+                    NuxStatus::InvalidArgument,
+                    "pointer kind is not an ABI-v3 constant",
+                ));
+            }
+        };
+        if !matches!(kind, PreparedPointerKind::Move) && pointer.timestamp_seconds != 0.0 {
+            return Err((
+                NuxStatus::InvalidArgument,
+                "only pointer move accepts a nonzero C++ timestamp",
+            ));
+        }
+        prepared.push(PreparedPlayerPointer {
+            kind,
+            x: pointer.x,
+            y: pointer.y,
+            pointer_id: pointer.pointer_id,
+            timestamp_seconds: pointer.timestamp_seconds,
+        });
+    }
+    Ok(prepared)
+}
+
+fn pointer_hit(result: RuntimeHitResult) -> NuxPlayerPointerHit {
+    match result {
+        RuntimeHitResult::None => NuxPlayerPointerHit::None,
+        RuntimeHitResult::Hit => NuxPlayerPointerHit::Hit,
+        RuntimeHitResult::HitOpaque => NuxPlayerPointerHit::HitOpaque,
+    }
+}
+
+fn apply_player_pointer(
+    machine: &mut StateMachineInstance,
+    artboard: &mut OwnedArtboardInstance,
+    pointer: PreparedPlayerPointer,
+) -> Result<NuxPlayerPointerHit, nuxie::ScriptError> {
+    let mut host = NoopScriptHost;
+    let result = match pointer.kind {
+        PreparedPointerKind::Down => machine
+            .try_pointer_down_hit_result_with_timestamp_and_script_host(
+                artboard.raw_mut(),
+                pointer.x,
+                pointer.y,
+                pointer.pointer_id,
+                pointer.timestamp_seconds,
+                &mut host,
+            ),
+        PreparedPointerKind::Move => machine
+            .try_pointer_move_hit_result_with_timestamp_and_script_host(
+                artboard.raw_mut(),
+                pointer.x,
+                pointer.y,
+                pointer.pointer_id,
+                pointer.timestamp_seconds,
+                &mut host,
+            ),
+        PreparedPointerKind::Up => machine
+            .try_pointer_up_hit_result_with_timestamp_and_script_host(
+                artboard.raw_mut(),
+                pointer.x,
+                pointer.y,
+                pointer.pointer_id,
+                pointer.timestamp_seconds,
+                &mut host,
+            ),
+        PreparedPointerKind::Exit => machine
+            .try_pointer_exit_hit_result_with_timestamp_and_script_host(
+                artboard.raw_mut(),
+                pointer.x,
+                pointer.y,
+                pointer.pointer_id,
+                pointer.timestamp_seconds,
+                &mut host,
+            ),
+    }?;
+    Ok(pointer_hit(result))
+}
+
+fn push_owned_bytes(total: &mut usize, value: &[u8]) -> Result<Box<[u8]>, NuxStatus> {
+    *total = total
+        .checked_add(value.len())
+        .filter(|total| *total <= MAX_PLAYER_STEP_RESULT_BYTES)
+        .ok_or(NuxStatus::LimitExceeded)?;
+    Ok(value.to_vec().into_boxed_slice())
+}
+
+fn push_optional_owned_bytes(
+    total: &mut usize,
+    value: Option<&str>,
+) -> Result<Option<Box<[u8]>>, NuxStatus> {
+    value
+        .map(|value| push_owned_bytes(total, value.as_bytes()))
+        .transpose()
+}
+
+fn own_reported_events(
+    reported: Vec<StateMachineReportedEvent>,
+    pointer_result_count: usize,
+    state_change_count: usize,
+) -> Result<Vec<OwnedPlayerEvent>, (NuxStatus, &'static str)> {
+    if reported.len() > MAX_PLAYER_STEP_EVENTS {
+        return Err((
+            NuxStatus::LimitExceeded,
+            "runtime event count exceeds step bound",
+        ));
+    }
+    let total_properties = reported.iter().try_fold(0usize, |total, event| {
+        if event.properties().len() > MAX_PLAYER_EVENT_PROPERTIES {
+            return Err((
+                NuxStatus::LimitExceeded,
+                "runtime event property count exceeds per-event step bound",
+            ));
+        }
+        total
+            .checked_add(event.properties().len())
+            .filter(|total| *total <= MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL)
+            .ok_or((
+                NuxStatus::LimitExceeded,
+                "runtime event properties exceed aggregate step bound",
+            ))
+    })?;
+    let result_prefix_bytes = pointer_result_count
+        .checked_mul(std::mem::size_of::<NuxPlayerPointerHit>())
+        .and_then(|bytes| {
+            state_change_count
+                .checked_mul(std::mem::size_of::<OwnedPlayerStateChange>())
+                .and_then(|state_bytes| bytes.checked_add(state_bytes))
+        });
+    let mut owned_bytes_total = reported
+        .len()
+        .checked_mul(std::mem::size_of::<OwnedPlayerEvent>())
+        .and_then(|bytes| {
+            total_properties
+                .checked_mul(std::mem::size_of::<OwnedPlayerEventProperty>())
+                .and_then(|property_bytes| bytes.checked_add(property_bytes))
+        })
+        .and_then(|bytes| result_prefix_bytes.and_then(|prefix| bytes.checked_add(prefix)))
+        .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
+        .ok_or((
+            NuxStatus::LimitExceeded,
+            "runtime event projection exceeds structural byte bound",
+        ))?;
+    let mut events = Vec::with_capacity(reported.len());
+    for event in reported {
+        if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
+            return Err((NuxStatus::RuntimeError, "runtime event delay is invalid"));
+        }
+        let name = push_optional_owned_bytes(&mut owned_bytes_total, event.name())
+            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+        let url = push_optional_owned_bytes(&mut owned_bytes_total, event.url())
+            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+        let target = push_optional_owned_bytes(&mut owned_bytes_total, event.target())
+            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+        let mut properties = Vec::with_capacity(event.properties().len());
+        for property in event.properties() {
+            let name = push_optional_owned_bytes(&mut owned_bytes_total, property.name.as_deref())
+                .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+            let value = match &property.value {
+                RuntimeEventPropertyValue::Number(value) => {
+                    OwnedPlayerEventPropertyValue::Number(*value)
+                }
+                RuntimeEventPropertyValue::Bool(value) => {
+                    OwnedPlayerEventPropertyValue::Bool(*value)
+                }
+                RuntimeEventPropertyValue::String(value) => OwnedPlayerEventPropertyValue::String(
+                    push_owned_bytes(&mut owned_bytes_total, value)
+                        .map_err(|status| (status, "runtime event bytes exceed step bound"))?,
+                ),
+                RuntimeEventPropertyValue::Color(value) => {
+                    OwnedPlayerEventPropertyValue::Color(*value)
+                }
+                RuntimeEventPropertyValue::Enum(value) => {
+                    OwnedPlayerEventPropertyValue::Enum(*value)
+                }
+                RuntimeEventPropertyValue::Trigger(value) => {
+                    OwnedPlayerEventPropertyValue::Trigger(*value)
+                }
+            };
+            properties.push(OwnedPlayerEventProperty { name, value });
+        }
+        events.push(OwnedPlayerEvent {
+            event_local_index: event.event_local_index(),
+            event_core_type: event.event_core_type(),
+            name,
+            url,
+            target,
+            seconds_delay: event.seconds_delay(),
+            properties,
+        });
+    }
+    Ok(events)
+}
+
+fn player_step_body(
+    player: *mut NuxPlayer,
+    step: *const NuxPlayerStep,
+    out_result: *mut *mut NuxPlayerStepResult,
+) -> NuxStatus {
+    let _player_call = match enter_handle(player, HandleKind::Player) {
+        Ok(guard) => guard,
+        Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
+    };
+    let Some(player) = (unsafe { player.as_ref() }) else {
+        return publish_player_step_failure(out_result, NuxStatus::NullArgument, "player is null");
+    };
+    if let Err(status) = require_owner_thread(player.owner_thread) {
+        return publish_player_step_failure(out_result, status, status_code(status));
+    }
+    let step = match unsafe { read_player_step(step) } {
+        Ok(step) => step,
+        Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
+    };
+    if !step.elapsed_seconds.is_finite() || step.elapsed_seconds < 0.0 {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::InvalidArgument,
+            "elapsed seconds must be finite and nonnegative",
+        );
+    }
+    if step.input_count > NUX_PLAYER_STEP_MAX_INPUTS
+        || step.pointer_count > NUX_PLAYER_STEP_MAX_POINTERS
+    {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::LimitExceeded,
+            "player step batch exceeds fixed item bounds",
+        );
+    }
+    if (step.inputs.is_null() && step.input_count != 0)
+        || (step.pointers.is_null() && step.pointer_count != 0)
+    {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::NullArgument,
+            "nonempty player step array is null",
+        );
+    }
+    let inputs = if step.input_count == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(step.inputs, step.input_count) }
+    };
+    let pointers = if step.pointer_count == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(step.pointers, step.pointer_count) }
+    };
+    let prepared_pointers = match validate_player_pointers(pointers) {
+        Ok(pointers) => pointers,
+        Err((status, message)) => {
+            return publish_player_step_failure(out_result, status, message);
+        }
+    };
+
+    let _occurrence_call = match enter_occurrence(&player.artboard) {
+        Ok(guard) => guard,
+        Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
+    };
+    let Ok(mut artboard) = player.artboard.instance.try_borrow_mut() else {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::ReentrantCall,
+            "artboard occurrence is already active",
+        );
+    };
+    let Ok(mut player_instance) = player.instance.try_borrow_mut() else {
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::ReentrantCall,
+            "player is already active",
+        );
+    };
+
+    let planned_inputs = match &*player_instance {
+        PlayerInstance::StateMachine(machine) => match validate_player_inputs(machine, inputs) {
+            Ok(planned) => planned,
+            Err((status, message)) => {
+                return publish_player_step_failure(out_result, status, message);
+            }
+        },
+        PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard
+            if !inputs.is_empty() =>
+        {
+            return publish_player_step_failure(
+                out_result,
+                NuxStatus::NotFound,
+                "named inputs require a state-machine player",
+            );
+        }
+        PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard => Vec::new(),
+    };
+    let prepared = PreparedPlayerOperation {
+        inputs: planned_inputs,
+        pointers: prepared_pointers,
+        elapsed_seconds: step.elapsed_seconds,
+    };
+
+    let transaction = artboard.begin_transaction();
+    let mut pointer_results = Vec::with_capacity(prepared.pointers.len());
+    let mut state_changes = Vec::new();
+    let mut reported_events = Vec::new();
+    let keep_going = match &mut *player_instance {
+        PlayerInstance::StateMachine(machine) => {
+            for input in prepared.inputs {
+                match input {
+                    PlannedPlayerInput::Bool { index, value } => {
+                        let _ = machine.set_bool(index, value);
+                    }
+                    PlannedPlayerInput::Number { index, value } => {
+                        let _ = machine.set_number(index, value);
+                    }
+                    PlannedPlayerInput::Trigger { index } => {
+                        let _ = machine.fire_trigger(index);
+                    }
+                }
+            }
+            for pointer in prepared.pointers.iter().copied() {
+                match apply_player_pointer(machine, &mut artboard, pointer) {
+                    Ok(result) => pointer_results.push(result),
+                    Err(error) => {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            format!("scripted pointer dispatch failed: {error}"),
+                        );
+                    }
+                }
+            }
+            // Pointer callbacks can report authored events immediately. Drain
+            // those before advancement, then append events authored by the
+            // advance itself so the result preserves C++ production order.
+            reported_events = machine.take_reported_events(artboard.raw());
+            let keep_going =
+                match artboard.try_advance_with_state_machine(machine, prepared.elapsed_seconds) {
+                    Ok(keep_going) => keep_going,
+                    Err(error) => {
+                        player.artboard.poisoned.set(true);
+                        return publish_player_step_failure(
+                            out_result,
+                            NuxStatus::RuntimeError,
+                            format!("player advance failed: {error:#}"),
+                        );
+                    }
+                };
+            let state_change_count = machine.changed_state_count();
+            if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::LimitExceeded,
+                    "runtime state-change count exceeds step bound",
+                );
+            }
+            for index in 0..state_change_count {
+                let Some(state) = machine.changed_state(index) else {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        "runtime state-change projection is inconsistent",
+                    );
+                };
+                state_changes.push(OwnedPlayerStateChange {
+                    layer_index: machine.changed_state_layer_index(index).unwrap_or(index),
+                    state_core_type: match state.core_type() {
+                        Some(core_type) => core_type,
+                        None => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                NuxStatus::RuntimeError,
+                                "runtime state schema type is unknown",
+                            );
+                        }
+                    },
+                    state_global_id: state.global_id().unwrap_or(u32::MAX),
+                });
+            }
+            reported_events.extend(machine.take_reported_events(artboard.raw()));
+            keep_going
+        }
+        PlayerInstance::LinearAnimation(animation) => {
+            pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
+            let more = artboard
+                .raw_mut()
+                .advance_linear_animation_instance_with_events(
+                    animation,
+                    prepared.elapsed_seconds,
+                    &mut reported_events,
+                );
+            let _ = artboard
+                .raw_mut()
+                .apply_linear_animation_instance(animation, 1.0);
+            let artboard_more = artboard.advance(prepared.elapsed_seconds);
+            more || artboard_more
+                || artboard
+                    .raw()
+                    .linear_animation_instance_keep_going(animation)
+        }
+        PlayerInstance::StaticArtboard => {
+            pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
+            let _ = artboard.advance(0.0);
+            true
+        }
+    };
+
+    let events =
+        match own_reported_events(reported_events, pointer_results.len(), state_changes.len()) {
+            Ok(events) => events,
+            Err((status, message)) => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(out_result, status, message);
+            }
+        };
+    if let Err(error) = transaction.commit_without_host_effects() {
+        player.artboard.poisoned.set(true);
+        return publish_player_step_failure(
+            out_result,
+            NuxStatus::RuntimeError,
+            format!("player step cannot project host effects: {error}"),
+        );
+    }
+    publish_player_step_result(
+        out_result,
+        NuxPlayerStepResult {
+            status: NuxStatus::Ok,
+            code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
+            message: Box::default(),
+            keep_going,
+            pointer_results,
+            state_changes,
+            events,
+        },
+    );
+    NuxStatus::Ok
+}
+
+/// Apply all input changes and pointer events, then advance exactly once. The
+/// operation validates the complete batch before mutation. Any unexpected
+/// post-mutation failure rolls back pending script-host effects and terminally
+/// poisons the shared occurrence, so no artboard/player operation can observe
+/// partially committed runtime state.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step(
+    player: *mut NuxPlayer,
+    step: *const NuxPlayerStep,
+    out_result: *mut *mut NuxPlayerStepResult,
+) -> NuxStatus {
+    ffi_guard_with_player_step_result(out_result, || player_step_body(player, step, out_result))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_status(
+    result: *const NuxPlayerStepResult,
+    out_status: *mut NuxStatus,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_status.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        unsafe { *out_status = result.status };
+        NuxStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_diagnostic(
+    result: *const NuxPlayerStepResult,
+    out_diagnostic: *mut NuxCapiDiagnosticView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let value = NuxCapiDiagnosticView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxCapiDiagnosticView>())
+                .unwrap_or(u32::MAX),
+            status: result.status,
+            code: byte_view(&result.code),
+            message: byte_view(&result.message),
+        };
+        unsafe { write_caller_struct(out_diagnostic, &value, NUX_CAPI_DIAGNOSTIC_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_info(
+    result: *const NuxPlayerStepResult,
+    out_info: *mut NuxPlayerStepInfo,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let value = NuxPlayerStepInfo {
+            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerStepInfo>())
+                .unwrap_or(u32::MAX),
+            keep_going: result.keep_going,
+            pointer_result_count: result.pointer_results.len(),
+            state_change_count: result.state_changes.len(),
+            event_count: result.events.len(),
+        };
+        unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_STEP_INFO_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_pointer(
+    result: *const NuxPlayerStepResult,
+    index: usize,
+    out_hit: *mut u32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_hit.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(hit) = result.pointer_results.get(index).copied() else {
+            return NuxStatus::NotFound;
+        };
+        unsafe { *out_hit = hit as u32 };
+        NuxStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_state_change(
+    result: *const NuxPlayerStepResult,
+    index: usize,
+    out_change: *mut NuxPlayerStateChangeView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(change) = result.state_changes.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxPlayerStateChangeView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerStateChangeView>())
+                .unwrap_or(u32::MAX),
+            layer_index: change.layer_index,
+            state_core_type: change.state_core_type,
+            state_global_id: change.state_global_id,
+        };
+        unsafe { write_caller_struct(out_change, &value, NUX_PLAYER_STATE_CHANGE_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_event(
+    result: *const NuxPlayerStepResult,
+    index: usize,
+    out_event: *mut NuxPlayerEventView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(event) = result.events.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxPlayerEventView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerEventView>())
+                .unwrap_or(u32::MAX),
+            event_local_index: event.event_local_index,
+            event_core_type: event.event_core_type,
+            name: optional_byte_view(event.name.as_deref()),
+            url: optional_byte_view(event.url.as_deref()),
+            target: optional_byte_view(event.target.as_deref()),
+            seconds_delay: event.seconds_delay,
+            property_count: event.properties.len(),
+        };
+        unsafe { write_caller_struct(out_event, &value, NUX_PLAYER_EVENT_VIEW_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_event_property(
+    result: *const NuxPlayerStepResult,
+    event_index: usize,
+    property_index: usize,
+    out_property: *mut NuxPlayerEventPropertyView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(property) = result
+            .events
+            .get(event_index)
+            .and_then(|event| event.properties.get(property_index))
+        else {
+            return NuxStatus::NotFound;
+        };
+        let mut value = NuxPlayerEventPropertyView {
+            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerEventPropertyView>())
+                .unwrap_or(u32::MAX),
+            name: optional_byte_view(property.name.as_deref()),
+            ..NuxPlayerEventPropertyView::default()
+        };
+        match &property.value {
+            OwnedPlayerEventPropertyValue::Number(number) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER;
+                value.number_value = *number;
+            }
+            OwnedPlayerEventPropertyValue::Bool(boolean) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_BOOL;
+                value.bool_value = *boolean;
+            }
+            OwnedPlayerEventPropertyValue::String(string) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_STRING;
+                value.string_value = byte_slice_view(string);
+            }
+            OwnedPlayerEventPropertyValue::Color(color) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_COLOR;
+                value.color_value = *color;
+            }
+            OwnedPlayerEventPropertyValue::Enum(integer) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_ENUM;
+                value.integer_value = *integer;
+            }
+            OwnedPlayerEventPropertyValue::Trigger(integer) => {
+                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_TRIGGER;
+                value.integer_value = *integer;
+            }
+        }
+        unsafe {
+            write_caller_struct(
+                out_property,
+                &value,
+                NUX_PLAYER_EVENT_PROPERTY_VIEW_V3_MIN_SIZE,
+            )
+        }
+        .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_free(
+    result: *mut NuxPlayerStepResult,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if result.is_null() {
+            return NuxStatus::Ok;
+        }
+        if let Err(status) = remove_handle(result, HandleKind::PlayerStepResult) {
+            return status;
+        }
+        unsafe { drop(Box::from_raw(result)) };
+        NuxStatus::Ok
     })
 }
 
@@ -2221,6 +3507,61 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
 mod firewall_tests {
     use super::*;
 
+    #[cfg(feature = "scripting")]
+    fn trusted_script_file(name: &str) -> *mut NuxFile {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let bytes = std::fs::read(root.join("tests/unit_tests/assets").join(name))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
+        let file = Arc::new(
+            File::import_with_unsigned_scripts(&bytes)
+                .unwrap_or_else(|error| panic!("trusted import {name}: {error:#}")),
+        );
+        let handle = Box::into_raw(Box::new(NuxFile {
+            file,
+            owner_thread: thread::current().id(),
+        }));
+        register_handle(handle, HandleKind::File, thread::current().id());
+        handle
+    }
+
+    #[cfg(feature = "scripting")]
+    fn default_script_player(
+        file: *mut NuxFile,
+    ) -> (
+        *mut NuxArtboardInstance,
+        *mut NuxViewModelInstance,
+        *mut NuxPlayer,
+    ) {
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut view_model = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_default(artboard, &mut view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        let mut machine_name = NuxStringView::default();
+        assert_eq!(
+            unsafe { nux_file_artboard_state_machine_name(file, 0, 0, &mut machine_name) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_state_machine_named(artboard, machine_name, &mut player) },
+            NuxStatus::Ok
+        );
+        (artboard, view_model, player)
+    }
+
     // A deliberately-panicking internal path must surface as the function's
     // error value instead of unwinding across the C ABI boundary. This runs in
     // the dev profile (`debug_assertions`, unwinding enabled), which is exactly
@@ -2292,6 +3633,259 @@ mod firewall_tests {
         );
         assert_eq!(result_status, NuxStatus::RuntimeError);
         assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+    }
+
+    #[test]
+    fn player_step_firewall_reclaims_a_result_published_before_panic() {
+        let mut result = ptr::null_mut();
+        PANIC_AFTER_STEP_RESULT_PUBLICATION.store(true, std::sync::atomic::Ordering::SeqCst);
+        let status = ffi_guard_with_player_step_result(&mut result, || {
+            publish_player_step_result(&mut result, player_step_failure(NuxStatus::Ok, ""));
+            NuxStatus::Ok
+        });
+        assert_eq!(status, NuxStatus::RuntimeError);
+        assert!(!result.is_null());
+        let mut result_status = NuxStatus::Ok;
+        assert_eq!(
+            unsafe { nux_player_step_result_status(result, &mut result_status) },
+            NuxStatus::Ok
+        );
+        assert_eq!(result_status, NuxStatus::RuntimeError);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+    }
+
+    #[test]
+    fn player_step_publication_guard_reclaims_a_box_before_registration() {
+        let mut result = ptr::null_mut();
+        PANIC_BEFORE_STEP_RESULT_REGISTRATION.store(true, std::sync::atomic::Ordering::SeqCst);
+        let status = ffi_guard_with_player_step_result(&mut result, || {
+            publish_player_step_result(&mut result, player_step_failure(NuxStatus::Ok, ""));
+            NuxStatus::Ok
+        });
+        assert_eq!(status, NuxStatus::RuntimeError);
+        assert!(!result.is_null());
+        let mut result_status = NuxStatus::Ok;
+        assert_eq!(
+            unsafe { nux_player_step_result_status(result, &mut result_status) },
+            NuxStatus::Ok
+        );
+        assert_eq!(result_status, NuxStatus::RuntimeError);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn trusted_script_advances_through_the_c_step_entry() {
+        let file = trusted_script_file("scripted_transition_condition.riv");
+        let (artboard, view_model, mut player) = default_script_player(file);
+        let initialize = NuxPlayerStep {
+            elapsed_seconds: 0.1,
+            ..NuxPlayerStep::default()
+        };
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &initialize, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+
+        let name = std::ffi::CString::new("timelineBool").expect("static CString");
+        assert_eq!(
+            unsafe { nux_view_model_instance_set_bool(view_model, name.as_ptr(), true) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        // UNIV-1822 owns public VM mutation transport. Re-selecting here is a
+        // test-only setup that lets the trusted machine inherit the new bound
+        // context, then proves production C stepping preserves script work.
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        let mut machine_name = NuxStringView::default();
+        assert_eq!(
+            unsafe { nux_file_artboard_state_machine_name(file, 0, 0, &mut machine_name) },
+            NuxStatus::Ok
+        );
+        player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_state_machine_named(artboard, machine_name, &mut player) },
+            NuxStatus::Ok
+        );
+        let transition = NuxPlayerStep {
+            elapsed_seconds: 0.016,
+            ..NuxPlayerStep::default()
+        };
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &transition, &mut result) },
+            NuxStatus::Ok
+        );
+        let mut step_info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_info(result, &mut step_info) },
+            NuxStatus::Ok
+        );
+        assert!(
+            step_info.state_change_count > 0,
+            "the authenticated embedded Evaluate script enabled the pinned transition"
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_view_model_instance_free(view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    }
+
+    #[test]
+    fn fallible_script_advance_poison_blocks_every_shared_occurrence_path() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let bytes = std::fs::read(root.join("tests/unit_tests/assets/smi_test.riv"))
+            .expect("read smi fixture");
+        let mut file = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+            NuxStatus::Ok
+        );
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 1, &mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_player_new_state_machine_named(
+                    artboard,
+                    NuxStringView {
+                        data: c"State Machine 1".as_ptr(),
+                        len: "State Machine 1".len(),
+                    },
+                    &mut player,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let input = NuxPlayerInputChange {
+            kind: NUX_PLAYER_INPUT_KIND_BOOL,
+            name: NuxStringView {
+                data: c"bool".as_ptr(),
+                len: 4,
+            },
+            bool_value: 1,
+            number_value: 0.0,
+        };
+        let operation = NuxPlayerStep {
+            inputs: &input,
+            input_count: 1,
+            elapsed_seconds: 0.016,
+            ..NuxPlayerStep::default()
+        };
+        let mut result = ptr::null_mut();
+        unsafe { artboard.as_ref() }
+            .expect("primary artboard handle")
+            .occurrence
+            .instance
+            .borrow_mut()
+            .fail_next_fallible_state_machine_advance_for_test();
+
+        // The injection belongs to this exact occurrence. Advancing another
+        // occurrence first must not consume it, even when tests run in
+        // parallel on the same process.
+        let mut control_artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 1, &mut control_artboard) },
+            NuxStatus::Ok
+        );
+        let mut control_player = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_player_new_state_machine_named(
+                    control_artboard,
+                    NuxStringView {
+                        data: c"State Machine 1".as_ptr(),
+                        len: "State Machine 1".len(),
+                    },
+                    &mut control_player,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_step(control_player, &operation, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_player_free(control_player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(control_artboard) },
+            NuxStatus::Ok
+        );
+
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &operation, &mut result) },
+            NuxStatus::RuntimeError
+        );
+        let mut status = NuxStatus::Ok;
+        assert_eq!(
+            unsafe { nux_player_step_result_status(result, &mut status) },
+            NuxStatus::Ok
+        );
+        assert_eq!(status, NuxStatus::RuntimeError);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+
+        assert_eq!(
+            unsafe { nux_artboard_instance_advance(artboard, 0.0, ptr::null_mut()) },
+            NuxStatus::RuntimeError
+        );
+        let mut player_info = NuxPlayerInfo::default();
+        assert_eq!(
+            unsafe { nux_player_info(player, &mut player_info) },
+            NuxStatus::RuntimeError
+        );
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &operation, &mut result) },
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     }
 
     #[test]

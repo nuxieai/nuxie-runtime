@@ -789,7 +789,10 @@ impl FlowSession {
                 session.listener_binding_baseline = listener_binding_baseline;
             }
             let commands = transaction
-                .commit_host_effects::<Vec<ScriptHostCommand>>()
+                .try_commit_host_effects::<Vec<ScriptHostCommand>>()
+                .map_err(|error| {
+                    FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
+                })?
                 .unwrap_or_default();
             session.append_lua_host_commands(&mut outputs, 0, commands)?;
             (outputs, dirty)
@@ -847,7 +850,10 @@ impl FlowSession {
             return match operation_result {
                 Ok(mut result) => {
                     let commands = transaction
-                        .commit_host_effects::<Vec<ScriptHostCommand>>()
+                        .try_commit_host_effects::<Vec<ScriptHostCommand>>()
+                        .map_err(|error| {
+                            FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
+                        })?
                         .unwrap_or_default();
                     if let Err(error) =
                         self.integrate_lua_host_commands(&mut result, sequence_before, commands)
@@ -995,7 +1001,10 @@ impl FlowSession {
                 return Err(self.poison_after_mutation(error));
             }
             let commands = transaction
-                .commit_host_effects::<Vec<ScriptHostCommand>>()
+                .try_commit_host_effects::<Vec<ScriptHostCommand>>()
+                .map_err(|error| {
+                    FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
+                })?
                 .unwrap_or_default();
             if let Err(error) = self.integrate_lua_host_commands(result, sequence_before, commands)
             {
@@ -1497,7 +1506,10 @@ impl FlowSession {
                 let cycle_result = {
                     let mut cycle_result = cycle_result;
                     let commands = event_transaction
-                        .commit_host_effects::<Vec<ScriptHostCommand>>()
+                        .try_commit_host_effects::<Vec<ScriptHostCommand>>()
+                        .map_err(|error| {
+                            FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
+                        })?
                         .unwrap_or_default();
                     self.integrate_lua_host_commands(&mut cycle_result, sequence_before, commands)?;
                     cycle_result

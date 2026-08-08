@@ -383,13 +383,13 @@ class MigrationDistributionTests(unittest.TestCase):
                 "full-apple": {
                     "compressedBytes": 10,
                     "expandedBytes": 20,
-                    "representativeLinkedBytes": 4,
+                    "representativeLinkedBytes": {"c": 4, "swift": 5},
                     "sliceBytes": full_slices,
                 },
                 "ios-only": {
                     "compressedBytes": 8,
                     "expandedBytes": 12,
-                    "representativeLinkedBytes": 4,
+                    "representativeLinkedBytes": {"c": 4, "swift": 5},
                     "sliceBytes": ios_slices,
                 },
             },
@@ -410,13 +410,13 @@ class MigrationDistributionTests(unittest.TestCase):
                 "full-apple": {
                     "compressedBytes": 9,
                     "expandedBytes": 20,
-                    "representativeLinkedBytes": 4,
+                    "representativeLinkedBytes": {"c": 4, "swift": 5},
                     "sliceBytes": full_slices,
                 },
                 "ios-only": {
                     "compressedBytes": 8,
                     "expandedBytes": 12,
-                    "representativeLinkedBytes": 4,
+                    "representativeLinkedBytes": {"c": 4, "swift": 5},
                     "sliceBytes": ios_slices,
                 },
             },

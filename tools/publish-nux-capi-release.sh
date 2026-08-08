@@ -40,6 +40,7 @@ if [[ ! "${build_source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
     exit 5
 fi
 git -C "${repo_root}" merge-base --is-ancestor "${build_source_revision}" "${source_revision}"
+test "${build_source_revision}" = "${source_revision}"
 
 qualified_metadata="$(mktemp "${artifact_root}/.artifact-qualified.XXXXXX")"
 trap 'rm -f "${qualified_metadata}"' EXIT

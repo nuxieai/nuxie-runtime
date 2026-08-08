@@ -765,7 +765,7 @@ apple-runtime-check: apple-runtime-contract-test apple-runtime-build-identity-te
 	cargo clippy --locked -p nux-apple-runtime --lib --no-default-features --features apple-product --no-deps --quiet -- -D warnings
 
 apple-runtime-xcframework:
-	tools/build-apple-xcframework.sh
+	$(MAKE) --no-print-directory nux-capi-xcframeworks
 
 # SDK binary-size report: builds the post-Phase-R Darwin link closure with the
 # renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also

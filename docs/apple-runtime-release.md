@@ -118,20 +118,29 @@ or incompletely described build-input provenance fails verification.
 
 ## Release
 
-Apple releases preserve the existing `apple-runtime-v*` namespace. The next
-release is `apple-runtime-v0.3.0`; it is the first version whose XCFramework
-and complete Apple native implementation are co-located here.
+Apple releases preserve the existing `apple-runtime-v*` namespace. The current
+release is `apple-runtime-v0.3.1`; it contains the dependency-closure-qualified
+XCFramework built after the runtime acquisition-contract closeout.
 
 The repository intentionally has no release workflow that assumes an
-unverified macOS runner. Build and verify the artifact on a qualified Mac,
-merge the exact source, create an annotated tag on the merged commit, then run
-the guarded publisher from that clean tagged checkout:
+unverified macOS runner. Merge the release change first, check out the exact
+landed `origin/main` commit on a qualified Mac, then build and verify the
+artifact from that clean commit. Create the annotated tag on the same commit
+and run the guarded publisher without changing checkouts:
 
 ```sh
-git tag -a apple-runtime-v0.3.0 -m "Nuxie Apple runtime 0.3.0"
-git push origin refs/tags/apple-runtime-v0.3.0
-tools/publish-apple-runtime-release.sh apple-runtime-v0.3.0
+git fetch origin
+git checkout --detach <exact-landed-origin-main-sha>
+make apple-runtime-check
+make apple-runtime-xcframework
+git tag -a apple-runtime-v0.3.1 -m "Nuxie Apple runtime 0.3.1"
+git push origin refs/tags/apple-runtime-v0.3.1
+tools/publish-apple-runtime-release.sh apple-runtime-v0.3.1
 ```
+
+Do not reuse a pre-merge artifact after a rebase merge. Even when its source
+tree is byte-identical, its producing commit is not an ancestor of the landed
+release commit and the publisher correctly rejects that provenance.
 
 The publisher rejects a version mismatch, dirty checkout, tag/HEAD mismatch,
 commit not reachable from `origin/main`, missing or invalid artifacts, a

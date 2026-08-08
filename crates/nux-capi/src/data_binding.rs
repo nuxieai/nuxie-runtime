@@ -7,7 +7,7 @@
 
 use super::*;
 use nuxie::host_interfaces::{
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelUndoLog, RuntimeViewModelLinkError,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -26,12 +26,18 @@ static NEXT_VIEW_MODEL_IDENTITY: AtomicU64 = AtomicU64::new(1);
 #[cfg(test)]
 thread_local! {
     static TEST_VM_COMMIT_PANIC_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
+    static TEST_VM_RESULT_PUBLICATION_PANIC: Cell<bool> = const { Cell::new(false) };
     static TEST_TEXT_COMMIT_PANIC_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 #[cfg(test)]
 fn inject_vm_commit_panic_after(applied_count: Option<usize>) {
     TEST_VM_COMMIT_PANIC_AFTER.set(applied_count);
+}
+
+#[cfg(test)]
+fn inject_vm_result_publication_panic(armed: bool) {
+    TEST_VM_RESULT_PUBLICATION_PANIC.set(armed);
 }
 
 #[cfg(test)]
@@ -1767,8 +1773,8 @@ fn apply_mutation(
     Ok(())
 }
 
-fn record_mutation_undo(
-    undo: &mut RuntimeOwnedViewModelUndoLog,
+fn apply_transaction_mutation(
+    transaction: &mut RuntimeOwnedViewModelTransaction,
     instances: &BTreeMap<usize, RuntimeOwnedViewModelHandle>,
     mutation: &ResolvedMutation,
 ) -> bool {
@@ -1776,25 +1782,57 @@ fn record_mutation_undo(
         return false;
     };
     match mutation.kind {
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => undo.record_string(owner, &mutation.path),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => undo.record_number(owner, &mutation.path),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => undo.record_boolean(owner, &mutation.path),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => undo.record_color(owner, &mutation.path),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => undo.record_enum(owner, &mutation.path),
-        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => undo.record_trigger(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => {
+            transaction.set_string(owner, &mutation.path, &mutation.bytes)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => {
+            transaction.set_number(owner, &mutation.path, mutation.number)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => {
+            transaction.set_boolean(owner, &mutation.path, mutation.boolean)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => u32::try_from(mutation.integer)
+            .is_ok_and(|value| transaction.set_color(owner, &mutation.path, value)),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => {
+            transaction.set_enum(owner, &mutation.path, mutation.integer)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => {
+            transaction.fire_trigger(owner, &mutation.path)
+        }
         NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => {
-            undo.record_list_index(owner, &mutation.path)
+            transaction.set_list_index(owner, &mutation.path, mutation.integer)
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => undo.record_asset(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => {
+            transaction.set_asset(owner, &mutation.path, mutation.integer)
+        }
         NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL => {
-            undo.record_view_model(owner, &mutation.path)
+            let Some(value) = mutation.related.and_then(|related| instances.get(&related)) else {
+                return false;
+            };
+            transaction
+                .link_view_model(owner, &mutation.path, value)
+                .is_ok()
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT
-        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE
-        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP
-        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE
-        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET
-        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => undo.record_list(owner, &mutation.path),
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT => mutation
+            .related
+            .and_then(|related| instances.get(&related))
+            .is_some_and(|item| {
+                transaction.list_insert(owner, &mutation.path, mutation.index, item)
+            }),
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE => {
+            transaction.list_remove(owner, &mutation.path, mutation.index)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP => {
+            transaction.list_swap(owner, &mutation.path, mutation.index, mutation.second_index)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE => {
+            transaction.list_move(owner, &mutation.path, mutation.index, mutation.second_index)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET => mutation
+            .related
+            .and_then(|related| instances.get(&related))
+            .is_some_and(|item| transaction.list_set(owner, &mutation.path, mutation.index, item)),
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => transaction.list_clear(owner, &mutation.path),
         _ => false,
     }
 }
@@ -1805,18 +1843,54 @@ fn publish_mutation_result(
     applied_count: usize,
     message: impl AsRef<[u8]>,
 ) {
-    let result = Box::into_raw(Box::new(NuxViewModelMutationResult {
-        status,
-        applied_count,
-        code: bounded_diagnostic_bytes(status_code(status)),
-        message: bounded_diagnostic_bytes(message),
-    }));
+    let pending = PendingHandlePublication::new(
+        NuxViewModelMutationResult {
+            status,
+            applied_count,
+            code: bounded_diagnostic_bytes(status_code(status)),
+            message: bounded_diagnostic_bytes(message),
+        },
+        HandleKind::ViewModelMutationResult,
+    );
     register_handle(
-        result,
+        pending.handle,
         HandleKind::ViewModelMutationResult,
         thread::current().id(),
     );
-    unsafe { *out_result = result };
+    unsafe { *out_result = pending.handle };
+    let _ = pending.finish();
+}
+
+fn publish_mutation_success_and_commit(
+    out_result: *mut *mut NuxViewModelMutationResult,
+    applied_count: usize,
+    transaction: RuntimeOwnedViewModelTransaction,
+) {
+    let pending = PendingHandlePublication::new(
+        NuxViewModelMutationResult {
+            status: NuxStatus::Ok,
+            applied_count,
+            code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
+            message: Box::default(),
+        },
+        HandleKind::ViewModelMutationResult,
+    );
+    register_handle(
+        pending.handle,
+        HandleKind::ViewModelMutationResult,
+        thread::current().id(),
+    );
+    unsafe { *out_result = pending.handle };
+    #[cfg(test)]
+    if TEST_VM_RESULT_PUBLICATION_PANIC.with(|armed| armed.replace(false)) {
+        panic!("injected panic after view-model mutation result publication");
+    }
+    // Notification delivery is deliberately the final, non-fallible runtime
+    // step. Until this call the pending result and RAII transaction remain
+    // armed, so any allocation/registration/publication unwind retracts the
+    // handle and restores the exact graph before the FFI error is returned.
+    transaction.commit();
+    let _ = pending.finish();
 }
 
 #[unsafe(no_mangle)]
@@ -1966,40 +2040,33 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 return status;
             }
         }
-        // Record every inverse before its corresponding write. The journal
-        // retains exact runtime handles, so rollback preserves identities
-        // already observed through artboards, scripts, and shared C handles.
-        let mut undo = RuntimeOwnedViewModelUndoLog::new();
+        // The runtime transaction owns each write and captures its exact-cell
+        // or exact-topology inverse before mutating. Dirt and listener effects
+        // stay buffered until the success result is fully published.
         let commit = panic::catch_unwind(AssertUnwindSafe(|| {
+            let mut transaction = RuntimeOwnedViewModelTransaction::begin().ok_or(())?;
             for (index, mutation) in resolved.iter().enumerate() {
-                if !record_mutation_undo(&mut undo, &live, mutation) {
-                    return Err(());
-                }
-                if apply_mutation(&live, mutation).is_err() {
+                if !apply_transaction_mutation(&mut transaction, &live, mutation) {
                     return Err(());
                 }
                 maybe_panic_during_vm_commit(index + 1);
             }
+            publish_mutation_success_and_commit(out_result, resolved.len(), transaction);
             Ok(())
         }));
         if !matches!(commit, Ok(Ok(()))) {
-            let restored = panic::catch_unwind(AssertUnwindSafe(|| undo.rollback()))
-                .is_ok_and(|restored| restored);
+            // A panic can happen after the raw pointer write. The pending
+            // publication guard has already retracted/freed that handle.
+            unsafe { *out_result = ptr::null_mut() };
             publish_mutation_result(
                 out_result,
                 NuxStatus::RuntimeError,
                 0,
-                if restored {
-                    "validated mutation diverged during commit; live graph restored"
-                } else {
-                    "validated mutation diverged and rollback failed"
-                },
+                "validated mutation diverged during commit; live graph restored",
             );
             return NuxStatus::RuntimeError;
         }
-        undo.commit();
         drop(guards);
-        publish_mutation_result(out_result, NuxStatus::Ok, resolved.len(), "");
         NuxStatus::Ok
     })
 }
@@ -2106,7 +2173,8 @@ unsafe fn read_text_run_mutation_batch(
 ///
 /// Every name and buffer is validated before the first write. `out_changed` is
 /// optional and receives canonical 0/1. An unexpected commit divergence or
-/// panic restores every earlier write through the runtime undo journal.
+/// panic drops the runtime-owned transaction, restoring every staged write
+/// and discarding every deferred invalidation before this call returns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
     instance: *mut NuxArtboardInstance,
@@ -2176,32 +2244,25 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
             .iter()
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>();
-        let Some(undo) = artboard.raw().root_text_value_run_undo_log(&names) else {
+        let Some(mut transaction) = artboard.raw_mut().root_text_value_run_transaction(&names)
+        else {
             return NuxStatus::NotFound;
         };
         let commit = panic::catch_unwind(AssertUnwindSafe(|| {
             let mut changed = false;
             for (index, (name, text)) in resolved.into_iter().enumerate() {
-                let Some(did_change) = artboard.raw_mut().set_root_text_value_run(&name, text)
-                else {
+                let Some(did_change) = transaction.set(&name, text) else {
                     return Err(());
                 };
                 changed |= did_change;
                 maybe_panic_during_text_commit(index + 1);
             }
+            transaction.commit();
             Ok(changed)
         }));
         let changed = match commit {
             Ok(Ok(changed)) => changed,
-            Ok(Err(())) | Err(_) => {
-                let restored =
-                    panic::catch_unwind(AssertUnwindSafe(|| undo.rollback(artboard.raw_mut())))
-                        .is_ok_and(|restored| restored);
-                if !restored {
-                    instance.occurrence.poisoned.set(true);
-                }
-                return NuxStatus::RuntimeError;
-            }
+            Ok(Err(())) | Err(_) => return NuxStatus::RuntimeError,
         };
         if !out_changed.is_null() {
             unsafe { *out_changed = u32::from(changed) };
@@ -2302,6 +2363,13 @@ mod transaction_tests {
         );
         inject_vm_commit_panic_after(None);
         assert_eq!(number_value(shared, "num"), original);
+        let mut info = NuxViewModelMutationResultInfo::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.status, NuxStatus::RuntimeError);
+        assert_eq!(info.applied_count, 0);
         assert_eq!(
             unsafe { nux_view_model_mutation_result_free(result) },
             NuxStatus::Ok
@@ -2319,6 +2387,64 @@ mod transaction_tests {
         unsafe {
             nux_view_model_mutation_result_free(result);
             nux_view_model_instance_free(shared);
+            nux_view_model_instance_free(instance);
+            nux_file_free(file);
+        }
+    }
+
+    #[test]
+    fn result_publication_panic_retracts_result_and_rolls_back_before_failure_result() {
+        let file = import_fixture("data_binding_test_2.riv");
+        let schema = schema_with_property(file, "num");
+        let mut instance = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new(file, schema, &mut instance) },
+            NuxStatus::Ok
+        );
+        let original = number_value(instance, "num");
+        let path = b"num";
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            instance,
+            path: NuxStringView {
+                data: path.as_ptr().cast(),
+                len: path.len(),
+            },
+            number_value: 77.0,
+            ..NuxViewModelMutation::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..NuxViewModelMutationBatch::default()
+        };
+        inject_vm_result_publication_panic(true);
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&batch, &mut result) },
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(number_value(instance, "num"), original);
+        let mut info = NuxViewModelMutationResultInfo::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.status, NuxStatus::RuntimeError);
+        assert_eq!(info.applied_count, 0);
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_free(result) },
+            NuxStatus::Ok
+        );
+        result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&batch, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(number_value(instance, "num"), 77.0);
+        unsafe {
+            nux_view_model_mutation_result_free(result);
             nux_view_model_instance_free(instance);
             nux_file_free(file);
         }

@@ -87,7 +87,11 @@
  *    synchronous call. Mutation-result code/message views borrow that result
  *    and expire when nux_view_model_mutation_result_free succeeds. A failed
  *    batch reports applied_count=0 and leaves the live view-model graph
- *    observationally unchanged.
+ *    observationally unchanged: exact retained cells/topology are restored
+ *    and buffered dirt, listener, and binding notifications are discarded.
+ *    Observer callbacks run only during final publication and are individually
+ *    panic-isolated; a panicking observer falls back to ordinary dirt delivery
+ *    and does not change a successfully committed batch into a failure.
  *
  * PANIC SAFETY
  *
@@ -97,6 +101,12 @@
  * handle/occurrence; later operations fail with RUNTIME_ERROR, but its matching
  * free remains permitted on the creation thread unless that panic occurred
  * during destruction itself, in which case destruction already consumed it.
+ * The narrow exception is a runtime panic while staging or publishing the
+ * result of a transactional view-model/text-run batch: its runtime-owned RAII
+ * transaction restores the exact graph silently, returns RUNTIME_ERROR (and
+ * applied_count=0 when a result exists), and leaves the otherwise healthy
+ * handle usable. Panics from observer callbacks are contained as described
+ * above and therefore do not fail or poison the committed batch.
  */
 
 #include "nux_capi.generated.h"

@@ -22,6 +22,99 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
+type RuntimeDeferredNotification = Box<dyn FnOnce()>;
+
+thread_local! {
+    static HOST_MUTATION_NOTIFICATIONS: RefCell<Option<Vec<RuntimeDeferredNotification>>> =
+        const { RefCell::new(None) };
+    static HOST_MUTATION_CALLBACK_FIREWALL_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+struct RuntimeHostMutationCallbackFirewall;
+
+impl RuntimeHostMutationCallbackFirewall {
+    fn enter() -> Self {
+        HOST_MUTATION_CALLBACK_FIREWALL_DEPTH.with(|depth| {
+            depth.set(depth.get().saturating_add(1));
+        });
+        Self
+    }
+}
+
+impl Drop for RuntimeHostMutationCallbackFirewall {
+    fn drop(&mut self) {
+        HOST_MUTATION_CALLBACK_FIREWALL_DEPTH.with(|depth| {
+            depth.set(depth.get().saturating_sub(1));
+        });
+    }
+}
+
+/// Thread-confined notification buffer for one host mutation transaction.
+/// Payload/topology writes remain immediately available to later operations
+/// in the same batch, while dirt/listener publication is deferred to commit.
+#[derive(Debug)]
+pub(crate) struct RuntimeHostMutationNotifications {
+    armed: bool,
+}
+
+impl RuntimeHostMutationNotifications {
+    pub(crate) fn begin() -> Option<Self> {
+        HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if slot.is_some() {
+                return None;
+            }
+            *slot = Some(Vec::new());
+            Some(Self { armed: true })
+        })
+    }
+
+    pub(crate) fn commit(mut self) {
+        self.armed = false;
+        let notifications = HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+            slot.borrow_mut()
+                .take()
+                .expect("active host mutation notification buffer")
+        });
+        // Rust/script observers are host extension points and may panic. The
+        // final publication phase isolates those callbacks individually (in
+        // `cascade`) so one observer cannot convert an already validated
+        // atomic batch into a partial failure or suppress later dependents.
+        let _callback_firewall = RuntimeHostMutationCallbackFirewall::enter();
+        for notification in notifications {
+            notification();
+        }
+    }
+
+    pub(crate) fn discard(mut self) {
+        self.armed = false;
+        HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+            let _ = slot.borrow_mut().take();
+        });
+    }
+}
+
+impl Drop for RuntimeHostMutationNotifications {
+    fn drop(&mut self) {
+        if self.armed {
+            HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+                let _ = slot.borrow_mut().take();
+            });
+        }
+    }
+}
+
+pub(crate) fn defer_host_mutation_notification(notification: impl FnOnce() + 'static) -> bool {
+    HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(notifications) = slot.as_mut() else {
+            return false;
+        };
+        notifications.push(Box::new(notification));
+        true
+    })
+}
+
 /// Retained mutation-order notification queue used by ViewModel listeners.
 ///
 /// C++ `StateMachineInstance::m_reportedListenerViewModels` is appended from
@@ -268,10 +361,7 @@ impl RuntimeCellDependent {
         }
         let was_dirty = bits.get() & dirt.0 == dirt.0;
         let handled_notification = if !dirt.is_empty() && !was_dirty {
-            self.before_notify
-                .upgrade()
-                .and_then(|callback| callback.borrow().clone())
-                .map(|callback| callback(dirt))
+            invoke_before_notify(&self.before_notify, dirt)
         } else {
             None
         };
@@ -293,6 +383,25 @@ impl RuntimeCellDependent {
 
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
         self.bits.ptr_eq(&other.bits)
+    }
+}
+
+fn invoke_before_notify(
+    before_notify: &Weak<RefCell<Option<Rc<dyn Fn(RuntimeCellDirt) -> bool>>>>,
+    dirt: RuntimeCellDirt,
+) -> Option<bool> {
+    let invoke = || {
+        before_notify
+            .upgrade()
+            .and_then(|callback| callback.borrow().clone())
+            .map(|callback| callback(dirt))
+    };
+    if HOST_MUTATION_CALLBACK_FIREWALL_DEPTH.with(Cell::get) != 0 {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(invoke))
+            .ok()
+            .flatten()
+    } else {
+        invoke()
     }
 }
 
@@ -611,11 +720,7 @@ impl RuntimeViewModelCellState {
             }
             let was_dirty = bits.get() & dirt.0 == dirt.0;
             let handled_notification = if !dirt.is_empty() && !was_dirty {
-                dependent
-                    .before_notify
-                    .upgrade()
-                    .and_then(|callback| callback.borrow().clone())
-                    .map(|callback| callback(dirt))
+                invoke_before_notify(&dependent.before_notify, dirt)
             } else {
                 None
             };
@@ -698,6 +803,12 @@ impl RuntimeViewModelCell {
         self.state.borrow().value.clone()
     }
 
+    /// Restore a transaction-captured payload without changing flags or
+    /// publishing dirt. The caller must own the exact retained cell.
+    pub(crate) fn restore_value_silent(&self, value: RuntimeViewModelCellValue) {
+        self.state.borrow_mut().value = value;
+    }
+
     /// C++ `ViewModelInstanceValue::hasChanged` (`ValueFlags::valueChanged`).
     pub fn has_changed(&self) -> bool {
         self.state.borrow().value_changed
@@ -769,11 +880,23 @@ impl RuntimeViewModelCell {
             return false;
         }
         state.value = value;
-        if state.suppress_depth == 0 {
+        let marks_changed = state.suppress_depth == 0;
+        drop(state);
+        let cell = self.clone();
+        if !defer_host_mutation_notification(move || {
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+        }) {
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+        }
+        true
+    }
+
+    fn publish_value_changed(&self, dirt: RuntimeCellDirt, marks_changed: bool) {
+        let mut state = self.state.borrow_mut();
+        if marks_changed {
             state.value_changed = true;
         }
-        state.cascade(RuntimeCellDirt::BINDINGS);
-        true
+        state.cascade(dirt);
     }
 
     /// C++ setters may report another `Bindings` cascade after an earlier
@@ -783,11 +906,13 @@ impl RuntimeViewModelCell {
     /// observable dependent/listener multiplicity without inventing a
     /// second payload write.
     pub(crate) fn notify_bindings_value_changed(&self) {
-        let mut state = self.state.borrow_mut();
-        if state.suppress_depth == 0 {
-            state.value_changed = true;
+        let marks_changed = self.state.borrow().suppress_depth == 0;
+        let cell = self.clone();
+        if !defer_host_mutation_notification(move || {
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+        }) {
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
         }
-        state.cascade(RuntimeCellDirt::BINDINGS);
     }
 
     /// C++ `ViewModelInstanceAssetFont::propertyValue(uint32_t)`: update the

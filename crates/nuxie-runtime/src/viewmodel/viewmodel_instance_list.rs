@@ -48,6 +48,42 @@ impl RuntimeOwnedViewModelListHandle {
             .collect()
     }
 
+    fn transaction_snapshot_items(&self) -> Vec<RuntimeOwnedViewModelListItem> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .map(|item| {
+                let mut snapshot = RuntimeOwnedViewModelListItem::copy_identity_from(
+                    item,
+                    Rc::clone(&item.instance),
+                );
+                snapshot.parent_registered = item.parent_registered;
+                snapshot
+            })
+            .collect()
+    }
+
+    fn transaction_restore_items(&self, mut items: Vec<RuntimeOwnedViewModelListItem>) {
+        let mut value = self.value.borrow_mut();
+        let mut current = std::mem::take(&mut value.items);
+        for item in &mut current {
+            value.detach_item(item);
+        }
+        for item in &mut items {
+            if item.parent_registered {
+                // `attach_item` also records the local registration bit. The
+                // snapshot already has that exact bit, so add only the relay
+                // edge that was removed with the staged topology.
+                if let Some(parent) = value.parent_relay.upgrade() {
+                    RuntimeOwnedViewModelParentRelay::add_parent(&item.child_relay, &parent);
+                }
+            }
+        }
+        value.item_count = items.len();
+        value.items = items;
+    }
+
     pub(crate) fn item_entries(&self) -> Vec<RuntimeOwnedViewModelListItemEntry> {
         self.value
             .borrow()

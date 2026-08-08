@@ -186,37 +186,40 @@ pub struct RuntimeOwnedViewModelHandle {
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
 }
 
-/// Identity-preserving undo journal for a bounded host mutation transaction.
+/// Identity-preserving, runtime-owned transaction for a bounded host batch.
 ///
-/// Entries retain the exact runtime cells and list/view-model handles that
-/// existed before each write. Rolling the journal back in reverse order
-/// restores values and topology without replacing any `Rc` identity observed
-/// by an artboard, state machine, script, or another host handle.
+/// Mutation methods retain the exact runtime cells and list/view-model
+/// topology before each write; callers cannot separate inverse capture from
+/// mutation. Drop restores in reverse order without replacing any `Rc`
+/// identity or publishing buffered dirt/listener effects.
+#[derive(Debug)]
+pub struct RuntimeOwnedViewModelTransaction {
+    undo: RuntimeOwnedViewModelUndoLog,
+    notifications: Option<RuntimeHostMutationNotifications>,
+    armed: bool,
+}
+
 #[derive(Debug, Default)]
-pub struct RuntimeOwnedViewModelUndoLog {
+struct RuntimeOwnedViewModelUndoLog {
     entries: Vec<RuntimeOwnedViewModelUndo>,
 }
 
 #[derive(Debug)]
 enum RuntimeOwnedViewModelUndo {
-    String(RuntimeOwnedViewModelHandle, String, Arc<[u8]>),
-    Number(RuntimeOwnedViewModelHandle, String, f32),
-    Boolean(RuntimeOwnedViewModelHandle, String, bool),
-    Color(RuntimeOwnedViewModelHandle, String, u32),
-    Enum(RuntimeOwnedViewModelHandle, String, u64),
-    Trigger(RuntimeOwnedViewModelHandle, String, u64),
-    ListIndex(RuntimeOwnedViewModelHandle, String, u64),
-    Asset(RuntimeOwnedViewModelHandle, String, u64),
-    ViewModel(
-        RuntimeOwnedViewModelHandle,
-        String,
-        Option<RuntimeOwnedViewModelHandle>,
-    ),
+    Cell(RuntimeViewModelCell, RuntimeViewModelCellValue),
+    ViewModel(RuntimeOwnedViewModelLinkSnapshot),
     List(
-        RuntimeOwnedViewModelHandle,
-        String,
-        Vec<RuntimeOwnedViewModelHandle>,
+        RuntimeOwnedViewModelListHandle,
+        Vec<RuntimeOwnedViewModelListItem>,
     ),
+}
+
+#[derive(Debug)]
+struct RuntimeOwnedViewModelLinkSnapshot {
+    endpoint: RuntimeOwnedViewModelEndpoint,
+    parent_relay: Rc<RuntimeOwnedViewModelParentRelay>,
+    value: RuntimeViewModelPointer,
+    linked_instance: Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -619,228 +622,13 @@ impl RuntimeOwnedViewModelHandle {
     }
 }
 
-impl RuntimeOwnedViewModelHandle {
-    fn restore_linked_view_model_by_property_name(
-        &self,
-        property_name: &str,
-        value: Option<&Self>,
-    ) -> bool {
-        if property_name.is_empty() || property_name.contains('/') {
-            return false;
-        }
-        let (property_index, previous) = {
-            let Ok(instance) = self.instance.try_borrow() else {
-                return false;
-            };
-            let Some(property_index) = instance.property_index_by_name(property_name) else {
-                return false;
-            };
-            let Some(property) = instance
-                .view_models
-                .iter()
-                .find(|property| property.property_index == property_index)
-            else {
-                return false;
-            };
-            (property_index, property.endpoint.linked_instance())
-        };
-        let previous_relay = match previous.as_ref() {
-            Some(previous) => {
-                let Ok(previous) = previous.try_borrow() else {
-                    return false;
-                };
-                Some(Rc::clone(&previous.parent_relay))
-            }
-            None => None,
-        };
-        let (replacement, replacement_relay) = match value {
-            Some(value) => {
-                let Ok(value_instance) = value.instance.try_borrow() else {
-                    return false;
-                };
-                (
-                    Some(value.shared()),
-                    Some(Rc::clone(&value_instance.parent_relay)),
-                )
-            }
-            None => (None, None),
-        };
-        let Ok(mut instance) = self.instance.try_borrow_mut() else {
-            return false;
-        };
-        let parent_relay = Rc::clone(&instance.parent_relay);
-        let Some(property) = instance
-            .view_models
-            .iter_mut()
-            .find(|property| property.property_index == property_index)
-        else {
-            return false;
-        };
-        if let Some(previous_relay) = previous_relay {
-            RuntimeOwnedViewModelParentRelay::remove_parent(&previous_relay, &parent_relay);
-        }
-        property.endpoint.set_linked_instance_silent(replacement);
-        if let Some(replacement_relay) = replacement_relay {
-            RuntimeOwnedViewModelParentRelay::add_parent(&replacement_relay, &parent_relay);
-        }
-        instance.mark_structurally_mutated();
-        true
-    }
-
-    fn restore_list_by_property_name(
-        &self,
-        property_name: &str,
-        items: &[RuntimeOwnedViewModelHandle],
-    ) -> bool {
-        let Some(current_count) = self.list_item_count_by_property_name_path(property_name) else {
-            return false;
-        };
-        if current_count != 0 && !self.clear_list_items_by_property_name_path(property_name) {
-            return false;
-        }
-        for (index, item) in items.iter().enumerate() {
-            if !self.insert_list_item_by_property_name_path(property_name, index, item) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
 impl RuntimeOwnedViewModelUndoLog {
-    pub fn new() -> Self {
-        Self::default()
+    fn record_cell(&mut self, cell: RuntimeViewModelCell) {
+        let value = cell.value();
+        self.entries.push(RuntimeOwnedViewModelUndo::Cell(cell, value));
     }
 
-    pub fn record_string(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.string_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::String(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_number(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.number_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Number(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_boolean(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.boolean_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Boolean(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_color(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.color_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Color(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_enum(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.enum_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Enum(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_trigger(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.trigger_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Trigger(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_list_index(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.symbol_list_index_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::ListIndex(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_asset(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Ok(instance) = owner.instance.try_borrow() else {
-            return false;
-        };
-        let Some(value) = instance.asset_value_by_property_name_path(path) else {
-            return false;
-        };
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::Asset(
-            owner.clone(),
-            path.to_owned(),
-            value,
-        ));
-        true
-    }
-
-    pub fn record_view_model(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+    fn record_view_model(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
         if path.is_empty() || path.contains('/') {
             return false;
         }
@@ -857,156 +645,364 @@ impl RuntimeOwnedViewModelUndoLog {
         else {
             return false;
         };
-        let previous = property
-            .endpoint
-            .linked_instance()
-            .map(RuntimeOwnedViewModelHandle::from_shared);
-        drop(instance);
-        self.entries.push(RuntimeOwnedViewModelUndo::ViewModel(
-            owner.clone(),
-            path.to_owned(),
-            previous,
-        ));
+        let snapshot = RuntimeOwnedViewModelLinkSnapshot {
+            endpoint: RuntimeOwnedViewModelEndpoint {
+                state: Rc::clone(&property.endpoint.state),
+            },
+            parent_relay: Rc::clone(&instance.parent_relay),
+            value: property.endpoint.value(),
+            linked_instance: property.endpoint.linked_instance(),
+        };
+        self.entries
+            .push(RuntimeOwnedViewModelUndo::ViewModel(snapshot));
         true
     }
 
-    pub fn record_list(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        let Some(items) = owner.list_items_by_property_name_path(path) else {
+    fn record_list(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+        let Ok(instance) = owner.instance.try_borrow() else {
             return false;
         };
+        let Some(source) = instance.list_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(list) = instance.list_handle_by_property_path(source.path()) else {
+            return false;
+        };
+        let items = list.transaction_snapshot_items();
         self.entries.push(RuntimeOwnedViewModelUndo::List(
-            owner.clone(),
-            path.to_owned(),
+            list,
             items,
         ));
         true
     }
 
-    /// Restore every recorded write in reverse order. Returns false only when
-    /// a runtime invariant was violated after the journal was captured.
-    pub fn rollback(&mut self) -> bool {
+    /// Exact retained cells and topology make rollback independent of schema
+    /// lookup and ordinary setters. It therefore cannot publish dirt, invoke
+    /// listeners, allocate, or fail after the journal entry was captured.
+    fn rollback(&mut self) {
         while let Some(entry) = self.entries.pop() {
-            let restored = match entry {
-                RuntimeOwnedViewModelUndo::String(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .string_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
+            match entry {
+                RuntimeOwnedViewModelUndo::Cell(cell, value) => {
+                    cell.restore_value_silent(value);
+                }
+                RuntimeOwnedViewModelUndo::ViewModel(snapshot) => {
+                    let current = snapshot.endpoint.linked_instance();
+                    if let Some(current) = current {
+                        let relay = Rc::clone(&current.borrow().parent_relay);
+                        RuntimeOwnedViewModelParentRelay::remove_parent(
+                            &relay,
+                            &snapshot.parent_relay,
+                        );
                     }
-                    let _ = instance.set_string_by_property_name_path(&path, &value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::Number(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .number_source_handle_by_property_name_path(&path)
-                        .is_none()
                     {
-                        return false;
+                        let mut state = snapshot.endpoint.state.borrow_mut();
+                        state.value = snapshot.value;
+                        state.linked_instance = snapshot.linked_instance.as_ref().map(Rc::clone);
                     }
-                    let _ = instance.set_number_by_property_name_path(&path, value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::Boolean(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .boolean_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
+                    if let Some(previous) = snapshot.linked_instance {
+                        let relay = Rc::clone(&previous.borrow().parent_relay);
+                        RuntimeOwnedViewModelParentRelay::add_parent(
+                            &relay,
+                            &snapshot.parent_relay,
+                        );
                     }
-                    let _ = instance.set_boolean_by_property_name_path(&path, value);
-                    true
                 }
-                RuntimeOwnedViewModelUndo::Color(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .color_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
-                    }
-                    let _ = instance.set_color_by_property_name_path(&path, value);
-                    true
+                RuntimeOwnedViewModelUndo::List(list, items) => {
+                    list.transaction_restore_items(items);
                 }
-                RuntimeOwnedViewModelUndo::Enum(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .enum_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
-                    }
-                    let _ = instance.set_enum_by_property_name_path(&path, value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::Trigger(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .trigger_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
-                    }
-                    let _ = instance.set_trigger_by_property_name_path(&path, value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::ListIndex(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .symbol_list_index_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
-                    }
-                    let _ = instance.set_symbol_list_index_by_property_name_path(&path, value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::Asset(owner, path, value) => {
-                    let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-                        return false;
-                    };
-                    if instance
-                        .asset_source_handle_by_property_name_path(&path)
-                        .is_none()
-                    {
-                        return false;
-                    }
-                    let _ = instance.set_asset_by_property_name_path(&path, value);
-                    true
-                }
-                RuntimeOwnedViewModelUndo::ViewModel(owner, path, value) => {
-                    owner.restore_linked_view_model_by_property_name(&path, value.as_ref())
-                }
-                RuntimeOwnedViewModelUndo::List(owner, path, items) => {
-                    owner.restore_list_by_property_name(&path, &items)
-                }
-            };
-            if !restored {
-                return false;
             }
         }
+    }
+
+    fn commit(&mut self) {
+        self.entries.clear();
+    }
+}
+
+impl RuntimeOwnedViewModelTransaction {
+    pub fn begin() -> Option<Self> {
+        Some(Self {
+            undo: RuntimeOwnedViewModelUndoLog::default(),
+            notifications: Some(RuntimeHostMutationNotifications::begin()?),
+            armed: true,
+        })
+    }
+
+    fn capture_cell(&mut self, cell: RuntimeViewModelCell) {
+        self.undo.record_cell(cell);
+    }
+
+    pub fn set_string(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: &[u8],
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.string_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_string_by_source_handle(&source, value);
         true
     }
 
+    pub fn set_number(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: f32,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.number_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_number_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn set_boolean(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: bool,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.boolean_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_boolean_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn set_color(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u32,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.color_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_color_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn set_enum(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.enum_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_enum_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn fire_trigger(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.trigger_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        let Some(value) = instance.trigger_value_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(next) = value.checked_add(1) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_trigger_by_source_handle(&source, next);
+        true
+    }
+
+    pub fn set_list_index(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.symbol_list_index_source_handle_by_property_name_path(path)
+        else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_symbol_list_index_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn set_asset(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> bool {
+        let Ok(mut instance) = owner.instance.try_borrow_mut() else {
+            return false;
+        };
+        let Some(source) = instance.asset_source_handle_by_property_name_path(path) else {
+            return false;
+        };
+        let Some(cell) = instance.cell_by_property_path(source.path()) else {
+            return false;
+        };
+        self.capture_cell(cell);
+        let _ = instance.set_asset_by_source_handle(&source, value);
+        true
+    }
+
+    pub fn link_view_model(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: &RuntimeOwnedViewModelHandle,
+    ) -> Result<bool, RuntimeViewModelLinkError> {
+        if !self.undo.record_view_model(owner, path) {
+            return Err(RuntimeViewModelLinkError::PropertyNotFound);
+        }
+        owner.link_view_model_by_property_name_path(path, value)
+    }
+
+    fn capture_list(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+        self.undo.record_list(owner, path)
+    }
+
+    pub fn list_insert(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        index: usize,
+        item: &RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        self.capture_list(owner, path)
+            && owner.insert_list_item_by_property_name_path(path, index, item)
+    }
+
+    pub fn list_remove(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        index: usize,
+    ) -> bool {
+        self.capture_list(owner, path)
+            && owner.remove_list_item_by_property_name_path(path, index)
+    }
+
+    pub fn list_swap(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        first: usize,
+        second: usize,
+    ) -> bool {
+        if first == second {
+            return true;
+        }
+        self.capture_list(owner, path)
+            && owner.swap_list_items_by_property_name_path(path, first, second)
+    }
+
+    pub fn list_move(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        from: usize,
+        to: usize,
+    ) -> bool {
+        if from == to {
+            return true;
+        }
+        self.capture_list(owner, path)
+            && owner.move_list_item_by_property_name_path(path, from, to)
+    }
+
+    pub fn list_set(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        index: usize,
+        item: &RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        self.capture_list(owner, path)
+            && owner.set_list_item_by_property_name_path(path, index, item)
+    }
+
+    pub fn list_clear(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+        self.capture_list(owner, path) && {
+            let _ = owner.clear_list_items_by_property_name_path(path);
+            true
+        }
+    }
+
+    /// Publish the buffered dirt/listener effects only after the caller has
+    /// prepared and registered every fallible result object.
     pub fn commit(mut self) {
-        self.entries.clear();
+        self.notifications
+            .take()
+            .expect("active view-model transaction")
+            .commit();
+        self.undo.commit();
+        self.armed = false;
+    }
+
+    fn rollback(&mut self) {
+        if !self.armed {
+            return;
+        }
+        self.undo.rollback();
+        if let Some(notifications) = self.notifications.take() {
+            notifications.discard();
+        }
+        self.armed = false;
+    }
+}
+
+impl Drop for RuntimeOwnedViewModelTransaction {
+    fn drop(&mut self) {
+        self.rollback();
     }
 }
 

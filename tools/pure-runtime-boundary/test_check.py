@@ -2060,6 +2060,22 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("exported portable ABI macros are not approved", result.stderr)
 
+    def test_rejects_macro_generated_export_attributes(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/generated_export.rs").write_text(
+            "macro_rules! export_item { ($attr:ident, $item:item) => {\n"
+            "    #[$attr] $item\n"
+            "}; }\n"
+            "export_item!(macro_export, macro_rules! accepts_type {\n"
+            "    ($ty:ty) => { pub fn f(_: $ty) {} };\n"
+            "});\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exported portable ABI macros are not approved", result.stderr)
+
     def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/test_support.rs").write_text(

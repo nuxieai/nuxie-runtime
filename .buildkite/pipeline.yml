@@ -8,14 +8,19 @@ env:
   RIVE_PREMAKE_TAG: "v5.0.0-beta7"
 
 steps:
-  # Every pull request gets a fast, portable compile and lint signal. Keep this
-  # independent of the pinned C++ runtime, fixtures, and Apple host so the
-  # common path does not wait behind expensive confidence work.
+  # Every pull request gets a fast, portable compile and lint signal. Its tests
+  # consume the checksum-pinned fixture corpus, but remain independent of the
+  # C++ runtime build and Apple host used by the confidence lanes.
   - label: ":linux: Runtime fast checks"
     if: "build.pull_request.id != null"
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+      export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
+      git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git "$RIVE_RUNTIME_DIR"
+      git -C "$RIVE_RUNTIME_DIR" checkout "$RIVE_RUNTIME_REF"
+      make fixtures
+      PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_buildkite_pipeline.py -v
       make fmt-check check lint-gate feature-compile-gate-portable
     agents:
       queue: nuxie-pr

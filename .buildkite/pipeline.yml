@@ -99,6 +99,9 @@ steps:
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --no-self-update
+      rustup target add --toolchain stable \
+        aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios \
+        aarch64-apple-darwin x86_64-apple-darwin
       export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git "$RIVE_RUNTIME_DIR"
       git -C "$RIVE_RUNTIME_DIR" checkout "$RIVE_RUNTIME_REF"

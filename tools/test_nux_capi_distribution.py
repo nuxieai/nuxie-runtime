@@ -1,6 +1,8 @@
 import importlib.util
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -19,6 +21,9 @@ class DistributionToolTests(unittest.TestCase):
         ).read_text()
         self.verifier = (
             REPO_ROOT / "tools/verify-nux-capi-xcframeworks.sh"
+        ).read_text()
+        self.apple_checker = (
+            REPO_ROOT / "tools/check-nux-capi-apple.sh"
         ).read_text()
         self.pipeline = (REPO_ROOT / ".buildkite/pipeline.yml").read_text()
         self.makefile = (REPO_ROOT / "Makefile").read_text()
@@ -167,6 +172,82 @@ class DistributionToolTests(unittest.TestCase):
             self.assertEqual(
                 self.layout_checker.clang_command(), ["clang", "-D__APPLE__"]
             )
+
+    def test_apple_ci_provisions_every_five_slice_rust_target(self) -> None:
+        apple_lane = self.pipeline.split(':mac: Apple distribution compile"', 1)[
+            1
+        ].split(':linux: Nightly full runtime confidence"', 1)[0]
+        self.assertIn("rustup target add --toolchain stable", apple_lane)
+        for target in (
+            "aarch64-apple-ios",
+            "aarch64-apple-ios-sim",
+            "x86_64-apple-ios",
+            "aarch64-apple-darwin",
+            "x86_64-apple-darwin",
+        ):
+            self.assertIn(target, apple_lane)
+        self.assertIn('rust_sysroot=$("${rustc_cmd[@]}" --print sysroot)', self.apple_checker)
+        self.assertIn(
+            '"$rust_sysroot/lib/rustlib/$target/lib"', self.apple_checker
+        )
+        self.assertNotIn("rustup target list --installed", self.apple_checker)
+
+    def test_apple_checker_uses_the_ci_runtime_fixture_checkout(self) -> None:
+        self.assertIn(
+            'runtime_dir="${NUX_RUNTIME_DIR:-${RIVE_RUNTIME_DIR:-',
+            self.apple_checker,
+        )
+        self.assertIn(
+            'fixture="$runtime_dir/tests/unit_tests/assets/in_band_asset.riv"',
+            self.apple_checker,
+        )
+        self.assertIn('if [[ ! -f "$fixture" ]]', self.apple_checker)
+        self.assertNotIn(
+            'fixture="${NUX_RUNTIME_DIR:-/Users/', self.apple_checker
+        )
+        apple_lane = self.pipeline.split(':mac: Apple distribution compile"', 1)[
+            1
+        ].split(':linux: Nightly full runtime confidence"', 1)[0]
+        self.assertIn('export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"', apple_lane)
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            temporary_path = Path(temporary_dir)
+            runtime_dir = temporary_path / "missing-runtime"
+            runtime_dir.mkdir()
+            stub_dir = temporary_path / "bin"
+            stub_dir.mkdir()
+            rustup_marker = temporary_path / "rustup-was-run"
+            rustup_stub = stub_dir / "rustup"
+            rustup_stub.write_text(
+                '#!/bin/sh\nprintf reached > "$RUSTUP_MARKER"\nexit 97\n'
+            )
+            rustup_stub.chmod(0o755)
+            environment = os.environ.copy()
+            environment.pop("NUX_RUNTIME_DIR", None)
+            environment.pop("CARGO_BIN", None)
+            environment.pop("RUSTC_BIN", None)
+            environment.update(
+                {
+                    "PATH": f"{stub_dir}:/usr/bin:/bin",
+                    "RIVE_RUNTIME_DIR": str(runtime_dir),
+                    "RUSTUP_MARKER": str(rustup_marker),
+                }
+            )
+            result = subprocess.run(
+                [str(REPO_ROOT / "tools/check-nux-capi-apple.sh")],
+                cwd=REPO_ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+            )
+            rustup_was_run = rustup_marker.exists()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            f"missing Apple smoke fixture: {runtime_dir}/tests/unit_tests/assets/in_band_asset.riv",
+            result.stderr,
+        )
+        self.assertFalse(rustup_was_run)
 
     def test_distribution_gates_report_every_independent_verdict(self) -> None:
         contract_gate = self.makefile.split(

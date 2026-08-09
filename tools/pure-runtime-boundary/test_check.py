@@ -1970,6 +1970,25 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_rejects_dynamic_portable_abi_facade_paths_in_macros(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/dynamic_path.rs").write_text(
+            "macro_rules! nested { ($ty:ident) => {\n"
+            "    fn leak(_: nuxie::host_interfaces::$ty) {}\n"
+            "}; }\n"
+            "macro_rules! root { ($ty:ident) => {\n"
+            "    fn leak_root(_: nuxie::$ty) {}\n"
+            "}; }\n"
+            "nested!(RuntimeOwnedViewModelInstance);\n"
+            "root!(Scene);\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dynamic portable ABI facade path", result.stderr)
+        self.assertIn("host_interfaces", result.stderr)
+
     def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/test_support.rs").write_text(

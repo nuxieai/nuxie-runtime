@@ -1081,7 +1081,11 @@ impl<'a> Analyzer<'a> {
                 "reported_events",
             ],
             GuardKind::Selection => &["RuntimeNestedAnimationInstance", "StateMachine"],
-            GuardKind::Dispatch => &["notify_events", "StateMachineInstance"],
+            GuardKind::Dispatch => &[
+                "notify_events",
+                "advance_artboard_frame_components_with_script_host",
+                "StateMachineInstance",
+            ],
             GuardKind::Audio => &[
                 "flush_deferred_owner_audio_events",
                 "flush_deferred_owner_audio_event",

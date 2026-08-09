@@ -5307,6 +5307,22 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         forbidden_cases = [
             textwrap.dedent(
                 """
+                fn macro_composed_frame_owner() {
+                    invoke!(advance_artboard_frame_components_with_script_host);
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                #[delegate(
+                    StateMachineInstance,
+                    advance_artboard_frame_components_with_script_host,
+                )]
+                fn attribute_composed_frame_owner() {}
+                """
+            ),
+            textwrap.dedent(
+                """
                 #[delegate(StateMachineInstance, notify_events)]
                 fn attribute_composed_sender() {}
                 """

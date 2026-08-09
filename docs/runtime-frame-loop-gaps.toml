@@ -1176,7 +1176,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_instance_reexport_required"
 globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
-pattern = "pub\\s+use\\s+super::state_machine_instance::\\{\\s*FocusState\\s*,\\s*StateMachineInstance\\s*\\}\\s*;"
+pattern = "pub\\s+use\\s+super::state_machine_instance::\\{\\s*FocusState\\s*,\\s*RuntimeStateMachineAdvanceResult\\s*,\\s*StateMachineInstance\\s*,?\\s*\\}\\s*;"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1537,7 +1537,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_advance_instance_owner_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+advance_on_artboard\\b)(?=[\\s\\S]*fn\\s+advance\\b[\\s\\S]{0,500}artboard:\\s*&mut\\s+ArtboardInstance)(?=[\\s\\S]*fn\\s+advance_artboard_frame_components\\b[\\s\\S]{0,3000}nested_event_dispatch)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply\\b)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply_with_view_models\\b)(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models\\b[\\s\\S]{0,600}Self::advance_and_apply_state_machines_with_view_models_and_script_host\\()(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models_and_script_host\\b[\\s\\S]{0,1800}if\\s+advance_view_models[\\s\\S]{0,300}advance_detached_view_models\\(\\))(?=[\\s\\S]*fn\\s+settle_artboard_update_passes\\b)"
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_on_artboard\\b)(?=[\\s\\S]*fn\\s+advance\\b[\\s\\S]{0,500}artboard:\\s*&mut\\s+ArtboardInstance)(?=[\\s\\S]*fn\\s+advance_artboard_frame_components\\b[\\s\\S]{0,3000}nested_event_dispatch)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply\\b)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply_with_view_models\\b)(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models\\b[\\s\\S]{0,600}Self::advance_and_apply_state_machines_with_view_models_and_script_host\\()(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models_and_script_host\\b[\\s\\S]{0,900}Self::advance_and_apply_state_machines_with_view_models_and_script_host_result\\()(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models_and_script_host_result\\b[\\s\\S]{0,2500}if\\s+advance_view_models[\\s\\S]{0,300}advance_detached_view_models\\(\\))(?=[\\s\\S]*fn\\s+settle_artboard_update_passes\\b)"
 min_occurrences = 1
 max_occurrences = 1
 

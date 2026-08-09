@@ -9,6 +9,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
+#[derive(Debug, Default)]
+struct OracleScriptHost;
+
+impl nuxie::ScriptHost for OracleScriptHost {}
+
 fn fixture_bytes(name: &str) -> Vec<u8> {
     let fixture = PathBuf::from(
         std::env::var_os("NUX_RUNTIME_DIR")
@@ -978,7 +983,7 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
         .try_advance_with_state_machines_and_script_host_result(
             std::slice::from_mut(&mut rust_machine),
             0.0,
-            &mut nuxie::NoopScriptHost,
+            &mut OracleScriptHost,
         )
         .unwrap();
     let rust_down_hit = match rust_down_hit {

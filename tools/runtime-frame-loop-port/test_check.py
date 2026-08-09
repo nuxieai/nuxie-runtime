@@ -2429,11 +2429,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "crates/nuxie-runtime/src/state_machine/instance.rs",
                 (
                     "pub use super::state_machine_instance::"
-                    "{FocusState, StateMachineInstance};\n"
+                    "{FocusState, RuntimeStateMachineAdvanceResult, "
+                    "StateMachineInstance,};\n"
                 ),
                 (
                     "pub(super) use super::state_machine_instance::"
-                    "{FocusState, StateMachineInstance};\n"
+                    "{FocusState, RuntimeStateMachineAdvanceResult, "
+                    "StateMachineInstance,};\n"
                 ),
             ),
             (
@@ -3780,6 +3782,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     Self::advance_and_apply_state_machines_with_view_models_and_script_host();
                 }
                 fn advance_and_apply_state_machines_with_view_models_and_script_host() {
+                    Self::advance_and_apply_state_machines_with_view_models_and_script_host_result();
+                }
+                fn advance_and_apply_state_machines_with_view_models_and_script_host_result() {
                     if advance_view_models {
                         advance_detached_view_models();
                     }
@@ -3795,9 +3800,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 pub fn advance_and_apply() {}
                 pub fn advance_and_apply_with_view_models() {}
                 fn advance_and_apply_state_machines_with_view_models() {
-                    bypass_host_aware_owner();
+                    Self::advance_and_apply_state_machines_with_view_models_and_script_host();
                 }
                 fn advance_and_apply_state_machines_with_view_models_and_script_host() {
+                    bypass_result_owner();
+                }
+                fn advance_and_apply_state_machines_with_view_models_and_script_host_result() {
                     if advance_view_models { advance_detached_view_models(); }
                 }
                 fn settle_artboard_update_passes() {}

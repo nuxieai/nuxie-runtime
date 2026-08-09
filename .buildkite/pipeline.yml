@@ -96,6 +96,10 @@ steps:
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --no-self-update
+      export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"
+      git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git "$RIVE_RUNTIME_DIR"
+      git -C "$RIVE_RUNTIME_DIR" checkout "$RIVE_RUNTIME_REF"
+      make fixtures
       make feature-compile-gate-apple
       make crate-seams-apple-check
     agents:

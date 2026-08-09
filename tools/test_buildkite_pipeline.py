@@ -12,6 +12,12 @@ class BuildkitePipelineContractTests(unittest.TestCase):
         fast_checks = pipeline.split('label: ":linux: Runtime fast checks"', 1)[1]
         return fast_checks.split("\n  - label:", 1)[0]
 
+    @staticmethod
+    def apple_distribution_compile_command() -> str:
+        pipeline = (REPO_ROOT / ".buildkite" / "pipeline.yml").read_text()
+        apple_compile = pipeline.split('label: ":mac: Apple distribution compile"', 1)[1]
+        return apple_compile.split("\n  - label:", 1)[0]
+
     def test_fast_checks_prepare_fixtures_before_portable_feature_compile(self) -> None:
         fast_checks = self.fast_checks_command()
 
@@ -31,6 +37,22 @@ class BuildkitePipelineContractTests(unittest.TestCase):
         self.assertLess(runtime_dir, clone)
         self.assertLess(clone, pin)
         self.assertLess(pin, fixtures)
+
+    def test_apple_compile_checks_out_pinned_runtime_before_feature_compile(self) -> None:
+        apple_compile = self.apple_distribution_compile_command()
+
+        runtime_dir = apple_compile.index('export RIVE_RUNTIME_DIR="$(pwd)/rive-runtime"')
+        clone = apple_compile.index("git clone --filter=blob:none")
+        pin = apple_compile.index(
+            'git -C "$RIVE_RUNTIME_DIR" checkout "$RIVE_RUNTIME_REF"'
+        )
+        fixtures = apple_compile.index("make fixtures")
+        feature_compile = apple_compile.index("make feature-compile-gate-apple")
+
+        self.assertLess(runtime_dir, clone)
+        self.assertLess(clone, pin)
+        self.assertLess(pin, fixtures)
+        self.assertLess(fixtures, feature_compile)
 
 
 if __name__ == "__main__":

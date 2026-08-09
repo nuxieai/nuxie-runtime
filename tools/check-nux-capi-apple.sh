@@ -92,7 +92,7 @@ for target in "${targets[@]}"; do
     IPHONEOS_DEPLOYMENT_TARGET=15.0 MACOSX_DEPLOYMENT_TARGET=12.0 \
         RUSTC="$rustc_path" \
         "${cargo_cmd[@]}" build --locked --manifest-path "$repo_dir/Cargo.toml" \
-        -p nux-capi --no-default-features --features apple-metal \
+        -p nux-capi --no-default-features --features apple-metal,scripting \
         --profile "$profile" --target "$target"
 
     artifact_dir="$target_root/$target/$artifact_profile"
@@ -104,9 +104,9 @@ for target in "${targets[@]}"; do
         exit 3
     fi
     if "${cargo_cmd[@]}" tree --locked --manifest-path "$repo_dir/Cargo.toml" -p nux-capi \
-        --no-default-features --features apple-metal --target "$target" --edges normal \
-        | grep -q 'nuxie-apple-adapter'; then
-        echo "compatibility adapter leaked into nux-capi distribution for $target" >&2
+        --no-default-features --features apple-metal,scripting --target "$target" --edges normal \
+        | grep -Eq '(^| )(?:nux-apple-runtime|nux-container|nuxie-apple-adapter|nuxie-product|nuxie-product-scripting|nuxie-project-data) v'; then
+        echo "retired product/runtime package leaked into nux-capi distribution for $target" >&2
         exit 4
     fi
 
@@ -142,5 +142,6 @@ for target in "${targets[@]}"; do
         "$target" "$profile" "$(stat -f %z "$archive")"
 done
 
-NUX_CAPI_FEATURES=apple-metal "$repo_dir/tools/check-nux-capi-exports.sh"
+NUX_CAPI_FEATURES=apple-metal,scripting "$repo_dir/tools/check-nux-capi-exports.sh"
+"$repo_dir/tools/check-nux-capi-surface.py"
 echo "nux-capi Apple five-slice C/Swift link and executable render smoke ok"

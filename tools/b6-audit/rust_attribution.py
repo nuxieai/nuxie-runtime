@@ -10,16 +10,10 @@ import tomllib
 
 
 CRATE_ROOTS = (
-    "crates/nux-apple-runtime/src",
-    "crates/nux-container/src",
     "crates/nuxie-audio/src",
     "crates/nuxie-runtime/src",
     "crates/nuxie/src",
-    "crates/nuxie-product/src",
     "crates/nuxie-project-data/src",
-    "crates/nuxie-product-scripting/src",
-    "crates/nuxie-authoring/src",
-    "crates/nuxie-apple-adapter/src",
     "crates/nuxie-scripting/src",
     "crates/nuxie-binary/src",
     "crates/nuxie-render-api/src",

@@ -75,7 +75,36 @@ cleanup() {
     rm -rf "${downloads}"
 }
 trap cleanup EXIT
-printf 'Nuxie runtime %s\n\nSource: `%s`\n' "${runtime_version}" "${source_revision}" > "${notes}"
+python3 - "${size_report}" "${runtime_version}" "${source_revision}" "${notes}" <<'PY'
+import json
+import pathlib
+import sys
+
+report_path, version, source_revision, notes_path = sys.argv[1:]
+report = json.loads(pathlib.Path(report_path).read_text())
+baseline = report["baseline"]
+lines = [
+    f"Nuxie runtime {version}",
+    "",
+    f"Source: `{source_revision}`",
+    "",
+    (
+        "Slim-runtime size comparison against immutable "
+        f"`{baseline['releaseTag']}` (`{baseline['sourceRevision']}`; "
+        f"SIZE_REPORT SHA-256 `{baseline['sizeReportSha256']}`):"
+    ),
+    "",
+    "| Artifact | Metric | Before (bytes) | After (bytes) | Delta (bytes) |",
+    "| --- | --- | ---: | ---: | ---: |",
+]
+for kind in ("full-apple", "ios-only"):
+    for metric in ("compressedBytes", "expandedBytes"):
+        before = baseline["artifacts"][kind][metric]
+        after = report["artifacts"][kind][metric]
+        delta = report["deltasFromBaseline"][kind][metric]
+        lines.append(f"| {kind} | {metric} | {before} | {after} | {delta:+d} |")
+pathlib.Path(notes_path).write_text("\n".join(lines) + "\n")
+PY
 gh release create "${release_tag}" \
     "${full_archive}#NuxieRuntime.xcframework.zip" \
     "${ios_archive}#NuxieRuntime-iOS.xcframework.zip" \

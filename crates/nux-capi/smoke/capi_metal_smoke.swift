@@ -3,11 +3,7 @@ import CoreGraphics
 import ImageIO
 import Metal
 import QuartzCore
-#if canImport(NuxieRuntimeC)
 import NuxieRuntimeC
-#else
-import NuxieRuntimeInternal
-#endif
 
 final class CompletionBox {
     let semaphore = DispatchSemaphore(value: 0)

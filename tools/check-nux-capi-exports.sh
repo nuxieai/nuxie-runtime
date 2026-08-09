@@ -3,15 +3,31 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 features="${NUX_CAPI_FEATURES:-}"
-if [ "$features" = "apple-metal" ]; then
-    expected="$repo_dir/crates/nux-capi/exports-v3-apple-metal.txt"
-    feature_args="--features apple-metal"
-else
-    expected="$repo_dir/crates/nux-capi/exports-v3.txt"
-    feature_args=""
-fi
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
+
+expected="$work_dir/expected.txt"
+case "$features" in
+    "")
+        cp "$repo_dir/crates/nux-capi/exports-v3-portable.txt" "$expected"
+        feature_args=""
+        ;;
+    scripting)
+        cp "$repo_dir/crates/nux-capi/exports-v3-portable.txt" "$expected"
+        feature_args="--features scripting"
+        ;;
+    apple-metal|apple-metal,scripting)
+        cat \
+            "$repo_dir/crates/nux-capi/exports-v3-portable.txt" \
+            "$repo_dir/crates/nux-capi/exports-v3-apple-metal-extension.txt" | \
+            LC_ALL=C sort -u > "$expected"
+        feature_args="--features $features"
+        ;;
+    *)
+        echo "unsupported NUX_CAPI_FEATURES value: $features" >&2
+        exit 2
+        ;;
+esac
 
 # shellcheck disable=SC2086 # an empty or one-feature Cargo argument pair
 cargo build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi $feature_args
@@ -39,7 +55,7 @@ header_actual="$work_dir/header.txt"
 grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
     "$repo_dir/crates/nux-capi/include/nux_capi.generated.h" | \
     sed -E 's/[[:space:]]*\($//' | sort -u > "$header_actual"
-if [ "$features" != "apple-metal" ]; then
+if [ "$features" != "apple-metal" ] && [ "$features" != "apple-metal,scripting" ]; then
     # cbindgen retains feature-gated declarations in the generated header. The
     # portable ABI excludes the Apple renderer family and this one Apple-only
     # import entry point; keep the latter exact so future imports fail closed.

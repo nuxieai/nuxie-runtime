@@ -138,12 +138,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "base64"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
-
-[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1247,31 +1241,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "nux-apple-runtime"
-version = "0.3.1"
-dependencies = [
- "base64",
- "cbindgen",
- "dispatch2",
- "ed25519-dalek",
- "nux-capi",
- "nux-container",
- "nuxie",
- "nuxie-apple-adapter",
- "nuxie-product",
- "nuxie-schema",
- "objc2",
- "objc2-core-foundation",
- "objc2-metal",
- "objc2-quartz-core",
- "png",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "nux-capi"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "cbindgen",
  "dispatch2",
@@ -1286,18 +1257,6 @@ dependencies = [
  "objc2-metal",
  "objc2-quartz-core",
  "serde_json",
-]
-
-[[package]]
-name = "nux-container"
-version = "0.1.0"
-dependencies = [
- "base64",
- "ed25519-dalek",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1320,16 +1279,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "silver-corpus",
-]
-
-[[package]]
-name = "nuxie-apple-adapter"
-version = "0.1.0"
-dependencies = [
- "nuxie-image-codec",
- "nuxie-render-api",
- "nuxie-renderer",
- "png",
 ]
 
 [[package]]
@@ -1383,42 +1332,6 @@ dependencies = [
  "moxcms",
  "nuxie-render-stream",
  "png",
-]
-
-[[package]]
-name = "nuxie-product"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ed25519-dalek",
- "luaur-common",
- "luaur-compiler",
- "nuxie",
- "nuxie-binary",
- "nuxie-product-scripting",
- "nuxie-project-data",
- "nuxie-render-stream",
- "nuxie-runtime",
- "nuxie-schema",
- "serde_json",
- "sha2",
- "silver-corpus",
-]
-
-[[package]]
-name = "nuxie-product-scripting"
-version = "0.1.0"
-dependencies = [
- "ed25519-dalek",
- "luaur-common",
- "luaur-compiler",
- "luaur-rt",
- "nux-container",
- "nuxie",
- "nuxie-scripting",
- "serde",
- "serde_json",
- "sha2",
 ]
 
 [[package]]

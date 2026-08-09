@@ -7,9 +7,9 @@ rule for runtime and product work, not a port-phase plan.
 
 ```text
 editor authoring --------+
-nuxie-product crate -----+---> parity baseline <--- portable C ABI
+Swift SDK ---------------+---> parity baseline <--- portable C ABI
 browser adapter ---------+            ^             replay/oracle tools
-Apple distribution leaf +            |
+Apple platform services -+            |
                               general-purpose crates
 ```
 
@@ -25,8 +25,9 @@ advance/apply, scripting semantics, backend-neutral rendering, and faithful
 embedder operations. Host-safety adaptations remain baseline only when they
 are product-neutral and explicitly recorded.
 
-The baseline must not know about Nuxie flows, authored transactions, ProjectDO
-identities, Nux artifact manifests, product host commands, or host/UI
+The baseline must not know about Nuxie experiences, flows, screens, SDK
+sessions, authored transactions, ProjectDO identities, Nux artifact manifests,
+package authentication, product host commands, or host/UI
 presentation lifecycle policy. Product-neutral backend mechanics may validate
 and present a caller-borrowed native target as described by the Apple platform
 extension below; layer ownership, target acquisition, actor choice, and frame
@@ -45,20 +46,14 @@ including shared-global bytecode evaluation for editor callers, and executes
 imported GPUCanvas userdata through `GpuCanvasPlan`; nuxie-dev owns the source
 and snapshot layer above those contracts.
 
-### In-workspace product layer
+### Product layer
 
-The explicitly separated `nux-container`, `nuxie-product-scripting`,
-`nuxie-project-data`, and `nuxie-product` workspace crates own the optional
-product layer: the `.nux` container and trust model, FlowSession and player
-selection, transactional host batches, product output/wake/error policy, the
-private Nuxie Luau module and host effects, and ProjectDO
-vocabulary/programs. They may consume baseline operations but may not replace
-runtime semantics or become dependencies of protected baseline packages.
-
-The crate graph, one lockfile, and the boundary checker make this a layering
-rule inside one qualified `nuxie-runtime` revision. `nuxie-dev` and `nuxie-ios`
-pin that runtime revision independently; neither repository shares editor or
-Apple implementation code through an additional product repository.
+Experience lifecycle, Flow/session policy, `.nux` acquisition and
+authentication, product-specific host commands, and Apple application
+orchestration are no longer runtime crates. The Swift SDK owns those concepts
+on Apple platforms and consumes the raw C ABI. `nuxie-project-data` remains an
+authoring/project conversion owner in this workspace, but is forbidden from
+the distributed `nux-capi` dependency closure.
 
 ### Editor authoring
 
@@ -82,27 +77,18 @@ including validation and presentation of a caller-borrowed CAMetalDrawable and
 device-health reporting. It never owns CAMetalLayer, acquires a drawable, or
 imports UIKit/AppKit policy. The Apple-only `nux-capi/apple-metal` feature
 exposes those mechanics through product-neutral C handles and fixed-width
-outcomes. The caller owns layer configuration, drawable acquisition, actor and
-frame scheduling, and every product concept.
-
-`nuxie-apple-adapter` is a compatibility re-export for the legacy product
-runtime and retains only trusted-image admission policy of its own.
-`nux-apple-runtime` continues to own package/session adaptation and the legacy
-product XCFramework until that compatibility distribution is retired. Its
-one-release `migration-distribution` feature depends inward on `nux-capi` to
-compose the mature and legacy modules in one archive; `nux-capi` never depends
-upward on that product leaf. Product operations never enter `nux-capi` merely
-because an Apple consumer needs them.
+outcomes. `nux-capi` also composes the generic scripting and image-decoding
+seams required by the SDK. The caller owns layer configuration, drawable
+acquisition, actor and frame scheduling, and every product concept.
 
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
 errors, callbacks, and buffer negotiation. Its Apple feature is a platform
 extension of that same product-neutral distribution, not a product facade.
-Package, experience, screen, and session operations belong to the separately
-named legacy `nux-apple-runtime` ABI above the baseline. Replay and oracle
-tools import the baseline directly so parity evidence cannot depend on product
-glue.
+Package, experience, screen, journey, authentication, and SDK-session
+operations are absent from the C distribution. Replay and oracle tools import
+the baseline directly so parity evidence cannot depend on product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
 edge rather than migration debt. It reaches only the audited baseline facade:
@@ -117,7 +103,7 @@ constructors, nested imports, and owning files are each enumerated, while
 aliases, globs, unknown features and symbols, and product lifecycle vocabulary
 remain rejected.
 
-## Current migration debt
+## Current compatibility debt
 
 The repository is not yet physically split at every ownership boundary, but
 protected baseline consumers have no grandfathered source-debt files.
@@ -135,8 +121,9 @@ the baseline through the product-neutral external-data seam documented in
 
 Any future debt exception must name exact files and is an architecture-policy
 change. The approved portable-ABI edge is enforced as permanent architecture
-policy and is not included in debt reporting. The UNIV-1621 child issues own
-the physical extractions, so this document does not duplicate their sequencing.
+policy and is not included in debt reporting. The former Apple/product runtime
+crates are deleted and retained as forbidden dependency vocabulary so they
+cannot quietly return.
 
 ## Executable ratchet
 

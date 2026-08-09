@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke capi-migration-contract nux-capi-layout-contract nux-capi-distribution-contract-test nux-capi-distribution-plan nux-capi-xcframeworks apple-runtime-check apple-runtime-contract-test apple-runtime-build-identity-test apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-product-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
@@ -167,34 +167,10 @@ fmt-check:
 check:
 	cargo check --workspace
 
-# Independently selectable package cuts for the product-surface extraction.
-# The platform targets compile their real target-gated interfaces rather than
-# succeeding through an empty host cfg. `crate-seams-full-check` remains the
-# ordinary whole-workspace verdict.
+# Independently selectable runtime package cuts. The Apple target compiles the
+# actual five-slice nux-capi distribution root instead of a host-only cfg shell.
 crate-seams-baseline-check:
 	cargo check -p nuxie-runtime --no-default-features --lib
-
-crate-seams-product-check:
-	cargo check -p nuxie-product --all-targets
-	cargo test -p nuxie-product --features scripting --lib
-	@$(MAKE) --no-print-directory crate-seams-product-host-free-check \
-		PRODUCT_FEATURES=scripting
-	@if $(MAKE) --no-print-directory crate-seams-product-host-free-check \
-		PRODUCT_FEATURES=scripting,js-host-seed >/dev/null 2>&1; then \
-		echo "host-free feature ratchet missed its js-host-seed positive control" >&2; \
-		exit 1; \
-	fi
-
-crate-seams-product-host-free-check:
-	@set -e; \
-	feature_tree="$$(cargo tree --target wasm32-unknown-unknown \
-		-p nuxie-product --no-default-features --features "$(PRODUCT_FEATURES)" \
-		-e normal,build --format '{p} [{f}]')"; \
-	if printf '%s\n' "$$feature_tree" | \
-		grep -Eq 'nuxie-(runtime|scripting) v.*\[.*js-host-seed'; then \
-		echo "host-free nuxie-product scripting unexpectedly enables js-host-seed" >&2; \
-		exit 1; \
-	fi
 
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \
@@ -202,9 +178,7 @@ crate-seams-browser-check:
 		-p browser-renderer-smoke --target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
-	cargo check -p nuxie-apple-adapter --all-targets
-	cargo test --locked -p nuxie-apple-adapter
-	cargo check -p nux-apple-runtime --all-targets --features apple-product
+	tools/check-nux-capi-apple.sh
 	cargo check -p nuxie-size-report-roots --all-targets
 
 crate-seams-full-check:
@@ -399,8 +373,7 @@ feature-compile-gate-portable:
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
 		"riv-inspect --features inspect" "cargo check -p nuxie-binary --features inspect --bin riv-inspect" \
-		"graph-inspect --features inspect" "cargo check -p nuxie-graph --features inspect --bin graph-inspect" \
-		"product and authoring seams" "$(MAKE) --no-print-directory crate-seams-product-check"
+		"graph-inspect --features inspect" "cargo check -p nuxie-graph --features inspect --bin graph-inspect"
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
@@ -726,46 +699,35 @@ capi-smoke: fixtures
 	fi
 	tools/check-nux-capi-exports.sh
 
-capi-migration-contract:
-	tools/check-nux-capi-migration.sh
-
 nux-capi-layout-contract:
 	tools/check-nux-capi-layout.py
 
-nux-capi-distribution-contract-test: nux-capi-layout-contract
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
-		tools/test_nux_capi_distribution.py \
-		tools/test_apple_runtime_contract.py \
-		tools/test_apple_runtime_input_digest.py
+nux-capi-surface-contract:
+	tools/check-nux-capi-surface.py
+
+nux-capi-distribution-contract-test:
+	@tools/report-all.sh "nux-capi-distribution-unit" \
+		"distribution tooling tests" "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_nux_capi_distribution.py" \
+		"release contract tests" "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_apple_runtime_contract.py" \
+		"input digest tests" "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_apple_runtime_input_digest.py" \
+		"slim runtime tests" "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_slim_runtime_distribution.py"
+
+nux-capi-distribution-contract-gate:
+	@tools/report-all.sh "nux-capi-distribution-contract" \
+		"ABI layout contract" "$(MAKE) --no-print-directory nux-capi-layout-contract" \
+		"shipped surface contract" "$(MAKE) --no-print-directory nux-capi-surface-contract" \
+		"distribution unit contracts" "$(MAKE) --no-print-directory nux-capi-distribution-contract-test"
+
+nux-capi-pr-gate:
+	@tools/report-all.sh "nux-capi-pr" \
+		"portable C ABI smoke" "$(MAKE) --no-print-directory capi-smoke" \
+		"distribution contracts" "$(MAKE) --no-print-directory nux-capi-distribution-contract-gate"
 
 nux-capi-distribution-plan:
 	tools/build-nux-capi-xcframeworks.sh --plan
 
 nux-capi-xcframeworks:
 	tools/build-nux-capi-xcframeworks.sh
-
-apple-runtime-header-smoke:
-	cargo build --locked -p nux-apple-runtime --features apple-product
-	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-apple-runtime/include -fsyntax-only crates/nux-apple-runtime/smoke/header_smoke.c
-
-apple-runtime-release-panic-smoke:
-	cargo test --locked --profile release-apple -p nux-apple-runtime --features apple-product panic_firewall_converts_panics_to_the_declared_fallback
-
-apple-runtime-contract-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
-		tools/test_apple_runtime_contract.py \
-		tools/test_apple_runtime_input_digest.py
-
-apple-runtime-build-identity-test:
-	tools/test-apple-runtime-build-identity.sh
-
-apple-runtime-check: apple-runtime-contract-test apple-runtime-build-identity-test apple-runtime-header-smoke apple-runtime-release-panic-smoke
-	cargo test --locked -p nuxie-apple-adapter
-	cargo test --locked -p nux-apple-runtime --features apple-product
-	cargo clippy --locked -p nux-apple-runtime --lib --no-default-features --features apple-product --no-deps --quiet -- -D warnings
-
-apple-runtime-xcframework:
-	$(MAKE) --no-print-directory nux-capi-xcframeworks
 
 # SDK binary-size report: builds the post-Phase-R Darwin link closure with the
 # renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also

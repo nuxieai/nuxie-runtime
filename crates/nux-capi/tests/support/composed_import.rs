@@ -157,9 +157,7 @@ pub fn scripted_view_model_asset_fixture(source: &[u8]) -> Vec<u8> {
             bytes,
             "FileAssetContents",
             "bytes",
-            include_bytes!(
-                "../../../../tests/ExperienceRuntimeHostApp/Fixtures/external-image/assets/sha256/b9d4e51e3590796b9a65fc9ec0b623bdf71a2bacef0098b79063edc87055b1a0.png"
-            ),
+            include_bytes!("../fixtures/external-image.png"),
         );
     });
     push_object(&mut bytes, "Artboard", |bytes| {

@@ -92,7 +92,7 @@ are merged in.
 |---|---|---|---|---|
 | F1 | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` | 1,030+ | PARTIAL (P2F1/P2F2) | Symphonia WAV/MP3/FLAC source/reader decode, file-owned AudioAsset loading, Factory decode, the Rive-owned headless frame-clock/mixer/sound lifecycle and retained default engine, dense-ordinal AudioEvent playback, multiplied Artboard volume, recursive engine/volume propagation, and Artboard-scoped teardown are ported under D17. Lua audio and CPAL device output remain later packages. |
 | F2 | **Text input editing** — cursor motion, selection, keyboard routing (`raw_text_input.cpp` 992, `text_input.cpp` 777, `cursor.cpp` 359, selection/selected-text files) | ~2,400 | CLOSED | FL-E6 ports the retained buffer/journal, cursor and selection paths, key/committed-text routing, multiline source/display behavior, pointer multi-click/drag selection, focus request, and scroll-viewport edge advancement. The remaining non-TextInput gamepad/semantic listener work stays in F5. |
-| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | CLOSED (83/83) | The direct `CommandQueue`/`CommandServer` port covers all 83 pinned cases. S4-45's four blob handle/message cases are baseline runtime behavior, with their upstream provenance and Rust adaptations recorded in `docs/command-queue-test-ledger.md`. FlowSession remains a separate renderer-neutral product transaction protocol, not the command-port substitute or an iOS-owned baseline API. |
+| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | CLOSED (83/83) | The direct `CommandQueue`/`CommandServer` port covers all 83 pinned cases. S4-45's four blob handle/message cases are baseline runtime behavior, with their upstream provenance and Rust adaptations recorded in `docs/command-queue-test-ledger.md`. Product transaction/session policy is SDK-owned and outside this parity row. |
 | F4 | **Scroll physics** — `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists). |
 | F5 | **Keyboard/gamepad/semantic/text-input listener groups + input runtime** (`*_listener_group.cpp` 481, `gamepad_batch.cpp` 363, inputs/) | ~930 | ABSENT | Pointer listeners only. Blocks F2 interaction and any keyboard-driven content. |
 | F6 | **Semantics/accessibility** — `semantic_manager` 1,109, `semantic_data` 572, provider, inference registry | 1,926 | CLOSED (FTAIL) | The retained runtime and LT-1 full diff/action/focus side channel are implemented against `4ac7b327`. Nested focus, Simpsons, and data_binding_lists are exact. The latter now shapes its four initial mounted Text bounds through the same retained glyph path used for drawing (`text.cpp:534-615,1154-1233`; `semantic_data.cpp:273-293,501-532`). Component settlement journals generic owner WorldTransform/Path dirt once per semantic synchronization, replacing the former snapshot-only refresh; the dedicated journal test and exact three-sample data_binding_lists projection close the named SEMRES remainders. |
@@ -109,19 +109,18 @@ are merged in.
 ## A — Embedder API surface gaps
 
 The runtime behavior often exists; the surface doesn't. Structural finding:
-**capability fragmentation** — events-with-properties, text runs, VM lists,
-multi-touch batches live only in the Apple product/session boundary. That
-product-shaped C boundary is owned by `nux-apple-runtime`; portable
-`nux_capi.h` remains a minimal surface in this repository.
+The mature `nux-capi` surface now owns portable events-with-properties, text
+run mutation, VM transactions, and input batches. Product lifecycle remains a
+Swift SDK concern and is deliberately absent from this register's C boundary.
 
 | id | gap | tier |
 |---|---|---|
 | A1 | **No `FileAssetLoader` callback** — no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1 |
 | A2 | **Native device-output control remains absent** — the Rust Artboard facade now exposes headless engine and volume control, but CPAL start/stop and the portable C boundary remain later work. | 1 |
-| A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the Apple product/session boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
-| A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
+| A3 | **RESOLVED — text-run batch mutation is in `nux-capi`**; a read API remains independently justifiable. | 1 |
+| A4 | **RESOLVED — step-result events and custom properties are in `nux-capi`.** | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |
-| A6 | **RESOLVED 2026-08-05 — Command-server product adoption evaluated (UNIV-1631, `da54bf13`).** The shared `flow_command_equivalence` harness proves scalar mutation equivalence but non-equivalent output phases, atomic rollback, wake scheduling, terminal errors, and host model. `docs/flow-command-equivalence.md` records the decision: CommandServer remains the baseline port, while Flow retains its product transaction machinery. | 2 |
+| A6 | **RESOLVED — product transaction/session policy stays above the raw C runtime.** | 2 |
 | A7 | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Responsive hosts need this. | 2 |
 | A8 | Async decode callbacks; RTTI-style typed queries; semantic-tree protocol (pairs with F6). | 3 |
 

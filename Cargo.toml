@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/nux-container",
     "crates/nuxie-audio",
     "crates/nuxie-binary",
     "crates/nuxie-graph",
@@ -10,11 +9,7 @@ members = [
     "crates/nuxie-renderer",
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
-    "crates/nuxie-product",
-    "crates/nuxie-product-scripting",
     "crates/nuxie-project-data",
-    "crates/nuxie-apple-adapter",
-    "crates/nux-apple-runtime",
     "crates/nux-capi",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",

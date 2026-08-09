@@ -1,5 +1,5 @@
 import Foundation
-import NuxieRuntimeInternal
+import NuxieRuntimeC
 
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     guard condition() else {

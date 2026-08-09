@@ -19,10 +19,9 @@ ongoing workflows, and every document here supports one of them:
 | `upstream-test-findings.md` | Open coverage gaps and production divergences found while porting the upstream unit-test suite; each is anchored by an `#[ignore]`d Rust test. |
 | `command-queue-test-ledger.md` | Complete CommandQueue/CommandServer upstream-test correspondence, including the S4-45 blob disposition. |
 | `pure-runtime-boundary.md` | Ratified ownership and dependency-direction contract separating the ported runtime baseline from product, editor, browser, and Apple layers. |
-| `product-crate-seams.md` | Transitional package ownership, narrow interfaces, build selectors, and compatibility paths for the product-surface extraction. |
 | `player-scheduling-contract.md` | Product-neutral dirty/settled/render-demand evidence, occurrence-scoped presentation acknowledgement, and optional monotonic wake semantics. |
 | `project-data-runtime-seam.md` | Decision and evidence for the product-owned ProjectDO evaluator and the neutral external-data adapter retained by the baseline bind graph. |
-| `flow-command-equivalence.md` | Measured decision record showing why CommandServer does not replace Flow's product transaction contract. |
+| `nux-capi-apple-release.md` | The slim Apple binary contract: sole nux-capi root, dual packages, provenance, size deltas, and immutable publication. |
 | `side-channel-format.md` | Wire format of the golden-stream runtime side channel (settled bool, hit results, events, semantics). Implemented by both golden runners. |
 | `SIZE.md` | The blocking 9 MiB SDK size budget and its measurement method. |
 | `renderer-parity-workflow.md` | Acceptance contract for renderer performance parity (1.0x threshold, fixed report matrix). |

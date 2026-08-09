@@ -1,6 +1,6 @@
 # Nuxie Runtime
 
-An independent, pure-Rust runtime for Nuxie flows, compatible with the Rive
+An independent, pure-Rust interactive graphics runtime compatible with the Rive
 (`.riv`) file format. This project is not affiliated with or endorsed by Rive
 Inc.
 
@@ -12,15 +12,15 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 
 - `nuxie`: public Rust API
 - `nuxie-renderer`: default pure-Rust renderer with native and browser backends
-- `nux-capi`: C SDK surface and `nux_capi.h`
 - `nuxie-runtime`: artboard, animation, state-machine, and draw runtime
 - `nuxie-binary`: `.riv` importer
 - `nuxie-graph`: imported component graph
 - `nuxie-render-api`: renderer-neutral traits
 - `nuxie-scripting`: optional pure-Rust Luau integration
-- `nux-container`: optional `.nux` package format and trust model
-- `nuxie-product-scripting`: optional Nuxie host module and effects
-- `nuxie-product`: optional session and product behavior above the baseline
+- `nux-capi`: the sole static-library distribution root, exposing the portable
+  C API plus narrow Apple Metal, image-decoding, and asset hooks
+- `nuxie-project-data`: authoring/project conversion kept outside the shipped
+  runtime dependency closure
 
 ## Development
 
@@ -41,15 +41,13 @@ dependency only; it is not linked into or shipped with the Nuxie SDK.
 The fixture bootstrap pins and verifies the small upstream test-asset set;
 those `.riv` binaries are intentionally not stored in this repository.
 
-Nuxie-specific `.nux`, product scripting, ProjectDO, and session behavior are
-isolated in upper-layer crates in this workspace. Protected baseline crates do
-not depend on them. `nux-capi` is the product-neutral C distribution: its
-portable base has an Apple-only `apple-metal` extension backed by generic
-renderer-owned Metal presentation mechanics. The compatibility Apple adapter,
-legacy product C ABI, and current XCFramework release leaf are also co-located
-here; see [Apple runtime distribution](docs/apple-runtime-release.md). The iOS
-SDK consumes the published binary through a pure Swift package layer and does
-not compile Rust.
+Nuxie-specific experience, package, authentication, and SDK-session behavior
+lives above this repository's shipped runtime. `nux-capi` is the sole static
+library distribution root: its portable base composes generic scripting, and
+its Apple extension adds renderer-owned Metal presentation and image/asset
+hooks. See [Apple C runtime distribution](docs/nux-capi-apple-release.md). The
+iOS SDK consumes the published binary through a pure Swift package layer and
+does not compile Rust.
 
 ## License
 

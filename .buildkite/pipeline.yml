@@ -66,15 +66,17 @@ steps:
   - label: ":linux: C ABI smoke"
     if: "build.pull_request.id != null"
     if_changed:
+      - .buildkite/pipeline.yml
       - Cargo.{toml,lock}
       - Makefile
       - crates/nux-capi/**
       - crates/nuxie/**
       - crates/{nuxie-runtime,nuxie-schema,nuxie-binary,nuxie-image-codec,nuxie-render-api,nuxie-renderer}/**
       - fixtures/**
+      - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-exports.sh,check-nux-capi-layout.py,check-nux-capi-surface.py,publish-nux-capi-release.sh,report-all.sh,test_apple_runtime_contract.py,test_apple_runtime_input_digest.py,test_nux_capi_distribution.py,test_slim_runtime_distribution.py,verify-nux-capi-xcframeworks.sh}
     command: |
       set -euo pipefail
-      make fixtures capi-smoke
+      make nux-capi-pr-gate
     agents:
       queue: nuxie-pr
       nuxie-platform: linux
@@ -91,7 +93,8 @@ steps:
     if_changed:
       - Cargo.{toml,lock}
       - Makefile
-      - crates/{nux-apple-runtime,nuxie-apple-adapter,nuxie-audio,nuxie-image-codec,nuxie-product,nuxie-render-api,nuxie-renderer}/**
+      - crates/{nux-capi,nuxie,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer,nuxie-scripting}/**
+      - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-apple.sh,check-nux-capi-surface.py,verify-nux-capi-xcframeworks.sh}
       - tools/size-report-roots/**
     command: |
       set -euo pipefail
@@ -101,7 +104,6 @@ steps:
       git -C "$RIVE_RUNTIME_DIR" checkout "$RIVE_RUNTIME_REF"
       make fixtures
       make feature-compile-gate-apple
-      make crate-seams-apple-check
     agents:
       queue: nuxie-pr
       nuxie-platform: macos

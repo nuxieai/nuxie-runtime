@@ -8,13 +8,12 @@ source hashes, comparison classification, fixture hashes, and pinned ref live in
 The mirror is diagnostic evidence, not a merge ratchet. Ratios are emitted only
 where both sides use the same input construction, operation boundary,
 repetition count, execution capabilities, and minimum-individual-invocation
-statistic. Ten cases meet that requirement. The ten `Draw*` cases are retained
-as directional timings without ratios because the pinned C++ Null backend and
-Rust Null backend currently negotiate different raster-ordering capabilities.
+statistic. All 20 cases meet that requirement. The ten `Draw*` cases use the
+production RasterOrdering logical-frame mode on both sides.
 
 ## Workload correspondence
 
-Ten cases have equivalent measured boundaries and receive direct ratios:
+All 20 cases have equivalent measured boundaries and receive direct ratios:
 
 - `BuildRawPath`, `IterateRawPath`, `MeasurePath`, and `RawPathBounds`.
 - `MapPointsScaleTrans` and `MapPointsAffine` use the production bulk
@@ -29,12 +28,10 @@ inside the timed boundary.
 - The ten `Draw*` cases use the production `LogicalFrame` through its retained
   `NullLogicalRenderer`. Both sides execute ten 1600x1600 begin/draw/flush
   frames, include logical planning and typed shadow-buffer writes, and omit
-  final GPU submission. They remain directional, however: pinned C++
-  `RenderContextNULL` selects `RasterOrdering`, while the Rust workload
-  explicitly configures `ClockwiseAtomic`. Equal interlock-mode selection is
-  tracked by [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727). The
+  final GPU submission. Pinned C++ `RenderContextNULL` and Rust's production
+  Null logical renderer both select `RasterOrdering`. The
   [dated resolution record](evidence/upstream-draw-microbenchmark-blocker-2026-08-06.md)
-  maps the production seam, the remaining mismatch, and regression coverage.
+  maps the shared production seam and its regression coverage.
 
 The path coordinates, matrix values, C `srand(0)`/`rand()` inputs, and ten-frame
 draw loops follow the pinned sources. Paper capture preserves authored color,
@@ -103,9 +100,8 @@ measured run's evidence-only descendant commit to revalidate while rejecting
 any benchmark, tool, input, production-source, manifest, or other content
 change. Uncommitted changes are also rejected except beneath `docs/evidence/`.
 
-The classification contract names the ten ratio cases and ten directional
-`Draw*` cases explicitly. A label flip is rejected even if the inventory still
-contains ten entries of each allowed classification.
+The classification contract names all 20 ratio cases explicitly and rejects
+any directional label.
 
 Both harnesses report the minimum observed individually timed invocation. The
 Criterion benches use `iter_custom` to start and stop the clock around every

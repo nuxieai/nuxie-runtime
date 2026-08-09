@@ -851,6 +851,15 @@ pub enum RenderMode {
     ClockwiseAtomic,
 }
 
+fn validate_wgpu_render_mode(mode: RenderMode) -> Result<(), RendererError> {
+    if mode == RenderMode::RasterOrdering {
+        return Err(RendererError::Unsupported(
+            "raster-ordering mode has no WGPU backend",
+        ));
+    }
+    Ok(())
+}
+
 struct RequestedWgpuDevice {
     adapter: wgpu::Adapter,
     adapter_info: WgpuAdapterInfo,
@@ -1054,11 +1063,7 @@ impl WgpuFactory {
         mode: RenderMode,
         force_vertex_storage_polyfill: bool,
     ) -> Result<Self, RendererError> {
-        if mode == RenderMode::RasterOrdering {
-            return Err(RendererError::Unsupported(
-                "raster-ordering mode has no WGPU backend",
-            ));
-        }
+        validate_wgpu_render_mode(mode)?;
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         #[cfg(not(target_arch = "wasm32"))]
         let requested_device = request_core_wgpu_device(
@@ -1472,6 +1477,7 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
+        validate_wgpu_render_mode(mode)?;
         validate_texture_extent(
             "render target",
             width,
@@ -11127,6 +11133,12 @@ mod tests {
 
     #[test]
     fn raster_ordering_is_rejected_by_the_wgpu_factory_boundary() {
+        assert!(matches!(
+            validate_wgpu_render_mode(RenderMode::RasterOrdering),
+            Err(RendererError::Unsupported(
+                "raster-ordering mode has no WGPU backend"
+            ))
+        ));
         assert!(matches!(
             WgpuFactory::new_with_mode(64, 64, RenderMode::RasterOrdering),
             Err(RendererError::Unsupported(

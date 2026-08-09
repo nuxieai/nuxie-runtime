@@ -2031,8 +2031,28 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (package / "src/exported_macro.rs").write_text(
             "#[macro_export]\n"
             "macro_rules! accepts_type { ($ty:ty) => { pub fn f(_: $ty) {} }; }\n"
-            "#[macro_export]\n"
+            "#[macro_export(local_inner_macros)]\n"
             "macro_rules! accepts_path { ($path:path) => { pub use $path; }; }\n"
+            "#[cfg_attr(feature = \"scripting\", macro_export)]\n"
+            "macro_rules! conditional_type { ($ty:ty) => { pub fn g(_: $ty) {} }; }\n"
+            "#[cfg_attr(all(feature = \"scripting\", test), "
+            "macro_export(local_inner_macros))]\n"
+            "macro_rules! conditional_path { ($path:path) => { pub use $path; }; }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exported portable ABI macros are not approved", result.stderr)
+
+    def test_rejects_conditionally_exported_portable_abi_macros(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/conditional_macro.rs").write_text(
+            "#[cfg_attr(feature = \"scripting\", macro_export)]\n"
+            "macro_rules! conditional_type { ($ty:ty) => { pub fn g(_: $ty) {} }; }\n"
+            "#[cfg_attr(all(feature = \"scripting\", test), "
+            "macro_export(local_inner_macros))]\n"
+            "macro_rules! conditional_path { ($path:path) => { pub use $path; }; }\n"
         )
 
         result = self.run_check()

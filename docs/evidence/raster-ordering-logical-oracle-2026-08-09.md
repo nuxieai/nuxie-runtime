@@ -49,10 +49,12 @@ direct ratios and rejects directional classifications. The committed evidence
 run records timing settings, source identities, raw-output hashes, and the
 resulting 20-row comparison separately from this semantic oracle.
 
-The candidate head passed:
+The post-review implementation head
+`dcb7fb6059bb282433213d5e991423f2cd342265` passed:
 
-- six focused RasterOrdering renderer tests;
-- the pinned 3,861-path paper differential (one test, 406.05 seconds);
+- seven focused RasterOrdering renderer tests, including exact two-draw packed
+  feather-atlas transforms and onscreen blit vertex writes;
+- the pinned 3,861-path paper differential (one test, 403.54 seconds);
 - the feature-gated ten-frame production Null workload test;
 - native `nuxie-renderer` all-features compilation;
 - default-feature `wasm32-unknown-unknown` compilation; and

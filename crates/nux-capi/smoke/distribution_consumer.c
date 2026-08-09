@@ -16,5 +16,14 @@ int main(void) {
     (void)nux_capi_result_diagnostic(result, &diagnostic);
     (void)nux_capi_result_free(result);
   }
+  NuxPlayerSchedulingInfo scheduling = {
+      .struct_size = sizeof(NuxPlayerSchedulingInfo),
+  };
+  if (scheduling.struct_size < NUX_PLAYER_SCHEDULING_INFO_V3_MIN_SIZE ||
+      nux_player_step_result_scheduling(NULL, &scheduling) !=
+          NUX_STATUS_NULL_ARGUMENT ||
+      nux_player_acknowledge_presented(NULL, 1) != NUX_STATUS_NULL_ARGUMENT) {
+    return 3;
+  }
   return nux_capi_abi_version() == NUX_CAPI_ABI_VERSION ? 0 : 2;
 }

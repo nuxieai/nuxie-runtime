@@ -609,7 +609,7 @@ axes:
   compensation:
     status: divergent
     mechanisms:
-      - {name: "scene_rebind_artboard_input_rehydration", kind: "AF-2/AF-8 rescan and table rehydrate", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie/src/lib.rs:654-676", "crates/nuxie/src/lib.rs:807-845", "crates/nuxie-product/src/flow_session.rs:1239-1245"]}
+      - {name: "scene_rebind_artboard_input_rehydration", kind: "AF-2/AF-8 rescan and table rehydrate", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie/src/lib.rs:654-676", "crates/nuxie/src/lib.rs:807-845"]}
     import_time_constants:
       - {name: "script input kind/name/global id", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie/src/lib.rs:710-744"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]

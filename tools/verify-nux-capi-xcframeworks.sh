@@ -126,8 +126,7 @@ for library in "${thin_libraries[@]}"; do
     python3 "${script_dir}/apple_runtime_contract.py" symbol-partitions \
         "${symbols_path}" \
         "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
-        "legacyMigration=${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt"
+        "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
 done
 
 for framework in "${full_framework}" "${ios_framework}"; do
@@ -151,7 +150,7 @@ done
 "${script_dir}/check-nux-capi-layout.py"
 
 headers_dir="$(dirname "${full_macos}")/Headers"
-expected_headers="$(printf '%s\n' module.modulemap nux_capi.generated.h nux_capi.h nux_capi_apple.h nux_runtime.generated.h nux_runtime.h)"
+expected_headers="$(printf '%s\n' module.modulemap nux_capi.generated.h nux_capi.h nux_capi_apple.h)"
 while IFS= read -r packaged_headers; do
     actual_headers="$(cd "${packaged_headers}" && find . -mindepth 1 -maxdepth 1 -print | sed 's#^./##' | LC_ALL=C sort)"
     test "${actual_headers}" = "${expected_headers}"
@@ -185,25 +184,12 @@ xcrun --sdk macosx clang \
     -o "${consumer_root}/c-consumer"
 "${consumer_root}/c-consumer"
 
-xcrun --sdk macosx clang \
-    -std=c11 -Wall -Wextra -Werror \
-    -isysroot "${macos_sdk_path}" \
-    -mmacosx-version-min="${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
-    -I"${headers_dir}" \
-    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c" \
-    "${full_macos}" \
-    -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
-    -framework Security -liconv \
-    -o "${consumer_root}/c-legacy-consumer"
-"${consumer_root}/c-legacy-consumer"
-
 xcrun --sdk macosx swiftc \
     -parse-as-library \
     -sdk "${macos_sdk_path}" \
     -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
     -I "${headers_dir}" \
-    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
     "${full_macos}" \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
@@ -246,23 +232,12 @@ xcrun --sdk iphoneos clang \
     -framework Foundation -framework QuartzCore -framework Metal \
     -framework CoreGraphics -framework ImageIO -framework Security \
     -o "${consumer_root}/c-consumer-ios"
-xcrun --sdk iphoneos clang \
-    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
-    -std=c11 -Wall -Wextra -Werror \
-    -isysroot "${iphoneos_sdk_path}" \
-    -I"${device_headers}" \
-    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c" \
-    "${full_device}" \
-    -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
-    -framework Security -liconv \
-    -o "${consumer_root}/c-legacy-consumer-ios"
 xcrun --sdk iphoneos swiftc \
     -parse-as-library \
     -sdk "${iphoneos_sdk_path}" \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
     -I "${device_headers}" \
-    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift" \
+    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
     "${full_device}" \
     -o "${consumer_root}/swift-consumer-ios"
 
@@ -289,7 +264,9 @@ xcrun --sdk iphoneos swiftc \
     -Xlinker -liconv \
     -o "${consumer_root}/swift-behavior-consumer-ios"
 
-python3 - "${size_report_path}" "${full_archive}" "${ios_archive}" \
+python3 - "${size_report_path}" \
+    "${repo_root}/crates/nux-capi/size-baseline-apple-runtime-v0.4.0.json" \
+    "${full_archive}" "${ios_archive}" \
     "${full_framework}" "${ios_framework}" \
     "${consumer_root}/c-behavior-consumer" "${consumer_root}/swift-behavior-consumer" \
     "${consumer_root}/c-behavior-consumer-ios" "${consumer_root}/swift-behavior-consumer-ios" \
@@ -299,7 +276,7 @@ import pathlib
 import sys
 
 (
-    output, full_archive, ios_archive, full_framework, ios_framework,
+    output, baseline_path, full_archive, ios_archive, full_framework, ios_framework,
     c_macos, swift_macos, c_ios, swift_ios, *specs
 ) = sys.argv[1:]
 slice_bytes = {}
@@ -310,9 +287,7 @@ for specification in specs:
 def expanded(path):
     return sum(item.stat().st_size for item in pathlib.Path(path).rglob("*") if item.is_file())
 
-document = {
-    "schemaVersion": 1,
-    "artifacts": {
+current = {
         "full-apple": {
             "compressedBytes": pathlib.Path(full_archive).stat().st_size,
             "expandedBytes": expanded(full_framework),
@@ -331,6 +306,34 @@ document = {
             },
             "sliceBytes": {key: slice_bytes[key] for key in sorted(slice_bytes) if "darwin" not in key},
         },
+}
+baseline_document = json.loads(pathlib.Path(baseline_path).read_text())
+baseline = {
+    key: baseline_document[key]
+    for key in ("releaseTag", "sourceRevision", "sizeReportSha256", "artifacts")
+}
+
+def subtract(after, before):
+    return {
+        "compressedBytes": after["compressedBytes"] - before["compressedBytes"],
+        "expandedBytes": after["expandedBytes"] - before["expandedBytes"],
+        "representativeLinkedBytes": {
+            key: value - before["representativeLinkedBytes"][key]
+            for key, value in after["representativeLinkedBytes"].items()
+        },
+        "sliceBytes": {
+            key: value - before["sliceBytes"][key]
+            for key, value in after["sliceBytes"].items()
+        },
+    }
+
+document = {
+    "schemaVersion": 2,
+    "baseline": baseline,
+    "artifacts": current,
+    "deltasFromBaseline": {
+        kind: subtract(metrics, baseline["artifacts"][kind])
+        for kind, metrics in current.items()
     },
 }
 pathlib.Path(output).write_text(json.dumps(document, indent=2) + "\n")
@@ -338,4 +341,5 @@ PY
 
 python3 "${script_dir}/apple_runtime_contract.py" sizes \
     "${size_report_path}" "${repo_root}/crates/nux-capi/size-budgets-v3.json"
+python3 "${script_dir}/check-nux-capi-surface.py"
 echo "nux-capi dual-XCFramework verification passed"

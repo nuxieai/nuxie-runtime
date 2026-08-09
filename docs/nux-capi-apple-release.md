@@ -1,10 +1,8 @@
 # Nuxie runtime C distribution
 
-The supported Apple binary exposes `nux-capi`, the product-neutral C ABI. For
-the one migration release, the final static archive is composed by the upper
-`nux-apple-runtime` product leaf, which depends inward on `nux-capi` and retains
-the temporary legacy exports. A single immutable source revision produces five
-thin static libraries.
+The supported Apple binary is rooted directly in `nux-capi`, the
+product-neutral C ABI. A single immutable source revision produces five thin
+static libraries.
 Those exact libraries are reused in two archives:
 
 - `NuxieRuntime.xcframework.zip` contains iOS device, universal iOS simulator,
@@ -12,17 +10,25 @@ Those exact libraries are reused in two archives:
 - `NuxieRuntime-iOS.xcframework.zip` contains the same iOS device and simulator
   libraries, without copying the macOS slices into an iOS SDK dependency.
 
-Both archives expose `NuxieRuntimeC`. During the one migration release only,
-the same archive also exposes `NuxieRuntimeFFI`, backed by the explicitly
-allowlisted legacy experience/session symbols. The modules have separate
-headers because their historical typedefs overlap; consumers must not include
-both header families in one C translation unit.
+Both archives expose exactly one Clang module, `NuxieRuntimeC`, backed by four
+headers: the module map, umbrella header, generated portable header, and narrow
+Apple extension header. The exported ABI is the disjoint union of the portable
+and Apple Metal symbol partitions. Experience, screen, journey, SDK-session,
+package authentication, and product host-command semantics belong to the Swift
+SDK and are rejected by the shipped-interface source guard.
 
-The reverse dependency is intentionally forbidden: `nux-capi` never imports
-`nux-apple-runtime` or experience/session policy. Removing the upper leaf's
-`migration-distribution` feature, legacy header module, smoke consumers, and
-symbol allowlist retires the compatibility lane without changing the mature C
-ABI crate.
+The portable scheduling contract is part of both packages:
+`nux_player_step_result_scheduling` reports independent dirty, settled,
+render-demand, revision, and optional monotonic-deadline facts, and
+`nux_player_acknowledge_presented` consumes only the exact outstanding
+occurrence revision. A successful Apple `Presented` disposition performs that
+acknowledgement automatically; skipped or failed presentations preserve the
+render demand. Both packaged C and Swift consumers compile and link these
+symbols from `NuxieRuntimeC`.
+
+The distribution has no product runtime leaf or migration facade. Package,
+experience, screen, session, authentication, and product host-command policy
+remain Swift SDK responsibilities and cannot enter the shipped Rust closure.
 
 ## Candidate qualification
 
@@ -30,7 +36,6 @@ From a clean checkout of the exact intended release commit:
 
 ```sh
 make nux-capi-distribution-contract-test
-make capi-migration-contract
 make nux-capi-xcframeworks
 ```
 
@@ -39,17 +44,20 @@ bitcode, constructs both XCFrameworks, links clean C and pure-Swift consumers,
 and writes:
 
 - `target/nux-capi-apple/artifact-set.json` (schema 6 provenance and checksums)
-- `target/nux-capi-apple/SIZE_REPORT.json` (compressed, expanded, per-slice,
-  and representative linked sizes)
+- `target/nux-capi-apple/SIZE_REPORT.json` (schema 2 exact compressed,
+  expanded, per-slice, and representative linked sizes, plus signed deltas
+  from the immutable v0.4.0 baseline)
 
 Before release, replace the candidate sentinel in
 `crates/nux-capi/size-budgets-v3.json` with reviewed release maxima. The
 publisher fails closed while those values are unfrozen.
 
-The v0.4.0 maxima are the qualified measurements rounded up independently to
-the next 1 MiB boundary. This keeps a narrow allowance for provenance-only
-rebuild variation while still ratcheting archives, expanded bundles, every
-thin slice, and representative C and Swift linked binaries.
+The committed v0.4.0 baseline records its tag, exact source revision, original
+size-report SHA-256, and every measurement. Release maxima are frozen from the
+qualified v0.5.0 slim build, rounded up independently to the next 1 MiB
+boundary. This keeps a narrow allowance for provenance-only rebuild variation
+while still ratcheting archives, expanded bundles, every thin slice, and
+representative C and Swift linked binaries.
 
 ## Immutable release
 

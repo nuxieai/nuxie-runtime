@@ -40,7 +40,6 @@ FORBIDDEN_DEPENDENCY_PREFIXES = (
     "nuxie-project-",
 )
 
-PRODUCT_ROOT_REEXPORT = re.compile(r"\bpub\s+use\b[^;]*;", re.DOTALL)
 PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
     r"\b(?:UIKit|SwiftUI|AppKit|CAMetal(?:Layer|Drawable)?|MTLDrawable|wgpu)\b|"
     r"\bnuxie_renderer\s*::"
@@ -54,19 +53,9 @@ PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
-    "nux-apple-runtime",
-    "nux-container",
-    "nuxie-apple-adapter",
-    "nuxie-authoring",
-    "nuxie-flow",
-    "nuxie-product",
-    "nuxie-product-scripting",
     "nuxie-project-data",
 }
 PRODUCT_LAYER_PACKAGES = {
-    "nux-container",
-    "nuxie-product",
-    "nuxie-product-scripting",
     "nuxie-project-data",
 }
 EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}
@@ -150,7 +139,7 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"\b(?:prepare_flow_[A-Za-z0-9_]*|import_with_(?:trusted_scripts|"
-    r"trusted_scripts_and_limits|script_capability|unsigned_scripts)|"
+    r"trusted_scripts_and_limits|script_capability)|"
     r"FlowSession[A-Za-z0-9_]*|"
     r"Scene(?:Tx)?[A-Za-z0-9_]*|ProjectData[A-Za-z0-9_]*)\b"
 )
@@ -671,7 +660,7 @@ def portable_abi_facade_edge_error(
 ) -> str | None:
     if (package_name, normalized_package_name(resolved_name)) != PORTABLE_ABI_FACADE_EDGE:
         return "not-approved"
-    if table_path != ("dependencies",) or not isinstance(specification, dict):
+    if not isinstance(specification, dict):
         return "portable ABI facade edge is only approved in [dependencies]"
     if normalized_package_name(dependency_name) != "nuxie":
         return "portable ABI facade edge must use dependency key 'nuxie'"
@@ -679,6 +668,12 @@ def portable_abi_facade_edge_error(
         return "portable ABI facade edge must resolve to local crates/nuxie"
     if specification.get("default-features") is not False:
         return "portable ABI facade edge must disable default features"
+    if table_path == ("dev-dependencies",):
+        if specification.get("features") != ["test-support"]:
+            return "portable ABI facade dev edge may enable only test-support"
+        return None
+    if table_path != ("dependencies",):
+        return "portable ABI facade edge is only approved in [dependencies]"
     features = specification.get("features", [])
     if features not in (None, []) and features != ():
         return "portable ABI facade edge cannot enable dependency features"
@@ -1804,24 +1799,6 @@ def check_repository(
                 errors.append(
                     f"{relative}: stale {family} boundary debt exception; remove the "
                     "allowlist entry with the debt or restore the marker classification"
-                )
-
-    product_lib = repo_root / "crates/nuxie-product/src/lib.rs"
-    if product_lib.is_file():
-        try:
-            product_source = strip_rust_non_code(product_lib.read_text())
-        except OSError as error:
-            errors.append(f"crates/nuxie-product/src/lib.rs: cannot read source: {error}")
-        else:
-            for match in PRODUCT_ROOT_REEXPORT.finditer(product_source):
-                prefix = product_source[: match.start()]
-                if prefix.count("{") != prefix.count("}"):
-                    continue
-                line_number = product_source.count("\n", 0, match.start()) + 1
-                errors.append(
-                    "crates/nuxie-product/src/lib.rs:"
-                    f"{line_number}: product vocabulary must remain namespaced; "
-                    "crate-root compatibility exports cannot return"
                 )
 
     return (

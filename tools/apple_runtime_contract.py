@@ -9,31 +9,6 @@ import tempfile
 import unicodedata
 
 
-METADATA_KEYS = {
-    "schemaVersion",
-    "runtimeVersion",
-    "buildSourceRevision",
-    "releaseRevision",
-    "buildInputsHash",
-    "buildInputsManifestPath",
-    "runtimeIdentity",
-    "contractFingerprint",
-    "luaurVersion",
-    "buildProfile",
-    "rustToolchain",
-    "xcodeVersion",
-    "xcodeBuild",
-    "iphoneOSSDKVersion",
-    "iphoneOSSDKBuild",
-    "iphoneSimulatorSDKVersion",
-    "iphoneSimulatorSDKBuild",
-    "macOSSDKVersion",
-    "macOSSDKBuild",
-    "minimumIOSVersion",
-    "minimumMacOSVersion",
-    "thirdPartyNoticesPath",
-    "swiftPackageChecksum",
-}
 BUILD_INPUT_KEYS = {
     "configuration",
     "features",
@@ -61,20 +36,23 @@ IOS_TARGETS = {
     "aarch64-apple-ios-sim",
     "x86_64-apple-ios",
 }
-FORBIDDEN_HEADER_IDENTIFIERS = {
-    "NUX_FLOW_SESSION_ABI_MINOR",
-    "NUX_RUNTIME_ABI_MAJOR",
-    "NUX_RUNTIME_ABI_MINOR",
-    "NUX_STATUS_ABI_MISMATCH",
-    "minimum_abi_minor",
-    # Keep the hard-cut sentinel while honoring the repository-wide rule that
-    # retired lowercase ABI spellings do not appear verbatim in code.
-    "nux_" "flow_runtime_context_create",
-    "nux_runtime_abi_major",
-    "nux_runtime_abi_minor",
-    "nux_runtime_require_abi",
-    "required_abi_major",
+SHIPPING_ROOT_PACKAGE = "nux-capi"
+SHIPPING_FEATURES = ["apple-metal", "scripting"]
+RETIRED_PACKAGES = {
+    "nux-apple-runtime",
+    "nux-container",
+    "nuxie-apple-adapter",
+    "nuxie-product",
+    "nuxie-product-scripting",
+    "nuxie-project-data",
 }
+IMMUTABLE_V04_BASELINE_PATH = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "crates/nux-capi/size-baseline-apple-runtime-v0.4.0.json"
+)
+IMMUTABLE_V04_BASELINE_DOCUMENT_SHA256 = (
+    "0a42068e520e038ad17d11127d7b8e35eef12f2d48c9c1908645b3beeb19fea4"
+)
 
 
 class ContractError(ValueError):
@@ -88,75 +66,6 @@ def _string(document: dict[str, object], key: str) -> str:
     if any(unicodedata.category(character) == "Cc" for character in value):
         raise ContractError(f"{key} contains a control character")
     return value
-
-
-def validate_metadata(document: object) -> None:
-    if not isinstance(document, dict):
-        raise ContractError("artifact metadata must be a top-level object")
-    actual_keys = set(document)
-    if actual_keys != METADATA_KEYS:
-        missing = sorted(METADATA_KEYS - actual_keys)
-        extra = sorted(actual_keys - METADATA_KEYS)
-        raise ContractError(f"metadata keys differ: missing={missing}, extra={extra}")
-    if document["schemaVersion"] != 5:
-        raise ContractError("schemaVersion must be exactly 5")
-
-    runtime_version = _string(document, "runtimeVersion")
-    build_source_revision = _string(document, "buildSourceRevision")
-    release_revision = _string(document, "releaseRevision")
-    runtime_identity = _string(document, "runtimeIdentity")
-    contract_fingerprint = _string(document, "contractFingerprint")
-    swift_package_checksum = _string(document, "swiftPackageChecksum")
-    build_inputs_manifest_path = _string(document, "buildInputsManifestPath")
-    for key in METADATA_KEYS - {"schemaVersion"}:
-        _string(document, key)
-
-    build_inputs_hash = document["buildInputsHash"]
-    if not isinstance(build_inputs_hash, str) or SHA256.fullmatch(build_inputs_hash) is None:
-        raise ContractError("buildInputsHash must be a lowercase SHA-256")
-    if build_inputs_manifest_path != "NuxieRuntime.xcframework/BUILD_INPUTS.json":
-        raise ContractError("buildInputsManifestPath is not the canonical artifact path")
-
-    if SEMVER.fullmatch(runtime_version) is None:
-        raise ContractError("runtimeVersion is not canonical SemVer")
-    if SOURCE_REVISION.fullmatch(build_source_revision) is None:
-        raise ContractError("buildSourceRevision is not an exact source identity")
-    if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
-        raise ContractError("releaseRevision is not an exact clean source identity")
-    if runtime_identity != f"{runtime_version}@{build_source_revision}":
-        raise ContractError("runtimeIdentity does not match version and build revision")
-    if SHA256.fullmatch(contract_fingerprint) is None:
-        raise ContractError("contractFingerprint is not a lowercase SHA-256")
-    if SHA256.fullmatch(swift_package_checksum) is None:
-        raise ContractError("swiftPackageChecksum is not a lowercase SHA-256")
-
-
-def expected_symbols(header: str) -> set[str]:
-    identifiers = set(re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", header))
-    forbidden = sorted(identifiers & FORBIDDEN_HEADER_IDENTIFIERS)
-    if forbidden:
-        raise ContractError(
-            f"generated header exposes removed client ABI identifiers: {forbidden}"
-        )
-    symbols = {f"_{name}" for name in HEADER_FUNCTION.findall(header)}
-    if not symbols:
-        raise ContractError("generated header declares no public nux_* functions")
-    return symbols
-
-
-def validate_symbols(header: str, exported: str) -> None:
-    expected = expected_symbols(header)
-    actual = {
-        line.strip()
-        for line in exported.splitlines()
-        if EXPORTED_FUNCTION.fullmatch(line.strip()) is not None
-    }
-    if actual != expected:
-        missing = sorted(expected - actual)
-        extra = sorted(actual - expected)
-        raise ContractError(
-            f"public symbol set differs: missing={missing}, extra={extra}"
-        )
 
 
 def validate_symbol_partitions(
@@ -402,12 +311,46 @@ def validate_layout_oracle(document: object) -> None:
 
 
 def validate_size_report(report: object, budgets: object, *, release: bool) -> None:
-    if not isinstance(report, dict) or set(report) != {"schemaVersion", "artifacts"}:
+    report_keys = {
+        "schemaVersion",
+        "baseline",
+        "artifacts",
+        "deltasFromBaseline",
+    }
+    if not isinstance(report, dict) or set(report) != report_keys:
         raise ContractError("size report has an incomplete or unknown schema")
-    if report["schemaVersion"] != 1 or not isinstance(report["artifacts"], dict):
-        raise ContractError("size report must use schema 1")
-    if set(report["artifacts"]) != {"full-apple", "ios-only"}:
-        raise ContractError("size report must contain both distribution artifacts")
+    if report["schemaVersion"] != 2:
+        raise ContractError("size report must use schema 2")
+    baseline = report["baseline"]
+    if not isinstance(baseline, dict) or set(baseline) != {
+        "releaseTag",
+        "sourceRevision",
+        "sizeReportSha256",
+        "artifacts",
+    }:
+        raise ContractError("size report has malformed baseline identity")
+    if baseline["releaseTag"] != "apple-runtime-v0.4.0":
+        raise ContractError("size baseline is not the immutable v0.4.0 release")
+    if re.fullmatch(r"[0-9a-f]{40}", baseline["sourceRevision"] or "") is None:
+        raise ContractError("size baseline has malformed source identity")
+    if SHA256.fullmatch(baseline["sizeReportSha256"] or "") is None:
+        raise ContractError("size baseline has malformed report identity")
+    try:
+        immutable_baseline_bytes = IMMUTABLE_V04_BASELINE_PATH.read_bytes()
+        immutable_baseline_document = json.loads(immutable_baseline_bytes)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError(f"immutable v0.4.0 size baseline is unreadable: {error}") from error
+    if (
+        hashlib.sha256(immutable_baseline_bytes).hexdigest()
+        != IMMUTABLE_V04_BASELINE_DOCUMENT_SHA256
+    ):
+        raise ContractError("immutable v0.4.0 size baseline document was modified")
+    expected_baseline = {
+        key: immutable_baseline_document.get(key)
+        for key in ("releaseTag", "sourceRevision", "sizeReportSha256", "artifacts")
+    }
+    if baseline != expected_baseline:
+        raise ContractError("size report does not use the immutable v0.4.0 size baseline")
     metric_keys = {
         "compressedBytes",
         "expandedBytes",
@@ -416,30 +359,57 @@ def validate_size_report(report: object, budgets: object, *, release: bool) -> N
     }
     scalar_metric_keys = {"compressedBytes", "expandedBytes"}
     mapped_metric_keys = {"representativeLinkedBytes", "sliceBytes"}
-    for kind, metrics in report["artifacts"].items():
-        if not isinstance(metrics, dict) or set(metrics) != metric_keys:
-            raise ContractError(f"{kind} size record is malformed")
-        if not all(
-            isinstance(metrics[key], int) and metrics[key] >= 0
-            for key in scalar_metric_keys
-        ):
-            raise ContractError(f"{kind} has an invalid byte measurement")
-        for metric in mapped_metric_keys:
-            if (
-                not isinstance(metrics[metric], dict)
-                or not metrics[metric]
-                or not all(
-                    isinstance(label, str)
-                    and label
-                    and isinstance(value, int)
-                    and value >= 0
-                    for label, value in metrics[metric].items()
-                )
+
+    def validate_artifacts(artifacts: object, label: str) -> None:
+        if not isinstance(artifacts, dict) or set(artifacts) != {"full-apple", "ios-only"}:
+            raise ContractError(f"{label} must contain both distribution artifacts")
+        for kind, metrics in artifacts.items():
+            if not isinstance(metrics, dict) or set(metrics) != metric_keys:
+                raise ContractError(f"{label}.{kind} size record is malformed")
+            if not all(
+                isinstance(metrics[key], int) and metrics[key] >= 0
+                for key in scalar_metric_keys
             ):
-                raise ContractError(f"{kind} has malformed {metric} measurements")
-        expected_targets = FULL_APPLE_TARGETS if kind == "full-apple" else IOS_TARGETS
-        if set(metrics["sliceBytes"]) != expected_targets:
-            raise ContractError(f"{kind} size report has the wrong slice target set")
+                raise ContractError(f"{label}.{kind} has an invalid byte measurement")
+            for metric in mapped_metric_keys:
+                if (
+                    not isinstance(metrics[metric], dict)
+                    or not metrics[metric]
+                    or not all(
+                        isinstance(name, str)
+                        and name
+                        and isinstance(value, int)
+                        and value >= 0
+                        for name, value in metrics[metric].items()
+                    )
+                ):
+                    raise ContractError(f"{label}.{kind} has malformed {metric}")
+            expected_targets = FULL_APPLE_TARGETS if kind == "full-apple" else IOS_TARGETS
+            if set(metrics["sliceBytes"]) != expected_targets:
+                raise ContractError(f"{label}.{kind} has the wrong slice target set")
+
+    validate_artifacts(baseline["artifacts"], "baseline")
+    validate_artifacts(report["artifacts"], "current")
+
+    deltas = report["deltasFromBaseline"]
+    if not isinstance(deltas, dict) or set(deltas) != {"full-apple", "ios-only"}:
+        raise ContractError("size report has malformed before/after deltas")
+    for kind, current in report["artifacts"].items():
+        before = baseline["artifacts"][kind]
+        delta = deltas[kind]
+        if not isinstance(delta, dict) or set(delta) != metric_keys:
+            raise ContractError(f"{kind} before/after delta is malformed")
+        for metric in scalar_metric_keys:
+            if delta[metric] != current[metric] - before[metric]:
+                raise ContractError(f"{kind}.{metric} before/after delta is incorrect")
+        for metric in mapped_metric_keys:
+            if not isinstance(delta[metric], dict) or set(delta[metric]) != set(current[metric]):
+                raise ContractError(f"{kind}.{metric} before/after delta labels differ")
+            for label, value in current[metric].items():
+                if delta[metric][label] != value - before[metric][label]:
+                    raise ContractError(
+                        f"{kind}.{metric}.{label} before/after delta is incorrect"
+                    )
 
     if not isinstance(budgets, dict) or set(budgets) != {
         "schemaVersion",
@@ -485,8 +455,10 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
         raise ContractError("build-input manifest schemaVersion must be exactly 1")
     root_package = document["rootPackage"]
     features = document["features"]
-    if not isinstance(root_package, str) or not root_package:
-        raise ContractError("build-input manifest has no root package")
+    if root_package != SHIPPING_ROOT_PACKAGE:
+        raise ContractError(
+            f"build-input manifest root package must be exactly {SHIPPING_ROOT_PACKAGE}"
+        )
     if (
         not isinstance(features, list)
         or not features
@@ -494,6 +466,10 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
         or not all(isinstance(feature, str) and feature for feature in features)
     ):
         raise ContractError("build-input manifest has a malformed feature set")
+    if features != SHIPPING_FEATURES:
+        raise ContractError(
+            "build-input manifest feature set must be exactly apple-metal,scripting"
+        )
     targets = document["targets"]
     if not isinstance(targets, list) or set(targets) != BUILD_TARGETS or targets != sorted(targets):
         raise ContractError("build-input manifest does not cover the exact Apple target set")
@@ -582,6 +558,7 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
     packages = document["packages"]
     if not isinstance(packages, list) or not packages:
         raise ContractError("build-input manifest has no dependency closure")
+    shipping_roots = 0
     for package in packages:
         if not isinstance(package, dict) or set(package) != {
             "checksum",
@@ -596,6 +573,12 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
             raise ContractError("build-input manifest has a malformed package record")
         if not all(isinstance(package[key], str) and package[key] for key in ("name", "version")):
             raise ContractError("build-input manifest has an unnamed dependency")
+        if package["name"] in RETIRED_PACKAGES:
+            raise ContractError(
+                f"build-input manifest contains retired package {package['name']}"
+            )
+        if package["name"] == SHIPPING_ROOT_PACKAGE:
+            shipping_roots += 1
         if package["source"] is None:
             if not isinstance(package["manifestPath"], str) or not package["manifestPath"]:
                 raise ContractError("local dependency is missing its manifest path")
@@ -631,6 +614,10 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
             or not set(package_targets) <= BUILD_TARGETS | {"host"}
         ):
             raise ContractError("dependency has an invalid target closure")
+    if shipping_roots != 1:
+        raise ContractError(
+            "build-input manifest must contain exactly one nux-capi package"
+        )
 
     canonical = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if canonical != encoded:
@@ -651,10 +638,7 @@ def _load_json(path: pathlib.Path) -> object:
 
 def qualify_release_metadata(path: pathlib.Path, release_revision: str) -> None:
     document = _load_json(path)
-    if isinstance(document, dict) and document.get("schemaVersion") == 6:
-        validate_distribution_metadata(document)
-    else:
-        validate_metadata(document)
+    validate_distribution_metadata(document)
     if re.fullmatch(r"[0-9a-f]{40}", release_revision) is None:
         raise ContractError("release revision is not an exact clean source identity")
     assert isinstance(document, dict)
@@ -676,19 +660,8 @@ def qualify_release_metadata(path: pathlib.Path, release_revision: str) -> None:
 
 
 def main(arguments: list[str]) -> int:
-    if len(arguments) == 2 and arguments[0] == "metadata":
-        validate_metadata(_load_json(pathlib.Path(arguments[1])))
-        return 0
     if len(arguments) == 3 and arguments[0] == "release":
         qualify_release_metadata(pathlib.Path(arguments[1]), arguments[2])
-        return 0
-    if len(arguments) == 3 and arguments[0] == "symbols":
-        try:
-            header = pathlib.Path(arguments[1]).read_text(encoding="utf-8")
-            exported = pathlib.Path(arguments[2]).read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as error:
-            raise ContractError(f"cannot read symbol inputs: {error}") from error
-        validate_symbols(header, exported)
         return 0
     if len(arguments) >= 4 and arguments[0] == "symbol-partitions":
         try:
@@ -761,9 +734,8 @@ def main(arguments: list[str]) -> int:
         return 0
     raise ContractError(
         "usage: apple_runtime_contract.py "
-        "metadata <artifact.json> | release <artifact.json> <revision> | "
+        "release <artifact.json> <revision> | "
         "inputs <BUILD_INPUTS.json> <sha256> | "
-        "symbols <header> <nm-output> | "
         "symbol-partitions <nm-output> NAME=<manifest>... | "
         "header-symbols <header> NAME=<manifest>... | "
         "slice-provenance <strings> <artifact-set.json> <BUILD_INPUTS.json> <target> | "

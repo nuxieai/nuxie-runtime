@@ -32,7 +32,7 @@ def package(repo: Path, name: str, *, source: str | None = None) -> dict:
 
 def metadata(repo: Path, *, target_specific: bool) -> dict:
     packages = [
-        package(repo, "nux-apple-runtime"),
+        package(repo, "nux-capi"),
         package(repo, "direct"),
         package(repo, "transitive"),
         package(repo, "target-only"),
@@ -52,7 +52,11 @@ def metadata(repo: Path, *, target_specific: bool) -> dict:
         "packages": packages,
         "resolve": {
             "nodes": [
-                {"deps": root_dependencies, "features": ["apple-product"], "id": "nux-apple-runtime"},
+                {
+                    "deps": root_dependencies,
+                    "features": ["apple-metal", "scripting"],
+                    "id": "nux-capi",
+                },
                 {
                     "deps": [{"dep_kinds": [{"kind": None, "target": None}], "pkg": "transitive"}],
                     "features": [],
@@ -84,7 +88,7 @@ class InputDigestTests(unittest.TestCase):
             f"checksum = \"{'e' * 64}\"\n"
         )
         for name in (
-            "nux-apple-runtime",
+            "nux-capi",
             "direct",
             "transitive",
             "target-only",
@@ -135,7 +139,7 @@ class InputDigestTests(unittest.TestCase):
         self.assertEqual(baseline, self.manifest())
 
     def test_direct_transitive_and_target_specific_source_changes_invalidate(self) -> None:
-        for name in ("nux-apple-runtime", "direct", "transitive", "target-only"):
+        for name in ("nux-capi", "direct", "transitive", "target-only"):
             with self.subTest(name=name):
                 path = self.repo / "crates" / name / "src" / "lib.rs"
                 original = path.read_text()
@@ -149,14 +153,14 @@ class InputDigestTests(unittest.TestCase):
             self.repo / "crates" / "direct" / "build.rs",
             self.repo
             / "crates"
-            / "nux-apple-runtime"
+            / "nux-capi"
             / "include"
-            / "nux_runtime.h",
+            / "nux_capi.h",
             self.repo / "THIRD_PARTY_NOTICES.md",
-            self.repo / "tools" / "build-apple-xcframework.sh",
+            self.repo / "tools" / "build-nux-capi-xcframeworks.sh",
         )
         inputs[2].write_text("fn main() {}\n")
-        inputs[3].parent.mkdir()
+        inputs[3].parent.mkdir(exist_ok=True)
         inputs[3].write_text("/* header */\n")
         (self.repo / ".cargo").mkdir()
         provider = self.repo / ".cargo" / "config.toml"
@@ -239,7 +243,7 @@ class InputDigestTests(unittest.TestCase):
         root = next(
             node
             for node in host_metadata["resolve"]["nodes"]
-            if node["id"] == "nux-apple-runtime"
+            if node["id"] == "nux-capi"
         )
         root["deps"].append(
             {
@@ -287,13 +291,13 @@ class InputDigestTests(unittest.TestCase):
     def test_exact_root_resolution_excludes_workspace_feature_pollution(self) -> None:
         exact = {
             TARGET_A: {
-                "nux-apple-runtime": ["apple-product"],
+                "nux-capi": ["apple-metal", "scripting"],
                 "direct": [],
                 "transitive": ["backend"],
                 "registry": [],
             },
             TARGET_B: {
-                "nux-apple-runtime": ["apple-product"],
+                "nux-capi": ["apple-metal", "scripting"],
                 "direct": [],
                 "transitive": ["backend"],
                 "target-only": [],

@@ -14,6 +14,16 @@ enum DistributionConsumer {
             _ = nux_capi_result_diagnostic(result, &diagnostic)
             _ = nux_capi_result_free(result)
         }
+        var scheduling = NuxPlayerSchedulingInfo()
+        scheduling.struct_size = UInt32(MemoryLayout<NuxPlayerSchedulingInfo>.size)
+        precondition(
+            nux_player_step_result_scheduling(nil, &scheduling) ==
+                NUX_STATUS_NULL_ARGUMENT.rawValue
+        )
+        precondition(
+            nux_player_acknowledge_presented(nil, 1) ==
+                NUX_STATUS_NULL_ARGUMENT.rawValue
+        )
         precondition(nux_capi_abi_version() == NUX_CAPI_ABI_VERSION)
     }
 }

@@ -1093,9 +1093,7 @@ mod tests {
 
     #[test]
     fn decoded_image_contract_copies_tight_premultiplied_srgb_pixels() {
-        let encoded = include_bytes!(
-            "../../../tests/ExperienceRuntimeHostApp/Fixtures/external-image/assets/sha256/b9d4e51e3590796b9a65fc9ec0b623bdf71a2bacef0098b79063edc87055b1a0.png"
-        );
+        let encoded = include_bytes!("../tests/fixtures/external-image.png");
         let dimensions = nuxie_image_codec::preflight_encoded_image(encoded)
             .expect("checked-in external image is valid");
         let tight_row = dimensions.width.checked_mul(4).expect("row bytes");
@@ -1138,9 +1136,7 @@ mod tests {
 
     #[test]
     fn decoded_image_rejects_dimension_format_row_and_byte_limits_after_balancing_owner() {
-        let encoded = include_bytes!(
-            "../../../tests/ExperienceRuntimeHostApp/Fixtures/external-image/assets/sha256/b9d4e51e3590796b9a65fc9ec0b623bdf71a2bacef0098b79063edc87055b1a0.png"
-        );
+        let encoded = include_bytes!("../tests/fixtures/external-image.png");
         let dimensions = nuxie_image_codec::preflight_encoded_image(encoded).expect("dimensions");
         let row = dimensions.width * 4;
         let pixels = vec![0x55; row as usize * dimensions.height as usize];
@@ -1812,10 +1808,7 @@ mod tests {
                 .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
         )
         .join("tests/unit_tests/assets");
-        let png = include_bytes!(
-            "../../../tests/ExperienceRuntimeHostApp/Fixtures/external-image/assets/sha256/b9d4e51e3590796b9a65fc9ec0b623bdf71a2bacef0098b79063edc87055b1a0.png"
-        )
-        .to_vec();
+        let png = include_bytes!("../tests/fixtures/external-image.png").to_vec();
         let font = std::fs::read(root.join("fonts/Inter_18pt-Regular.ttf")).expect("font fixture");
         let sound_bytes = std::fs::read(root.join("sound.riv")).expect("sound fixture");
         let sound = File::import(&sound_bytes).expect("sound imports");

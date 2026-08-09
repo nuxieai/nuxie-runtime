@@ -13,8 +13,8 @@ targets=(
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
-        'root-package: nux-apple-runtime' \
-        'feature-set: migration-distribution' \
+        'root-package: nux-capi' \
+        'feature-set: apple-metal,scripting' \
         'thin-builds: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin' \
         'artifact full-apple: all five thin builds' \
         'artifact ios-only: first three thin builds'
@@ -108,8 +108,7 @@ contract_fingerprint="$({
         "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
         "${repo_root}/crates/nux-capi/abi-layout-v3.json" \
         "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt"
+        "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
 } | shasum -a 256 | awk '{ print $1 }')"
 
 xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
@@ -123,8 +122,9 @@ build_inputs_hash="$(
         write "${build_inputs_path}" \
         --repo-root "${repo_root}" \
         --cargo "${rust_cargo}" \
-        --root-package nux-apple-runtime \
-        --feature migration-distribution \
+        --root-package nux-capi \
+        --feature apple-metal \
+        --feature scripting \
         --build-profile "${profile}" \
         --rust-toolchain "${rust_toolchain}" \
         --rustc-version "${rustc_version}" \
@@ -159,13 +159,13 @@ for target in "${targets[@]}"; do
         "${rust_cargo}" build \
             --manifest-path "${repo_root}/Cargo.toml" \
             --locked \
-            --package nux-apple-runtime \
+            --package nux-capi \
             --no-default-features \
-            --features migration-distribution \
+            --features apple-metal,scripting \
             --profile "${profile}" \
             --target "${target}"
     mkdir -p "${stripped_root}/${target}"
-    cp "${cargo_target_dir}/${target}/${profile}/libnux_apple_runtime.a" \
+    cp "${cargo_target_dir}/${target}/${profile}/libnux_capi.a" \
         "${stripped_root}/${target}/libnux_capi.a"
     "${rust_llvm_objcopy}" \
         --remove-section=__LLVM,__bitcode \
@@ -186,9 +186,7 @@ lipo -create "${arm_macos_library}" "${intel_macos_library}" -output "${macos_li
 cp "${repo_root}/crates/nux-capi/include/nux_capi.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi_apple.h" "${headers_dir}/"
-cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}/"
-cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
-cp "${repo_root}/crates/nux-apple-runtime/include/module.migration.modulemap" "${headers_dir}/module.modulemap"
+cp "${repo_root}/crates/nux-capi/include/module.modulemap" "${headers_dir}/"
 
 xcodebuild -create-xcframework \
     -library "${device_library}" -headers "${headers_dir}" \

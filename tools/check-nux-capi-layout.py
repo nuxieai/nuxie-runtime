@@ -17,6 +17,16 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.apple_runtime_contract import ContractError, validate_layout_oracle
 
 
+def clang_command() -> list[str]:
+    if sys.platform == "darwin":
+        return ["xcrun", "clang"]
+    # The public Apple extension uses only fixed-width C types and opaque
+    # pointers. Compiling its committed LP64 assertions on Linux therefore
+    # gives the PR lane an independent layout verdict without requiring an
+    # Apple SDK; defining __APPLE__ only exposes those guarded declarations.
+    return ["clang", "-D__APPLE__"]
+
+
 def public_structs(header: str) -> dict[str, list[str]]:
     structs: dict[str, list[str]] = {}
     for name, body in re.findall(
@@ -52,8 +62,7 @@ def compile_probe(source: str, *, run: bool) -> str:
         output_path = root / "layout"
         source_path.write_text(source, encoding="utf-8")
         command = [
-            "xcrun",
-            "clang",
+            *clang_command(),
             "-DNUX_CAPI_APPLE_METAL",
             "-std=c11",
             "-Wall",

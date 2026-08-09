@@ -269,7 +269,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("./Cargo.toml", result.stderr)
         self.assertIn("nuxie-product", result.stderr)
 
-    def test_root_package_scan_does_not_claim_nested_product_sources(self) -> None:
+    def test_retired_product_package_is_no_longer_an_unprotected_owner(self) -> None:
         product = self.root / "crates/nuxie-authoring"
         (product / "src").mkdir(parents=True)
         (product / "src/lib.rs").write_text("pub struct ProjectDataSecret;\n")
@@ -299,7 +299,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("project-data boundary debt spread", result.stderr)
 
     def test_virtual_manifest_does_not_hide_protected_root_source(self) -> None:
         hidden = self.root / "src/hidden"
@@ -899,7 +900,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("belongs to its external product/platform owner", result.stderr)
 
     def test_rejects_platform_or_renderer_source_in_product_layer(self) -> None:
-        product_root = self.create_package("crates/nux-container", "nux-container", "")
+        product_root = self.create_package(
+            "crates/nuxie-project-data", "nuxie-project-data", ""
+        )
         source = product_root / "src/lib.rs"
         for forbidden in (
             "use UIKit;",
@@ -914,7 +917,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
                 self.assertIn("platform/renderer ownership", result.stderr)
 
     def test_product_layer_platform_words_in_comments_and_strings_are_ignored(self) -> None:
-        product_root = self.create_package("crates/nux-container", "nux-container", "")
+        product_root = self.create_package(
+            "crates/nuxie-project-data", "nuxie-project-data", ""
+        )
         (product_root / "src/lib.rs").write_text(
             "// UIKit and wgpu belong outside this crate\n"
             'const NOTE: &str = "CAMetalLayer and nuxie_renderer::WgpuFactory";\n'
@@ -1736,7 +1741,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             "'product-session'",
             result.stderr,
         )
-
     def test_allows_renderer_feature_forwarding(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(
@@ -1881,30 +1885,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product/authoring module", result.stderr)
 
-    def test_rejects_product_root_reexports(self) -> None:
-        product = self.create_package("crates/nuxie-product", "nuxie-product", "")
-        sources = [
-            "pub mod flow_session {}\npub use crate::flow_session::*;\n",
-            "pub mod flow_session { pub struct FlowSession; }\n"
-            "pub use flow_session::FlowSession;\n",
-            "pub mod flow_session { pub struct FlowSession; pub struct FlowOperation; }\n"
-            "pub use flow_session::{FlowOperation, FlowSession};\n",
-            "pub mod flow_session { pub struct FlowSession; }\n"
-            "pub use self::flow_session::FlowSession as Session;\n",
-            "mod compatibility { pub use crate::flow_session::*; }\n"
-            "pub mod flow_session { pub struct FlowSession; }\n"
-            "pub use compatibility::*;\n",
-        ]
-        for source in sources:
-            with self.subTest(source=source):
-                (product / "src/lib.rs").write_text(source)
-                result = self.run_check()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(
-                    "crate-root compatibility exports cannot return", result.stderr
-                )
-
-    def test_allows_namespaced_product_reexport(self) -> None:
+    def test_retired_product_package_cannot_return_as_a_namespaced_owner(self) -> None:
         product = self.create_package("crates/nuxie-product", "nuxie-product", "")
         (product / "src/lib.rs").write_text(
             "pub mod project_data { pub use nuxie_project_data::*; }\n"
@@ -1912,7 +1893,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product/authoring module", result.stderr)
 
     def test_allows_approved_portable_abi_facade_symbols_and_file_import(
         self,
@@ -1949,6 +1931,34 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade symbol 'RuntimeMystery'", result.stderr)
+
+    def test_rejects_host_interfaces_module_import_without_an_approved_symbol(
+        self,
+    ) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/module_import.rs").write_text(
+            "use nuxie::host_interfaces;\n"
+            "fn leak(_: host_interfaces::RuntimeFile) {}\n"
+        )
+        (package / "src/grouped_module_import.rs").write_text(
+            "use nuxie::{host_interfaces};\n"
+            "fn leak(_: host_interfaces::RuntimeOwnedViewModelInstance) {}\n"
+        )
+        (package / "src/flat_host_import.rs").write_text(
+            "use nuxie::{RuntimeOwnedViewModelHandle, "
+            "RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI facade symbol 'host_interfaces'", result.stderr)
+        for symbol in (
+            "RuntimeOwnedViewModelHandle",
+            "RuntimeOwnedViewModelTransaction",
+            "RuntimeViewModelLinkError",
+        ):
+            self.assertIn(f"portable ABI facade symbol '{symbol}'", result.stderr)
 
     def test_rejects_unapproved_direct_nested_portable_abi_paths(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
@@ -2115,7 +2125,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade product method", result.stderr)
 
-    def test_rejects_product_trust_constructor_on_approved_file_type(self) -> None:
+    def test_rejects_unsigned_script_import_outside_cfg_test(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_trust.rs").write_text(
             "fn leak(bytes: &[u8]) { let _ = nuxie::File::import_with_unsigned_scripts(bytes); }\n"
@@ -2124,14 +2134,13 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("approved baseline facade surface", result.stderr)
+        self.assertIn("is not in the approved baseline facade surface", result.stderr)
 
-    def test_rejects_every_current_product_trust_constructor_name(self) -> None:
+    def test_rejects_retired_and_unsigned_trust_constructors_in_shipping_source(self) -> None:
         methods = (
             "import_with_trusted_scripts",
             "import_with_trusted_scripts_and_limits",
             "import_with_script_capability",
-            "import_with_unsigned_scripts",
         )
 
         for method in methods:
@@ -2140,6 +2149,12 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
                     "crates/nux-capi/src/trust.rs", f"Self::{method}(bytes);"
                 )
                 self.assertTrue(errors, method)
+        self.assertTrue(
+            BOUNDARY_TOOL.portable_abi_facade_source_errors(
+                "crates/nux-capi/src/trust.rs",
+                "let _ = File::import_with_unsigned_scripts(bytes);",
+            )
+        )
 
     def test_rejects_portable_abi_facade_crate_alias(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
@@ -2348,6 +2363,38 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
+
+    def test_rejects_product_host_cycle_method_in_every_generic_command_owner(
+        self,
+    ) -> None:
+        capi = self.create_package("crates/nux-capi", "nux-capi", "")
+        capi_tests = capi / "tests"
+        capi_tests.mkdir()
+        facade = self.create_package("crates/nuxie", "nuxie", "")
+        scripting = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        scripting_tests = scripting / "tests"
+        scripting_tests.mkdir()
+        owners = (
+            capi / "src/apple_assets.rs",
+            capi / "src/lib.rs",
+            capi_tests / "apple_metal.rs",
+            facade / "src/lib.rs",
+            scripting / "src/host_commands.rs",
+            scripting / "src/lib.rs",
+            scripting_tests / "generic_host_commands.rs",
+        )
+        for owner in owners:
+            with self.subTest(owner=owner.relative_to(self.root)):
+                original = owner.read_text() if owner.exists() else ""
+                owner.write_text("fn cycle(vm: &Vm) { vm.begin_host_cycle(); }\n")
+                result = self.run_check()
+                owner.write_text(original)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "product-host-commands boundary debt spread", result.stderr
+                )
 
     def test_allows_generic_host_command_drain_method_in_new_file(self) -> None:
         package = self.create_package(

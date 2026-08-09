@@ -17,8 +17,8 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-ROOT_PACKAGE = "nux-apple-runtime"
-DEFAULT_FEATURES = ("apple-product",)
+ROOT_PACKAGE = "nux-capi"
+DEFAULT_FEATURES = ("apple-metal", "scripting")
 DEFAULT_TARGETS = (
     "aarch64-apple-ios",
     "aarch64-apple-ios-sim",
@@ -29,21 +29,27 @@ DEFAULT_TARGETS = (
 PACKAGING_INPUTS = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "crates/nux-capi/abi-layout-v3.json",
+    "crates/nux-capi/exports-v3-apple-metal-extension.txt",
+    "crates/nux-capi/exports-v3-portable.txt",
+    "crates/nux-capi/include/module.modulemap",
+    "crates/nux-capi/include/nux_capi.generated.h",
+    "crates/nux-capi/include/nux_capi.h",
+    "crates/nux-capi/include/nux_capi_apple.h",
+    "crates/nux-capi/size-baseline-apple-runtime-v0.4.0.json",
+    "crates/nux-capi/size-budgets-v3.json",
     "crates/nux-capi/smoke/distribution_consumer.c",
     "crates/nux-capi/smoke/distribution_consumer.swift",
-    "crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c",
-    "crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift",
     "crates/nux-capi/smoke/capi_metal_smoke.c",
     "crates/nux-capi/smoke/capi_metal_smoke.swift",
     "crates/nux-capi/smoke/composed_script_asset.riv.base64",
     "tools/apple_runtime_contract.py",
     "tools/apple_runtime_input_digest.py",
-    "tools/build-apple-xcframework.sh",
     "tools/build-nux-capi-xcframeworks.sh",
+    "tools/check-nux-capi-surface.py",
     "tools/check-nux-capi-layout.py",
     "tools/json-scalar.py",
     "tools/publish-nux-capi-release.sh",
-    "tools/verify-apple-xcframework.sh",
     "tools/verify-nux-capi-xcframeworks.sh",
 )
 EXCLUDED_DIRECTORY_NAMES = {".git", "target", "__pycache__"}

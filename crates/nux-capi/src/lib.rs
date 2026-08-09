@@ -270,6 +270,7 @@ impl ArtboardOccurrence {
 
 struct BoundViewModelChangeCapture {
     root: RuntimeOwnedViewModelHandle,
+    owners: Vec<RuntimeOwnedViewModelHandle>,
     capture: RuntimeViewModelChangeCapture,
 }
 
@@ -284,8 +285,15 @@ fn begin_bound_view_model_change_capture(
     let Some(root) = root else {
         return Ok(None);
     };
+    let owners = root
+        .reachable_change_owner_snapshot()
+        .ok_or(NuxStatus::ReentrantCall)?;
     let capture = RuntimeViewModelChangeCapture::begin().ok_or(NuxStatus::ReentrantCall)?;
-    Ok(Some(BoundViewModelChangeCapture { root, capture }))
+    Ok(Some(BoundViewModelChangeCapture {
+        root,
+        owners,
+        capture,
+    }))
 }
 
 /// Complete a legacy runtime mutation boundary and propagate exact changed
@@ -298,8 +306,26 @@ fn commit_legacy_runtime_change_or_poison(
     view_model_capture: Option<BoundViewModelChangeCapture>,
 ) -> NuxStatus {
     let mut view_model_changed = false;
-    if let Some(BoundViewModelChangeCapture { root, capture }) = view_model_capture {
-        let Some(owner_changes) = root.resolve_change_capture_with_owners(capture) else {
+    if let Some(BoundViewModelChangeCapture {
+        root,
+        owners,
+        capture,
+    }) = view_model_capture
+    {
+        let Some(owner_changes) =
+            RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
+                &owners, capture,
+            )
+        else {
+            // Legacy runtime writes are already committed. If their bounded
+            // journal overflows or cannot be resolved, conservatively mark
+            // every pre-mutation owner. Exact owner relays then invalidate any
+            // other root that still retains a mutated-and-detached child.
+            if let Ok(generation) = reserve_view_model_mutation_generation() {
+                for owner in owners {
+                    owner.mark_observable_mutation(generation);
+                }
+            }
             occurrence.poisoned.set(true);
             return NuxStatus::RuntimeError;
         };

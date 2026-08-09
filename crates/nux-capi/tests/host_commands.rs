@@ -970,6 +970,72 @@ fn player_child_commit_invalidates_every_distinct_root_sharing_that_child() {
         );
     }
 
+    let mut legacy_machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(artboards[0], 0, &mut legacy_machine) },
+        NuxStatus::Ok
+    );
+    let mut changed = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(artboards[0], legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    let legacy_click = pointer_click();
+    let mut hit = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_down(
+                artboards[0],
+                legacy_machine,
+                legacy_click[0].x,
+                legacy_click[0].y,
+                &mut hit,
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_up(
+                artboards[0],
+                legacy_machine,
+                legacy_click[1].x,
+                legacy_click[1].y,
+                &mut hit,
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(artboards[0], legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(players[1], acknowledged_revisions[1]) },
+        NuxStatus::HandleMismatch,
+        "legacy runtime mutation marks the exact child shared by distinct roots"
+    );
+    let refreshed = correlated_step_with_delta(players[1], &[], 0, 0.0);
+    let mut refreshed_scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(refreshed, &mut refreshed_scheduling) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_player_acknowledge_presented(players[1], refreshed_scheduling.render_revision)
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_step_result_free(refreshed) },
+        NuxStatus::Ok
+    );
+
     let committed = correlated_step(players[0], &pointer_click(), 91);
     let mut info = NuxPlayerStepInfo::default();
     assert_eq!(
@@ -978,13 +1044,16 @@ fn player_child_commit_invalidates_every_distinct_root_sharing_that_child() {
     );
     assert_eq!(info.view_model_change_count, 1);
     assert_eq!(
-        unsafe { nux_player_acknowledge_presented(players[1], acknowledged_revisions[1]) },
+        unsafe {
+            nux_player_acknowledge_presented(players[1], refreshed_scheduling.render_revision)
+        },
         NuxStatus::HandleMismatch,
         "marking the changed child reaches every independently bound parent root"
     );
 
     unsafe {
         nux_player_step_result_free(committed);
+        nux_state_machine_instance_free(legacy_machine);
         for player in players {
             nux_player_free(player);
         }
@@ -1507,5 +1576,166 @@ fn trusted_import_config_rejects_unbounded_or_incomplete_policies() {
         assert!(file.is_null());
         assert!(!result.is_null());
         assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+    }
+}
+
+#[test]
+fn legacy_runtime_view_model_mutation_invalidates_a_sibling_occurrence() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local root = context:viewModel()
+                        if root ~= nil and root.amount.value == 0 then
+                            root.amount.value = 10
+                            root.amount.value = 20
+                        end
+                    end,
+                }
+            end
+        "#,
+    );
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    let mut first_artboard = std::ptr::null_mut();
+    let mut second_artboard = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut first_artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut second_artboard) },
+        NuxStatus::Ok
+    );
+    for artboard in [first_artboard, second_artboard] {
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+            NuxStatus::Ok
+        );
+    }
+
+    let mut legacy_machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(first_artboard, 0, &mut legacy_machine) },
+        NuxStatus::Ok
+    );
+    let mut changed = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(first_artboard, legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    let mut second_player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_player_new_state_machine_named(
+                second_artboard,
+                view("HostCommands"),
+                &mut second_player,
+            )
+        },
+        NuxStatus::Ok
+    );
+    let initialized = correlated_step_with_delta(second_player, &[], 0, 0.0);
+    let mut scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(initialized, &mut scheduling) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(second_player, scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+
+    let click = pointer_click();
+    let mut hit = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_down(
+                first_artboard,
+                legacy_machine,
+                click[0].x,
+                click[0].y,
+                &mut hit,
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_up(
+                first_artboard,
+                legacy_machine,
+                click[1].x,
+                click[1].y,
+                &mut hit,
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(first_artboard, legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 20.0);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(second_player, scheduling.render_revision) },
+        NuxStatus::HandleMismatch,
+        "legacy runtime mutations propagate through the shared graph generation"
+    );
+
+    let refreshed = correlated_step_with_delta(second_player, &[], 0, 0.0);
+    let mut refreshed_scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(refreshed, &mut refreshed_scheduling) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_player_acknowledge_presented(second_player, refreshed_scheduling.render_revision)
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(first_artboard, legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 20.0);
+    assert_eq!(
+        unsafe {
+            nux_player_acknowledge_presented(second_player, refreshed_scheduling.render_revision)
+        },
+        NuxStatus::Ok,
+        "a legacy step with no ViewModel write preserves the sibling generation"
+    );
+
+    unsafe {
+        nux_player_step_result_free(refreshed);
+        nux_player_step_result_free(initialized);
+        nux_player_free(second_player);
+        nux_state_machine_instance_free(legacy_machine);
+        nux_artboard_instance_free(first_artboard);
+        nux_artboard_instance_free(second_artboard);
+        nux_view_model_instance_free(view_model);
+        nux_file_free(file);
     }
 }

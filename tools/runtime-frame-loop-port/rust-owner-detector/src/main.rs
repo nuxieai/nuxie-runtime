@@ -51,7 +51,13 @@ impl GuardKind {
                         && (name.contains("event") || name.contains("report")))
             }
             Self::Selection => name == "StateMachine",
-            Self::Dispatch => name == "notify_events" || name.starts_with("notify_events_"),
+            Self::Dispatch => {
+                name == "notify_events"
+                    || name.starts_with("notify_events_")
+                    // The host-aware owner delegates through this exact wrapper;
+                    // keep its existing outer call-site registry anchors guarded.
+                    || name == "advance_artboard_frame_components_with_script_host"
+            }
             Self::Audio => matches!(
                 name,
                 "flush_deferred_owner_audio_event"

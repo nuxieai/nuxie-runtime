@@ -238,8 +238,8 @@ MACRO_RULES_DEFINITION = re.compile(
 MACRO_TOKEN_TREE_FRAGMENT = re.compile(
     r"\$[A-Za-z_][A-Za-z0-9_]*\s*:\s*tt\b"
 )
-MACRO_REPETITION_QUALIFIED_PATH = re.compile(
-    r"\$\([^)]*\)\s*[*+?]\s*::"
+MACRO_EXPORT_ATTRIBUTE = re.compile(
+    r"#\s*\[\s*macro_export(?:\s*\([^]]*\))?\s*\]"
 )
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
@@ -888,6 +888,35 @@ def matching_delimiter(
     return None
 
 
+def macro_qualified_repetition_offset(body: str) -> int | None:
+    """Locate a repetition that can synthesize a qualified Rust path."""
+
+    for marker in re.finditer(r"\$\s*\(", body):
+        opening = body.find("(", marker.start(), marker.end())
+        closing = matching_delimiter(body, opening, "(", ")")
+        if closing is None:
+            return marker.start()
+        suffix = body[closing + 1 :]
+        repetition = re.match(
+            r"\s*(?:(?P<separator>[^\s*+?]+)\s*)?(?P<operator>[*+?])",
+            suffix,
+        )
+        if repetition is None:
+            continue
+        repeated = body[opening + 1 : closing]
+        repeated_separator = repeated.find("::")
+        if repeated_separator >= 0:
+            return opening + 1 + repeated_separator
+        separator = repetition.group("separator")
+        if separator is not None and "::" in separator:
+            return closing + 1 + repetition.start("separator")
+        tail = suffix[repetition.end() :]
+        qualified_tail = re.match(r"\s*::", tail)
+        if qualified_tail is not None:
+            return closing + 1 + repetition.end() + qualified_tail.start()
+    return None
+
+
 def split_cfg_arguments(arguments: str) -> list[str]:
     parts = []
     start = 0
@@ -1002,6 +1031,13 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     def inside_test_module(match: re.Match[str]) -> bool:
         return any(start <= match.start() < end for start, end in test_module_ranges)
 
+    for match in MACRO_EXPORT_ATTRIBUTE.finditer(source):
+        line = source.count("\n", 0, match.start()) + 1
+        errors.append(
+            f"{relative}:{line}: exported portable ABI macros are not approved; "
+            "keep macro invocations inside the scanned facade source"
+        )
+
     delimiters = {"{": "}", "(": ")", "[": "]"}
     for match in MACRO_RULES_DEFINITION.finditer(source):
         opening = match.group("opening")
@@ -1014,10 +1050,10 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             errors.append(f"{relative}:{line}: cannot parse macro_rules! definition")
             continue
         body = source[opening_index + 1 : closing_index]
-        qualified_repetition = MACRO_REPETITION_QUALIFIED_PATH.search(body)
+        qualified_repetition = macro_qualified_repetition_offset(body)
         if qualified_repetition is not None:
             line = source.count(
-                "\n", 0, opening_index + 1 + qualified_repetition.start()
+                "\n", 0, opening_index + 1 + qualified_repetition
             ) + 1
             errors.append(
                 f"{relative}:{line}: macro-generated qualified paths are not approved "

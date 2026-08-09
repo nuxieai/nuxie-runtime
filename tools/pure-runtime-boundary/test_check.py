@@ -2008,6 +2008,38 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("macro-generated qualified paths", result.stderr)
         self.assertIn("token-tree fragment", result.stderr)
 
+    def test_rejects_repeated_macro_path_segments(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/repeated_segments.rs").write_text(
+            "macro_rules! path { ($($segment:ident),*) => {\n"
+            "    fn leak(_: nuxie $(:: $segment)*) {}\n"
+            "}; }\n"
+            "path!(host_interfaces, RuntimeFile);\n"
+            "macro_rules! separated_root { ($($root:ident),*) => {\n"
+            "    fn leak_separated(_: $($root)::* :: host_interfaces::RuntimeFile) {}\n"
+            "}; }\n"
+            "separated_root!(nuxie);\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("macro-generated qualified paths", result.stderr)
+
+    def test_rejects_exported_portable_abi_macros(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/exported_macro.rs").write_text(
+            "#[macro_export]\n"
+            "macro_rules! accepts_type { ($ty:ty) => { pub fn f(_: $ty) {} }; }\n"
+            "#[macro_export]\n"
+            "macro_rules! accepts_path { ($path:path) => { pub use $path; }; }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exported portable ABI macros are not approved", result.stderr)
+
     def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/test_support.rs").write_text(

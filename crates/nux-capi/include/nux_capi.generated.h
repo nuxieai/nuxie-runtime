@@ -207,6 +207,24 @@ typedef uint32_t NuxPlayerKind;
 #endif // __cplusplus
 
 /**
+ * Explicit domain for an optional absolute monotonic deadline. Epochs are
+ * intentionally not interchangeable across domains or processes.
+ */
+enum NuxMonotonicClockDomain
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_MONOTONIC_CLOCK_DOMAIN_UNSPECIFIED = 0,
+  NUX_MONOTONIC_CLOCK_DOMAIN_POSIX_MONOTONIC = 1,
+  NUX_MONOTONIC_CLOCK_DOMAIN_APPLE_CONTINUOUS = 2,
+  NUX_MONOTONIC_CLOCK_DOMAIN_WINDOWS_PERFORMANCE_COUNTER = 3,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxMonotonicClockDomain;
+#endif // __cplusplus
+
+/**
  * One fixed-stride state-machine input mutation in a player step. The
  * selected value field is determined by `kind`; Trigger ignores both values.
  */
@@ -889,6 +907,45 @@ typedef struct NuxPlayerStepInfo {
 } NuxPlayerStepInfo;
 
 /**
+ * Product-neutral scheduling facts captured by one successful atomic player
+ * step. They are deliberately independent from `keep_going`, whose meaning
+ * remains the exact pinned C++ `advanceAndApply` return value.
+ */
+typedef struct NuxPlayerSchedulingInfo {
+  uint32_t struct_size;
+  /**
+   * This committed operation changed observable runtime state.
+   */
+  bool dirty;
+  /**
+   * No selected root or nested runtime occurrence needs continuation.
+   */
+  bool settled;
+  /**
+   * The current occurrence revision has not yet been presented.
+   */
+  bool render_required;
+  /**
+   * Whether `wake_deadline_monotonic_ns` contains a deadline.
+   */
+  bool has_wake_deadline;
+  /**
+   * Clock whose epoch defines `wake_deadline_monotonic_ns`.
+   */
+  NuxMonotonicClockDomain wake_deadline_clock;
+  /**
+   * Exact occurrence-local revision associated with `render_required`.
+   */
+  uint64_t render_revision;
+  /**
+   * Absolute nanoseconds in `wake_deadline_clock`'s named domain.
+   * The current runtime has no time-based deferred work and reports this
+   * field absent rather than manufacturing a host-policy deadline.
+   */
+  uint64_t wake_deadline_monotonic_ns;
+} NuxPlayerSchedulingInfo;
+
+/**
  * C++ `stateChangedByIndex` projection in compressed authored-layer order.
  */
 typedef struct NuxPlayerStateChangeView {
@@ -1395,6 +1452,13 @@ NuxStatus nux_file_import_with_result(const uint8_t *bytes,
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);
 
+/**
+ * Acknowledge that an exact occurrence revision was successfully presented.
+ * Stale or future revisions return HANDLE_MISMATCH and cannot clear newer
+ * render work.
+ */
+NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t render_revision);
+
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
 /**
@@ -1507,6 +1571,12 @@ NuxStatus nux_player_step_result_info(const struct NuxPlayerStepResult *result,
 NuxStatus nux_player_step_result_pointer(const struct NuxPlayerStepResult *result,
                                          size_t index,
                                          uint32_t *out_hit);
+
+/**
+ * Copy the product-neutral scheduling snapshot owned by one successful step.
+ */
+NuxStatus nux_player_step_result_scheduling(const struct NuxPlayerStepResult *result,
+                                            struct NuxPlayerSchedulingInfo *out_scheduling);
 
 NuxStatus nux_player_step_result_state_change(const struct NuxPlayerStepResult *result,
                                               size_t index,

@@ -111,6 +111,14 @@ until the owned result is freed. Failed operations discard the complete journal
 and restore the bound view-model graph before poisoning the failed occurrence;
 the interface adds no session, experience, screen, package, or SDK policy.
 
+Player scheduling follows the same boundary. A successful step owns
+product-neutral `dirty`, `settled`, persistent occurrence render demand, and
+an optional runtime-sourced monotonic wake deadline. `keep_going` remains the
+pinned C++ return value. Exact-revision presentation acknowledgement and Apple
+renderer outcomes update only occurrence state; display-link cadence,
+visibility, retries, and product lifecycle remain host policy. See
+`player-scheduling-contract.md`.
+
 ## Build selectors
 
 Each cut has a named selector:

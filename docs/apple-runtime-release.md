@@ -26,6 +26,13 @@ frame scheduling, and SDK/product concepts. Rust owns the renderer domain,
 draw/presentation mechanics, and device health. It never calls UIKit/AppKit or
 acquires a drawable.
 
+The C ABI exposes only the product-neutral scheduling evidence described in
+`player-scheduling-contract.md`. The Apple renderer clears an occurrence's
+current render demand only after the exact revision returns `Presented`;
+skips and failures preserve it. Swift remains responsible for deciding when
+and how to retry, and the slim release must consume this ABI rather than
+recreating product scheduling in a Rust Apple harness.
+
 ## Legacy product distribution
 
 The existing product-shaped release remains during migration:

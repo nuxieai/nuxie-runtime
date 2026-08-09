@@ -296,11 +296,12 @@ pub use state_machine::{
     FocusState, GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
     RuntimeHitResult, RuntimeLayerState, RuntimeNestedStateMachineReport,
     RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
-    RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
-    ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
-    ScriptListenerInvocation, ScriptPointerEventKind, StateMachineEventContext,
-    StateMachineEventStringProperty, StateMachineInputInstance, StateMachineInputKind,
-    StateMachineInstance, StateMachineReportedEvent,
+    RuntimeStateMachineAdvanceResult, RuntimeStateMachineDataConverterBindStep,
+    RuntimeStateMachineInput, RuntimeStateMachineLayer, ScriptGamepadInputChange,
+    ScriptGamepadMappingKind, ScriptGamepadSnapshot, ScriptListenerInvocation,
+    ScriptPointerEventKind, StateMachineEventContext, StateMachineEventStringProperty,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent,
 };
 #[cfg(feature = "tools")]
 #[doc(hidden)]

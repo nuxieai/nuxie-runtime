@@ -74,12 +74,12 @@ pub use nuxie_runtime::{
     RuntimeBlobAsset, RuntimeEventPropertyValue, RuntimeFileAsset, RuntimeFileAssetKind,
     RuntimeFileAssetLoader, RuntimeHitResult, RuntimeLayerState, RuntimeOwnedViewModelContext,
     RuntimeOwnedViewModelGraphTransaction, RuntimeScrollConstraintSnapshot,
-    RuntimeStateMachineInput, RuntimeViewModelChange, RuntimeViewModelChangeCapture,
-    RuntimeViewModelChangeLimitExceeded, RuntimeViewModelChangeValue,
-    RuntimeViewModelGraphTransactionError, ScriptCoreString, ScriptError, ScriptHost,
-    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
-    SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole, SemanticState,
-    SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
+    RuntimeStateMachineAdvanceResult, RuntimeStateMachineInput, RuntimeViewModelChange,
+    RuntimeViewModelChangeCapture, RuntimeViewModelChangeLimitExceeded,
+    RuntimeViewModelChangeValue, RuntimeViewModelGraphTransactionError, ScriptCoreString,
+    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure,
+    ScriptValue, ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
+    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
     SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
     StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
@@ -5982,6 +5982,24 @@ impl<'a> ArtboardInstance<'a> {
         elapsed_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool> {
+        Ok(self
+            .try_advance_with_state_machines_and_script_host_result(
+                state_machines,
+                elapsed_seconds,
+                host,
+            )?
+            .keep_going)
+    }
+
+    /// Rich sibling used by hosts that must distinguish committed mutation
+    /// from the pinned `advanceAndApply()` continuation bool.
+    #[doc(hidden)]
+    pub fn try_advance_with_state_machines_and_script_host_result(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeStateMachineAdvanceResult> {
         if state_machines.is_empty() {
             bail!("fallible state-machine advance requires at least one state machine");
         }
@@ -6004,7 +6022,7 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(feature = "scripting")]
         let file = self.file;
         Ok(
-            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host_result(
                 &mut self.raw,
                 state_machines,
                 elapsed_seconds,
@@ -7153,6 +7171,24 @@ impl OwnedArtboardInstance {
         elapsed_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool> {
+        Ok(self
+            .try_advance_with_state_machines_and_script_host_result(
+                state_machines,
+                elapsed_seconds,
+                host,
+            )?
+            .keep_going)
+    }
+
+    /// Rich owning sibling used by hosts that must distinguish committed
+    /// mutation from the pinned `advanceAndApply()` continuation bool.
+    #[doc(hidden)]
+    pub fn try_advance_with_state_machines_and_script_host_result(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeStateMachineAdvanceResult> {
         if state_machines.is_empty() {
             bail!("fallible state-machine advance requires at least one state machine");
         }
@@ -7175,7 +7211,7 @@ impl OwnedArtboardInstance {
         #[cfg(feature = "scripting")]
         let file = Arc::clone(&self.file);
         Ok(
-            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host(
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host_result(
                 &mut self.raw,
                 state_machines,
                 elapsed_seconds,
@@ -7521,6 +7557,13 @@ impl ViewModelInstance {
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<RuntimeViewModelChange>> {
         self.raw.resolve_change_capture(capture)
+    }
+
+    pub fn resolve_change_capture_with_owners(
+        &self,
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<(RuntimeOwnedViewModelHandle, RuntimeViewModelChange)>> {
+        self.raw.resolve_change_capture_with_owners(capture)
     }
 
     /// Set a number property by name path. Returns whether the property existed

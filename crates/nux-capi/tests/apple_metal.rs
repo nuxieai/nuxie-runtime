@@ -234,12 +234,36 @@ unsafe fn render(
     outcome
 }
 
+fn scheduling(player: *mut NuxPlayer, elapsed_seconds: f32) -> NuxPlayerSchedulingInfo {
+    let operation = NuxPlayerStep {
+        elapsed_seconds,
+        ..NuxPlayerStep::default()
+    };
+    let mut result = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_step(player, &operation, &raw mut result) },
+        NuxStatus::Ok
+    );
+    let mut scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(result, &raw mut scheduling) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_step_result_free(result) },
+        NuxStatus::Ok
+    );
+    scheduling
+}
+
 #[test]
 fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
     autoreleasepool(|_| {
         let player = player_retaining_released_import_owners("smi_test.riv", 1);
         let first = renderer(4, 3);
         let second = renderer(4, 3);
+        let initial_scheduling = scheduling(player, 0.0);
+        assert!(initial_scheduling.render_required);
 
         // Caller-reported availability skips never bind the occurrence.
         let outcome = unsafe {
@@ -253,6 +277,12 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
         assert_eq!(
             outcome.disposition,
             NUX_RENDERER_DISPOSITION_SKIPPED_TIMEOUT
+        );
+        let after_timeout = scheduling(player, 1.0);
+        assert!(after_timeout.render_required);
+        assert_eq!(
+            after_timeout.render_revision,
+            initial_scheduling.render_revision
         );
         let outcome = unsafe {
             render(
@@ -279,6 +309,12 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
             )
         };
         assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        let after_present = scheduling(player, 1.0);
+        assert!(!after_present.render_required);
+        assert_eq!(
+            after_present.render_revision,
+            initial_scheduling.render_revision
+        );
         assert_eq!(unsafe { nux_renderer_free(first) }, NuxStatus::Ok);
 
         // The player's retained domain outlives its public renderer handle; a
@@ -300,6 +336,9 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
             NuxStatus::Ok
         );
         unsafe { assert_result(result, NuxStatus::Ok) };
+        let after_domain_reset = scheduling(player, 1.0);
+        assert!(after_domain_reset.render_required);
+        assert!(after_domain_reset.render_revision > after_present.render_revision);
 
         let second_drawable = second_layer.nextDrawable().expect("reset drawable");
         let second_pointer = Retained::as_ptr(&second_drawable).cast_mut().cast();
@@ -312,6 +351,8 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
             )
         };
         assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        let before_reattach = scheduling(player, 1.0);
+        assert!(!before_reattach.render_required);
 
         // A live drawable with incompatible texture dimensions is rejected
         // deterministically before presentation.
@@ -353,6 +394,11 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
             control_outcome.disposition,
             NUX_RENDERER_DISPOSITION_RECREATED
         );
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, before_reattach.render_revision) },
+            NuxStatus::HandleMismatch,
+            "reattach invalidates an in-flight occurrence revision"
+        );
 
         let replacement_layer = layer(second, 4, 3);
         let drawable = replacement_layer
@@ -393,6 +439,7 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
             outcome.disposition,
             NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
         );
+        assert!(scheduling(player, 1.0).render_required);
 
         assert_eq!(unsafe { nux_renderer_free(second) }, NuxStatus::Ok);
         assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);

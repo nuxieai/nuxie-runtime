@@ -7947,6 +7947,32 @@ impl StateMachineInstance {
         host: &mut dyn ScriptHost,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
+        Ok(
+            Self::advance_and_apply_state_machines_with_view_models_and_script_host_result(
+                artboard,
+                state_machines,
+                elapsed_seconds,
+                advance_view_models,
+                host,
+                advance_detached_view_models,
+            )?
+            .keep_going,
+        )
+    }
+
+    /// Rich sibling of the pinned bool-returning advance seam.
+    ///
+    /// This keeps mutation and continuation distinct for product-neutral
+    /// schedulers without changing the established bool contract.
+    #[doc(hidden)]
+    pub fn advance_and_apply_state_machines_with_view_models_and_script_host_result(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        advance_view_models: bool,
+        host: &mut dyn ScriptHost,
+        advance_detached_view_models: impl FnOnce() -> bool,
+    ) -> Result<RuntimeStateMachineAdvanceResult, ScriptError> {
         let component_result = Self::advance_artboard_frame_components_with_script_host(
             artboard,
             state_machines,
@@ -7981,11 +8007,10 @@ impl StateMachineInstance {
         if let Err(error) = settlement_result {
             return Err(error);
         }
-        Ok(Self::advance_and_apply_return(
+        Ok(RuntimeStateMachineAdvanceResult {
             changed,
-            elapsed_seconds,
-            state_machines,
-        ))
+            keep_going: Self::advance_and_apply_return(changed, elapsed_seconds, state_machines),
+        })
     }
 
     pub fn advance_and_apply_state_machines_with_factory_and_view_models(

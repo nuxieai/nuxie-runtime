@@ -233,7 +233,9 @@ fn shared_nested_list_fixture() -> Vec<u8> {
     object(&mut bytes, "ViewModelPropertyString", |bytes| {
         string(bytes, "ViewModelPropertyString", "name", "label")
     });
-    object(&mut bytes, "Artboard", |_| {});
+    object(&mut bytes, "Artboard", |bytes| {
+        uint(bytes, "Artboard", "viewModelId", 0)
+    });
     bytes
 }
 
@@ -632,6 +634,398 @@ fn generic_instances_bind_only_to_compatible_occurrences_from_the_same_file() {
         nux_view_model_instance_free(view_model);
         nux_view_model_catalog_free(catalog);
         nux_file_free(other_file);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn linked_child_and_list_item_mutations_invalidate_the_bound_root_occurrence() {
+    let bytes = shared_nested_list_fixture();
+    let file = import_bytes(&bytes);
+    let mut root = std::ptr::null_mut();
+    let mut sibling_root = std::ptr::null_mut();
+    let mut child = std::ptr::null_mut();
+    let mut list_item = std::ptr::null_mut();
+    let mut replacement = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 0, &mut sibling_root) },
+        NuxStatus::Ok
+    );
+    for out in [&mut child, &mut list_item, &mut replacement] {
+        assert_eq!(
+            unsafe { nux_view_model_instance_new(file, 1, out) },
+            NuxStatus::Ok
+        );
+    }
+    let mut artboard = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    let mut sibling_artboard = std::ptr::null_mut();
+    let mut sibling_player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(artboard, root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_new_static(artboard, &mut player) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut sibling_artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(sibling_artboard, sibling_root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_new_static(sibling_artboard, &mut sibling_player) },
+        NuxStatus::Ok
+    );
+
+    let step_and_ack = |player| {
+        let mut result = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &NuxPlayerStep::default(), &mut result) },
+            NuxStatus::Ok
+        );
+        let mut scheduling = NuxPlayerSchedulingInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_scheduling(result, &mut scheduling) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, scheduling.render_revision) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        scheduling.render_revision
+    };
+    let apply = |mutation: NuxViewModelMutation| {
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&batch, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_free(result) },
+            NuxStatus::Ok
+        );
+    };
+
+    let initial_revision = step_and_ack(player);
+    let child_path = b"child";
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+        instance: root,
+        path: NuxStringView {
+            data: child_path.as_ptr().cast(),
+            len: child_path.len(),
+        },
+        related_instance: child,
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_revision) },
+        NuxStatus::HandleMismatch
+    );
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+        instance: sibling_root,
+        path: NuxStringView {
+            data: child_path.as_ptr().cast(),
+            len: child_path.len(),
+        },
+        related_instance: child,
+        ..NuxViewModelMutation::default()
+    });
+    let shared_root_revision = step_and_ack(player);
+    let shared_sibling_revision = step_and_ack(sibling_player);
+    let nested_path = b"child/label";
+    let shared_value = b"shared nested change";
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+        instance: root,
+        path: NuxStringView {
+            data: nested_path.as_ptr().cast(),
+            len: nested_path.len(),
+        },
+        bytes_value: NuxByteView {
+            data: shared_value.as_ptr(),
+            len: shared_value.len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, shared_root_revision) },
+        NuxStatus::HandleMismatch
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(sibling_player, shared_sibling_revision) },
+        NuxStatus::HandleMismatch,
+        "a nested mutation through one root invalidates every root sharing the changed owner"
+    );
+
+    let no_op_root_revision = step_and_ack(player);
+    let no_op_sibling_revision = step_and_ack(sibling_player);
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+        instance: root,
+        path: NuxStringView {
+            data: nested_path.as_ptr().cast(),
+            len: nested_path.len(),
+        },
+        bytes_value: NuxByteView {
+            data: shared_value.as_ptr(),
+            len: shared_value.len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, no_op_root_revision) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(sibling_player, no_op_sibling_revision) },
+        NuxStatus::Ok,
+        "a no-op batch preserves every current presentation acknowledgement"
+    );
+
+    let legacy_no_op_root_revision = step_and_ack(player);
+    let legacy_no_op_sibling_revision = step_and_ack(sibling_player);
+    let nested_path_c = std::ffi::CString::new("child/label").unwrap();
+    let shared_value_c = std::ffi::CString::new("shared nested change").unwrap();
+    assert_eq!(
+        unsafe {
+            nux_view_model_instance_set_string(
+                root,
+                nested_path_c.as_ptr(),
+                shared_value_c.as_ptr(),
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, legacy_no_op_root_revision) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(sibling_player, legacy_no_op_sibling_revision) },
+        NuxStatus::Ok,
+        "a no-op legacy setter preserves every current presentation acknowledgement"
+    );
+    let legacy_nested_root_revision = step_and_ack(player);
+    let legacy_nested_sibling_revision = step_and_ack(sibling_player);
+    let legacy_nested_value = std::ffi::CString::new("legacy nested actual change").unwrap();
+    assert_eq!(
+        unsafe {
+            nux_view_model_instance_set_string(
+                root,
+                nested_path_c.as_ptr(),
+                legacy_nested_value.as_ptr(),
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, legacy_nested_root_revision) },
+        NuxStatus::HandleMismatch
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(sibling_player, legacy_nested_sibling_revision) },
+        NuxStatus::HandleMismatch,
+        "a changed legacy nested setter invalidates every root sharing the changed owner"
+    );
+    let label = std::ffi::CString::new("label").unwrap();
+    let linked_revision = step_and_ack(player);
+    let batch_child_value = b"batch child change";
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+        instance: child,
+        path: NuxStringView {
+            data: b"label".as_ptr().cast(),
+            len: b"label".len(),
+        },
+        bytes_value: NuxByteView {
+            data: batch_child_value.as_ptr(),
+            len: batch_child_value.len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, linked_revision) },
+        NuxStatus::HandleMismatch,
+        "an atomic child mutation invalidates its bound root"
+    );
+
+    let before_legacy_child = step_and_ack(player);
+    let legacy_value = std::ffi::CString::new("legacy child change").unwrap();
+    assert_eq!(
+        unsafe { nux_view_model_instance_set_string(child, label.as_ptr(), legacy_value.as_ptr()) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_legacy_child) },
+        NuxStatus::HandleMismatch,
+        "a legacy child setter invalidates its bound root"
+    );
+
+    let items_path = b"items";
+    let before_alias_list = step_and_ack(player);
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+        instance: root,
+        path: NuxStringView {
+            data: items_path.as_ptr().cast(),
+            len: items_path.len(),
+        },
+        related_instance: child,
+        index: 0,
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_alias_list) },
+        NuxStatus::HandleMismatch
+    );
+
+    let before_replace = step_and_ack(player);
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+        instance: root,
+        path: NuxStringView {
+            data: child_path.as_ptr().cast(),
+            len: child_path.len(),
+        },
+        related_instance: replacement,
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_replace) },
+        NuxStatus::HandleMismatch
+    );
+    let after_replace = step_and_ack(player);
+    let still_linked_value = std::ffi::CString::new("still linked through list").unwrap();
+    assert_eq!(
+        unsafe {
+            nux_view_model_instance_set_string(child, label.as_ptr(), still_linked_value.as_ptr())
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, after_replace) },
+        NuxStatus::HandleMismatch,
+        "removing one of two same-parent edges preserves invalidation through the other"
+    );
+
+    let before_detach = step_and_ack(player);
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+        instance: root,
+        path: NuxStringView {
+            data: items_path.as_ptr().cast(),
+            len: items_path.len(),
+        },
+        index: 0,
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_detach) },
+        NuxStatus::HandleMismatch
+    );
+    let detached_revision = step_and_ack(player);
+    let detached_value = std::ffi::CString::new("detached child change").unwrap();
+    assert_eq!(
+        unsafe {
+            nux_view_model_instance_set_string(child, label.as_ptr(), detached_value.as_ptr())
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, detached_revision) },
+        NuxStatus::Ok,
+        "the runtime parent relay stops invalidating a root after unlink"
+    );
+
+    let before_list = step_and_ack(player);
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+        instance: root,
+        path: NuxStringView {
+            data: items_path.as_ptr().cast(),
+            len: items_path.len(),
+        },
+        related_instance: list_item,
+        index: 0,
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_list) },
+        NuxStatus::HandleMismatch
+    );
+    let list_revision = step_and_ack(player);
+    let batch_value = b"batch list-item change";
+    apply(NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+        instance: list_item,
+        path: NuxStringView {
+            data: b"label".as_ptr().cast(),
+            len: b"label".len(),
+        },
+        bytes_value: NuxByteView {
+            data: batch_value.as_ptr(),
+            len: batch_value.len(),
+        },
+        ..NuxViewModelMutation::default()
+    });
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, list_revision) },
+        NuxStatus::HandleMismatch,
+        "an atomic list-item mutation invalidates its bound root"
+    );
+
+    let before_legacy_list_item = step_and_ack(player);
+    let legacy_list_value = std::ffi::CString::new("legacy list-item change").unwrap();
+    assert_eq!(
+        unsafe {
+            nux_view_model_instance_set_string(
+                list_item,
+                label.as_ptr(),
+                legacy_list_value.as_ptr(),
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, before_legacy_list_item) },
+        NuxStatus::HandleMismatch,
+        "a legacy list-item setter invalidates its bound root"
+    );
+
+    unsafe {
+        nux_player_free(sibling_player);
+        nux_artboard_instance_free(sibling_artboard);
+        nux_player_free(player);
+        nux_artboard_instance_free(artboard);
+        nux_view_model_instance_free(list_item);
+        nux_view_model_instance_free(replacement);
+        nux_view_model_instance_free(child);
+        nux_view_model_instance_free(sibling_root);
+        nux_view_model_instance_free(root);
         nux_file_free(file);
     }
 }
@@ -1146,6 +1540,33 @@ fn root_text_run_batch_prevalidates_before_any_write() {
         unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
         NuxStatus::Ok
     );
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(artboard, &mut player) },
+        NuxStatus::Ok
+    );
+    let step_and_ack = |player| {
+        let mut result = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(player, &NuxPlayerStep::default(), &mut result) },
+            NuxStatus::Ok
+        );
+        let mut scheduling = NuxPlayerSchedulingInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_scheduling(result, &mut scheduling) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, scheduling.render_revision) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        scheduling.render_revision
+    };
+    let initial_revision = step_and_ack(player);
     let headline = b"nameRun";
     let missing = b"missing";
     let changed_text = b"changed";
@@ -1182,6 +1603,11 @@ fn root_text_run_batch_prevalidates_before_any_write() {
         NuxStatus::NotFound
     );
     assert_eq!(changed, 0);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_revision) },
+        NuxStatus::Ok,
+        "a rejected text batch preserves current render demand"
+    );
 
     let mutation = NuxTextRunMutation {
         name: NuxStringView {
@@ -1204,12 +1630,24 @@ fn root_text_run_batch_prevalidates_before_any_write() {
     );
     assert_eq!(changed, 1, "failed batch left the original text intact");
     assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_revision) },
+        NuxStatus::HandleMismatch,
+        "a committed text change invalidates the acknowledged occurrence revision"
+    );
+    let changed_revision = step_and_ack(player);
+    assert_eq!(
         unsafe { nux_artboard_instance_set_text_runs(artboard, &batch, &mut changed) },
         NuxStatus::Ok
     );
     assert_eq!(changed, 0);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, changed_revision) },
+        NuxStatus::Ok,
+        "a no-op text batch preserves current render demand"
+    );
 
     unsafe {
+        nux_player_free(player);
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
     }

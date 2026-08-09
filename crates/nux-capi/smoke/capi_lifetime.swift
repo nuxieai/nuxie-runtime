@@ -75,6 +75,29 @@ let name = UnsafeRawBufferPointer(
     count: info.name.len
 )
 check(String(decoding: name, as: UTF8.self) == "State Machine 1", "owned player name")
+
+var step = NuxPlayerStep()
+step.struct_size = UInt32(MemoryLayout<NuxPlayerStep>.size)
+step.elapsed_seconds = 0
+var stepResult: OpaquePointer?
+check(nux_player_step(player, &step, &stepResult) == NUX_STATUS_OK.rawValue,
+      "player step")
+var scheduling = NuxPlayerSchedulingInfo()
+scheduling.struct_size = UInt32(MemoryLayout<NuxPlayerSchedulingInfo>.size)
+check(nux_player_step_result_scheduling(stepResult, &scheduling) == NUX_STATUS_OK.rawValue,
+      "scheduling snapshot")
+check(scheduling.dirty, "initial settlement changed observable runtime state")
+check(!scheduling.settled, "active state-machine work remains unsettled")
+check(scheduling.render_required, "initial occurrence requires presentation")
+check(scheduling.render_revision != 0, "nonzero render revision")
+check(!scheduling.has_wake_deadline && scheduling.wake_deadline_monotonic_ns == 0,
+      "runtime does not manufacture a wake deadline")
+check(scheduling.wake_deadline_clock == NUX_MONOTONIC_CLOCK_DOMAIN_UNSPECIFIED.rawValue,
+      "an absent deadline has no clock domain")
+check(nux_player_acknowledge_presented(player, scheduling.render_revision) == NUX_STATUS_OK.rawValue,
+      "acknowledge exact presented revision")
+check(nux_player_step_result_free(stepResult) == NUX_STATUS_OK.rawValue,
+      "free scheduling step")
 check(nux_player_free(player) == NUX_STATUS_OK.rawValue, "player-last release")
 
 print("swift-capi-lifetime ok")

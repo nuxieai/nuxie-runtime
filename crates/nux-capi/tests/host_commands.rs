@@ -722,6 +722,7 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
     let mut first_player = std::ptr::null_mut();
     let mut second_player = std::ptr::null_mut();
     let mut unbound_player = std::ptr::null_mut();
+    let mut initialized_revisions = Vec::new();
     for (artboard, out) in [
         (first_artboard, &mut first_player),
         (second_artboard, &mut second_player),
@@ -732,6 +733,18 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
             NuxStatus::Ok
         );
         let initialized = correlated_step_with_delta(*out, &[], 0, 0.0);
+        let mut initialized_scheduling = NuxPlayerSchedulingInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_scheduling(initialized, &mut initialized_scheduling) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe {
+                nux_player_acknowledge_presented(*out, initialized_scheduling.render_revision)
+            },
+            NuxStatus::Ok
+        );
+        initialized_revisions.push(initialized_scheduling.render_revision);
         assert_eq!(
             unsafe { nux_player_step_result_free(initialized) },
             NuxStatus::Ok
@@ -747,6 +760,24 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
     );
     assert_eq!(first_info.host_command_count, 1);
     assert_eq!(first_info.view_model_change_count, 2);
+    let mut first_scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(first_result, &mut first_scheduling) },
+        NuxStatus::Ok
+    );
+    assert!(first_scheduling.dirty);
+    assert!(first_scheduling.render_required);
+    assert!(!first_scheduling.has_wake_deadline);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(second_player, initialized_revisions[1]) },
+        NuxStatus::HandleMismatch,
+        "runtime changes to a shared graph invalidate sibling bound occurrences"
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(unbound_player, initialized_revisions[2]) },
+        NuxStatus::Ok,
+        "an unbound occurrence does not observe the graph epoch"
+    );
     for (index, expected) in [10.0, 20.0].into_iter().enumerate() {
         let mut change = NuxViewModelChangeView::default();
         assert_eq!(
@@ -771,6 +802,11 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
         second_info.view_model_change_count, 0,
         "a second player cannot drain another operation"
     );
+    let mut second_scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(second_result, &mut second_scheduling) },
+        NuxStatus::Ok
+    );
 
     let unbound_result = correlated_step(unbound_player, &pointer_click(), 33);
     let mut unbound_info = NuxPlayerStepInfo::default();
@@ -783,6 +819,27 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
         unbound_info.view_model_change_count, 0,
         "an unbound occurrence never leaves a latent journal"
     );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(first_player, first_scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_player_acknowledge_presented(second_player, second_scheduling.render_revision)
+        },
+        NuxStatus::Ok
+    );
+    mutate_view_model_number(view_model, "amount", 30.0);
+    for (player, revision) in [
+        (first_player, first_scheduling.render_revision),
+        (second_player, second_scheduling.render_revision),
+    ] {
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, revision) },
+            NuxStatus::HandleMismatch,
+            "one shared graph mutation invalidates every bound occurrence"
+        );
+    }
 
     unsafe {
         nux_player_step_result_free(second_result);
@@ -807,6 +864,138 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
         unsafe { nux_player_step_result_free(first_result) },
         NuxStatus::Ok
     );
+}
+
+#[test]
+fn player_child_commit_invalidates_every_distinct_root_sharing_that_child() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local child = context:viewModel().child.value
+                        child.score.value = child.score.value + 1
+                    end,
+                }
+            end
+        "#,
+    );
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut first_root = std::ptr::null_mut();
+    let mut second_root = std::ptr::null_mut();
+    let mut shared_child = std::ptr::null_mut();
+    for out in [&mut first_root, &mut second_root] {
+        assert_eq!(
+            unsafe { nux_view_model_instance_new(file, 0, out) },
+            NuxStatus::Ok
+        );
+    }
+    assert_eq!(
+        unsafe { nux_view_model_instance_new(file, 1, &mut shared_child) },
+        NuxStatus::Ok
+    );
+    let child_path = b"child";
+    for root in [first_root, second_root] {
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: root,
+            path: NuxStringView {
+                data: child_path.as_ptr().cast(),
+                len: child_path.len(),
+            },
+            related_instance: shared_child,
+            ..NuxViewModelMutation::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_mutate(&batch, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_free(result) },
+            NuxStatus::Ok
+        );
+    }
+
+    let mut artboards = [std::ptr::null_mut(); 2];
+    let mut players = [std::ptr::null_mut(); 2];
+    let mut acknowledged_revisions = [0; 2];
+    for (index, root) in [first_root, second_root].into_iter().enumerate() {
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &mut artboards[index]) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboards[index], root) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(artboards[index], &NuxRenderCallbacks::default()) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe {
+                nux_player_new_state_machine_named(
+                    artboards[index],
+                    view("HostCommands"),
+                    &mut players[index],
+                )
+            },
+            NuxStatus::Ok
+        );
+        let initialized = correlated_step_with_delta(players[index], &[], 0, 0.0);
+        let mut scheduling = NuxPlayerSchedulingInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_scheduling(initialized, &mut scheduling) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(players[index], scheduling.render_revision) },
+            NuxStatus::Ok
+        );
+        acknowledged_revisions[index] = scheduling.render_revision;
+        assert_eq!(
+            unsafe { nux_player_step_result_free(initialized) },
+            NuxStatus::Ok
+        );
+    }
+
+    let committed = correlated_step(players[0], &pointer_click(), 91);
+    let mut info = NuxPlayerStepInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_info(committed, &mut info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(info.view_model_change_count, 1);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(players[1], acknowledged_revisions[1]) },
+        NuxStatus::HandleMismatch,
+        "marking the changed child reaches every independently bound parent root"
+    );
+
+    unsafe {
+        nux_player_step_result_free(committed);
+        for player in players {
+            nux_player_free(player);
+        }
+        for artboard in artboards {
+            nux_artboard_instance_free(artboard);
+        }
+        nux_view_model_instance_free(shared_child);
+        nux_view_model_instance_free(second_root);
+        nux_view_model_instance_free(first_root);
+        nux_file_free(file);
+    }
 }
 
 #[test]

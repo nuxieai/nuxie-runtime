@@ -7,8 +7,15 @@
 /// replacement walks this relay and invalidates each live containing instance.
 #[derive(Debug)]
 pub(super) struct RuntimeOwnedViewModelParentRelay {
-    pub(super) parents: RefCell<Vec<Weak<RuntimeOwnedViewModelParentRelay>>>,
+    parents: RefCell<Vec<RuntimeOwnedViewModelParentEdge>>,
     dependents: RefCell<Vec<RuntimeCellDependent>>,
+    observable_mutation_generation: Cell<u64>,
+}
+
+#[derive(Debug)]
+struct RuntimeOwnedViewModelParentEdge {
+    relay: Weak<RuntimeOwnedViewModelParentRelay>,
+    edge_count: usize,
 }
 
 impl RuntimeOwnedViewModelParentRelay {
@@ -16,32 +23,82 @@ impl RuntimeOwnedViewModelParentRelay {
         Rc::new(Self {
             parents: RefCell::new(Vec::new()),
             dependents: RefCell::new(Vec::new()),
+            observable_mutation_generation: Cell::new(0),
         })
     }
 
     fn add_parent(this: &Rc<Self>, parent: &Rc<Self>) {
         let mut parents = this.parents.borrow_mut();
-        parents.retain(|candidate| candidate.strong_count() != 0);
-        if parents
+        parents.retain(|candidate| candidate.relay.strong_count() != 0);
+        if let Some(existing) = parents
             .iter()
-            .any(|candidate| candidate.ptr_eq(&Rc::downgrade(parent)))
+            .position(|candidate| candidate.relay.ptr_eq(&Rc::downgrade(parent)))
         {
+            parents[existing].edge_count = parents[existing]
+                .edge_count
+                .checked_add(1)
+                .expect("view-model parent edge count overflowed");
             return;
         }
-        parents.push(Rc::downgrade(parent));
+        parents.push(RuntimeOwnedViewModelParentEdge {
+            relay: Rc::downgrade(parent),
+            edge_count: 1,
+        });
     }
 
     fn remove_parent(this: &Rc<Self>, parent: &Rc<Self>) {
         let parent = Rc::downgrade(parent);
-        this.parents
-            .borrow_mut()
-            .retain(|candidate| !candidate.ptr_eq(&parent) && candidate.strong_count() != 0);
+        let mut parents = this.parents.borrow_mut();
+        parents.retain(|candidate| candidate.relay.strong_count() != 0);
+        if let Some(existing) = parents
+            .iter()
+            .position(|candidate| candidate.relay.ptr_eq(&parent))
+        {
+            if parents[existing].edge_count == 1 {
+                parents.remove(existing);
+            } else {
+                parents[existing].edge_count -= 1;
+            }
+        }
     }
 
     pub(super) fn has_parents(&self) -> bool {
         let mut parents = self.parents.borrow_mut();
-        parents.retain(|candidate| candidate.strong_count() != 0);
+        parents.retain(|candidate| candidate.relay.strong_count() != 0);
         !parents.is_empty()
+    }
+
+    pub(super) fn observable_mutation_generation(&self) -> u64 {
+        self.observable_mutation_generation.get()
+    }
+
+    pub(super) fn mark_observable_mutation(this: &Rc<Self>, generation: u64) {
+        fn visit(
+            relay: &Rc<RuntimeOwnedViewModelParentRelay>,
+            generation: u64,
+            visited: &mut BTreeSet<usize>,
+        ) {
+            let identity = Rc::as_ptr(relay) as usize;
+            if !visited.insert(identity) {
+                return;
+            }
+            relay.observable_mutation_generation.set(generation);
+            let parents = relay
+                .parents
+                .borrow()
+                .iter()
+                .filter_map(|candidate| candidate.relay.upgrade())
+                .collect::<Vec<_>>();
+            relay
+                .parents
+                .borrow_mut()
+                .retain(|candidate| candidate.relay.strong_count() != 0);
+            for parent in parents {
+                visit(&parent, generation, visited);
+            }
+        }
+
+        visit(this, generation, &mut BTreeSet::new());
     }
 
     pub(super) fn add_dependent(&self, sink: &RuntimeCellDirtSink) {
@@ -78,12 +135,12 @@ impl RuntimeOwnedViewModelParentRelay {
                 .parents
                 .borrow()
                 .iter()
-                .filter_map(Weak::upgrade)
+                .filter_map(|candidate| candidate.relay.upgrade())
                 .collect::<Vec<_>>();
             relay
                 .parents
                 .borrow_mut()
-                .retain(|candidate| candidate.strong_count() != 0);
+                .retain(|candidate| candidate.relay.strong_count() != 0);
             for parent in parents {
                 visit(&parent, visited);
             }

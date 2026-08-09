@@ -2005,6 +2005,8 @@ fn publish_mutation_success_and_commit(
     correlation_id: u64,
     changes: Vec<OwnedViewModelChange>,
     transaction: RuntimeOwnedViewModelTransaction,
+    mutation_generation: Option<u64>,
+    changed_owners: &[RuntimeOwnedViewModelHandle],
 ) {
     let pending = PendingHandlePublication::new(
         NuxViewModelMutationResult {
@@ -2032,6 +2034,11 @@ fn publish_mutation_success_and_commit(
     // armed, so any allocation/registration/publication unwind retracts the
     // handle and restores the exact graph before the FFI error is returned.
     transaction.commit();
+    if let Some(mutation_generation) = mutation_generation {
+        for handle in changed_owners {
+            handle.mark_observable_mutation(mutation_generation);
+        }
+    }
     let _ = pending.finish();
 }
 
@@ -2186,20 +2193,36 @@ pub unsafe extern "C" fn nux_view_model_mutate(
         // or exact-topology inverse before mutating. Dirt and listener effects
         // stay buffered until the success result is fully published.
         let commit = panic::catch_unwind(AssertUnwindSafe(|| {
-            let mut transaction = RuntimeOwnedViewModelTransaction::begin().ok_or(())?;
+            let mut transaction =
+                RuntimeOwnedViewModelTransaction::begin().ok_or(NuxStatus::RuntimeError)?;
             let capture =
                 RuntimeViewModelChangeCapture::begin_bounded(MAX_MUTATIONS, MAX_TOTAL_BYTES)
-                    .ok_or(())?;
+                    .ok_or(NuxStatus::RuntimeError)?;
             for (index, mutation) in resolved.iter().enumerate() {
                 if !apply_transaction_mutation(&mut transaction, &live, mutation) {
-                    return Err(());
+                    return Err(NuxStatus::RuntimeError);
                 }
                 maybe_panic_during_vm_commit(index + 1);
             }
             let roots = live.values().cloned().collect::<Vec<_>>();
-            let changes =
-                RuntimeOwnedViewModelHandle::resolve_change_capture_across(&roots, capture)
-                    .ok_or(())?;
+            let owner_changes =
+                RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
+                    &roots, capture,
+                )
+                .ok_or(NuxStatus::RuntimeError)?;
+            let mut changed_owners = Vec::new();
+            let mut changes = Vec::with_capacity(owner_changes.len());
+            for (owner, change) in owner_changes {
+                if !changed_owners.iter().any(|known| owner.ptr_eq(known)) {
+                    changed_owners.push(owner);
+                }
+                changes.push(change);
+            }
+            let mutation_generation = if changed_owners.is_empty() {
+                None
+            } else {
+                Some(reserve_view_model_mutation_generation()?)
+            };
             let changes = own_view_model_changes(
                 NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER,
                 batch.correlation_id,
@@ -2211,20 +2234,31 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 batch.correlation_id,
                 changes,
                 transaction,
+                mutation_generation,
+                &changed_owners,
             );
             Ok(())
         }));
-        if !matches!(commit, Ok(Ok(()))) {
+        let failure_status = match commit {
+            Ok(Ok(())) => None,
+            Ok(Err(status)) => Some(status),
+            Err(_) => Some(NuxStatus::RuntimeError),
+        };
+        if let Some(status) = failure_status {
             // A panic can happen after the raw pointer write. The pending
             // publication guard has already retracted/freed that handle.
             unsafe { *out_result = ptr::null_mut() };
             publish_mutation_result(
                 out_result,
-                NuxStatus::RuntimeError,
+                status,
                 0,
-                "validated mutation diverged during commit; live graph restored",
+                if status == NuxStatus::LimitExceeded {
+                    "view-model mutation generation overflowed"
+                } else {
+                    "validated mutation diverged during commit; live graph restored"
+                },
             );
-            return NuxStatus::RuntimeError;
+            return status;
         }
         drop(guards);
         NuxStatus::Ok
@@ -2476,6 +2510,10 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
             Ok(Ok(changed)) => changed,
             Ok(Err(())) | Err(_) => return NuxStatus::RuntimeError,
         };
+        let status = instance.occurrence.commit_runtime_change_or_poison(changed);
+        if status != NuxStatus::Ok {
+            return status;
+        }
         if !out_changed.is_null() {
             unsafe { *out_changed = u32::from(changed) };
         }

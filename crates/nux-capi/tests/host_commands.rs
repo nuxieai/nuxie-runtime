@@ -1739,3 +1739,120 @@ fn legacy_runtime_view_model_mutation_invalidates_a_sibling_occurrence() {
         nux_file_free(file);
     }
 }
+
+#[test]
+fn legacy_capture_overflow_conservatively_invalidates_a_sibling_occurrence() {
+    let bytes = scripted_view_model_asset_fixture(
+        br#"
+            return function(context)
+                return {
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local root = context:viewModel()
+                        if root ~= nil and root.amount.value == 0 then
+                            for value = 1, 4097 do
+                                root.amount.value = value
+                            end
+                        end
+                    end,
+                }
+            end
+        "#,
+    );
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
+        NuxStatus::Ok
+    );
+    let mut first_artboard = std::ptr::null_mut();
+    let mut second_artboard = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut first_artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut second_artboard) },
+        NuxStatus::Ok
+    );
+    for artboard in [first_artboard, second_artboard] {
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+            NuxStatus::Ok
+        );
+    }
+
+    let mut legacy_machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(first_artboard, 0, &mut legacy_machine) },
+        NuxStatus::Ok
+    );
+    let mut changed = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_advance(first_artboard, legacy_machine, 0.0, &mut changed)
+        },
+        NuxStatus::Ok
+    );
+    let mut second_player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_player_new_state_machine_named(
+                second_artboard,
+                view("HostCommands"),
+                &mut second_player,
+            )
+        },
+        NuxStatus::Ok
+    );
+    let initialized = correlated_step_with_delta(second_player, &[], 0, 0.0);
+    let mut scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(initialized, &mut scheduling) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(second_player, scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+
+    let click = pointer_click();
+    let mut hit = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_down(
+                first_artboard,
+                legacy_machine,
+                click[0].x,
+                click[0].y,
+                &mut hit,
+            )
+        },
+        NuxStatus::RuntimeError,
+        "the committed journal overflow poisons the initiating occurrence"
+    );
+    assert_eq!(view_model_number(view_model, "amount"), 4097.0);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(second_player, scheduling.render_revision) },
+        NuxStatus::HandleMismatch,
+        "overflow conservatively invalidates every pre-mutation owner relay"
+    );
+
+    unsafe {
+        nux_player_step_result_free(initialized);
+        nux_player_free(second_player);
+        nux_state_machine_instance_free(legacy_machine);
+        nux_artboard_instance_free(first_artboard);
+        nux_artboard_instance_free(second_artboard);
+        nux_view_model_instance_free(view_model);
+        nux_file_free(file);
+    }
+}

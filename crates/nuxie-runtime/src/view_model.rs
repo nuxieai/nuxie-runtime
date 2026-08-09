@@ -4078,7 +4078,7 @@ mod owned_context_tests {
     }
 
     #[test]
-    fn duplicate_list_occurrence_removal_matches_cpp_pointer_unique_parent_semantics() {
+    fn duplicate_list_occurrence_removal_preserves_the_remaining_parent_edge() {
         let file = list_row_relink_fixture();
         let root = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
@@ -4096,13 +4096,14 @@ mod owned_context_tests {
             RuntimeOwnedViewModelInstance::new(&file, 2).expect("child"),
         );
 
-        // C++ addParent dedupes by parent pointer, while removeParent erases
-        // it outright (`viewmodel_instance.cpp:346-363`).
+        // The retained graph counts equal-parent edges. Removing one aliased
+        // list occurrence must not sever propagation through the occurrence
+        // that is still live under the root.
         assert_eq!(
             row.link_view_model_by_property_name_path("child", &child),
             Ok(true)
         );
-        assert!(root_rebind.take_dirt().is_empty());
+        assert!(root_rebind.take_dirt().contains(RuntimeCellDirt::BINDINGS));
     }
 
     #[test]

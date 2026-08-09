@@ -277,6 +277,49 @@ impl RuntimeOwnedViewModelHandle {
         Rc::ptr_eq(&self.instance, &other.instance)
     }
 
+    /// Retain every exact owner reachable before a runtime-authored mutation.
+    ///
+    /// A script can replace or unlink a child after mutating one of its cells.
+    /// Resolving the operation journal only through the post-mutation root
+    /// would then lose the changed child's identity. Keeping this snapshot
+    /// lets the operation boundary resolve that cell directly and propagate
+    /// invalidation through any other root that still retains the child.
+    pub fn reachable_change_owner_snapshot(&self) -> Option<Vec<Self>> {
+        fn visit(
+            owner: &RuntimeOwnedViewModelHandle,
+            visited: &mut BTreeSet<u64>,
+            owners: &mut Vec<RuntimeOwnedViewModelHandle>,
+        ) -> Option<()> {
+            let instance = owner.instance.try_borrow().ok()?;
+            if !visited.insert(instance.allocation_identity) {
+                return Some(());
+            }
+            let mut children = instance
+                .view_models
+                .iter()
+                .filter_map(|child| child.endpoint.linked_instance())
+                .map(RuntimeOwnedViewModelHandle::from_shared)
+                .collect::<Vec<_>>();
+            for list in &instance.lists {
+                let items = list.value.try_borrow().ok()?;
+                children.extend(items.items.iter().map(|item| RuntimeOwnedViewModelHandle {
+                    instance: Rc::clone(&item.instance),
+                }));
+            }
+            drop(instance);
+            owners.push(owner.clone());
+            for child in children {
+                visit(&child, visited, owners)?;
+            }
+            Some(())
+        }
+
+        let mut visited = BTreeSet::new();
+        let mut owners = Vec::new();
+        visit(self, &mut visited, &mut owners)?;
+        Some(owners)
+    }
+
     pub fn instance_identity(&self) -> u64 {
         self.instance.borrow().instance_identity()
     }
@@ -2058,6 +2101,62 @@ mod upstream_viewmodel_instance_contract_tests {
             second_dependent
                 .take_dirt()
                 .contains(RuntimeCellDirt::BINDINGS)
+        );
+    }
+
+    #[test]
+    fn pre_mutation_owner_snapshot_resolves_a_changed_child_after_detach() {
+        let file = replace_child_file();
+        let first_root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("first root"),
+        );
+        let second_root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("second root"),
+        );
+        let shared_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("shared child"),
+        );
+        let replacement = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("replacement child"),
+        );
+        assert_eq!(
+            first_root.link_view_model_by_property_name_path("child", &shared_child),
+            Ok(true)
+        );
+        assert_eq!(
+            second_root.link_view_model_by_property_name_path("child", &shared_child),
+            Ok(true)
+        );
+
+        let owners = first_root
+            .reachable_change_owner_snapshot()
+            .expect("snapshot every pre-mutation owner");
+        let capture = RuntimeViewModelChangeCapture::begin().expect("one active capture");
+        assert!(shared_child
+            .borrow_mut()
+            .set_number_by_property_name("value", 7.0));
+        assert_eq!(
+            first_root.link_view_model_by_property_name_path("child", &replacement),
+            Ok(true)
+        );
+
+        let changes = RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
+            &owners, capture,
+        )
+        .expect("the detached child remains an exact captured owner");
+        let changed_child = changes
+            .iter()
+            .find_map(|(owner, change)| {
+                (owner.ptr_eq(&shared_child)
+                    && change.value == RuntimeViewModelChangeValue::Number(7.0))
+                    .then_some(owner)
+            })
+            .expect("shared child write");
+        changed_child.mark_observable_mutation(41);
+        assert_eq!(
+            second_root.observable_mutation_generation(),
+            41,
+            "the other root retaining the detached child is invalidated"
         );
     }
 

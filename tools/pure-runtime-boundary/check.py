@@ -219,7 +219,10 @@ PORTABLE_ABI_PRODUCT_VOCABULARY = re.compile(
     r"nux_package|nux_artifact|product_(?:session|context|package|abi|api|host|"
     r"runtime|operation|result|value)))"
 )
-DIRECT_NUXIE_PATH = re.compile(r"\bnuxie\s*::\s*(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)")
+DIRECT_NUXIE_PATH = re.compile(
+    r"\bnuxie\s*::\s*(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s*::\s*(?P<nested_symbol>[A-Za-z_][A-Za-z0-9_]*))?"
+)
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
@@ -1034,12 +1037,21 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")
-        if symbol in PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS:
-            continue
-        if symbol not in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS:
+        nested_symbol = match.group("nested_symbol")
+        module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(symbol)
+        if module_symbols is not None:
+            if nested_symbol is None:
+                continue
+            approved = nested_symbol in module_symbols
+            reported_symbol = f"{symbol}::{nested_symbol}"
+        else:
+            approved = symbol in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS
+            reported_symbol = symbol
+        if not approved:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
-                f"{relative}:{line}: portable ABI facade symbol {symbol!r} is not approved"
+                f"{relative}:{line}: portable ABI facade symbol {reported_symbol!r} "
+                "is not approved"
             )
     for match in re.finditer(r"\bimpl\b(?P<header>[^{};]*)\{", source, re.DOTALL):
         header = match.group("header")

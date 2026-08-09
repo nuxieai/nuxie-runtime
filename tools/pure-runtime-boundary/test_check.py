@@ -1989,6 +1989,14 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             "}; }\n"
             "split_root!(nuxie, RuntimeOwnedViewModelInstance);\n"
             "split_all!(nuxie, host_interfaces, RuntimeFile);\n"
+            "macro_rules! repeated_root { ($($root:ident),*) => {\n"
+            "    fn leak_repeated(_: $($root)*::host_interfaces::RuntimeFile) {}\n"
+            "}; }\n"
+            "macro_rules! separator_token { ($sep:tt) => {\n"
+            "    fn leak_separator(_: nuxie $sep host_interfaces $sep RuntimeFile) {}\n"
+            "}; }\n"
+            "repeated_root!(nuxie);\n"
+            "separator_token!(::);\n"
         )
 
         result = self.run_check()
@@ -1997,6 +2005,8 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("dynamic portable ABI facade path", result.stderr)
         self.assertIn("host_interfaces", result.stderr)
         self.assertIn("metavariable-qualified path", result.stderr)
+        self.assertIn("macro-generated qualified paths", result.stderr)
+        self.assertIn("token-tree fragment", result.stderr)
 
     def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")

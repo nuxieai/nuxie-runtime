@@ -268,6 +268,67 @@ impl ArtboardOccurrence {
     }
 }
 
+struct BoundViewModelChangeCapture {
+    root: RuntimeOwnedViewModelHandle,
+    capture: RuntimeViewModelChangeCapture,
+}
+
+fn begin_bound_view_model_change_capture(
+    occurrence: &ArtboardOccurrence,
+) -> Result<Option<BoundViewModelChangeCapture>, NuxStatus> {
+    let root = occurrence
+        .bound_view_model
+        .borrow()
+        .as_ref()
+        .map(|view_model| view_model.handle().clone());
+    let Some(root) = root else {
+        return Ok(None);
+    };
+    let capture = RuntimeViewModelChangeCapture::begin().ok_or(NuxStatus::ReentrantCall)?;
+    Ok(Some(BoundViewModelChangeCapture { root, capture }))
+}
+
+/// Complete a legacy runtime mutation boundary and propagate exact changed
+/// ViewModel owners through the shared retained graph. Occurrence-local render
+/// invalidation alone is insufficient because another occurrence can bind the
+/// same root, or a distinct root that retains the same changed child.
+fn commit_legacy_runtime_change_or_poison(
+    occurrence: &ArtboardOccurrence,
+    runtime_changed: bool,
+    view_model_capture: Option<BoundViewModelChangeCapture>,
+) -> NuxStatus {
+    let mut view_model_changed = false;
+    if let Some(BoundViewModelChangeCapture { root, capture }) = view_model_capture {
+        let Some(owner_changes) = root.resolve_change_capture_with_owners(capture) else {
+            occurrence.poisoned.set(true);
+            return NuxStatus::RuntimeError;
+        };
+        let mut changed_owners = Vec::new();
+        for (owner, _) in owner_changes {
+            if !changed_owners.iter().any(|known| owner.ptr_eq(known)) {
+                changed_owners.push(owner);
+            }
+        }
+        if !changed_owners.is_empty() {
+            let generation = match reserve_view_model_mutation_generation() {
+                Ok(generation) => generation,
+                Err(status) => {
+                    occurrence.poisoned.set(true);
+                    return status;
+                }
+            };
+            for owner in changed_owners {
+                owner.mark_observable_mutation(generation);
+            }
+            occurrence
+                .observed_bound_view_model_generation
+                .set(root.observable_mutation_generation());
+            view_model_changed = true;
+        }
+    }
+    occurrence.commit_runtime_change_or_poison(runtime_changed || view_model_changed)
+}
+
 /// Stable renderer factory retained only by an authenticated scripted File.
 /// The exact descriptor remains the occurrence binding. Sibling occurrences
 /// may share this domain only when their copied callback tables identify the
@@ -2308,11 +2369,20 @@ pub unsafe extern "C" fn nux_artboard_instance_advance(
             Ok(guard) => guard,
             Err(status) => return status,
         };
+        let view_model_capture = match begin_bound_view_model_change_capture(&instance.occurrence) {
+            Ok(capture) => capture,
+            Err(status) => return status,
+        };
         let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
         let changed = artboard.advance(elapsed_seconds);
-        let status = instance.occurrence.commit_runtime_change_or_poison(changed);
+        drop(artboard);
+        let status = commit_legacy_runtime_change_or_poison(
+            &instance.occurrence,
+            changed,
+            view_model_capture,
+        );
         if status != NuxStatus::Ok {
             return status;
         }
@@ -4676,6 +4746,10 @@ pub unsafe extern "C" fn nux_state_machine_instance_advance(
             Ok(guard) => guard,
             Err(status) => return status,
         };
+        let view_model_capture = match begin_bound_view_model_change_capture(&instance.occurrence) {
+            Ok(capture) => capture,
+            Err(status) => return status,
+        };
         let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
@@ -4683,7 +4757,13 @@ pub unsafe extern "C" fn nux_state_machine_instance_advance(
             return NuxStatus::ReentrantCall;
         };
         let changed = artboard.advance_with_state_machine(&mut machine, elapsed_seconds);
-        let status = instance.occurrence.commit_runtime_change_or_poison(changed);
+        drop(machine);
+        drop(artboard);
+        let status = commit_legacy_runtime_change_or_poison(
+            &instance.occurrence,
+            changed,
+            view_model_capture,
+        );
         if status != NuxStatus::Ok {
             return status;
         }
@@ -4799,6 +4879,10 @@ fn state_machine_pointer_event(
         Ok(guard) => guard,
         Err(status) => return status,
     };
+    let view_model_capture = match begin_bound_view_model_change_capture(&instance.occurrence) {
+        Ok(capture) => capture,
+        Err(status) => return status,
+    };
     let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
         return NuxStatus::ReentrantCall;
     };
@@ -4806,7 +4890,10 @@ fn state_machine_pointer_event(
         return NuxStatus::ReentrantCall;
     };
     let hit = dispatch(&mut machine, &mut artboard);
-    let status = instance.occurrence.commit_runtime_change_or_poison(true);
+    drop(machine);
+    drop(artboard);
+    let status =
+        commit_legacy_runtime_change_or_poison(&instance.occurrence, true, view_model_capture);
     if status != NuxStatus::Ok {
         return status;
     }

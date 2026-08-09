@@ -479,6 +479,10 @@ fn disposition_value(
     })
 }
 
+fn disposition_acknowledges_render(disposition: SurfaceDisposition) -> bool {
+    disposition == SurfaceDisposition::Presented
+}
+
 fn outcome(
     state: &RendererState,
     disposition: NuxRendererDisposition,
@@ -794,6 +798,17 @@ pub unsafe extern "C" fn nux_renderer_reset_player_domain(
             domain: Arc::clone(&renderer.domain),
             generation: renderer.domain.generation.load(Ordering::Relaxed),
         });
+        player
+            .artboard
+            .observed_renderer_generation
+            .set(renderer.domain.generation.load(Ordering::Relaxed));
+        player.artboard.invalidate_render().map_err(|status| {
+            player.artboard.poisoned.set(true);
+            ApiFailure::new(
+                status,
+                "player render revision overflowed during domain reset",
+            )
+        })?;
         Ok(())
     })
 }
@@ -878,6 +893,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                             domain: Arc::clone(&renderer_ref.domain),
                             generation,
                         });
+                    player.artboard.observed_renderer_generation.set(generation);
                 }
                 Some(_) => {
                     return Err(ApiFailure::new(
@@ -887,6 +903,11 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 }
             }
             let RendererState { factory, surface } = &mut *state;
+            player
+                .artboard
+                .refresh_bound_view_model_invalidation()
+                .map_err(|status| ApiFailure::new(status, "player render revision overflowed"))?;
+            let rendered_revision = player.artboard.render_revision.get();
             let mut frame = factory.borrow().begin_frame(operation.clear_color);
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
@@ -906,6 +927,17 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             let (disposition, metrics) =
                 unsafe { surface.present(frame, operation.drawable, completion) }
                     .map_err(surface_failure)?;
+            if disposition_acknowledges_render(disposition) {
+                player
+                    .artboard
+                    .acknowledge_presented(rendered_revision)
+                    .map_err(|status| {
+                        ApiFailure::new(
+                            status,
+                            "presented player revision no longer matches the rendered occurrence",
+                        )
+                    })?;
+            }
             write_outcome(
                 out_outcome,
                 &outcome(&state, disposition_value(disposition)?, Some(metrics)),
@@ -1018,6 +1050,26 @@ mod tests {
         assert_eq!(NUX_RENDERER_DISPOSITION_OUT_OF_MEMORY, 8);
         assert_eq!(std::mem::size_of::<NuxRendererDisposition>(), 4);
         assert_eq!(std::mem::size_of::<NuxRendererHealth>(), 4);
+    }
+
+    #[test]
+    fn only_presented_acknowledges_an_occurrence_revision() {
+        assert!(disposition_acknowledges_render(
+            SurfaceDisposition::Presented
+        ));
+        for disposition in [
+            SurfaceDisposition::None,
+            SurfaceDisposition::SkippedZeroSize,
+            SurfaceDisposition::SkippedTimeout,
+            SurfaceDisposition::SkippedOccluded,
+            SurfaceDisposition::Reconfigured,
+            SurfaceDisposition::Recreated,
+            SurfaceDisposition::DeviceLost,
+            SurfaceDisposition::OutOfMemory,
+            SurfaceDisposition::Fatal,
+        ] {
+            assert!(!disposition_acknowledges_render(disposition));
+        }
     }
 
     #[test]

@@ -92,6 +92,15 @@ fn info(result: *mut NuxPlayerStepResult) -> NuxPlayerStepInfo {
     info
 }
 
+fn scheduling(result: *mut NuxPlayerStepResult) -> NuxPlayerSchedulingInfo {
+    let mut scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(result, &mut scheduling) },
+        NuxStatus::Ok
+    );
+    scheduling
+}
+
 fn animation_name(file: *const NuxFile, artboard_index: usize, index: usize) -> String {
     let mut name = NuxStringView::default();
     assert_eq!(
@@ -99,6 +108,341 @@ fn animation_name(file: *const NuxFile, artboard_index: usize, index: usize) -> 
         NuxStatus::Ok
     );
     owned(name)
+}
+
+#[test]
+fn static_player_scheduling_is_independent_from_cpp_keep_going() {
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(instance, &mut player) },
+        NuxStatus::Ok
+    );
+
+    let (status, result) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    assert!(info(result).keep_going, "pinned C++ StaticScene stays true");
+    let initial_scheduling = scheduling(result);
+    assert!(
+        initial_scheduling.dirty,
+        "the first zero-time settlement commits the initial runtime snapshot"
+    );
+    assert!(initial_scheduling.settled);
+    assert!(initial_scheduling.render_required);
+    assert!(!initial_scheduling.has_wake_deadline);
+    assert_eq!(
+        initial_scheduling.wake_deadline_clock,
+        NuxMonotonicClockDomain::Unspecified
+    );
+    assert_eq!(initial_scheduling.wake_deadline_monotonic_ns, 0);
+    assert_ne!(initial_scheduling.render_revision, 0);
+
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+    let (status, settled_result) = step(player, &[], &[], 1.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let settled = scheduling(settled_result);
+    assert!(!settled.dirty);
+    assert!(settled.settled);
+    assert!(!settled.render_required);
+    assert_eq!(settled.render_revision, initial_scheduling.render_revision);
+
+    unsafe {
+        nux_player_step_result_free(settled_result);
+        nux_player_step_result_free(result);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn linear_step_invalidates_the_presented_revision_and_rejects_stale_acknowledgement() {
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let timeline = animation_name(file, 1, 0);
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_linear_animation_named(instance, view(&timeline), &mut player) },
+        NuxStatus::Ok
+    );
+
+    let (status, initial) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let initial_scheduling = scheduling(initial);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+
+    let (status, advanced) = step(player, &[], &[], 0.25);
+    assert_eq!(status, NuxStatus::Ok);
+    let advanced_scheduling = scheduling(advanced);
+    assert!(advanced_scheduling.dirty);
+    assert!(!advanced_scheduling.settled);
+    assert!(advanced_scheduling.render_required);
+    assert!(advanced_scheduling.render_revision > initial_scheduling.render_revision);
+    assert!(!advanced_scheduling.has_wake_deadline);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, initial_scheduling.render_revision) },
+        NuxStatus::HandleMismatch
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, advanced_scheduling.render_revision) },
+        NuxStatus::Ok
+    );
+
+    unsafe {
+        nux_player_step_result_free(advanced);
+        nux_player_step_result_free(initial);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn full_loop_period_is_dirty_even_when_linear_time_returns_to_its_start() {
+    let bytes = fixture_bytes("looping_timeline_events.riv");
+    let rust_file = Arc::new(nuxie::File::import(&bytes).unwrap());
+    let rust_artboard = nuxie::OwnedArtboardInstance::instantiate(Arc::clone(&rust_file), 0)
+        .expect("fixture artboard");
+    let definition = rust_artboard
+        .raw()
+        .linear_animation(0)
+        .expect("fixture animation");
+    assert_eq!(
+        definition.loop_value, 1,
+        "oracle requires a looping timeline"
+    );
+    let period = definition.duration as f32 / definition.fps as f32;
+
+    let file = import("looping_timeline_events.riv");
+    let instance = artboard(file, 0);
+    let timeline = animation_name(file, 0, 0);
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_linear_animation_named(instance, view(&timeline), &mut player) },
+        NuxStatus::Ok
+    );
+
+    let (status, result) = step(player, &[], &[], period);
+    assert_eq!(status, NuxStatus::Ok);
+    let scheduling = scheduling(result);
+    assert!(
+        scheduling.dirty,
+        "a full loop traverses authored runtime work"
+    );
+    assert!(!scheduling.settled);
+
+    unsafe {
+        nux_player_step_result_free(result);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn legacy_state_machine_mutation_invalidates_a_player_ack_on_the_shared_occurrence() {
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(instance, &mut player) },
+        NuxStatus::Ok
+    );
+    let (status, initial) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let revision = scheduling(initial).render_revision;
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, revision) },
+        NuxStatus::Ok
+    );
+
+    let mut machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(instance, 0, &mut machine) },
+        NuxStatus::Ok
+    );
+    let bool_name = std::ffi::CString::new("bool").unwrap();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_set_bool(machine, bool_name.as_ptr(), true) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, revision) },
+        NuxStatus::HandleMismatch
+    );
+    let (status, after_input) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let after_input_revision = scheduling(after_input).render_revision;
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, after_input_revision) },
+        NuxStatus::Ok
+    );
+    let mut changed = false;
+    assert_eq!(
+        unsafe { nux_state_machine_instance_advance(instance, machine, 0.016, &mut changed) },
+        NuxStatus::Ok
+    );
+    assert!(changed);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, after_input_revision) },
+        NuxStatus::HandleMismatch
+    );
+
+    unsafe {
+        nux_state_machine_instance_free(machine);
+        nux_player_step_result_free(after_input);
+        nux_player_step_result_free(initial);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn legacy_pointer_dispatch_invalidates_a_player_ack_on_the_shared_occurrence() {
+    let file = import("click_event.riv");
+    let mut instance = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new_named(file, view("art-1"), &mut instance) },
+        NuxStatus::Ok
+    );
+    let player = state_player(instance, "sm-1");
+    let (status, initial) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let revision = scheduling(initial).render_revision;
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, revision) },
+        NuxStatus::Ok
+    );
+
+    let mut machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(instance, 0, &mut machine) },
+        NuxStatus::Ok
+    );
+    let mut hit = false;
+    assert_eq!(
+        unsafe { nux_state_machine_instance_pointer_down(instance, machine, 75.0, 75.0, &mut hit) },
+        NuxStatus::Ok
+    );
+    assert!(hit);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, revision) },
+        NuxStatus::HandleMismatch
+    );
+    let (status, after_inside) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let inside_revision = scheduling(after_inside).render_revision;
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, inside_revision) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_up(instance, machine, 10_000.0, 10_000.0, &mut hit)
+        },
+        NuxStatus::Ok
+    );
+    assert!(!hit, "outside dispatch is spatially unconsumed");
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, inside_revision) },
+        NuxStatus::HandleMismatch,
+        "an outside/exit dispatch can mutate focus and listener phases"
+    );
+
+    unsafe {
+        nux_state_machine_instance_free(machine);
+        nux_player_step_result_free(after_inside);
+        nux_player_step_result_free(initial);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn scheduling_snapshot_is_prefix_safe_and_requires_a_successful_step() {
+    #[repr(C)]
+    struct ExtendedScheduling {
+        prefix: NuxPlayerSchedulingInfo,
+        suffix_canary: u64,
+    }
+
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(instance, &mut player) },
+        NuxStatus::Ok
+    );
+    let (status, result) = step(player, &[], &[], 0.0);
+    assert_eq!(status, NuxStatus::Ok);
+
+    let mut undersized = NuxPlayerSchedulingInfo::default();
+    undersized.struct_size = (NUX_PLAYER_SCHEDULING_INFO_V3_MIN_SIZE - 1) as u32;
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(result, &mut undersized) },
+        NuxStatus::InvalidStructSize
+    );
+
+    let mut extended = ExtendedScheduling {
+        prefix: NuxPlayerSchedulingInfo::default(),
+        suffix_canary: 0x5a5a_a5a5_1122_3344,
+    };
+    extended.prefix.struct_size = std::mem::size_of::<ExtendedScheduling>() as u32;
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(result, &mut extended.prefix) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        extended.prefix.struct_size as usize,
+        std::mem::size_of::<NuxPlayerSchedulingInfo>()
+    );
+    assert_eq!(extended.suffix_canary, 0x5a5a_a5a5_1122_3344);
+    assert_eq!(
+        unsafe { nux_player_acknowledge_presented(player, extended.prefix.render_revision) },
+        NuxStatus::Ok
+    );
+
+    let invalid_step = NuxPlayerStep {
+        struct_size: (NUX_PLAYER_STEP_V3_MIN_SIZE - 1) as u32,
+        ..NuxPlayerStep::default()
+    };
+    let mut failure = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_step(player, &invalid_step, &mut failure) },
+        NuxStatus::InvalidStructSize
+    );
+    let mut failure_scheduling = NuxPlayerSchedulingInfo::default();
+    assert_eq!(
+        unsafe { nux_player_step_result_scheduling(failure, &mut failure_scheduling) },
+        NuxStatus::InvalidStructSize
+    );
+    let (status, after_failure) = step(player, &[], &[], 1.0);
+    assert_eq!(status, NuxStatus::Ok);
+    let after_failure_scheduling = scheduling(after_failure);
+    assert!(!after_failure_scheduling.dirty);
+    assert!(!after_failure_scheduling.render_required);
+    assert_eq!(
+        after_failure_scheduling.render_revision,
+        extended.prefix.render_revision
+    );
+
+    unsafe {
+        nux_player_step_result_free(after_failure);
+        nux_player_step_result_free(failure);
+        nux_player_step_result_free(result);
+        nux_player_free(player);
+        nux_artboard_instance_free(instance);
+        nux_file_free(file);
+    }
 }
 
 #[test]
@@ -482,6 +826,15 @@ fn linear_static_and_nested_steps_match_runtime_oracles() {
         .try_advance_with_state_machine(&mut rust_machine, 0.016)
         .unwrap();
     assert_eq!(info(nested_result).keep_going, expected_nested);
+    let nested_scheduling = scheduling(nested_result);
+    assert_eq!(
+        nested_scheduling.settled,
+        !rust_machine.needs_advance()
+            && rust_machine.reported_event_count() == 0
+            && !rust_machine.has_pending_listener_view_model_reports()
+            && !rust_nested.raw().has_ongoing_nested_work()
+    );
+    assert!(!nested_scheduling.has_wake_deadline);
 
     unsafe {
         nux_player_step_result_free(nested_result);
@@ -592,6 +945,7 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
     let (status, result) = step(player, &[], &pointers, 0.0);
     assert_eq!(status, NuxStatus::Ok);
     let c_info = info(result);
+    let c_scheduling = scheduling(result);
     let mut c_down_hit = NUX_PLAYER_POINTER_HIT_NONE;
     assert_eq!(
         unsafe { nux_player_step_result_pointer(result, 0, &mut c_down_hit) },
@@ -619,8 +973,13 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
         rust_machine.pointer_down_hit_result(rust_instance.raw_mut(), 75.0, 75.0, 0, None);
     let _ = rust_machine.pointer_up_hit_result(rust_instance.raw_mut(), 75.0, 75.0, 0, None);
     let rust_immediate_event_count = rust_machine.reported_event_count();
-    let rust_keep_going = rust_instance
-        .try_advance_with_state_machine(&mut rust_machine, 0.0)
+    let _ = rust_machine.take_reported_events(rust_instance.raw());
+    let rust_advance = rust_instance
+        .try_advance_with_state_machines_and_script_host_result(
+            std::slice::from_mut(&mut rust_machine),
+            0.0,
+            &mut nuxie::NoopScriptHost,
+        )
         .unwrap();
     let rust_down_hit = match rust_down_hit {
         nuxie::RuntimeHitResult::None => NUX_PLAYER_POINTER_HIT_NONE,
@@ -629,7 +988,9 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
     };
     assert_eq!(rust_down_hit, cpp_down_hit);
     assert_eq!(rust_immediate_event_count, cpp_event_count);
-    assert_eq!(rust_keep_going, cpp_final_keep_going);
+    assert_eq!(rust_advance.keep_going, cpp_final_keep_going);
+    assert_eq!(c_scheduling.dirty, rust_advance.changed);
+    assert!(!c_scheduling.has_wake_deadline);
     assert_eq!(
         rust_machine.changed_state_count(),
         cpp_final_state_types.len()

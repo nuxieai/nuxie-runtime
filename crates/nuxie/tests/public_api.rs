@@ -498,6 +498,41 @@ fn public_api_drives_default_state_machine_and_inputs() {
 }
 
 #[test]
+fn rich_state_machine_advance_keeps_mutation_distinct_from_cpp_continuation() {
+    let bytes = external_fixture("smi_test.riv");
+    let file = File::import(&bytes).expect("import file");
+    let mut instance = file
+        .artboard_named("artboard to nest")
+        .expect("artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+    let mut state_machine = instance
+        .default_state_machine_instance()
+        .expect("default state machine");
+
+    let _initial = instance
+        .try_advance_with_state_machines_and_script_host_result(
+            std::slice::from_mut(&mut state_machine),
+            0.0,
+            &mut nuxie::NoopScriptHost,
+        )
+        .expect("initial settlement");
+    let settled = instance
+        .try_advance_with_state_machines_and_script_host_result(
+            std::slice::from_mut(&mut state_machine),
+            0.0,
+            &mut nuxie::NoopScriptHost,
+        )
+        .expect("settled zero-time advance");
+
+    assert!(!settled.changed);
+    assert!(
+        settled.keep_going,
+        "pinned C++ advanceAndApply returns true for zero elapsed time"
+    );
+}
+
+#[test]
 fn public_api_view_model_number_set_changes_stream() {
     // `data_binding_test_2.riv` artboard 0 binds a shape to the view model's
     // `num` number property, so setting it visibly changes the draw stream.

@@ -112,6 +112,18 @@ use state_machine_instance::{
     relink_view_model_listener_cell,
 };
 
+/// Product-neutral outcome of one runtime-owned state-machine frame.
+///
+/// `changed` reports whether the committed operation changed observable
+/// runtime state. `keep_going` preserves the pinned C++
+/// `advanceAndApply()` return contract; hosts must not reinterpret it as a
+/// complete scheduling policy.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RuntimeStateMachineAdvanceResult {
+    pub changed: bool,
+    pub keep_going: bool,
+}
+
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,

@@ -284,6 +284,21 @@ int main(int argc, char** argv)
     CHECK(nux_player_step_result_info(step_result, &step_info) == NUX_STATUS_OK);
     CHECK(step_info.pointer_result_count == 0);
     CHECK(step_info.view_model_change_count == 0);
+    NuxPlayerSchedulingInfo scheduling = {
+        .struct_size = sizeof(NuxPlayerSchedulingInfo)};
+    CHECK(nux_player_step_result_scheduling(step_result, &scheduling) ==
+          NUX_STATUS_OK);
+    CHECK(scheduling.dirty);
+    CHECK(!scheduling.settled);
+    CHECK(scheduling.render_required);
+    CHECK(scheduling.render_revision != 0);
+    CHECK(!scheduling.has_wake_deadline);
+    CHECK(scheduling.wake_deadline_clock ==
+          NUX_MONOTONIC_CLOCK_DOMAIN_UNSPECIFIED);
+    CHECK(scheduling.wake_deadline_monotonic_ns == 0);
+    CHECK(nux_player_acknowledge_presented(player,
+                                           scheduling.render_revision) ==
+          NUX_STATUS_OK);
     NuxViewModelChangeView step_change = {
         .struct_size = sizeof(NuxViewModelChangeView)};
     CHECK(nux_player_step_result_view_model_change(

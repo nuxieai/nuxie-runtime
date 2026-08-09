@@ -611,6 +611,45 @@
       ]
     },
     {
+      "name": "NuxPlayerSchedulingInfo",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "dirty",
+          "offset": 4
+        },
+        {
+          "name": "settled",
+          "offset": 5
+        },
+        {
+          "name": "render_required",
+          "offset": 6
+        },
+        {
+          "name": "has_wake_deadline",
+          "offset": 7
+        },
+        {
+          "name": "wake_deadline_clock",
+          "offset": 8
+        },
+        {
+          "name": "render_revision",
+          "offset": 16
+        },
+        {
+          "name": "wake_deadline_monotonic_ns",
+          "offset": 24
+        }
+      ]
+    },
+    {
       "name": "NuxPlayerStateChangeView",
       "size": 24,
       "alignment": 8,

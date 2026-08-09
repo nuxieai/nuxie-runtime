@@ -162,6 +162,9 @@
 #define NUX_PLAYER_STEP_INFO_V3_MIN_SIZE                                  \
     (offsetof(NuxPlayerStepInfo, event_count) +                           \
      sizeof(((NuxPlayerStepInfo*)0)->event_count))
+#define NUX_PLAYER_SCHEDULING_INFO_V3_MIN_SIZE                            \
+    (offsetof(NuxPlayerSchedulingInfo, wake_deadline_monotonic_ns) +      \
+     sizeof(((NuxPlayerSchedulingInfo*)0)->wake_deadline_monotonic_ns))
 #define NUX_HOST_COMMAND_IMPORT_CONFIG_V3_MIN_SIZE                        \
     (offsetof(NuxHostCommandImportConfig, max_command_bytes_per_step) +   \
      sizeof(((NuxHostCommandImportConfig*)0)->max_command_bytes_per_step))

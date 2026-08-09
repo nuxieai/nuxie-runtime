@@ -108,7 +108,7 @@ pub use event_report::{
 pub use gamepad_batch::{
     GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
 };
-pub use instance::{FocusState, StateMachineInstance};
+pub use instance::{FocusState, RuntimeStateMachineAdvanceResult, StateMachineInstance};
 pub use layer_state::RuntimeLayerState;
 pub(crate) use listener_action::{
     RuntimeScheduledListenerAction, RuntimeScheduledListenerActionExecutor,

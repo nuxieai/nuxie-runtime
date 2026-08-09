@@ -4257,7 +4257,7 @@ mod owned_context_tests {
             .and_then(|mut items| items.pop())
             .expect("authored row");
 
-        assert!(row.borrow().parent_relay.parents.borrow().is_empty());
+        assert!(!row.borrow().has_parents());
     }
 
     #[test]

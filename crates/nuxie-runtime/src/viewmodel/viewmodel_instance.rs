@@ -295,22 +295,122 @@ impl RuntimeOwnedViewModelHandle {
         roots: &[Self],
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<RuntimeViewModelChange>> {
+        Some(
+            Self::resolve_change_capture_across_with_owners(roots, capture)?
+                .into_iter()
+                .map(|(_, change)| change)
+                .collect(),
+        )
+    }
+
+    /// Resolve a captured journal together with the exact retained owner of
+    /// each changed cell. Consumers that publish occurrence invalidation need
+    /// the owner relay, not merely its semantic identity: one child can be
+    /// shared beneath multiple independently bound roots.
+    pub fn resolve_change_capture_with_owners(
+        &self,
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
+        Self::resolve_change_capture_across_with_owners(std::slice::from_ref(self), capture)
+    }
+
+    pub fn resolve_change_capture_across_with_owners(
+        roots: &[Self],
+        capture: RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
         let captured = capture.finish().ok()?;
         let mut changes = Vec::with_capacity(captured.len());
         for change in captured {
-            let (owner_instance_identity, property_index) = roots.iter().find_map(|root| {
+            let (owner, property_index) = roots.iter().find_map(|root| {
                 let mut visited = BTreeSet::new();
-                root.instance
-                    .borrow()
-                    .change_identity_for_cell(change.cell_identity, &mut visited)
+                root.change_owner_for_cell(change.cell_identity, &mut visited)
             })?;
-            changes.push(RuntimeViewModelChange {
-                owner_instance_identity,
-                property_index,
-                value: change.value,
-            });
+            changes.push((
+                owner.clone(),
+                RuntimeViewModelChange {
+                    owner_instance_identity: owner.instance_identity(),
+                    property_index,
+                    value: change.value,
+                },
+            ));
         }
         Some(changes)
+    }
+
+    fn change_owner_for_cell(
+        &self,
+        cell_identity: usize,
+        visited: &mut BTreeSet<u64>,
+    ) -> Option<(Self, usize)> {
+        let instance = self.instance.try_borrow().ok()?;
+        if !visited.insert(instance.allocation_identity) {
+            return None;
+        }
+        macro_rules! scalar_cells {
+            ($($values:expr),+ $(,)?) => {
+                $(
+                    if let Some(value) = $values
+                        .iter()
+                        .find(|value| value.cell.capture_identity() == cell_identity)
+                    {
+                        return Some((self.clone(), value.property_index));
+                    }
+                )+
+            };
+        }
+        scalar_cells!(
+            instance.numbers,
+            instance.booleans,
+            instance.strings,
+            instance.colors,
+            instance.enums,
+            instance.symbol_list_indices,
+            instance.lists,
+            instance.assets,
+            instance.font_assets,
+            instance.blob_assets,
+            instance.artboards,
+            instance.triggers,
+        );
+        for child in &instance.view_models {
+            if child.endpoint.cell().capture_identity() == cell_identity {
+                return Some((self.clone(), child.property_index));
+            }
+            if let Some(linked) = child.endpoint.linked_instance()
+                && let Some(found) = (Self { instance: linked })
+                    .change_owner_for_cell(cell_identity, visited)
+            {
+                return Some(found);
+            }
+        }
+        for list in &instance.lists {
+            let items = list.value.try_borrow().ok()?;
+            for item in &items.items {
+                if let Some(found) = (Self {
+                    instance: Rc::clone(&item.instance),
+                })
+                .change_owner_for_cell(cell_identity, visited)
+                {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    /// Occurrence-facing generation propagated through the runtime-owned
+    /// parent topology. A child or list-item mutation updates every currently
+    /// reachable root without retaining stale relationships after unlink.
+    pub fn observable_mutation_generation(&self) -> u64 {
+        self.instance
+            .borrow()
+            .parent_relay
+            .observable_mutation_generation()
+    }
+
+    pub fn mark_observable_mutation(&self, generation: u64) {
+        let relay = Rc::clone(&self.instance.borrow().parent_relay);
+        RuntimeOwnedViewModelParentRelay::mark_observable_mutation(&relay, generation);
     }
 
     pub(crate) fn add_rebind_dependent(&self, sink: &RuntimeCellDirtSink) {
@@ -1322,63 +1422,6 @@ impl From<RuntimeOwnedViewModelInstance> for RuntimeOwnedViewModelHandle {
 }
 
 impl RuntimeOwnedViewModelInstance {
-    fn change_identity_for_cell(
-        &self,
-        cell_identity: usize,
-        visited: &mut BTreeSet<u64>,
-    ) -> Option<(u64, usize)> {
-        if !visited.insert(self.allocation_identity) {
-            return None;
-        }
-        macro_rules! scalar_cells {
-            ($($values:expr),+ $(,)?) => {
-                $(
-                    if let Some(value) = $values
-                        .iter()
-                        .find(|value| value.cell.capture_identity() == cell_identity)
-                    {
-                        return Some((self.instance_identity, value.property_index));
-                    }
-                )+
-            };
-        }
-        scalar_cells!(
-            self.numbers,
-            self.booleans,
-            self.strings,
-            self.colors,
-            self.enums,
-            self.symbol_list_indices,
-            self.lists,
-            self.assets,
-            self.font_assets,
-            self.blob_assets,
-            self.artboards,
-            self.triggers,
-        );
-        for child in &self.view_models {
-            if child.endpoint.cell().capture_identity() == cell_identity {
-                return Some((self.instance_identity, child.property_index));
-            }
-            if let Some(linked) = child.endpoint.linked_instance()
-                && let Ok(linked) = linked.try_borrow()
-                && let Some(found) = linked.change_identity_for_cell(cell_identity, visited)
-            {
-                return Some(found);
-            }
-        }
-        for list in &self.lists {
-            for item in &list.value.borrow().items {
-                if let Ok(item) = item.instance.try_borrow()
-                    && let Some(found) = item.change_identity_for_cell(cell_identity, visited)
-                {
-                    return Some(found);
-                }
-            }
-        }
-        None
-    }
-
     /// Whether this retained instance is currently reachable through another
     /// instance's ViewModel or list property.
     ///

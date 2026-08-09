@@ -28,6 +28,7 @@ pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
 };
 
+use nuxie::host_interfaces::{RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction};
 use nuxie::{
     File, LinearAnimationInstance, OwnedArtboardInstance, PersistentFactory,
     RuntimeEventPropertyValue, RuntimeHitResult, RuntimeOwnedViewModelGraphTransaction,
@@ -55,6 +56,18 @@ thread_local! {
     /// callback. Every exported boundary checks this before touching caller
     /// pointers, so a callback cannot reenter any runtime operation.
     static PLATFORM_CALLBACK_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    static VIEW_MODEL_MUTATION_GENERATION: Cell<u64> = const { Cell::new(0) };
+}
+
+fn reserve_view_model_mutation_generation() -> Result<u64, NuxStatus> {
+    VIEW_MODEL_MUTATION_GENERATION.with(|generation| {
+        let next = generation
+            .get()
+            .checked_add(1)
+            .ok_or(NuxStatus::LimitExceeded)?;
+        generation.set(next);
+        Ok(next)
+    })
 }
 
 struct PlatformCallbackGuard;
@@ -162,13 +175,97 @@ pub struct NuxFile {
 struct ArtboardOccurrence {
     instance: RefCell<OwnedArtboardInstance>,
     bound_view_model: RefCell<Option<ViewModelInstance>>,
+    observed_bound_view_model_generation: Cell<u64>,
     has_script_assets: bool,
     script_callback_factory_domain: Rc<RefCell<Option<CallbackRendererDomain>>>,
     #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
     apple_assets: Option<Arc<apple_assets::AppleAssetCatalog>>,
     renderer_domain: RefCell<Option<RendererDomainBinding>>,
+    /// Monotonic occurrence-local revision of the observable runtime snapshot.
+    /// Revision zero is reserved so a new occurrence requires presentation.
+    render_revision: Cell<u64>,
+    presented_render_revision: Cell<u64>,
+    /// Last renderer generation whose invalidation was folded into the
+    /// occurrence revision. Zero means no generational renderer was bound.
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    observed_renderer_generation: Cell<u64>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
+}
+
+impl ArtboardOccurrence {
+    fn invalidate_render(&self) -> Result<u64, NuxStatus> {
+        let revision = self.next_render_revision()?;
+        self.render_revision.set(revision);
+        Ok(revision)
+    }
+
+    fn next_render_revision(&self) -> Result<u64, NuxStatus> {
+        self.render_revision
+            .get()
+            .checked_add(1)
+            .ok_or(NuxStatus::LimitExceeded)
+    }
+
+    /// Fold one already-committed occurrence mutation into presentation
+    /// demand. All C entry points which can mutate the shared artboard use
+    /// this seam so an acknowledgement can never outlive the state it names.
+    fn commit_runtime_change(&self, changed: bool) -> Result<(), NuxStatus> {
+        if changed {
+            self.invalidate_render()?;
+        }
+        Ok(())
+    }
+
+    fn commit_runtime_change_or_poison(&self, changed: bool) -> NuxStatus {
+        match self.commit_runtime_change(changed) {
+            Ok(()) => NuxStatus::Ok,
+            Err(status) => {
+                self.poisoned.set(true);
+                status
+            }
+        }
+    }
+
+    fn acknowledge_presented(&self, revision: u64) -> Result<(), NuxStatus> {
+        if revision == 0 || revision != self.render_revision.get() {
+            return Err(NuxStatus::HandleMismatch);
+        }
+        self.presented_render_revision.set(revision);
+        Ok(())
+    }
+
+    fn refresh_renderer_domain_invalidation(&self) -> Result<(), NuxStatus> {
+        #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+        {
+            let generation = match &*self.renderer_domain.borrow() {
+                Some(RendererDomainBinding::Metal { domain, .. }) => {
+                    domain.generation.load(std::sync::atomic::Ordering::Relaxed)
+                }
+                _ => return Ok(()),
+            };
+            if generation != self.observed_renderer_generation.get() {
+                self.invalidate_render()?;
+                self.observed_renderer_generation.set(generation);
+            }
+        }
+        Ok(())
+    }
+
+    fn refresh_bound_view_model_invalidation(&self) -> Result<(), NuxStatus> {
+        let generation = self
+            .bound_view_model
+            .borrow()
+            .as_ref()
+            .map_or(0, |view_model| {
+                view_model.handle().observable_mutation_generation()
+            });
+        if generation != self.observed_bound_view_model_generation.get() {
+            self.invalidate_render()?;
+            self.observed_bound_view_model_generation.set(generation);
+        }
+        Ok(())
+    }
 }
 
 /// Stable renderer factory retained only by an authenticated scripted File.
@@ -273,6 +370,7 @@ pub struct NuxArtboardInstance {
 /// [`NuxArtboardInstance`] it was created from.
 pub struct NuxStateMachineInstance {
     instance: RefCell<StateMachineInstance>,
+    occurrence: Rc<ArtboardOccurrence>,
     owner_thread: ThreadId,
     provenance: Arc<()>,
 }
@@ -858,6 +956,61 @@ impl Default for NuxPlayerStepInfo {
     }
 }
 
+/// Product-neutral scheduling facts captured by one successful atomic player
+/// step. They are deliberately independent from `keep_going`, whose meaning
+/// remains the exact pinned C++ `advanceAndApply` return value.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerSchedulingInfo {
+    pub struct_size: u32,
+    /// This committed operation changed observable runtime state.
+    pub dirty: bool,
+    /// No selected root or nested runtime occurrence needs continuation.
+    pub settled: bool,
+    /// The current occurrence revision has not yet been presented.
+    pub render_required: bool,
+    /// Whether `wake_deadline_monotonic_ns` contains a deadline.
+    pub has_wake_deadline: bool,
+    /// Clock whose epoch defines `wake_deadline_monotonic_ns`.
+    pub wake_deadline_clock: NuxMonotonicClockDomain,
+    /// Exact occurrence-local revision associated with `render_required`.
+    pub render_revision: u64,
+    /// Absolute nanoseconds in `wake_deadline_clock`'s named domain.
+    /// The current runtime has no time-based deferred work and reports this
+    /// field absent rather than manufacturing a host-policy deadline.
+    pub wake_deadline_monotonic_ns: u64,
+}
+
+/// Explicit domain for an optional absolute monotonic deadline. Epochs are
+/// intentionally not interchangeable across domains or processes.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxMonotonicClockDomain {
+    Unspecified = 0,
+    PosixMonotonic = 1,
+    AppleContinuous = 2,
+    WindowsPerformanceCounter = 3,
+}
+
+pub const NUX_PLAYER_SCHEDULING_INFO_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerSchedulingInfo, wake_deadline_monotonic_ns)
+        + std::mem::size_of::<u64>();
+
+impl Default for NuxPlayerSchedulingInfo {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            dirty: false,
+            settled: false,
+            render_required: false,
+            has_wake_deadline: false,
+            wake_deadline_clock: NuxMonotonicClockDomain::Unspecified,
+            render_revision: 0,
+            wake_deadline_monotonic_ns: 0,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NuxHostValueKind {
@@ -1134,6 +1287,7 @@ pub struct NuxPlayerStepResult {
     code: Box<[u8]>,
     message: Box<[u8]>,
     keep_going: bool,
+    scheduling: NuxPlayerSchedulingInfo,
     pointer_results: Vec<NuxPlayerPointerHit>,
     state_changes: Vec<OwnedPlayerStateChange>,
     events: Vec<OwnedPlayerEvent>,
@@ -2045,6 +2199,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                     occurrence: Rc::new(ArtboardOccurrence {
                         instance: RefCell::new(instance),
                         bound_view_model: RefCell::new(None),
+                        observed_bound_view_model_generation: Cell::new(0),
                         has_script_assets: file_has_script_assets(&file.file),
                         script_callback_factory_domain: Rc::clone(
                             &file.script_callback_factory_domain,
@@ -2055,6 +2210,13 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         ))]
                         apple_assets: file.apple_assets.clone(),
                         renderer_domain: RefCell::new(None),
+                        render_revision: Cell::new(1),
+                        presented_render_revision: Cell::new(0),
+                        #[cfg(all(
+                            feature = "apple-metal",
+                            any(target_os = "ios", target_os = "macos")
+                        ))]
+                        observed_renderer_generation: Cell::new(0),
                         active: Cell::new(false),
                         poisoned: Cell::new(false),
                     }),
@@ -2150,6 +2312,10 @@ pub unsafe extern "C" fn nux_artboard_instance_advance(
             return NuxStatus::ReentrantCall;
         };
         let changed = artboard.advance(elapsed_seconds);
+        let status = instance.occurrence.commit_runtime_change_or_poison(changed);
+        if status != NuxStatus::Ok {
+            return status;
+        }
         if let Some(out_changed) = unsafe { out_changed.as_mut() } {
             *out_changed = changed;
         }
@@ -2302,6 +2468,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new(
         unsafe {
             let handle = Box::into_raw(Box::new(NuxStateMachineInstance {
                 instance: RefCell::new(state_machine),
+                occurrence: Rc::clone(&instance.occurrence),
                 owner_thread: instance.owner_thread,
                 provenance: Arc::clone(&instance.provenance),
             }));
@@ -2385,6 +2552,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new_default(
         unsafe {
             let handle = Box::into_raw(Box::new(NuxStateMachineInstance {
                 instance: RefCell::new(state_machine),
+                occurrence: Rc::clone(&instance.occurrence),
                 owner_thread: instance.owner_thread,
                 provenance: Arc::clone(&instance.provenance),
             }));
@@ -2716,6 +2884,7 @@ fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlaye
         code: bounded_diagnostic_bytes(status_code(status)),
         message: bounded_diagnostic_bytes(message),
         keep_going: false,
+        scheduling: NuxPlayerSchedulingInfo::default(),
         pointer_results: Vec::new(),
         state_changes: Vec::new(),
         events: Vec::new(),
@@ -3342,6 +3511,22 @@ fn player_step_body(
         Ok(guard) => guard,
         Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
     };
+    if let Err(status) = player.artboard.refresh_renderer_domain_invalidation() {
+        player.artboard.poisoned.set(true);
+        return publish_player_step_failure(
+            out_result,
+            status,
+            "player render revision overflowed during renderer invalidation",
+        );
+    }
+    if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
+        player.artboard.poisoned.set(true);
+        return publish_player_step_failure(
+            out_result,
+            status,
+            "player render revision overflowed during view-model invalidation",
+        );
+    }
     let bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
@@ -3439,18 +3624,19 @@ fn player_step_body(
     let mut state_changes = Vec::new();
     let mut reported_events = Vec::new();
     let mut script_host = TransactionalScriptHost;
-    let keep_going = match &mut *player_instance {
+    let (keep_going, mut runtime_dirty) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
+            let mut input_dirty = false;
             for input in prepared.inputs {
                 match input {
                     PlannedPlayerInput::Bool { index, value } => {
-                        let _ = machine.set_bool(index, value);
+                        input_dirty |= machine.set_bool(index, value);
                     }
                     PlannedPlayerInput::Number { index, value } => {
-                        let _ = machine.set_number(index, value);
+                        input_dirty |= machine.set_number(index, value);
                     }
                     PlannedPlayerInput::Trigger { index } => {
-                        let _ = machine.fire_trigger(index);
+                        input_dirty |= machine.fire_trigger(index);
                     }
                 }
             }
@@ -3479,12 +3665,12 @@ fn player_step_body(
             // those before advancement, then append events authored by the
             // advance itself so the result preserves C++ production order.
             reported_events = machine.take_reported_events(artboard.raw());
-            let keep_going = match artboard.try_advance_with_state_machines_and_script_host(
+            let advance = match artboard.try_advance_with_state_machines_and_script_host_result(
                 std::slice::from_mut(machine),
                 prepared.elapsed_seconds,
                 &mut script_host,
             ) {
-                Ok(keep_going) => keep_going,
+                Ok(advance) => advance,
                 Err(error) => {
                     player.artboard.poisoned.set(true);
                     return publish_player_step_failure(
@@ -3537,10 +3723,12 @@ fn player_step_body(
                 });
             }
             reported_events.extend(machine.take_reported_events(artboard.raw()));
-            keep_going
+            (advance.keep_going, input_dirty || advance.changed)
         }
         PlayerInstance::LinearAnimation(animation) => {
             pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
+            let previous_time = animation.time();
+            let previous_total_time = animation.total_time();
             let more = artboard
                 .raw_mut()
                 .advance_linear_animation_instance_with_events(
@@ -3548,10 +3736,10 @@ fn player_step_body(
                     prepared.elapsed_seconds,
                     &mut reported_events,
                 );
-            let _ = artboard
+            let applied_changed = artboard
                 .raw_mut()
                 .apply_linear_animation_instance(animation, 1.0);
-            let artboard_more = match artboard.try_advance(prepared.elapsed_seconds) {
+            let artboard_changed = match artboard.try_advance(prepared.elapsed_seconds) {
                 Ok(changed) => changed,
                 Err(error) => {
                     player.artboard.poisoned.set(true);
@@ -3562,22 +3750,29 @@ fn player_step_body(
                     );
                 }
             };
-            more || artboard_more
-                || artboard
-                    .raw()
-                    .linear_animation_instance_keep_going(animation)
+            let linear_keep_going = artboard
+                .raw()
+                .linear_animation_instance_keep_going(animation);
+            let dirty = animation.time().to_bits() != previous_time.to_bits()
+                || animation.total_time().to_bits() != previous_total_time.to_bits()
+                || applied_changed
+                || artboard_changed;
+            (more || artboard_changed || linear_keep_going, dirty)
         }
         PlayerInstance::StaticArtboard => {
             pointer_results.resize(prepared.pointers.len(), NuxPlayerPointerHit::None);
-            if let Err(error) = artboard.try_advance(0.0) {
-                player.artboard.poisoned.set(true);
-                return publish_player_step_failure(
-                    out_result,
-                    NuxStatus::RuntimeError,
-                    format!("player advance failed: {error:#}"),
-                );
-            }
-            true
+            let dirty = match artboard.try_advance(0.0) {
+                Ok(dirty) => dirty,
+                Err(error) => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        format!("player advance failed: {error:#}"),
+                    );
+                }
+            };
+            (true, dirty)
         }
     };
 
@@ -3614,24 +3809,50 @@ fn player_step_body(
     let (host_commands, host_values) = flatten_host_commands(commands);
     #[cfg(not(feature = "scripting"))]
     let (host_commands, host_values) = (Vec::new(), Vec::new());
-    let view_model_changes = match (bound_view_model.as_ref(), change_capture) {
-        (Some(view_model), Some(capture)) => match view_model.resolve_change_capture(capture) {
-            Some(changes) => data_binding::own_view_model_changes(
-                data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
-                step.correlation_id,
-                changes,
-            ),
-            None => {
+    let resolved_view_model_changes = match (bound_view_model.as_ref(), change_capture) {
+        (Some(view_model), Some(capture)) => {
+            match view_model.resolve_change_capture_with_owners(capture) {
+                Some(changes) => changes,
+                None => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::LimitExceeded,
+                        "runtime view-model change journal exceeded its bound or left the bound graph",
+                    );
+                }
+            }
+        }
+        (None, None) => Vec::new(),
+        _ => unreachable!("capture exists exactly when a view model is bound"),
+    };
+    let changed_view_model_owners = resolved_view_model_changes
+        .iter()
+        .map(|(owner, _)| owner.clone())
+        .collect::<Vec<_>>();
+    let view_model_changes = data_binding::own_view_model_changes(
+        data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
+        step.correlation_id,
+        resolved_view_model_changes
+            .into_iter()
+            .map(|(_, change)| change)
+            .collect(),
+    );
+    runtime_dirty |= !view_model_changes.is_empty();
+    let bound_view_model_generation_commit = if view_model_changes.is_empty() {
+        None
+    } else {
+        match reserve_view_model_mutation_generation() {
+            Ok(next) => Some(next),
+            Err(status) => {
                 player.artboard.poisoned.set(true);
                 return publish_player_step_failure(
                     out_result,
-                    NuxStatus::LimitExceeded,
-                    "runtime view-model change journal exceeded its bound or left the bound graph",
+                    status,
+                    "bound view-model mutation generation overflowed",
                 );
             }
-        },
-        (None, None) => Vec::new(),
-        _ => unreachable!("capture exists exactly when a view model is bound"),
+        }
     };
     let Some(owned_result_bytes) = player_step_owned_result_bytes(
         &pointer_results,
@@ -3656,13 +3877,34 @@ fn player_step_body(
             "player step result exceeds its aggregate owned-byte bound",
         );
     }
-    publish_player_step_result(
-        out_result,
+    let render_revision = if runtime_dirty {
+        match player.artboard.next_render_revision() {
+            Ok(revision) => revision,
+            Err(status) => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "player render revision overflowed",
+                );
+            }
+        }
+    } else {
+        player.artboard.render_revision.get()
+    };
+    let pending = PendingHandlePublication::new(
         NuxPlayerStepResult {
             status: NuxStatus::Ok,
             code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
             message: Box::default(),
             keep_going,
+            scheduling: NuxPlayerSchedulingInfo {
+                dirty: runtime_dirty,
+                settled: false,
+                render_required: render_revision != player.artboard.presented_render_revision.get(),
+                render_revision,
+                ..NuxPlayerSchedulingInfo::default()
+            },
             pointer_results,
             state_changes,
             events,
@@ -3670,10 +3912,54 @@ fn player_step_body(
             host_values,
             view_model_changes,
         },
+        HandleKind::PlayerStepResult,
     );
+    #[cfg(test)]
+    if PANIC_BEFORE_STEP_RESULT_REGISTRATION.with(|armed| armed.replace(false)) {
+        panic!("injected panic before player-step result registration");
+    }
+    register_handle(
+        pending.handle,
+        HandleKind::PlayerStepResult,
+        thread::current().id(),
+    );
+    unsafe { *out_result = pending.handle };
+    #[cfg(test)]
+    if PANIC_AFTER_STEP_RESULT_PUBLICATION.with(|armed| armed.replace(false)) {
+        panic!("injected panic after player-step result publication");
+    }
     if let Some(transaction) = view_model_transaction.take() {
         transaction.commit();
     }
+    if let Some(next) = bound_view_model_generation_commit {
+        for owner in &changed_view_model_owners {
+            owner.mark_observable_mutation(next);
+        }
+        player
+            .artboard
+            .observed_bound_view_model_generation
+            .set(next);
+    }
+    let settled = match &*player_instance {
+        PlayerInstance::StateMachine(machine) => {
+            !machine.needs_advance()
+                && machine.reported_event_count() == 0
+                && !machine.has_pending_listener_view_model_reports()
+                && !artboard.raw().has_ongoing_nested_work()
+        }
+        PlayerInstance::LinearAnimation(animation) => {
+            !artboard
+                .raw()
+                .linear_animation_instance_keep_going(animation)
+                && !artboard.raw().has_ongoing_nested_work()
+        }
+        PlayerInstance::StaticArtboard => !artboard.raw().has_ongoing_nested_work(),
+    };
+    unsafe { (*pending.handle).scheduling.settled = settled };
+    if runtime_dirty {
+        player.artboard.render_revision.set(render_revision);
+    }
+    let _ = pending.finish();
     NuxStatus::Ok
 }
 
@@ -3755,6 +4041,63 @@ pub unsafe extern "C" fn nux_player_step_result_info(
             view_model_change_count: result.view_model_changes.len(),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_STEP_INFO_V3_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+/// Copy the product-neutral scheduling snapshot owned by one successful step.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_scheduling(
+    result: *const NuxPlayerStepResult,
+    out_scheduling: *mut NuxPlayerSchedulingInfo,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        unsafe {
+            write_caller_struct(
+                out_scheduling,
+                &result.scheduling,
+                NUX_PLAYER_SCHEDULING_INFO_V3_MIN_SIZE,
+            )
+        }
+        .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+/// Acknowledge that an exact occurrence revision was successfully presented.
+/// Stale or future revisions return HANDLE_MISMATCH and cannot clear newer
+/// render work.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_acknowledge_presented(
+    player: *mut NuxPlayer,
+    render_revision: u64,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _player_call = enter_status_handle!(player, HandleKind::Player);
+        let Some(player) = (unsafe { player.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let _occurrence_call = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        if let Err(status) = player.artboard.refresh_renderer_domain_invalidation() {
+            player.artboard.poisoned.set(true);
+            return status;
+        }
+        if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
+            player.artboard.poisoned.set(true);
+            return status;
+        }
+        player
+            .artboard
+            .acknowledge_presented(render_revision)
             .map_or_else(|status| status, |()| NuxStatus::Ok)
     })
 }
@@ -4289,11 +4632,12 @@ fn state_machine_input_by_name(
     let Some(index) = machine.input_index_named(name) else {
         return NuxStatus::NotFound;
     };
-    if apply(&mut machine, index) {
-        NuxStatus::Ok
-    } else {
-        NuxStatus::InvalidArgument
+    if !apply(&mut machine, index) {
+        return NuxStatus::InvalidArgument;
     }
+    state_machine
+        .occurrence
+        .commit_runtime_change_or_poison(true)
 }
 
 /// Advance the artboard while driving `state_machine`. The state machine must
@@ -4339,6 +4683,10 @@ pub unsafe extern "C" fn nux_state_machine_instance_advance(
             return NuxStatus::ReentrantCall;
         };
         let changed = artboard.advance_with_state_machine(&mut machine, elapsed_seconds);
+        let status = instance.occurrence.commit_runtime_change_or_poison(changed);
+        if status != NuxStatus::Ok {
+            return status;
+        }
         if let Some(out_changed) = unsafe { out_changed.as_mut() } {
             *out_changed = changed;
         }
@@ -4458,6 +4806,10 @@ fn state_machine_pointer_event(
         return NuxStatus::ReentrantCall;
     };
     let hit = dispatch(&mut machine, &mut artboard);
+    let status = instance.occurrence.commit_runtime_change_or_poison(true);
+    if status != NuxStatus::Ok {
+        return status;
+    }
     if let Some(out_hit) = unsafe { out_hit.as_mut() } {
         *out_hit = hit;
     }
@@ -4580,13 +4932,8 @@ pub unsafe extern "C" fn nux_view_model_instance_set_number(
     value: f32,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        view_model_set(view_model, name_path, |view_model, name| {
-            let changed = view_model.set_number(name, value);
-            changed
-                || view_model
-                    .raw()
-                    .number_source_handle_by_property_name_path(name)
-                    .is_some()
+        view_model_set(view_model, name_path, |transaction, view_model, name| {
+            transaction.set_number(view_model, name, value)
         })
     })
 }
@@ -4601,13 +4948,8 @@ pub unsafe extern "C" fn nux_view_model_instance_set_bool(
     value: bool,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        view_model_set(view_model, name_path, |view_model, name| {
-            let changed = view_model.set_bool(name, value);
-            changed
-                || view_model
-                    .raw()
-                    .boolean_source_handle_by_property_name_path(name)
-                    .is_some()
+        view_model_set(view_model, name_path, |transaction, view_model, name| {
+            transaction.set_boolean(view_model, name, value)
         })
     })
 }
@@ -4628,13 +4970,8 @@ pub unsafe extern "C" fn nux_view_model_instance_set_string(
         let Ok(value) = (unsafe { CStr::from_ptr(value) }).to_str() else {
             return NuxStatus::InvalidArgument;
         };
-        view_model_set(view_model, name_path, |view_model, name| {
-            let changed = view_model.set_string(name, value);
-            changed
-                || view_model
-                    .raw()
-                    .string_source_handle_by_property_name_path(name)
-                    .is_some()
+        view_model_set(view_model, name_path, |transaction, view_model, name| {
+            transaction.set_string(view_model, name, value.as_bytes())
         })
     })
 }
@@ -4642,7 +4979,11 @@ pub unsafe extern "C" fn nux_view_model_instance_set_string(
 fn view_model_set(
     view_model: *mut NuxViewModelInstance,
     name_path: *const c_char,
-    apply: impl FnOnce(&mut ViewModelInstance, &str) -> bool,
+    apply: impl FnOnce(
+        &mut RuntimeOwnedViewModelTransaction,
+        &RuntimeOwnedViewModelHandle,
+        &str,
+    ) -> bool,
 ) -> NuxStatus {
     let _view_model_call = match enter_handle(view_model, HandleKind::ViewModel) {
         Ok(guard) => guard,
@@ -4660,14 +5001,38 @@ fn view_model_set(
     let Ok(name) = (unsafe { CStr::from_ptr(name_path) }).to_str() else {
         return NuxStatus::InvalidArgument;
     };
-    let Ok(mut view_model_instance) = view_model.instance.try_borrow_mut() else {
+    let Ok(view_model_instance) = view_model.instance.try_borrow() else {
         return NuxStatus::ReentrantCall;
     };
-    if apply(&mut view_model_instance, name) {
-        NuxStatus::Ok
-    } else {
-        NuxStatus::NotFound
+    let root = view_model_instance.handle().clone();
+    drop(view_model_instance);
+    let next_generation = match reserve_view_model_mutation_generation() {
+        Ok(generation) => generation,
+        Err(status) => return status,
+    };
+    let Some(mut transaction) = RuntimeOwnedViewModelTransaction::begin() else {
+        return NuxStatus::ReentrantCall;
+    };
+    let Some(capture) = RuntimeViewModelChangeCapture::begin() else {
+        return NuxStatus::ReentrantCall;
+    };
+    if !apply(&mut transaction, &root, name) {
+        return NuxStatus::NotFound;
     }
+    let Some(owner_changes) = root.resolve_change_capture_with_owners(capture) else {
+        return NuxStatus::RuntimeError;
+    };
+    let mut changed_owners = Vec::new();
+    for (owner, _) in owner_changes {
+        if !changed_owners.iter().any(|known| owner.ptr_eq(known)) {
+            changed_owners.push(owner);
+        }
+    }
+    transaction.commit();
+    for owner in changed_owners {
+        owner.mark_observable_mutation(next_generation);
+    }
+    NuxStatus::Ok
 }
 
 /// Bind `view_model` to `instance`'s own data binds and nested-artboard
@@ -4720,7 +5085,15 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         };
         artboard.bind_view_model(&view_model_instance);
         *bound_view_model = Some(view_model_instance.clone());
-        NuxStatus::Ok
+        instance
+            .occurrence
+            .observed_bound_view_model_generation
+            .set(
+                view_model_instance
+                    .handle()
+                    .observable_mutation_generation(),
+            );
+        instance.occurrence.commit_runtime_change_or_poison(true)
     })
 }
 
@@ -5027,6 +5400,77 @@ mod firewall_tests {
             unsafe { nux_player_step_result_free(result) },
             NuxStatus::Ok
         );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn actual_player_step_publication_panic_does_not_rearm_render_revision() {
+        let file = trusted_script_file("script_create_viewmodel_instance.riv");
+        let (artboard, view_model, player) = default_script_player(file);
+        let revision_before = unsafe { (&(*player).artboard).render_revision.get() };
+        let step = NuxPlayerStep {
+            elapsed_seconds: 0.016,
+            ..NuxPlayerStep::default()
+        };
+        let mut result = ptr::null_mut();
+        PANIC_AFTER_STEP_RESULT_PUBLICATION.with(|armed| armed.set(true));
+
+        assert_eq!(
+            unsafe { nux_player_step(player, &step, &mut result) },
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(
+            unsafe { (&(*player).artboard).render_revision.get() },
+            revision_before,
+            "an unpublished operation cannot rearm presentation demand"
+        );
+
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_view_model_instance_free(view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn rebinding_a_shared_occurrence_rejects_the_previous_render_ack() {
+        let file = trusted_script_file("script_create_viewmodel_instance.riv");
+        let (artboard, view_model, player) = default_script_player(file);
+        let revision = unsafe { (&(*player).artboard).render_revision.get() };
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, revision) },
+            NuxStatus::Ok
+        );
+
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(artboard, view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(player, revision) },
+            NuxStatus::HandleMismatch
+        );
+
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_view_model_instance_free(view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     }
 
     #[cfg(feature = "scripting")]

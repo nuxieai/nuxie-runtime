@@ -835,7 +835,7 @@ pub use gpu_canvas::{
 };
 pub use logical_frame::{
     LogicalFrame, LogicalFrameConfig, LogicalFrameReport, LogicalGradient, LogicalPathHandle,
-    LogicalPathPaint, LogicalResourceCounts, NullLogicalRenderer,
+    LogicalPathPaint, LogicalResourceCounts, NullLogicalRenderer, RasterOrderingPlan,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
@@ -843,6 +843,10 @@ pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {
+    /// Backend-neutral pixel-local-storage planning that mirrors Rive's
+    /// raster-ordering renderer. WGPU does not expose this interlock; use it
+    /// with `NullLogicalRenderer` for production logical-frame consumption.
+    RasterOrdering,
     Msaa,
     ClockwiseAtomic,
 }
@@ -1050,6 +1054,11 @@ impl WgpuFactory {
         mode: RenderMode,
         force_vertex_storage_polyfill: bool,
     ) -> Result<Self, RendererError> {
+        if mode == RenderMode::RasterOrdering {
+            return Err(RendererError::Unsupported(
+                "raster-ordering mode has no WGPU backend",
+            ));
+        }
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         #[cfg(not(target_arch = "wasm32"))]
         let requested_device = request_core_wgpu_device(
@@ -7712,8 +7721,10 @@ fn prepare_path_draw_with_pixel_bounds(
         if prepared.is_collinear {
             return None;
         }
-        let use_interior = mode == RenderMode::ClockwiseAtomic
-            && paint.feather == 0.0
+        let use_interior = matches!(
+            mode,
+            RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+        ) && paint.feather == 0.0
             && prepared.should_use_interior(path, state.transform);
         let has_geometry = if use_interior {
             let clockwise_override = mode == RenderMode::ClockwiseAtomic;
@@ -7743,7 +7754,7 @@ fn prepare_path_draw_with_pixel_bounds(
                 &path.raw_path,
                 state.transform,
                 path.fill_rule,
-                true,
+                mode == RenderMode::ClockwiseAtomic,
             );
             match (uses_atlas, negate) {
                 (true, true) => draw::FeatherFillDirection::Reverse,
@@ -7759,13 +7770,14 @@ fn prepare_path_draw_with_pixel_bounds(
             stroke,
             direction,
         )?;
-        let pass_count = if mode == RenderMode::Msaa || is_stroke {
-            1
-        } else if draw::feather_requires_atlas(paint.feather, state.transform, false) {
-            1
-        } else {
-            2
-        };
+        let pass_count =
+            if mode == RenderMode::RasterOrdering || mode == RenderMode::Msaa || is_stroke {
+                1
+            } else if draw::feather_requires_atlas(paint.feather, state.transform, false) {
+                1
+            } else {
+                2
+            };
         let resources = midpoint_resource_counts(&built.tessellation, pass_count);
         Some(Arc::new(PreparedFeatherGeometry {
             mode,
@@ -8088,7 +8100,7 @@ fn logical_flush_draw_resources(
         };
     }
     if matches!(draw.image, Some(ImageDraw::Mesh(_)))
-        || (mode == RenderMode::ClockwiseAtomic && matches!(draw.image, Some(ImageDraw::Rect(_))))
+        || (mode != RenderMode::Msaa && matches!(draw.image, Some(ImageDraw::Rect(_))))
     {
         return logical_flush::ResourceCounters {
             image_draw_count: 1,
@@ -8124,6 +8136,44 @@ fn logical_flush_draw_resources(
             draw_pass_count: pass_count,
             ..Default::default()
         });
+    }
+
+    if mode == RenderMode::RasterOrdering {
+        if draw.paint.feather != 0.0 {
+            return draw
+                .prepared_feather(mode)
+                .map(|prepared| prepared.resources)
+                .unwrap_or(logical_flush::ResourceCounters {
+                    draw_pass_count: 1,
+                    ..Default::default()
+                });
+        }
+        if draw.paint.style == RenderPaintStyle::Stroke {
+            return draw
+                .prepared_stroke()
+                .map(|stroke| stroke.resources)
+                .unwrap_or(logical_flush::ResourceCounters {
+                    draw_pass_count: 1,
+                    ..Default::default()
+                });
+        }
+        if draw.authored_should_use_interior() {
+            if let Some(interior) = draw.authored_interior_resources(false, 2) {
+                return interior;
+            }
+        }
+        return draw
+            .authored_fill_tessellation()
+            .map(|mut tessellation| {
+                tessellation.make_double_sided_with_direction(
+                    draw.authored_clockwise_atomic_negate_coverage(draw.path.fill_rule, false),
+                );
+                midpoint_resource_counts(&tessellation, 1)
+            })
+            .unwrap_or(logical_flush::ResourceCounters {
+                draw_pass_count: 1,
+                ..Default::default()
+            });
     }
 
     let outermost_clip = matches!(draw.role, DrawRole::ClipUpdate { parent_id: 0, .. });
@@ -11022,6 +11072,214 @@ mod tests {
                 "logical semantic variant {index} collapsed to an earlier report"
             );
         }
+    }
+
+    #[test]
+    fn raster_ordering_logical_mode_preserves_pls_draw_semantics() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let fill = LogicalPathPaint::default();
+        let draws = [
+            logical_workload_draw(logical_triangle(), FillRule::NonZero, fill),
+            logical_workload_draw(
+                logical_cubic([6.0, 34.0, 14.0, 2.0, 50.0, 62.0, 58.0, 26.0]),
+                FillRule::Clockwise,
+                LogicalPathPaint {
+                    style: RenderPaintStyle::Stroke,
+                    thickness: 2.0,
+                    ..fill
+                },
+            ),
+            logical_workload_draw(
+                logical_triangle(),
+                FillRule::Clockwise,
+                LogicalPathPaint {
+                    feather: 4.0,
+                    ..fill
+                },
+            ),
+        ];
+
+        let report = null_logical_workload(config, &draws, None);
+
+        assert_eq!(report.draw_count, 3);
+        assert_eq!(report.written.draw_records, 3);
+        assert_eq!(
+            report.raster_ordering,
+            Some(RasterOrderingPlan {
+                pixel_local_storage_coverage: true,
+                pixel_local_storage_draws: 3,
+                feather_atlas_draws: 0,
+                authored_draw_order_preserved: true,
+                interlock_barriers: 0,
+                transient_backing_planes: 3,
+                draw_passes: 3,
+            })
+        );
+        assert_eq!(report.production_fallback_draws, 0);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn raster_ordering_is_rejected_by_the_wgpu_factory_boundary() {
+        assert!(matches!(
+            WgpuFactory::new_with_mode(64, 64, RenderMode::RasterOrdering),
+            Err(RendererError::Unsupported(
+                "raster-ordering mode has no WGPU backend"
+            ))
+        ));
+    }
+
+    #[test]
+    fn pinned_custom_draw_workloads_use_raster_ordering_oracle_plan() {
+        const WORKLOADS: [&str; 6] = [
+            "DrawZeroChopStrokes",
+            "DrawOneChopStrokes",
+            "DrawTwoChopStrokes",
+            "DrawOneCuspStrokes",
+            "DrawTwoCuspStrokes",
+            "DrawCustomFeathers",
+        ];
+        let config = LogicalFrameConfig {
+            width: 1_600,
+            height: 1_600,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+
+        for name in WORKLOADS {
+            let (draws, clip) = logical_workload(name);
+            let report = null_logical_workload(config, &draws, clip.as_ref());
+            let plan = report
+                .raster_ordering
+                .as_ref()
+                .expect("RasterOrdering emits an explicit PLS plan");
+            assert_eq!(report.mode, RenderMode::RasterOrdering, "{name}");
+            assert_eq!(report.draw_count, 1_000, "{name}");
+            assert_eq!(plan.draw_passes, report.written.draw_records, "{name}");
+            assert!(plan.pixel_local_storage_coverage, "{name}");
+            assert_eq!(
+                plan.pixel_local_storage_draws + plan.feather_atlas_draws,
+                report.draw_count,
+                "{name}"
+            );
+            assert_eq!(plan.interlock_barriers, 0, "{name}");
+            assert!(plan.authored_draw_order_preserved, "{name}");
+            assert_eq!(plan.transient_backing_planes, 3, "{name}");
+            assert_eq!(report.production_fallback_draws, 0, "{name}");
+            assert!(report.production_typed_output_consumed, "{name}");
+            assert!(report.buffer_write_operations > 0, "{name}");
+            assert!(report.written_bytes > 0, "{name}");
+            assert_eq!(
+                report.buffer_rewinds,
+                report.logical_flushes.len(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn raster_ordering_rewinds_frame_state_and_retains_allocations() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut renderer = NullLogicalRenderer::new(config);
+        let path = renderer.prepare_path(&logical_triangle(), FillRule::NonZero);
+
+        let render_frame = |renderer: &mut NullLogicalRenderer| {
+            renderer.begin_frame();
+            renderer
+                .draw_path(&path, LogicalPathPaint::default())
+                .unwrap();
+            renderer.flush_with_diagnostics().unwrap()
+        };
+        let first = render_frame(&mut renderer);
+        let second = render_frame(&mut renderer);
+
+        assert!(first.allocation_growths > 0);
+        assert_eq!(second.allocation_growths, 0);
+        assert_eq!(first.retained_capacity, second.retained_capacity);
+        assert_eq!(first.written, second.written);
+        assert_eq!(first.shadow_fingerprint, second.shadow_fingerprint);
+        assert_eq!(first.buffer_rewinds, first.logical_flushes.len());
+        assert_eq!(second.buffer_rewinds, second.logical_flushes.len());
+    }
+
+    #[test]
+    fn raster_ordering_selects_the_cpp_feather_atlas_threshold() {
+        let config = LogicalFrameConfig {
+            width: 1_600,
+            height: 1_600,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let draw = logical_workload_draw(
+            logical_triangle(),
+            FillRule::Clockwise,
+            LogicalPathPaint {
+                feather: 100.0,
+                ..Default::default()
+            },
+        );
+
+        let report = null_logical_workload(config, &[draw], None);
+        let plan = report.raster_ordering.unwrap();
+
+        assert_eq!(plan.pixel_local_storage_draws, 0);
+        assert_eq!(plan.feather_atlas_draws, 1);
+        assert_eq!(report.production_fallback_draws, 0);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn raster_ordering_retains_nested_path_clip_updates_in_authored_order() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut renderer = NullLogicalRenderer::new(config);
+        let outer = renderer.prepare_path(&logical_triangle(), FillRule::NonZero);
+        let inner = renderer.prepare_path(
+            &logical_cubic([8.0, 40.0, 16.0, 2.0, 48.0, 62.0, 56.0, 20.0]),
+            FillRule::EvenOdd,
+        );
+        let content = renderer.prepare_path(&logical_triangle(), FillRule::Clockwise);
+
+        renderer.begin_frame();
+        renderer.clip_path(&outer).unwrap();
+        renderer
+            .draw_path(&content, LogicalPathPaint::default())
+            .unwrap();
+        renderer.clip_path(&inner).unwrap();
+        renderer
+            .draw_path(&content, LogicalPathPaint::default())
+            .unwrap();
+        let report = renderer.flush_with_diagnostics().unwrap();
+
+        assert_eq!(report.draw_count, 4);
+        assert_eq!(report.production_fallback_draws, 0);
+        assert!(report.production_typed_output_consumed);
+        assert!(
+            report
+                .raster_ordering
+                .as_ref()
+                .unwrap()
+                .authored_draw_order_preserved
+        );
     }
 
     #[test]

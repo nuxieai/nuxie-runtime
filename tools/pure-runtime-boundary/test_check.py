@@ -1950,6 +1950,26 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade symbol 'RuntimeMystery'", result.stderr)
 
+    def test_rejects_unapproved_direct_nested_portable_abi_paths(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/direct_nested.rs").write_text(
+            "fn leak(_: nuxie::host_interfaces::RuntimeOwnedViewModelInstance) {\n"
+            "    let _ = nuxie::host_interfaces::RuntimeFile::default();\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "portable ABI facade symbol 'host_interfaces::RuntimeOwnedViewModelInstance'",
+            result.stderr,
+        )
+        self.assertIn(
+            "portable ABI facade symbol 'host_interfaces::RuntimeFile'",
+            result.stderr,
+        )
+
     def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/test_support.rs").write_text(

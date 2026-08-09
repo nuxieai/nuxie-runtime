@@ -1,4 +1,5 @@
 import json
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,35 @@ class DistributionToolTests(unittest.TestCase):
         self.size_budgets = json.loads(
             (REPO_ROOT / "crates/nux-capi/size-budgets-v3.json").read_text()
         )
+        self.capi_manifest = tomllib.loads(
+            (REPO_ROOT / "crates/nux-capi/Cargo.toml").read_text()
+        )
+        self.apple_manifest = tomllib.loads(
+            (REPO_ROOT / "crates/nux-apple-runtime/Cargo.toml").read_text()
+        )
+
+    def test_migration_distribution_composes_from_the_upper_apple_leaf(self) -> None:
+        self.assertNotIn("legacy-migration", self.capi_manifest["features"])
+        self.assertNotIn("nux-apple-runtime", self.capi_manifest["dependencies"])
+
+        migration = self.apple_manifest["features"]["migration-distribution"]
+        self.assertEqual(
+            migration,
+            [
+                "apple-product",
+                "dep:nux-capi",
+                "nux-capi/apple-metal",
+                "nux-capi/scripting",
+            ],
+        )
+        capi = self.apple_manifest["dependencies"]["nux-capi"]
+        self.assertEqual(capi["path"], "../nux-capi")
+        self.assertFalse(capi["default-features"])
+        self.assertTrue(capi["optional"])
+
+        self.assertIn('--package nux-apple-runtime', self.builder)
+        self.assertIn('--features migration-distribution', self.builder)
+        self.assertIn('libnux_apple_runtime.a', self.builder)
 
     def test_five_thin_builds_are_reused_by_both_artifacts(self) -> None:
         self.assertEqual(self.builder.count('"${rust_cargo}" build'), 1)
@@ -27,8 +57,8 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('full/NuxieRuntime.xcframework', self.builder)
         self.assertIn('ios/NuxieRuntime.xcframework', self.builder)
         self.assertIn('NuxieRuntime-iOS.xcframework.zip', self.builder)
-        self.assertEqual(self.builder.count('--package nux-capi'), 1)
-        self.assertNotIn('--package nux-apple-runtime', self.builder)
+        self.assertEqual(self.builder.count('--package nux-apple-runtime'), 1)
+        self.assertNotIn('--package nux-capi', self.builder)
 
     def test_build_strips_bitcode_and_uses_the_three_symbol_manifests(self) -> None:
         self.assertIn('--remove-section=__LLVM,__bitcode', self.builder)
@@ -77,6 +107,17 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn("header-symbols", self.verifier)
         self.assertIn("slice-provenance", self.verifier)
         self.assertNotIn("-lnux_capi", self.verifier)
+
+    def test_product_consumers_are_owned_by_the_upper_apple_leaf(self) -> None:
+        apple_smoke = REPO_ROOT / "crates/nux-apple-runtime/smoke"
+        capi_smoke = REPO_ROOT / "crates/nux-capi/smoke"
+        self.assertTrue((apple_smoke / "distribution_legacy_consumer.c").is_file())
+        self.assertTrue((apple_smoke / "distribution_migration_consumer.swift").is_file())
+        self.assertFalse((capi_smoke / "distribution_legacy_consumer.c").exists())
+        portable_swift = (capi_smoke / "distribution_consumer.swift").read_text()
+        self.assertNotIn("NuxieRuntimeFFI", portable_swift)
+        self.assertNotIn("nux_experience_", portable_swift)
+        self.assertNotIn("nux_screen_session_", portable_swift)
 
     def test_release_size_budgets_are_frozen_for_both_artifacts(self) -> None:
         self.assertEqual(self.size_budgets["mode"], "release")

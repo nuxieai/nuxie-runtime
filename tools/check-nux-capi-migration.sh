@@ -18,13 +18,13 @@ trap 'rm -rf "${work_dir}"' EXIT
 RUSTC="${rust_compiler}" "${rust_cargo}" build \
     --manifest-path "${repo_root}/Cargo.toml" \
     --locked \
-    --package nux-capi \
+    --package nux-apple-runtime \
     --no-default-features \
-    --features legacy-migration \
+    --features migration-distribution \
     --profile "${profile}" \
     --target-dir "${target_dir}"
 
-library="${target_dir}/${profile}/libnux_capi.a"
+library="${target_dir}/${profile}/libnux_apple_runtime.a"
 test -f "${library}"
 stripped_library="${work_dir}/libnux_capi.a"
 cp "${library}" "${stripped_library}"
@@ -51,7 +51,7 @@ cp "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" "${headers}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi_apple.h" "${headers}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers}/"
-cp "${repo_root}/crates/nux-capi/include/module.migration.modulemap" \
+cp "${repo_root}/crates/nux-apple-runtime/include/module.migration.modulemap" \
     "${headers}/module.modulemap"
 
 swift_source="${work_dir}/migration_import.swift"
@@ -76,7 +76,7 @@ xcrun clang \
 xcrun clang \
     -std=c11 -Wall -Wextra -Werror \
     -I "${headers}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_legacy_consumer.c" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c" \
     "${stripped_library}" \
     -framework Foundation -framework QuartzCore -framework Metal \
     -framework CoreGraphics -framework ImageIO -framework Security \
@@ -86,7 +86,7 @@ xcrun clang \
 xcrun swiftc \
     -parse-as-library \
     -I "${headers}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift" \
     "${stripped_library}" \
     -o "${work_dir}/swift-consumer"
 "${work_dir}/swift-consumer"

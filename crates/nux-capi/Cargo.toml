@@ -12,16 +12,9 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 default = []
 scripting = ["nuxie/scripting"]
 apple-metal = ["nuxie/renderer", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer"]
-legacy-migration = [
-    "apple-metal",
-    "scripting",
-    "dep:nux-apple-runtime",
-    "nux-apple-runtime/apple-product",
-]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }
-nux-apple-runtime = { path = "../nux-apple-runtime", default-features = false, optional = true }
 nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
 
 [dev-dependencies]

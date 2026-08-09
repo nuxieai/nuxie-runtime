@@ -19,10 +19,17 @@ apple-product = [
     "nuxie-product/scripting",
     "dep:nuxie-apple-adapter",
 ]
+migration-distribution = [
+    "apple-product",
+    "dep:nux-capi",
+    "nux-capi/apple-metal",
+    "nux-capi/scripting",
+]
 
 [dependencies]
 dispatch2 = { version = "0.3.1", default-features = false, features = ["std"], optional = true }
 nux-container = { path = "../nux-container" }
+nux-capi = { path = "../nux-capi", default-features = false, optional = true }
 nuxie = { path = "../nuxie", default-features = false }
 nuxie-product = { path = "../nuxie-product", default-features = false }
 nuxie-apple-adapter = { path = "../nuxie-apple-adapter", optional = true }

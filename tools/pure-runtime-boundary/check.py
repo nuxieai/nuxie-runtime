@@ -80,7 +80,7 @@ FORBIDDEN_DEPENDENCIES.update(UNPROTECTED_WORKSPACE_PACKAGES)
 # package is protected, while the C consumer is restricted to this exact edge
 # and approved symbols.
 PORTABLE_ABI_FACADE_EDGE = ("nux-capi", "nuxie")
-PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer"}
+PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer", "scripting"}
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Artboard",
     "ArtboardInstance",
@@ -98,11 +98,17 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "GpuCanvasPlan",
     "GpuCanvasShader",
     "GpuCanvasShaderLoad",
+    "HostCommand",
+    "HostCommandImportConfig",
+    "HostCommandLimits",
+    "HostValue",
     "ImageDecodeError",
     "ImageFilter",
     "ImageSampler",
     "ImageWrap",
+    "LinearAnimationInstance",
     "Mat2D",
+    "OwnedArtboardInstance",
     "PersistentFactory",
     "PersistentFactoryContext",
     "RawPath",
@@ -117,17 +123,30 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "RenderPath",
     "Renderer",
     "RenderShader",
+    "RuntimeEventPropertyValue",
+    "RuntimeHitResult",
     "RuntimeOwnedViewModelGraphTransaction",
     "RuntimeViewModelChange",
     "RuntimeViewModelChangeCapture",
     "RuntimeViewModelChangeValue",
     "RuntimeViewModelGraphTransactionError",
+    "ScriptError",
+    "ScriptExecutionLimits",
+    "ScriptHost",
     "StateMachineInstance",
+    "StateMachineReportedEvent",
     "StrokeCap",
     "StrokeJoin",
     "ViewModelInstance",
     "WgpuFactory",
     "WgpuFrame",
+}
+PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
+    "host_interfaces": {
+        "RuntimeOwnedViewModelHandle",
+        "RuntimeOwnedViewModelTransaction",
+        "RuntimeViewModelLinkError",
+    },
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"\b(?:prepare_flow_[A-Za-z0-9_]*|import_with_(?:trusted_scripts|"
@@ -171,6 +190,7 @@ PORTABLE_ABI_CONTRACT_SUFFIXES = {
 # ABI file still fail closed.
 APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/Cargo.toml",
+    "crates/nux-capi/build.rs",
     "crates/nux-capi/cbindgen.toml",
     "crates/nux-capi/include/module.modulemap",
     "crates/nux-capi/include/nux_capi.generated.h",
@@ -178,6 +198,7 @@ APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/include/nux_capi_apple.h",
     "crates/nux-capi/smoke/capi_metal_smoke.c",
     "crates/nux-capi/smoke/capi_metal_smoke.swift",
+    "crates/nux-capi/smoke/distribution_consumer.c",
     "crates/nux-capi/src/apple_metal.rs",
     "crates/nux-capi/src/apple_assets.rs",
     "crates/nux-capi/src/lib.rs",
@@ -210,7 +231,13 @@ PORTABLE_ABI_FACADE_TYPE_ALIAS = re.compile(
     + "|".join(sorted(PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS))
     + r")\b"
 )
-PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {"import"}
+PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {
+    "import",
+    "import_trusted_with_host_commands",
+}
+PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS = {
+    "import_with_unsigned_scripts",
+}
 
 # Exact third-party path providers intentionally excluded from the root Cargo
 # workspace. New entries require an architecture-policy review; a blanket
@@ -267,32 +294,19 @@ INTERNAL_DEBT_MARKERS = {
     ),
     "project-data": re.compile(r"\bProjectData|\bproject_data_converter\b"),
     "product-host-commands": re.compile(
-        r"\bhost_commands\b|\bHost(?:Command|Value|CycleCheckpoint|EffectCheckpoint)\b|"
         r"\b(?:begin|rollback)_host_cycle\b|\b(?:checkpoint|rollback)_host_effects\b|"
-        r"\bdrain_(?:flow_)?host_commands\b|\bhost_cycle_active\b|"
-        r"\b(?:HostIdentifier|HostString|HostDepth|HostNodes|HostEdges|HostValueBytes|"
-        r"Commands|CommandContent)\b|"
-        r"\bScriptResourceLimit::(?:Host(?:Identifier|String|Depth|Nodes|Edges|ValueBytes)|"
-        r"Commands|CommandContent)\b"
+        r"\bdrain_flow_host_commands\b|\bhost_cycle_active\b"
     ),
 }
 
-# These exact files own approved generic presentation mechanics rather than
-# grandfathered architecture debt. The marker still rejects those mechanics in
-# every other protected source file.
-APPROVED_PLATFORM_MECHANICS_FILES = {
+# These exact files own approved product-neutral platform or host mechanics
+# rather than grandfathered architecture debt. The marker still rejects those
+# mechanics in every other protected source file.
+APPROVED_NEUTRAL_MECHANICS_FILES = {
     "apple-presentation": {
         "crates/nux-capi/src/apple_metal.rs",
         "crates/nuxie-renderer/src/apple_surface.rs",
         "crates/nuxie-renderer/src/lib.rs",
-    },
-    # The Apple-gated composition root names the already-ratified generic host
-    # command import table; its exact integration oracle proves that composition
-    # without granting the exception to portable tests or another owner. Neither
-    # file owns command interpretation or product policy.
-    "product-host-commands": {
-        "crates/nux-capi/src/apple_assets.rs",
-        "crates/nux-capi/tests/apple_metal.rs",
     },
 }
 
@@ -676,6 +690,33 @@ def nuxie_self_test_dependency_error(
     return None
 
 
+def portable_abi_test_support_dependency_error(
+    package_name: str,
+    table_path: tuple[str, ...],
+    dependency_name: str,
+    resolved_name: str,
+    specification: object,
+    resolved_path: str | None,
+) -> str | None:
+    if (
+        package_name != PORTABLE_ABI_FACADE_EDGE[0]
+        or normalized_package_name(resolved_name) != PORTABLE_ABI_FACADE_EDGE[1]
+        or table_path != ("dev-dependencies",)
+    ):
+        return "not-approved"
+    if not isinstance(specification, dict):
+        return "portable ABI test-support edge must use a dependency table"
+    if normalized_package_name(dependency_name) != PORTABLE_ABI_FACADE_EDGE[1]:
+        return "portable ABI test-support edge must use dependency key 'nuxie'"
+    if resolved_path != "crates/nuxie":
+        return "portable ABI test-support edge must resolve to local crates/nuxie"
+    if specification.get("default-features") is not False:
+        return "portable ABI test-support edge must disable default features"
+    if specification.get("features") != ["test-support"]:
+        return "portable ABI test-support edge may enable only the test-support feature"
+    return None
+
+
 def _blank_non_newlines(characters: list[str], start: int, end: int) -> None:
     for index in range(start, end):
         if characters[index] not in "\r\n":
@@ -935,6 +976,11 @@ def portable_abi_facade_feature_errors(
 
 def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     errors = []
+    test_module_ranges = cfg_test_module_ranges(source)
+
+    def inside_test_module(match: re.Match[str]) -> bool:
+        return any(start <= match.start() < end for start, end in test_module_ranges)
+
     for match in NUXIE_EXTERN_CRATE.finditer(source):
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
@@ -947,12 +993,29 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         imported_symbols: list[str] | None = None
         direct = re.fullmatch(r"nuxie\s*::\s*([A-Za-z_][A-Za-z0-9_]*)", body)
         grouped = re.fullmatch(r"nuxie\s*::\s*\{([^{}]*)\}", body, re.DOTALL)
+        nested_grouped = re.fullmatch(
+            r"nuxie\s*::\s*([A-Za-z_][A-Za-z0-9_]*)\s*::\s*\{([^{}]*)\}",
+            body,
+            re.DOTALL,
+        )
+        allowed_symbols = PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS
         if direct is not None:
             imported_symbols = [direct.group(1)]
         elif grouped is not None:
             items = [item.strip() for item in grouped.group(1).split(",")]
             if all(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item) for item in items if item):
                 imported_symbols = [item for item in items if item]
+        elif nested_grouped is not None:
+            module = nested_grouped.group(1)
+            items = [item.strip() for item in nested_grouped.group(2).split(",")]
+            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(module)
+            if module_symbols is not None and all(
+                re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item)
+                for item in items
+                if item
+            ):
+                imported_symbols = [item for item in items if item]
+                allowed_symbols = module_symbols
         line = source.count("\n", 0, match.start()) + 1
         if imported_symbols is None:
             errors.append(
@@ -960,7 +1023,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             )
             continue
         for symbol in imported_symbols:
-            if symbol not in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS:
+            if symbol not in allowed_symbols:
                 errors.append(
                     f"{relative}:{line}: portable ABI facade symbol {symbol!r} is not approved"
                 )
@@ -971,6 +1034,8 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")
+        if symbol in PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS:
+            continue
         if symbol not in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
@@ -998,6 +1063,11 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             )
     for match in FILE_ASSOCIATED_ITEM.finditer(source):
         item = match.group("item")
+        if (
+            item in PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS
+            and inside_test_module(match)
+        ):
+            continue
         if item not in PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS:
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
@@ -1005,6 +1075,11 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
                 "approved baseline facade surface"
             )
     for match in PORTABLE_ABI_FACADE_PRODUCT_METHOD.finditer(source):
+        if (
+            match.group(0) in PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS
+            and inside_test_module(match)
+        ):
+            continue
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
             f"{relative}:{line}: portable ABI facade product method/type {match.group(0)!r} "
@@ -1473,6 +1548,22 @@ def check_repository(
                     resolved_name
                 ):
                     table = ".".join(table_path)
+                    test_support_error = portable_abi_test_support_dependency_error(
+                        package_name,
+                        table_path,
+                        dependency_name,
+                        resolved_name,
+                        effective_specification,
+                        resolved_path,
+                    )
+                    if test_support_error is None:
+                        continue
+                    if test_support_error != "not-approved":
+                        errors.append(
+                            f"{package}/Cargo.toml: {test_support_error}: "
+                            f"{dependency_name!r} through [{table}]"
+                        )
+                        continue
                     edge_error = portable_abi_facade_edge_error(
                         package_name,
                         table_path,
@@ -1548,7 +1639,7 @@ def check_repository(
                 matches = list(marker.finditer(source))
                 if not matches:
                     continue
-                if relative in APPROVED_PLATFORM_MECHANICS_FILES.get(family, set()):
+                if relative in APPROVED_NEUTRAL_MECHANICS_FILES.get(family, set()):
                     continue
                 observed_debt[family].add(relative)
                 spread = (family, relative)

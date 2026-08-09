@@ -1089,10 +1089,32 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (package / "cbindgen.toml").write_text(
             '"apple-metal" = "NUX_CAPI_APPLE_METAL"\n'
         )
+        (package / "build.rs").write_text(
+            'const FEATURE: &str = "CARGO_FEATURE_APPLE_METAL";\n'
+        )
+        smoke = package / "smoke"
+        smoke.mkdir()
+        (smoke / "distribution_consumer.c").write_text(
+            '#include "nux_capi_apple.h"\n'
+        )
 
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_migration_module_from_portable_abi_owner(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        include = package / "include"
+        include.mkdir()
+        (include / "module.migration.modulemap").write_text(
+            'module NuxieRuntimeFFI { header "NuxExperienceSession.h" }\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("module.migration.modulemap", result.stderr)
+        self.assertIn("product/Apple vocabulary", result.stderr)
 
     def test_rejects_product_vocabulary_in_apple_platform_extension_file(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
@@ -1115,23 +1137,42 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("apple_product_session_create", result.stderr)
         self.assertIn("apple_experience_context_create", result.stderr)
 
-    def test_allows_generic_host_command_composition_only_in_apple_import_owner_and_oracle(self) -> None:
+    def test_allows_product_neutral_host_command_vocabulary(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text("fn host_commands() {}\n")
         (package / "src/apple_assets.rs").write_text(
             "fn host_commands() {}\n"
         )
         tests = package / "tests"
         tests.mkdir()
         (tests / "apple_metal.rs").write_text("fn host_commands() {}\n")
+        facade = self.create_package("crates/nuxie", "nuxie", "")
+        (facade / "src/lib.rs").write_text("struct HostCommand;\n")
+        scripting = self.create_package(
+            "crates/nuxie-scripting", "nuxie-scripting", ""
+        )
+        (scripting / "src/lib.rs").write_text("mod host_commands;\n")
+        (scripting / "src/host_commands.rs").write_text("struct HostCommand;\n")
+        scripting_tests = scripting / "tests"
+        scripting_tests.mkdir()
+        (scripting_tests / "generic_host_commands.rs").write_text(
+            "fn host_commands() {}\n"
+        )
 
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_rejects_product_host_command_lifecycle_in_new_owner(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        tests = package / "tests"
+        tests.mkdir()
         (tests / "new_command_bridge.rs").write_text(
-            "fn host_commands() {}\n"
+            "fn drain_flow_host_commands() {}\n"
         )
+
         result = self.run_check()
+
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
@@ -1151,6 +1192,50 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("portable-c-abi-mixed-facade", result.stdout)
         self.assertNotIn("mixed-facade", result.stdout)
+
+    def test_allows_exact_portable_abi_test_support_edge(self) -> None:
+        self.create_portable_abi_facade()
+        facade_manifest = self.root / "crates/nuxie/Cargo.toml"
+        facade_manifest.write_text(
+            facade_manifest.read_text().replace(
+                '[features]\nrenderer = ["dep:nuxie-renderer"]',
+                '[features]\nrenderer = ["dep:nuxie-renderer"]\ntest-support = []',
+            )
+        )
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+
+            [dev-dependencies]
+            nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_expansion_of_portable_abi_test_support_edge(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+
+            [dev-dependencies]
+            nuxie = { path = "../nuxie", default-features = false, features = ["test-support", "renderer"] }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI test-support edge", result.stderr)
 
     def test_rejects_direct_product_dependency_from_nuxie(self) -> None:
         self.create_portable_abi_facade()
@@ -1611,15 +1696,32 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertIn("portable ABI facade edge", result.stderr)
         self.assertIn("dependency key 'nuxie'", result.stderr)
 
-    def test_rejects_product_feature_forwarding_over_portable_abi_facade(
-        self,
-    ) -> None:
+    def test_allows_product_neutral_scripting_feature_forwarding(self) -> None:
+        self.create_portable_abi_facade()
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            product = ["nuxie/scripting"]
+            scripting = ["nuxie/scripting"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_indirect_product_feature_forwarding(self) -> None:
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            product = ["helper"]
+            helper = ["nuxie/product-session"]
 
             [dependencies]
             nuxie = { path = "../nuxie", default-features = false }
@@ -1630,28 +1732,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "forwards forbidden portable ABI facade feature 'scripting'",
+            "feature 'helper' forwards forbidden portable ABI facade feature "
+            "'product-session'",
             result.stderr,
         )
-
-    def test_rejects_indirect_product_feature_forwarding(self) -> None:
-        self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [features]
-            product = ["helper"]
-            helper = ["nuxie/scripting"]
-
-            [dependencies]
-            nuxie = { path = "../nuxie", default-features = false }
-            """,
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("feature 'helper' forwards forbidden", result.stderr)
 
     def test_allows_renderer_feature_forwarding(self) -> None:
         self.create_portable_abi_facade()
@@ -1834,10 +1918,46 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self,
     ) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/approved.rs").write_text(
-            "use nuxie::{File, StateMachineInstance};\n"
+        (package / "src/lib.rs").write_text(
+            "use nuxie::{\n"
+            "    File, HostCommand, HostCommandImportConfig, HostCommandLimits, HostValue,\n"
+            "    LinearAnimationInstance, OwnedArtboardInstance, RuntimeEventPropertyValue,\n"
+            "    RuntimeHitResult, ScriptError, ScriptExecutionLimits, ScriptHost,\n"
+            "    StateMachineInstance, StateMachineReportedEvent,\n"
+            "};\n"
+            "use nuxie::host_interfaces::{\n"
+            "    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction,\n"
+            "    RuntimeViewModelLinkError,\n"
+            "};\n"
             "fn import(bytes: &[u8], _: &StateMachineInstance) {\n"
             "    let _ = File::import(bytes);\n"
+            "    let _ = File::import_trusted_with_host_commands;\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_unapproved_nested_portable_abi_facade_symbol(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/new_nested.rs").write_text(
+            "use nuxie::host_interfaces::{RuntimeOwnedViewModelHandle, RuntimeMystery};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI facade symbol 'RuntimeMystery'", result.stderr)
+
+    def test_allows_unsigned_script_import_only_inside_cfg_test_module(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/test_support.rs").write_text(
+            '#[cfg(test)]\nmod tests {\n'
+            "    use nuxie::File;\n"
+            "    fn fixture(bytes: &[u8]) {\n"
+            "        let _ = File::import_with_unsigned_scripts(bytes);\n"
+            "    }\n"
             "}\n"
         )
 
@@ -2077,7 +2197,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("project-data boundary debt spread", result.stderr)
 
-    def test_rejects_glob_imported_product_host_limit_in_new_file(self) -> None:
+    def test_allows_generic_host_resource_limits_in_new_file(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
@@ -2088,8 +2208,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("product-host-commands boundary debt spread", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_rejects_product_host_cycle_method_in_new_file(self) -> None:
         package = self.create_package(
@@ -2104,7 +2223,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("product-host-commands boundary debt spread", result.stderr)
 
-    def test_rejects_product_host_command_drain_method_in_new_file(self) -> None:
+    def test_allows_generic_host_command_drain_method_in_new_file(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
@@ -2114,10 +2233,9 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("product-host-commands boundary debt spread", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_product_host_resource_limits_are_no_longer_an_exception(self) -> None:
+    def test_generic_host_resource_limits_are_product_neutral(self) -> None:
         package = self.create_package(
             "crates/nuxie-scripting", "nuxie-scripting", ""
         )
@@ -2127,8 +2245,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         result = self.run_check()
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("product-host-commands boundary debt spread", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_deleted_internal_debt_exception_fails_in_repository(self) -> None:
         (self.root / ".git").write_text("gitdir: fixture\n")

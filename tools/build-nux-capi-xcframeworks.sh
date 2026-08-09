@@ -13,8 +13,8 @@ targets=(
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
-        'root-package: nux-capi' \
-        'feature-set: legacy-migration' \
+        'root-package: nux-apple-runtime' \
+        'feature-set: migration-distribution' \
         'thin-builds: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin' \
         'artifact full-apple: all five thin builds' \
         'artifact ios-only: first three thin builds'
@@ -123,8 +123,8 @@ build_inputs_hash="$(
         write "${build_inputs_path}" \
         --repo-root "${repo_root}" \
         --cargo "${rust_cargo}" \
-        --root-package nux-capi \
-        --feature legacy-migration \
+        --root-package nux-apple-runtime \
+        --feature migration-distribution \
         --build-profile "${profile}" \
         --rust-toolchain "${rust_toolchain}" \
         --rustc-version "${rustc_version}" \
@@ -159,13 +159,13 @@ for target in "${targets[@]}"; do
         "${rust_cargo}" build \
             --manifest-path "${repo_root}/Cargo.toml" \
             --locked \
-            --package nux-capi \
+            --package nux-apple-runtime \
             --no-default-features \
-            --features legacy-migration \
+            --features migration-distribution \
             --profile "${profile}" \
             --target "${target}"
     mkdir -p "${stripped_root}/${target}"
-    cp "${cargo_target_dir}/${target}/${profile}/libnux_capi.a" \
+    cp "${cargo_target_dir}/${target}/${profile}/libnux_apple_runtime.a" \
         "${stripped_root}/${target}/libnux_capi.a"
     "${rust_llvm_objcopy}" \
         --remove-section=__LLVM,__bitcode \
@@ -188,7 +188,7 @@ cp "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi_apple.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
-cp "${repo_root}/crates/nux-capi/include/module.migration.modulemap" "${headers_dir}/module.modulemap"
+cp "${repo_root}/crates/nux-apple-runtime/include/module.migration.modulemap" "${headers_dir}/module.modulemap"
 
 xcodebuild -create-xcframework \
     -library "${device_library}" -headers "${headers_dir}" \

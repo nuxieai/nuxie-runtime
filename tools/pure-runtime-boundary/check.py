@@ -232,6 +232,15 @@ DYNAMIC_NUXIE_PATH = re.compile(
 METAVARIABLE_QUALIFIED_PATH = re.compile(
     r"\$(?!crate\b)(?P<metavar>[A-Za-z_][A-Za-z0-9_]*)\s*::"
 )
+MACRO_RULES_DEFINITION = re.compile(
+    r"\bmacro_rules!\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?P<opening>[{([])"
+)
+MACRO_TOKEN_TREE_FRAGMENT = re.compile(
+    r"\$[A-Za-z_][A-Za-z0-9_]*\s*:\s*tt\b"
+)
+MACRO_REPETITION_QUALIFIED_PATH = re.compile(
+    r"\$\([^)]*\)\s*[*+?]\s*::"
+)
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
@@ -992,6 +1001,35 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
 
     def inside_test_module(match: re.Match[str]) -> bool:
         return any(start <= match.start() < end for start, end in test_module_ranges)
+
+    delimiters = {"{": "}", "(": ")", "[": "]"}
+    for match in MACRO_RULES_DEFINITION.finditer(source):
+        opening = match.group("opening")
+        opening_index = match.end("opening") - 1
+        closing_index = matching_delimiter(
+            source, opening_index, opening, delimiters[opening]
+        )
+        if closing_index is None:
+            line = source.count("\n", 0, match.start()) + 1
+            errors.append(f"{relative}:{line}: cannot parse macro_rules! definition")
+            continue
+        body = source[opening_index + 1 : closing_index]
+        qualified_repetition = MACRO_REPETITION_QUALIFIED_PATH.search(body)
+        if qualified_repetition is not None:
+            line = source.count(
+                "\n", 0, opening_index + 1 + qualified_repetition.start()
+            ) + 1
+            errors.append(
+                f"{relative}:{line}: macro-generated qualified paths are not approved "
+                f"in portable ABI macro {match.group('name')!r}"
+            )
+        token_tree = MACRO_TOKEN_TREE_FRAGMENT.search(body)
+        if token_tree is not None:
+            line = source.count("\n", 0, opening_index + 1 + token_tree.start()) + 1
+            errors.append(
+                f"{relative}:{line}: token-tree fragment is not approved in portable ABI "
+                f"macro {match.group('name')!r}"
+            )
 
     for match in NUXIE_EXTERN_CRATE.finditer(source):
         line = source.count("\n", 0, match.start()) + 1

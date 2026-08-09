@@ -2,11 +2,17 @@
 set -euo pipefail
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-fixture="${NUX_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}/tests/unit_tests/assets/in_band_asset.riv"
+runtime_dir="${NUX_RUNTIME_DIR:-${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}}"
+fixture="$runtime_dir/tests/unit_tests/assets/in_band_asset.riv"
 profile="${NUX_CAPI_APPLE_PROFILE:-dev}"
 target_root="${CARGO_TARGET_DIR:-${repo_dir}/target}"
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
+
+if [[ ! -f "$fixture" ]]; then
+    echo "missing Apple smoke fixture: $fixture" >&2
+    exit 2
+fi
 
 # This is a compile/link matrix, not a packaging path. Its default dev archives
 # stay in Cargo's ignored target directory and are only intermediates for the
@@ -23,7 +29,8 @@ else
     cargo_cmd=(rustup run stable cargo)
     rustc_cmd=(rustup run stable rustc)
 fi
-rustc_path=$("${rustc_cmd[@]}" --print sysroot)/bin/rustc
+rust_sysroot=$("${rustc_cmd[@]}" --print sysroot)
+rustc_path="$rust_sysroot/bin/rustc"
 
 if [[ "$profile" == dev ]]; then
     artifact_profile=debug
@@ -51,7 +58,7 @@ targets=(
 )
 
 for target in "${targets[@]}"; do
-    if ! rustup target list --installed | grep -qx "$target"; then
+    if [[ ! -d "$rust_sysroot/lib/rustlib/$target/lib" ]]; then
         echo "missing Rust target: $target" >&2
         exit 2
     fi

@@ -1978,6 +1978,7 @@ fn write_resources(
     gradient_batch: &PreparedGradientSelection<'_>,
 ) -> Vec<Option<PreparedTypedDrawResources>> {
     let _ = (flush_index, counts);
+    let raster_ordering_atlas_placements = raster_ordering_feather_atlas_placements(config, draws);
     push_u32(&mut buffers.gradients, gradient_batch.height());
     push_usize(&mut buffers.gradients, gradient_batch.spans().len());
     for span in gradient_batch.spans() {
@@ -1991,10 +1992,11 @@ fn write_resources(
         }
     }
     let mut prepared = Vec::with_capacity(draws.len());
-    for (draw_index, ((draw, resources), &use_clockwise_atomic_batch)) in draws
+    for (draw_index, (((draw, resources), &use_clockwise_atomic_batch), atlas_placement)) in draws
         .iter()
         .zip(draw_resources)
         .zip(atomic_batch_flags)
+        .zip(raster_ordering_atlas_placements)
         .enumerate()
     {
         let path_start = buffers.paths.len();
@@ -2009,6 +2011,7 @@ fn write_resources(
             draw,
             use_clockwise_atomic_batch,
             gradient_batch,
+            atlas_placement,
         );
         let backend_fallback =
             typed_draw_uses_backend_fallback(config, draw, use_clockwise_atomic_batch);
@@ -2078,6 +2081,71 @@ fn write_resources(
         });
     }
     prepared
+}
+
+fn raster_ordering_feather_atlas_placements(
+    config: LogicalFrameConfig,
+    draws: &[SolidDraw],
+) -> Vec<Option<super::AtlasPlacement>> {
+    let mut placements = draws
+        .iter()
+        .map(|draw| {
+            (config.mode == RenderMode::RasterOrdering
+                && draw.paint.feather != 0.0
+                && draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false))
+            .then(|| {
+                feather_atlas_placement(
+                    &draw.path.raw_path,
+                    draw.state.transform,
+                    draw.paint.feather,
+                    draw.paint.effective_stroke(),
+                    config.width,
+                    config.height,
+                )
+                .expect("logical frame admission already validated feather atlas placement")
+            })
+        })
+        .collect::<Vec<_>>();
+    let draw_sizes = placements
+        .iter()
+        .filter_map(|placement| {
+            placement.map(|placement| {
+                (
+                    placement.width - FEATHER_ATLAS_PADDING * 2,
+                    placement.height - FEATHER_ATLAS_PADDING * 2,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    if draw_sizes.is_empty() {
+        return placements;
+    }
+
+    let atlas = pack_logical_feather_atlas_for_cpp(config.max_texture_dimension_2d, &draw_sizes)
+        .expect("logical frame allocation already validated feather atlas packing");
+    let mut packed_regions = atlas.origins().iter().copied().zip(&atlas.region_sizes);
+    for placement in placements.iter_mut().flatten() {
+        let (origin, &(region_width, region_height)) = packed_regions
+            .next()
+            .expect("packed feather atlas must include every draw");
+        let raw_width = placement.width - FEATHER_ATLAS_PADDING * 2;
+        let raw_height = placement.height - FEATHER_ATLAS_PADDING * 2;
+        let horizontal_padding = (region_width - raw_width) / 2;
+        let vertical_padding = (region_height - raw_height) / 2;
+        placement.origin = origin;
+        placement.translate[0] += origin[0] as f32;
+        placement.translate[1] += origin[1] as f32;
+        if horizontal_padding != FEATHER_ATLAS_PADDING {
+            placement.translate[0] += horizontal_padding as f32 - FEATHER_ATLAS_PADDING as f32;
+        }
+        if vertical_padding != FEATHER_ATLAS_PADDING {
+            placement.translate[1] += vertical_padding as f32 - FEATHER_ATLAS_PADDING as f32;
+        }
+        placement.width = region_width;
+        placement.height = region_height;
+    }
+    debug_assert!(packed_regions.next().is_none());
+    placements
 }
 
 pub(crate) fn typed_draw_uses_backend_fallback(
@@ -2204,6 +2272,7 @@ fn write_typed_draw_resources(
     draw: &SolidDraw,
     use_clockwise_atomic_batch: bool,
     gradients: &PreparedGradientSelection<'_>,
+    atlas_placement: Option<super::AtlasPlacement>,
 ) -> bool {
     if matches!(draw.role, DrawRole::ClipReset { .. }) || draw.image.is_some() {
         return false;
@@ -2281,6 +2350,22 @@ fn write_typed_draw_resources(
         path = tessellation.path;
         // Fill tessellation emits every contour record with spans in order.
         local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
+    }
+    if let Some(placement) = atlas_placement {
+        path.atlas_transform = gpu::AtlasTransform {
+            scale_factor: placement.scale,
+            translate_x: placement.translate[0],
+            translate_y: placement.translate[1],
+        };
+        let [left, top, right, bottom] = placement.bounds;
+        triangles.extend([
+            gpu::TriangleVertex::new([left, bottom], 1, path_id),
+            gpu::TriangleVertex::new([left, top], 1, path_id),
+            gpu::TriangleVertex::new([right, bottom], 1, path_id),
+            gpu::TriangleVertex::new([right, bottom], 1, path_id),
+            gpu::TriangleVertex::new([left, top], 1, path_id),
+            gpu::TriangleVertex::new([right, top], 1, path_id),
+        ]);
     }
 
     if spans.is_empty()

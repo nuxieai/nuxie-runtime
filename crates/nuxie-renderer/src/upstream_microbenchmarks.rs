@@ -147,7 +147,7 @@ impl NullFrameWorkload {
         let renderer = NullLogicalRenderer::new(LogicalFrameConfig {
             width: 1600,
             height: 1600,
-            mode: RenderMode::ClockwiseAtomic,
+            mode: RenderMode::RasterOrdering,
             max_texture_dimension_2d: 8192,
             msaa_atlas_supports_clip_rect: true,
         });
@@ -177,26 +177,29 @@ impl NullFrameWorkload {
     pub fn run(&mut self) -> usize {
         let mut written_bytes = 0usize;
         for _ in 0..10 {
-            self.renderer.begin_frame();
-            for draw in &self.draws {
-                match &draw.gradient {
-                    Some(gradient) => self.renderer.draw_path_with_gradient(
-                        &draw.path,
-                        draw.paint,
-                        gradient.clone(),
-                    ),
-                    None => self.renderer.draw_path(&draw.path, draw.paint),
-                }
-                .expect("pinned upstream path is supported by the production logical frame");
-            }
-            let report = self
-                .renderer
-                .flush()
-                .expect("pinned upstream logical frame flushes through the null adapter");
-            written_bytes = written_bytes.wrapping_add(report.written_bytes);
-            self.completed_frames = self.completed_frames.saturating_add(1);
+            written_bytes = written_bytes.wrapping_add(self.run_frame().written_bytes);
         }
         written_bytes
+    }
+
+    pub fn run_frame(&mut self) -> crate::LogicalFrameReport {
+        self.renderer.begin_frame();
+        for draw in &self.draws {
+            match &draw.gradient {
+                Some(gradient) => {
+                    self.renderer
+                        .draw_path_with_gradient(&draw.path, draw.paint, gradient.clone())
+                }
+                None => self.renderer.draw_path(&draw.path, draw.paint),
+            }
+            .expect("pinned upstream path is supported by the production logical frame");
+        }
+        let report = self
+            .renderer
+            .flush()
+            .expect("pinned upstream logical frame flushes through the null adapter");
+        self.completed_frames = self.completed_frames.saturating_add(1);
+        report
     }
 }
 
@@ -236,9 +239,15 @@ mod tests {
             super::Preparation::Authored,
         );
 
+        let report = workload.run_frame();
+
+        assert_eq!(report.mode, super::RenderMode::RasterOrdering);
+        assert!(report.written_bytes > 0);
+        assert_eq!(workload.completed_frames, 1);
+
         let written_bytes = workload.run();
 
         assert!(written_bytes > 0);
-        assert_eq!(workload.completed_frames, 10);
+        assert_eq!(workload.completed_frames, 11);
     }
 }

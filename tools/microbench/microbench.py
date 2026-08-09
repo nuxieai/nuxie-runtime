@@ -35,17 +35,6 @@ FIXED_RUN_ARTIFACTS = {
 }
 RATIO_CASE_NAMES = {
     "BuildRawPath",
-    "IntersectionBoardBench_marty",
-    "IntersectionBoardBench_paper",
-    "IntersectionTileBench",
-    "IntersectionTileBenchWithOverlap",
-    "IterateRawPath",
-    "MapPointsAffine",
-    "MapPointsScaleTrans",
-    "MeasurePath",
-    "RawPathBounds",
-}
-DIRECTIONAL_CASE_NAMES = {
     "DrawCustomFeathers",
     "DrawFeatheredPaths_paper",
     "DrawOneChopStrokes",
@@ -56,7 +45,17 @@ DIRECTIONAL_CASE_NAMES = {
     "DrawTwoChopStrokes",
     "DrawTwoCuspStrokes",
     "DrawZeroChopStrokes",
+    "IntersectionBoardBench_marty",
+    "IntersectionBoardBench_paper",
+    "IntersectionTileBench",
+    "IntersectionTileBenchWithOverlap",
+    "IterateRawPath",
+    "MapPointsAffine",
+    "MapPointsScaleTrans",
+    "MeasurePath",
+    "RawPathBounds",
 }
+DIRECTIONAL_CASE_NAMES: set[str] = set()
 CPP_PREMAKE_ARGS = "--with_rive_text --with_rive_layout --with_rive_canvas"
 CPP_BUILD_ENVIRONMENT_KEYS = {
     "AR",

@@ -417,7 +417,7 @@ fn capture_paint_preserves_authored_color_blend_and_gradients() {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PaperWorkload {
     Authored,
     BevelStrokes,
@@ -662,5 +662,37 @@ fn pinned_paper_workloads_match_between_wgpu_and_null_logical_frames() {
             assert_report_is_meaningful(workload, mode, &wgpu);
             assert_eq!(null, wgpu, "{} diverged in {mode:?}", workload.name());
         }
+    }
+
+    let raster_config = LogicalFrameConfig {
+        width: 1_600,
+        height: 1_600,
+        mode: RenderMode::RasterOrdering,
+        max_texture_dimension_2d: 8_192,
+        msaa_atlas_supports_clip_rect: true,
+    };
+    let mut raster = NullLogicalRenderer::new(raster_config);
+    for workload in PaperWorkload::ALL {
+        let draws = workload.prepare(&authored);
+        let report = null_report(&mut raster, &draws);
+        assert_report_is_meaningful(workload, RenderMode::RasterOrdering, &report);
+        let plan = report
+            .raster_ordering
+            .as_ref()
+            .expect("paper RasterOrdering workload emits a PLS plan");
+        assert_eq!(plan.draw_passes, report.written.draw_records);
+        assert!(plan.pixel_local_storage_coverage);
+        assert_eq!(
+            plan.pixel_local_storage_draws + plan.feather_atlas_draws,
+            report.draw_count
+        );
+        if workload == PaperWorkload::Feathered {
+            assert!(plan.feather_atlas_draws > 0);
+        }
+        assert_eq!(plan.interlock_barriers, 0);
+        assert!(plan.authored_draw_order_preserved);
+        assert_eq!(plan.transient_backing_planes, 3);
+        assert_eq!(report.production_fallback_draws, 0);
+        assert_eq!(report.buffer_rewinds, report.logical_flushes.len());
     }
 }

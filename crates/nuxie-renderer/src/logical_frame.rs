@@ -263,7 +263,27 @@ impl LogicalResourceCounts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RasterOrderingPlan {
+    /// Non-atlased path coverage is accumulated in the transient PLS coverage
+    /// plane.
+    pub pixel_local_storage_coverage: bool,
+    pub pixel_local_storage_draws: usize,
+    pub feather_atlas_draws: usize,
+    /// Raster-ordering consumes draw passes in authored order instead of
+    /// using the overlap sorter required by atomic and MSAA modes.
+    pub authored_draw_order_preserved: bool,
+    /// Raster ordering provides the interlock, so adjacent draw passes do not
+    /// require explicit PLS barriers.
+    pub interlock_barriers: usize,
+    /// C++ allocates clip, scratch-color, and coverage transient PLS planes.
+    pub transient_backing_planes: usize,
+    pub draw_passes: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogicalFrameReport {
+    pub mode: RenderMode,
+    pub raster_ordering: Option<RasterOrderingPlan>,
     pub draw_count: usize,
     pub resource_planning_passes: usize,
     pub plan_finalization_passes: usize,
@@ -682,12 +702,14 @@ impl LogicalFlushAllocations {
             }
 
             let uses_feather_atlas = config.mode == RenderMode::Msaa
-                || (config.mode == RenderMode::ClockwiseAtomic
-                    && draw::feather_requires_atlas(
-                        draw.paint.feather,
-                        draw.state.transform,
-                        false,
-                    ));
+                || (matches!(
+                    config.mode,
+                    RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+                ) && draw::feather_requires_atlas(
+                    draw.paint.feather,
+                    draw.state.transform,
+                    false,
+                ));
             if draw.paint.feather != 0.0 && uses_feather_atlas {
                 let placement = feather_atlas_placement(
                     &draw.path.raw_path,
@@ -821,7 +843,10 @@ impl LogicalDrawState {
         &mut self,
         config: LogicalFrameConfig,
     ) -> Result<(Vec<SolidDraw>, u16), &'static str> {
-        if config.mode == RenderMode::ClockwiseAtomic {
+        if matches!(
+            config.mode,
+            RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+        ) {
             let height = self.state.clip_stack_height;
             if height == 0 {
                 return Ok((Vec::new(), 0));
@@ -986,7 +1011,11 @@ impl LogicalDrawState {
         clip_id: u16,
         uses_generic_atomic_plane: bool,
     ) {
-        if config.mode == RenderMode::ClockwiseAtomic {
+        if config.mode == RenderMode::RasterOrdering {
+            if clip_id != 0 {
+                self.generic_atomic_path_clip_id = clip_id;
+            }
+        } else if config.mode == RenderMode::ClockwiseAtomic {
             if !uses_generic_atomic_plane {
                 self.generic_atomic_path_clip_id = 0;
             } else if clip_id != 0 {
@@ -1563,7 +1592,37 @@ impl LogicalResourceStore {
             }
             buffers.rewind();
         }
+        let raster_ordering = (config.mode == RenderMode::RasterOrdering).then(|| {
+            let feather_atlas_draws = frame
+                .draws
+                .iter()
+                .filter(|draw| {
+                    draw.paint.feather != 0.0
+                        && draw::feather_requires_atlas(
+                            draw.paint.feather,
+                            draw.state.transform,
+                            false,
+                        )
+                })
+                .count();
+            let path_draws = frame
+                .draws
+                .iter()
+                .filter(|draw| draw.image.is_none())
+                .count();
+            RasterOrderingPlan {
+                pixel_local_storage_coverage: true,
+                pixel_local_storage_draws: path_draws.saturating_sub(feather_atlas_draws),
+                feather_atlas_draws,
+                authored_draw_order_preserved: true,
+                interlock_barriers: 0,
+                transient_backing_planes: 3,
+                draw_passes: written.draw_records,
+            }
+        });
         let report = LogicalFrameReport {
+            mode: config.mode,
+            raster_ordering,
             draw_count: frame.draws.len(),
             resource_planning_passes: frame.resource_planning_evaluations,
             plan_finalization_passes: frame.finalization_passes,
@@ -2048,16 +2107,20 @@ fn typed_draw_metadata(
     config: LogicalFrameConfig,
     use_clockwise_atomic_batch: bool,
 ) -> TypedDrawMetadata {
-    if config.mode == RenderMode::ClockwiseAtomic
-        && draw.paint.style == RenderPaintStyle::Fill
+    if matches!(
+        config.mode,
+        RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+    ) && draw.paint.style == RenderPaintStyle::Fill
         && draw.paint.feather == 0.0
         && draw.authored_should_use_interior()
     {
-        let clockwise_override = atomic_fill_clockwise_override(draw, true);
+        let frame_clockwise_override = config.mode == RenderMode::ClockwiseAtomic;
+        let clockwise_override = atomic_fill_clockwise_override(draw, frame_clockwise_override);
         if let Some(prepared) = draw.authored_atomic_interior_geometry(
             clockwise_override,
-            use_clockwise_atomic_batch,
-            use_clockwise_atomic_batch
+            config.mode == RenderMode::ClockwiseAtomic && use_clockwise_atomic_batch,
+            config.mode == RenderMode::ClockwiseAtomic
+                && use_clockwise_atomic_batch
                 && matches!(draw.role, DrawRole::Content { clip_id: 0 })
                 && super::clockwise_atomic_clip_is_inactive(draw),
             1,
@@ -2074,12 +2137,15 @@ fn typed_draw_metadata(
         }
     }
 
-    if config.mode == RenderMode::ClockwiseAtomic
-        && draw.paint.style == RenderPaintStyle::Fill
+    if matches!(
+        config.mode,
+        RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+    ) && draw.paint.style == RenderPaintStyle::Fill
         && draw.paint.feather == 0.0
     {
         if let Some(mut tessellation) = draw.authored_fill_tessellation() {
-            let clockwise_override = atomic_fill_clockwise_override(draw, true);
+            let frame_clockwise_override = config.mode == RenderMode::ClockwiseAtomic;
+            let clockwise_override = atomic_fill_clockwise_override(draw, frame_clockwise_override);
             tessellation.make_double_sided_with_direction(
                 draw.authored_clockwise_atomic_negate_coverage(
                     draw.path.fill_rule,
@@ -2168,11 +2234,16 @@ fn write_typed_draw_resources(
             // builder knows whether the surviving local IDs stayed dense.
             local_contour_ids_are_dense = stroke.local_contour_ids_are_dense;
         }
-    } else if config.mode == RenderMode::ClockwiseAtomic && draw.authored_should_use_interior() {
+    } else if matches!(
+        config.mode,
+        RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+    ) && draw.authored_should_use_interior()
+    {
         let prepared = draw.authored_atomic_interior_geometry(
             clockwise_override,
-            use_clockwise_atomic_batch,
-            use_clockwise_atomic_batch
+            config.mode == RenderMode::ClockwiseAtomic && use_clockwise_atomic_batch,
+            config.mode == RenderMode::ClockwiseAtomic
+                && use_clockwise_atomic_batch
                 && matches!(draw.role, DrawRole::Content { clip_id: 0 })
                 && super::clockwise_atomic_clip_is_inactive(draw),
             path_id,
@@ -2194,7 +2265,10 @@ fn write_typed_draw_resources(
             draw.authored_fill_tessellation()
         }
     {
-        if config.mode == RenderMode::ClockwiseAtomic {
+        if matches!(
+            config.mode,
+            RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+        ) {
             tessellation.make_double_sided_with_direction(
                 draw.authored_clockwise_atomic_negate_coverage(
                     draw.path.fill_rule,
@@ -2215,7 +2289,10 @@ fn write_typed_draw_resources(
         && draw.paint.style == RenderPaintStyle::Fill
     {
         if let Some(mut tessellation) = draw.authored_fill_tessellation() {
-            if config.mode == RenderMode::ClockwiseAtomic {
+            if matches!(
+                config.mode,
+                RenderMode::RasterOrdering | RenderMode::ClockwiseAtomic
+            ) {
                 tessellation.make_double_sided_with_direction(
                     draw.authored_clockwise_atomic_negate_coverage(
                         draw.path.fill_rule,

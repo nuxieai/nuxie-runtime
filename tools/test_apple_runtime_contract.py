@@ -353,7 +353,7 @@ NuxStatus nux_renderer_free(struct NuxRenderer *renderer);
                 {
                     "name": "nux-capi",
                     "targets": {
-                        target: ["apple-metal", "legacy-migration", "scripting"]
+                        target: ["apple-metal", "scripting"]
                     },
                 }
             ],
@@ -365,7 +365,7 @@ NuxStatus nux_renderer_free(struct NuxRenderer *renderer);
             "buildSourceRevision": "a" * 40,
             "target": target,
             "profile": "release-apple",
-            "features": "apple-metal,legacy-migration,scripting",
+            "features": "apple-metal,scripting",
             "rustc": "rustc 1.94.1",
             "buildInputsHash": "c" * 64,
             "contractFingerprint": "b" * 64,

@@ -1,7 +1,10 @@
 # Nuxie runtime C distribution
 
-The supported Apple binary is built from `nux-capi`, the product-neutral C ABI
-root. A single immutable source revision produces five thin static libraries.
+The supported Apple binary exposes `nux-capi`, the product-neutral C ABI. For
+the one migration release, the final static archive is composed by the upper
+`nux-apple-runtime` product leaf, which depends inward on `nux-capi` and retains
+the temporary legacy exports. A single immutable source revision produces five
+thin static libraries.
 Those exact libraries are reused in two archives:
 
 - `NuxieRuntime.xcframework.zip` contains iOS device, universal iOS simulator,
@@ -14,6 +17,12 @@ the same archive also exposes `NuxieRuntimeFFI`, backed by the explicitly
 allowlisted legacy experience/session symbols. The modules have separate
 headers because their historical typedefs overlap; consumers must not include
 both header families in one C translation unit.
+
+The reverse dependency is intentionally forbidden: `nux-capi` never imports
+`nux-apple-runtime` or experience/session policy. Removing the upper leaf's
+`migration-distribution` feature, legacy header module, smoke consumers, and
+symbol allowlist retires the compatibility lane without changing the mature C
+ABI crate.
 
 ## Candidate qualification
 

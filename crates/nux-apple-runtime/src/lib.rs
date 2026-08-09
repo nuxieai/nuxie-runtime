@@ -63,13 +63,24 @@ const MAX_RUNTIME_IDENTITY_PART_BYTE_LENGTH: usize = 4_096;
 
 static RUNTIME_BINDING_TOKEN: u8 = 0;
 
-/// Retain the explicitly temporary legacy C export set when this crate is
-/// linked as an rlib beneath the mature `nux-capi` Apple distribution root.
+// The one-release migration archive is composed at this upper product leaf.
+// Retaining the mature C ABI from here keeps the baseline dependency pointed
+// inward: nux-capi never imports experience or session policy.
+#[cfg(feature = "migration-distribution")]
+#[used]
+static MATURE_C_ABI_LINK_ANCHOR: unsafe extern "C" fn() -> u32 = nux_capi::nux_capi_abi_version;
+
+#[cfg(feature = "migration-distribution")]
+#[used]
+static LEGACY_MIGRATION_LINK_ANCHOR: fn() = retain_legacy_migration_exports;
+
+/// Retain the explicitly temporary legacy C export set in the upper Apple
+/// migration distribution root.
 ///
 /// The corresponding committed allowlist is owned by `nux-capi`; the release
-/// verifier compares the final archive to that list exactly. Keeping this one
-/// retention edge here prevents packaging code from interpreting product
-/// symbols and makes legacy removal a bounded deletion.
+/// verifier compares the final archive to that list exactly. Keeping both
+/// retention edges in this product crate makes legacy removal a bounded
+/// deletion without giving the baseline facade an upward dependency.
 #[cfg(feature = "apple-product")]
 #[doc(hidden)]
 #[inline(never)]

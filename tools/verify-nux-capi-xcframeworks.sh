@@ -190,7 +190,7 @@ xcrun --sdk macosx clang \
     -isysroot "${macos_sdk_path}" \
     -mmacosx-version-min="${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
     -I"${headers_dir}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_legacy_consumer.c" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c" \
     "${full_macos}" \
     -framework Foundation -framework QuartzCore -framework Metal \
     -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
@@ -203,7 +203,7 @@ xcrun --sdk macosx swiftc \
     -sdk "${macos_sdk_path}" \
     -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
     -I "${headers_dir}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift" \
     "${full_macos}" \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
@@ -251,7 +251,7 @@ xcrun --sdk iphoneos clang \
     -std=c11 -Wall -Wextra -Werror \
     -isysroot "${iphoneos_sdk_path}" \
     -I"${device_headers}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_legacy_consumer.c" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_legacy_consumer.c" \
     "${full_device}" \
     -framework Foundation -framework QuartzCore -framework Metal \
     -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
@@ -262,7 +262,7 @@ xcrun --sdk iphoneos swiftc \
     -sdk "${iphoneos_sdk_path}" \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
     -I "${device_headers}" \
-    "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
+    "${repo_root}/crates/nux-apple-runtime/smoke/distribution_migration_consumer.swift" \
     "${full_device}" \
     -o "${consumer_root}/swift-consumer-ios"
 

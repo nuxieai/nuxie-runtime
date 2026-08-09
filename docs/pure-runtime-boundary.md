@@ -88,8 +88,11 @@ frame scheduling, and every product concept.
 `nuxie-apple-adapter` is a compatibility re-export for the legacy product
 runtime and retains only trusted-image admission policy of its own.
 `nux-apple-runtime` continues to own package/session adaptation and the legacy
-product XCFramework until that compatibility distribution is retired. Product
-operations never enter `nux-capi` merely because an Apple consumer needs them.
+product XCFramework until that compatibility distribution is retired. Its
+one-release `migration-distribution` feature depends inward on `nux-capi` to
+compose the mature and legacy modules in one archive; `nux-capi` never depends
+upward on that product leaf. Product operations never enter `nux-capi` merely
+because an Apple consumer needs them.
 
 ### Portable ABI and oracle consumers
 
@@ -106,6 +109,13 @@ edge rather than migration debt. It reaches only the audited baseline facade:
 the manifest form, local provider, feature behavior, and imported Rust symbols
 are independently constrained. The whole `nuxie` provider graph remains
 protected by the ordinary baseline rules.
+
+The forwarded `scripting` feature and generic host-command values are runtime
+mechanics for an exact-artifact caller. They do not select product commands or
+authorize product policy: approved dependency shapes, facade symbols,
+constructors, nested imports, and owning files are each enumerated, while
+aliases, globs, unknown features and symbols, and product lifecycle vocabulary
+remain rejected.
 
 ## Current migration debt
 

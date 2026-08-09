@@ -8148,7 +8148,16 @@ fn logical_flush_draw_resources(
         if draw.paint.feather != 0.0 {
             return draw
                 .prepared_feather(mode)
-                .map(|prepared| prepared.resources)
+                .map(|prepared| {
+                    let mut resources = prepared.resources;
+                    if draw::feather_requires_atlas(draw.paint.feather, draw.state.transform, false)
+                    {
+                        // C++ PathDraw reserves the two-triangle onscreen
+                        // rectangle that samples the offscreen feather mask.
+                        resources.max_triangle_vertex_count = 6;
+                    }
+                    resources
+                })
                 .unwrap_or(logical_flush::ResourceCounters {
                     draw_pass_count: 1,
                     ..Default::default()
@@ -11250,8 +11259,101 @@ mod tests {
 
         assert_eq!(plan.pixel_local_storage_draws, 0);
         assert_eq!(plan.feather_atlas_draws, 1);
+        assert_eq!(report.written.triangle_records, 6);
         assert_eq!(report.production_fallback_draws, 0);
         assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn raster_ordering_writes_the_cpp_feather_atlas_blit_geometry() {
+        let config = LogicalFrameConfig {
+            width: 1_600,
+            height: 1_600,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let path = LogicalPath {
+            raw_path: Arc::new(logical_triangle()),
+            fill_rule: FillRule::Clockwise,
+            valid: true,
+        };
+        let paint = LogicalPathPaint {
+            feather: 100.0,
+            ..Default::default()
+        }
+        .into_wgpu();
+        let state = DrawState::default();
+        let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
+            .unwrap()
+            .unwrap();
+        let mut scratch = draw::StrokePreparationScratch::default();
+        let draw = admitted.finish(0, &mut scratch).unwrap();
+        let placement = feather_atlas_placement(
+            &path.raw_path,
+            state.transform,
+            paint.feather,
+            paint.effective_stroke(),
+            config.width,
+            config.height,
+        )
+        .unwrap();
+
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        frame.push_content_batch(Vec::new(), draw.clone()).unwrap();
+        frame.push_content_batch(Vec::new(), draw).unwrap();
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize(&mut board).unwrap();
+        let prepared = logical_frame::LogicalResourceStore::default()
+            .prepare_for_production(&frame)
+            .unwrap();
+        let selected = prepared.typed_draws(&frame.draws);
+        let typed = [selected.draw(0).unwrap(), selected.draw(1).unwrap()];
+        let raw_size = (
+            placement.width - FEATHER_ATLAS_PADDING * 2,
+            placement.height - FEATHER_ATLAS_PADDING * 2,
+        );
+        let atlas = pack_logical_feather_atlas_for_cpp(
+            config.max_texture_dimension_2d,
+            &[raw_size, raw_size],
+        )
+        .unwrap();
+        let [left, top, right, bottom] = placement.bounds;
+        for (index, (typed, (&origin, &(region_width, region_height)))) in typed
+            .into_iter()
+            .zip(atlas.origins().iter().zip(&atlas.region_sizes))
+            .enumerate()
+        {
+            let horizontal_padding = (region_width - raw_size.0) / 2;
+            let vertical_padding = (region_height - raw_size.1) / 2;
+            let expected_translate_x =
+                placement.translate[0] + origin[0] as f32 + horizontal_padding as f32
+                    - FEATHER_ATLAS_PADDING as f32;
+            let expected_translate_y =
+                placement.translate[1] + origin[1] as f32 + vertical_padding as f32
+                    - FEATHER_ATLAS_PADDING as f32;
+            assert_eq!(typed.path.atlas_transform.scale_factor, placement.scale);
+            assert_eq!(typed.path.atlas_transform.translate_x, expected_translate_x);
+            assert_eq!(typed.path.atlas_transform.translate_y, expected_translate_y);
+            let path_id = i32::try_from(index + 1).unwrap();
+            let weight_path_id = (1 << 16) | path_id;
+            assert_eq!(
+                typed
+                    .triangles
+                    .iter()
+                    .map(|vertex| (vertex.point, vertex.weight_path_id))
+                    .collect::<Vec<_>>(),
+                vec![
+                    ([left, bottom], weight_path_id),
+                    ([left, top], weight_path_id),
+                    ([right, bottom], weight_path_id),
+                    ([right, bottom], weight_path_id),
+                    ([left, top], weight_path_id),
+                    ([right, top], weight_path_id),
+                ]
+            );
+        }
     }
 
     #[test]

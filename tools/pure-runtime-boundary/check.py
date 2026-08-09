@@ -223,6 +223,9 @@ DIRECT_NUXIE_PATH = re.compile(
     r"\bnuxie\s*::\s*(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)"
     r"(?:\s*::\s*(?P<nested_symbol>[A-Za-z_][A-Za-z0-9_]*))?"
 )
+DYNAMIC_NUXIE_PATH = re.compile(
+    r"\bnuxie\s*::\s*(?:(?P<module>[A-Za-z_][A-Za-z0-9_]*)\s*::\s*)?\$"
+)
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
@@ -1034,6 +1037,13 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         line = source.count("\n", 0, match.start()) + 1
         errors.append(
             f"{relative}:{line}: type aliases of portable ABI facade symbols are not approved"
+        )
+    for match in DYNAMIC_NUXIE_PATH.finditer(source):
+        line = source.count("\n", 0, match.start()) + 1
+        module = match.group("module")
+        scope = f" under {module!r}" if module is not None else ""
+        errors.append(
+            f"{relative}:{line}: dynamic portable ABI facade path{scope} is not approved"
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")

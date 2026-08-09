@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import tomllib
 import unittest
 
 
@@ -286,6 +287,26 @@ class RustAttributionCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("invalid rust-additions category_values", result.stderr)
+
+    def test_repository_additions_pin_current_baseline_ownership(self) -> None:
+        repo_root = pathlib.Path(__file__).resolve().parents[2]
+        with (repo_root / "rust-additions.toml").open("rb") as additions_file:
+            additions = tomllib.load(additions_file)["addition"]
+        categories = {item["path"]: item["category"] for item in additions}
+
+        self.assertEqual(
+            categories["crates/nux-container/src/acquisition.rs"],
+            "product-trust",
+        )
+        self.assertEqual(
+            categories["crates/nuxie-binary/src/legacy_test_support.rs"],
+            "test-infra",
+        )
+        self.assertEqual(
+            categories["crates/nuxie-scripting/src/host_commands.rs"],
+            "baseline-adaptation",
+        )
+        self.assertNotIn("crates/nuxie-apple-adapter/src/apple.rs", categories)
 
 
 if __name__ == "__main__":

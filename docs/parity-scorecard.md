@@ -3,29 +3,29 @@
 ## C++ → Rust file correspondence
 
 Files: 456
-Status counts: `divergent-by-decision`: 4; `faithful`: 448; `partial`: 4
+Status counts: `divergent-by-decision`: 4; `faithful`: 450; `partial`: 2
 Named pending files: 0
 
 ## Rust → C++ attribution
 
-Ledger coverage: 484 Rust files (454 attributed by manifest inversion; 30 classified additions)
-Addition categories: `baseline-adaptation`: 4; `codegen`: 17; `mixed-product-host`: 2; `product-authoring`: 1; `product-data`: 1; `product-host`: 2; `product-trust`: 1; `retained-render`: 1; `test-infra`: 1
+Ledger coverage: 502 Rust files (457 attributed by manifest inversion; 45 classified additions)
+Addition categories: `baseline-adaptation`: 8; `codegen`: 17; `platform-adapter`: 4; `product-data`: 1; `product-host`: 4; `product-trust`: 6; `retained-render`: 1; `test-infra`: 4
 
 ## Test correspondence
 
 Files: 157
 Test cases: 1404
-Status counts: `n-a`: 2; `partial`: 30; `pending`: 78; `ported-differential`: 5; `ported-direct`: 42
+Status counts: `n-a`: 2; `partial`: 29; `pending`: 78; `ported-differential`: 5; `ported-direct`: 43
 
 ## Silver corpus
 
 Entries: 252
-Status counts: `divergent`: 101; `exact`: 77; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 30
-Exact ratchet: 77/77 (met)
+Status counts: `divergent`: 92; `exact`: 87; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 29
+Exact ratchet: 87/87 (met)
 
 ## Golden corpus
 
-Entries: 363
+Entries: 364
 
 ## Runtime frame-loop ledger
 
@@ -40,7 +40,7 @@ Rows: 14
 - D1 — `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 - D2 — Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
 - D3 — **Taffy, not Yoga** — edge-case layouts verify `tolerant`; fence: never pin Taffy behavior-by-behavior.
-- D4 — luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered). Luau engine-version skew CLOSED 2026-08-05 by the in-house fork ported to the pinned engine's `rive_0_732` tip (docs/luau-fork.md).
+- D4 — luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered).
 - D5 — Rust image decoders vs platform decoders — JPEG color-profile rows resolvable only by CoreGraphics; dimension+tolerant-pixel verification, never payload hashes.
 - D6 — Renderer fuzz-accepted findings R3-FZ-03/04/05 (area-capped, neither rasterization canonical).
 - D7 — GPU integer semantics (unsigned-cast fixed-point limits; checked-sub vs deliberate wrap in row-wrap rebuild).

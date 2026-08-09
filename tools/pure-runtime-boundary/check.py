@@ -226,6 +226,12 @@ DIRECT_NUXIE_PATH = re.compile(
 DYNAMIC_NUXIE_PATH = re.compile(
     r"\bnuxie\s*::\s*(?:(?P<module>[A-Za-z_][A-Za-z0-9_]*)\s*::\s*)?\$"
 )
+# A macro can otherwise synthesize `nuxie::...` from separate identifiers and
+# bypass every literal-path check. `$crate::` is Rust's fixed current-crate
+# path, but every caller-supplied qualified root fails closed in nux-capi.
+METAVARIABLE_QUALIFIED_PATH = re.compile(
+    r"\$(?!crate\b)(?P<metavar>[A-Za-z_][A-Za-z0-9_]*)\s*::"
+)
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
@@ -1044,6 +1050,12 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         scope = f" under {module!r}" if module is not None else ""
         errors.append(
             f"{relative}:{line}: dynamic portable ABI facade path{scope} is not approved"
+        )
+    for match in METAVARIABLE_QUALIFIED_PATH.finditer(source):
+        line = source.count("\n", 0, match.start()) + 1
+        errors.append(
+            f"{relative}:{line}: macro metavariable-qualified path "
+            f"${match.group('metavar')}:: is not approved in the portable ABI facade"
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")

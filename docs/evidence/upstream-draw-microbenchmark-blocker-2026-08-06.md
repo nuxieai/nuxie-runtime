@@ -1,11 +1,11 @@
-# Upstream draw microbenchmark equivalence resolution — 2026-08-06
+# Upstream draw microbenchmark equivalence resolution — 2026-08-09
 
 The production `LogicalFrame` and `NullLogicalRenderer` seam resolves the
 original missing-workload blocker for the ten `Draw*` cases in
-[UNIV-1688](https://universe.basis.dev/issue/UNIV-1688). A capability mismatch
-still prevents direct ratios, so the inventory classifies the ten cases as
-directional timings and links the follow-up
-[UNIV-1727](https://universe.basis.dev/issue/UNIV-1727).
+[UNIV-1688](https://universe.basis.dev/issue/UNIV-1688). Production
+RasterOrdering logical mode resolves the remaining capability mismatch in
+[UNIV-1727](https://universe.basis.dev/issue/UNIV-1727), so the inventory now
+classifies all ten cases as direct ratios.
 
 ## Shared operation boundary
 
@@ -30,17 +30,18 @@ prepares immutable `LogicalPathHandle`s. Each measured `run()` then performs
 exactly ten repetitions of:
 
 1. `NullLogicalRenderer::begin_frame()` with a 1600x1600
-   `ClockwiseAtomic` configuration;
+   `RasterOrdering` configuration;
 2. `draw_path()` or `draw_path_with_gradient()` for every prepared input;
 3. `flush()` through the production logical resource writer.
 
 The same Null renderer is retained across Criterion iterations, matching the
 retained C++ context and its allocation-growth behavior. Rust's null adapter
 is the terminal consumer of the production typed resource output and performs
-no WebGPU device, encoder, pipeline, or submission work. It currently runs
-with an explicit `ClockwiseAtomic` configuration. Because that differs from
-the upstream `RenderContextNULL` `RasterOrdering` selection, the two raw timings
-are useful directionally but their quotient is not a valid speed ratio.
+no WebGPU device, encoder, pipeline, or submission work. Both sides use
+pixel-local-storage coverage for non-atlased paths, switch large feathers to
+the feather atlas at the same threshold, preserve authored draw order, require
+no explicit interlock barriers, and account for the clip, scratch-color, and
+coverage PLS planes. Their quotient is therefore a valid direct ratio.
 
 ## Production seam evidence
 
@@ -56,9 +57,13 @@ are useful directionally but their quotient is not a valid speed ratio.
   four pinned `paper.riv` preparation modes preserve authored paint/gradient
   inputs and produce the same logical reports through Wgpu and Null.
 - Renderer unit tests cover all six pinned custom `Draw*` workloads through
-  both modes and assert Wgpu/Null logical-report parity.
-- The feature-gated microbenchmark test proves one public workload call
-  completes ten production Null frames with non-empty typed resource writes.
+  RasterOrdering and assert their exact PLS plan, resource writes, rewind, and
+  zero-fallback contract.
+- The pinned `paper.riv` differential covers the other four exact `Draw*`
+  preparations through RasterOrdering in addition to preserving the existing
+  Wgpu/Null parity checks for MSAA and ClockwiseAtomic.
+- The feature-gated microbenchmark test proves the public workload calls the
+  same production RasterOrdering frame path for every one of its ten frames.
 
 Direct tessellation helpers remain outside this protocol. They do not include
 the upstream frame lifecycle, retained allocation policy, typed resource
@@ -78,4 +83,4 @@ settings, and every raw sample hash. `make microbench-compare` accepts only that
 sealed run manifest, requires its exact schema and inventory-derived artifact
 set, validates each artifact path/hash and common Criterion run namespace, and
 loads samples only through the sealed `criterion:<case>` entries. It then
-reports ten direct ratios plus ten directional timings.
+reports 20 direct ratios and no directional timings.

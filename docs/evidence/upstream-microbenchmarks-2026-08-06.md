@@ -1,5 +1,10 @@
 # Upstream C++/Rust microbenchmark evidence — 2026-08-06
 
+> Historical evidence: this run predates the RasterOrdering logical mode added
+> by [UNIV-1727](https://universe.basis.dev/issue/UNIV-1727). Its ten Draw rows
+> remain intentionally directional; later evidence records the 20-ratio
+> contract.
+
 This evidence measures exact committed Rust source
 `eb972bfdd7a93d56c64b444b6699aed51f5434f8` against pinned rive-runtime
 `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.

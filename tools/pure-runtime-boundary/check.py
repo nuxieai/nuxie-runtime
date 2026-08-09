@@ -238,8 +238,7 @@ MACRO_RULES_DEFINITION = re.compile(
 MACRO_TOKEN_TREE_FRAGMENT = re.compile(
     r"\$[A-Za-z_][A-Za-z0-9_]*\s*:\s*tt\b"
 )
-RUST_ATTRIBUTE_OPENING = re.compile(r"#\s*!?\s*\[")
-MACRO_EXPORT_META_ITEM = re.compile(r"\bmacro_export\b")
+MACRO_EXPORT_TOKEN = re.compile(r"\bmacro_export\b")
 RUST_USE_STATEMENT = re.compile(r"\buse\b(?P<body>[^;]*);", re.DOTALL)
 NUXIE_EXTERN_CRATE = re.compile(r"\bextern\s+crate\s+nuxie\b")
 FILE_ASSOCIATED_ITEM = re.compile(
@@ -916,22 +915,6 @@ def macro_qualified_repetition_offset(body: str) -> int | None:
     return None
 
 
-def macro_export_attribute_offsets(source: str) -> list[int]:
-    """Locate direct or conditional macro_export meta-items in Rust attributes."""
-
-    offsets = []
-    for attribute in RUST_ATTRIBUTE_OPENING.finditer(source):
-        opening = attribute.end() - 1
-        closing = matching_delimiter(source, opening, "[", "]")
-        if closing is None:
-            continue
-        body = source[opening + 1 : closing]
-        macro_export = MACRO_EXPORT_META_ITEM.search(body)
-        if macro_export is not None:
-            offsets.append(opening + 1 + macro_export.start())
-    return offsets
-
-
 def split_cfg_arguments(arguments: str) -> list[str]:
     parts = []
     start = 0
@@ -1046,8 +1029,11 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     def inside_test_module(match: re.Match[str]) -> bool:
         return any(start <= match.start() < end for start, end in test_module_ranges)
 
-    for offset in macro_export_attribute_offsets(source):
-        line = source.count("\n", 0, offset) + 1
+    # The caller passes comment/string-stripped Rust. Rejecting the token itself
+    # also closes attributes synthesized by macro expansion, not just literal
+    # `#[macro_export]` and `cfg_attr(..., macro_export)` spellings.
+    for match in MACRO_EXPORT_TOKEN.finditer(source):
+        line = source.count("\n", 0, match.start()) + 1
         errors.append(
             f"{relative}:{line}: exported portable ABI macros are not approved; "
             "keep macro invocations inside the scanned facade source"

@@ -3777,6 +3777,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 pub fn advance_and_apply() {}
                 pub fn advance_and_apply_with_view_models() {}
                 fn advance_and_apply_state_machines_with_view_models() {
+                    Self::advance_and_apply_state_machines_with_view_models_and_script_host();
+                }
+                fn advance_and_apply_state_machines_with_view_models_and_script_host() {
                     if advance_view_models {
                         advance_detached_view_models();
                     }
@@ -3786,8 +3789,18 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 fn advance_on_artboard() {}
                 fn advance(artboard: &mut ArtboardInstance) {}
+                fn advance_artboard_frame_components() {
+                    nested_event_dispatch;
+                }
                 pub fn advance_and_apply() {}
                 pub fn advance_and_apply_with_view_models() {}
+                fn advance_and_apply_state_machines_with_view_models() {
+                    bypass_host_aware_owner();
+                }
+                fn advance_and_apply_state_machines_with_view_models_and_script_host() {
+                    if advance_view_models { advance_detached_view_models(); }
+                }
+                fn settle_artboard_update_passes() {}
                 """,
             ),
             (
@@ -5490,6 +5503,54 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             )
             result = self.run_check()
             self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_detector_audits_transitive_owner_exports(self) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        owner = self.repo / (
+            "crates/nuxie-runtime/src/state_machine/"
+            "state_machine_instance.rs"
+        )
+        consumer = self.repo / (
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+        )
+        owner.parent.mkdir(parents=True, exist_ok=True)
+        owner.write_text(
+            textwrap.dedent(
+                """
+                impl StateMachineInstance {
+                    pub(crate) fn advance_artboard_frame_components_with_script_host(
+                        &mut self,
+                    ) {
+                        StateMachineInstance::notify_events(
+                            self, child, Some(host), &batch,
+                        );
+                    }
+                    pub(crate) fn advance_artboard_frame_components_with(&mut self) {
+                        self.advance_artboard_frame_components_with_script_host();
+                    }
+                }
+                """
+            )
+        )
+        consumer.write_text(
+            "fn consumer(owner: &mut StateMachineInstance) { "
+            "owner.advance_artboard_frame_components_with(); }\n"
+        )
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "from owner export "
+                "crates/nuxie-runtime/src/state_machine/"
+                "state_machine_instance.rs::advance_artboard_frame_components_with",
+                result.stderr,
+            )
         finally:
             self.gaps.write_text(base_gaps)
 

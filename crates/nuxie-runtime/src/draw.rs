@@ -5987,6 +5987,20 @@ impl ArtboardInstance {
             }
             return;
         }
+        if self
+            .component(drawable_local)
+            .is_some_and(|component| component.type_name == "Text")
+        {
+            let next_flags = self
+                .component(drawable_local)
+                .and_then(|component| component.concrete.drawable.as_ref())
+                .and_then(|drawable| drawable.drawable_flags_property_key)
+                .and_then(|key| self.uint_property(drawable_local, key));
+            if next_flags.is_some_and(|next_flags| (previous_flags ^ next_flags) & 1 != 0) {
+                self.mark_semantic_geometry_changed();
+            }
+            return;
+        }
         if self.runtime_shape_has_visible_catalogue_membership_with_drawable_flags(
             drawable_local,
             Some(previous_flags),

@@ -1787,6 +1787,14 @@ mod upstream_viewmodel_instance_contract_tests {
                     FixtureValue::String("Grandchild".to_owned()),
                 )],
             ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    FixtureValue::String("value".to_owned()),
+                )],
+            ),
         ])
         .expect("nested mixed value order fixture")
     }
@@ -2038,6 +2046,27 @@ mod upstream_viewmodel_instance_contract_tests {
             .materialize_active_instance_unbound()
             .expect("materialized child");
         assert_eq!(materialized.value_order, child.active_value_order());
+    }
+
+    #[test]
+    fn changed_value_tree_reaches_a_generated_grandchild_and_returns_clean() {
+        let file = nested_mixed_value_order_file();
+        let mut root = RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated root");
+
+        assert!(!root.has_changed_value_tree());
+        assert!(root.set_number_by_property_path(&[0, 2, 0], 7.0));
+        assert!(
+            root.has_changed_value_tree(),
+            "a nested scalar mutation must keep the host publication pass armed"
+        );
+
+        root.cell_by_property_path(&[0, 2, 0])
+            .expect("grandchild number cell")
+            .advanced();
+        assert!(
+            !root.has_changed_value_tree(),
+            "a fully acknowledged retained graph must let the host skip path reconstruction"
+        );
     }
 
     #[test]
@@ -5995,6 +6024,59 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|view_model| view_model.property_index == *view_model_index)?
             .active_scalar_cell_by_property_path(rest)
+    }
+
+    /// Cheap retained-cell authority for mounted-context publication.
+    ///
+    /// C++ shares these cells directly with the host and only runs callbacks
+    /// for changed values. Rust must bridge a detached authored object arena,
+    /// but it can avoid rebuilding every authored property path when the
+    /// complete retained graph is clean. Borrow/schema uncertainty returns
+    /// `true`, preserving the existing full-scan behavior.
+    pub(crate) fn has_changed_value_tree(&self) -> bool {
+        self.has_changed_value_tree_with_visited(&mut BTreeSet::new())
+    }
+
+    fn has_changed_value_tree_with_visited(&self, visited: &mut BTreeSet<u64>) -> bool {
+        if !visited.insert(self.allocation_identity) {
+            return false;
+        }
+        for occurrence in &self.value_order {
+            let Some(cell) = self.scalar_cell_by_property_index(occurrence.property_index) else {
+                return true;
+            };
+            if cell.has_changed() {
+                return true;
+            }
+            match occurrence.kind {
+                RuntimeOwnedViewModelValueKind::List => {
+                    let Some(list) = self.lists.get(occurrence.slot_index) else {
+                        return true;
+                    };
+                    let Ok(list) = list.value.try_borrow() else {
+                        return true;
+                    };
+                    for item in &list.items {
+                        let Ok(item) = item.instance.try_borrow() else {
+                            return true;
+                        };
+                        if item.has_changed_value_tree_with_visited(visited) {
+                            return true;
+                        }
+                    }
+                }
+                RuntimeOwnedViewModelValueKind::ViewModel => {
+                    let Some(child) = self.view_models.get(occurrence.slot_index) else {
+                        return true;
+                    };
+                    if child.has_changed_value_tree(visited) {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     fn cell_by_relative_scoped_property_path(

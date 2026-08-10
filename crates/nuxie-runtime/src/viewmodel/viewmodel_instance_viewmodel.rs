@@ -78,6 +78,75 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
+    fn active_list(&self, slot_index: usize) -> Option<&RuntimeOwnedViewModelList> {
+        match self.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => self.lists.get(slot_index),
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_lists
+                .get(&object_id)
+                .and_then(|lists| lists.get(slot_index)),
+            _ => None,
+        }
+    }
+
+    /// Whether the currently selected retained subtree contains a C++
+    /// `ViewModelInstanceValue::hasChanged` cell. Linked instances and list
+    /// items preserve shared identity; generated/imported projections remain
+    /// embedded beneath this endpoint. A borrow or schema mismatch fails open
+    /// so the caller performs its established full reconciliation.
+    fn has_changed_value_tree(&self, visited: &mut BTreeSet<u64>) -> bool {
+        if let Some(linked) = self.endpoint.linked_instance() {
+            let Ok(linked) = linked.try_borrow() else {
+                return true;
+            };
+            return linked.has_changed_value_tree_with_visited(visited);
+        }
+        let Some(children) = self.active_children() else {
+            return self.active_value_order().iter().any(|occurrence| {
+                self.active_scalar_cell_by_property_index(occurrence.property_index)
+                    .is_none_or(|cell| cell.has_changed())
+            });
+        };
+        for occurrence in self.active_value_order() {
+            let Some(cell) =
+                self.active_scalar_cell_by_property_index(occurrence.property_index)
+            else {
+                return true;
+            };
+            if cell.has_changed() {
+                return true;
+            }
+            match occurrence.kind {
+                RuntimeOwnedViewModelValueKind::List => {
+                    let Some(list) = self.active_list(occurrence.slot_index) else {
+                        return true;
+                    };
+                    let Ok(list) = list.value.try_borrow() else {
+                        return true;
+                    };
+                    for item in &list.items {
+                        let Ok(item) = item.instance.try_borrow() else {
+                            return true;
+                        };
+                        if item.has_changed_value_tree_with_visited(visited) {
+                            return true;
+                        }
+                    }
+                }
+                RuntimeOwnedViewModelValueKind::ViewModel => {
+                    let Some(child) = children.get(occurrence.slot_index) else {
+                        return true;
+                    };
+                    if child.has_changed_value_tree(visited) {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
     fn generated_children_mut(&mut self) -> Option<&mut Vec<RuntimeOwnedViewModelViewModel>> {
         match self.endpoint.value() {
             RuntimeViewModelPointer::OwnedGenerated { .. } => Some(&mut self.children),

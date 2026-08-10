@@ -9365,6 +9365,14 @@ impl ArtboardInstance {
         let Some(nested) = self.nested_artboards.get(&host_local_id) else {
             return false;
         };
+        if nested
+            .stateful_view_model_context
+            .iter()
+            .chain(nested.stateful_global_view_model_contexts.values())
+            .all(|context| !context.borrow().has_changed_value_tree())
+        {
+            return false;
+        }
         let roots_by_local = nested
             .stateful_view_model_instance_locals_by_id
             .iter()

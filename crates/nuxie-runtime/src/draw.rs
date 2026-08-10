@@ -13807,6 +13807,7 @@ impl TaffyRuntimeLayoutEngine {
             if !visiting.insert(from) {
                 return Some(());
             }
+            let component_handle = instance.component_handle(from)?;
             let component = instance.component(from)?;
             for child_handle in &component.children {
                 let child_local = instance.component_local_id(*child_handle)?;
@@ -13818,6 +13819,9 @@ impl TaffyRuntimeLayoutEngine {
                     continue;
                 }
                 let child = instance.component(child_local)?;
+                if child.parent != Some(component_handle) {
+                    continue;
+                }
                 let provider = matches!(
                     child.type_name,
                     "LayoutComponent" | "NestedArtboardLayout" | "ArtboardComponentList"
@@ -31436,6 +31440,21 @@ mod tests {
         (participant_local, container_local)
     }
 
+    #[test]
+    fn layout_provider_discovery_uses_each_childs_current_parent() {
+        let (_runtime, _graphs, instance) = animated_participant_instance();
+        let engine = TaffyRuntimeLayoutEngine;
+
+        assert_eq!(
+            engine
+                .layout_provider_children(&instance, 0)
+                .expect("root providers resolve"),
+            vec![1],
+            "a participant belongs only to its current owning layout, even when occurrence \
+             construction retains an obsolete root child backlink"
+        );
+    }
+
     fn participant_width(instance: &ArtboardInstance, participant_local: usize) -> f32 {
         instance
             .component(participant_local)
@@ -32000,6 +32019,17 @@ mod tests {
             vec![6],
             "provider discovery follows the live Solo selection"
         );
+    }
+
+    #[test]
+    fn layout_provider_discovery_cannot_reopen_the_static_graph() {
+        let provider_discovery: fn(
+            &TaffyRuntimeLayoutEngine,
+            &ArtboardInstance,
+            usize,
+        ) -> Option<Vec<usize>> = TaffyRuntimeLayoutEngine::layout_provider_children;
+
+        let _ = provider_discovery;
     }
 
     #[test]

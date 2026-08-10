@@ -2029,6 +2029,15 @@ impl GpuCanvasBytecodeProgram {
         self.instance.set(cpp_c_string_prefix(key), value)
     }
 
+    /// Assign one integer script input, matching C++
+    /// `ScriptedObject::setIntegerInput`. Rive passes the signed `int`
+    /// through `lua_pushunsigned`, so preserve the same 32-bit bit pattern
+    /// before projecting the value into Luau's numeric domain.
+    pub fn set_integer_input(&mut self, key: &str, value: i32) -> Result<()> {
+        self.instance
+            .set(cpp_c_string_prefix(key), value as u32 as f64)
+    }
+
     /// Assign one boolean script input, matching C++
     /// `ScriptedObject::setBooleanInput` table-write semantics.
     pub fn set_boolean_input(&mut self, key: &str, value: bool) -> Result<()> {

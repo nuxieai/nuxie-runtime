@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+use crate::components::ComponentHandle;
 #[cfg(test)]
 use crate::input::FocusEvent;
 use crate::input::{
@@ -25,6 +26,40 @@ const FOCUS_KEY_LIST_SCOPE: u64 = 3;
 const FOCUS_KEY_LIST_ROW: u64 = 4;
 const FOCUS_KEY_AUTHORED: u64 = 5;
 const FOCUS_KEY_NESTED_CHILD: u64 = 6;
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct RuntimeFocusTraversalWork {
+    pub(crate) component_visits: usize,
+    pub(crate) graph_lookup_candidates: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static RUNTIME_FOCUS_TRAVERSAL_WORK: RefCell<RuntimeFocusTraversalWork> =
+        RefCell::new(RuntimeFocusTraversalWork::default());
+}
+
+#[cfg(test)]
+pub(crate) fn reset_runtime_focus_traversal_work() {
+    RUNTIME_FOCUS_TRAVERSAL_WORK
+        .with(|work| *work.borrow_mut() = RuntimeFocusTraversalWork::default());
+}
+
+#[cfg(test)]
+pub(crate) fn runtime_focus_traversal_work() -> RuntimeFocusTraversalWork {
+    RUNTIME_FOCUS_TRAVERSAL_WORK.with(|work| *work.borrow())
+}
+
+#[cfg(test)]
+fn record_runtime_focus_component_visit() {
+    RUNTIME_FOCUS_TRAVERSAL_WORK.with(|work| {
+        work.borrow_mut().component_visits += 1;
+    });
+}
+
+#[cfg(not(test))]
+fn record_runtime_focus_component_visit() {}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct RuntimeFocusOccurrenceKey(Vec<u64>);
@@ -931,21 +966,13 @@ fn build_artboard_focus_tree(
             sibling_index,
         },
     );
-    let Some(graph) = artboard.runtime_graph() else {
-        return;
-    };
-    let Some(root_local) = graph
-        .components
-        .iter()
-        .find(|component| component.type_name == "Artboard" && component.parent_local.is_none())
-        .map(|component| component.local_id)
-    else {
+    let Some(root) = artboard.root_component_handle() else {
         return;
     };
     build_component_focus_tree(
         tree,
         artboard,
-        root_local,
+        root,
         occurrence_key,
         parent_focus,
         inherited_eligible,
@@ -959,7 +986,7 @@ fn build_artboard_focus_tree(
 fn build_component_focus_tree(
     tree: &RuntimeFocusTree,
     artboard: &ArtboardInstance,
-    local_id: usize,
+    component_handle: ComponentHandle,
     occurrence_key: &RuntimeFocusOccurrenceKey,
     parent_focus: Option<RuntimeFocusOccurrenceKey>,
     inherited_eligible: bool,
@@ -967,16 +994,12 @@ fn build_component_focus_tree(
     active: &mut BTreeSet<RuntimeFocusOccurrenceKey>,
     sibling_counts: &mut BTreeMap<Option<RuntimeFocusOccurrenceKey>, usize>,
 ) {
+    record_runtime_focus_component_visit();
     let Some(graph) = artboard.runtime_graph() else {
         return;
     };
-    let Some(component) = graph
-        .components
-        .iter()
-        .find(|component| component.local_id == local_id)
-    else {
-        return;
-    };
+    let component = artboard.component_at(component_handle);
+    let local_id = component.local_id;
 
     let mut host_parent = parent_focus.clone();
     if matches!(
@@ -1048,7 +1071,10 @@ fn build_component_focus_tree(
                 )
                 .is_some()
                 {
-                    component.parent_local.unwrap_or(local_id)
+                    component
+                        .parent
+                        .map(|parent| artboard.component_at(parent).local_id)
+                        .unwrap_or(local_id)
                 } else {
                     local_id
                 };
@@ -1095,27 +1121,22 @@ fn build_component_focus_tree(
         }
     }
 
-    let direct_focus = component.children.iter().copied().find(|child_local| {
-        graph
-            .components
-            .iter()
-            .find(|child| child.local_id == *child_local)
-            .is_some_and(|child| child.type_name == "FocusData")
-    });
-    let recurse_parent = if let Some(focus_local) = direct_focus {
+    let direct_focus = component
+        .children
+        .iter()
+        .copied()
+        .find(|child| artboard.component_at(*child).type_name == "FocusData");
+    let recurse_parent = if let Some(focus_handle) = direct_focus {
+        let focus = artboard.component_at(focus_handle);
         let focus_key = occurrence_key.child(
             FOCUS_KEY_AUTHORED,
-            focus_local as u64,
-            graph
-                .components
-                .iter()
-                .find(|child| child.local_id == focus_local)
-                .map_or(0, |child| u64::from(child.global_id)),
+            focus.local_id as u64,
+            u64::from(focus.global_id),
         );
         tree.place_retained_node(
             focus_key.clone(),
             parent_focus,
-            authored_focus_node(artboard, focus_local, inherited_eligible, root_transform),
+            authored_focus_node(artboard, focus.local_id, inherited_eligible, root_transform),
             active,
             sibling_counts,
         );
@@ -1124,17 +1145,13 @@ fn build_component_focus_tree(
         parent_focus
     };
 
-    for child_local in &component.children {
-        let is_focus_data = graph
-            .components
-            .iter()
-            .find(|child| child.local_id == *child_local)
-            .is_some_and(|child| child.type_name == "FocusData");
+    for child in &component.children {
+        let is_focus_data = artboard.component_at(*child).type_name == "FocusData";
         if !is_focus_data {
             build_component_focus_tree(
                 tree,
                 artboard,
-                *child_local,
+                *child,
                 occurrence_key,
                 recurse_parent.clone(),
                 inherited_eligible,

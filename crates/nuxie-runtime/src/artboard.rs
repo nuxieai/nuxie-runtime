@@ -3844,6 +3844,10 @@ impl ArtboardInstance {
         self.objects.component_handle(local_id)
     }
 
+    pub(crate) fn root_component_handle(&self) -> Option<ComponentHandle> {
+        self.objects.root()
+    }
+
     /// Exact Component/Drawable/LayoutComponent virtual hit-test chain.
     ///
     /// The `ComponentHandle` is the occurrence-local counterpart of the C++

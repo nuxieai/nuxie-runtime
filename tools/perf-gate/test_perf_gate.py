@@ -29,6 +29,25 @@ class PerfCorpusTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(self.manifest.files), 20)
 
+    def test_data_viz_is_enrolled_with_the_measured_ratchet(self):
+        data_viz = next(
+            file for file in self.manifest.files if file.id == "data_viz_demo"
+        )
+
+        self.assertEqual(data_viz.file_bytes, 1_652_339)
+        self.assertEqual(data_viz.baseline_ratio, 244.770162)
+        self.assertEqual(data_viz.ceiling, 282)
+        self.assertEqual(
+            set(data_viz.categories),
+            {
+                "largest",
+                "layout-heavy",
+                "nested-artboards",
+                "scripted",
+                "text-heavy",
+            },
+        )
+
     def test_blocking_gate_is_wired_into_make_landing_and_ci(self):
         makefile = (REPO_ROOT / "Makefile").read_text()
         land = (REPO_ROOT / "tools" / "land.sh").read_text()
@@ -40,8 +59,10 @@ class PerfCorpusTests(unittest.TestCase):
         self.assertIn("perf-gate-measure: perf-runtime-ref-check", makefile)
         self.assertIn("perf-gate: perf-gate-measure", makefile)
         self.assertIn("perf-gate-tighten:", makefile)
-        self.assertIn("timing_gates=(perf-gate)", land)
+        self.assertIn("timing_gates=(perf-gate-tighten)", land)
         self.assertIn('cat "$cache/$g.log"', land)
+        self.assertIn('git diff --quiet -- perf-corpus.toml', land)
+        self.assertIn("commit the tightened perf-corpus.toml", land)
         self.assertIn("make perf-gate PERF_JSON_META=", perf_job)
         self.assertNotIn("continue-on-error", perf_job)
         self.assertNotIn("make perf-hot-loop", workflow)

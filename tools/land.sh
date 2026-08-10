@@ -33,7 +33,10 @@ gates=(cpp-probe runtime-frame-loop-port-gate rust-attribution-gate
        feature-compile-gate
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
        scripted-golden-compare silver-corpus-test)
-timing_gates=(perf-gate)
+# Every performance landing remeasures the full ratchet three times and applies
+# only lower baselines/ceilings. If it finds an improvement, the generated
+# manifest delta is a required part of the landing rather than hidden slack.
+timing_gates=(perf-gate-tighten)
 for extra in "$@"; do gates+=("$extra"); done
 
 run_gate() {
@@ -95,6 +98,12 @@ for g in "${timing_gates[@]}"; do
     fi
     cat "$cache/$g.log"
 done
+
+if ! git diff --quiet -- perf-corpus.toml; then
+    echo "land.sh: perf ratios improved — commit the tightened perf-corpus.toml and rerun the lane" >&2
+    git diff -- perf-corpus.toml >&2
+    exit 1
+fi
 
 git push -u origin "$branch" || exit 1
 # A prior land.sh run may have created the PR and then lost the merge race with

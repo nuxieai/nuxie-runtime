@@ -2,11 +2,9 @@ schema = "nuxie-perf-corpus-v1"
 source = "corpus.toml"
 minimum_files = 20
 
-# Nineteen rows are the largest practical exact, input-free corpus.toml entries
-# at the pinned rive-runtime revision. data_viz_demo is omitted because one
-# current 100-frame run takes minutes, which would make this landing gate a soak
-# test. The final five rows deliberately add structurally distinct scripted,
-# list/virtualization, and nesting paths.
+# Twenty rows are the largest practical exact, input-free corpus.toml entries
+# at the pinned rive-runtime revision. The final five rows deliberately add
+# structurally distinct scripted, list/virtualization, and nesting paths.
 
 [[file]]
 id = "text_vertical_trim_test"
@@ -63,6 +61,14 @@ categories = ["largest", "text-heavy", "list-virtualization", "layout-heavy"]
 note = "Large command-queue data-binding scene with list-backed view models and text layout."
 baseline_ratio = 12.559797
 ceiling = 15
+
+[[file]]
+id = "data_viz_demo"
+bytes = 1652339
+categories = ["largest", "text-heavy", "nested-artboards", "scripted", "layout-heavy"]
+note = "Large scripted data-visualization scene guards retained font shaping, text topology, and transferred nested-layout convergence."
+baseline_ratio = 244.770162
+ceiling = 282
 
 [[file]]
 id = "viewmodel_based_condition"

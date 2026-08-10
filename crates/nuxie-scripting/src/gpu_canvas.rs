@@ -2026,19 +2026,20 @@ impl GpuCanvasBytecodeProgram {
     /// the Lua table without imposing host schema policy. The caller drives
     /// the next direct draw, so there is no component dirt graph to mark here.
     pub fn set_number_input(&mut self, key: &str, value: f32) -> Result<()> {
-        self.instance.set(key, value)
+        self.instance.set(cpp_c_string_prefix(key), value)
     }
 
     /// Assign one boolean script input, matching C++
     /// `ScriptedObject::setBooleanInput` table-write semantics.
     pub fn set_boolean_input(&mut self, key: &str, value: bool) -> Result<()> {
-        self.instance.set(key, value)
+        self.instance.set(cpp_c_string_prefix(key), value)
     }
 
     /// Assign one string script input, matching C++
     /// `ScriptedObject::setStringInput` table-write semantics.
     pub fn set_string_input(&mut self, key: &str, value: &str) -> Result<()> {
-        self.instance.set(key, value)
+        self.instance
+            .set(cpp_c_string_prefix(key), cpp_c_string_prefix(value))
     }
 
     /// Execute `drawCanvas` and return the exact Rust-owned completed pass.
@@ -2073,6 +2074,10 @@ impl GpuCanvasBytecodeProgram {
     pub fn vm(&self) -> &ScriptVm {
         &self.vm
     }
+}
+
+fn cpp_c_string_prefix(value: &str) -> &str {
+    value.split('\0').next().unwrap_or_default()
 }
 
 pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {

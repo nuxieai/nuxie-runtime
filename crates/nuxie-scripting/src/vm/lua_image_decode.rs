@@ -441,6 +441,61 @@ mod tests {
     }
 
     #[test]
+    fn script_callbacks_leave_async_completion_for_the_root_poll_boundary() {
+        let lua = lua_with_context();
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(&[4, 8, 12, 255], 1, 1, image_webp::ColorType::Rgba8)
+            .unwrap();
+        lua.globals()
+            .set("encoded", lua.create_buffer(encoded).unwrap())
+            .unwrap();
+        let table: Table = lua
+            .load(
+                "decodePromise = context:decodeImage(encoded); \
+                 return { advance = function() \
+                     observedStatus = decodePromise:getStatus(); return false \
+                 end }",
+            )
+            .eval()
+            .unwrap();
+        let mut instance = LuaScriptInstance::new(table);
+
+        for _ in 0..10_000 {
+            with_global_work_pool(|pool| {
+                pool.poll_completed_work(16);
+            });
+            if !lock_unpoisoned(&registry(&lua).unwrap().completions).is_empty() {
+                break;
+            }
+            std::thread::yield_now();
+        }
+        assert!(
+            !lock_unpoisoned(&registry(&lua).unwrap().completions).is_empty(),
+            "decode completion never reached the VM-owned queue"
+        );
+
+        assert!(
+            !instance
+                .call_advance_truthy(1.0 / 60.0, &mut nuxie_runtime::NoopScriptHost)
+                .unwrap()
+        );
+        assert_eq!(
+            lua.globals().get::<String>("observedStatus").unwrap(),
+            "Pending",
+            "ordinary script callbacks must not replace Artboard::advance as the async poll authority"
+        );
+
+        assert!(instance.poll_async_work().unwrap());
+        assert_eq!(
+            lua.load("return decodePromise:getStatus()")
+                .eval::<String>()
+                .unwrap(),
+            "Fulfilled"
+        );
+    }
+
+    #[test]
     fn decode_image_rejects_invalid_encoded_bytes_after_work_pool_poll() {
         let lua = lua_with_context();
         lua.load(

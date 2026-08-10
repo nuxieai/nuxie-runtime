@@ -724,16 +724,6 @@ impl LuaScriptInstance {
     }
 
     fn reset_execution_budget(&self) {
-        if let Some(lua) = self
-            .table
-            .as_ref()
-            .map(Table::lua)
-            .or_else(|| self.generator.as_ref().map(Function::lua))
-        {
-            if let Err(error) = lua_image_decode::poll_completed(&lua) {
-                self.logging.log_error(&error);
-            }
-        }
         if self
             .script_cycle_active
             .as_ref()

@@ -58,7 +58,7 @@ pub struct RuntimeNestedStateMachineReport {
 pub(crate) struct RuntimeNestedStateMachineInstance {
     local_id: usize,
     animation_id: usize,
-    state_machine: Option<StateMachineInstance>,
+    state_machine: Option<Box<StateMachineInstance>>,
     nested_inputs: Vec<RuntimeNestedInput>,
 }
 
@@ -84,7 +84,7 @@ impl RuntimeNestedStateMachineInstance {
         let mut occurrence = Self {
             local_id,
             animation_id: state_machine.state_machine_index(),
-            state_machine: Some(state_machine),
+            state_machine: Some(Box::new(state_machine)),
             nested_inputs,
         };
         occurrence.apply_authored_values();
@@ -138,7 +138,7 @@ impl RuntimeNestedStateMachineInstance {
         let mut occurrence = Self {
             local_id,
             animation_id,
-            state_machine,
+            state_machine: state_machine.map(Box::new),
             nested_inputs,
         };
         occurrence.apply_authored_values();
@@ -159,7 +159,7 @@ impl RuntimeNestedStateMachineInstance {
         let mut occurrence = Self {
             local_id: self.local_id,
             animation_id: self.animation_id,
-            state_machine,
+            state_machine: state_machine.map(Box::new),
             nested_inputs,
         };
         occurrence.apply_authored_values();
@@ -179,18 +179,18 @@ impl RuntimeNestedStateMachineInstance {
     }
 
     pub(crate) fn state_machine(&self) -> Option<&StateMachineInstance> {
-        self.state_machine.as_ref()
+        self.state_machine.as_deref()
     }
 
     pub(crate) fn state_machine_mut(&mut self) -> Option<&mut StateMachineInstance> {
-        self.state_machine.as_mut()
+        self.state_machine.as_deref_mut()
     }
 
-    pub(crate) fn take_state_machine(&mut self) -> Option<StateMachineInstance> {
+    pub(crate) fn take_state_machine(&mut self) -> Option<Box<StateMachineInstance>> {
         self.state_machine.take()
     }
 
-    pub(crate) fn restore_state_machine(&mut self, state_machine: StateMachineInstance) {
+    pub(crate) fn restore_state_machine(&mut self, state_machine: Box<StateMachineInstance>) {
         debug_assert!(self.state_machine.is_none());
         self.state_machine = Some(state_machine);
     }
@@ -200,7 +200,7 @@ impl RuntimeNestedStateMachineInstance {
         parent_focus: &RuntimeFocusTree,
         child_identity: u64,
     ) {
-        if let Some(state_machine) = self.state_machine.as_mut() {
+        if let Some(state_machine) = self.state_machine.as_deref_mut() {
             state_machine.install_external_focus(parent_focus, child_identity);
         }
     }

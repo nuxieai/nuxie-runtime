@@ -1964,6 +1964,78 @@
     }
 
     #[test]
+    fn nested_state_machine_owner_allocation_is_stable_across_same_host_handoffs() {
+        let mut definition = empty_state_machine(11);
+        definition.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_bool(
+            1,
+            Some("enabled".to_owned()),
+            false,
+        ))]);
+        let mut nested = synthetic_nested_artboard_instance(22);
+        nested.child.state_machines = Arc::new(vec![definition.clone()]);
+        let state_machine = StateMachineInstance::new(0, &definition, &mut nested.child);
+        let mut occurrence = RuntimeNestedStateMachineInstance::new(
+            7,
+            state_machine,
+            vec![(0, Some("enabled".to_owned()), Some(false), None)],
+        );
+        let focus_owner = synthetic_instance(Vec::new(), Vec::new());
+        let parent_focus = RuntimeFocusTree::new_unsynchronized(&focus_owner);
+        occurrence.install_external_focus(&parent_focus, nested.child.instance_identity());
+        let owner_identity = occurrence
+            .state_machine()
+            .expect("nested state-machine owner")
+            .allocation_identity();
+        nested
+            .animations
+            .push(RuntimeNestedAnimationInstance::StateMachine(occurrence));
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.nested_artboards.insert(3, nested);
+        for expected in [true, false] {
+            let mut nested = parent
+                .nested_artboards
+                .remove(&3)
+                .expect("same mounted nested occurrence");
+            parent.detach_active_nested_state_machines(&mut nested);
+
+            let active = parent
+                .active_nested_state_machines
+                .get(&7)
+                .expect("same-host callbacks can address the active owner");
+            assert_eq!(
+                active.allocation_identity(),
+                owner_identity,
+                "pinned C++ keeps NestedStateMachine::m_StateMachineInstance in one unique_ptr allocation while same-host callbacks run"
+            );
+            assert!(
+                active.has_external_focus_manager(),
+                "the stable owner retains its parent focus domain while active"
+            );
+            assert!(parent.set_nested_state_machine_bool(7, 0, expected));
+
+            parent.restore_active_nested_state_machines(&mut nested);
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = &nested.animations[0]
+            else {
+                panic!("nested animation remains a state machine");
+            };
+            let restored = occurrence
+                .state_machine()
+                .expect("owner returns to its mounted occurrence");
+            assert_eq!(restored.allocation_identity(), owner_identity);
+            assert!(restored.has_external_focus_manager());
+            assert_eq!(
+                restored
+                    .input(0)
+                    .and_then(StateMachineInputInstance::bool_value),
+                Some(expected),
+                "same-host nested-input writes survive the owner handoff"
+            );
+            parent.nested_artboards.insert(3, nested);
+        }
+    }
+
+    #[test]
     fn nested_state_machine_forwards_empty_child_results_and_context_lifecycle() {
         let definition = empty_state_machine(11);
         let mut child = synthetic_instance(Vec::new(), Vec::new());

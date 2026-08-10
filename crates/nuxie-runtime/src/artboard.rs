@@ -414,8 +414,10 @@ pub struct ArtboardInstance {
     /// The occurrence itself must leave `nested_artboards` so Rust can hand
     /// the parent and child to the callback-major policy simultaneously.
     /// Keeping its state-machine owners here preserves same-host nested-input
-    /// listener actions while each callback completes through the parent.
-    pub(crate) active_nested_state_machines: BTreeMap<usize, StateMachineInstance>,
+    /// listener actions while each callback completes through the parent. The
+    /// stable heap owner mirrors C++ `NestedStateMachine`'s `unique_ptr`: this
+    /// temporary map handoff never relocates the state-machine instance.
+    pub(crate) active_nested_state_machines: BTreeMap<usize, Box<StateMachineInstance>>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
@@ -10030,6 +10032,7 @@ impl ArtboardInstance {
     ) -> Option<&StateMachineInstance> {
         self.active_nested_state_machines
             .get(&state_machine_local_id)
+            .map(Box::as_ref)
             .or_else(|| {
                 self.nested_artboards
                     .state_machine(state_machine_local_id)
@@ -10047,7 +10050,8 @@ impl ArtboardInstance {
         {
             return self
                 .active_nested_state_machines
-                .get_mut(&state_machine_local_id);
+                .get_mut(&state_machine_local_id)
+                .map(Box::as_mut);
         }
         self.nested_artboards
             .state_machine_mut(state_machine_local_id)

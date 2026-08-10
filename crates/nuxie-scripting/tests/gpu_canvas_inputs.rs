@@ -13,11 +13,13 @@ fn program() -> GpuCanvasBytecodeProgram {
                 amount = 1.0,
                 enabled = true,
                 title = "original",
+                color = 0,
                 advance = function(self, _seconds)
                     return type(self.amount) == "number"
                         and self.enabled
                         and self.amount > 5
                         and self.title == "updated"
+                        and self.color == 4279312947
                         and self.added == 7
                 end,
             }
@@ -36,6 +38,9 @@ fn retained_program_applies_scalar_script_inputs() {
     program
         .set_string_input("title", "updated")
         .expect("string");
+    program
+        .set_integer_input("color", 0xff112233_u32 as i32)
+        .expect("C++ integer input uses unsigned Lua number semantics");
     program
         .set_number_input("added", 7.0)
         .expect("new table field");
@@ -63,6 +68,9 @@ fn retained_program_matches_cpp_untyped_table_assignment() {
         .set_string_input("title", "updated")
         .expect("string input");
     program
+        .set_integer_input("color", 0xff112233_u32 as i32)
+        .expect("integer input");
+    program
         .set_number_input("added", 7.0)
         .expect("new table field");
     assert!(program.advance(1.0 / 60.0).expect("restored inputs"));
@@ -76,6 +84,9 @@ fn retained_program_matches_cpp_c_string_boundaries() {
         .set_string_input("title\0ignored", "updated\0ignored")
         .expect("C++ truncates names and string values at embedded NULs");
     program.set_number_input("amount", 6.0).expect("number");
+    program
+        .set_integer_input("color", 0xff112233_u32 as i32)
+        .expect("integer input");
     program
         .set_number_input("added", 7.0)
         .expect("new table field");

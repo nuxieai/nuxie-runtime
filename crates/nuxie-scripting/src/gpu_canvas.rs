@@ -2019,6 +2019,53 @@ impl GpuCanvasBytecodeProgram {
         Ok(matches!(value, Value::Boolean(true)))
     }
 
+    /// Override one authored numeric input on the retained script instance.
+    ///
+    /// Hosts use this to apply editor-controlled values before advancing or
+    /// drawing. Unknown keys and type mismatches fail closed so a stale
+    /// inspector schema cannot silently create a new Lua field.
+    pub fn set_number_input(&mut self, key: &str, value: f64) -> Result<bool> {
+        if !value.is_finite() {
+            return Err(Error::runtime(format!(
+                "GPU-canvas input `{key}` must be a finite number"
+            )));
+        }
+        let current: Value = self.instance.get(key)?;
+        let changed = match current {
+            Value::Integer(current) => current as f64 != value,
+            Value::Number(current) => current != value,
+            Value::Nil => return Err(unknown_gpu_canvas_input(key)),
+            other => return Err(gpu_canvas_input_type_mismatch(key, "number", &other)),
+        };
+        self.instance.set(key, value)?;
+        Ok(changed)
+    }
+
+    /// Override one authored boolean input on the retained script instance.
+    pub fn set_boolean_input(&mut self, key: &str, value: bool) -> Result<bool> {
+        let current: Value = self.instance.get(key)?;
+        let changed = match current {
+            Value::Boolean(current) => current != value,
+            Value::Nil => return Err(unknown_gpu_canvas_input(key)),
+            other => return Err(gpu_canvas_input_type_mismatch(key, "boolean", &other)),
+        };
+        self.instance.set(key, value)?;
+        Ok(changed)
+    }
+
+    /// Override one authored string or color input on the retained script
+    /// instance. Colors use their canonical string representation.
+    pub fn set_string_input(&mut self, key: &str, value: &str) -> Result<bool> {
+        let current: Value = self.instance.get(key)?;
+        let changed = match current {
+            Value::String(current) => current.as_bytes() != value.as_bytes(),
+            Value::Nil => return Err(unknown_gpu_canvas_input(key)),
+            other => return Err(gpu_canvas_input_type_mismatch(key, "string", &other)),
+        };
+        self.instance.set(key, value)?;
+        Ok(changed)
+    }
+
     /// Execute `drawCanvas` and return the exact Rust-owned completed pass.
     pub fn draw(&mut self) -> Result<GpuCanvasDrawPlan> {
         {
@@ -2051,6 +2098,17 @@ impl GpuCanvasBytecodeProgram {
     pub fn vm(&self) -> &ScriptVm {
         &self.vm
     }
+}
+
+fn unknown_gpu_canvas_input(key: &str) -> Error {
+    Error::runtime(format!("GPU-canvas input `{key}` is not defined"))
+}
+
+fn gpu_canvas_input_type_mismatch(key: &str, expected: &str, actual: &Value) -> Error {
+    Error::runtime(format!(
+        "GPU-canvas input `{key}` expected {expected}, found {}",
+        actual.type_name()
+    ))
 }
 
 pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {

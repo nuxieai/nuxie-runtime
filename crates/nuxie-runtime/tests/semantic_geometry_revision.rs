@@ -1139,6 +1139,49 @@ fn semantic_geometry_revision_changes_when_text_render_opacity_hides_visible_geo
 }
 
 #[test]
+fn semantic_geometry_revision_changes_when_text_drawable_flags_hide_visible_geometry() {
+    let mut artboard = variable_font_fixture_artboard();
+    artboard.update_pass();
+    let text_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Text")
+        .map(|component| component.local_id)
+        .expect("fixture has Text");
+    assert!(
+        artboard.visible_geometry_with_bounds().iter().any(|hit| {
+            hit.path
+                .last()
+                .is_some_and(|segment| segment.local_id == text_local)
+        }),
+        "fixture exposes a public Text hit",
+    );
+    let drawable_flags = fixture_property("Drawable", "drawableFlags", FixtureValue::Uint(0)).key;
+    let before = artboard
+        .try_semantic_geometry_revision()
+        .expect("fixture has covered semantic geometry");
+
+    assert!(artboard.set_uint_property(text_local, drawable_flags, 1));
+    assert_ne!(
+        artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture has covered semantic geometry"),
+        before,
+        "the Text hidden-bit write must publish before a later semantic read",
+    );
+    artboard.update_pass();
+
+    assert!(
+        artboard.visible_geometry_with_bounds().iter().all(|hit| {
+            hit.path
+                .last()
+                .is_none_or(|segment| segment.local_id != text_local)
+        }),
+        "the hidden Text removes its public catalogue occurrence",
+    );
+}
+
+#[test]
 fn semantic_geometry_revision_changes_when_solid_color_hides_visible_geometry() {
     let mut artboard = solid_color_fixture_artboard();
     artboard.update_pass();

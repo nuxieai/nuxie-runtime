@@ -67,3 +67,18 @@ fn retained_program_matches_cpp_untyped_table_assignment() {
         .expect("new table field");
     assert!(program.advance(1.0 / 60.0).expect("restored inputs"));
 }
+
+#[test]
+fn retained_program_matches_cpp_c_string_boundaries() {
+    let mut program = program();
+
+    program
+        .set_string_input("title\0ignored", "updated\0ignored")
+        .expect("C++ truncates names and string values at embedded NULs");
+    program.set_number_input("amount", 6.0).expect("number");
+    program
+        .set_number_input("added", 7.0)
+        .expect("new table field");
+
+    assert!(program.advance(1.0 / 60.0).expect("truncated string input"));
+}

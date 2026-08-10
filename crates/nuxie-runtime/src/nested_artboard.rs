@@ -5,6 +5,77 @@
 // borrowing the surrounding private runtime vocabulary without recreating a
 // parallel public abstraction.
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeNestedViewModelPublicationBinding {
+    pub(crate) source_local_id: usize,
+    pub(crate) type_name: &'static str,
+    pub(crate) value_key: u16,
+    pub(crate) cell: RuntimeViewModelCell,
+}
+
+/// Occurrence-owned counterpart of the callbacks C++ receives directly from
+/// shared authored `ViewModelInstanceValue` pointers. Ordinary value dirt
+/// reuses exact cached cells; only a changed intermediate ViewModel endpoint
+/// invalidates the authored-property path resolution.
+#[derive(Debug)]
+pub(crate) struct RuntimeNestedViewModelPublicationState {
+    initialized: bool,
+    bindings: Vec<RuntimeNestedViewModelPublicationBinding>,
+    value_dirt: RuntimeCellDirtSink,
+    topology_dirt: RuntimeCellDirtSink,
+}
+
+impl Default for RuntimeNestedViewModelPublicationState {
+    fn default() -> Self {
+        Self {
+            initialized: false,
+            bindings: Vec::new(),
+            value_dirt: RuntimeCellDirtSink::new(),
+            topology_dirt: RuntimeCellDirtSink::new(),
+        }
+    }
+}
+
+impl RuntimeNestedViewModelPublicationState {
+    pub(crate) fn take_requires_rebuild(&self) -> bool {
+        !self.initialized
+            || self
+                .topology_dirt
+                .take_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+    }
+
+    pub(crate) fn take_value_dirt(&self) -> bool {
+        self.value_dirt
+            .take_dirt()
+            .contains(RuntimeCellDirt::BINDINGS)
+    }
+
+    pub(crate) fn rebuild(
+        &mut self,
+        bindings: Vec<RuntimeNestedViewModelPublicationBinding>,
+        value_cells: impl IntoIterator<Item = RuntimeViewModelCell>,
+        topology_cells: impl IntoIterator<Item = RuntimeViewModelCell>,
+    ) {
+        let value_dirt = RuntimeCellDirtSink::new();
+        for cell in value_cells {
+            cell.add_dependent(&value_dirt);
+        }
+        let topology_dirt = RuntimeCellDirtSink::new();
+        for cell in topology_cells {
+            cell.add_dependent(&topology_dirt);
+        }
+        self.bindings = bindings;
+        self.value_dirt = value_dirt;
+        self.topology_dirt = topology_dirt;
+        self.initialized = true;
+    }
+
+    pub(crate) fn bindings(&self) -> &[RuntimeNestedViewModelPublicationBinding] {
+        &self.bindings
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     // Rust drops fields in declaration order. C++ releases nested animations
@@ -32,6 +103,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelHandle>,
     pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    pub(crate) stateful_view_model_publication: RuntimeNestedViewModelPublicationState,
     /// C++ `NestedArtboardHostFlags::pendingStatefulBinding`: `onAddedClean`
     /// only schedules `bindStateful`; the occurrence consumes the latch on its
     /// next advance, after the host's own data binds have applied
@@ -94,6 +166,7 @@ impl Clone for RuntimeNestedArtboardInstance {
                     )
                 })
                 .collect(),
+            stateful_view_model_publication: RuntimeNestedViewModelPublicationState::default(),
             data_bind_property_source_locals: self.data_bind_property_source_locals.clone(),
             data_bind_image_source_locals: self.data_bind_image_source_locals.clone(),
             data_bind_context_source_locals_by_path: self
@@ -105,6 +178,43 @@ impl Clone for RuntimeNestedArtboardInstance {
             quantize: self.quantize,
             cumulated_seconds: self.cumulated_seconds,
         }
+    }
+}
+
+#[cfg(test)]
+mod nested_view_model_publication_tests {
+    use super::*;
+    use crate::view_model_cell::{
+        RuntimeViewModelCell, RuntimeViewModelCellValue, RuntimeViewModelChangeValue,
+    };
+
+    #[test]
+    fn scalar_dirt_reuses_cached_cells_while_topology_dirt_rebuilds_paths() {
+        let scalar = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let topology = RuntimeViewModelCell::new(RuntimeViewModelCellValue::ViewModel);
+        let mut publication = RuntimeNestedViewModelPublicationState::default();
+
+        assert!(publication.take_requires_rebuild());
+        publication.rebuild(Vec::new(), [scalar.clone()], [topology.clone()]);
+        assert!(!publication.take_requires_rebuild());
+        assert!(!publication.take_value_dirt());
+
+        assert!(scalar.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert!(publication.take_value_dirt());
+        assert!(!publication.take_requires_rebuild());
+
+        topology.notify_structural_value_changed(RuntimeViewModelChangeValue::ViewModel(Some(2)));
+        assert!(publication.take_requires_rebuild());
+
+        let replacement = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
+        publication.rebuild(Vec::new(), [replacement.clone()], []);
+        assert!(scalar.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert!(
+            !publication.take_value_dirt(),
+            "rebuilding drops the old weak callback subscription"
+        );
+        assert!(replacement.set_value(RuntimeViewModelCellValue::Number(5.0)));
+        assert!(publication.take_value_dirt());
     }
 }
 

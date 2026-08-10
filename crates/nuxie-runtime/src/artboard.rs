@@ -3848,6 +3848,13 @@ impl ArtboardInstance {
         self.objects.root()
     }
 
+    pub(crate) fn component_is_authored(&self, handle: ComponentHandle) -> bool {
+        matches!(
+            self.objects.address(handle),
+            Some(ComponentAddress::Authored(_))
+        )
+    }
+
     /// Exact Component/Drawable/LayoutComponent virtual hit-test chain.
     ///
     /// The `ComponentHandle` is the occurrence-local counterpart of the C++

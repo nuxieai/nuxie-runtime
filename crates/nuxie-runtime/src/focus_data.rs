@@ -1125,6 +1125,7 @@ fn build_component_focus_tree(
         .children
         .iter()
         .copied()
+        .filter(|child| artboard.component_is_authored(*child))
         .find(|child| artboard.component_at(*child).type_name == "FocusData");
     let recurse_parent = if let Some(focus_handle) = direct_focus {
         let focus = artboard.component_at(focus_handle);
@@ -1145,13 +1146,18 @@ fn build_component_focus_tree(
         parent_focus
     };
 
-    for child in &component.children {
-        let is_focus_data = artboard.component_at(*child).type_name == "FocusData";
+    for child in component
+        .children
+        .iter()
+        .copied()
+        .filter(|child| artboard.component_is_authored(*child))
+    {
+        let is_focus_data = artboard.component_at(child).type_name == "FocusData";
         if !is_focus_data {
             build_component_focus_tree(
                 tree,
                 artboard,
-                *child,
+                child,
                 occurrence_key,
                 recurse_parent.clone(),
                 inherited_eligible,

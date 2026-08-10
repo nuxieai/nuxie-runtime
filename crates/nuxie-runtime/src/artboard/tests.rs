@@ -11526,6 +11526,9 @@
                 push_synthetic_object(bytes, "Node", &[("parentId", (local_id - 1) as u64)]);
             }
             push_synthetic_object(bytes, "FocusData", &[("parentId", NODE_COUNT as u64)]);
+            // Shape owns an embedded PathComposer that participates in the
+            // dependency graph, but not C++ ContainerComponent::children.
+            push_synthetic_object(bytes, "Shape", &[("parentId", 0)]);
         });
         let instance = instance_from_riv(&bytes);
         let mut focus_tree = RuntimeFocusTree::new_unsynchronized(&instance);
@@ -11536,7 +11539,7 @@
         assert_eq!(
             runtime_focus_traversal_work(),
             RuntimeFocusTraversalWork {
-                component_visits: NODE_COUNT + 1,
+                component_visits: NODE_COUNT + 2,
                 graph_lookup_candidates: 0,
             },
             "pinned C++ follows retained Component::children pointers once per component"

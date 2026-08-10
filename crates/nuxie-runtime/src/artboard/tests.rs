@@ -6383,6 +6383,49 @@
     }
 
     #[test]
+    fn dirty_layout_solve_seeds_the_same_generation_nested_layout_frame() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/sync/databind_null_artboard_swap.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+        let file = read_runtime_file(&bytes).expect("nested-layout fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested-layout fixture graphs");
+        let mut instance = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("nested-layout fixture instance");
+        assert!(!instance.nested_artboard_locals.is_empty());
+
+        crate::draw::reset_taffy_layout_solve_entries();
+        instance.update_components();
+        let after_style_sync = crate::draw::taffy_layout_solve_entries();
+        assert!(after_style_sync > 0, "dirty layout performs one retained solve");
+        let frame = instance.runtime_nested_artboard_layout_bounds_frame();
+        assert!(frame.bounds.is_some());
+        assert_eq!(
+            crate::draw::taffy_layout_solve_entries(),
+            after_style_sync,
+            "the nested transfer must consume the retained result of the same C++ Yoga solve"
+        );
+
+        instance
+            .advance(0.0)
+            .expect("the first nested-layout frame transfers the child layout");
+        crate::draw::reset_taffy_layout_solve_entries();
+        instance
+            .advance(0.0)
+            .expect("an unchanged transferred nested-layout frame advances");
+        assert_eq!(
+            crate::draw::taffy_layout_solve_entries(),
+            0,
+            "an unchanged transferred C++ Yoga tree must remain clean on the next frame"
+        );
+    }
+
+    #[test]
     fn layout_revision_tracks_retained_layout_owners_not_global_text_writes() {
         let layout = synthetic_component_for_type(0, "LayoutComponent");
         let mut text_run = synthetic_component(1, 1);
@@ -6532,6 +6575,7 @@
         // cached bounds snapshot; this apply performs no constraint refresh
         // and must leave the pending child layout generation armed instead of
         // absorbing it.
+        crate::draw::reset_taffy_layout_solve_entries();
         instance.apply_nested_artboard_layout_bounds(
             hug_host,
             frame.bounds.as_ref().as_ref(),
@@ -6549,6 +6593,11 @@
             (child_width - 263.0879).abs() < 0.001,
             "a mid-animation data-bound gap write must re-solve the transferred \
              nested layout in the same frame; got {child_width}"
+        );
+        assert!(
+            crate::draw::taffy_layout_solve_entries() <= 9,
+            "one transferred child dirt generation must settle in one bounded decomposed-layout wave instead of re-solving until the 100-pass safety cap; got {} solves",
+            crate::draw::taffy_layout_solve_entries()
         );
     }
 

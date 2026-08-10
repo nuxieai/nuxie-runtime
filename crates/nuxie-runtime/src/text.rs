@@ -17,6 +17,7 @@ use skrifa::raw::TableProvider;
 use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaTag};
 use std::collections::BTreeSet;
+use std::rc::Rc;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProperty};
 
@@ -2173,7 +2174,8 @@ impl StaticTextSlice {
                 harf_variations.iter().copied(),
             ))
         };
-        let shaper_data = ShaperData::new(&harf_font);
+        let shaper_data =
+            base_style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
         let shaper = shaper_data
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
@@ -2253,7 +2255,8 @@ impl StaticTextSlice {
                 harf_variations.iter().copied(),
             ))
         };
-        let shaper_data = ShaperData::new(&harf_font);
+        let shaper_data =
+            base_style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
         let shaper = shaper_data
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
@@ -2655,7 +2658,8 @@ impl StaticTextSlice {
                 harf_variations.iter().copied(),
             ))
         };
-        let shaper_data = ShaperData::new(&harf_font);
+        let shaper_data =
+            base_style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
         let shaper = shaper_data
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
@@ -2798,7 +2802,8 @@ impl StaticTextSlice {
                 harf_variations.iter().copied(),
             ))
         };
-        let shaper_data = ShaperData::new(&harf_font);
+        let shaper_data =
+            base_style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
         let shaper = shaper_data
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
@@ -3681,7 +3686,7 @@ impl StaticTextSlice {
                 harf_variations.iter().copied(),
             ))
         };
-        let shaper_data = ShaperData::new(&harf_font);
+        let shaper_data = style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
         let shaper = shaper_data
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
@@ -3873,7 +3878,8 @@ impl StaticTextSlice {
                     harf_variations.iter().copied(),
                 ))
             };
-            let shaper_data = ShaperData::new(&harf_font);
+            let shaper_data =
+                base_style.retained_shaper_data(runtime, instance, font_bytes, &harf_font);
             let shaper = shaper_data
                 .shaper(&harf_font)
                 .instance(shaper_instance.as_ref())
@@ -4819,6 +4825,28 @@ impl StaticTextStyle {
                 self.font_asset_id
                     .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
             })
+    }
+
+    fn retained_shaper_data(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        font_bytes: &[u8],
+        font: &HarfFontRef<'_>,
+    ) -> Rc<ShaperData> {
+        let asset_global = instance
+            .text_style_font_override(self.local_id)
+            .and_then(|value| usize::try_from(value.file_asset_index()).ok())
+            .and_then(|index| runtime.file_asset(index))
+            .filter(|asset| asset.type_name == "FontAsset")
+            .map(|asset| asset.id)
+            .or(self.font_asset_global);
+        let retained = asset_global.and_then(|asset_global| {
+            instance
+                .runtime_font_assets
+                .shaper_data_for_bytes(asset_global, font_bytes)
+        });
+        retained.unwrap_or_else(|| Rc::new(ShaperData::new(font)))
     }
 }
 

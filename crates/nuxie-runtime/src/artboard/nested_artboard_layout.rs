@@ -406,9 +406,15 @@ impl ArtboardInstance {
                 (transfer_key, nested.child.layout_constraint_bounds.clone()),
             );
         }
-        if changed {
-            crate::layout_node_provider::mark_layout_node_dirty(self, host_local_id);
-        }
+        // Applying a parent-owned Yoga result can update the detached child's
+        // presentation and constraint cache without changing the parent's
+        // Yoga inputs. C++ performs that publication inside the same shared
+        // tree; re-dirtying the host here makes Rust solve the identical parent
+        // tree again, and every refresh changes the generation key enough to
+        // repeat until the outer safety cap. Genuine child-authored layout
+        // changes already publish through `update_nested_artboard_from_host_dirt`
+        // (and a pending transferred hug generation remains armed above), so
+        // the accepted parent result itself must not schedule another solve.
         changed
     }
 }

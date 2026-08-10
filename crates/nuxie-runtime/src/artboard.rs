@@ -8165,6 +8165,20 @@ impl ArtboardInstance {
                 self.control_runtime_layout_joysticks(&graphs[*graph_index], layout_bounds);
             }
         }
+        if calculates_layout {
+            // C++ retains one Yoga tree and NestedArtboardLayout consumes the
+            // result produced by this same `syncStyleChanges` calculation.
+            // Rust's decomposed transfer frame must point at that result too;
+            // seed it after publishing the solved bounds because those writes
+            // advance the occurrence's layout revision themselves.
+            self.nested_layout_bounds = Some(RuntimeNestedLayoutBoundsFrame {
+                key: RuntimeNestedLayoutBoundsCacheKey {
+                    graph_global_id: self.graph_global_id,
+                    layout_revision: self.layout_revision,
+                },
+                bounds: Arc::new(calculated_layout_bounds.as_deref().cloned()),
+            });
+        }
         true
     }
 

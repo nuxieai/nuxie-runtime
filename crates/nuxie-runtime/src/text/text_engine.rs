@@ -58,6 +58,12 @@ pub(crate) fn static_text_layout_measure_bounds(
     text_local: usize,
     layout_constraint: RuntimeTextLayoutConstraint,
 ) -> Option<(f32, f32, f32, f32)> {
+    if let Some(slice) = instance.retained_static_text_topology(runtime, graph, text_local)
+        && let Ok(Some(bounds)) =
+            slice.measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
+    {
+        return Some(bounds);
+    }
     if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
         && let Ok(Some(bounds)) =
             slice.measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)

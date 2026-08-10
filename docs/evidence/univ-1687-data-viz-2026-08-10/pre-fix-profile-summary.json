@@ -1,0 +1,334 @@
+{
+  "maximum_weight_ns": 1000000,
+  "minimum_weight_ns": 1000000,
+  "process": "rust-golden-runner-scripted-pre-fix",
+  "sample_period_ms": 1,
+  "sample_rows": 5780,
+  "schema": "nuxie-xctrace-folded/v1",
+  "top_inclusive": [
+    {
+      "frame": "start",
+      "samples": 5780
+    },
+    {
+      "frame": "main",
+      "samples": 5777
+    },
+    {
+      "frame": "std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>",
+      "samples": 5776
+    },
+    {
+      "frame": "rust_golden_runner::main",
+      "samples": 5776
+    },
+    {
+      "frame": "rust_golden_runner::run",
+      "samples": 5776
+    },
+    {
+      "frame": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug",
+      "samples": 5382
+    },
+    {
+      "frame": "rust_golden_runner::timed_result::<bool, rust_golden_runner::run::{closure#11}>",
+      "samples": 5294
+    },
+    {
+      "frame": "rust_golden_runner::advance_scene_to",
+      "samples": 5294
+    },
+    {
+      "frame": "<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>::compute_child_layout::{closure#0}",
+      "samples": 5292
+    },
+    {
+      "frame": "taffy::compute::flexbox::compute_preliminary::<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>",
+      "samples": 5292
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::update_pass_with_script_mode",
+      "samples": 5135
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset",
+      "samples": 5070
+    },
+    {
+      "frame": "nuxie_runtime::text::static_text_layout_measure_bounds",
+      "samples": 5022
+    },
+    {
+      "frame": "<nuxie_runtime::text::StaticTextSlice>::layout_bounds_with_constraint",
+      "samples": 5005
+    },
+    {
+      "frame": "<nuxie_runtime::text::StaticTextSlice>::styled_resolved_run_glyphs",
+      "samples": 4811
+    },
+    {
+      "frame": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style_with_strengths",
+      "samples": 4732
+    },
+    {
+      "frame": "nuxie_runtime::text::shape_text_glyphs_with_features",
+      "samples": 4035
+    },
+    {
+      "frame": "nuxie_runtime::text::shape_cxx_script_run_glyphs_in_direction",
+      "samples": 3937
+    },
+    {
+      "frame": "<harfrust::hb::face::hb_font_t>::shape",
+      "samples": 3884
+    },
+    {
+      "frame": "<harfrust::hb::face::hb_font_t>::shape_with_plan",
+      "samples": 3212
+    },
+    {
+      "frame": "<std::sys::sync::once::queue::Once>::call",
+      "samples": 2980
+    },
+    {
+      "frame": "<harfrust::hb::ot::lookup::LookupInfo>::new",
+      "samples": 2813
+    },
+    {
+      "frame": "<harfrust::hb::ot_shape::OtShapeContext>::substitute_pre",
+      "samples": 2785
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::sync_style_changes",
+      "samples": 2739
+    },
+    {
+      "frame": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::build_node",
+      "samples": 2662
+    },
+    {
+      "frame": "<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::initialize::<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::get_or_init<<harfrust::hb::ot::lookup::cache::LookupCache>::get<read_fonts::tables::gsub::Gsub>::{closure#0}>::{closure#0}, !>",
+      "samples": 2644
+    },
+    {
+      "frame": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_bounds_with_root_hug",
+      "samples": 2615
+    },
+    {
+      "frame": "<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::initialize<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::get_or_init<<harfrust::hb::ot::lookup::cache::LookupCache>::get<read_fonts::tables::gsub::Gsub>::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}",
+      "samples": 2599
+    },
+    {
+      "frame": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::nested_artboard_layout_axis_hug_size",
+      "samples": 2568
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::apply_nested_artboard_layout_bounds",
+      "samples": 2464
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::refresh_layout_constraint_bounds",
+      "samples": 2408
+    },
+    {
+      "frame": "taffy::compute::flexbox::calculate_flex_item::<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>",
+      "samples": 897
+    },
+    {
+      "frame": "taffy::compute::flexbox::calculate_layout_line::<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>",
+      "samples": 897
+    },
+    {
+      "frame": "harfrust::hb::ot::gsub::ligature::collect_seconds",
+      "samples": 700
+    },
+    {
+      "frame": "<harfrust::hb::set_digest::hb_set_digest_t>::add_coverage",
+      "samples": 680
+    },
+    {
+      "frame": "_realloc",
+      "samples": 465
+    },
+    {
+      "frame": "_xzm_free",
+      "samples": 435
+    },
+    {
+      "frame": "<harfrust::hb::ot_shape::OtShapeContext>::position_by_plan",
+      "samples": 389
+    },
+    {
+      "frame": "_malloc_zone_realloc",
+      "samples": 385
+    },
+    {
+      "frame": "core::ptr::drop_glue::<harfrust::hb::face::ShaperData>",
+      "samples": 378
+    },
+    {
+      "frame": "<alloc::raw_vec::RawVecInner>::finish_grow",
+      "samples": 366
+    },
+    {
+      "frame": "core::ptr::drop_glue::<harfrust::hb::ot::lookup::cache::LookupCache>",
+      "samples": 351
+    },
+    {
+      "frame": "<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::initialize::<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::get_or_init<<harfrust::hb::ot::lookup::cache::LookupCache>::get<read_fonts::tables::gpos::Gpos>::{closure#0}>::{closure#0}, !>",
+      "samples": 342
+    },
+    {
+      "frame": "<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::initialize<<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>::get_or_init<<harfrust::hb::ot::lookup::cache::LookupCache>::get<read_fonts::tables::gpos::Gpos>::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}",
+      "samples": 339
+    },
+    {
+      "frame": "xzm_realloc",
+      "samples": 337
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::from_graph_with_artboards",
+      "samples": 314
+    },
+    {
+      "frame": "<nuxie_runtime::artboard::ArtboardInstance>::from_graph_inner",
+      "samples": 282
+    },
+    {
+      "frame": "rust_golden_runner::ensure_static_draw_supported",
+      "samples": 281
+    },
+    {
+      "frame": "rust_golden_runner::taffy_refused_layout_dependent_draw",
+      "samples": 281
+    },
+    {
+      "frame": "rust_golden_runner::ensure_static_draw_supported_for_artboard",
+      "samples": 281
+    }
+  ],
+  "top_leaf": [
+    {
+      "frame": "<harfrust::hb::ot::lookup::LookupInfo>::new",
+      "samples": 872
+    },
+    {
+      "frame": "harfrust::hb::ot::gsub::ligature::collect_seconds",
+      "samples": 700
+    },
+    {
+      "frame": "<harfrust::hb::set_digest::hb_set_digest_t>::add_coverage",
+      "samples": 680
+    },
+    {
+      "frame": "<harfrust::hb::face::hb_font_t>::shape",
+      "samples": 390
+    },
+    {
+      "frame": "_xzm_free",
+      "samples": 362
+    },
+    {
+      "frame": "_xzm_xzone_malloc_tiny",
+      "samples": 258
+    },
+    {
+      "frame": "<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>::compute_child_layout::{closure#0}",
+      "samples": 149
+    },
+    {
+      "frame": "nuxie_schema::definition_by_type_key",
+      "samples": 141
+    },
+    {
+      "frame": "<deduplicated_symbol>",
+      "samples": 122
+    },
+    {
+      "frame": "_platform_memmove",
+      "samples": 95
+    },
+    {
+      "frame": "core::ptr::drop_glue::<std::sync::once_lock::OnceLock<core::option::Option<alloc::boxed::Box<harfrust::hb::ot::lookup::LookupInfo>>>>",
+      "samples": 92
+    },
+    {
+      "frame": "_xzm_xzone_malloc",
+      "samples": 91
+    },
+    {
+      "frame": "<harfrust::hb::face::ShaperData>::new",
+      "samples": 86
+    },
+    {
+      "frame": "xzm_realloc",
+      "samples": 84
+    },
+    {
+      "frame": "<harfrust::hb::ot_shape::OtShapeContext>::substitute_pre",
+      "samples": 81
+    },
+    {
+      "frame": "_malloc_zone_malloc",
+      "samples": 67
+    },
+    {
+      "frame": "_platform_memset",
+      "samples": 60
+    },
+    {
+      "frame": "<nuxie_binary::RuntimeFile>::cpp_view_models",
+      "samples": 57
+    },
+    {
+      "frame": "taffy::compute::flexbox::compute_preliminary::<taffy::tree::taffy_tree::TaffyView<nuxie_runtime::draw::TaffyMeasureContext, <nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug::{closure#1}>>",
+      "samples": 57
+    },
+    {
+      "frame": "xzm_malloc_zone_size",
+      "samples": 51
+    },
+    {
+      "frame": "_free",
+      "samples": 45
+    },
+    {
+      "frame": "_malloc_zone_realloc",
+      "samples": 43
+    },
+    {
+      "frame": "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::layout_provider_children::visit",
+      "samples": 38
+    },
+    {
+      "frame": "_realloc",
+      "samples": 36
+    },
+    {
+      "frame": "<alloc::raw_vec::RawVecInner>::finish_grow",
+      "samples": 35
+    },
+    {
+      "frame": "<nuxie_runtime::text::StaticTextSlice>::styled_text_glyphs_for_style_with_strengths",
+      "samples": 35
+    },
+    {
+      "frame": "nuxie_schema::generated::schema::definition_by_name",
+      "samples": 31
+    },
+    {
+      "frame": "harfrust::hb::ot_layout::apply_forward",
+      "samples": 31
+    },
+    {
+      "frame": "<read_fonts::FontRef as read_fonts::table_provider::TableProvider>::data_for_tag",
+      "samples": 28
+    },
+    {
+      "frame": "<nuxie_binary::RuntimeFile>::data_converter",
+      "samples": 25
+    }
+  ],
+  "total_samples": 5780,
+  "unique_stacks": 1859
+}

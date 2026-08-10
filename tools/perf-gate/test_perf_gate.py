@@ -1,5 +1,8 @@
 import copy
+import gzip
+import hashlib
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -46,6 +49,58 @@ class PerfCorpusTests(unittest.TestCase):
                 "scripted",
                 "text-heavy",
             },
+        )
+
+    def test_data_viz_profile_attribution_is_retained_and_derivable(self):
+        evidence = (
+            REPO_ROOT / "docs" / "evidence" / "univ-1687-data-viz-2026-08-10"
+        )
+        folded_path = evidence / "pre-fix-profile.folded.gz"
+        summary_path = evidence / "pre-fix-profile-summary.json"
+        source_patch_path = evidence / "pre-fix-source.patch"
+
+        self.assertEqual(
+            hashlib.sha256(folded_path.read_bytes()).hexdigest(),
+            "f019028868e454195117590f68b462df0f27fc0895cb81449b60ed732d40dc62",
+        )
+        self.assertEqual(
+            hashlib.sha256(source_patch_path.read_bytes()).hexdigest(),
+            "c4c3ce44e72d0c748880cb871a0e8920829761bcd7b3b43a125a6f3096e90b8d",
+        )
+        self.assertEqual(
+            hashlib.sha256(summary_path.read_bytes()).hexdigest(),
+            "88d4743f1138ae8abb0b8c9248ace83cc8594f3f669c6881f657fc26c1432468",
+        )
+
+        folded = gzip.decompress(folded_path.read_bytes()).decode()
+        stacks = []
+        for line in folded.splitlines():
+            stack, samples = line.rsplit(" ", 1)
+            stacks.append((set(stack.split(";")), int(samples)))
+
+        summary = json.loads(summary_path.read_text())
+        self.assertEqual(summary["schema"], "nuxie-xctrace-folded/v1")
+        self.assertEqual(summary["sample_period_ms"], 1)
+        self.assertEqual(summary["sample_rows"], 5_780)
+        self.assertEqual(summary["total_samples"], 5_780)
+        self.assertEqual(summary["unique_stacks"], 1_859)
+        self.assertEqual(sum(samples for _, samples in stacks), 5_780)
+
+        inclusive = {
+            frame: sum(samples for stack, samples in stacks if frame in stack)
+            for frame in (
+                "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::compute_layout_with_root_hug",
+                "nuxie_runtime::text::static_text_layout_measure_bounds",
+                "<harfrust::hb::face::hb_font_t>::shape",
+                "<nuxie_runtime::artboard::ArtboardInstance>::sync_style_changes",
+                "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>::nested_artboard_layout_axis_hug_size",
+                "<nuxie_runtime::artboard::ArtboardInstance>::apply_nested_artboard_layout_bounds",
+                "<nuxie_runtime::artboard::ArtboardInstance>::refresh_layout_constraint_bounds",
+            )
+        }
+        self.assertEqual(
+            tuple(inclusive.values()),
+            (5_382, 5_022, 3_884, 2_739, 2_568, 2_464, 2_408),
         )
 
     def test_blocking_gate_is_wired_into_make_landing_and_ci(self):

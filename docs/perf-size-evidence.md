@@ -111,12 +111,13 @@ reports are the `corrected-*` baseline/fix-1 files and the `fix2-*`/`fix3-*` fil
 
 ## 2026-08-04 V10 blocking-gate baseline
 
-The V10 lane broadened the measurement to the 24 checked-in entries in
-`perf-corpus.toml`. Nineteen are the largest practical exact, input-free files
-from `corpus.toml`; five targeted rows add explicit scripted,
-list/virtualization, nested-artboard, text, and layout coverage. The otherwise
-size-eligible `data_viz_demo` is excluded because one current 100-frame Rust
-session takes minutes, which would turn a landing ratchet into a soak test.
+The V10 lane originally broadened the measurement to 24 checked-in entries in
+`perf-corpus.toml`. As of the 2026-08-10 data-viz addendum below, twenty are the
+largest practical exact, input-free files from `corpus.toml`; five targeted rows
+add explicit scripted, list/virtualization, nested-artboard, text, and layout
+coverage. The otherwise size-eligible `data_viz_demo` was initially excluded
+because one 100-frame Rust session took minutes and would have turned the landing
+ratchet into a soak test.
 
 The gate uses scripting-enabled C++ and Rust release runners for the whole
 corpus, and passes `--execute-scripts` to Rust. That keeps the runtime modes
@@ -185,6 +186,48 @@ The equivalent comparator arguments are:
 --rust-execute-scripts \
 --iterations 5 --warmups 0 --aggregate median --runner-order cpp-first
 ```
+
+## 2026-08-10 data-viz enrollment and mandatory ratchet tightening
+
+`data_viz_demo` is now part of the blocking manifest. The source fix retains
+decoded font shaping tables and imported Text topology on their concrete
+owners, transfers the already-computed parent layout frame, and stops a parent
+Yoga result from re-dirtying the same host until the 100-pass convergence cap.
+The deterministic regression fell from 505 Taffy solves to one bounded
+decomposed-layout wave (9 entries), while an unchanged transferred tree
+performs zero solves and the animated child retains its exact settled width.
+
+Three fixed release sessions used the pinned C++ runtime at `4ac7b327`, 100
+frames at 60 Hz, C++ first, five iterations, no warmups, and script execution.
+The blocking `advance + draw` ratios were 215.911086x, 227.396295x, and
+244.770162x. The worst first-complete session is the enrolled baseline, giving
+the exact 15% ceiling `ceil(244.770162 * 1.15) = 282`. Rust's complete
+100-frame hot loop was 1.156–1.181 seconds across those sessions rather than
+minutes, so the row is practical in the existing landing gate.
+
+The first complete 25-file landing-gate set subsequently measured data-viz at
+191.637377x, 272.445238x, and 210.653252x, all within the enrolled 282x ceiling.
+The overall tighten command stayed RED on four unrelated pre-existing
+small-workload ceilings under recorded ambient load; those ratchets were not
+loosened or rerun. The exact reports and failure disclosure are in the evidence
+dossier below.
+
+Time Profiler attribution before the final convergence correction isolated the
+catastrophic work to repeated nested-layout settlement: `sync_style_changes`,
+`refresh_layout_constraint_bounds`, static text measurement, HarfRust shaping,
+and nested hug propagation. Test-only solve accounting then tied that profile
+to the exact 505-entry self-redirty loop before the production edit. The raw
+profile, XML export, and fixed reports are retained under
+`target/univ-1687/{diagnosis,final}`; their hashes are recorded with the issue
+evidence and in the checked-in
+[`docs/evidence/univ-1687-data-viz-2026-08-10/`](evidence/univ-1687-data-viz-2026-08-10/)
+dossier.
+
+Runtime performance lanes have a mandatory definition of done: run
+`make perf-gate-tighten` after the implementation is frozen and commit every
+lower `baseline_ratio`/`ceiling` it produces. `tools/land.sh` enforces this by
+running the three-session tighten gate and stopping if `perf-corpus.toml`
+changes; the tightened manifest must be committed before the lane can proceed.
 
 ## 2026-08-04 retained text-topology addendum
 

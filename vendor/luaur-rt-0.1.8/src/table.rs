@@ -1,10 +1,11 @@
 //! The [`Table`] handle. Mirrors `mlua::Table`.
 
 use crate::error::Result;
+use crate::multi::MultiValue;
 use crate::state::{Lua, LuaRef};
 use crate::sync::{NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
-use crate::traits::{FromLua, IntoLua};
+use crate::traits::{FromLua, IntoLua, IntoLuaMulti};
 use crate::value::Value;
 
 /// A handle to a Lua table.
@@ -80,6 +81,71 @@ impl Table {
             v
         };
         V::from_lua(value, &lua)
+    }
+
+    /// Look up a table field and call it with a fixed zero-result contract.
+    ///
+    /// The field lookup and Lua call share one protected boundary. This keeps
+    /// hot callback dispatch from materializing an intermediate registry-owned
+    /// [`Function`](crate::Function) or collecting an unused `LUA_MULTRET`
+    /// result vector. Returns `false` when the field is not a function.
+    pub fn call_function_unit(
+        &self,
+        key: impl IntoLua,
+        args: impl IntoLuaMulti,
+    ) -> Result<bool> {
+        self.call_function_predicate(key, args, Some(c_call_function_unit))
+    }
+
+    /// Look up a table field, call it for one result, and apply Lua truthiness
+    /// inside the same protected boundary. Returns `false` when the field is
+    /// absent/non-callable or its result is `nil`/`false`.
+    pub fn call_function_truthy(
+        &self,
+        key: impl IntoLua,
+        args: impl IntoLuaMulti,
+    ) -> Result<bool> {
+        self.call_function_predicate(key, args, Some(c_call_function_truthy))
+    }
+
+    fn call_function_predicate(
+        &self,
+        key: impl IntoLua,
+        args: impl IntoLuaMulti,
+        callback: lua_CFunction,
+    ) -> Result<bool> {
+        let lua = self.lua();
+        let state = lua.state();
+        let key = key.into_lua(&lua)?;
+        let args: MultiValue = args.into_lua_multi(&lua)?;
+        unsafe {
+            let base = lua_gettop(state);
+            let nargs = args.len() as c_int;
+            if lua_checkstack(state, nargs.saturating_add(5)) == 0 {
+                return Err(crate::error::Error::RuntimeError(
+                    "stack overflow: too many arguments to table function call".to_string(),
+                ));
+            }
+            lua_pushcclosurek(
+                state,
+                callback,
+                c"luaur-rt-table-function-call".as_ptr(),
+                0,
+                None,
+            );
+            self.reference.push();
+            lua.push_value(&key)?;
+            for value in args.iter() {
+                lua.push_value(value)?;
+            }
+            let status = lua_pcall(state, nargs + 2, 1, 0);
+            if status != 0 {
+                return Err(lua.pop_error(status));
+            }
+            let result = lua_toboolean(state, -1) != 0;
+            lua_settop(state, base);
+            Ok(result)
+        }
     }
 
     /// Whether `table[key]` is non-nil.
@@ -636,6 +702,44 @@ unsafe fn c_settable(state: *mut lua_State) -> c_int {
     unsafe {
         lua_settable(state, 1);
         0
+    }
+}
+
+/// C trampoline: stack is `[table, key, args...]`. Resolve `table[key]` and,
+/// when it is callable, invoke it with the remaining arguments and no result.
+/// The enclosing `lua_pcall` catches errors from both lookup and invocation.
+unsafe fn c_call_function_unit(state: *mut lua_State) -> c_int {
+    unsafe {
+        let nargs = lua_gettop(state) - 2;
+        lua_pushvalue(state, 2);
+        lua_gettable(state, 1);
+        if lua_type(state, -1) != ttype::FUNCTION {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        lua_insert(state, 3);
+        lua_call(state, nargs, 0);
+        lua_pushboolean(state, 1);
+        1
+    }
+}
+
+/// C trampoline equivalent to [`c_call_function_unit`], but request one Lua
+/// result and collapse it to native truthiness before returning to Rust.
+unsafe fn c_call_function_truthy(state: *mut lua_State) -> c_int {
+    unsafe {
+        let nargs = lua_gettop(state) - 2;
+        lua_pushvalue(state, 2);
+        lua_gettable(state, 1);
+        if lua_type(state, -1) != ttype::FUNCTION {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        lua_insert(state, 3);
+        lua_call(state, nargs, 1);
+        let truthy = lua_toboolean(state, -1);
+        lua_pushboolean(state, truthy);
+        1
     }
 }
 

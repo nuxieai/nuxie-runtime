@@ -92,6 +92,7 @@ pub(crate) use luaur_vm::functions::lua_touserdata::lua_touserdata;
 
 // ---- refs / call / load --------------------------------------------------
 pub(crate) use luaur_vm::functions::lua_checkstack::lua_checkstack;
+pub(crate) use luaur_vm::functions::lua_call::lua_call;
 pub(crate) use luaur_vm::functions::lua_error::lua_error;
 pub(crate) use luaur_vm::functions::lua_pcall::lua_pcall;
 pub(crate) use luaur_vm::functions::lua_ref::lua_ref;

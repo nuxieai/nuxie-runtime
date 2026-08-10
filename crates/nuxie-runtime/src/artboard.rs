@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::{
     Arc,
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 use anyhow::{Context, Result};
@@ -70,8 +70,8 @@ use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     RuntimeArtboardDimensions, artboard_index_for_graph,
     layout_component_style_display_value_property_key, property_key_for_name,
-    solid_color_value_property_key, solo_active_component_id_property_key,
-    transform_property_for_key,
+    shape_paint_is_visible_property_key, solid_color_value_property_key,
+    solo_active_component_id_property_key, transform_property_for_key,
 };
 use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
@@ -343,6 +343,11 @@ impl<'a> RuntimeComponents<'a> {
 #[derive(Debug)]
 pub struct ArtboardInstance {
     instance_identity: RuntimeArtboardInstanceIdentity,
+    /// Equality authority shared by every mounted descendant of one root
+    /// occurrence. Public and transient clones fork this authority even when
+    /// the latter later restore renderer-facing instance identities.
+    semantic_geometry_authority: Arc<RuntimeSemanticGeometryAuthority>,
+    semantic_geometry_locally_covered: bool,
     audio_event_playback: RuntimeAudioEventPlayback,
     /// Transient layout clones share the mounted occurrence's playback owner
     /// but must not run its destructor-side stop hook.
@@ -555,11 +560,14 @@ pub struct ArtboardInstance {
 impl Clone for ArtboardInstance {
     fn clone(&self) -> Self {
         let instance_identity = self.instance_identity.clone();
+        let semantic_geometry_authority = RuntimeSemanticGeometryAuthority::new();
         let mut cloned = Self {
             audio_event_playback: self
                 .audio_event_playback
                 .cold_clone(crate::AudioArtboardId(instance_identity.0)),
             instance_identity,
+            semantic_geometry_authority: Arc::clone(&semantic_geometry_authority),
+            semantic_geometry_locally_covered: self.semantic_geometry_locally_covered,
             audio_lifecycle_armed: true,
             width: self.width,
             height: self.height,
@@ -748,6 +756,7 @@ impl Clone for ArtboardInstance {
             cloned.attach_runtime_image_assets_tree(owners);
         }
         cloned.refresh_runtime_font_asset_referencers();
+        cloned.adopt_semantic_geometry_authority(semantic_geometry_authority);
         cloned
     }
 }
@@ -798,6 +807,45 @@ pub enum RuntimeArtboardOccurrenceSegment {
 pub struct RuntimeFrameComponentsAdvance {
     pub notified: bool,
     pub changed: bool,
+}
+
+/// Opaque equality authority for one artboard occurrence's settled semantic
+/// geometry. Callers may retain and compare this value, but must not infer an
+/// ordering or derive cache validity from any runtime implementation detail.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct SemanticGeometryRevision {
+    occurrence_identity: u64,
+    generation: u64,
+}
+
+impl std::fmt::Debug for SemanticGeometryRevision {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SemanticGeometryRevision(..)")
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeSemanticGeometryAuthority {
+    identity: u64,
+    generation: AtomicU64,
+    covered: AtomicBool,
+}
+
+impl RuntimeSemanticGeometryAuthority {
+    fn new() -> Arc<Self> {
+        static NEXT_IDENTITY: AtomicU64 = AtomicU64::new(0);
+        Arc::new(Self {
+            identity: NEXT_IDENTITY.fetch_add(1, Ordering::Relaxed),
+            generation: AtomicU64::new(0),
+            covered: AtomicBool::new(true),
+        })
+    }
+
+    fn require_coverage(&self, covered: bool) {
+        if !covered {
+            self.covered.store(false, Ordering::Relaxed);
+        }
+    }
 }
 
 /// Probe-facing snapshot of one mounted nested remap animation occurrence.
@@ -1050,6 +1098,29 @@ impl ArtboardInstance {
         cloned.restore_transient_script_handles_from(self);
         cloned.restore_transient_layout_transfer_state_from(self);
         cloned
+    }
+
+    fn adopt_semantic_geometry_authority(
+        &mut self,
+        authority: Arc<RuntimeSemanticGeometryAuthority>,
+    ) {
+        self.semantic_geometry_authority = Arc::clone(&authority);
+        authority.require_coverage(self.semantic_geometry_locally_covered);
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .adopt_semantic_geometry_authority(Arc::clone(&authority));
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for local_id in list_locals {
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
+            for item in items {
+                item.child
+                    .adopt_semantic_geometry_authority(Arc::clone(&authority));
+            }
+        }
     }
 
     fn restore_transient_component_lists_from(&mut self, source: &Self) {
@@ -2113,6 +2184,7 @@ impl ArtboardInstance {
             &artboards,
             &mut BTreeSet::new(),
             Some(context),
+            RuntimeSemanticGeometryAuthority::new(),
             true,
             Vec::new(),
         )
@@ -2239,6 +2311,7 @@ impl ArtboardInstance {
             artboards,
             &mut BTreeSet::new(),
             Some(context),
+            RuntimeSemanticGeometryAuthority::new(),
             true,
             Vec::new(),
         )
@@ -2250,9 +2323,14 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         visiting: &mut BTreeSet<u32>,
         build_context: Option<RuntimeArtboardBuildContext>,
+        semantic_geometry_authority: Arc<RuntimeSemanticGeometryAuthority>,
         layout_constraint_bounds_enabled: bool,
         profile_path: Vec<crate::ProfilePathSegment>,
     ) -> Result<Self> {
+        let semantic_geometry_locally_covered = graph.component_lists.is_empty()
+            && graph.draw_targets.is_empty()
+            && graph.draw_rules.is_empty();
+        semantic_geometry_authority.require_coverage(semantic_geometry_locally_covered);
         let external_font_assets = build_context
             .as_ref()
             .map(|context| Arc::clone(&context.external_font_assets))
@@ -2419,6 +2497,7 @@ impl ArtboardInstance {
                 &objects,
                 visiting,
                 build_context.clone(),
+                Arc::clone(&semantic_geometry_authority),
                 &profile_path,
             )?
         } else {
@@ -2448,6 +2527,8 @@ impl ArtboardInstance {
         );
         let mut instance = Self {
             instance_identity,
+            semantic_geometry_authority,
+            semantic_geometry_locally_covered,
             audio_event_playback,
             audio_lifecycle_armed: true,
             width: dimensions.width,
@@ -4125,8 +4206,15 @@ impl ArtboardInstance {
         }
     }
 
+    pub(crate) fn mark_semantic_geometry_changed(&self) {
+        self.semantic_geometry_authority
+            .generation
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
     fn mark_nested_structure_changed(&self) {
         self.nested_context_source_tree_cache.set(None);
+        self.mark_semantic_geometry_changed();
         if let Some(context) = self.build_context.as_ref() {
             context
                 .nested_structure_epoch
@@ -4852,14 +4940,16 @@ impl ArtboardInstance {
         {
             return self.set_nested_bool_value(local_id, value);
         }
+        let previous_shape_paint_visibility = (shape_paint_is_visible_property_key()
+            == Some(property_key))
+        .then(|| self.shape_paint_is_visible(local_id))
+        .flatten();
         if !self
             .objects
             .set_bool_property(local_id, property_key, value)
         {
             return false;
         }
-        // Generated setter order is backing field, concrete callback, then
-        // property notification.
         let mut owner_callback_handled = false;
         self.apply_bool_property_changed(
             local_id,
@@ -4867,6 +4957,12 @@ impl ArtboardInstance {
             value,
             &mut owner_callback_handled,
         );
+        // Generated setter order is backing field, concrete callback, then
+        // property notification. Compare the whole owning Shape only after
+        // its concrete callback observes the new backing value.
+        if let Some(previous_visibility) = previous_shape_paint_visibility {
+            self.mark_runtime_shape_paint_visibility_changed(local_id, previous_visibility);
+        }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
@@ -5021,6 +5117,10 @@ impl ArtboardInstance {
         {
             return self.set_nested_number_value(local_id, value);
         }
+        let previous_stroke_thickness = (property_key_for_name("Stroke", "thickness")
+            == Some(property_key))
+        .then(|| self.stroke_thickness(local_id))
+        .flatten();
         if let Some(changed) =
             set_runtime_scroll_double_property(self, local_id, property_key, value)
         {
@@ -5030,7 +5130,12 @@ impl ArtboardInstance {
             let _ = self
                 .objects
                 .set_generated_double_property(local_id, property_key, value);
-            return self.after_double_property_set(local_id, property_key, value);
+            return self.after_double_property_set_with_previous_stroke(
+                local_id,
+                property_key,
+                value,
+                previous_stroke_thickness,
+            );
         }
         if self.runtime_images.has_public_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
@@ -5046,7 +5151,12 @@ impl ArtboardInstance {
         if !object_changed && !image_scale_changed {
             return false;
         }
-        self.after_double_property_set(local_id, property_key, value)
+        self.after_double_property_set_with_previous_stroke(
+            local_id,
+            property_key,
+            value,
+            previous_stroke_thickness,
+        )
     }
 
     pub(crate) fn set_int_property(
@@ -5084,6 +5194,16 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        self.after_double_property_set_with_previous_stroke(local_id, property_key, value, None)
+    }
+
+    fn after_double_property_set_with_previous_stroke(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+        previous_stroke_thickness: Option<f32>,
+    ) -> bool {
         // Generated C++ setters assign backing storage, run the concrete
         // changed callback, then notify property listeners. Transform dirt
         // must therefore be visible before a DataBind observes the write.
@@ -5094,6 +5214,9 @@ impl ArtboardInstance {
             value,
             &mut owner_callback_handled,
         );
+        if let Some(previous_thickness) = previous_stroke_thickness {
+            self.mark_runtime_stroke_thickness_changed(local_id, previous_thickness);
+        }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
@@ -5111,17 +5234,31 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
+        let previous_drawable_flags = (property_key_for_name("Drawable", "drawableFlags")
+            == Some(property_key))
+        .then(|| self.uint_property(local_id, property_key))
+        .flatten();
+        let previous_path_flags = (property_key_for_name("Path", "pathFlags")
+            == Some(property_key))
+        .then(|| self.uint_property(local_id, property_key))
+        .flatten();
         if !self
             .objects
             .set_uint_property(local_id, property_key, value)
         {
             return false;
         }
+        if let Some(previous_flags) = previous_path_flags {
+            self.mark_path_hidden_changed(local_id, previous_flags, value);
+        }
         // Generated uint setters follow the same backing → concrete callback
         // → notification order as doubles. DistanceConstraint::modeValue is
         // the A4 positive callback that makes this ordering observable.
         let mut owner_callback_handled = false;
         self.apply_uint_property_changed(local_id, property_key, &mut owner_callback_handled);
+        if let Some(previous_flags) = previous_drawable_flags {
+            self.mark_runtime_drawable_visibility_changed(local_id, previous_flags);
+        }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
@@ -6683,6 +6820,23 @@ impl ArtboardInstance {
         self.cache_epoch
     }
 
+    /// Return a comparable semantic-geometry authority only while every
+    /// mounted graph belongs to the mutation families covered by this token.
+    /// Component lists and draw-order owners fail closed until their public
+    /// mutation paths publish equivalent invalidation authority.
+    pub fn try_semantic_geometry_revision(&self) -> Option<SemanticGeometryRevision> {
+        self.semantic_geometry_authority
+            .covered
+            .load(Ordering::Relaxed)
+            .then(|| SemanticGeometryRevision {
+                occurrence_identity: self.semantic_geometry_authority.identity,
+                generation: self
+                    .semantic_geometry_authority
+                    .generation
+                    .load(Ordering::Relaxed),
+            })
+    }
+
     pub(crate) fn instance_identity(&self) -> u64 {
         self.instance_identity.0
     }
@@ -6745,6 +6899,7 @@ impl ArtboardInstance {
     fn mark_world_transform_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
         self.mark_tree_paint_preparation_changed();
+        self.mark_semantic_geometry_changed();
     }
 
     pub(crate) fn enable_layout_constraint_bounds(&mut self) {
@@ -6844,6 +6999,7 @@ impl ArtboardInstance {
     pub(crate) fn mark_layout_changed(&mut self) {
         self.layout_revision = self.layout_revision.wrapping_add(1);
         self.mark_prepared_changed();
+        self.mark_semantic_geometry_changed();
     }
 
     /// Direct `LayoutComponent::markLayoutNodeDirty` publication. The revision
@@ -6868,6 +7024,7 @@ impl ArtboardInstance {
         if starts_layout_generation && set_changed {
             self.layout_revision = self.layout_revision.wrapping_add(1);
         }
+        self.mark_semantic_geometry_changed();
         self.mark_components_dirty();
         true
     }
@@ -6949,6 +7106,7 @@ impl ArtboardInstance {
     pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
         self.mark_prepared_changed();
+        self.mark_semantic_geometry_changed();
     }
 
     fn mark_runtime_shape_property_changed(&mut self, local_id: usize) {
@@ -7057,12 +7215,48 @@ impl ArtboardInstance {
         self.mark_prepared_changed();
     }
 
+    fn mark_path_hidden_changed(&mut self, local_id: usize, previous_flags: u64, next_flags: u64) {
+        if (previous_flags ^ next_flags) & 1 != 0 {
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
+        }
+    }
+
     fn mark_clipping_changed(&mut self) {
         self.mark_prepared_changed();
     }
 
-    fn mark_render_opacity_changed(&mut self) {
+    fn mark_render_opacity_changed(
+        &mut self,
+        local_id: usize,
+        previous_opacity: f32,
+        next_opacity: f32,
+    ) {
         self.mark_prepared_changed();
+        if self.nested_artboards.get(&local_id).is_some()
+            && (previous_opacity == 0.0) != (next_opacity == 0.0)
+        {
+            // Nested hosts gate the complete mounted occurrence at traversal.
+            // Publish from the derived opacity boundary so generic writes and
+            // inherited parent opacity share the same no-scan authority.
+            self.mark_semantic_geometry_changed();
+        }
+        match self
+            .component(local_id)
+            .map(|component| component.type_name)
+        {
+            Some("Text")
+                if (previous_opacity.is_finite() && previous_opacity > 0.0)
+                    != (next_opacity.is_finite() && next_opacity > 0.0) =>
+            {
+                self.mark_semantic_geometry_changed();
+            }
+            Some("Shape") => self.publish_runtime_shape_render_opacity_membership_change(
+                local_id,
+                previous_opacity,
+                next_opacity,
+            ),
+            _ => {}
+        }
     }
 
     fn mark_prepared_changed_for_property(&mut self, local_id: usize, property_key: u16) {
@@ -8649,15 +8843,14 @@ impl ArtboardInstance {
                 .component_mut(component_handle)
                 .expect("component handle must remain live")
                 .update_render_opacity(opacity, parent_opacity);
-            if self
+            let next_opacity = self
                 .objects
                 .component(component_handle)
                 .expect("component handle must remain live")
                 .transform
-                .render_opacity
-                != previous_opacity
-            {
-                self.mark_render_opacity_changed();
+                .render_opacity;
+            if next_opacity != previous_opacity {
+                self.mark_render_opacity_changed(local_id, previous_opacity, next_opacity);
             }
         }
         self.update_runtime_joystick(component_handle, dirt);
@@ -9860,6 +10053,7 @@ impl ArtboardInstance {
             child_graph,
             &mut visiting,
             Some(context.clone()),
+            Arc::clone(&self.semantic_geometry_authority),
             data_bind_path_ids,
             data_bind_path_is_relative,
             self.bool_property(
@@ -10258,6 +10452,7 @@ fn build_runtime_nested_artboard_instances(
     objects: &InstanceObjectArena,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
+    semantic_geometry_authority: Arc<RuntimeSemanticGeometryAuthority>,
     parent_profile_path: &[crate::ProfilePathSegment],
 ) -> Result<RuntimeNestedArtboards> {
     if artboards.is_empty() {
@@ -10294,6 +10489,7 @@ fn build_runtime_nested_artboard_instances(
             child_graph,
             visiting,
             build_context.clone(),
+            Arc::clone(&semantic_geometry_authority),
             data_bind_path_ids,
             data_bind_path_is_relative,
             host_object.bool_property("isPaused").unwrap_or(false),
@@ -10317,6 +10513,7 @@ fn build_runtime_nested_artboard_instance(
     child_graph: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
+    semantic_geometry_authority: Arc<RuntimeSemanticGeometryAuthority>,
     data_bind_path_ids: Option<Vec<u32>>,
     data_bind_path_is_relative: bool,
     is_paused: bool,
@@ -10340,6 +10537,7 @@ fn build_runtime_nested_artboard_instance(
         artboards,
         visiting,
         build_context,
+        semantic_geometry_authority,
         false,
         profile_path,
     )?);

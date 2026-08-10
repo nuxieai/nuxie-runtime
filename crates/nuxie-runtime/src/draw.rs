@@ -1924,14 +1924,28 @@ impl ArtboardInstance {
         height: u32,
     ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
         self.with_owned_geometry_state(|instance, state| {
-            state.register_image_dimensions(instance, asset_global, width, height)
+            state.retain_instance(instance);
+            let previous = state
+                .registered_image_dimensions
+                .get(&asset_global)
+                .copied();
+            let result = state.register_image_dimensions(instance, asset_global, width, height);
+            if result.is_ok() && previous != Some((width, height)) {
+                instance.mark_semantic_geometry_changed();
+            }
+            result
         })
     }
 
     pub fn observe_owned_images(
         &mut self,
     ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
-        self.with_owned_geometry_state(|instance, state| state.observe_artboard_images(instance))
+        self.with_owned_geometry_state(|instance, state| {
+            if state.observe_artboard_images(instance)? {
+                instance.mark_semantic_geometry_changed();
+            }
+            Ok(())
+        })
     }
 
     fn geometry_static_text_query_context<'a>(
@@ -5848,6 +5862,232 @@ impl ArtboardInstance {
     /// `renderOpacityChanged` (`src/shapes/paint/solid_color.cpp:23-54`).
     /// SolidColor is a property callback owner; it does not wait for a
     /// dependency update before its retained paint state changes.
+    fn runtime_shape_has_effectively_visible_paint(&self, shape_local: usize) -> bool {
+        self.runtime_shape_has_effectively_visible_paint_with_overrides(shape_local, None, None)
+    }
+
+    fn runtime_shape_has_visible_catalogue_membership_at_render_opacity(
+        &self,
+        shape_local: usize,
+        render_opacity: f32,
+    ) -> bool {
+        let Some(component) = self
+            .component(shape_local)
+            .filter(|component| component.type_name == "Shape" && !component.is_collapsed())
+        else {
+            return false;
+        };
+        if render_opacity == 0.0 {
+            return false;
+        }
+        let drawable_is_visible = component
+            .concrete
+            .drawable
+            .as_ref()
+            .and_then(|drawable| drawable.drawable_flags_property_key)
+            .and_then(|key| self.uint_property(shape_local, key))
+            .is_none_or(|flags| flags & 1 == 0);
+        let Some(shape) = self.runtime_shapes.get(shape_local) else {
+            return false;
+        };
+        let path_flags = property_key_for_name("Path", "pathFlags");
+        let has_visible_path = shape.path_locals.iter().any(|path_local| {
+            path_flags
+                .and_then(|key| self.uint_property(*path_local, key))
+                .is_none_or(|flags| flags & 1 == 0)
+        });
+        let Some(container) = self.runtime_graph().and_then(|graph| {
+            shape
+                .paint_container_index
+                .and_then(|index| graph.shape_paint_containers.get(index))
+        }) else {
+            return false;
+        };
+
+        drawable_is_visible
+            && has_visible_path
+            && shape.paint_owners.iter().any(|owner| {
+                runtime_owned_shape_paint_is_visible(self, owner)
+                    && container
+                        .paints
+                        .get(owner.paint_index)
+                        .is_some_and(|paint| {
+                            runtime_shape_paint_state_is_effectively_visible(
+                                &runtime_shape_paint_state(self, paint, render_opacity),
+                            )
+                        })
+            })
+    }
+
+    pub(crate) fn publish_runtime_shape_render_opacity_membership_change(
+        &self,
+        shape_local: usize,
+        previous_opacity: f32,
+        next_opacity: f32,
+    ) {
+        if self.runtime_shape_has_visible_catalogue_membership_at_render_opacity(
+            shape_local,
+            previous_opacity,
+        ) != self.runtime_shape_has_visible_catalogue_membership_at_render_opacity(
+            shape_local,
+            next_opacity,
+        ) {
+            self.mark_semantic_geometry_changed();
+        }
+    }
+
+    fn runtime_shape_has_visible_catalogue_membership_with_drawable_flags(
+        &self,
+        shape_local: usize,
+        drawable_flags_override: Option<u64>,
+    ) -> bool {
+        let Some(component) = self
+            .component(shape_local)
+            .filter(|component| component.type_name == "Shape")
+        else {
+            return false;
+        };
+        let drawable_flags = drawable_flags_override.or_else(|| {
+            component
+                .concrete
+                .drawable
+                .as_ref()
+                .and_then(|drawable| drawable.drawable_flags_property_key)
+                .and_then(|key| self.uint_property(shape_local, key))
+        });
+        let has_visible_path = self.runtime_shapes.get(shape_local).is_some_and(|shape| {
+            let path_flags = property_key_for_name("Path", "pathFlags");
+            shape.path_locals.iter().any(|path_local| {
+                path_flags
+                    .and_then(|key| self.uint_property(*path_local, key))
+                    .is_none_or(|flags| flags & 1 == 0)
+            })
+        });
+        drawable_flags.is_none_or(|flags| flags & 1 == 0)
+            && component.transform.render_opacity != 0.0
+            && has_visible_path
+            && self.runtime_shape_has_effectively_visible_paint(shape_local)
+    }
+
+    pub(crate) fn mark_runtime_drawable_visibility_changed(
+        &self,
+        drawable_local: usize,
+        previous_flags: u64,
+    ) {
+        if self.nested_artboards.get(&drawable_local).is_some() {
+            let next_flags = self
+                .component(drawable_local)
+                .and_then(|component| component.concrete.drawable.as_ref())
+                .and_then(|drawable| drawable.drawable_flags_property_key)
+                .and_then(|key| self.uint_property(drawable_local, key));
+            if next_flags.is_some_and(|next_flags| (previous_flags ^ next_flags) & 1 != 0) {
+                // The host Drawable owns whether its complete mounted child
+                // occurrence participates; the child graph does not own this
+                // visibility gate.
+                self.mark_semantic_geometry_changed();
+            }
+            return;
+        }
+        if self.runtime_shape_has_visible_catalogue_membership_with_drawable_flags(
+            drawable_local,
+            Some(previous_flags),
+        ) != self.runtime_shape_has_visible_catalogue_membership_with_drawable_flags(
+            drawable_local,
+            None,
+        ) {
+            self.mark_semantic_geometry_changed();
+        }
+    }
+
+    fn runtime_shape_has_effectively_visible_paint_with_overrides(
+        &self,
+        shape_local: usize,
+        visibility_override: Option<(usize, bool)>,
+        stroke_thickness_override: Option<(usize, f32)>,
+    ) -> bool {
+        self.runtime_shapes.get(shape_local).is_some_and(|shape| {
+            shape.paint_owners.iter().any(|paint| {
+                let is_visible = visibility_override
+                    .filter(|(paint_local, _)| *paint_local == paint.paint_local)
+                    .map_or_else(
+                        || {
+                            self.shape_paint_is_visible(paint.paint_local)
+                                .unwrap_or(true)
+                        },
+                        |(_, is_visible)| is_visible,
+                    );
+                let stroke_thickness = stroke_thickness_override
+                    .filter(|(paint_local, _)| *paint_local == paint.paint_local)
+                    .map_or_else(
+                        || self.stroke_thickness(paint.paint_local).unwrap_or(1.0),
+                        |(_, thickness)| thickness,
+                    );
+                is_visible
+                    && (paint.paint_type != RuntimeShapePaintKind::Stroke || stroke_thickness > 0.0)
+                    && runtime_shape_paint_state_is_effectively_visible(&paint.paint_state.borrow())
+            })
+        })
+    }
+
+    pub(crate) fn mark_runtime_shape_paint_visibility_changed(
+        &self,
+        paint_local: usize,
+        previous_visibility: bool,
+    ) {
+        let Some(owners) = self
+            .runtime_shapes
+            .paint_owners_by_component_local
+            .get(paint_local)
+        else {
+            return;
+        };
+        let mut shape_locals = BTreeSet::new();
+        shape_locals.extend(owners.iter().map(|owner| owner.shape_local));
+        if shape_locals.into_iter().any(|shape_local| {
+            self.runtime_shape_has_effectively_visible_paint_with_overrides(
+                shape_local,
+                Some((paint_local, previous_visibility)),
+                None,
+            ) != self.runtime_shape_has_effectively_visible_paint(shape_local)
+        }) {
+            self.mark_semantic_geometry_changed();
+        }
+    }
+
+    pub(crate) fn mark_runtime_stroke_thickness_changed(
+        &self,
+        stroke_local: usize,
+        previous_thickness: f32,
+    ) {
+        let Some(owners) = self
+            .runtime_shapes
+            .paint_owners_by_component_local
+            .get(stroke_local)
+        else {
+            return;
+        };
+        let mut shape_locals = BTreeSet::new();
+        shape_locals.extend(owners.iter().filter_map(|owner| {
+            self.runtime_shapes
+                .get(owner.shape_local)
+                .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                .filter(|paint| {
+                    paint.paint_local == stroke_local
+                        && paint.paint_type == RuntimeShapePaintKind::Stroke
+                })
+                .map(|_| owner.shape_local)
+        }));
+        if shape_locals.into_iter().any(|shape_local| {
+            self.runtime_shape_has_effectively_visible_paint_with_overrides(
+                shape_local,
+                None,
+                Some((stroke_local, previous_thickness)),
+            ) != self.runtime_shape_has_effectively_visible_paint(shape_local)
+        }) {
+            self.mark_semantic_geometry_changed();
+        }
+    }
+
     pub(crate) fn settle_runtime_solid_color_callback_with_graph(
         &self,
         local_id: usize,
@@ -5874,6 +6114,8 @@ impl ArtboardInstance {
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
                 settled_owner = true;
+                let was_effectively_visible =
+                    self.runtime_shape_has_effectively_visible_paint(owner.shape_local);
                 settle_concrete_sidecar |= shape.paint_container_family.is_some_and(|family| {
                     !family.owns_shape_geometry() && !family.owns_text_paint()
                 });
@@ -5924,6 +6166,11 @@ impl ArtboardInstance {
                     ) {
                         continue;
                     }
+                }
+                if self.runtime_shape_has_effectively_visible_paint(owner.shape_local)
+                    != was_effectively_visible
+                {
+                    self.mark_semantic_geometry_changed();
                 }
                 // Direct port of `SolidColor::renderOpacityChanged`: once the
                 // ShapePaint has a RenderPaint, the callback changes only its
@@ -6042,6 +6289,12 @@ impl ArtboardInstance {
             owner.mutator_dirty.set(false);
             return true;
         };
+        let tracks_effective_visibility = matches!(
+            paint.mutator_type_name,
+            Some("LinearGradient" | "RadialGradient")
+        );
+        let was_effectively_visible = tracks_effective_visibility
+            .then(|| self.runtime_shape_has_effectively_visible_paint(shape_local));
         let Some(path_kind) = runtime_live_shape_paint_path_kind(self, paint) else {
             owner.paint_state.replace(None);
             owner.mutator_dirty.set(false);
@@ -6085,6 +6338,11 @@ impl ArtboardInstance {
         });
         owner.paint_state.replace(paint_state);
         owner.mutator_dirty.set(false);
+        if was_effectively_visible.is_some_and(|was_effectively_visible| {
+            self.runtime_shape_has_effectively_visible_paint(shape_local) != was_effectively_visible
+        }) {
+            self.mark_semantic_geometry_changed();
+        }
         true
     }
 
@@ -15134,11 +15392,11 @@ impl RuntimeGeometryState {
     pub fn observe_artboard_images(
         &mut self,
         instance: &ArtboardInstance,
-    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+    ) -> std::result::Result<bool, RuntimeImageDimensionConflict> {
         self.retain_instance(instance);
         let image_assets = instance.runtime_image_assets.borrow();
         let Some(image_assets) = image_assets.as_ref() else {
-            return Ok(());
+            return Ok(false);
         };
         for (asset_global, width, height, _) in image_assets.dimensions() {
             let actual = (width, height);
@@ -15155,13 +15413,15 @@ impl RuntimeGeometryState {
                 });
             }
         }
-        self.presented_image_dimensions.clear();
-        self.presented_image_dimensions.extend(
-            image_assets
-                .dimensions()
-                .map(|(global_id, width, height, identity)| (global_id, (width, height, identity))),
-        );
-        Ok(())
+        let observed = image_assets
+            .dimensions()
+            .map(|(global_id, width, height, identity)| (global_id, (width, height, identity)))
+            .collect::<BTreeMap<_, _>>();
+        if self.presented_image_dimensions == observed {
+            return Ok(false);
+        }
+        self.presented_image_dimensions = observed;
+        Ok(true)
     }
 
     fn presented_image_dimensions(&self, global_id: u32) -> Option<(u32, u32, usize)> {

@@ -190,7 +190,7 @@ pub use animation::{
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
-    RuntimeFrameComponentsAdvance, artboard_draw_frame_id,
+    RuntimeFrameComponentsAdvance, SemanticGeometryRevision, artboard_draw_frame_id,
 };
 pub use audio_asset::RuntimeAudioAssetOwners;
 pub use components::{

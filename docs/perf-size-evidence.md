@@ -217,9 +217,10 @@ catastrophic work to repeated nested-layout settlement: `sync_style_changes`,
 `refresh_layout_constraint_bounds`, static text measurement, HarfRust shaping,
 and nested hug propagation. Test-only solve accounting then tied that profile
 to the exact 505-entry self-redirty loop before the production edit. The raw
-profile, XML export, and fixed reports are retained under
-`target/univ-1687/{diagnosis,final}`; their hashes are recorded with the issue
-evidence and in the checked-in
+profile and XML export are retained in the external
+`univ-1687-profile-recapture/raw/` archive, while the fixed reports are in
+`univ-1687-data-viz-20260810/{reports,full-gate}/`. Their hashes are recorded
+with the issue evidence and in the checked-in
 [`docs/evidence/univ-1687-data-viz-2026-08-10/`](evidence/univ-1687-data-viz-2026-08-10/)
 dossier.
 

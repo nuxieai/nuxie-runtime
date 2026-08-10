@@ -23,10 +23,11 @@ first complete results stand; no sample was discarded or rerun.
 The checked-in [worst-session.json](worst-session.json) is a path-sanitized
 copy of session 3, with SHA-256
 `08e40d60d040307add43286353d183c275f9d14973f6ffad74289e7f616c76ee`.
-The raw report remains under
-`target/univ-1687/final/data-viz-ratchet-3.json`; the SHA above authenticates
-the unsanitized authority. The blocking baseline is the worst measured ratio,
-`244.770162`; its exact 15% ceiling is `ceil(244.770162 * 1.15) = 282`.
+The raw report remains in the external evidence archive at
+`univ-1687-data-viz-20260810/reports/data-viz-ratchet-3.json`; the SHA above
+authenticates the unsanitized authority. The blocking baseline is the worst
+measured ratio, `244.770162`; its exact 15% ceiling is
+`ceil(244.770162 * 1.15) = 282`.
 
 ### Full landing-gate confirmation
 
@@ -55,8 +56,19 @@ reports are retained in the external evidence archive
 
 ## Flamegraph attribution
 
-The final pre-fix Time Profiler capture contains 5,716 fully resolved 1 ms
-samples. The folded stacks have this dominant inclusive path:
+The original pre-fix Time Profiler capture contained 5,716 fully resolved 1 ms
+samples, but its ignored `target/` XML and trace were later reclaimed. Its
+task transcript retained the exact successful capture/export commands, source
+sequence, and parsed attribution. A first-run recapture reconstructed that
+exact production state from `8aabc827` plus
+[`pre-fix-source.patch`](pre-fix-source.patch): the patch restores the one
+final convergence hunk that the accepted commit removed. The reconstructed
+file byte-matches the `8aabc827^` version and the other six production files
+remain exactly `8aabc827`.
+
+The recapture contains 5,780 fully resolved 1 ms samples across 1,859 unique
+stacks and independently reproduces the original attribution. Its folded
+stacks have this dominant inclusive path:
 
 ```text
 advance_scene_to
@@ -77,13 +89,13 @@ ancestor in its stack:
 
 | Frame | Inclusive samples | Inclusive time | Share of profile |
 | --- | ---: | ---: | ---: |
-| `TaffyRuntimeLayoutEngine::compute_layout_with_root_hug` | 5,312 | 5,312 ms | 92.9% |
-| `static_text_layout_measure_bounds` | 4,961 | 4,961 ms | 86.8% |
-| `harfrust::hb_font_t::shape` | 3,910 | 3,910 ms | 68.4% |
-| `ArtboardInstance::sync_style_changes` | 2,710 | 2,710 ms | 47.4% |
-| `nested_artboard_layout_axis_hug_size` | 2,540 | 2,540 ms | 44.4% |
-| `ArtboardInstance::apply_nested_artboard_layout_bounds` | 2,439 | 2,439 ms | 42.7% |
-| `ArtboardInstance::refresh_layout_constraint_bounds` | 2,376 | 2,376 ms | 41.6% |
+| `TaffyRuntimeLayoutEngine::compute_layout_with_root_hug` | 5,382 | 5,382 ms | 93.1% |
+| `static_text_layout_measure_bounds` | 5,022 | 5,022 ms | 86.9% |
+| `harfrust::hb_font_t::shape` | 3,884 | 3,884 ms | 67.2% |
+| `ArtboardInstance::sync_style_changes` | 2,739 | 2,739 ms | 47.4% |
+| `nested_artboard_layout_axis_hug_size` | 2,568 | 2,568 ms | 44.4% |
+| `ArtboardInstance::apply_nested_artboard_layout_bounds` | 2,464 | 2,464 ms | 42.6% |
+| `ArtboardInstance::refresh_layout_constraint_bounds` | 2,408 | 2,408 ms | 41.7% |
 
 The capture preceded only the final convergence correction. Test-only solve
 accounting then made the causal link deterministic: a single data-bound gap
@@ -92,13 +104,47 @@ re-dirtied the same host. The production correction reduced that to one bounded
 9-entry wave; the unchanged next frame performs zero solves while preserving
 the exact animated child width.
 
-Raw artifacts remain available locally:
+Durable checked-in evidence:
 
-- Time Profiler XML:
-  `target/univ-1687/diagnosis/data-viz-one-frame-single-yoga-result-time-profile.xml`,
-  SHA-256 `0f801c466e1803abfc4f111dfb672103d7dc07532e0037fe8c6c66b4ec263ed4`.
-- Instruments trace tree: directory-content SHA-256
-  `2b63d85816d15a3b5de0bb96d9462f2bf00f9dbb906ea012b1d9f1ad040db1d9`.
+- [`pre-fix-profile.folded.gz`](pre-fix-profile.folded.gz) is the complete
+  semicolon-delimited folded-stack source, deterministically compressed with
+  `gzip -9 -n`; SHA-256
+  `f019028868e454195117590f68b462df0f27fc0895cb81449b60ed732d40dc62`.
+- [`pre-fix-profile-summary.json`](pre-fix-profile-summary.json) records the
+  sample period, total, unique-stack count, and ranked leaf/inclusive frames;
+  SHA-256
+  `88d4743f1138ae8abb0b8c9248ace83cc8594f3f669c6881f657fc26c1432468`.
+- [`pre-fix-source.patch`](pre-fix-source.patch) reconstructs the profiled
+  source from `8aabc827`; SHA-256
+  `c4c3ce44e72d0c748880cb871a0e8920829761bcd7b3b43a125a6f3096e90b8d`.
+
+`test_data_viz_profile_attribution_is_retained_and_derivable` decompresses the
+folded source and derives every number in the table, so deleting or replacing
+the retained profile fails the focused evidence contract. A standard flamegraph
+can consume it directly with `gzip -dc pre-fix-profile.folded.gz`.
+
+The first-run recapture used the same command shape as the original:
+
+```sh
+xcrun xctrace record --template 'Time Profiler' \
+  --output data-viz-pre-fix.trace --launch -- \
+  rust-golden-runner-scripted-pre-fix \
+  --file "$RIVE_RUNTIME_DIR/tests/unit_tests/assets/data_viz_demo.riv" \
+  --samples 0 --execute-scripts --benchmark --benchmark-repeat 1
+xcrun xctrace export --input data-viz-pre-fix.trace \
+  --xpath '//trace-toc[1]/run[1]/data[1]/table[@schema="time-profile"]' \
+  --output data-viz-pre-fix-time-profile.xml
+```
+
+The profiled runner SHA-256 is
+`be85c39a38ee4300a903e6d3802c8c953a65da8378c224f5e02f677d5707508a`
+(Mach-O UUID `82EDDEDE-2611-3077-BEBE-5AECEB376853`). The raw XML SHA-256 is
+`95cf5514b3162cc5e28c019285f9ef7f20f81a3512f67e07bc91bfe1a105b75c`;
+the trace's sorted path-and-content SHA-256 is
+`0b37fe245bb68349a3b3ecfc1adebcc5546a4863b5a2a10d4f323e6edcd325fc`.
+Those large raw artifacts and the immutable runner remain in the external
+`univ-1687-profile-recapture` evidence archive; the compact checked-in source
+is the durable review authority.
 
 ## Ratchet discipline
 

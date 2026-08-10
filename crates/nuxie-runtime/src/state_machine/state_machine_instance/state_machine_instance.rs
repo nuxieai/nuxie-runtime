@@ -1990,6 +1990,11 @@ pub(super) fn apply_scripted_input_update(
 }
 
 impl StateMachineInstance {
+    #[cfg(test)]
+    pub(crate) fn allocation_identity(&self) -> usize {
+        self as *const Self as usize
+    }
+
     /// Explicitly detach this occurrence from every nested notifier identity.
     ///
     /// Rust polls nested reports rather than installing a raw child→parent
@@ -7526,6 +7531,7 @@ impl StateMachineInstance {
                 let phase = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut())
                     .and_then(|state_machine| {
                         state_machine.begin_nested_apply_events(&mut nested.child)
@@ -7538,6 +7544,7 @@ impl StateMachineInstance {
                     let batch = parent_artboard
                         .active_nested_state_machines
                         .get_mut(&notifier_local)
+                        .map(Box::as_mut)
                         .or_else(|| occurrence.state_machine_mut())
                         .and_then(|state_machine| {
                             state_machine
@@ -7558,6 +7565,7 @@ impl StateMachineInstance {
                     let batch_changed = parent_artboard
                         .active_nested_state_machines
                         .get_mut(&notifier_local)
+                        .map(Box::as_mut)
                         .or_else(|| occurrence.state_machine_mut())
                         .map_or(ancestor_changed, |state_machine| {
                             state_machine.finish_nested_apply_events_batch(
@@ -7572,6 +7580,7 @@ impl StateMachineInstance {
                 changed |= parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut())
                     .is_some_and(|state_machine| {
                         state_machine.finish_nested_advance_after_apply_events(
@@ -7648,6 +7657,7 @@ impl StateMachineInstance {
                 let state_machine = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut());
                 let Some(state_machine) = state_machine else {
                     continue;
@@ -7683,6 +7693,7 @@ impl StateMachineInstance {
                 if let Some(state_machine) = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut())
                 {
                     for event in &bubbled_events {
@@ -7699,6 +7710,7 @@ impl StateMachineInstance {
                 && let Some(state_machine) = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut())
             {
                 let _: bool = state_machine.retain_script_result(Err(error));
@@ -7707,6 +7719,7 @@ impl StateMachineInstance {
                 && let Some(state_machine) = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
+                    .map(Box::as_mut)
                     .or_else(|| occurrence.state_machine_mut())
             {
                 let settlement =

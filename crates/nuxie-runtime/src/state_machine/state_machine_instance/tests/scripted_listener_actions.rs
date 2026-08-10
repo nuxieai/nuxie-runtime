@@ -5260,7 +5260,7 @@ fn fl_c5_failing_reporting_owner_completes_deep_bubble_and_audio_before_error_pr
     let mut parent_artboard = scripted_listener_artboard_and_machine().0;
     parent_artboard
         .active_nested_state_machines
-        .insert(notifier_local, parent);
+        .insert(notifier_local, Box::new(parent));
     let mid_chain_error_was_none = Rc::new(RefCell::new(None));
     let observed_mid_chain = Rc::clone(&mid_chain_error_was_none);
     let mut ancestor_dispatch =

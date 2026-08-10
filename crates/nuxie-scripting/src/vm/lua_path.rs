@@ -169,10 +169,10 @@ fn lua_path_index(key: &Value) -> Result<Option<i64>> {
 pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyUserData> {
     let userdata = lua.create_userdata(path)?;
     let metatable = userdata_metatable(lua, userdata.clone())?;
-    let methods: Table = metatable.get("__index")?;
-    let index =
-        lua.create_function(
-            move |lua, (userdata, key): (AnyUserData, Value)| match lua_path_index(&key)? {
+    if !metatable.is_readonly() {
+        let methods: Table = metatable.get("__index")?;
+        let index = lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
+            match lua_path_index(&key)? {
                 Some(index) => {
                     let command = {
                         let path = userdata.borrow::<ScriptedPath>()?;
@@ -181,45 +181,48 @@ pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyU
                     create_scripted_path_command(lua, command).map(Value::UserData)
                 }
                 None => methods.get(key),
-            },
-        )?;
-    metatable.set("__index", index)?;
-    metatable.set_readonly(true);
+            }
+        })?;
+        metatable.set("__index", index)?;
+        metatable.set_readonly(true);
+    }
     Ok(userdata)
 }
 
 fn create_scripted_path_command(lua: &Lua, command: ScriptedPathCommand) -> Result<AnyUserData> {
     let userdata = lua.create_userdata(command)?;
     let metatable = userdata_metatable(lua, userdata.clone())?;
-    let index = lua.create_function(|_, (userdata, key): (AnyUserData, Value)| {
-        let command = userdata.borrow::<ScriptedPathCommand>()?;
-        match key {
-            Value::Integer(index) => command
-                .points
-                .get(index.saturating_sub(1) as usize)
-                .map_or(Ok(Value::Nil), |point| {
-                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
-                }),
-            Value::Number(index) => command
-                .points
-                .get((index as i64).saturating_sub(1) as usize)
-                .map_or(Ok(Value::Nil), |point| {
-                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
-                }),
-            Value::String(name) if name.as_bytes() == b"type" => Ok(Value::String(
-                userdata.lua().create_string(command.command_type),
-            )),
-            Value::String(name) => Err(Error::runtime(format!(
-                "'{}' is not a valid index of PathCommand",
-                name.to_string_lossy()
-            ))),
-            _ => Err(Error::runtime(
-                "PathCommand index must be a string or number",
-            )),
-        }
-    })?;
-    metatable.set("__index", index)?;
-    metatable.set_readonly(true);
+    if !metatable.is_readonly() {
+        let index = lua.create_function(|_, (userdata, key): (AnyUserData, Value)| {
+            let command = userdata.borrow::<ScriptedPathCommand>()?;
+            match key {
+                Value::Integer(index) => command
+                    .points
+                    .get(index.saturating_sub(1) as usize)
+                    .map_or(Ok(Value::Nil), |point| {
+                        Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                    }),
+                Value::Number(index) => command
+                    .points
+                    .get((index as i64).saturating_sub(1) as usize)
+                    .map_or(Ok(Value::Nil), |point| {
+                        Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                    }),
+                Value::String(name) if name.as_bytes() == b"type" => Ok(Value::String(
+                    userdata.lua().create_string(command.command_type),
+                )),
+                Value::String(name) => Err(Error::runtime(format!(
+                    "'{}' is not a valid index of PathCommand",
+                    name.to_string_lossy()
+                ))),
+                _ => Err(Error::runtime(
+                    "PathCommand index must be a string or number",
+                )),
+            }
+        })?;
+        metatable.set("__index", index)?;
+        metatable.set_readonly(true);
+    }
     Ok(userdata)
 }
 

@@ -3049,6 +3049,38 @@ mod tests {
         assert_eq!(state.detached_view_model_frames.len(), 2);
         assert_eq!(state.registered_view_model_frame_identities.len(), 2);
     }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn nested_script_initialization_gate_closes_after_interpolators_are_registered() {
+        let bytes = include_bytes!("../../../fixtures/p2d/scripted_interpolator.riv");
+        let runtime = read_runtime_file(bytes).expect("scripted interpolator fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("fixture graph builds");
+        let artboard = graph.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+                .expect("fixture artboard instantiates");
+
+        assert!(artboard_needs_script_initialization(artboard, &instance));
+        for global_id in instance
+            .linear_animations()
+            .iter()
+            .flat_map(|animation| animation.scripted_interpolator_global_ids())
+            .collect::<Vec<_>>()
+        {
+            instance.set_scripted_interpolator_factory(
+                global_id,
+                nuxie_runtime::RuntimeScriptedInterpolatorFactory::new(|_| {
+                    Err(ScriptError::new("test factory is never invoked"))
+                }),
+            );
+        }
+
+        assert!(
+            !artboard_needs_script_initialization(artboard, &instance),
+            "a stable mounted artboard must not reopen view-model context construction"
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -3973,6 +4005,23 @@ fn initialize_scripted_drawables(
 }
 
 #[cfg(feature = "scripting")]
+fn artboard_needs_script_initialization(
+    artboard: &ArtboardGraph,
+    instance: &ArtboardInstance,
+) -> bool {
+    artboard.local_objects.iter().any(|local_object| {
+        local_object
+            .type_name
+            .is_some_and(is_scripted_drawable_type)
+            && !instance.has_script_instance_for_global(local_object.global_id)
+    }) || instance
+        .linear_animations()
+        .iter()
+        .flat_map(|animation| animation.scripted_interpolator_global_ids())
+        .any(|global_id| !instance.has_scripted_interpolator_factory(global_id))
+}
+
+#[cfg(feature = "scripting")]
 fn initialize_nested_scripted_drawables(
     runtime: &RuntimeFile,
     root_artboard_index: usize,
@@ -3983,6 +4032,26 @@ fn initialize_nested_scripted_drawables(
     registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<()> {
     let script_assets = extract_script_assets(runtime);
+    let mut needs_initialization = false;
+    instance.try_visit_artboard_tree_instances_mut(&mut |_, graph_global_id, child_instance| {
+        let child_index = artboards
+            .iter()
+            .position(|candidate| candidate.global_id == graph_global_id)
+            .with_context(|| format!("missing nested artboard graph {graph_global_id}"))?;
+        let child_artboard = &artboards[child_index];
+        let relevant = child_instance
+            .linear_animations()
+            .iter()
+            .any(|animation| !animation.scripted_interpolator_global_ids().is_empty())
+            || artboard_scripts_request_context(runtime, child_artboard, &script_assets);
+        needs_initialization |=
+            relevant && artboard_needs_script_initialization(child_artboard, child_instance);
+        Ok::<(), anyhow::Error>(())
+    })?;
+    if !needs_initialization {
+        return Ok(());
+    }
+
     let root_context_model = selected_script_view_model(runtime, root_artboard_index);
     let mut context_models_by_depth = vec![root_context_model];
     let mut initialized_any = false;
@@ -4110,21 +4179,8 @@ fn initialize_scripted_drawables_for_artboard(
     initialize_only_missing: bool,
     registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<bool> {
-    if initialize_only_missing {
-        let missing_drawable = artboard.local_objects.iter().any(|local_object| {
-            local_object
-                .type_name
-                .is_some_and(is_scripted_drawable_type)
-                && !instance.has_script_instance_for_global(local_object.global_id)
-        });
-        let missing_interpolator = instance
-            .linear_animations()
-            .iter()
-            .flat_map(|animation| animation.scripted_interpolator_global_ids())
-            .any(|global_id| !instance.has_scripted_interpolator_factory(global_id));
-        if !missing_drawable && !missing_interpolator {
-            return Ok(false);
-        }
+    if initialize_only_missing && !artboard_needs_script_initialization(artboard, instance) {
+        return Ok(false);
     }
 
     let local_registered_file;

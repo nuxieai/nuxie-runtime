@@ -2201,16 +2201,12 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(false);
         };
-        let value: Value = table
-            .get(ScriptMethod::Advance.as_str())
-            .map_err(|error| self.script_error(error))?;
-        let Value::Function(function) = value else {
-            return Ok(false);
-        };
-        let value: Value = function
-            .call((table, f64::from(elapsed_seconds)))
-            .map_err(|error| self.script_error(error))?;
-        Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
+        table
+            .call_function_truthy(
+                ScriptMethod::Advance.as_str(),
+                (table.clone(), f64::from(elapsed_seconds)),
+            )
+            .map_err(|error| self.script_error(error))
     }
 
     fn call_method_with_factory(

@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
 
-use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
+use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods};
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -36,11 +36,6 @@ impl RendererBindings {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<()> {
-        let value: Value = table.get("draw")?;
-        let Value::Function(function) = value else {
-            return Ok(());
-        };
-
         let lua = table.lua();
         self.verify_render_context(factory)?;
         let scripted_renderer = lua.create_userdata(ScriptedRenderer {
@@ -49,13 +44,13 @@ impl RendererBindings {
             save_count: Cell::new(0),
             valid: Cell::new(true),
         })?;
-        let result = function.call::<()>((table.clone(), scripted_renderer.clone()));
+        let result = table.call_function_unit("draw", (table.clone(), scripted_renderer.clone()));
 
         {
             let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
             scripted_renderer.end();
         }
-        result
+        result.map(|_| ())
     }
 }
 

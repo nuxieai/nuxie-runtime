@@ -1,6 +1,7 @@
 use crate::ArtboardInstance;
 #[cfg(test)]
 use crate::ComponentDirt;
+use harfrust::{FontRef as HarfFontRef, ShaperData};
 use nuxie_binary::RuntimeFile;
 use nuxie_render_api::{Factory as RenderFactory, NullFactory};
 use std::cell::RefCell;
@@ -13,10 +14,22 @@ use std::sync::Arc;
 /// Bytes are the portable counterpart of C++ `rcp<Font>`: validation happens
 /// when the owner is replaced, while the text backends materialize their
 /// backend-specific font views while shaping.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct RuntimeFontAssetOwners {
     fonts: RefCell<BTreeMap<u32, Arc<[u8]>>>,
+    shaper_data: RefCell<BTreeMap<u32, Rc<ShaperData>>>,
     referencers: RefCell<Vec<Weak<RuntimeFontAssetReferencerQueue>>>,
+}
+
+impl std::fmt::Debug for RuntimeFontAssetOwners {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeFontAssetOwners")
+            .field("font_count", &self.fonts.borrow().len())
+            .field("shaper_data_count", &self.shaper_data.borrow().len())
+            .field("referencer_count", &self.referencers.borrow().len())
+            .finish()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -98,6 +111,40 @@ impl RuntimeFontAssetOwners {
         self.fonts.borrow().get(&asset_global).cloned()
     }
 
+    /// Return the shaping tables retained by the decoded FontAsset owner.
+    ///
+    /// C++ retains HarfBuzz face/font state on `Font`; rebuilding the OpenType
+    /// lookup caches for every Yoga measurement makes text-heavy nested layout
+    /// scale with font-table parsing rather than with the measured text.
+    pub(crate) fn shaper_data(&self, asset_global: u32) -> Option<Rc<ShaperData>> {
+        if let Some(shaper_data) = self.shaper_data.borrow().get(&asset_global) {
+            return Some(Rc::clone(shaper_data));
+        }
+        let fonts = self.fonts.borrow();
+        let bytes = fonts.get(&asset_global)?;
+        let font = HarfFontRef::new(bytes.as_ref()).ok()?;
+        let shaper_data = Rc::new(ShaperData::new(&font));
+        drop(fonts);
+        self.shaper_data
+            .borrow_mut()
+            .insert(asset_global, Rc::clone(&shaper_data));
+        Some(shaper_data)
+    }
+
+    pub(crate) fn shaper_data_for_bytes(
+        &self,
+        asset_global: u32,
+        bytes: &[u8],
+    ) -> Option<Rc<ShaperData>> {
+        let fonts = self.fonts.borrow();
+        let retained = fonts.get(&asset_global)?;
+        if retained.len() != bytes.len() || !std::ptr::eq(retained.as_ptr(), bytes.as_ptr()) {
+            return None;
+        }
+        drop(fonts);
+        self.shaper_data(asset_global)
+    }
+
     /// Decode and atomically replace one FontAsset's retained font.
     ///
     /// Every decode result replaces the current owner: valid bytes install a
@@ -117,6 +164,7 @@ impl RuntimeFontAssetOwners {
         } else {
             self.fonts.borrow_mut().remove(&asset_global);
         }
+        self.shaper_data.borrow_mut().remove(&asset_global);
         self.referencers.borrow_mut().retain(|referencer| {
             let Some(referencer) = referencer.upgrade() else {
                 return false;
@@ -396,5 +444,33 @@ mod tests {
 
         assert_eq!(factory.decode_calls, 1);
         assert!(owners.get(7).is_some());
+    }
+
+    #[test]
+    fn retained_font_owner_reuses_shaper_tables_until_font_replacement() {
+        let owners = RuntimeFontAssetOwners::default();
+        let mut factory = NullFactory::new();
+        let font = fixture_font_bytes();
+
+        assert!(owners.decode(7, &font, &mut factory));
+        let first = owners
+            .shaper_data(7)
+            .expect("decoded font exposes retained shaper data");
+        let second = owners
+            .shaper_data(7)
+            .expect("unchanged font reuses retained shaper data");
+        assert!(
+            Rc::ptr_eq(&first, &second),
+            "C++ retains shaping tables on the decoded Font owner"
+        );
+
+        assert!(owners.decode(7, &font, &mut factory));
+        let replacement = owners
+            .shaper_data(7)
+            .expect("replacement font rebuilds retained shaper data");
+        assert!(
+            !Rc::ptr_eq(&first, &replacement),
+            "FontAsset::decode must invalidate caches from the replaced bytes"
+        );
     }
 }

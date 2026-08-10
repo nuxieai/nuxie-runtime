@@ -11273,6 +11273,21 @@ trait RuntimeLayoutEngine {
 
 struct TaffyRuntimeLayoutEngine;
 
+#[cfg(test)]
+thread_local! {
+    static TAFFY_LAYOUT_SOLVE_ENTRIES: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_taffy_layout_solve_entries() {
+    TAFFY_LAYOUT_SOLVE_ENTRIES.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn taffy_layout_solve_entries() -> usize {
+    TAFFY_LAYOUT_SOLVE_ENTRIES.with(Cell::get)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TaffyMeasureContext {
     LayoutComponentMeasure {
@@ -11467,6 +11482,8 @@ impl TaffyRuntimeLayoutEngine {
         if root.type_name != "Artboard" {
             return None;
         }
+        #[cfg(test)]
+        TAFFY_LAYOUT_SOLVE_ENTRIES.with(|count| count.set(count.get() + 1));
         let mut taffy = TaffyTree::<TaffyMeasureContext>::new();
         taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();
@@ -17708,6 +17725,32 @@ impl ArtboardInstance {
                     .is_some_and(|frame| frame.publishes_layout_dirty);
         }
         publishes_layout_dirty
+    }
+
+    /// Borrow the immutable topology retained by this concrete Text
+    /// occurrence, materializing it once from the imported graph if needed.
+    ///
+    /// C++ `Text::measure` reads `m_allRuns`, `m_textStylePaints`, and
+    /// `m_modifierGroups` from the cloned Text object. Yoga may invoke measure
+    /// repeatedly while settling nested hug layouts; rebuilding those imported
+    /// collections for every callback is not part of the upstream lifecycle.
+    pub(crate) fn retained_static_text_topology(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        text_local: usize,
+    ) -> Option<Arc<StaticTextSlice>> {
+        let drawable_index = self
+            .runtime_drawables
+            .drawable_by_local
+            .get(&text_local)
+            .copied()?;
+        let owner = self.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()?;
+        owner
+            .topology_or_build(|| StaticTextSlice::from_graph(runtime, graph, text_local))
+            .ok()
     }
 }
 
@@ -26768,6 +26811,54 @@ mod tests {
             .retained_or_build(build)
             .expect("dirty rebuild succeeds");
         assert_eq!(builds.get(), 2);
+    }
+
+    #[test]
+    fn layout_measurement_reuses_the_text_occurrence_imported_topology() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+        let owner = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text has a retained owner");
+        assert!(owner.topology.borrow().is_none());
+
+        let constraint = RuntimeTextLayoutConstraint {
+            width: f32::MAX,
+            height: f32::MAX,
+            width_scale_type: 2,
+            height_scale_type: 2,
+            layout_direction: 0,
+        };
+        static_text_layout_measure_bounds(&runtime, graph, &instance, text_local, constraint)
+            .expect("first layout measurement succeeds");
+        let first = owner
+            .topology
+            .borrow()
+            .clone()
+            .expect("layout measurement retains the imported Text topology");
+
+        static_text_layout_measure_bounds(&runtime, graph, &instance, text_local, constraint)
+            .expect("second layout measurement succeeds");
+        let second = owner
+            .topology
+            .borrow()
+            .clone()
+            .expect("second measurement keeps the imported Text topology");
+        assert!(
+            Arc::ptr_eq(&first, &second),
+            "unchanged Yoga measurement must reuse the concrete Text occurrence topology"
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use luaur_rt::{Error, FromLuaMulti, Function, Result, Value};
 use nuxie_scripting::vm::ScriptVm;
 
-fn compile_source(source: &str) -> Result<Vec<u8>> {
+pub(crate) fn compile_source(source: &str) -> Result<Vec<u8>> {
     use luaur_compiler::functions::luau_compile::luau_compile;
 
     luaur_common::set_all_flags(true);

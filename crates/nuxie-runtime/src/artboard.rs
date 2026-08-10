@@ -36,7 +36,7 @@ use crate::artboard_data_bind::{
     build_artboard_property_bindings, build_artboard_solo_bindings,
     build_artboard_solo_source_bindings, build_artboard_text_list_bindings,
     build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
-    build_nested_host_view_model_instance_locals,
+    build_nested_host_view_model_instance_locals, build_nested_host_view_model_publications,
     reunite_artboard_shared_data_bind_converter_states,
 };
 use crate::audio_event::RuntimeAudioEventPlayback;
@@ -10539,6 +10539,11 @@ fn build_runtime_nested_artboard_instance(
                 Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
             })
             .collect();
+    let stateful_view_model_publications = build_nested_host_view_model_publications(
+        parent_slots,
+        parent_objects,
+        &data_bind_view_model_instance_locals_by_id,
+    );
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
         parent_slots,
         parent_objects,
@@ -10569,6 +10574,7 @@ fn build_runtime_nested_artboard_instance(
         stateful_view_model_instance_locals_by_id: data_bind_view_model_instance_locals_by_id,
         stateful_view_model_context,
         stateful_global_view_model_contexts,
+        stateful_view_model_publications,
         data_bind_property_source_locals,
         data_bind_image_source_locals,
         data_bind_context_source_locals_by_path: data_bind_source_locals_by_path,

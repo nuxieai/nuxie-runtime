@@ -11,6 +11,10 @@
     use crate::data_bind_graph::{
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
+    use crate::artboard_data_bind::{
+        RuntimeNestedPublicationWork, reset_runtime_nested_publication_work,
+        runtime_nested_publication_work,
+    };
     use crate::focus_data::{
         RuntimeFocusTraversalWork, RuntimeFocusTree, reset_runtime_focus_traversal_work,
         runtime_focus_traversal_work,
@@ -823,6 +827,7 @@
             stateful_view_model_instance_locals_by_id: BTreeMap::new(),
             stateful_view_model_context: None,
             stateful_global_view_model_contexts: BTreeMap::new(),
+            stateful_view_model_publications: Vec::new(),
             data_bind_property_source_locals: Vec::new(),
             data_bind_image_source_locals: Vec::new(),
             data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -2168,6 +2173,7 @@
             stateful_view_model_instance_locals_by_id: BTreeMap::new(),
             stateful_view_model_context: None,
             stateful_global_view_model_contexts: BTreeMap::new(),
+            stateful_view_model_publications: Vec::new(),
             data_bind_property_source_locals: Vec::new(),
             data_bind_image_source_locals: Vec::new(),
             data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -2440,6 +2446,11 @@
                 "ViewModelInstance",
                 &[("parentId", 1), ("viewModelId", 2)],
             );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceNumber",
+                &[("parentId", 3), ("viewModelPropertyId", 0)],
+            );
             push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
             push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
             push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
@@ -2451,6 +2462,36 @@
         let mut parent =
             ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graph.artboards)
                 .expect("parent artboard instance");
+
+        reset_runtime_nested_publication_work();
+        assert!(!parent.publish_nested_view_model_context_mutations(host_local_id));
+        assert_eq!(
+            runtime_nested_publication_work(),
+            RuntimeNestedPublicationWork {
+                authored_slot_inspections: 0,
+                retained_descriptor_inspections: 1,
+            },
+            "C++ retains the exact authored value pointer; an unchanged nested frame must not reconstruct every host slot and property path"
+        );
+        let number_local = parent
+            .slots
+            .iter()
+            .find(|slot| slot.type_name == Some("ViewModelInstanceNumber"))
+            .map(|slot| slot.local_id)
+            .expect("authored global number occurrence");
+        assert!(
+            parent
+                .nested_artboards
+                .get_mut(&host_local_id)
+                .and_then(|nested| nested.stateful_global_view_model_contexts.get_mut(&2))
+                .is_some_and(|context| {
+                    context.borrow_mut().set_number_by_property_index(0, 17.0)
+                })
+        );
+        assert!(parent.publish_nested_view_model_context_mutations(host_local_id));
+        let number_key = property_key_for_name("ViewModelInstanceNumber", "propertyValue")
+            .expect("number value key");
+        assert_eq!(parent.double_property(number_local, number_key), Some(17.0));
 
         let authored = parent
             .nested_artboards
@@ -2636,6 +2677,7 @@
                 stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
+                stateful_view_model_publications: Vec::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -2883,6 +2925,7 @@
                 stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
+                stateful_view_model_publications: Vec::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -2943,6 +2986,7 @@
                 stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
+                stateful_view_model_publications: Vec::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),
@@ -6341,6 +6385,7 @@
                 stateful_view_model_instance_locals_by_id: BTreeMap::new(),
                 stateful_view_model_context: None,
                 stateful_global_view_model_contexts: BTreeMap::new(),
+                stateful_view_model_publications: Vec::new(),
                 data_bind_property_source_locals: Vec::new(),
                 data_bind_image_source_locals: Vec::new(),
                 data_bind_context_source_locals_by_path: BTreeMap::new(),

@@ -5,6 +5,16 @@
 // borrowing the surrounding private runtime vocabulary without recreating a
 // parallel public abstraction.
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeNestedViewModelPublication {
+    pub(crate) source_local_id: usize,
+    pub(crate) type_name: &'static str,
+    pub(crate) property_path: Vec<usize>,
+    pub(crate) instance_local_id: usize,
+    pub(crate) view_model_index: usize,
+    pub(crate) value_key: u16,
+}
+
 #[derive(Debug)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     // Rust drops fields in declaration order. C++ releases nested animations
@@ -32,6 +42,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
     pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelHandle>,
     pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    pub(crate) stateful_view_model_publications: Vec<RuntimeNestedViewModelPublication>,
     /// C++ `NestedArtboardHostFlags::pendingStatefulBinding`: `onAddedClean`
     /// only schedules `bindStateful`; the occurrence consumes the latch on its
     /// next advance, after the host's own data binds have applied
@@ -94,6 +105,7 @@ impl Clone for RuntimeNestedArtboardInstance {
                     )
                 })
                 .collect(),
+            stateful_view_model_publications: self.stateful_view_model_publications.clone(),
             data_bind_property_source_locals: self.data_bind_property_source_locals.clone(),
             data_bind_image_source_locals: self.data_bind_image_source_locals.clone(),
             data_bind_context_source_locals_by_path: self

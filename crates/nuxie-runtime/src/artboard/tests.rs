@@ -5084,6 +5084,10 @@
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+        let parked_path_epoch = instance.path_epoch();
+        let parked_semantic_geometry_revision = instance
+            .try_semantic_geometry_revision()
+            .expect("synthetic component graph has complete semantic authority");
         assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
         assert!(
             instance
@@ -5091,6 +5095,11 @@
                 .unwrap()
                 .dirt
                 .contains(ComponentDirt::PATH | ComponentDirt::PAINT)
+        );
+        assert_eq!(instance.path_epoch(), parked_path_epoch);
+        assert_eq!(
+            instance.try_semantic_geometry_revision(),
+            Some(parked_semantic_geometry_revision)
         );
     }
 

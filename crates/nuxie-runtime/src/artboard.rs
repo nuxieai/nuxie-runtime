@@ -7322,6 +7322,10 @@ impl ArtboardInstance {
         if component.dirt.contains(dirt) {
             return false;
         }
+        // Concrete callbacks below still receive the complete accumulated
+        // mask. Revisions represent this addDirt event, though, so parked
+        // path bits must not be republished by an unrelated new dirt family.
+        let newly_added = dirt & !component.dirt;
 
         // C++ Component::addDirt publishes the accumulated mask before any
         // concrete callback can re-enter this owner.
@@ -7333,7 +7337,7 @@ impl ArtboardInstance {
             component.dirt |= dirt;
             component.dirt
         };
-        self.dispatch_component_on_dirty(handle, accumulated);
+        self.dispatch_component_on_dirty(handle, accumulated, newly_added);
         self.on_component_dirty_handle(handle);
 
         if recurse {
@@ -7348,7 +7352,12 @@ impl ArtboardInstance {
         true
     }
 
-    fn dispatch_component_on_dirty(&mut self, handle: ComponentHandle, accumulated: ComponentDirt) {
+    fn dispatch_component_on_dirty(
+        &mut self,
+        handle: ComponentHandle,
+        accumulated: ComponentDirt,
+        newly_added: ComponentDirt,
+    ) {
         let Some(component) = self.objects.component(handle) else {
             return;
         };
@@ -7441,7 +7450,7 @@ impl ArtboardInstance {
             // dirty-layout set.
             self.mark_layout_node_changed(local_id);
         }
-        if component_dirt_affects_path_epoch(accumulated) {
+        if component_dirt_affects_path_epoch(newly_added) {
             if let Some(component) = self.component(local_id) {
                 component.bump_path_revision();
             }
@@ -7513,7 +7522,15 @@ impl ArtboardInstance {
         // Component::collapse publishes its new mask to the concrete virtual
         // owner before Artboard and collapsable notifications
         // (`src/component.cpp:76-95`).
-        self.dispatch_component_on_dirty(handle, accumulated);
+        self.dispatch_component_on_dirty(
+            handle,
+            accumulated,
+            if collapsed {
+                ComponentDirt::COLLAPSED
+            } else {
+                ComponentDirt::NONE
+            },
+        );
         self.on_component_dirty_handle(handle);
         let collapsable_count = self.objects.collapsable_len(handle);
         for index in 0..collapsable_count {
@@ -9624,6 +9641,14 @@ impl ArtboardInstance {
             // intentionally do not call updateImageScale themselves.
             self.runtime_images
                 .apply_double_property(local_id, property_key, value);
+            if ["originX", "originY"]
+                .into_iter()
+                .any(|name| property_key_for_name("Image", name) == Some(property_key))
+            {
+                // Public geometry bounds consume the live Image origin
+                // immediately, independently of retained layout-fit scale.
+                self.mark_semantic_geometry_changed();
+            }
         }
         if type_name == Some("NSlicedNode")
             && let Some(changed) =

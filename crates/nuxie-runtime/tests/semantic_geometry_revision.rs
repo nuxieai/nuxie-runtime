@@ -342,6 +342,101 @@ fn stroke_fixture_artboard() -> ArtboardInstance {
         .expect("stroke fixture instantiates")
 }
 
+#[derive(Clone, Copy, Debug)]
+enum ShapeExclusionGate {
+    DrawableHidden,
+    Collapsed,
+    ZeroRenderOpacity,
+    NoVisiblePath,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PaintMembershipMutation {
+    FillVisibility,
+    StrokeThickness,
+}
+
+fn assert_paint_membership_is_stable_under_shape_gate(
+    gate: ShapeExclusionGate,
+    mutation: PaintMembershipMutation,
+) {
+    let mut artboard = match mutation {
+        PaintMembershipMutation::FillVisibility => solid_color_fixture_artboard(),
+        PaintMembershipMutation::StrokeThickness => stroke_fixture_artboard(),
+    };
+    artboard.update_pass();
+    let shape_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Shape")
+        .map(|component| component.local_id)
+        .expect("fixture has a Shape");
+    match gate {
+        ShapeExclusionGate::DrawableHidden => {
+            let drawable_flags =
+                fixture_property("Drawable", "drawableFlags", FixtureValue::Uint(0)).key;
+            assert!(artboard.set_uint_property(shape_local, drawable_flags, 1));
+        }
+        ShapeExclusionGate::Collapsed => {
+            assert!(artboard.collapse_component(shape_local, true));
+        }
+        ShapeExclusionGate::ZeroRenderOpacity => {
+            assert!(artboard.set_transform_property(shape_local, TransformProperty::Opacity, 0.0,));
+            artboard.update_pass();
+        }
+        ShapeExclusionGate::NoVisiblePath => {
+            let rectangle_local = artboard
+                .components()
+                .iter()
+                .find(|component| component.type_name == "Rectangle")
+                .map(|component| component.local_id)
+                .expect("fixture has a Rectangle");
+            let path_flags = fixture_property("Path", "pathFlags", FixtureValue::Uint(0)).key;
+            assert!(artboard.set_uint_property(rectangle_local, path_flags, 1));
+        }
+    }
+    assert!(
+        artboard.visible_geometry_with_bounds().is_empty(),
+        "the {gate:?} Shape is already absent from the public catalogue",
+    );
+    let before = artboard
+        .try_semantic_geometry_revision()
+        .expect("fixture has covered semantic geometry");
+
+    match mutation {
+        PaintMembershipMutation::FillVisibility => {
+            let fill_local = artboard
+                .components()
+                .iter()
+                .find(|component| component.type_name == "Fill")
+                .map(|component| component.local_id)
+                .expect("fixture has a Fill");
+            let is_visible =
+                fixture_property("ShapePaint", "isVisible", FixtureValue::Bool(true)).key;
+            assert!(artboard.set_bool_property(fill_local, is_visible, false));
+        }
+        PaintMembershipMutation::StrokeThickness => {
+            let stroke_local = artboard
+                .components()
+                .iter()
+                .find(|component| component.type_name == "Stroke")
+                .map(|component| component.local_id)
+                .expect("fixture has a Stroke");
+            let thickness = fixture_property("Stroke", "thickness", FixtureValue::Double(0.0)).key;
+            assert!(artboard.set_double_property(stroke_local, thickness, 0.0));
+        }
+    }
+
+    assert!(artboard.visible_geometry_with_bounds().is_empty());
+    assert_eq!(
+        artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture has covered semantic geometry"),
+        before,
+        "{mutation:?} below a {gate:?} Shape cannot change visible catalogue membership",
+    );
+}
+
 fn gradient_fixture_artboard() -> ArtboardInstance {
     let file = RuntimeFile::from_fixture_records(vec![
         fixture_record("Backboard", vec![]),
@@ -641,6 +736,94 @@ fn semantic_geometry_revision_changes_when_image_dimensions_are_registered_late(
             .expect("fixture has covered semantic geometry"),
         after,
         "re-registering identical dimensions must keep the authority stable",
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_changes_immediately_for_image_origin_mutation() {
+    for (property_name, expected_min_x, expected_min_y) in
+        [("originX", -25.0, -25.0), ("originY", -50.0, -12.5)]
+    {
+        let mut artboard = image_fixture_artboard();
+        artboard.update_pass();
+        let image_local = artboard
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Image")
+            .map(|component| component.local_id)
+            .expect("fixture has an Image");
+        artboard
+            .register_image_dimensions(1, 100, 50)
+            .expect("image dimensions register");
+        let before_bounds = artboard
+            .object_world_bounds(image_local)
+            .expect("registered dimensions publish image bounds");
+        assert_eq!((before_bounds.min_x, before_bounds.min_y), (-50.0, -25.0));
+        let before = artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture has covered semantic geometry");
+        let origin = fixture_property("Image", property_name, FixtureValue::Double(0.5)).key;
+
+        assert!(artboard.set_double_property(image_local, origin, 0.25));
+
+        let after_bounds = artboard
+            .object_world_bounds(image_local)
+            .expect("mutated Image origin retains authoritative bounds");
+        assert_eq!(
+            (after_bounds.min_x, after_bounds.min_y),
+            (expected_min_x, expected_min_y),
+            "Image.{property_name} moves the public object bounds immediately",
+        );
+        assert_ne!(
+            artboard
+                .try_semantic_geometry_revision()
+                .expect("fixture has covered semantic geometry"),
+            before,
+            "Image.{property_name} bounds changes must invalidate retained semantic geometry",
+        );
+    }
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_identical_image_origin_write() {
+    let mut artboard = image_fixture_artboard();
+    artboard.update_pass();
+    let image_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Image")
+        .map(|component| component.local_id)
+        .expect("fixture has an Image");
+    artboard
+        .register_image_dimensions(1, 100, 50)
+        .expect("image dimensions register");
+    let before_bounds = artboard
+        .object_world_bounds(image_local)
+        .expect("registered dimensions publish image bounds");
+    let before = artboard
+        .try_semantic_geometry_revision()
+        .expect("fixture has covered semantic geometry");
+
+    for property_name in ["originX", "originY"] {
+        let origin = fixture_property("Image", property_name, FixtureValue::Double(0.5)).key;
+        assert!(
+            !artboard.set_double_property(image_local, origin, 0.5),
+            "an identical Image.{property_name} write is not a mutation",
+        );
+    }
+
+    assert_eq!(
+        artboard
+            .object_world_bounds(image_local)
+            .expect("identical writes retain authoritative bounds"),
+        before_bounds,
+    );
+    assert_eq!(
+        artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture has covered semantic geometry"),
+        before,
+        "identical Image origin writes must keep the authority stable",
     );
 }
 
@@ -1251,6 +1434,38 @@ fn semantic_geometry_revision_changes_when_shape_paint_hides_visible_geometry() 
 }
 
 #[test]
+fn semantic_geometry_revision_is_stable_for_paint_membership_under_hidden_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::DrawableHidden,
+        PaintMembershipMutation::FillVisibility,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_paint_membership_under_collapsed_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::Collapsed,
+        PaintMembershipMutation::FillVisibility,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_paint_membership_under_zero_opacity_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::ZeroRenderOpacity,
+        PaintMembershipMutation::FillVisibility,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_paint_membership_without_visible_shape_path() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::NoVisiblePath,
+        PaintMembershipMutation::FillVisibility,
+    );
+}
+
+#[test]
 fn semantic_geometry_revision_changes_when_stroke_thickness_hides_visible_geometry() {
     let mut artboard = stroke_fixture_artboard();
     artboard.update_pass();
@@ -1281,6 +1496,38 @@ fn semantic_geometry_revision_changes_when_stroke_thickness_hides_visible_geomet
             .expect("fixture has covered semantic geometry"),
         before,
         "Stroke thickness visibility transitions must invalidate retained semantic geometry",
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_stroke_membership_under_hidden_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::DrawableHidden,
+        PaintMembershipMutation::StrokeThickness,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_stroke_membership_under_collapsed_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::Collapsed,
+        PaintMembershipMutation::StrokeThickness,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_stroke_membership_under_zero_opacity_shape() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::ZeroRenderOpacity,
+        PaintMembershipMutation::StrokeThickness,
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_for_stroke_membership_without_visible_shape_path() {
+    assert_paint_membership_is_stable_under_shape_gate(
+        ShapeExclusionGate::NoVisiblePath,
+        PaintMembershipMutation::StrokeThickness,
     );
 }
 

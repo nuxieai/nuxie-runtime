@@ -5866,6 +5866,45 @@ impl ArtboardInstance {
         self.runtime_shape_has_effectively_visible_paint_with_overrides(shape_local, None, None)
     }
 
+    fn runtime_shape_has_visible_catalogue_membership_with_paint_overrides(
+        &self,
+        shape_local: usize,
+        visibility_override: Option<(usize, bool)>,
+        stroke_thickness_override: Option<(usize, f32)>,
+    ) -> bool {
+        let Some(component) = self.component(shape_local).filter(|component| {
+            component.type_name == "Shape"
+                && !component.is_collapsed()
+                && component.transform.render_opacity != 0.0
+        }) else {
+            return false;
+        };
+        let drawable_is_visible = component
+            .concrete
+            .drawable
+            .as_ref()
+            .and_then(|drawable| drawable.drawable_flags_property_key)
+            .and_then(|key| self.uint_property(shape_local, key))
+            .is_none_or(|flags| flags & 1 == 0);
+        let has_visible_path = self
+            .runtime_graph()
+            .zip(self.runtime_shapes.get(shape_local))
+            .is_some_and(|(graph, shape)| {
+                shape
+                    .path_locals
+                    .iter()
+                    .any(|path_local| self.runtime_shape_path_is_visible(*path_local, graph))
+            });
+
+        drawable_is_visible
+            && has_visible_path
+            && self.runtime_shape_has_effectively_visible_paint_with_overrides(
+                shape_local,
+                visibility_override,
+                stroke_thickness_override,
+            )
+    }
+
     fn runtime_shape_has_visible_catalogue_membership_at_render_opacity(
         &self,
         shape_local: usize,
@@ -6058,11 +6097,15 @@ impl ArtboardInstance {
         let mut shape_locals = BTreeSet::new();
         shape_locals.extend(owners.iter().map(|owner| owner.shape_local));
         if shape_locals.into_iter().any(|shape_local| {
-            self.runtime_shape_has_effectively_visible_paint_with_overrides(
+            self.runtime_shape_has_visible_catalogue_membership_with_paint_overrides(
                 shape_local,
                 Some((paint_local, previous_visibility)),
                 None,
-            ) != self.runtime_shape_has_effectively_visible_paint(shape_local)
+            ) != self.runtime_shape_has_visible_catalogue_membership_with_paint_overrides(
+                shape_local,
+                None,
+                None,
+            )
         }) {
             self.mark_semantic_geometry_changed();
         }
@@ -6092,11 +6135,15 @@ impl ArtboardInstance {
                 .map(|_| owner.shape_local)
         }));
         if shape_locals.into_iter().any(|shape_local| {
-            self.runtime_shape_has_effectively_visible_paint_with_overrides(
+            self.runtime_shape_has_visible_catalogue_membership_with_paint_overrides(
                 shape_local,
                 None,
                 Some((stroke_local, previous_thickness)),
-            ) != self.runtime_shape_has_effectively_visible_paint(shape_local)
+            ) != self.runtime_shape_has_visible_catalogue_membership_with_paint_overrides(
+                shape_local,
+                None,
+                None,
+            )
         }) {
             self.mark_semantic_geometry_changed();
         }

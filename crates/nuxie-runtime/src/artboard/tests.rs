@@ -152,6 +152,10 @@
         updates: Rc<Cell<usize>>,
     }
 
+    struct RetainedInputScriptInstance {
+        value: Rc<RefCell<ScriptValue>>,
+    }
+
     #[test]
     fn upstream_runtime_nested_inputs_fixture_aliases_share_live_occurrences() {
         let fixture = PathBuf::from(
@@ -571,6 +575,35 @@
         }
 
         fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for RetainedInputScriptInstance {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(match *self.value.borrow() {
+                // The Luau backend stores colors as integers and returns Lua
+                // integers through the untyped Number variant.
+                ScriptValue::Color(value) => ScriptValue::Number(f64::from(value)),
+                ref value => value.clone(),
+            })
+        }
+
+        fn set_input(&mut self, _name: &str, value: ScriptValue) -> Result<(), ScriptError> {
+            *self.value.borrow_mut() = value;
             Ok(())
         }
     }
@@ -2798,6 +2831,76 @@
                 .expect("post-init update")
         );
         assert_eq!(updates.get(), 3);
+    }
+
+    #[test]
+    fn script_input_broadcast_updates_root_and_nested_occurrences() {
+        let root_value = Rc::new(RefCell::new(ScriptValue::Number(1.0)));
+        let nested_value = Rc::new(RefCell::new(ScriptValue::Number(1.0)));
+
+        let mut nested_script = synthetic_component_for_type(0, "ScriptedDrawable");
+        nested_script.global_id = 17;
+        let mut child = synthetic_instance(vec![nested_script], vec![0]);
+        child.set_script_instance_for_global(
+            17,
+            Box::new(RetainedInputScriptInstance {
+                value: Rc::clone(&nested_value),
+            }),
+        );
+
+        let nested_host = synthetic_component_for_type(0, "NestedArtboard");
+        let mut root_script = synthetic_component_for_type(1, "ScriptedDrawable");
+        root_script.global_id = 17;
+        let mut root = synthetic_instance(vec![nested_host, root_script], vec![0, 1]);
+        root.set_script_instance_for_global(
+            17,
+            Box::new(RetainedInputScriptInstance {
+                value: Rc::clone(&root_value),
+            }),
+        );
+        let mut nested = synthetic_nested_artboard_instance(17);
+        nested.child = Box::new(child);
+        root.nested_artboards.insert(0, nested);
+
+        assert_eq!(
+            root.set_script_input_for_global_occurrences_if_changed(
+                17,
+                "offset",
+                ScriptValue::Number(4.0),
+            )
+            .expect("broadcast succeeds"),
+            Some(true)
+        );
+        assert_eq!(*root_value.borrow(), ScriptValue::Number(4.0));
+        assert_eq!(*nested_value.borrow(), ScriptValue::Number(4.0));
+        assert_eq!(
+            root.set_script_input_for_global_occurrences_if_changed(
+                17,
+                "offset",
+                ScriptValue::Number(4.0),
+            )
+            .expect("no-op broadcast succeeds"),
+            Some(false)
+        );
+
+        assert_eq!(
+            root.set_script_input_for_global_occurrences_if_changed(
+                17,
+                "color",
+                ScriptValue::Color(0xff33_66cc),
+            )
+            .expect("color broadcast succeeds"),
+            Some(true)
+        );
+        assert_eq!(
+            root.set_script_input_for_global_occurrences_if_changed(
+                17,
+                "color",
+                ScriptValue::Color(0xff33_66cc),
+            )
+            .expect("unchanged Luau-backed color broadcast succeeds"),
+            Some(false)
+        );
     }
 
     #[test]

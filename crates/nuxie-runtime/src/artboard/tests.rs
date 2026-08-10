@@ -11,6 +11,10 @@
     use crate::data_bind_graph::{
         RuntimeDataBindGraphConverter, runtime_data_bind_graph_reverse_convert_value,
     };
+    use crate::focus_data::{
+        RuntimeFocusTraversalWork, RuntimeFocusTree, reset_runtime_focus_traversal_work,
+        runtime_focus_traversal_work,
+    };
     use crate::properties::property_key_for_name;
     use crate::state_machine::{
         RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
@@ -11510,6 +11514,33 @@
         assert_eq!(large.batch_queries, 1);
         assert_eq!(small.visited_slots, small_child_count + 2);
         assert_eq!(large.visited_slots, large_child_count + 2);
+    }
+
+    #[test]
+    fn focus_tree_walk_follows_retained_children_without_graph_searches() {
+        const NODE_COUNT: usize = 64;
+        let bytes = synthetic_riv(9684, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            for local_id in 1..=NODE_COUNT {
+                push_synthetic_object(bytes, "Node", &[("parentId", (local_id - 1) as u64)]);
+            }
+            push_synthetic_object(bytes, "FocusData", &[("parentId", NODE_COUNT as u64)]);
+        });
+        let instance = instance_from_riv(&bytes);
+        let mut focus_tree = RuntimeFocusTree::new_unsynchronized(&instance);
+
+        reset_runtime_focus_traversal_work();
+        focus_tree.synchronize_after_layer_initialization(&instance);
+
+        assert_eq!(
+            runtime_focus_traversal_work(),
+            RuntimeFocusTraversalWork {
+                component_visits: NODE_COUNT + 1,
+                graph_lookup_candidates: 0,
+            },
+            "pinned C++ follows retained Component::children pointers once per component"
+        );
     }
 
     #[test]

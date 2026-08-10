@@ -3,7 +3,6 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
@@ -44,27 +43,18 @@ impl RendererBindings {
 
         let lua = table.lua();
         self.verify_render_context(factory)?;
-        let save_count = Rc::new(Cell::new(0usize));
-        let valid = Rc::new(Cell::new(true));
-        let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
-
         let scripted_renderer = lua.create_userdata(ScriptedRenderer {
-            renderer: Rc::clone(&renderer_ref),
+            renderer: RefCell::new(erase_renderer_lifetime(renderer)),
             bindings: self.clone(),
-            save_count: Rc::clone(&save_count),
-            valid: Rc::clone(&valid),
+            save_count: Cell::new(0),
+            valid: Cell::new(true),
         })?;
-        let result = function.call::<()>((table.clone(), scripted_renderer));
+        let result = function.call::<()>((table.clone(), scripted_renderer.clone()));
 
-        while save_count.get() > 0 {
-            let mut renderer = renderer_ref.borrow_mut();
-            // The renderer userdata is still valid while this cleanup runs;
-            // the pointer is invalidated immediately after the save stack is
-            // balanced.
-            unsafe { renderer.as_mut().restore() };
-            save_count.set(save_count.get() - 1);
+        {
+            let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
+            scripted_renderer.end();
         }
-        valid.set(false);
         result
     }
 }
@@ -77,13 +67,25 @@ fn erase_renderer_lifetime(renderer: &mut dyn Renderer) -> NonNull<dyn Renderer>
 }
 
 pub(super) struct ScriptedRenderer {
-    renderer: Rc<RefCell<NonNull<dyn Renderer>>>,
+    renderer: RefCell<NonNull<dyn Renderer>>,
     pub(super) bindings: RendererBindings,
-    save_count: Rc<Cell<usize>>,
-    valid: Rc<Cell<bool>>,
+    save_count: Cell<usize>,
+    valid: Cell<bool>,
 }
 
 impl ScriptedRenderer {
+    fn end(&self) {
+        while self.save_count.get() > 0 {
+            let mut renderer = self.renderer.borrow_mut();
+            // The renderer userdata is still valid while this cleanup runs;
+            // the pointer is invalidated immediately after the save stack is
+            // balanced.
+            unsafe { renderer.as_mut().restore() };
+            self.save_count.set(self.save_count.get() - 1);
+        }
+        self.valid.set(false);
+    }
+
     fn validate(&self) -> Result<()> {
         if self.valid.get() {
             Ok(())
@@ -251,6 +253,65 @@ mod tests {
     use crate::vm::ScriptVm;
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::{NoopScriptHost, ScriptInstance};
+
+    #[test]
+    fn scripted_renderer_keeps_callback_lifetime_state_inline() {
+        fn assert_field_type<T: 'static>(
+            _field: impl Fn(&ScriptedRenderer) -> &T,
+            expected: std::any::TypeId,
+        ) {
+            assert_eq!(std::any::TypeId::of::<T>(), expected);
+        }
+
+        assert_field_type(
+            |renderer| &renderer.renderer,
+            std::any::TypeId::of::<RefCell<NonNull<dyn Renderer>>>(),
+        );
+        assert_field_type(
+            |renderer| &renderer.save_count,
+            std::any::TypeId::of::<Cell<usize>>(),
+        );
+        assert_field_type(
+            |renderer| &renderer.valid,
+            std::any::TypeId::of::<Cell<bool>>(),
+        );
+    }
+
+    #[test]
+    fn retained_scripted_renderer_is_invalid_after_balanced_callback_cleanup() {
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let table: Table = vm
+            .eval(
+                r#"
+                return {
+                    draw = function(self, renderer)
+                        renderer:save()
+                        retainedRenderer = renderer
+                    end,
+                }
+                "#,
+            )
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        let mut renderer = factory.borrow().make_renderer();
+
+        instance
+            .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+            .unwrap();
+
+        assert!(factory.borrow().stream().contains("save\nrestore\n"));
+        let (valid, error): (bool, String) = vm
+            .eval(
+                "local ok, err = pcall(function() retainedRenderer:save() end); \
+                 return ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(!valid);
+        assert!(error.contains("Renderer is no longer valid"), "{error}");
+    }
 
     #[test]
     fn factory_image_mesh_allocates_resets_and_draws_exact_buffers() {

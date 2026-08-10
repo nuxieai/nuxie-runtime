@@ -2,7 +2,7 @@
 //!
 //! Owns live-context resolution and the artboard-facing typed adapters.
 
-use crate::artboard::RuntimeNestedArtboardInstance;
+use crate::artboard::{RuntimeNestedArtboardInstance, RuntimeNestedViewModelPublication};
 use crate::components::{ComponentHandle, DataBindHandle};
 use crate::custom_property_container::RuntimeArtboardCustomPropertyBindingInstance;
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
@@ -54,6 +54,40 @@ use nuxie_schema::{FieldKind, definition_by_type_key};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct RuntimeNestedPublicationWork {
+    pub(crate) authored_slot_inspections: usize,
+    pub(crate) retained_descriptor_inspections: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static RUNTIME_NESTED_PUBLICATION_WORK: std::cell::RefCell<RuntimeNestedPublicationWork> =
+        std::cell::RefCell::new(RuntimeNestedPublicationWork::default());
+}
+
+#[cfg(test)]
+pub(crate) fn reset_runtime_nested_publication_work() {
+    RUNTIME_NESTED_PUBLICATION_WORK
+        .with(|work| *work.borrow_mut() = RuntimeNestedPublicationWork::default());
+}
+
+#[cfg(test)]
+pub(crate) fn runtime_nested_publication_work() -> RuntimeNestedPublicationWork {
+    RUNTIME_NESTED_PUBLICATION_WORK.with(|work| *work.borrow())
+}
+
+#[cfg(test)]
+fn record_runtime_nested_publication_descriptor() {
+    RUNTIME_NESTED_PUBLICATION_WORK.with(|work| {
+        work.borrow_mut().retained_descriptor_inspections += 1;
+    });
+}
+
+#[cfg(not(test))]
+fn record_runtime_nested_publication_descriptor() {}
 
 pub(crate) fn build_key_frame_data_bind_templates<'a>(
     file: &'a RuntimeFile,
@@ -359,6 +393,80 @@ pub(crate) fn build_nested_host_view_model_instance_locals(
         locals_by_id.entry(view_model_id).or_insert(slot.local_id);
     }
     locals_by_id
+}
+
+pub(crate) fn build_nested_host_view_model_publications(
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
+    view_model_instance_locals_by_id: &BTreeMap<u32, usize>,
+) -> Vec<RuntimeNestedViewModelPublication> {
+    let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
+        return Vec::new();
+    };
+    let Some(property_id_key) = runtime_data_bind_view_model_instance_value_property_id_key()
+    else {
+        return Vec::new();
+    };
+    let roots_by_local = view_model_instance_locals_by_id
+        .iter()
+        .filter_map(|(&view_model_id, &instance_local_id)| {
+            usize::try_from(view_model_id)
+                .ok()
+                .map(|view_model_index| (instance_local_id, view_model_index))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut publications = Vec::new();
+
+    for slot in slots {
+        let Some(type_name) = slot.type_name else {
+            continue;
+        };
+        if !type_name.starts_with("ViewModelInstance") || type_name == "ViewModelInstance" {
+            continue;
+        }
+        let mut property_path = Vec::new();
+        let mut current_local = slot.local_id;
+        let mut visited = BTreeSet::new();
+        let (instance_local_id, view_model_index) = loop {
+            if !visited.insert(current_local) {
+                break (usize::MAX, usize::MAX);
+            }
+            let Some(property_index) = objects
+                .uint_property(current_local, property_id_key)
+                .and_then(|value| usize::try_from(value).ok())
+            else {
+                break (usize::MAX, usize::MAX);
+            };
+            property_path.push(property_index);
+            let Some(parent_local) = objects
+                .uint_property(current_local, parent_key)
+                .and_then(|value| usize::try_from(value).ok())
+            else {
+                break (usize::MAX, usize::MAX);
+            };
+            if let Some(&view_model_index) = roots_by_local.get(&parent_local) {
+                break (parent_local, view_model_index);
+            }
+            current_local = parent_local;
+        };
+        if instance_local_id == usize::MAX {
+            continue;
+        }
+        let Some(value_key) = runtime_data_bind_property_key_for_name(type_name, "propertyValue")
+        else {
+            continue;
+        };
+        property_path.reverse();
+        publications.push(RuntimeNestedViewModelPublication {
+            source_local_id: slot.local_id,
+            type_name,
+            property_path,
+            instance_local_id,
+            view_model_index,
+            value_key,
+        });
+    }
+    publications
 }
 
 fn stateful_nested_host_value_local_for_slots(
@@ -9355,114 +9463,71 @@ impl ArtboardInstance {
         &mut self,
         host_local_id: usize,
     ) -> bool {
-        let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
-            return false;
-        };
-        let Some(property_id_key) = runtime_data_bind_view_model_instance_value_property_id_key()
-        else {
-            return false;
-        };
         let Some(nested) = self.nested_artboards.get(&host_local_id) else {
             return false;
         };
-        let roots_by_local = nested
-            .stateful_view_model_instance_locals_by_id
-            .iter()
-            .filter_map(|(&view_model_id, &instance_local_id)| {
-                usize::try_from(view_model_id)
-                    .ok()
-                    .map(|view_model_index| (instance_local_id, view_model_index))
-            })
-            .collect::<BTreeMap<_, _>>();
         let mut updates = Vec::new();
 
-        for slot in &self.slots {
-            let Some(type_name) = slot.type_name else {
-                continue;
-            };
-            if !type_name.starts_with("ViewModelInstance") || type_name == "ViewModelInstance" {
-                continue;
-            }
-            let mut property_path = Vec::new();
-            let mut current_local = slot.local_id;
-            let mut visited = BTreeSet::new();
-            let (instance_local_id, view_model_index) = loop {
-                if !visited.insert(current_local) {
-                    break (usize::MAX, usize::MAX);
-                }
-                let Some(property_index) = self
-                    .uint_property(current_local, property_id_key)
-                    .and_then(|value| usize::try_from(value).ok())
-                else {
-                    break (usize::MAX, usize::MAX);
-                };
-                property_path.push(property_index);
-                let Some(parent_local) = self
-                    .uint_property(current_local, parent_key)
-                    .and_then(|value| usize::try_from(value).ok())
-                else {
-                    break (usize::MAX, usize::MAX);
-                };
-                if let Some(&view_model_index) = roots_by_local.get(&parent_local) {
-                    break (parent_local, view_model_index);
-                }
-                current_local = parent_local;
-            };
-            if instance_local_id == usize::MAX {
-                continue;
-            }
-            property_path.reverse();
-            let context = if nested.stateful_view_model_instance_local == Some(instance_local_id) {
+        for publication in &nested.stateful_view_model_publications {
+            record_runtime_nested_publication_descriptor();
+            let context = if nested.stateful_view_model_instance_local
+                == Some(publication.instance_local_id)
+            {
                 nested.stateful_view_model_context.as_ref()
             } else {
                 nested
                     .stateful_global_view_model_contexts
-                    .get(&view_model_index)
+                    .get(&publication.view_model_index)
             };
             let Some(cell) = context
                 .map(|context| context.borrow())
-                .and_then(|context| context.cell_by_property_path(&property_path))
+                .and_then(|context| context.cell_by_property_path(&publication.property_path))
             else {
                 continue;
             };
             if !cell.has_changed() {
                 continue;
             }
-            let Some(value_key) =
-                runtime_data_bind_property_key_for_name(type_name, "propertyValue")
-            else {
-                continue;
-            };
             let value = cell.value();
             let already_published = match &value {
                 RuntimeViewModelCellValue::Number(value) => self
-                    .double_property(slot.local_id, value_key)
+                    .double_property(publication.source_local_id, publication.value_key)
                     .is_some_and(|published| published.to_bits() == value.to_bits()),
                 RuntimeViewModelCellValue::Boolean(value) => {
-                    self.bool_property(slot.local_id, value_key) == Some(*value)
+                    self.bool_property(publication.source_local_id, publication.value_key)
+                        == Some(*value)
                 }
                 RuntimeViewModelCellValue::String(value) => self
-                    .string_property(slot.local_id, value_key)
+                    .string_property(publication.source_local_id, publication.value_key)
                     .is_some_and(|published| published == value.as_ref()),
                 RuntimeViewModelCellValue::Color(value) => {
-                    self.color_property(slot.local_id, value_key) == Some(*value)
+                    self.color_property(publication.source_local_id, publication.value_key)
+                        == Some(*value)
                 }
                 RuntimeViewModelCellValue::Enum(value)
                 | RuntimeViewModelCellValue::SymbolListIndex(value)
                 | RuntimeViewModelCellValue::AssetImage(value)
                 | RuntimeViewModelCellValue::Artboard(value) => {
-                    self.uint_property(slot.local_id, value_key) == Some(u64::from(*value))
+                    self.uint_property(publication.source_local_id, publication.value_key)
+                        == Some(u64::from(*value))
                 }
                 RuntimeViewModelCellValue::Trigger(value) => {
-                    self.uint_property(slot.local_id, value_key) == Some(*value)
+                    self.uint_property(publication.source_local_id, publication.value_key)
+                        == Some(*value)
                 }
                 RuntimeViewModelCellValue::AssetFont(value) => {
-                    self.uint_property(slot.local_id, value_key) == Some(value.file_asset_index())
+                    self.uint_property(publication.source_local_id, publication.value_key)
+                        == Some(value.file_asset_index())
                 }
                 _ => false,
             };
             if !already_published {
-                updates.push((slot.local_id, type_name, value_key, value));
+                updates.push((
+                    publication.source_local_id,
+                    publication.type_name,
+                    publication.value_key,
+                    value,
+                ));
             }
         }
 

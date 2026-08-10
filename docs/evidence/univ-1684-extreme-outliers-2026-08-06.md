@@ -288,11 +288,63 @@ The post-report external diagnostics are content-addressed as follows:
 - trace table-of-contents SHA-256:
   `89d8e7371492cd6b576afaf54756d54b13592ae543cc4b60f0cc2a531c116f42`
 
-## Required authoritative closeout
+## Stable nested state-machine owner acceptance
 
-After the PR is open, run the clean, serialized performance lane with the
-same three corpus IDs and the scripting-enabled release runners. Acceptance
-requires all three Rust/C++ ratios below 10x. Only three independent quiet
-sessions may tighten the affected `perf-corpus.toml` rows. The ordinary
-required signoff must also run the focused scripted golden comparison for all
-three IDs so exact draw and side-channel behavior remains pinned.
+Commit `bfcc9de65e3e781882b3e451739bab02dc99ba31` (tree
+`73ddfe92cd365ef823c798b61bcfd7cbda23253a`) restores the stable heap ownership
+used by pinned upstream commit `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+Pinned C++ stores each nested `StateMachineInstance` behind `std::unique_ptr`;
+Rust had transferred the complete value into and out of the active-instance
+map on every nested frame. The deterministic RED observed the active allocation
+at address `35387342848` and its remounted owner at `6166599976`. The GREEN
+retains the instance behind `Box` while preserving the existing callback-major
+detach/restore ordering, nested input and event behavior, and external focus
+manager.
+
+The focused ownership, input, event, focus, clone, and error-propagation
+controls are green. The complete `nuxie-runtime` release library suite reports
+1,031 passed, zero failed, and one ignored. The complete `nuxie-scripting`
+release suite is green; its unit summary is 90 passed, zero failed, and one
+ignored. `cargo fmt --all --check` and `git diff --check` also pass.
+
+The frozen scripting-enabled Rust runner SHA-256 is
+`07d67f54263d7fc65d0907f51c8e2c9f58a63009682ff21e9811060c169bbc61`.
+Its source digest is
+`e2f1ffd8d33a73ca9438bd83585346f731b18d6dddb194d70c52ca16a378ec91`.
+The unchanged C++ runner SHA-256 is
+`3be7c09908310f88fb322f821c16ffb80f3df33d10655b50ddd62ddbea7d43df`,
+the performance comparator SHA-256 is
+`a8a312ebfeab97674c55f17f7b8919ab07a1f08c29ffa6c77cc77444764172f1`,
+and the golden comparator SHA-256 is
+`1076a316a160981f721f336bd95bc9f2a4f0f60fb10a21a148dc7f6f763d3457`.
+The exact golden authority passed all three fixtures, all three exact streams,
+and all seven side-channel segments with zero divergence.
+
+The first complete fixed performance gate is authoritative under the user's
+ambient-concurrency authorization. It used five iterations, zero warmups,
+C++-first median selection, one 100-frame scripted-runner repeat, and the exact
+three issue fixtures. No sample was discarded and no rerun was performed. All
+three acceptance ratios are below the fixed 10x ceiling:
+
+- `car_widgets_v01`: 9.607641x total; advance 13.243915x; Rust advance
+  16.639920 ms per 100 frames
+- `gamepad_test`: 7.255573x total
+- `script_create_text_runs`: 7.799165x total
+- aggregate: 9.238228x total
+
+The complete result is
+[`univ-1684-stable-nested-state-machine-perf.json`](univ-1684-stable-nested-state-machine-perf.json),
+SHA-256 `9e4e5e193d856d6cf8affec5dc2d8bcc4dd38512411328541b8366dc74f59ab6`.
+Host load was `12.15,12.58,12.86` at start and `8.94,11.79,12.57` at end.
+Recorded ambient activity included Search Console MCP, WindowServer, Codex,
+Claude, Swift typechecking, and esbuild. This is a disclosed measurement
+condition, not grounds for a second run under the accepted first-result
+contract.
+
+## Required closeout
+
+The fixed correctness, exact golden, side-channel, and performance authorities
+are complete. Remaining closeout is an immutable-head Codex review followed by
+a separate adversarial review, required PR signoff, rebase merge, and final
+tracker evidence. There is no quiet-lane rerun or acceptance-ratio ratchet in
+this issue.

@@ -696,7 +696,7 @@
                 })
             })
             .collect();
-        let component_lists = objects
+        let component_lists: Vec<ComponentHandle> = objects
             .component_handles()
             .iter()
             .copied()
@@ -717,11 +717,19 @@
                 .map_or(0, |local_id| local_id.saturating_add(1))
         ];
         let instance_identity = RuntimeArtboardInstanceIdentity::next();
+        let semantic_geometry_locally_covered = component_lists.is_empty()
+            && slots.iter().all(|slot| {
+                !matches!(slot.type_name, Some("DrawTarget") | Some("DrawRules"))
+            });
+        let semantic_geometry_authority = RuntimeSemanticGeometryAuthority::new();
+        semantic_geometry_authority.require_coverage(semantic_geometry_locally_covered);
         ArtboardInstance {
             audio_event_playback: RuntimeAudioEventPlayback::empty(crate::AudioArtboardId(
                 instance_identity.0,
             )),
             instance_identity,
+            semantic_geometry_authority,
+            semantic_geometry_locally_covered,
             audio_lifecycle_armed: true,
             width: 0.0,
             height: 0.0,

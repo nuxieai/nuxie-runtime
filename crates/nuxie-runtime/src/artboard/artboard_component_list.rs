@@ -299,6 +299,7 @@ impl ArtboardInstance {
             &build_context.artboards,
             &mut visiting,
             Some(build_context.clone()),
+            Arc::clone(&self.semantic_geometry_authority),
             false,
             profile_path,
         )

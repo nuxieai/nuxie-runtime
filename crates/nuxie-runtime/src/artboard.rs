@@ -90,10 +90,7 @@ use crate::view_model::{
     RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
     set_component_list_item_index,
 };
-use crate::view_model_cell::{
-    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeFileViewModelInstanceCatalog,
-    RuntimeViewModelCell, RuntimeViewModelCellValue,
-};
+use crate::view_model_cell::{RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCellValue};
 use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
@@ -10561,7 +10558,6 @@ fn build_runtime_nested_artboard_instance(
         stateful_view_model_instance_locals_by_id: data_bind_view_model_instance_locals_by_id,
         stateful_view_model_context,
         stateful_global_view_model_contexts,
-        stateful_view_model_publication: RuntimeNestedViewModelPublicationState::default(),
         data_bind_property_source_locals,
         data_bind_image_source_locals,
         data_bind_context_source_locals_by_path: data_bind_source_locals_by_path,

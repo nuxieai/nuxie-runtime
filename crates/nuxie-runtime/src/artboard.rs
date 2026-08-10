@@ -3461,11 +3461,74 @@ impl ArtboardInstance {
             .get(&global_id)
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
-        if handle.borrow_mut().get_input(name)? == value {
+        let current = handle.borrow_mut().get_input(name)?;
+        let backend_equivalent = current == value
+            || matches!(
+                (&current, &value),
+                (ScriptValue::Number(current), ScriptValue::Color(requested))
+                    if *current == f64::from(*requested)
+            );
+        if backend_equivalent {
             return Ok(false);
         }
         self.set_script_input_for_global(global_id, name, value)?;
         Ok(true)
+    }
+
+    /// Writes one input to every currently retained occurrence of the same
+    /// authored scripted object below this artboard. `None` means the authored
+    /// global has no live occurrence in this tree; `Some(false)` means every
+    /// occurrence already held the requested value.
+    pub fn set_script_input_for_global_occurrences_if_changed(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+    ) -> Result<Option<bool>, ScriptError> {
+        let mut found = false;
+        let mut changed = false;
+
+        if self.script_instances_by_global.contains_key(&global_id) {
+            found = true;
+            changed |=
+                self.set_script_input_for_global_if_changed(global_id, name, value.clone())?;
+        }
+
+        for nested in self.nested_artboards.values_mut() {
+            if let Some(nested_changed) = nested
+                .child
+                .set_script_input_for_global_occurrences_if_changed(
+                    global_id,
+                    name,
+                    value.clone(),
+                )?
+            {
+                found = true;
+                changed |= nested_changed;
+            }
+        }
+
+        let component_list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for list_local_id in component_list_locals {
+            let Some(items) = self.component_list_items_mut(list_local_id) else {
+                continue;
+            };
+            for item in items {
+                if let Some(item_changed) = item
+                    .child
+                    .set_script_input_for_global_occurrences_if_changed(
+                        global_id,
+                        name,
+                        value.clone(),
+                    )?
+                {
+                    found = true;
+                    changed |= item_changed;
+                }
+            }
+        }
+
+        Ok(found.then_some(changed))
     }
 
     pub fn set_script_artboard_input_for_global(

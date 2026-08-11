@@ -182,6 +182,34 @@ class CaptureTraceTest(unittest.TestCase):
             self.assertEqual(first, receipt_only)
             self.assertNotEqual(first["sha256"], semantic_change["sha256"])
 
+    def test_candidate_source_fingerprint_excludes_upstream_oracle_checkout(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            source = repo / "crates/runtime/src/lib.rs"
+            source.parent.mkdir(parents=True)
+            source.write_text("pub fn frame() {}\n")
+            output = repo / "docs/runtime-frame-loop-trace.json"
+            output.parent.mkdir()
+            output.write_text("{}\n")
+
+            without_oracle = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+            upstream = repo / "rive-runtime"
+            subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+            upstream_source = upstream / "src/artboard.cpp"
+            upstream_source.parent.mkdir()
+            upstream_source.write_text("void advance() {}\n")
+            with_oracle = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+
+            self.assertEqual(without_oracle, with_oracle)
+            self.assertEqual(with_oracle["file_count"], 1)
+
     def test_interactive_input_is_only_enabled_for_mechanism_frame(self) -> None:
         row = {
             "id": "scroll",

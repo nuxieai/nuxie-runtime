@@ -1036,6 +1036,10 @@ impl ScriptMountTargetKind {
             Self::Interpolator => "ScriptedInterpolator",
         }
     }
+
+    fn hydrates_script_inputs(self) -> bool {
+        matches!(self, Self::Drawable | Self::Layout)
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -1255,8 +1259,8 @@ fn instantiate_script_mounts(
                         target.asset_name
                     ))
                 })?;
-            if matches!(target.kind, ScriptMountTargetKind::Layout) {
-                hydrate_prepared_layout_inputs(
+            if target.kind.hydrates_script_inputs() {
+                hydrate_prepared_scripted_object_inputs(
                     runtime,
                     group.graph_global_id,
                     target,
@@ -1346,8 +1350,8 @@ async fn instantiate_script_mounts_async(
                         group.path, target.global_id, target.asset_ordinal, target.asset_name
                     ))
                 })?;
-            if matches!(target.kind, ScriptMountTargetKind::Layout) {
-                hydrate_prepared_layout_inputs(
+            if target.kind.hydrates_script_inputs() {
+                hydrate_prepared_scripted_object_inputs(
                     runtime,
                     group.graph_global_id,
                     target,
@@ -1388,7 +1392,7 @@ async fn instantiate_script_mounts_async(
 }
 
 #[cfg(feature = "scripting")]
-fn hydrate_prepared_layout_inputs(
+fn hydrate_prepared_scripted_object_inputs(
     runtime: &RuntimeFile,
     graph_global_id: u32,
     target: &ScriptMountTarget,

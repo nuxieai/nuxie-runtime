@@ -2534,7 +2534,7 @@ impl StateMachineInstance {
                 current_sorted_index += 1;
             }
         }
-        for drawable in artboard.runtime_hit_component_order() {
+        artboard.visit_runtime_hit_component_order(|drawable| {
             let mut index = current_sorted_index;
             while index < self.hit_components.len() {
                 if self.hit_components[index].component() == Some(drawable) {
@@ -2544,9 +2544,10 @@ impl StateMachineInstance {
                 index += 1;
             }
             if current_sorted_index == self.hit_components.len() {
-                break;
+                return false;
             }
-        }
+            true
+        });
     }
 
     fn add_to_hit_lookup(

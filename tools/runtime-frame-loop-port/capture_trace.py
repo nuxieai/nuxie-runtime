@@ -207,6 +207,52 @@ def merge_and_export(
     return coverage
 
 
+def normalize_materialized_cpp_coverage_paths(
+    coverage: dict[str, Any], *, upstream: pathlib.Path
+) -> None:
+    """Map isolated patched-oracle source paths back to the pinned checkout."""
+
+    def normalize(path: str) -> str:
+        parts = pathlib.PurePath(path).parts
+        materialized_index = next(
+            (
+                index
+                for index, part in enumerate(parts)
+                if part.startswith("patched-runtime-src.")
+            ),
+            None,
+        )
+        if materialized_index is None:
+            return path
+        relative = pathlib.Path(*parts[materialized_index + 1 :])
+        return str(upstream / relative)
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == "filename":
+                    value[key] = normalize(str(child))
+                elif key == "filenames":
+                    value[key] = [normalize(str(path)) for path in child]
+                else:
+                    visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(coverage)
+
+
+def normalize_materialized_cpp_coverage_file(
+    coverage_path: pathlib.Path, *, upstream: pathlib.Path
+) -> None:
+    coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+    normalize_materialized_cpp_coverage_paths(coverage, upstream=upstream)
+    coverage_path.write_text(
+        json.dumps(coverage, separators=(",", ":")), encoding="utf-8"
+    )
+
+
 def capture_group(
     *,
     group: str,
@@ -261,6 +307,9 @@ def capture_group(
         output_stem=output_dir / f"{group}-cpp",
         llvm_profdata=llvm_profdata,
         llvm_cov=llvm_cov,
+    )
+    normalize_materialized_cpp_coverage_file(
+        cpp_coverage, upstream=upstream
     )
     rust_coverage = merge_and_export(
         profiles=profiles["rust"],

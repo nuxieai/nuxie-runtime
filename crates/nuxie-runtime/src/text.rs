@@ -1787,6 +1787,16 @@ impl StaticTextSlice {
                         | "ListenerInputTypeGamepad"
                         | "ScriptedDrawable"
                         | "ScriptInputArtboard"
+                        // C++ registers primitive ScriptInput records with
+                        // ScriptedObjectImporter, while Text::makeStyled only
+                        // walks TextValueRun children retained in m_allRuns.
+                        // These artboard siblings therefore cannot affect
+                        // shaping and must not narrow the static Text subset.
+                        | "ScriptInputBoolean"
+                        | "ScriptInputNumber"
+                        | "ScriptInputColor"
+                        | "ScriptInputString"
+                        | "ScriptInputTrigger"
                         | "ScriptInputViewModelProperty"
                         | "TextFollowPathModifier"
                         | "Feather"
@@ -5533,6 +5543,39 @@ mod tests {
 
         StaticTextSlice::from_graph(&runtime, graph, 1)
             .expect("non-shaping metadata cannot invalidate Text drawing");
+    }
+
+    #[test]
+    fn script_input_siblings_do_not_narrow_the_static_text_subset() {
+        let (runtime, mut graphs) = baseline_origin_text_runtime();
+        let graph = graphs
+            .artboards
+            .first_mut()
+            .expect("fixture has an artboard");
+        for (offset, type_name) in [
+            "ScriptInputBoolean",
+            "ScriptInputNumber",
+            "ScriptInputColor",
+            "ScriptInputString",
+            "ScriptInputTrigger",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut input = graph
+                .local_objects
+                .iter()
+                .find(|object| object.local_id == 1)
+                .expect("fixture Text object")
+                .clone();
+            input.local_id = graph.local_objects.len();
+            input.global_id = 10_008 + offset as u32;
+            input.type_name = Some(type_name);
+            graph.local_objects.push(input);
+        }
+
+        StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("primitive script inputs are non-shaping siblings");
     }
 
     #[test]

@@ -158,10 +158,13 @@ LANDMARKS = {
     },
     "layout_compute": {
         "cpp": "rive::Artboard::calculateLayout()",
-        "rust": (
-            "<nuxie_runtime::draw::TaffyRuntimeLayoutEngine>"
-            "::compute_layout"
-        ),
+        "rust": {
+            "source": "crates/nuxie-runtime/src/draw.rs",
+            "anchor": (
+                "if self.component_list_locals().into_iter().all(|local_id| {"
+            ),
+            "occurrence": 1,
+        },
     },
 }
 
@@ -304,7 +307,7 @@ MECHANISM_LANDMARKS = {
                 "crates/nuxie-runtime/src/constraints/scrolling/"
                 "scroll_virtualizer.rs"
             ),
-            "anchor": "let computed_layout_bounds = artboard",
+            "anchor": "let layout_bounds = artboard.retained_layout_bounds();",
             "occurrence": 1,
         },
     },

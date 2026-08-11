@@ -679,6 +679,13 @@ impl ArtboardInstance {
         self.runtime_drawables.hit_component_order()
     }
 
+    pub(crate) fn visit_runtime_hit_component_order(
+        &self,
+        visit: impl FnMut(ComponentHandle) -> bool,
+    ) {
+        self.runtime_drawables.visit_hit_component_order(visit);
+    }
+
     /// Apply C++ `Artboard::clearRedundantOperations` after clipping
     /// visibility changes, without rebuilding drawable ownership or order.
     pub(crate) fn refresh_runtime_drawable_save_operations(&mut self) {
@@ -10834,8 +10841,19 @@ impl std::fmt::Debug for RuntimeLayoutBackendResources {
 #[derive(Debug)]
 struct RuntimeLayoutDrawOwner {
     dirty: Cell<bool>,
+    revision: Cell<u64>,
     retained: RefCell<Option<RuntimeLayoutDrawPaths>>,
+    retained_paint_commands:
+        RefCell<[Option<(RuntimeLayoutPaintCommandKey, Vec<RuntimeShapePaintCommand>)>; 2]>,
     backend: RefCell<RuntimeLayoutBackendResources>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeLayoutPaintCommandKey {
+    cache_epoch: u64,
+    prepared_epoch: u64,
+    layout_revision: u64,
+    path_revision: u64,
 }
 
 impl Clone for RuntimeLayoutDrawOwner {
@@ -10850,7 +10868,9 @@ impl Default for RuntimeLayoutDrawOwner {
     fn default() -> Self {
         Self {
             dirty: Cell::new(true),
+            revision: Cell::new(0),
             retained: RefCell::new(None),
+            retained_paint_commands: RefCell::new([None, None]),
             backend: RefCell::new(RuntimeLayoutBackendResources::default()),
         }
     }
@@ -10859,6 +10879,7 @@ impl Default for RuntimeLayoutDrawOwner {
 impl RuntimeLayoutDrawOwner {
     fn mark_dirty(&self) {
         self.dirty.set(true);
+        self.revision.set(self.revision.get().wrapping_add(1));
     }
 
     fn backend(&self, context_id: u64) -> std::cell::RefMut<'_, RuntimeLayoutBackendResources> {
@@ -10885,6 +10906,31 @@ impl RuntimeLayoutDrawOwner {
             .as_ref()
             .expect("layout owner was just populated")
             .clone()
+    }
+
+    fn retained_paint_commands(
+        &self,
+        slot: usize,
+        key: RuntimeLayoutPaintCommandKey,
+        build: impl FnOnce() -> Vec<RuntimeShapePaintCommand>,
+    ) -> std::cell::Ref<'_, [RuntimeShapePaintCommand]> {
+        let needs_rebuild = self
+            .retained_paint_commands
+            .borrow()
+            .get(slot)
+            .and_then(Option::as_ref)
+            .is_none_or(|(cached_key, _)| *cached_key != key);
+        if needs_rebuild {
+            self.retained_paint_commands.borrow_mut()[slot] = Some((key, build()));
+        }
+        std::cell::Ref::map(self.retained_paint_commands.borrow(), |retained| {
+            retained
+                .get(slot)
+                .and_then(Option::as_ref)
+                .expect("layout paint commands were just populated")
+                .1
+                .as_slice()
+        })
     }
 }
 
@@ -11148,6 +11194,17 @@ impl RuntimeDrawableList {
     }
 
     fn hit_component_order(&self) -> Vec<ComponentHandle> {
+        let mut result = Vec::new();
+        self.visit_hit_component_order(|handle| {
+            if !result.contains(&handle) {
+                result.push(handle);
+            }
+            true
+        });
+        result
+    }
+
+    fn visit_hit_component_order(&self, mut visit: impl FnMut(ComponentHandle) -> bool) {
         // `StateMachineInstance::sortHitComponents` starts at
         // `firstDrawable`, walks `prev` to the back, then visits `next` so hit
         // targets are processed front-to-back (`state_machine_instance.cpp:
@@ -11159,18 +11216,16 @@ impl RuntimeDrawableList {
             };
             first = Some(previous);
         }
-        let mut result = Vec::new();
         let mut current = first;
         while let Some(index) = current {
             let drawable = self.drawables[index].as_ref();
             if let Some(handle) = drawable.hittable_component()
-                && !result.contains(&handle)
+                && !visit(handle)
             {
-                result.push(handle);
+                break;
             }
             current = drawable.next;
         }
-        result
     }
 
     pub(crate) fn mark_text_resources_dirty(&self) {
@@ -18648,14 +18703,22 @@ fn runtime_draw_live_layout_family(
         }
     }
 
-    let shape_paints =
-        instance.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache);
+    let shape_paints = owner.retained_paint_commands(
+        usize::from(drawable.kind != DrawableOrderKind::LayoutProxy),
+        RuntimeLayoutPaintCommandKey {
+            cache_epoch: instance.cache_epoch(),
+            prepared_epoch: instance.prepared_epoch(),
+            layout_revision: instance.layout_revision(),
+            path_revision: owner.revision.get(),
+        },
+        || instance.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache),
+    );
     runtime_draw_layout_owner_paints(
         runtime,
         instance,
         graph,
         layout_local,
-        &shape_paints,
+        shape_paints.as_ref(),
         layout_bounds,
         factory,
         renderer,
@@ -28137,6 +28200,75 @@ mod tests {
         owner.retained_or_build(build);
         assert_eq!(builds.get(), 2);
 
+        let paint_builds = Cell::new(0usize);
+        let paint_build = || {
+            paint_builds.set(paint_builds.get() + 1);
+            Vec::new()
+        };
+        let paint_key = RuntimeLayoutPaintCommandKey {
+            cache_epoch: 4,
+            prepared_epoch: 6,
+            layout_revision: 7,
+            path_revision: owner.revision.get(),
+        };
+        owner.retained_paint_commands(0, paint_key, paint_build);
+        owner.retained_paint_commands(0, paint_key, paint_build);
+        assert_eq!(
+            paint_builds.get(),
+            1,
+            "a clean LayoutComponent retains its paint-command projection"
+        );
+
+        owner.retained_paint_commands(
+            0,
+            RuntimeLayoutPaintCommandKey {
+                cache_epoch: 5,
+                ..paint_key
+            },
+            paint_build,
+        );
+        owner.retained_paint_commands(
+            0,
+            RuntimeLayoutPaintCommandKey {
+                cache_epoch: 5,
+                layout_revision: 8,
+                ..paint_key
+            },
+            paint_build,
+        );
+        owner.retained_paint_commands(
+            0,
+            RuntimeLayoutPaintCommandKey {
+                cache_epoch: 5,
+                prepared_epoch: 7,
+                ..paint_key
+            },
+            paint_build,
+        );
+        owner.mark_dirty();
+        owner.retained_paint_commands(
+            0,
+            RuntimeLayoutPaintCommandKey {
+                cache_epoch: 5,
+                prepared_epoch: 7,
+                layout_revision: 8,
+                path_revision: owner.revision.get(),
+            },
+            paint_build,
+        );
+        assert_eq!(
+            paint_builds.get(),
+            5,
+            "object paint, prepared state, layout, and owner-path revisions each invalidate retained commands"
+        );
+        owner.retained_paint_commands(1, paint_key, paint_build);
+        owner.retained_paint_commands(1, paint_key, paint_build);
+        assert_eq!(
+            paint_builds.get(),
+            6,
+            "background and foreground layout paints retain independent projections"
+        );
+
         owner.backend.borrow_mut().context_id = Some(17);
         let cloned = owner.clone();
         assert!(
@@ -28147,6 +28279,14 @@ mod tests {
             cloned.backend.borrow().context_id,
             None,
             "Layout backend paths never cross an occurrence boundary"
+        );
+        assert!(
+            cloned
+                .retained_paint_commands
+                .borrow()
+                .iter()
+                .all(Option::is_none),
+            "Layout paint commands never cross an occurrence boundary"
         );
         assert_eq!(
             owner.backend(23).context_id,

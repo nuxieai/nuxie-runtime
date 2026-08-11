@@ -1830,3 +1830,31 @@ fn semantic_geometry_revision_is_stable_across_non_geometry_settlement() {
         "a frame may report applied paint work without invalidating settled semantic geometry"
     );
 }
+
+#[cfg(feature = "tools")]
+#[test]
+fn path_composer_reuses_retained_path_storage_across_rebuild() {
+    let mut artboard = solid_color_fixture_artboard();
+    artboard.update_pass();
+    let shape_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Shape")
+        .map(|component| component.local_id)
+        .expect("fixture has a Shape");
+    let before = artboard
+        .debug_runtime_shape_path_identities(shape_local)
+        .expect("fixture retains Shape path owners");
+    assert!(before.iter().all(Option::is_some));
+
+    assert!(artboard.set_transform_property(shape_local, TransformProperty::X, 5.0));
+    artboard.update_pass();
+
+    assert_eq!(
+        artboard
+            .debug_runtime_shape_path_identities(shape_local)
+            .expect("Shape path owners survive their rebuild"),
+        before,
+        "pinned C++ PathComposer rewinds and reuses its three ShapePaintPaths"
+    );
+}

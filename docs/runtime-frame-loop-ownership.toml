@@ -5,20 +5,21 @@ porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
 phase = "closed"
+steady_zero_allocation_fixtures = ["component_list_virtualized"]
 
 [expected_trace_artifacts]
-cpp_binary_sha256 = "760c91d700585bc566db3261c12adeb18570a3e94be5f7413a65a0532491b380"
-cpp_coverage_sha256 = "b70d760ccb04847c33e7d4b8a7f38c26cbb74e767972f73d720fbc2ae0881db0"
-cpp_mechanism_coverage_sha256 = "ec7c9dbfb35d6080143f989000be87e2e8a07f19b532c5602303f8ec05bec21d"
-cpp_steady_coverage_sha256 = "2d1c23294012193b71fbdf4ef14d952911070ea3cddf5512192d78016915a8ad"
-dirty_text_clean_guard_local_bounds_cpp_coverage_sha256 = "0f2bdad7ddbe9f8f1c2efba07a661af180aba0fddb9faf6338f831644f5faf35"
-dirty_text_clean_guard_local_bounds_rust_coverage_sha256 = "5c27bfb7028218d6ac564db624fcd0ba65e7bb6ca77830c136cb948337c2e1b8"
-dirty_text_clean_guard_viewmodel_based_condition_cpp_coverage_sha256 = "5de844a7ccd02b71788e56408d076b5e31a6b7d1052050ad29d711e53027329d"
-dirty_text_clean_guard_viewmodel_based_condition_rust_coverage_sha256 = "5ba739286cdba0f23510c89cadf6a605aeba73d03f6e45db4e5094616ddd6540"
-rust_binary_sha256 = "a914b21d6fb35c7ec42f55a3d8a75310019f3363f43ff637f601aee726ee6f4a"
-rust_coverage_sha256 = "f691901f3bea402c4d5049b4bbf26704480b96a4c0d52d108c230ca26830ab85"
-rust_mechanism_coverage_sha256 = "0b694863d6ac8fbcfe4ae3d809826f9f9f939e6b1a2b98a98694f7685aac4faf"
-rust_steady_coverage_sha256 = "51d12f79f9a037d18a6d75f7d55fb1bb0cf47b837a96c1970009338a2bd38048"
+cpp_binary_sha256 = "d3f97e4607554c49c2770934f887edd6a00d8a5f5ddc67df0c8954e13a0359c4"
+cpp_coverage_sha256 = "f1ff573b2b36277e13088538f1671b18fea73cd243eb768949922ed9303e2759"
+cpp_mechanism_coverage_sha256 = "5efd3820fed4eb2de00697245f3bb735956aa58a5a83a8284897ca58ea34995a"
+cpp_steady_coverage_sha256 = "29ab20eacc16137b553c06a3d844bc1ff623a6360f0c26267c74ab0dc8ef64dc"
+dirty_text_clean_guard_local_bounds_cpp_coverage_sha256 = "fba9228592c40025f1803760f855c437a797188b3d123168c342d5a2a23d1461"
+dirty_text_clean_guard_local_bounds_rust_coverage_sha256 = "b5da3316263f51ce842416927ddd7910174008ba06b488402dc1e09fe7afe743"
+dirty_text_clean_guard_viewmodel_based_condition_cpp_coverage_sha256 = "72fd9c48f451ccd7c69fc1e9a8dbb256a26587e15577e859b1a6fa3d97da5180"
+dirty_text_clean_guard_viewmodel_based_condition_rust_coverage_sha256 = "414d38a57007e7cc56d9e80ca0ee89778b4aefe8d5910e07cc037ca36a1c801c"
+rust_binary_sha256 = "5504df5568e52008885fd2bf337426990e82545ef83c5d62b8c2f2cd4f505118"
+rust_coverage_sha256 = "559b47c5d6b48635718511b652209a1738234406556f63968840320035405de5"
+rust_mechanism_coverage_sha256 = "6631a4c6cc6224cf549873898a66a501b0f9c0578a7ec2ac6b22cff2d4a9b8bf"
+rust_steady_coverage_sha256 = "4e0f68bc42215e01eac2edb982bfddb8269520dde11eee92fe5aa1e166f011b7"
 
 [expected_trace_landmarks]
 frame = [
@@ -3393,7 +3394,7 @@ upstream = "src/input/focus_manager.cpp"
 source_set = "retained-focus-tree"
 wave = "S4"
 rust_modules = ["crates/nuxie-runtime/src/input/focus_manager.rs"]
-dynamically_reached = false
+dynamically_reached = true
 status = "faithful"
 
 [[file]]

@@ -220,6 +220,75 @@ class CaptureTraceTest(unittest.TestCase):
         self.assertEqual(steady["samples"], [0.0])
         self.assertNotIn("input_script", steady)
 
+    def test_materialized_cpp_coverage_paths_are_normalized_to_upstream(
+        self,
+    ) -> None:
+        upstream = pathlib.Path("/fixtures/rive-runtime")
+        coverage = {
+            "data": [
+                {
+                    "files": [
+                        {
+                            "filename": (
+                                "/repo/target/golden-runner-librive/"
+                                "patched-runtime-src.AbCd12/src/artboard.cpp"
+                            ),
+                            "expansions": [
+                                {
+                                    "filenames": [
+                                        "/system/include/vector",
+                                        (
+                                            "/repo/target/golden-runner-librive/"
+                                            "patched-runtime-src.AbCd12/"
+                                            "include/rive/artboard.hpp"
+                                        ),
+                                    ]
+                                }
+                            ],
+                        }
+                    ],
+                    "functions": [
+                        {
+                            "filenames": [
+                                (
+                                    "/repo/target/golden-runner-librive/"
+                                    "patched-runtime-src.AbCd12/"
+                                    "src/animation/state_machine_instance.cpp"
+                                ),
+                                "/system/include/vector",
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
+
+        CAPTURE.normalize_materialized_cpp_coverage_paths(
+            coverage, upstream=upstream
+        )
+
+        self.assertEqual(
+            coverage["data"][0]["files"][0]["filename"],
+            "/fixtures/rive-runtime/src/artboard.cpp",
+        )
+        self.assertEqual(
+            coverage["data"][0]["functions"][0]["filenames"],
+            [
+                (
+                    "/fixtures/rive-runtime/"
+                    "src/animation/state_machine_instance.cpp"
+                ),
+                "/system/include/vector",
+            ],
+        )
+        self.assertEqual(
+            coverage["data"][0]["files"][0]["expansions"][0]["filenames"],
+            [
+                "/system/include/vector",
+                "/fixtures/rive-runtime/include/rive/artboard.hpp",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

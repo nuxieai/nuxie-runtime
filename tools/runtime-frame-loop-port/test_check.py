@@ -1431,6 +1431,72 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "match the ownership packet manifest",
             fake_artifacts_result.stderr,
         )
+    def test_unrelated_steady_allocations_do_not_fail_fixture_ratchet(
+        self,
+    ) -> None:
+        content = self.ledger.read_text().replace(
+            'trace_evidence_file = "docs/trace.json"',
+            (
+                'trace_evidence_file = "docs/trace.json"\n'
+                'steady_zero_allocation_fixtures = '
+                '["component_list_virtualized"]'
+            ),
+            1,
+        ).replace(
+            "steady = []", 'steady = ["per_frame_allocations"]', 1
+        )
+        self.ledger.write_text(content)
+        trace = json.loads((self.repo / "docs/trace.json").read_text())
+        trace["steady_landmarks"] = {
+            "per_frame_allocations": {"cpp": 52, "rust": 52}
+        }
+        trace["steady_allocation_counts"] = {
+            "cpp": {
+                "component_list_virtualized": 0,
+                "component_list_follow_path": 52,
+            },
+            "rust": {
+                "component_list_virtualized": 0,
+                "component_list_follow_path": 52,
+            },
+        }
+        (self.repo / "docs/trace.json").write_text(json.dumps(trace))
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_nonzero_fixture_scoped_steady_allocation_fails(self) -> None:
+        ledger = self.ledger.read_text().replace(
+            'trace_evidence_file = "docs/trace.json"',
+            (
+                'trace_evidence_file = "docs/trace.json"\n'
+                'steady_zero_allocation_fixtures = '
+                '["component_list_virtualized"]'
+            ),
+            1,
+        )
+        trace = json.loads((self.repo / "docs/trace.json").read_text())
+        for side in ("cpp", "rust"):
+            with self.subTest(side=side):
+                self.ledger.write_text(ledger)
+                scoped_counts = {
+                    "cpp": {"component_list_virtualized": 0},
+                    "rust": {"component_list_virtualized": 0},
+                }
+                scoped_counts[side]["component_list_virtualized"] = 1
+                trace["steady_allocation_counts"] = scoped_counts
+                (self.repo / "docs/trace.json").write_text(
+                    json.dumps(trace)
+                )
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    (
+                        "steady allocation component_list_virtualized."
+                        f"{side} must be zero, got 1"
+                    ),
+                    result.stderr,
+                )
+
     def test_stream_work_mismatch_fails(self) -> None:
         trace = json.loads((self.repo / "docs/trace.json").read_text())
         trace["golden_stream_operations"] = {

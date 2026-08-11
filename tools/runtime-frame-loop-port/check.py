@@ -2163,6 +2163,36 @@ def check(
                     f"steady trace {name}.{side} must be zero, "
                     f"got {counts.get(side)!r}"
                 )
+    steady_zero_allocation_fixtures = ledger.get(
+        "steady_zero_allocation_fixtures", []
+    )
+    if not isinstance(steady_zero_allocation_fixtures, list) or any(
+        not isinstance(fixture_id, str) or not fixture_id
+        for fixture_id in steady_zero_allocation_fixtures
+    ):
+        errors.append(
+            "ownership ledger steady_zero_allocation_fixtures must be a list "
+            "of fixture ids"
+        )
+    else:
+        steady_allocation_counts = trace.get("steady_allocation_counts", {})
+        for fixture_id in sorted(set(steady_zero_allocation_fixtures)):
+            for side in ("cpp", "rust"):
+                side_counts = (
+                    steady_allocation_counts.get(side, {})
+                    if isinstance(steady_allocation_counts, dict)
+                    else {}
+                )
+                count = (
+                    side_counts.get(fixture_id)
+                    if isinstance(side_counts, dict)
+                    else None
+                )
+                if count != 0:
+                    errors.append(
+                        f"steady allocation {fixture_id}.{side} must be zero, "
+                        f"got {count!r}"
+                    )
     for side in ("cpp", "rust"):
         if not trace.get("functions", {}).get(side):
             errors.append(f"trace evidence has no reached {side} functions")

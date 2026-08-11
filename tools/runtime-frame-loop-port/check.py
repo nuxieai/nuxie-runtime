@@ -22,6 +22,8 @@ TOOL_DIR = pathlib.Path(__file__).resolve().parent
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
+from source_fingerprint import candidate_source_fingerprint, rust_runner_provenance
+
 STATUSES = {
     "faithful",
     "adapted",
@@ -703,9 +705,15 @@ def validate_trace_artifacts(
         "rust_mechanism_coverage_sha256",
         "rust_steady_coverage_sha256",
     }
+    supplemental_keys = {
+        f"dirty_text_clean_guard_{row.get('id', '')}_{side}_coverage_sha256"
+        for row in ledger.get("trace_dirty_text_clean_guard_fixture", [])
+        for side in ("cpp", "rust")
+    }
+    expected_keys = required_keys | supplemental_keys
     expected = ledger.get("expected_trace_artifacts")
     artifacts = trace.get("artifacts")
-    if not isinstance(expected, dict) or set(expected) != required_keys:
+    if not isinstance(expected, dict) or set(expected) != expected_keys:
         errors.append(
             "ownership ledger expected trace artifact hashes do not match the v2 schema"
         )
@@ -713,24 +721,232 @@ def validate_trace_artifacts(
     if not isinstance(artifacts, dict) or set(artifacts) != required_keys:
         errors.append("trace evidence artifact hashes do not match the v2 schema")
         return
-    invalid = sorted(
+    invalid_expected = sorted(
+        key
+        for key in expected_keys
+        if not isinstance(expected[key], str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected[key]) is None
+    )
+    invalid_artifacts = sorted(
         key
         for key in required_keys
         if not isinstance(artifacts[key], str)
         or re.fullmatch(r"[0-9a-f]{64}", artifacts[key]) is None
-        or not isinstance(expected[key], str)
-        or re.fullmatch(r"[0-9a-f]{64}", expected[key]) is None
     )
+    invalid = sorted(invalid_expected + invalid_artifacts)
     if invalid:
         errors.append(
             "trace evidence artifact hashes do not match the v2 schema: "
             + ", ".join(invalid)
         )
         return
-    if artifacts != expected:
+    if artifacts != {key: expected[key] for key in required_keys}:
         errors.append(
             "trace evidence artifact hashes do not match the ownership packet manifest"
         )
+
+
+def validate_dirty_text_clean_guard_trace(
+    trace: dict[str, Any],
+    ledger: dict[str, Any],
+    repo_root: pathlib.Path,
+    trace_path: pathlib.Path,
+    rive_runtime_dir: pathlib.Path,
+    errors: list[str],
+) -> None:
+    fixture_rows = list(ledger.get("trace_dirty_text_clean_guard_fixture", []))
+    if not fixture_rows:
+        return
+    expected_candidate_source = candidate_source_fingerprint(
+        repo_root, evidence_path=trace_path
+    )
+    candidate_source = trace.get("dirty_text_clean_guard_rust_candidate_source")
+    if candidate_source != expected_candidate_source:
+        errors.append(
+            "dirty-text clean-guard trace does not match the current Rust candidate source"
+        )
+    if trace.get("dirty_text_clean_guard_rust_runner_provenance") != (
+        rust_runner_provenance(expected_candidate_source)
+    ):
+        errors.append(
+            "dirty-text clean-guard trace Rust runner provenance is stale"
+        )
+    expected_ids = {str(row.get("id", "")) for row in fixture_rows}
+    if set(trace.get("dirty_text_clean_guard_corpus", [])) != expected_ids:
+        errors.append(
+            "trace evidence does not cover the dirty-text clean-guard corpus"
+        )
+    fixture_hashes = trace.get("dirty_text_clean_guard_fixture_sha256", {})
+    landmarks_by_fixture = trace.get("dirty_text_clean_guard_landmarks", {})
+    artifacts_by_fixture = trace.get("dirty_text_clean_guard_artifacts", {})
+    operations_by_fixture = trace.get(
+        "dirty_text_clean_guard_golden_stream_operations", {}
+    )
+    expected_artifacts = ledger.get("expected_trace_artifacts", {})
+    for name, value in (
+        ("fixture hashes", fixture_hashes),
+        ("landmarks", landmarks_by_fixture),
+        ("artifacts", artifacts_by_fixture),
+        ("golden-stream operations", operations_by_fixture),
+    ):
+        if not isinstance(value, dict) or set(value) != expected_ids:
+            errors.append(
+                f"dirty-text clean-guard trace {name} fixture IDs differ"
+            )
+
+    expected_names = ledger.get("expected_trace_landmarks", {}).get(
+        "dirty_text_clean_guard", []
+    )
+    if not isinstance(expected_names, list):
+        errors.append(
+            "expected_trace_landmarks.dirty_text_clean_guard is missing"
+        )
+        expected_names = []
+    expected_name_set = {str(value) for value in expected_names}
+    required_zero = {
+        "component_dirt_consumptions",
+        "dirty_text_dirty_hits",
+        "dirty_text_imported_visits",
+        "dirty_text_owner_candidates",
+        "dirty_text_scan_calls",
+        "layout_compute",
+    }
+    for row in fixture_rows:
+        fixture_id = str(row.get("id", ""))
+        relative_path = str(row.get("path", ""))
+        expected_hash = str(row.get("sha256", ""))
+        fixture_path = rive_runtime_dir / relative_path
+        if not fixture_id or not relative_path or len(expected_hash) != 64:
+            errors.append(
+                f"dirty-text clean-guard fixture {fixture_id!r} is incomplete"
+            )
+            continue
+        try:
+            actual_hash = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        except OSError as error:
+            errors.append(
+                f"cannot read dirty-text clean-guard fixture {fixture_path}: {error}"
+            )
+            continue
+        if actual_hash != expected_hash:
+            errors.append(
+                f"dirty-text clean-guard fixture {fixture_id} hash is "
+                f"{actual_hash}, expected {expected_hash}"
+            )
+        if (
+            isinstance(fixture_hashes, dict)
+            and fixture_hashes.get(fixture_id) != expected_hash
+        ):
+            errors.append(
+                f"dirty-text clean-guard trace fixture hash for {fixture_id} is stale"
+            )
+
+        operations = (
+            operations_by_fixture.get(fixture_id, {})
+            if isinstance(operations_by_fixture, dict)
+            else {}
+        )
+        operations_are_valid = (
+            isinstance(operations, dict)
+            and set(operations) == {"cpp", "rust"}
+            and all(
+                isinstance(counts, dict)
+                and bool(counts)
+                and all(
+                    isinstance(name, str)
+                    and bool(name)
+                    and isinstance(count, int)
+                    and count > 0
+                    for name, count in counts.items()
+                )
+                for counts in operations.values()
+            )
+        )
+        if not operations_are_valid:
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} golden-stream "
+                "work counts are invalid"
+            )
+        elif operations["cpp"] != operations["rust"]:
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} golden-stream "
+                "work counts differ"
+            )
+        artifacts = (
+            artifacts_by_fixture.get(fixture_id, {})
+            if isinstance(artifacts_by_fixture, dict)
+            else {}
+        )
+        pinned_artifacts = {
+            f"{side}_coverage_sha256": expected_artifacts.get(
+                f"dirty_text_clean_guard_{fixture_id}_{side}_coverage_sha256"
+            )
+            for side in ("cpp", "rust")
+        }
+        if (
+            not isinstance(artifacts, dict)
+            or set(artifacts) != {"cpp_coverage_sha256", "rust_coverage_sha256"}
+            or any(
+                not isinstance(value, str)
+                or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                for value in artifacts.values()
+            )
+        ):
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} coverage hashes are invalid"
+            )
+        elif artifacts != pinned_artifacts:
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} coverage hashes "
+                "do not match the ownership packet manifest"
+            )
+
+        landmarks = (
+            landmarks_by_fixture.get(fixture_id, {})
+            if isinstance(landmarks_by_fixture, dict)
+            else {}
+        )
+        if not isinstance(landmarks, dict) or set(landmarks) != expected_name_set:
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} counter set differs"
+            )
+            continue
+        if any(
+            not isinstance(counts, dict)
+            or set(counts) != {"cpp", "rust"}
+            or any(not isinstance(value, int) or value < 0 for value in counts.values())
+            for counts in landmarks.values()
+        ):
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} counters are invalid"
+            )
+            continue
+        rust_counts = {
+            name: counts["rust"]
+            for name, counts in landmarks.items()
+        }
+        entries = rust_counts.get("update_component_entries")
+        if not isinstance(entries, int) or entries <= 0:
+            errors.append(
+                f"dirty-text clean-guard trace {fixture_id} must enter component update"
+            )
+            continue
+        for name in (
+            "component_clean_guard_checks",
+            "component_clean_guard_returns",
+        ):
+            if rust_counts.get(name) != entries:
+                errors.append(
+                    f"dirty-text clean-guard trace {fixture_id} {name}.rust must "
+                    f"equal update_component_entries.rust={entries}, got "
+                    f"{rust_counts.get(name)!r}"
+                )
+        for name in sorted(required_zero):
+            if rust_counts.get(name) != 0:
+                errors.append(
+                    f"dirty-text clean-guard trace {fixture_id} {name}.rust "
+                    f"must be zero, got {rust_counts.get(name)!r}"
+                )
 
 
 def duplicate_values(values: Iterable[str]) -> list[str]:
@@ -1799,6 +2015,9 @@ def check(
     if trace.get("upstream_ref") != upstream_ref:
         errors.append("trace evidence pins a different upstream ref")
     validate_trace_artifacts(trace, ledger, errors)
+    validate_dirty_text_clean_guard_trace(
+        trace, ledger, repo_root, trace_path, rive_runtime_dir, errors
+    )
     trace_scope = trace.get("scope", {})
     if trace_scope.get("static_cpp_files") != len(assignments):
         errors.append(

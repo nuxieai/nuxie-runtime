@@ -7157,6 +7157,12 @@ impl ArtboardInstance {
 
     fn mark_text_changed(&mut self) {
         self.runtime_drawables.mark_text_resources_dirty();
+        // `FontAsset::fontChanged` publishes TextShape from the resource
+        // mutation boundary. Do that retained-owner walk here, where font
+        // replacement is rare, instead of polling every clean frame.
+        for (text_local, text_dirt) in self.runtime_drawables.dirty_text_locals() {
+            self.add_dirt(text_local, text_dirt, false);
+        }
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
@@ -8488,6 +8494,14 @@ impl ArtboardInstance {
     {
         self.initialize_clone_backend_if_pending();
         let mut report = UpdateComponentsReport::default();
+        // Match pinned C++ `Artboard::updateComponents`: a clean frame returns
+        // before inspecting any concrete component or renderer sidecar.
+        // Every external Text mutation publishes Component dirt at its owning
+        // callback; the post-layout enrollment below remains responsible for
+        // Text dirt produced by `propagateSizeToChildren -> controlSize`.
+        if !self.has_dirt(ComponentDirt::COMPONENTS) {
+            return report;
+        }
         let graph_owner = self.build_context.as_ref().and_then(|context| {
             let graph_index = context
                 .artboard_index_by_global
@@ -8496,9 +8510,9 @@ impl ArtboardInstance {
                 .flatten()?;
             Some((Arc::clone(&context.artboards), graph_index))
         });
-        // Enroll the concrete pending C++ Text dirt reason before the clean
-        // frame guard. ShapePaint changes remain Paint-only; text, font, and
-        // layout changes publish Path/TextShape.
+        // Enroll the concrete pending C++ Text dirt reason once Component
+        // dirt has selected this update pass. ShapePaint changes remain
+        // Paint-only; text, font, and layout changes publish Path/TextShape.
         for (text_local, text_dirt) in self.runtime_drawables.dirty_text_locals() {
             self.add_dirt(text_local, text_dirt, false);
         }
@@ -8508,10 +8522,6 @@ impl ArtboardInstance {
         // lifecycle rebuild; consume its one-shot wake here instead of
         // polling retained renderer sidecars (`artboard.hpp:557-588`,
         // `artboard.cpp:1214-1248`).
-        if !self.has_dirt(ComponentDirt::COMPONENTS) {
-            return report;
-        }
-
         report.did_layout = self.sync_style_changes(graph_owner.as_ref());
         let layout_bounds = self.retained_layout_bounds_arc();
 

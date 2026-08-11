@@ -18,6 +18,31 @@ SPEC.loader.exec_module(CAPTURE)
 
 
 class CaptureTraceTest(unittest.TestCase):
+    def test_fixture_arguments_pin_declared_file_hash(self) -> None:
+        arguments = CAPTURE.fixture_arguments(
+            {
+                "path": "tests/assets/tail.riv",
+                "samples": [0.0],
+                "expected_file_sha256": "a" * 64,
+            },
+            upstream=pathlib.Path("/pinned-rive-runtime"),
+            include_expected_file_sha256=True,
+        )
+
+        self.assertEqual(
+            arguments,
+            [
+                "--file",
+                "/pinned-rive-runtime/tests/assets/tail.riv",
+                "--expected-file-sha256",
+                "a" * 64,
+                "--samples",
+                "0",
+                "--benchmark-repeat",
+                "1",
+            ],
+        )
+
     def test_rust_runner_provenance_accepts_exact_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             runner = pathlib.Path(directory) / "rust-golden-runner"

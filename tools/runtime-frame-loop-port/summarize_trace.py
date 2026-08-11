@@ -375,6 +375,66 @@ STEADY_LANDMARKS = {
 }
 
 
+DIRTY_TEXT_CLEAN_GUARD_LANDMARKS = {
+    "update_component_entries": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/artboard.rs",
+            "anchor": "self.initialize_clone_backend_if_pending();",
+        },
+    },
+    "dirty_text_scan_calls": {
+        "cpp": 0,
+        "rust": (
+            "<nuxie_runtime::draw::RuntimeDrawableList>::dirty_text_locals"
+        ),
+    },
+    "dirty_text_imported_visits": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/draw.rs",
+            "anchor": '.filter(|drawable| drawable.type_name == "Text")',
+        },
+    },
+    "dirty_text_owner_candidates": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/draw.rs",
+            "anchor": "let owner = drawable.text_draw_owner.as_ref()?;",
+        },
+    },
+    "dirty_text_dirty_hits": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/draw.rs",
+            "anchor": "let pending = owner.pending_update_dirt.get();",
+        },
+    },
+    "component_clean_guard_checks": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/artboard.rs",
+            "anchor": "if !self.has_dirt(ComponentDirt::COMPONENTS) {",
+        },
+    },
+    "component_clean_guard_returns": {
+        "cpp": 0,
+        "rust": {
+            "source": "crates/nuxie-runtime/src/artboard.rs",
+            "anchor": "return report;",
+        },
+    },
+    "component_dirt_consumptions": {
+        "cpp": 0,
+        "rust": LANDMARKS["component_dirt_consumptions"]["rust"],
+    },
+    "layout_compute": {
+        "cpp": 0,
+        "rust": LANDMARKS["layout_compute"]["rust"],
+    },
+}
+
+
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -718,6 +778,55 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         scope_only=False,
         include_zero=True,
     )
+    dirty_text_clean_guard_stream_directories = {
+        fixture_id: pathlib.Path(directory)
+        for fixture_id, directory in args.dirty_text_clean_guard_stream_directory
+    }
+    dirty_text_clean_guard_landmarks = {}
+    dirty_text_clean_guard_artifacts = {}
+    for fixture_id, cpp_path_value, rust_path_value in (
+        args.dirty_text_clean_guard_coverage
+    ):
+        cpp_path = pathlib.Path(cpp_path_value)
+        rust_path = pathlib.Path(rust_path_value)
+        cpp_fixture_coverage = json.loads(cpp_path.read_text(encoding="utf-8"))
+        rust_fixture_coverage = json.loads(rust_path.read_text(encoding="utf-8"))
+        cpp_fixture = coverage_functions(
+            path=cpp_path,
+            side="cpp",
+            upstream=args.upstream,
+            scope=scope,
+            demangler=args.demangler,
+            scope_only=False,
+            include_zero=True,
+        )
+        rust_fixture = coverage_functions(
+            path=rust_path,
+            side="rust",
+            upstream=args.upstream,
+            scope=scope,
+            demangler=args.demangler,
+            scope_only=False,
+            include_zero=True,
+        )
+        dirty_text_clean_guard_landmarks[fixture_id] = summarize_landmarks(
+            patterns=DIRTY_TEXT_CLEAN_GUARD_LANDMARKS,
+            cpp_functions=cpp_fixture,
+            rust_functions=rust_fixture,
+            cpp_coverage=cpp_fixture_coverage,
+            rust_coverage=rust_fixture_coverage,
+            upstream=args.upstream,
+            repo_root=repo_root,
+        )
+        dirty_text_clean_guard_artifacts[fixture_id] = {
+            "cpp_coverage_sha256": sha256(cpp_path),
+            "rust_coverage_sha256": sha256(rust_path),
+        }
+    coverage_fixture_ids = set(dirty_text_clean_guard_landmarks)
+    if coverage_fixture_ids != set(dirty_text_clean_guard_stream_directories):
+        raise ValueError(
+            "dirty-text clean-guard coverage and stream fixture IDs differ"
+        )
     reached_by_source_set = collections.Counter(
         source_sets[path] for path in cpp
     )
@@ -797,6 +906,7 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         "corpus": args.corpus_id,
         "mechanism_corpus": args.mechanism_corpus_id,
         "steady_corpus": args.steady_corpus_id,
+        "dirty_text_clean_guard_corpus": args.dirty_text_clean_guard_corpus_id,
         "artifacts": {
             "cpp_coverage_sha256": sha256(args.cpp_coverage),
             "rust_coverage_sha256": sha256(args.rust_coverage),
@@ -826,6 +936,8 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         "mechanism_landmarks": mechanism_landmarks,
         "mechanism_construction_landmarks": mechanism_construction_landmarks,
         "steady_landmarks": steady_landmarks,
+        "dirty_text_clean_guard_landmarks": dirty_text_clean_guard_landmarks,
+        "dirty_text_clean_guard_artifacts": dirty_text_clean_guard_artifacts,
         "golden_stream_operations": {
             "cpp": stream_counts(args.stream_directory, "cpp"),
             "rust": stream_counts(args.stream_directory, "rust"),
@@ -833,6 +945,15 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         "mechanism_golden_stream_operations": {
             "cpp": stream_counts(args.mechanism_stream_directory, "cpp"),
             "rust": stream_counts(args.mechanism_stream_directory, "rust"),
+        },
+        "dirty_text_clean_guard_golden_stream_operations": {
+            fixture_id: {
+                "cpp": stream_counts(directory, "cpp"),
+                "rust": stream_counts(directory, "rust"),
+            }
+            for fixture_id, directory in sorted(
+                dirty_text_clean_guard_stream_directories.items()
+            )
         },
         "allocation_counts": allocation_counts,
         "mechanism_allocation_counts": mechanism_allocation_counts,
@@ -881,6 +1002,23 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--corpus-id", action="append", default=[])
     result.add_argument("--mechanism-corpus-id", action="append", default=[])
     result.add_argument("--steady-corpus-id", action="append", default=[])
+    result.add_argument(
+        "--dirty-text-clean-guard-coverage",
+        action="append",
+        nargs=3,
+        default=[],
+        metavar=("FIXTURE", "CPP_COVERAGE", "RUST_COVERAGE"),
+    )
+    result.add_argument(
+        "--dirty-text-clean-guard-stream-directory",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("FIXTURE", "DIRECTORY"),
+    )
+    result.add_argument(
+        "--dirty-text-clean-guard-corpus-id", action="append", default=[]
+    )
     result.add_argument("--output", type=pathlib.Path, required=True)
     return result
 

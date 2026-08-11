@@ -12,6 +12,10 @@ cpp_binary_sha256 = "663df326476dae609fff447a99a32898739d1d5c566faa50ffc4b7fe527
 cpp_coverage_sha256 = "58c8f5f067d621deaf401502682153d83b1efcd8587e80ef623005eddc898054"
 cpp_mechanism_coverage_sha256 = "824fdd6209c74d08c168e883751d83fd139c2b195b1473746cf9951d44ee887a"
 cpp_steady_coverage_sha256 = "93c666c694e6fa42c969ae7ed6e539a8e07cb548a32c478085b7c7a95691050f"
+dirty_text_clean_guard_local_bounds_cpp_coverage_sha256 = "6e7f96780e17b9021d5f739d3d779ce03351b57311891cbffe8698dddc3b5842"
+dirty_text_clean_guard_local_bounds_rust_coverage_sha256 = "e44f67d9b5b275d09adfa673599e4a6032900a24b609f4281c2b65bee86b0190"
+dirty_text_clean_guard_viewmodel_based_condition_cpp_coverage_sha256 = "210355330d0a4863ab75c37d46d3814321099aa0c7609472b249e6cbef9556b2"
+dirty_text_clean_guard_viewmodel_based_condition_rust_coverage_sha256 = "dca7bf844495fd4ee7683f89ff1cbd260d7fe119d592f4ad1bbb1befbed4319d"
 rust_binary_sha256 = "e142062617be79ffc038d098e891cf8e27c17c8b0a5e8f4bb7c68b98f89b437b"
 rust_coverage_sha256 = "7eee35849da7257034973fa046111772cc0ab4d85a5555f040b7df92b8acdcbb"
 rust_mechanism_coverage_sha256 = "c19e8efc6ff84d988a52ebd47ef4a86a27238e0295b11386f5b26ffbb630b9b6"
@@ -80,6 +84,27 @@ steady = [
   "per_frame_allocations",
   "skin_buffer_rebuilds",
 ]
+dirty_text_clean_guard = [
+  "component_clean_guard_checks",
+  "component_clean_guard_returns",
+  "component_dirt_consumptions",
+  "dirty_text_dirty_hits",
+  "dirty_text_imported_visits",
+  "dirty_text_owner_candidates",
+  "dirty_text_scan_calls",
+  "layout_compute",
+  "update_component_entries",
+]
+
+[[trace_dirty_text_clean_guard_fixture]]
+id = "local_bounds"
+path = "tests/unit_tests/assets/local_bounds.riv"
+sha256 = "d2d9b44a033ad77b421d06423e69b9ded78f0470287a0de2505d74245841ee53"
+
+[[trace_dirty_text_clean_guard_fixture]]
+id = "viewmodel_based_condition"
+path = "tests/unit_tests/assets/viewmodel_based_condition.riv"
+sha256 = "c4216fef61c11971839807eb9b14ee877f7b9d82dfcfe5e215c79662dee30e13"
 
 [[trace_mechanism_fixture]]
 id = "component_list_follow_path"

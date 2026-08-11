@@ -37,7 +37,14 @@ class DistributionToolTests(unittest.TestCase):
             migration,
             [
                 "apple-product",
+                "product-configured-import",
+            ],
+        )
+        self.assertEqual(
+            self.apple_manifest["features"]["product-configured-import"],
+            [
                 "dep:nux-capi",
+                "dep:nuxie-project-data",
                 "nux-capi/apple-metal",
                 "nux-capi/scripting",
             ],
@@ -46,6 +53,9 @@ class DistributionToolTests(unittest.TestCase):
         self.assertEqual(capi["path"], "../nux-capi")
         self.assertFalse(capi["default-features"])
         self.assertTrue(capi["optional"])
+        project_data = self.apple_manifest["dependencies"]["nuxie-project-data"]
+        self.assertEqual(project_data["path"], "../nuxie-project-data")
+        self.assertTrue(project_data["optional"])
 
         self.assertIn('--package nux-apple-runtime', self.builder)
         self.assertIn('--features migration-distribution', self.builder)
@@ -60,12 +70,13 @@ class DistributionToolTests(unittest.TestCase):
         self.assertEqual(self.builder.count('--package nux-apple-runtime'), 1)
         self.assertNotIn('--package nux-capi', self.builder)
 
-    def test_build_strips_bitcode_and_uses_the_three_symbol_manifests(self) -> None:
+    def test_build_strips_bitcode_and_uses_the_four_symbol_manifests(self) -> None:
         self.assertIn('--remove-section=__LLVM,__bitcode', self.builder)
         self.assertIn('--remove-section=__LLVM,__cmdline', self.builder)
         for manifest in (
             'exports-v3-portable.txt',
             'exports-v3-apple-metal-extension.txt',
+            'exports-v3-product-extension.txt',
             'exports-v3-legacy-migration.txt',
         ):
             self.assertIn(manifest, self.builder)

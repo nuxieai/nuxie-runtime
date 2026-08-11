@@ -1259,6 +1259,7 @@ dependencies = [
  "nuxie",
  "nuxie-apple-adapter",
  "nuxie-product",
+ "nuxie-project-data",
  "nuxie-schema",
  "objc2",
  "objc2-core-foundation",

@@ -36,6 +36,7 @@ cp "${library}" "${stripped_library}"
 cat \
     "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
     "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+    "${repo_root}/crates/nux-capi/exports-v3-product-extension.txt" \
     "${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt" |
     LC_ALL=C sort -u > "${work_dir}/expected-symbols.txt"
 "${rust_llvm_nm}" -gjU "${stripped_library}" |
@@ -62,6 +63,13 @@ printf '%s\n' \
     'let legacy = nux_screen_session_result_is_settled(nil)' \
     '_ = (mature, legacy)' > "${swift_source}"
 xcrun swiftc -typecheck -I "${headers}" "${swift_source}"
+
+product_swift_source="${work_dir}/product_import.swift"
+printf '%s\n' \
+    'import NuxieRuntimeC' \
+    'let product = nux_product_file_import_configured' \
+    '_ = product' > "${product_swift_source}"
+xcrun swiftc -typecheck -I "${headers}" "${product_swift_source}"
 
 xcrun clang \
     -std=c11 -Wall -Wextra -Werror \

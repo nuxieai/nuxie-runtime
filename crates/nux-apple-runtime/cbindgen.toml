@@ -7,6 +7,9 @@ cpp_compat = true
 style = "both"
 sort_by = "Name"
 
+[export]
+exclude = ["nux_product_file_import_configured"]
+
 [enum]
 prefix_with_name = true
 rename_variants = "ScreamingSnakeCase"

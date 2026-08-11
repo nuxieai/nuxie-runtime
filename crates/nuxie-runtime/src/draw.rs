@@ -4986,6 +4986,23 @@ impl ArtboardInstance {
         }
     }
 
+    pub(crate) fn publish_runtime_clipping_visibility_membership_change(
+        &self,
+        clipping_shape_local: usize,
+    ) {
+        let empty_clip = self
+            .runtime_clipping_shapes
+            .get(clipping_shape_local)
+            .is_some_and(|owner| !owner.has_path.get());
+        if empty_clip {
+            // C++ publishes Clipping dirt for the authored visibility change.
+            // Only an empty clip changes this port's semantic catalogue: its
+            // proxy range suppresses otherwise visible occurrences. Non-empty
+            // clipping affects pixels but not the catalogue entries/bounds.
+            self.mark_semantic_geometry_changed();
+        }
+    }
+
     fn runtime_shape_path_is_visible(&self, path_local: usize, graph: &ArtboardGraph) -> bool {
         let Some(path) = graph.paths.iter().find(|path| path.local_id == path_local) else {
             return false;

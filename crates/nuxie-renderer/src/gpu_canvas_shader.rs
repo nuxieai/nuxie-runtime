@@ -22,7 +22,7 @@ use super::Context;
 
 pub(super) struct WgpuGpuCanvasShader {
     pub(super) occurrence_id: u64,
-    template: Arc<WgpuGpuCanvasShaderTemplate>,
+    pub(super) template: Arc<WgpuGpuCanvasShaderTemplate>,
 }
 
 pub(super) struct WgpuGpuCanvasShaderTemplate {
@@ -134,11 +134,29 @@ pub(super) fn publish_occurrence(
             "prepared shader belongs to a different device",
         ));
     }
+    // Browser WebGPU validates this exact authored source asynchronously
+    // before Lua starts. The synchronous lookup can therefore create the
+    // fresh physical module that C++ creates in `Context::shader` without
+    // opening another promise-backed error scope. Keep parsed interface data
+    // shared by value, but never share the module-owning template itself.
+    let module = owner
+        .device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("nuxie-imported-gpu-canvas-occurrence"),
+            source: wgpu::ShaderSource::Wgsl(prepared.shader.source.clone().into()),
+        });
     Ok(Arc::new(WgpuGpuCanvasShader {
         occurrence_id: owner
             .next_gpu_canvas_shader_occurrence_id
             .fetch_add(1, Ordering::Relaxed),
-        template: Arc::clone(&prepared.template),
+        template: Arc::new(WgpuGpuCanvasShaderTemplate {
+            owner: Arc::downgrade(owner),
+            shader: prepared.shader.clone(),
+            parsed: prepared.parsed.clone(),
+            uniform_requirements: prepared.uniform_requirements.clone(),
+            resource_requirements: prepared.resource_requirements.clone(),
+            module,
+        }),
     }))
 }
 

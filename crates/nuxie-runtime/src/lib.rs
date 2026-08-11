@@ -215,6 +215,11 @@ pub use draw::{
     RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
     runtime_path_commands_from_raw_path,
 };
+#[cfg(feature = "tools")]
+#[doc(hidden)]
+pub use draw::{
+    reset_runtime_shape_paint_command_report_count, runtime_shape_paint_command_report_count,
+};
 pub use external_data_converter::{
     RuntimeExternalDataContext, RuntimeExternalDataOutputType, RuntimeExternalDataProgram,
     RuntimeExternalDataProgramHandle, RuntimeExternalDataRegistry, RuntimeExternalDataResolver,

@@ -2,6 +2,10 @@ use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, re
 use nuxie_graph::GraphFile;
 use nuxie_render_api::NullFactory;
 use nuxie_runtime::{ArtboardInstance, ComponentDirt, TransformProperty};
+#[cfg(feature = "tools")]
+use nuxie_runtime::{
+    reset_runtime_shape_paint_command_report_count, runtime_shape_paint_command_report_count,
+};
 use std::{collections::BTreeMap, sync::Arc};
 
 fn fixture_artboard() -> ArtboardInstance {
@@ -438,6 +442,10 @@ fn assert_paint_membership_is_stable_under_shape_gate(
 }
 
 fn gradient_fixture_artboard() -> ArtboardInstance {
+    gradient_fixture().2
+}
+
+fn gradient_fixture() -> (RuntimeFile, GraphFile, ArtboardInstance) {
     let file = RuntimeFile::from_fixture_records(vec![
         fixture_record("Backboard", vec![]),
         fixture_record("Artboard", vec![]),
@@ -491,8 +499,49 @@ fn gradient_fixture_artboard() -> ArtboardInstance {
     ])
     .expect("gradient fixture imports");
     let graphs = GraphFile::from_runtime_file(&file).expect("gradient fixture graph builds");
-    ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
-        .expect("gradient fixture instantiates")
+    let artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .expect("gradient fixture instantiates");
+    (file, graphs, artboard)
+}
+
+#[cfg(feature = "tools")]
+#[test]
+fn renderer_preparation_skips_shape_paint_command_compatibility_reports() {
+    let (file, graphs, mut artboard) = gradient_fixture();
+    artboard.update_pass();
+    let graph = &graphs.artboards[0];
+
+    reset_runtime_shape_paint_command_report_count();
+    let commands = artboard.draw_commands(graph);
+    assert!(
+        commands
+            .iter()
+            .any(|command| !command.shape_paints.is_empty()),
+        "the public compatibility report must retain ShapePaint commands",
+    );
+    assert!(
+        runtime_shape_paint_command_report_count() > 0,
+        "the diagnostic must observe public compatibility report construction",
+    );
+
+    reset_runtime_shape_paint_command_report_count();
+    let mut factory = NullFactory::new();
+    artboard
+        .synchronize_artboard_renderer(
+            &file,
+            graph,
+            &graphs.artboards,
+            &BTreeMap::new(),
+            &mut factory,
+            None,
+        )
+        .expect("renderer preparation succeeds");
+    assert_eq!(
+        runtime_shape_paint_command_report_count(),
+        0,
+        "backend preparation reads retained ShapePaint owners directly and must not build the public compatibility report",
+    );
 }
 
 fn variable_font_fixture_artboard() -> ArtboardInstance {

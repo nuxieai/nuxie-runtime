@@ -1,4 +1,4 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
@@ -32,6 +32,9 @@ RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
 PURE_RUNTIME_BOUNDARY_TOOL ?= $(CURDIR)/tools/pure-runtime-boundary/check.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
 PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
+PARITY_OWNER_PROOF_DOC ?= $(CURDIR)/docs/parity-owner-proofs.json
+PARITY_SCORECARD_GENERATED_DOC ?= $(CURDIR)/target/parity-scorecard/generated-parity-scorecard.md
+PARITY_OWNER_PROOF_GENERATED_DOC ?= $(CURDIR)/target/parity-scorecard/generated-owner-proofs.json
 PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
 PARITY_SCORECARD_JSON ?= $(CURDIR)/target/parity-scorecard/scorecard.json
 CPP_CONFIG ?= debug
@@ -743,12 +746,17 @@ parity-scorecard-test:
 # The snapshot no longer hides behind the tool's unit tests: a red suite used
 # to stop the snapshot from being taken at all.
 parity-scorecard-snapshot:
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --output "$(PARITY_SCORECARD_DOC)"
+	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --output "$(PARITY_SCORECARD_DOC)" --json "$(PARITY_OWNER_PROOF_DOC)"
+
+parity-scorecard-check:
+	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --output "$(PARITY_SCORECARD_GENERATED_DOC)" --json "$(PARITY_OWNER_PROOF_GENERATED_DOC)" >/dev/null
+	@cmp "$(PARITY_SCORECARD_GENERATED_DOC)" "$(PARITY_SCORECARD_DOC)"
+	@cmp "$(PARITY_OWNER_PROOF_GENERATED_DOC)" "$(PARITY_OWNER_PROOF_DOC)"
 
 parity-scorecard:
 	@tools/report-all.sh "parity-scorecard" \
 		"parity scorecard tool unit tests" "$(MAKE) --no-print-directory parity-scorecard-test" \
-		"parity scorecard snapshot" "$(MAKE) --no-print-directory parity-scorecard-snapshot"
+		"parity scorecard snapshot freshness" "$(MAKE) --no-print-directory parity-scorecard-check"
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture

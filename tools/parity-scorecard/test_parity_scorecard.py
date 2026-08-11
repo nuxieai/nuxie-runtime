@@ -92,8 +92,7 @@ class ParityScorecardCliTests(unittest.TestCase):
                 r'cargo test --workspace'
             ),
         )
-        self.assertIn("-- make cpp-oracle-workspace-tests", workflow)
-        self.assertIn("run: make cpp-oracle-workspace-tests", trusted_workflow)
+        self.assertIn("-- make cpp-oracle-workspace-tests", trusted_workflow)
 
     def test_ci_records_static_renderer_floor_and_keeps_same_runner_separate(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()

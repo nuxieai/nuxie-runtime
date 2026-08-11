@@ -112,10 +112,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 353
+faithful = 350
 adapted = 0
 divergent-by-decision = 1
-pending = 0
+pending = 3
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -1523,7 +1523,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "faithful"
+status = "pending"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
@@ -1531,7 +1531,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "faithful"
+status = "pending"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
@@ -1539,7 +1539,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "faithful"
+status = "pending"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"

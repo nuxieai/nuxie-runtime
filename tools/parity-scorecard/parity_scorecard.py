@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ledger_scorecard import aggregate_ledger_scorecard, render_ledger_scorecard
+from ledger_scorecard import (
+    aggregate_ledger_scorecard,
+    owner_proof_document,
+    render_ledger_scorecard,
+)
 
 
 EVIDENCE_SCHEMA = "nuxie-parity-gate-evidence-v1"
@@ -88,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     snapshot.add_argument("--repo-root", type=Path, default=Path.cwd())
     snapshot.add_argument("--output", type=Path)
+    snapshot.add_argument("--json", type=Path, dest="json_output")
 
     options = parser.parse_args(argv)
     if options.command == "check":
@@ -107,6 +112,8 @@ def snapshot_scorecard(options: argparse.Namespace) -> int:
         scorecard = aggregate_ledger_scorecard(repo_root)
         rendered = render_ledger_scorecard(scorecard)
         write_text_atomic(output, rendered)
+        if options.json_output:
+            write_json_atomic(options.json_output, owner_proof_document(scorecard))
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"parity-scorecard error: {error}", file=sys.stderr)
         return 1

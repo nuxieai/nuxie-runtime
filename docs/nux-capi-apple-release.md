@@ -24,6 +24,13 @@ The reverse dependency is intentionally forbidden: `nux-capi` never imports
 symbol allowlist retires the compatibility lane without changing the mature C
 ABI crate.
 
+The composed Apple distribution also exposes the explicitly product-named
+`nux_product_file_import_configured` extension from the upper leaf. It installs
+the ProjectDO converter adapter before delegating atomically to the mature
+configured import. The baseline `nux_file_import_configured` implementation and
+its product-neutral dependency graph remain unchanged. This extension has its
+own symbol partition so retiring the temporary legacy ABI cannot remove it.
+
 ## Candidate qualification
 
 From a clean checkout of the exact intended release commit:

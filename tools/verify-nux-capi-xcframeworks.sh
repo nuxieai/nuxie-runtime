@@ -127,6 +127,7 @@ for library in "${thin_libraries[@]}"; do
         "${symbols_path}" \
         "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
         "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "productExtension=${repo_root}/crates/nux-capi/exports-v3-product-extension.txt" \
         "legacyMigration=${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt"
 done
 

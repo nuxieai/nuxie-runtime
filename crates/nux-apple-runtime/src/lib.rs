@@ -70,6 +70,30 @@ static RUNTIME_BINDING_TOKEN: u8 = 0;
 #[used]
 static MATURE_C_ABI_LINK_ANCHOR: unsafe extern "C" fn() -> u32 = nux_capi::nux_capi_abi_version;
 
+/// Import caller-authenticated product scene bytes through the slim configured
+/// C API after installing the product-data converter implementation.
+///
+/// This upper-leaf entrypoint is deliberately product-named: baseline
+/// `nux_file_import_configured` stays product-neutral and never depends upward
+/// on ProjectDO converter policy.
+///
+/// # Safety
+///
+/// The pointers and lengths must satisfy the same contract as
+/// [`nux_capi::nux_file_import_configured`].
+#[cfg(feature = "product-configured-import")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_product_file_import_configured(
+    bytes: *const u8,
+    len: usize,
+    config: *const nux_capi::NuxFileImportConfig,
+    out_file: *mut *mut nux_capi::NuxFile,
+    out_result: *mut *mut nux_capi::NuxCapiResult,
+) -> nux_capi::NuxStatus {
+    nuxie_project_data::install_runtime_adapter();
+    unsafe { nux_capi::nux_file_import_configured(bytes, len, config, out_file, out_result) }
+}
+
 #[cfg(feature = "migration-distribution")]
 #[used]
 static LEGACY_MIGRATION_LINK_ANCHOR: fn() = retain_legacy_migration_exports;

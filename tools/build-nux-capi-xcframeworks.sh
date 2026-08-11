@@ -109,6 +109,7 @@ contract_fingerprint="$({
         "${repo_root}/crates/nux-capi/abi-layout-v3.json" \
         "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
         "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "${repo_root}/crates/nux-capi/exports-v3-product-extension.txt" \
         "${repo_root}/crates/nux-capi/exports-v3-legacy-migration.txt"
 } | shasum -a 256 | awk '{ print $1 }')"
 

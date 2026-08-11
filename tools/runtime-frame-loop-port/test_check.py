@@ -34,6 +34,7 @@ from check import (
     validate_fl_e8_wp3_artifacts,
     validate_frozen_wave_scopes,
 )
+from source_fingerprint import candidate_source_fingerprint, rust_runner_provenance
 
 
 class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
@@ -1296,6 +1297,140 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "steady trace skin_buffer_rebuilds.rust must be zero", result.stderr
         )
 
+    def test_dirty_text_clean_guard_rejects_imported_drawable_scan(self) -> None:
+        fixture = self.upstream / "tests/unit_tests/assets/local_bounds.riv"
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(b"local bounds fixture")
+        fixture_hash = hashlib.sha256(fixture.read_bytes()).hexdigest()
+        content = self.ledger.read_text().replace(
+            "steady = []",
+            textwrap.dedent(
+                """
+                steady = []
+                dirty_text_clean_guard = [
+                  "component_clean_guard_checks",
+                  "component_clean_guard_returns",
+                  "component_dirt_consumptions",
+                  "dirty_text_dirty_hits",
+                  "dirty_text_imported_visits",
+                  "dirty_text_owner_candidates",
+                  "dirty_text_scan_calls",
+                  "layout_compute",
+                  "update_component_entries",
+                ]
+                """
+            ).strip(),
+            1,
+        )
+        content = content.replace(
+            f'rust_steady_coverage_sha256 = "{"8" * 64}"',
+            f'rust_steady_coverage_sha256 = "{"8" * 64}"\n'
+            f'dirty_text_clean_guard_local_bounds_cpp_coverage_sha256 = "{"9" * 64}"\n'
+            f'dirty_text_clean_guard_local_bounds_rust_coverage_sha256 = "{"a" * 64}"',
+            1,
+        )
+        content += textwrap.dedent(
+            f"""
+
+            [[trace_dirty_text_clean_guard_fixture]]
+            id = "local_bounds"
+            path = "tests/unit_tests/assets/local_bounds.riv"
+            sha256 = "{fixture_hash}"
+            """
+        )
+        self.ledger.write_text(content)
+        trace_path = self.repo / "docs/trace.json"
+        trace = json.loads(trace_path.read_text())
+        trace["dirty_text_clean_guard_corpus"] = ["local_bounds"]
+        trace["dirty_text_clean_guard_fixture_sha256"] = {
+            "local_bounds": fixture_hash
+        }
+        candidate_source = candidate_source_fingerprint(
+            self.repo, evidence_path=trace_path
+        )
+        trace["dirty_text_clean_guard_rust_candidate_source"] = candidate_source
+        trace["dirty_text_clean_guard_rust_runner_provenance"] = (
+            rust_runner_provenance(candidate_source)
+        )
+        trace["dirty_text_clean_guard_artifacts"] = {
+            "local_bounds": {
+                "cpp_coverage_sha256": "9" * 64,
+                "rust_coverage_sha256": "a" * 64,
+            }
+        }
+        trace["dirty_text_clean_guard_golden_stream_operations"] = {
+            "local_bounds": {
+                "cpp": {"drawPath": 1},
+                "rust": {"drawPath": 1},
+            }
+        }
+        trace["dirty_text_clean_guard_landmarks"] = {
+            "local_bounds": {
+                "component_clean_guard_checks": {"cpp": 0, "rust": 1},
+                "component_clean_guard_returns": {"cpp": 0, "rust": 1},
+                "component_dirt_consumptions": {"cpp": 0, "rust": 0},
+                "dirty_text_dirty_hits": {"cpp": 0, "rust": 0},
+                "dirty_text_imported_visits": {"cpp": 0, "rust": 37},
+                "dirty_text_owner_candidates": {"cpp": 0, "rust": 0},
+                "dirty_text_scan_calls": {"cpp": 0, "rust": 1},
+                "layout_compute": {"cpp": 0, "rust": 0},
+                "update_component_entries": {"cpp": 1, "rust": 1},
+            }
+        }
+        trace_path.write_text(json.dumps(trace))
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds "
+            "dirty_text_imported_visits.rust must be zero, got 37",
+            result.stderr,
+        )
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds "
+            "dirty_text_scan_calls.rust must be zero, got 1",
+            result.stderr,
+        )
+
+        trace["dirty_text_clean_guard_rust_candidate_source"]["sha256"] = "0" * 64
+        trace_path.write_text(json.dumps(trace))
+        stale_result = self.run_check()
+        self.assertIn(
+            "dirty-text clean-guard trace does not match the current Rust "
+            "candidate source",
+            stale_result.stderr,
+        )
+
+        trace["dirty_text_clean_guard_rust_candidate_source"] = candidate_source
+        trace["dirty_text_clean_guard_golden_stream_operations"] = {
+            "local_bounds": {}
+        }
+        trace_path.write_text(json.dumps(trace))
+        empty_operations_result = self.run_check()
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds golden-stream work "
+            "counts are invalid",
+            empty_operations_result.stderr,
+        )
+
+        trace["dirty_text_clean_guard_golden_stream_operations"] = {
+            "local_bounds": {
+                "cpp": {"drawPath": 1},
+                "rust": {"drawPath": 1},
+            }
+        }
+        trace["dirty_text_clean_guard_artifacts"]["local_bounds"] = {
+            "cpp_coverage_sha256": "0" * 64,
+            "rust_coverage_sha256": "0" * 64,
+        }
+        trace_path.write_text(json.dumps(trace))
+        fake_artifacts_result = self.run_check()
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds coverage hashes do not "
+            "match the ownership packet manifest",
+            fake_artifacts_result.stderr,
+        )
     def test_stream_work_mismatch_fails(self) -> None:
         trace = json.loads((self.repo / "docs/trace.json").read_text())
         trace["golden_stream_operations"] = {

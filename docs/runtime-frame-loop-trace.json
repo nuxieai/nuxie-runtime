@@ -61,6 +61,171 @@
     "animation_reset_cases",
     "spotify_kids_demo"
   ],
+  "dirty_text_clean_guard_artifacts": {
+    "local_bounds": {
+      "cpp_coverage_sha256": "0f2bdad7ddbe9f8f1c2efba07a661af180aba0fddb9faf6338f831644f5faf35",
+      "rust_coverage_sha256": "5c27bfb7028218d6ac564db624fcd0ba65e7bb6ca77830c136cb948337c2e1b8"
+    },
+    "viewmodel_based_condition": {
+      "cpp_coverage_sha256": "5de844a7ccd02b71788e56408d076b5e31a6b7d1052050ad29d711e53027329d",
+      "rust_coverage_sha256": "5ba739286cdba0f23510c89cadf6a605aeba73d03f6e45db4e5094616ddd6540"
+    }
+  },
+  "dirty_text_clean_guard_corpus": [
+    "local_bounds",
+    "viewmodel_based_condition"
+  ],
+  "dirty_text_clean_guard_fixture_sha256": {
+    "local_bounds": "d2d9b44a033ad77b421d06423e69b9ded78f0470287a0de2505d74245841ee53",
+    "viewmodel_based_condition": "c4216fef61c11971839807eb9b14ee877f7b9d82dfcfe5e215c79662dee30e13"
+  },
+  "dirty_text_clean_guard_golden_stream_operations": {
+    "local_bounds": {
+      "cpp": {
+        "decodeImage": 1,
+        "drawImage": 2,
+        "drawPath": 22,
+        "frame": 1,
+        "makeEmptyRenderPath": 11,
+        "makeRenderPaint": 24,
+        "restore": 30,
+        "save": 30,
+        "transform": 28
+      },
+      "rust": {
+        "decodeImage": 1,
+        "drawImage": 2,
+        "drawPath": 22,
+        "frame": 1,
+        "makeEmptyRenderPath": 11,
+        "makeRenderPaint": 24,
+        "restore": 30,
+        "save": 30,
+        "transform": 28
+      }
+    },
+    "viewmodel_based_condition": {
+      "cpp": {
+        "decodeImage": 3,
+        "drawPath": 10,
+        "frame": 1,
+        "makeEmptyRenderPath": 5,
+        "makeRenderPaint": 10,
+        "restore": 12,
+        "save": 12,
+        "transform": 12
+      },
+      "rust": {
+        "decodeImage": 3,
+        "drawPath": 10,
+        "frame": 1,
+        "makeEmptyRenderPath": 5,
+        "makeRenderPaint": 10,
+        "restore": 12,
+        "save": 12,
+        "transform": 12
+      }
+    }
+  },
+  "dirty_text_clean_guard_landmarks": {
+    "local_bounds": {
+      "component_clean_guard_checks": {
+        "cpp": 0,
+        "rust": 2
+      },
+      "component_clean_guard_returns": {
+        "cpp": 0,
+        "rust": 2
+      },
+      "component_dirt_consumptions": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_dirty_hits": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_imported_visits": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_owner_candidates": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_scan_calls": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "layout_compute": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "update_component_entries": {
+        "cpp": 0,
+        "rust": 2
+      }
+    },
+    "viewmodel_based_condition": {
+      "component_clean_guard_checks": {
+        "cpp": 0,
+        "rust": 1
+      },
+      "component_clean_guard_returns": {
+        "cpp": 0,
+        "rust": 1
+      },
+      "component_dirt_consumptions": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_dirty_hits": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_imported_visits": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_owner_candidates": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "dirty_text_scan_calls": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "layout_compute": {
+        "cpp": 0,
+        "rust": 0
+      },
+      "update_component_entries": {
+        "cpp": 0,
+        "rust": 1
+      }
+    }
+  },
+  "dirty_text_clean_guard_rust_candidate_source": {
+    "file_count": 8914,
+    "schema": "nuxie-runtime-frame-loop-rust-source/v1",
+    "sha256": "aaed8000e9c03a67b1a2bf23f77f69b4d3c68419b026378d81abc83d5daf9fe9"
+  },
+  "dirty_text_clean_guard_rust_runner_provenance": {
+    "candidate_source": {
+      "file_count": 8914,
+      "schema": "nuxie-runtime-frame-loop-rust-source/v1",
+      "sha256": "aaed8000e9c03a67b1a2bf23f77f69b4d3c68419b026378d81abc83d5daf9fe9"
+    },
+    "cargo_target_dir": "target/frame-loop-coverage",
+    "features": [
+      "coverage-trace"
+    ],
+    "package": "rust-golden-runner",
+    "rustflags": [
+      "-Cinstrument-coverage"
+    ],
+    "schema": "nuxie-runtime-frame-loop-rust-runner/v1"
+  },
   "functions": {
     "cpp": {
       "src/animation/animation_reset.cpp": [

@@ -63,10 +63,7 @@ use nuxie_runtime::{
     ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
-use view_model::{
-    ScriptViewModelFrameContext, ScriptedContext, create_awaitable_scripted_context,
-    create_scripted_view_model,
-};
+use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
 use crate::gpu_canvas::{
@@ -1096,9 +1093,9 @@ impl ScriptVm {
     }
 
     /// Browser counterpart of the pinned synchronous generator call. WebGPU
-    /// validates physical shader modules asynchronously, so only this path
-    /// exposes an awaitable `context:shader`; every other context method still
-    /// delegates to the same concrete ScriptedContext userdata.
+    /// validates physical shader modules asynchronously, so this path prepares
+    /// the registered shader catalog first and then invokes the same concrete
+    /// ScriptedContext userdata and synchronous generator used by native hosts.
     pub async fn instantiate_registered_script_with_factory_async(
         &self,
         program: &ScriptProgram,
@@ -1120,27 +1117,30 @@ impl ScriptVm {
             Rc::clone(&self.gpu_canvas_shaders),
             self.renderer_bindings.clone(),
         );
-        let (context, proxy) = create_awaitable_scripted_context(
-            &self.lua,
-            ScriptedContext::new_with_lifetime(
+        gpu_canvas_context
+            .prepare_imported_shaders_async()
+            .await
+            .map_err(|error| self.script_error(error))?;
+        let context = self
+            .lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 context_parent_view_models.clone(),
                 Rc::clone(&context_missing_requested_data),
                 Some(gpu_canvas_context.clone()),
                 Rc::clone(&context_alive),
-            ),
-        )
-        .map_err(|error| self.script_error(error))?;
+            ))
+            .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
-        let result = program.generator.call_async(proxy).await;
-        let instance: Table = match self.track_resource_result(result) {
-            Ok(instance) => instance,
-            Err(error) => {
-                context_alive.set(false);
-                return Err(self.script_error(error));
-            }
-        };
+        let instance: Table =
+            match self.track_resource_result(program.generator.call(context.clone())) {
+                Ok(instance) => instance,
+                Err(error) => {
+                    context_alive.set(false);
+                    return Err(self.script_error(error));
+                }
+            };
         Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
             instance,
             self.renderer_bindings.clone(),

@@ -854,10 +854,22 @@ pub(crate) struct GpuCanvasImage {
 
 impl UserData for GpuCanvasImage {}
 
-#[derive(Debug)]
 pub(crate) struct RegisteredGpuCanvasShaderAsset {
     asset: RegisteredGpuCanvasShaderAssetState,
     decoded: Option<GpuCanvasShader>,
+    prepared_module: Option<Arc<dyn RenderGpuCanvasShader>>,
+    module_prepared: bool,
+}
+
+impl std::fmt::Debug for RegisteredGpuCanvasShaderAsset {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RegisteredGpuCanvasShaderAsset")
+            .field("asset", &self.asset)
+            .field("decoded", &self.decoded)
+            .field("module_prepared", &self.module_prepared)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
@@ -877,6 +889,8 @@ impl RegisteredGpuCanvasShaderAsset {
         Self {
             asset,
             decoded: None,
+            prepared_module: None,
+            module_prepared: false,
         }
     }
 
@@ -916,40 +930,6 @@ enum GpuCanvasShaderCatalog {
 }
 
 impl GpuCanvasShaderCatalog {
-    fn lookup(
-        &self,
-        lua: &luaur_rt::Lua,
-        name: &str,
-    ) -> Option<(String, Vec<GpuCanvasShaderEntry>, Option<GpuCanvasShader>)> {
-        match self {
-            Self::Direct(shaders) => {
-                let entries = shaders.get(name)?.clone();
-                if entries.is_empty() {
-                    return None;
-                }
-                Some((name.to_owned(), entries, None))
-            }
-            Self::Imported(shaders) => {
-                let reference = crate::vm::lua_blob::ScopedAssetReference::new(lua, name);
-                let mut best_rank = 0;
-                let mut selected = None;
-                for entry in shaders.borrow().iter() {
-                    let rank = reference.rank(&entry.name, &entry.short_name);
-                    if rank > best_rank {
-                        best_rank = rank;
-                        selected = Some((entry.name.clone(), Rc::clone(&entry.owner)));
-                    }
-                }
-                let (registered_name, owner) = selected?;
-                let shader = owner.borrow_mut().resolve(&registered_name).ok()?.clone();
-                if shader.entries.is_empty() {
-                    return None;
-                }
-                Some((name.to_owned(), shader.entries.clone(), Some(shader)))
-            }
-        }
-    }
-
     fn shader(
         &self,
         lua: &luaur_rt::Lua,
@@ -980,17 +960,29 @@ impl GpuCanvasShaderCatalog {
                     }
                 }
                 let (registered_name, owner) = selected?;
-                let shader = owner.borrow_mut().resolve(&registered_name).ok()?.clone();
+                let mut owner = owner.borrow_mut();
+                let shader = owner.resolve(&registered_name).ok()?.clone();
                 if shader.entries.is_empty() {
                     return None;
                 }
-                let module = renderer_bindings?
-                    .with_factory(|factory| {
-                        factory
-                            .make_gpu_canvas_shader(&shader)
-                            .map_err(|error| Error::runtime(error.to_string()))
-                    })
-                    .ok()?;
+                let module = if owner.module_prepared {
+                    let prepared = owner.prepared_module.as_ref()?;
+                    renderer_bindings?
+                        .with_factory(|factory| {
+                            factory
+                                .make_gpu_canvas_shader_occurrence(prepared)
+                                .map_err(|error| Error::runtime(error.to_string()))
+                        })
+                        .ok()?
+                } else {
+                    renderer_bindings?
+                        .with_factory(|factory| {
+                            factory
+                                .make_gpu_canvas_shader(&shader)
+                                .map_err(|error| Error::runtime(error.to_string()))
+                        })
+                        .ok()?
+                };
                 Some(GpuShader {
                     name: name.to_owned(),
                     entries: shader.entries,
@@ -1009,6 +1001,38 @@ pub(crate) struct GpuCanvasContextBindings {
 }
 
 impl GpuCanvasContextBindings {
+    /// Resolve every imported physical shader module before browser script
+    /// execution enters the synchronous C++-shaped generator/draw lifecycle.
+    pub(crate) async fn prepare_imported_shaders_async(&self) -> Result<()> {
+        let GpuCanvasShaderCatalog::Imported(shaders) = &self.shaders else {
+            return Ok(());
+        };
+        let Some(bindings) = self.renderer_bindings.as_ref() else {
+            return Ok(());
+        };
+        let entries = shaders.borrow().clone();
+        for entry in entries {
+            let shader = {
+                let mut owner = entry.owner.borrow_mut();
+                if owner.module_prepared {
+                    continue;
+                }
+                match owner.resolve(&entry.name) {
+                    Ok(shader) => shader.clone(),
+                    Err(_) => continue,
+                }
+            };
+            let load =
+                bindings.with_factory(|factory| Ok(factory.load_gpu_canvas_shader(&shader)))?;
+            if let Ok(module) = load.resolve().await {
+                let mut owner = entry.owner.borrow_mut();
+                owner.prepared_module = Some(module);
+                owner.module_prepared = true;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn canvas_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
         self.canvas_userdata_with_size(lua, 0, 0)
     }
@@ -1051,48 +1075,6 @@ impl GpuCanvasContextBindings {
         };
         lua.create_userdata(shader)
             .map(|shader| MultiValue::from_vec(vec![Value::UserData(shader)]))
-    }
-
-    pub(crate) async fn shader_userdata_async(
-        &self,
-        lua: luaur_rt::Lua,
-        name: String,
-    ) -> Result<MultiValue> {
-        let Some((name, entries, imported)) = self.shaders.lookup(&lua, &name) else {
-            return Ok(MultiValue::new());
-        };
-        let module = match imported {
-            None => None,
-            Some(shader) => {
-                let Some(bindings) = self.renderer_bindings.as_ref() else {
-                    return Ok(MultiValue::new());
-                };
-                let load =
-                    bindings.with_factory(|factory| Ok(factory.load_gpu_canvas_shader(&shader)))?;
-                match load.resolve().await {
-                    Ok(module) => Some(module),
-                    // Pinned C++ `lua_gpu_load_shader_by_name` returns false
-                    // when physical module construction fails; context:shader
-                    // then pops its temporary value and returns zero Lua values
-                    // (`lua_gpu.cpp:519-656`; `lua_scripted_context.cpp:531-558`).
-                    Err(_) => return Ok(MultiValue::new()),
-                }
-            }
-        };
-        lua.create_userdata(GpuShader {
-            name,
-            entries,
-            module,
-        })
-        .map(|shader| MultiValue::from_vec(vec![Value::UserData(shader)]))
-    }
-
-    pub(crate) fn async_shader_function(&self, lua: &luaur_rt::Lua) -> Result<Function> {
-        let bindings = self.clone();
-        lua.create_async_function(move |lua, (_context, name): (Value, String)| {
-            let bindings = bindings.clone();
-            async move { bindings.shader_userdata_async(lua, name).await }
-        })
     }
 }
 

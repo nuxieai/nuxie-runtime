@@ -1595,60 +1595,6 @@ impl ScriptedContext {
     }
 }
 
-/// Browser-only wrapper: every ordinary context method delegates to the one
-/// concrete ScriptedContext userdata; only `shader` is overridden with the
-/// awaitable WebGPU lookup. Pinned C++ hands scripts the context userdata
-/// directly on every platform (`lua_scripted_context.cpp:516-544`); the proxy
-/// is a Lua table, so `type(context)` observably differs on this path — a
-/// documented divergence forced by WebGPU's asynchronous validation scope.
-/// Field writes forward to the original userdata so unknown-field assignment
-/// raises exactly as it does natively.
-pub(super) fn create_awaitable_scripted_context(
-    lua: &luaur_rt::Lua,
-    context: ScriptedContext,
-) -> luaur_rt::Result<(AnyUserData, Table)> {
-    let shader = context
-        .gpu_canvas
-        .as_ref()
-        .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?
-        .async_shader_function(lua)?;
-    let original = lua.create_userdata(context)?;
-    let proxy: Table = lua
-        .load(
-            r#"
-local original, shader = ...
-local bound = {}
-local proxy = {}
-setmetatable(proxy, {
-    __index = function(_, key)
-        if key == "shader" then
-            return shader
-        end
-        local value = original[key]
-        if type(value) ~= "function" then
-            return value
-        end
-        local cached = bound[key]
-        if cached == nil then
-            cached = function(_, ...)
-                return value(original, ...)
-            end
-            bound[key] = cached
-        end
-        return cached
-    end,
-    __newindex = function(_, key, value)
-        original[key] = value
-    end,
-})
-return proxy
-"#,
-        )
-        .set_name("__nuxie_awaitable_scripted_context")
-        .call((original.clone(), shader))?;
-    Ok((original, proxy))
-}
-
 impl UserData for ScriptedContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("viewModel", |lua, this, ()| {

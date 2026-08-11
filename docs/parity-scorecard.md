@@ -8,8 +8,8 @@ Named pending files: 0
 
 ## Rust → C++ attribution
 
-Ledger coverage: 502 Rust files (457 attributed by manifest inversion; 45 classified additions)
-Addition categories: `baseline-adaptation`: 8; `codegen`: 17; `platform-adapter`: 4; `product-data`: 1; `product-host`: 4; `product-trust`: 6; `retained-render`: 1; `test-infra`: 4
+Ledger coverage: 487 Rust files (457 attributed by manifest inversion; 30 classified additions)
+Addition categories: `baseline-adaptation`: 8; `codegen`: 17; `product-data`: 1; `retained-render`: 1; `test-infra`: 3
 
 ## Test correspondence
 
@@ -51,3 +51,11 @@ Rows: 14
 - D16 — **Pure-Rust profiler capture backend (user-approved P1-m decomposition question 4, 2026-08-01).** The pinned 16-line `src/profiler/profiler.cpp` MicroProfile wrapper is replaced by a pluggable Rust `ProfileCapture` trait, with no MicroProfile or C++ FFI dependency.
 - D17 — **Symphonia audio decoder/resampler (Levi-approved P2-f decomposition question 5, 2026-08-01).** The pinned miniaudio memory decoder/channel converter/resampler is replaced by pure-Rust Symphonia decode plus the Rive-owned headless engine glue.
 - D18 — **wgpu Lua GPU execution contract (Levi-approved GPUCEIL D-row, 2026-08-03).** The pinned ORE-backed objects in `src/lua/renderer/lua_gpu.cpp` are represented by Rust userdata, immutable backend-neutral submission snapshots, and retained wgpu resources.
+
+## Additive host-extension register
+
+Rows: 3
+
+- X1 — **semantic-geometry-cache-authority.** An opaque, fail-closed equality token may invalidate editor semantic-geometry caches.
+- X2 — **scripted-global-occurrence-broadcast.** A host facade may broadcast an input to all currently retained occurrences of an authored global id.
+- X3 — **direct-gpu-bytecode-input-projection.** Editor-driven direct GPU bytecode programs may expose scalar input setters that reuse the exact C++ `ScriptedObject` table-write conversions.

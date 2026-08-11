@@ -347,6 +347,10 @@ class PortManifestCliTest(unittest.TestCase):
             with self.subTest(upstream=upstream):
                 self.assertEqual(rows[upstream]["status"], status)
                 self.assertIn(feature_id, rows[upstream]["note"])
+        self.assertIn(
+            "crates/nuxie-renderer/src/gpu_canvas_shader.rs",
+            rows["src/lua/renderer/lua_gpu.cpp"]["rust_module"],
+        )
 
     def test_check_reports_exact_inventory_and_status_counts(self) -> None:
         self.write_upstream("src/a.cpp", "src/b.cpp", "src/c.cpp", "src/d.cpp")

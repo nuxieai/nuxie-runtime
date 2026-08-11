@@ -2,8 +2,10 @@
 
 use std::any::Any;
 use std::cell::RefCell;
+use std::future::Future;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
@@ -91,6 +93,22 @@ return function(context)
 end
 "#;
 
+const AUTHORED_BOOLEAN_INPUT_SCRIPT: &[u8] = br#"
+return function(_context)
+    return {
+        animate = true,
+        init = function(self)
+            if self.animate ~= false then
+                error("authored boolean input was not hydrated before init")
+            end
+            return true
+        end,
+        draw = function(self, _renderer)
+        end,
+    }
+end
+"#;
+
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
     let mut output_size = 0;
@@ -103,6 +121,17 @@ fn compile_luau(source: &[u8]) -> Vec<u8> {
     assert!(!output.is_null());
     // SAFETY: luaur returns a valid allocation containing output_size bytes.
     unsafe { std::slice::from_raw_parts(output.cast(), output_size) }.to_vec()
+}
+
+fn block_on<F: Future>(future: F) -> F::Output {
+    let mut future = std::pin::pin!(future);
+    let mut context = Context::from_waker(Waker::noop());
+    loop {
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(output) => return output,
+            Poll::Pending => std::thread::yield_now(),
+        }
+    }
 }
 
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
@@ -158,6 +187,11 @@ fn push_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
 fn push_f32(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: f32) {
     push_var_uint(bytes, u64::from(property_key(type_name, name)));
     bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_bool(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: bool) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.push(u8::from(value));
 }
 
 fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
@@ -275,6 +309,38 @@ fn imported_file() -> Vec<u8> {
     push_object(&mut bytes, "ScriptedDrawable", |bytes| {
         push_uint(bytes, "ScriptedDrawable", "parentId", 0);
         push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 1);
+    });
+    bytes
+}
+
+fn authored_boolean_input_file() -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(AUTHORED_BOOLEAN_INPUT_SCRIPT));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 0);
+        push_string(bytes, "ScriptAsset", "name", "AuthoredInput");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 32.0);
+        push_f32(bytes, "Artboard", "height", 24.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
+    });
+    push_object(&mut bytes, "ScriptInputBoolean", |bytes| {
+        push_uint(bytes, "ScriptInputBoolean", "parentId", 1);
+        push_string(bytes, "ScriptInputBoolean", "name", "animate");
+        push_bool(bytes, "ScriptInputBoolean", "propertyValue", false);
     });
     bytes
 }
@@ -678,6 +744,29 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
         "{stream}"
     );
     assert!(stream.contains("blendMode=3 opacity=1"), "{stream}");
+}
+
+#[test]
+fn scripted_drawable_hydrates_authored_boolean_input_before_init() {
+    let file = File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
+
+    instance.draw(&mut factory, &mut renderer).unwrap();
+
+    let file = File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    assert!(block_on(instance.mount_scripted_drawables_async(&mut factory)).unwrap());
 }
 
 #[test]

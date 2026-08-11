@@ -16,6 +16,31 @@ SPEC.loader.exec_module(SUMMARIZER)
 
 
 class RuntimeFrameLoopTraceSummaryTest(unittest.TestCase):
+    def test_layout_landmark_uses_the_component_list_request_boundary(self) -> None:
+        self.assertEqual(
+            SUMMARIZER.LANDMARKS["layout_compute"]["rust"],
+            {
+                "source": "crates/nuxie-runtime/src/draw.rs",
+                "anchor": (
+                    "if self.component_list_locals().into_iter().all(|local_id| {"
+                ),
+                "occurrence": 1,
+            },
+        )
+
+    def test_scroll_virtualizer_landmark_uses_the_retained_layout_boundary(self) -> None:
+        self.assertEqual(
+            SUMMARIZER.MECHANISM_LANDMARKS["scroll_virtualizer_settlements"]["rust"],
+            {
+                "source": (
+                    "crates/nuxie-runtime/src/constraints/scrolling/"
+                    "scroll_virtualizer.rs"
+                ),
+                "anchor": "let layout_bounds = artboard.retained_layout_bounds();",
+                "occurrence": 1,
+            },
+        )
+
     def test_state_machine_landmarks_follow_the_fl_c5_owner_split(self) -> None:
         expected_owner = (
             "<nuxie_runtime::state_machine::state_machine_instance::"

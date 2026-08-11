@@ -157,9 +157,19 @@ class DistributionToolTests(unittest.TestCase):
             self.verifier.index('header-symbols'),
         )
 
-    def test_packaged_swift_consumer_links_the_product_entrypoint(self) -> None:
+    def test_packaged_c_and_swift_consumers_link_the_product_entrypoint(self) -> None:
+        self.assertGreaterEqual(
+            self.verifier.count("product_extension_consumer.c"), 2
+        )
         self.assertGreaterEqual(
             self.verifier.count("product_extension_consumer.swift"), 2
+        )
+        self.assertIn(
+            '"${consumer_root}/c-product-extension-consumer"', self.verifier
+        )
+        self.assertIn(
+            '"${consumer_root}/c-product-extension-consumer-ios"',
+            self.verifier,
         )
         self.assertIn(
             '"${consumer_root}/swift-product-extension-consumer"', self.verifier
@@ -168,6 +178,8 @@ class DistributionToolTests(unittest.TestCase):
             '"${consumer_root}/swift-product-extension-consumer-ios"',
             self.verifier,
         )
+        self.assertIn("max(pathlib.Path(c_behavior).stat().st_size", self.verifier)
+        self.assertIn("max(pathlib.Path(swift_behavior).stat().st_size", self.verifier)
 
     def test_product_extension_owns_the_only_shipping_provenance_record(self) -> None:
         extension_build = (
@@ -221,6 +233,47 @@ class DistributionToolTests(unittest.TestCase):
             self.size_baseline["sourceRevision"],
             "e2c8ecff2cd80f47b07909888a5fb3699593348d",
         )
+        mebibyte = 1024 * 1024
+        expected = {
+            "full-apple": {
+                "compressedBytes": 75 * mebibyte,
+                "expandedBytes": 230 * mebibyte,
+                "representativeLinkedBytes": {
+                    "c-macos-arm64": 29 * mebibyte,
+                    "swift-macos-arm64": 29 * mebibyte,
+                },
+                "sliceBytes": {
+                    "aarch64-apple-darwin": 46 * mebibyte,
+                    "aarch64-apple-ios": 46 * mebibyte,
+                    "aarch64-apple-ios-sim": 46 * mebibyte,
+                    "x86_64-apple-darwin": 47 * mebibyte,
+                    "x86_64-apple-ios": 46 * mebibyte,
+                },
+            },
+            "ios-only": {
+                "compressedBytes": 45 * mebibyte,
+                "expandedBytes": 138 * mebibyte,
+                "representativeLinkedBytes": {
+                    "c-ios-arm64": 29 * mebibyte,
+                    "swift-ios-arm64": 29 * mebibyte,
+                },
+                "sliceBytes": {
+                    "aarch64-apple-ios": 46 * mebibyte,
+                    "aarch64-apple-ios-sim": 46 * mebibyte,
+                    "x86_64-apple-ios": 46 * mebibyte,
+                },
+            },
+        }
+        self.assertEqual(self.size_budgets["maximums"], expected)
+
+    def test_release_documentation_describes_the_authored_data_root(self) -> None:
+        release_document = (
+            REPO_ROOT / "docs/nux-capi-apple-release.md"
+        ).read_text()
+        self.assertIn("rooted at `nux-apple-product-extension`", release_document)
+        self.assertIn("three disjoint symbol partitions", release_document)
+        self.assertIn("qualified v0.6.0", release_document)
+        self.assertNotIn("rooted directly in `nux-capi`", release_document)
 
     def test_pr_ci_runs_distribution_contract_tests_when_tooling_changes(self) -> None:
         c_abi_lane = self.pipeline.split(':linux: C ABI smoke"', 1)[1].split(
@@ -279,6 +332,9 @@ class DistributionToolTests(unittest.TestCase):
         )
         self.assertGreaterEqual(
             self.apple_checker.count("product_extension_consumer.swift"), 1
+        )
+        self.assertGreaterEqual(
+            self.apple_checker.count("product_extension_consumer.c"), 1
         )
         self.assertNotIn("NuxieRuntimeFFI", self.apple_checker)
 

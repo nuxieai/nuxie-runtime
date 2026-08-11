@@ -1,8 +1,10 @@
 # Nuxie runtime C distribution
 
-The supported Apple binary is rooted directly in `nux-capi`, the
-product-neutral C ABI. A single immutable source revision produces five thin
-static libraries.
+The supported Apple binary is rooted at `nux-apple-product-extension`. That
+upper leaf composes the product-neutral `nux-capi` ABI with Nuxie's authored-
+data converter registry and adds one explicit product-named configured-import
+entrypoint. A single immutable source revision produces five thin static
+libraries.
 Those exact libraries are reused in two archives:
 
 - `NuxieRuntime.xcframework.zip` contains iOS device, universal iOS simulator,
@@ -10,12 +12,14 @@ Those exact libraries are reused in two archives:
 - `NuxieRuntime-iOS.xcframework.zip` contains the same iOS device and simulator
   libraries, without copying the macOS slices into an iOS SDK dependency.
 
-Both archives expose exactly one Clang module, `NuxieRuntimeC`, backed by four
-headers: the module map, umbrella header, generated portable header, and narrow
-Apple extension header. The exported ABI is the disjoint union of the portable
-and Apple Metal symbol partitions. Experience, screen, journey, SDK-session,
-package authentication, and product host-command semantics belong to the Swift
-SDK and are rejected by the shipped-interface source guard.
+Both archives expose exactly one Clang module, `NuxieRuntimeC`, backed by five
+headers: the module map, product-extension umbrella header, baseline umbrella
+header, generated portable header, and narrow Apple extension header. The
+exported ABI is the union of three disjoint symbol partitions: portable, Apple
+Metal, and the single product configured-import symbol. Experience, screen,
+journey, SDK-session, package authentication, and product host-command
+semantics belong to the Swift SDK and are rejected by the shipped-interface
+source guard.
 
 The portable scheduling contract is part of both packages:
 `nux_player_step_result_scheduling` reports independent dirty, settled,
@@ -26,9 +30,11 @@ acknowledgement automatically; skipped or failed presentations preserve the
 render demand. Both packaged C and Swift consumers compile and link these
 symbols from `NuxieRuntimeC`.
 
-The distribution has no product runtime leaf or migration facade. Package,
-experience, screen, session, authentication, and product host-command policy
-remain Swift SDK responsibilities and cannot enter the shipped Rust closure.
+The distribution has no product lifecycle runtime or migration facade. The
+upper leaf installs only the authored-data converter registry before delegating
+to baseline configured import. Package, experience, screen, session,
+authentication, and product host-command policy remain Swift SDK
+responsibilities and cannot enter the shipped Rust closure.
 
 ## Candidate qualification
 
@@ -40,8 +46,8 @@ make nux-capi-xcframeworks
 ```
 
 The final command performs the five target builds once, strips embedded LLVM
-bitcode, constructs both XCFrameworks, links clean C and pure-Swift consumers,
-and writes:
+bitcode, constructs both XCFrameworks, links clean C and pure-Swift consumers
+for both the baseline and product entrypoints, and writes:
 
 - `target/nux-capi-apple/artifact-set.json` (schema 6 provenance and checksums)
 - `target/nux-capi-apple/SIZE_REPORT.json` (schema 2 exact compressed,
@@ -54,10 +60,10 @@ publisher fails closed while those values are unfrozen.
 
 The committed v0.4.0 baseline records its tag, exact source revision, original
 size-report SHA-256, and every measurement. Release maxima are frozen from the
-qualified v0.5.0 slim build, rounded up independently to the next 1 MiB
+qualified v0.6.0 authored-data build, rounded up independently to the next 1 MiB
 boundary. This keeps a narrow allowance for provenance-only rebuild variation
-while still ratcheting archives, expanded bundles, every thin slice, and
-representative C and Swift linked binaries.
+while still ratcheting archives, expanded bundles, every thin slice, and the
+larger of the baseline/product representative C and Swift linked binaries.
 
 ## Immutable release
 

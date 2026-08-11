@@ -878,6 +878,7 @@ impl ImportedResourceRequirement {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct ParsedAuthoredWgsl {
     pub(super) module: naga::Module,
     pub(super) info: naga::valid::ModuleInfo,
@@ -3905,7 +3906,7 @@ mod tests {
 
     use super::*;
     use nuxie_render_api::{
-        GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderTextureSampleType,
+        Factory, GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderTextureSampleType,
         GpuCanvasShaderTextureViewDimension,
     };
 
@@ -5049,6 +5050,35 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
             .unwrap()
             .occurrence_id;
         assert_ne!(first_id, second_id);
+
+        let prepared = first_factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("browser-style prevalidated shader");
+        let prepared_occurrence = first_factory
+            .make_gpu_canvas_shader_occurrence(&prepared)
+            .expect("first lookup from the prevalidated source");
+        let second_prepared_occurrence = first_factory
+            .make_gpu_canvas_shader_occurrence(&prepared)
+            .expect("second lookup from the prevalidated source");
+        let prepared_occurrence = prepared_occurrence
+            .as_any()
+            .downcast_ref::<WgpuGpuCanvasShader>()
+            .expect("WGPU prepared occurrence");
+        let second_prepared_occurrence = second_prepared_occurrence
+            .as_any()
+            .downcast_ref::<WgpuGpuCanvasShader>()
+            .expect("WGPU prepared occurrence");
+        assert_ne!(
+            prepared_occurrence.occurrence_id,
+            second_prepared_occurrence.occurrence_id,
+        );
+        assert!(
+            !Arc::ptr_eq(
+                &prepared_occurrence.template,
+                &second_prepared_occurrence.template,
+            ),
+            "each lookup must own a distinct physical shader module template",
+        );
 
         let error = second_factory
             .make_imported_gpu_canvas_image(&first, &first, &imported_plan())

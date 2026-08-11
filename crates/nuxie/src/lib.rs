@@ -9631,6 +9631,12 @@ mod owned_instance_tests {
         let mut stale =
             OwnedArtboardInstance::instantiate_default(file).expect("instantiate stale sibling");
         let font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
+        let _ = stale.advance(0.0);
+        assert!(
+            !stale
+                .raw()
+                .has_dirt(nuxie_runtime::ComponentDirt::COMPONENTS)
+        );
 
         first
             .attach_font_asset_bytes(font_id, font_bytes.clone())
@@ -9643,6 +9649,15 @@ mod owned_instance_tests {
         assert_eq!(
             stale.raw().external_font_asset_bytes(font_id),
             Some(font_bytes.as_slice())
+        );
+        assert!(
+            stale
+                .raw()
+                .has_dirt(nuxie_runtime::ComponentDirt::COMPONENTS)
+        );
+        assert!(
+            stale.advance(0.0),
+            "refreshing a mounted font publishes component work"
         );
     }
 

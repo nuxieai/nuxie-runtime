@@ -44,6 +44,10 @@ MECHANISM_IDS = (
     "scroll_test",
     "scroll_intent",
 )
+DIRTY_TEXT_CLEAN_GUARD_IDS = (
+    "local_bounds",
+    "viewmodel_based_condition",
+)
 ALLOCATION_PATTERN = re.compile(r"^frame_loop_allocations=(\d+)$", re.MULTILINE)
 
 
@@ -66,9 +70,16 @@ def sha256(path: pathlib.Path) -> str:
 
 
 def fixture_arguments(
-    row: dict[str, Any], *, upstream: pathlib.Path
+    row: dict[str, Any],
+    *,
+    upstream: pathlib.Path,
+    include_expected_file_sha256: bool = False,
 ) -> list[str]:
     arguments = ["--file", str(upstream / str(row["path"]))]
+    if include_expected_file_sha256 and row.get("expected_file_sha256"):
+        arguments.extend(
+            ["--expected-file-sha256", str(row["expected_file_sha256"])]
+        )
     if row.get("artboard"):
         arguments.extend(["--artboard", str(row["artboard"])])
     if row.get("state_machine"):
@@ -135,7 +146,11 @@ def run_fixture(
         environment["RIVE_GOLDEN_ALLOCATION_COUNTER"] = "1"
     command = [
         str(runner),
-        *fixture_arguments(effective_row, upstream=upstream),
+        *fixture_arguments(
+            effective_row,
+            upstream=upstream,
+            include_expected_file_sha256=side == "rust",
+        ),
     ]
     if benchmark:
         command.append("--benchmark")
@@ -397,6 +412,30 @@ def main() -> int:
     steady_rows = [
         row for row in mechanism_rows if str(row["id"]) in steady_ids
     ]
+    dirty_text_clean_guard_specs = {
+        str(row["id"]): row
+        for row in ledger.get("trace_dirty_text_clean_guard_fixture", [])
+    }
+    if set(dirty_text_clean_guard_specs) != set(DIRTY_TEXT_CLEAN_GUARD_IDS):
+        raise RuntimeError(
+            "dirty-text clean-guard fixture IDs do not match the capture contract"
+        )
+    dirty_text_clean_guard_rows = []
+    for value in DIRTY_TEXT_CLEAN_GUARD_IDS:
+        row = dict(rows_by_id[value])
+        spec = dirty_text_clean_guard_specs[value]
+        if str(row["path"]) != str(spec["path"]):
+            raise RuntimeError(
+                f"dirty-text clean-guard fixture {value} path differs from corpus"
+            )
+        fixture_hash = sha256(upstream / str(row["path"]))
+        if fixture_hash != str(spec["sha256"]):
+            raise RuntimeError(
+                f"dirty-text clean-guard fixture {value} hash is {fixture_hash}, "
+                f"expected {spec['sha256']}"
+            )
+        row["expected_file_sha256"] = fixture_hash
+        dirty_text_clean_guard_rows.append(row)
 
     canonical_full_cpp, canonical_full_rust, _ = capture_group(
         group="canonical-full",
@@ -478,6 +517,34 @@ def main() -> int:
         llvm_profdata=llvm_profdata,
         llvm_cov=llvm_cov,
     )
+    dirty_text_clean_guard_coverages = {}
+    dirty_text_clean_guard_stream_directories = {}
+    for row in dirty_text_clean_guard_rows:
+        fixture_id = str(row["id"])
+        group = f"dirty-text-clean-guard-{fixture_id}"
+        cpp_coverage, rust_coverage, _ = capture_group(
+            group=group,
+            rows=[row],
+            cpp_runner=cpp_runner,
+            rust_runner=rust_runner,
+            upstream=upstream,
+            output_dir=output_dir,
+            frame_only=True,
+            occurrence_only=False,
+            steady_only=True,
+            allocations=False,
+            benchmark=False,
+            retain_streams=True,
+            llvm_profdata=llvm_profdata,
+            llvm_cov=llvm_cov,
+        )
+        dirty_text_clean_guard_coverages[fixture_id] = (
+            cpp_coverage,
+            rust_coverage,
+        )
+        dirty_text_clean_guard_stream_directories[fixture_id] = (
+            output_dir / f"{group}-streams"
+        )
 
     allocation_paths: dict[str, pathlib.Path] = {}
     for name, counts in (
@@ -543,6 +610,21 @@ def main() -> int:
         summarize_command.extend(["--mechanism-corpus-id", value])
     for value in steady_ids:
         summarize_command.extend(["--steady-corpus-id", value])
+    for value in DIRTY_TEXT_CLEAN_GUARD_IDS:
+        cpp_coverage, rust_coverage = dirty_text_clean_guard_coverages[value]
+        summarize_command.extend(
+            [
+                "--dirty-text-clean-guard-coverage",
+                value,
+                str(cpp_coverage),
+                str(rust_coverage),
+                "--dirty-text-clean-guard-stream-directory",
+                value,
+                str(dirty_text_clean_guard_stream_directories[value]),
+                "--dirty-text-clean-guard-corpus-id",
+                value,
+            ]
+        )
     subprocess.run(summarize_command, cwd=repo_root, check=True)
 
     final_rust_candidate_source = candidate_source_fingerprint(
@@ -575,6 +657,12 @@ def main() -> int:
         for row in mechanism_rows
         if row.get("input_script")
     }
+    trace["dirty_text_clean_guard_fixture_sha256"] = {
+        str(row["id"]): sha256(upstream / str(row["path"]))
+        for row in dirty_text_clean_guard_rows
+    }
+    trace["dirty_text_clean_guard_rust_candidate_source"] = rust_candidate_source
+    trace["dirty_text_clean_guard_rust_runner_provenance"] = rust_runner_provenance
     args.output.write_text(
         json.dumps(trace, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

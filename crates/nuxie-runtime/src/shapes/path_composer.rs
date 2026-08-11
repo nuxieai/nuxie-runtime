@@ -2,14 +2,14 @@
 //! dependency-ordered update to rebuild local, local-clockwise, and world
 //! ShapePaintPaths; drawing never reconstructs those paths.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use nuxie_graph::{ArtboardGraph, ShapePaintPathKind};
 
 use crate::{
     ArtboardInstance, ComponentDirt, RuntimeLayoutBounds,
-    draw::{RuntimeShapePaintPathKind, RuntimeShapePathState, runtime_shape_paint_path_kind_slot},
-    math::raw_path::{prune_empty_path_segments, runtime_raw_path_from_commands},
+    draw::{RuntimeShapePaintPathKind, runtime_shape_paint_path_kind_slot},
+    math::raw_path::prune_empty_path_segments,
 };
 
 impl ArtboardInstance {
@@ -66,11 +66,8 @@ impl ArtboardInstance {
                 layout_bounds,
             );
             prune_empty_path_segments(&mut commands);
-            shape.paint_paths[runtime_shape_paint_path_kind_slot(runtime_kind)].replace_retained(
-                RuntimeShapePathState {
-                    raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
-                },
-            );
+            shape.paint_paths[runtime_shape_paint_path_kind_slot(runtime_kind)]
+                .rebuild_retained_from_commands(&commands);
         }
         crate::shapes::shape_paint_container::invalidate_stroke_effects(
             shape.paint_container_family.unwrap_or(

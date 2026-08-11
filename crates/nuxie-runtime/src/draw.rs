@@ -63,6 +63,23 @@ use crate::text::{
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
 
+#[cfg(feature = "tools")]
+thread_local! {
+    static RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(feature = "tools")]
+#[doc(hidden)]
+pub fn reset_runtime_shape_paint_command_report_count() {
+    RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT.set(0);
+}
+
+#[cfg(feature = "tools")]
+#[doc(hidden)]
+pub fn runtime_shape_paint_command_report_count() -> usize {
+    RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT.get()
+}
+
 #[path = "layout/axis.rs"]
 pub(crate) mod axis;
 #[path = "layout/axis_x.rs"]
@@ -1996,6 +2013,23 @@ impl ArtboardInstance {
             path_cache,
             include_invisible,
             Vec::new(),
+            true,
+        )
+    }
+
+    fn preparation_commands_with_live_drawable_order(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeArtboardPathState,
+    ) -> Vec<RuntimeDrawableDispatch> {
+        self.draw_commands_with_live_drawable_order_reusing(
+            graph,
+            layout_bounds,
+            path_cache,
+            true,
+            Vec::new(),
+            false,
         )
     }
 
@@ -2010,6 +2044,7 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeArtboardPathState,
         include_invisible: bool,
         mut commands: Vec<RuntimeDrawableDispatch>,
+        include_shape_paint_reports: bool,
     ) -> Vec<RuntimeDrawableDispatch> {
         commands.clear();
         let mut pending_clip_operations = Vec::<&RuntimeDrawable>::new();
@@ -2040,6 +2075,7 @@ impl ArtboardInstance {
                         graph,
                         layout_bounds,
                         path_cache,
+                        include_shape_paint_reports,
                     )
                 }));
             }
@@ -2049,6 +2085,7 @@ impl ArtboardInstance {
                 graph,
                 layout_bounds,
                 path_cache,
+                include_shape_paint_reports,
             ));
         }
 
@@ -2475,7 +2512,7 @@ impl ArtboardInstance {
             return Ok(());
         }
 
-        let prepared = render_cache.live_traversal_frame(self, graph, Some(runtime));
+        let prepared = render_cache.preparation_traversal_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let commands = prepared.commands.as_slice();
         let has_nested_artboards = commands
@@ -2782,7 +2819,7 @@ impl ArtboardInstance {
         apply_nested_layout_bounds: bool,
         nested_ancestors: &[u32],
     ) -> Result<()> {
-        let prepared = render_cache.live_traversal_frame(self, graph, Some(runtime));
+        let prepared = render_cache.preparation_traversal_frame(self, graph, Some(runtime));
         let commands = prepared.commands.as_slice();
 
         // Binding a newly-created C++ list row immediately updates all of its
@@ -2938,8 +2975,13 @@ impl ArtboardInstance {
             if drawable.referenced_artboard_global.is_none() {
                 continue;
             }
-            let command =
-                self.runtime_drawable_dispatch_for_node(drawable, graph, layout_bounds, path_cache);
+            let command = self.runtime_drawable_dispatch_for_node(
+                drawable,
+                graph,
+                layout_bounds,
+                path_cache,
+                false,
+            );
             if command.referenced_artboard_global.is_none()
                 || !runtime_drawable_dispatch_is_nested_artboard(&command)
             {
@@ -2972,7 +3014,7 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeArtboardPathState,
         nested_ancestors: &[u32],
     ) -> Result<()> {
-        let prepared = render_cache.live_traversal_frame(self, graph, Some(runtime));
+        let prepared = render_cache.preparation_traversal_frame(self, graph, Some(runtime));
         let layout_bounds = Arc::clone(&prepared.layout_bounds);
         let commands = prepared.commands;
 
@@ -5007,6 +5049,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeArtboardPathState,
+        include_shape_paint_reports: bool,
     ) -> RuntimeDrawableDispatch {
         let local_id = match drawable.kind {
             DrawableOrderKind::LayoutProxy => drawable.layout_local,
@@ -5039,12 +5082,11 @@ impl ArtboardInstance {
                 .resolved_image_asset_global(local_id, drawable.resolved_image_asset_global),
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
-            shape_paints: self.runtime_shape_paint_commands(
-                drawable,
-                graph,
-                layout_bounds,
-                path_cache,
-            ),
+            shape_paints: if include_shape_paint_reports {
+                self.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache)
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -5082,6 +5124,12 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         _path_cache: &mut RuntimeArtboardPathState,
     ) -> Vec<RuntimeShapePaintCommand> {
+        #[cfg(feature = "tools")]
+        RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT.set(
+            RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT
+                .get()
+                .saturating_add(1),
+        );
         if drawable.kind == DrawableOrderKind::Drawable
             && drawable.type_name == "Shape"
             && let Some(shape_local) = drawable.local_id
@@ -16226,6 +16274,32 @@ impl RuntimeArtboardPathState {
             layout_bounds.as_ref().as_ref(),
             self,
             true,
+        );
+        RuntimeLiveTraversalFrame {
+            layout_bounds,
+            commands,
+        }
+    }
+
+    fn preparation_traversal_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> RuntimeLiveTraversalFrame {
+        let (mounted_component_list_layout_revision, _) =
+            runtime_mounted_component_list_revisions(instance);
+        let layout_frame = self.layout_bounds_frame(
+            instance,
+            graph,
+            runtime,
+            mounted_component_list_layout_revision,
+        );
+        let layout_bounds = layout_frame.bounds.clone();
+        let commands = instance.preparation_commands_with_live_drawable_order(
+            graph,
+            layout_bounds.as_ref().as_ref(),
+            self,
         );
         RuntimeLiveTraversalFrame {
             layout_bounds,

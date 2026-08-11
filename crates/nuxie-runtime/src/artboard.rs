@@ -4619,6 +4619,7 @@ impl ArtboardInstance {
     pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
         self.update_pass();
         let layout = self.layout_bounds(local_id)?;
+        let retained_layout_bounds = self.retained_layout_bounds_arc();
         // Pinned C++ post-multiplies the scroll translate onto the child's
         // world transform (`constrainChild`: `worldTransform *
         // m_scrollTransform`, `scroll_constraint.cpp:215-230`), so the
@@ -4630,7 +4631,13 @@ impl ArtboardInstance {
         // vanishes and this read equals `layout_bounds` exactly.
         let world = self
             .runtime_graph()
-            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .map(|graph| {
+                self.runtime_component_world_transform_with_bounds(
+                    local_id,
+                    graph,
+                    retained_layout_bounds.as_deref(),
+                )
+            })
             .or_else(|| {
                 self.component(local_id)
                     .map(|component| component.transform.world_transform)

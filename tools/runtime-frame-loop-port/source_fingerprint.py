@@ -36,6 +36,7 @@ LOCAL_FIXTURE_LINKS = {
 # fixed naming forms, even when those receipts are untracked and actively
 # updated during a source-bound capture.
 LOCAL_ORCHESTRATION_DIRS = {".flc5", ".fle8"}
+LOCAL_UPSTREAM_ORACLE_DIRS = {"rive-runtime"}
 LOCAL_WAVE_ARTIFACT = re.compile(
     r"W\d+(?:-resume\d*)?\.log|W\d+-report\.md|"
     r"E\d+-inv-[A-Za-z0-9_-]+\.(?:log|md)"
@@ -90,7 +91,11 @@ def _is_excluded(
     if relative in LOCAL_FIXTURE_LINKS:
         return True
     if (
-        (relative.parts and relative.parts[0] in LOCAL_ORCHESTRATION_DIRS)
+        (
+            relative.parts
+            and relative.parts[0]
+            in LOCAL_ORCHESTRATION_DIRS | LOCAL_UPSTREAM_ORACLE_DIRS
+        )
         or (
             len(relative.parts) == 1
             and LOCAL_WAVE_ARTIFACT.fullmatch(relative.name) is not None

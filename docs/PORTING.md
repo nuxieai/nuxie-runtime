@@ -1438,4 +1438,40 @@ path.
 
 ## Named adaptation ceilings
 
-- **lua-gpu-wgpu-adapter** (D18): Lua GPU objects execute on wgpu via immutable submission snapshots; explicit `finish()` required at script return; at most 16 retained external texture identities. Never drop GPU-prefixed names or substitute CPU rendering.
+- **lua-gpu-wgpu-adapter** (D18): Lua GPU objects execute on wgpu via
+  immutable submission snapshots; explicit `finish()` is required at script
+  return; at most 16 external texture identities are retained. Browser WebGPU
+  validates the exact immutable WGSL asynchronously before mounting Lua because
+  its error scopes are promise-backed. Each later synchronous `Context::shader`
+  lookup must still allocate a fresh occurrence and physical shader module,
+  matching pinned C++ ownership. Never drop GPU-prefixed names, share the
+  physical module across lookups, or substitute CPU rendering.
+
+## Named additive host extensions
+
+These extensions add host/editor integration without relaxing any mapped C++
+owner. They are not support ceilings and must not alter baseline update, dirt,
+advance, or draw behavior.
+
+- **semantic-geometry-cache-authority** (X1):
+  `SemanticGeometryRevision` is an opaque equality token for an editor cache.
+  It may be returned only while every mounted graph family that can change
+  settled visible semantic geometry publishes to the token; otherwise
+  `try_semantic_geometry_revision()` fails closed. The token is observational:
+  baseline runtime traversal remains authoritative, and no C++ update or draw
+  may be skipped because of it. Visibility changes to an empty clipping shape
+  are geometry-membership changes and therefore publish to X1.
+- **scripted-global-occurrence-broadcast** (X2): the root host convenience API
+  may walk retained nested-artboard and component-list occurrences that share
+  one authored global id. Each changed occurrence delegates to the ordinary
+  per-object setter, preserving pinned `ScriptedObject` Lua assignment and dirt
+  semantics. Equality coalescing belongs only to the `_if_changed` host facade;
+  the baseline `set_script_input_for_global` path always performs the authored
+  write and schedules `ScriptUpdate` like C++.
+- **direct-gpu-bytecode-input-projection** (X3):
+  `GpuCanvasBytecodeProgram` may expose scalar setters for editor-driven direct
+  execution. Their C-string truncation and float, unsigned-integer, boolean,
+  and string projections must remain identical to the corresponding pinned
+  `ScriptedObject` setters. This retained direct program is not a runtime
+  Component, so the caller initiates the next draw and no component dirt is
+  synthesized.

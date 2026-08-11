@@ -137,6 +137,11 @@ class LedgerScorecardTests(unittest.TestCase):
                 2. Earlier row summary.
                 11. **[SUPERSEDED] Old decision.** Historical detail.
 
+                ## Additive host-extension register
+
+                - **X2 — Later extension.** Later extension summary. More detail.
+                - **X1 — Earlier extension.** Earlier extension summary.
+
                 ## H — Housekeeping
                 """,
             )
@@ -211,6 +216,21 @@ class LedgerScorecardTests(unittest.TestCase):
                 {"id": "D10", "summary": "Later row summary."},
             ],
         )
+        self.assertEqual(
+            scorecard["x_rows"],
+            [
+                {
+                    "id": "X1",
+                    "name": "Earlier extension",
+                    "summary": "Earlier extension summary.",
+                },
+                {
+                    "id": "X2",
+                    "name": "Later extension",
+                    "summary": "Later extension summary.",
+                },
+            ],
+        )
 
     def test_render_is_terminal_friendly_sorted_and_has_no_generated_timestamp(self):
         scorecard = {
@@ -252,6 +272,10 @@ class LedgerScorecardTests(unittest.TestCase):
                 {"id": "D2", "summary": "Earlier."},
                 {"id": "D10", "summary": "Later."},
             ],
+            "x_rows": [
+                {"id": "X2", "name": "Later extension", "summary": "Later."},
+                {"id": "X1", "name": "Earlier extension", "summary": "Earlier."},
+            ],
         }
 
         rendered = render_ledger_scorecard(scorecard)
@@ -265,6 +289,10 @@ class LedgerScorecardTests(unittest.TestCase):
         self.assertIn("Exact ratchet: 1/1 (met)", rendered)
         self.assertIn("Gaps: 2 (`closed`: 1; `open`: 1)", rendered)
         self.assertLess(rendered.index("- D2 — Earlier."), rendered.index("- D10 — Later."))
+        self.assertLess(
+            rendered.index("- X1 — **Earlier extension.** Earlier."),
+            rendered.index("- X2 — **Later extension.** Later."),
+        )
 
     def test_snapshot_command_prints_and_writes_the_same_document(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -288,6 +316,8 @@ class LedgerScorecardTests(unittest.TestCase):
             self.assertIn("## C++ → Rust file correspondence", completed.stdout)
             self.assertIn("Gaps: 10 (`closed`: 10; `open`: 0)", completed.stdout)
             self.assertIn("## D-row register", completed.stdout)
+            self.assertIn("## Additive host-extension register", completed.stdout)
+            self.assertIn("- X1 — **semantic-geometry-cache-authority.**", completed.stdout)
             self.assertNotIn("- D12", completed.stdout)
 
     @staticmethod

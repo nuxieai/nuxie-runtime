@@ -17,7 +17,7 @@ FEATURE_ROWS = {
     "src/artboard.cpp": (
         "partial",
         "crates/nuxie-runtime/src/artboard.rs",
-        "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Other historical Artboard ceilings keep this legacy row partial.",
+        "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Additive host extensions X1 semantic-geometry cache authority and X2 scripted-global occurrence broadcast are recorded separately and do not replace baseline Artboard behavior. Other historical Artboard ceilings keep this legacy row partial.",
     ),
     "src/text/cursor.cpp": (
         "ported",
@@ -51,8 +51,8 @@ FEATURE_ROWS = {
     ),
     "src/lua/renderer/lua_gpu.cpp": (
         "partial",
-        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs",
-        "GPUCEIL: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, and occurrence-lifetime cross-submission external texture identity through the proposed wgpu adaptation; mixed-file Canvas 2D/Image:view residue remains F7/F8.",
+        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs; crates/nuxie-renderer/src/gpu_canvas_shader.rs",
+        "GPUCEIL/D18: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, occurrence-lifetime cross-submission external texture identity, async browser validation before mount, and a fresh physical shader module per lookup. X3 records the additive direct-bytecode scalar input projection. Mixed-file Canvas 2D/Image:view residue remains F7/F8.",
     ),
     "src/joystick.cpp": (
         "ported",

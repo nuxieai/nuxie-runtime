@@ -191,7 +191,26 @@ Sync cycle.
 12. **[SUPERSEDED same day by #RD-1 — see map Phase RD.] Retained-renderer invalidation epochs (briefly user-approved 2026-07-21, #B-6 Family B).** The pure-Rust renderer retains replay caches (prepared paints/paths, draw command lists, text layout) that C++ has no counterpart for — C++ redraws through live objects each frame. The instance-to-cache version counters (cache/prepared/command/path/layout/text/draw-order/tree-paint epochs) are the invalidation bridge that retained design requires, validated by the 1,468/1,468 pixel gate and both golden gates. Guardrail: any epoch later found compensating for a missed PORT (lost C++ information) rather than bridging to the renderer is a defect and gets fixed individually — the distinction is "our design keeps more than C++" (feature cost, accepted) vs "our port lost what C++ had" (defect, rebuild).
 16. **Pure-Rust profiler capture backend (user-approved P1-m decomposition question 4, 2026-08-01).** The pinned 16-line `src/profiler/profiler.cpp` MicroProfile wrapper is replaced by a pluggable Rust `ProfileCapture` trait, with no MicroProfile or C++ FFI dependency. Fence: this is the FLR-21 **profiler-capture-backend** ceiling only. `RiveProfile` transition/listener records, stable string table, lifecycle and delayed-frame behavior, version-2 BinaryWriter bytes, and the original state-machine/listener hook semantics remain faithful obligations.
 17. **Symphonia audio decoder/resampler (Levi-approved P2-f decomposition question 5, 2026-08-01).** The pinned miniaudio memory decoder/channel converter/resampler is replaced by pure-Rust Symphonia decode plus the Rive-owned headless engine glue. WAV, MP3, and FLAC are wired; Vorbis remains recognized-but-unwired like the pinned build. Fence: this is the **decoded-PCM/resampled-frame** ceiling only. PCM bytes and individual decoded samples are never byte-pinned; offline differentials compare metadata plus energy/envelope presence, and resampled frame counts permit an absolute difference of at most two frames. Absolute-frame scheduling/clipping, engine clock, lifecycle/completion, per-artboard stop, levels, and sound volume remain exact obligations. CPAL/device output is not part of this adaptation or this package.
-18. **wgpu Lua GPU execution contract (Levi-approved GPUCEIL D-row, 2026-08-03).** The pinned ORE-backed objects in `src/lua/renderer/lua_gpu.cpp` are represented by Rust userdata, immutable backend-neutral submission snapshots, and retained wgpu resources. Equality obligations cover authored pipeline/resource selection, draw order and dynamic state, attachment load/store/resolve/depth behavior, texture upload history, stable resource identity across submissions, and resulting pixels under the existing renderer contract. Nuxie requires explicit `GPURenderPass:finish()` at script return rather than reproducing ORE's auto-finish/orphan-error lifecycle, and its factory retains at most 16 external GPU texture identities. Fence: this is the **lua-gpu-wgpu-adapter** ceiling only; it does not permit dropping GPU-prefixed names or substituting CPU rendering, and it does not include this mixed file's Canvas 2D or `Image:view` residue.
+18. **wgpu Lua GPU execution contract (Levi-approved GPUCEIL D-row, 2026-08-03).** The pinned ORE-backed objects in `src/lua/renderer/lua_gpu.cpp` are represented by Rust userdata, immutable backend-neutral submission snapshots, and retained wgpu resources. Equality obligations cover authored pipeline/resource selection, draw order and dynamic state, attachment load/store/resolve/depth behavior, texture upload history, stable resource identity across submissions, and resulting pixels under the existing renderer contract. Nuxie requires explicit `GPURenderPass:finish()` at script return rather than reproducing ORE's auto-finish/orphan-error lifecycle, and its factory retains at most 16 external GPU texture identities. Browser preparation asynchronously validates the exact immutable WGSL before Lua mounts because WebGPU error scopes are promise-backed; each synchronous shader lookup then allocates a fresh occurrence and physical module, preserving pinned C++ lookup ownership. Fence: this is the **lua-gpu-wgpu-adapter** ceiling only; it does not permit dropping GPU-prefixed names, sharing physical shader modules across lookups, or substituting CPU rendering, and it does not include this mixed file's Canvas 2D or `Image:view` residue.
+
+## Additive host-extension register
+
+These rows are host/editor additions, not parity exceptions or implementation
+ceilings. They may compose around the port but may not replace mapped C++
+behavior.
+
+- **X1 — semantic-geometry-cache-authority.** An opaque, fail-closed equality
+  token may invalidate editor semantic-geometry caches. It cannot suppress
+  baseline traversal, update, or drawing. Every covered visible-geometry
+  mutation, including empty-clip visibility membership, must publish to it.
+- **X2 — scripted-global-occurrence-broadcast.** A host facade may broadcast an
+  input to all currently retained occurrences of an authored global id. Each
+  changed occurrence uses the faithful per-object setter; equality coalescing
+  is confined to the named `_if_changed` facade.
+- **X3 — direct-gpu-bytecode-input-projection.** Editor-driven direct GPU
+  bytecode programs may expose scalar input setters that reuse the exact C++
+  `ScriptedObject` table-write conversions. Direct programs have no component
+  dirt graph; their caller initiates the next draw.
 
 ## H — Drift & housekeeping
 

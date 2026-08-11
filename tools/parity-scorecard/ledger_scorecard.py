@@ -14,8 +14,10 @@ SILVER_STATUS_LABELS = {
     "unsupported-feature": "unsupported",
 }
 D_SECTION = re.compile(r"^## D\b")
+X_SECTION = re.compile(r"^## Additive host-extension register$")
 SECTION = re.compile(r"^## ")
 D_ROW = re.compile(r"^(\d+)\.\s+(.*)$")
+X_ROW = re.compile(r"^- \*\*(X\d+) — (.+?)\.\*\*\s*(.*)$")
 SENTENCE_END = re.compile(r"^(.+?[.!?])(?:\s+(?=[A-Z\[`*_])|$)")
 
 
@@ -31,6 +33,7 @@ def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
     )
     frame_gaps = load_toml(repo_root / "docs" / "runtime-frame-loop-gaps.toml")
     d_rows = parse_d_rows((repo_root / "docs" / "parity-gap-register.md").read_text())
+    x_rows = parse_x_rows((repo_root / "docs" / "parity-gap-register.md").read_text())
 
     file_rows = table_rows(file_manifest, "file")
     pending_by_family: dict[str, list[str]] = collections.defaultdict(list)
@@ -115,6 +118,7 @@ def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
             "members": len(frame_members),
         },
         "d_rows": d_rows,
+        "x_rows": x_rows,
     }
 
 
@@ -189,6 +193,37 @@ def parse_d_rows(register: str) -> list[dict[str, str]]:
     return result
 
 
+def parse_x_rows(register: str) -> list[dict[str, str]]:
+    """Extract each additive host-extension row's name and first sentence."""
+    in_x_section = False
+    rows: list[tuple[str, str, list[str]]] = []
+    current: tuple[str, str, list[str]] | None = None
+
+    for line in register.splitlines():
+        if not in_x_section:
+            in_x_section = bool(X_SECTION.match(line))
+            continue
+        if SECTION.match(line):
+            break
+        match = X_ROW.match(line)
+        if match:
+            if current:
+                rows.append(current)
+            current = (match.group(1), match.group(2), [match.group(3)])
+        elif current and line.strip():
+            current[2].append(line.strip())
+    if current:
+        rows.append(current)
+
+    result = []
+    for row_id, name, fragments in sorted(rows, key=lambda row: int(row[0][1:])):
+        full_text = " ".join(" ".join(fragments).split())
+        match = SENTENCE_END.match(full_text)
+        summary = match.group(1) if match else full_text
+        result.append({"id": row_id, "name": name, "summary": summary})
+    return result
+
+
 def render_ledger_scorecard(scorecard: dict[str, Any]) -> str:
     """Render one deterministic Markdown view suitable for a terminal or docs."""
     cpp_to_rust = scorecard["cpp_to_rust"]
@@ -198,6 +233,7 @@ def render_ledger_scorecard(scorecard: dict[str, Any]) -> str:
     golden = scorecard["golden"]
     frame_loop = scorecard["frame_loop"]
     d_rows = scorecard["d_rows"]
+    x_rows = scorecard["x_rows"]
 
     exact = silver["status_counts"].get("exact", 0)
     ratchet_state = "met" if silver["ratchet_met"] else "MISSED"
@@ -263,6 +299,19 @@ def render_ledger_scorecard(scorecard: dict[str, Any]) -> str:
     lines.extend(
         f"- {row['id']} — {row['summary']}"
         for row in sorted(d_rows, key=lambda row: int(row["id"][1:]))
+    )
+    lines.extend(
+        [
+            "",
+            "## Additive host-extension register",
+            "",
+            f"Rows: {len(x_rows)}",
+            "",
+        ]
+    )
+    lines.extend(
+        f"- {row['id']} — **{row['name']}.** {row['summary']}"
+        for row in sorted(x_rows, key=lambda row: int(row["id"][1:]))
     )
     lines.append("")
     return "\n".join(lines)

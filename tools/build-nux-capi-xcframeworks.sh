@@ -13,8 +13,8 @@ targets=(
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
-        'root-package: nux-capi' \
-        'feature-set: apple-metal,scripting' \
+        'root-package: nux-apple-product-extension' \
+        'feature-set: apple-runtime' \
         'thin-builds: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin' \
         'artifact full-apple: all five thin builds' \
         'artifact ios-only: first three thin builds'
@@ -55,7 +55,7 @@ swift_path="$(command -v swift)"
 clang_path="$(xcrun --find clang)"
 rustc_version="$("${rust_compiler}" -vV | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 cargo_version="$("${rust_cargo}" -Vv | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
-runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-capi/Cargo.toml" | head -1)"
+runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-product-extension/Cargo.toml" | head -1)"
 source_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
 
 if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]]; then
@@ -108,7 +108,10 @@ contract_fingerprint="$({
         "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
         "${repo_root}/crates/nux-capi/abi-layout-v3.json" \
         "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
+        "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" \
+        "${repo_root}/crates/nux-apple-product-extension/include/module.modulemap" \
+        "${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 } | shasum -a 256 | awk '{ print $1 }')"
 
 xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
@@ -122,9 +125,8 @@ build_inputs_hash="$(
         write "${build_inputs_path}" \
         --repo-root "${repo_root}" \
         --cargo "${rust_cargo}" \
-        --root-package nux-capi \
-        --feature apple-metal \
-        --feature scripting \
+        --root-package nux-apple-product-extension \
+        --feature apple-runtime \
         --build-profile "${profile}" \
         --rust-toolchain "${rust_toolchain}" \
         --rustc-version "${rustc_version}" \
@@ -154,39 +156,41 @@ for target in "${targets[@]}"; do
     NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \
     NUX_RUNTIME_RUSTC_VERSION="${rustc_version}" \
     NUX_RUNTIME_SOURCE_REVISION="${source_revision}" \
+    NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-apple-product-extension" \
     CARGO_TARGET_DIR="${cargo_target_dir}" \
     RUSTC="${rust_compiler}" \
         "${rust_cargo}" build \
             --manifest-path "${repo_root}/Cargo.toml" \
             --locked \
-            --package nux-capi \
+            --package nux-apple-product-extension \
             --no-default-features \
-            --features apple-metal,scripting \
+            --features apple-runtime \
             --profile "${profile}" \
             --target "${target}"
     mkdir -p "${stripped_root}/${target}"
-    cp "${cargo_target_dir}/${target}/${profile}/libnux_capi.a" \
-        "${stripped_root}/${target}/libnux_capi.a"
+    cp "${cargo_target_dir}/${target}/${profile}/libnux_apple_product_extension.a" \
+        "${stripped_root}/${target}/libnux_apple_product_extension.a"
     "${rust_llvm_objcopy}" \
         --remove-section=__LLVM,__bitcode \
         --remove-section=__LLVM,__cmdline \
-        "${stripped_root}/${target}/libnux_capi.a"
+        "${stripped_root}/${target}/libnux_apple_product_extension.a"
 done
 
-device_library="${stripped_root}/aarch64-apple-ios/libnux_capi.a"
-arm_simulator_library="${stripped_root}/aarch64-apple-ios-sim/libnux_capi.a"
-intel_simulator_library="${stripped_root}/x86_64-apple-ios/libnux_capi.a"
-arm_macos_library="${stripped_root}/aarch64-apple-darwin/libnux_capi.a"
-intel_macos_library="${stripped_root}/x86_64-apple-darwin/libnux_capi.a"
-simulator_library="${universal_root}/libnux_capi-simulator.a"
-macos_library="${universal_root}/libnux_capi-macos.a"
+device_library="${stripped_root}/aarch64-apple-ios/libnux_apple_product_extension.a"
+arm_simulator_library="${stripped_root}/aarch64-apple-ios-sim/libnux_apple_product_extension.a"
+intel_simulator_library="${stripped_root}/x86_64-apple-ios/libnux_apple_product_extension.a"
+arm_macos_library="${stripped_root}/aarch64-apple-darwin/libnux_apple_product_extension.a"
+intel_macos_library="${stripped_root}/x86_64-apple-darwin/libnux_apple_product_extension.a"
+simulator_library="${universal_root}/libnux_apple_product_extension-simulator.a"
+macos_library="${universal_root}/libnux_apple_product_extension-macos.a"
 lipo -create "${arm_simulator_library}" "${intel_simulator_library}" -output "${simulator_library}"
 lipo -create "${arm_macos_library}" "${intel_macos_library}" -output "${macos_library}"
 
 cp "${repo_root}/crates/nux-capi/include/nux_capi.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-capi/include/nux_capi_apple.h" "${headers_dir}/"
-cp "${repo_root}/crates/nux-capi/include/module.modulemap" "${headers_dir}/"
+cp "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" "${headers_dir}/"
+cp "${repo_root}/crates/nux-apple-product-extension/include/module.modulemap" "${headers_dir}/"
 
 xcodebuild -create-xcframework \
     -library "${device_library}" -headers "${headers_dir}" \

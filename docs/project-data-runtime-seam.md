@@ -1,8 +1,10 @@
 # ProjectData runtime seam
 
-UNIV-1633 moves the ProjectDO converter model, compiler, envelope, evaluator,
-and errors into `nuxie-project-data`. The baseline `nuxie-runtime` retains only
-the Rive bind-graph integration and a product-neutral external-data contract.
+UNIV-1633 moves Nuxie's authored-data converter model, compiler, envelope,
+evaluator, and errors into `nuxie-project-data`. The baseline `nuxie-runtime`
+retains only the Rive bind-graph integration and a product-neutral external-data
+contract. “ProjectData” is the internal crate/type namespace for data authored
+into a Nuxie project; it is unrelated to ProjectDO persistence or networking.
 
 ## Decision
 
@@ -13,8 +15,11 @@ product crate owns durable identities, JSON, evaluation rules, and product
 errors. Neither side needs to know the other's internal graph or model.
 
 The process registry is empty until an authoring/product consumer calls
-`nuxie_project_data::install_runtime_adapter`. The shipping `nux-capi` closure
-does not install or depend on that adapter.
+`nuxie_project_data::install_runtime_adapter`. Baseline `nux-capi` does not
+install or depend on that adapter. The Apple distribution's upper-leaf
+`nux-apple-product-extension` installs it only through the explicit
+`nux_product_file_import_configured` entrypoint before delegating to baseline
+configured import.
 
 ## Prototype results
 

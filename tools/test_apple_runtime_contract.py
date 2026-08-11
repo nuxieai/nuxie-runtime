@@ -49,7 +49,7 @@ def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
             },
             "xcode": {"build": "17C52", "version": "26.2"},
         },
-        "features": ["apple-metal", "scripting"],
+        "features": ["apple-runtime"],
         "files": [
             {"kind": "cargo-resolution", "path": "Cargo.lock", "sha256": "a" * 64}
         ],
@@ -57,15 +57,37 @@ def valid_build_inputs() -> tuple[dict[str, object], bytes, str]:
             {
                 "checksum": None,
                 "lockEntryHash": None,
+                "manifestPath": "crates/nux-apple-product-extension/Cargo.toml",
+                "name": "nux-apple-product-extension",
+                "resolvedSourceHash": None,
+                "source": None,
+                "targets": {target: ["apple-runtime"] for target in APPLE_TARGETS},
+                "version": "0.6.0",
+            },
+            {
+                "checksum": None,
+                "lockEntryHash": None,
                 "manifestPath": "crates/nux-capi/Cargo.toml",
                 "name": "nux-capi",
                 "resolvedSourceHash": None,
                 "source": None,
-                "targets": {target: ["apple-metal", "scripting"] for target in APPLE_TARGETS},
-                "version": "0.5.0",
-            }
+                "targets": {
+                    target: ["apple-metal", "scripting"] for target in APPLE_TARGETS
+                },
+                "version": "0.6.0",
+            },
+            {
+                "checksum": None,
+                "lockEntryHash": None,
+                "manifestPath": "crates/nuxie-project-data/Cargo.toml",
+                "name": "nuxie-project-data",
+                "resolvedSourceHash": None,
+                "source": None,
+                "targets": {target: [] for target in APPLE_TARGETS},
+                "version": "0.1.0",
+            },
         ],
-        "rootPackage": "nux-capi",
+        "rootPackage": "nux-apple-product-extension",
         "schemaVersion": 1,
         "targets": APPLE_TARGETS,
     }
@@ -77,10 +99,10 @@ def valid_distribution_metadata() -> dict[str, object]:
     revision = "a" * 40
     return {
         "schemaVersion": 6,
-        "runtimeVersion": "0.5.0",
+        "runtimeVersion": "0.6.0",
         "buildSourceRevision": revision,
         "releaseRevision": revision,
-        "runtimeIdentity": f"0.5.0@{revision}",
+        "runtimeIdentity": f"0.6.0@{revision}",
         "contractFingerprint": "b" * 64,
         "buildInputsHash": "c" * 64,
         "artifacts": [
@@ -156,6 +178,14 @@ class BuildInputManifestTests(unittest.TestCase):
     def test_exact_slim_closure_passes(self) -> None:
         document, encoded, digest = valid_build_inputs()
         validate_build_inputs(document, encoded, digest)
+        self.assertEqual(
+            {package["name"] for package in document["packages"]},
+            {
+                "nux-apple-product-extension",
+                "nux-capi",
+                "nuxie-project-data",
+            },
+        )
 
     def test_root_features_and_retired_packages_fail_closed(self) -> None:
         for mutation, message in (
@@ -174,7 +204,6 @@ class BuildInputManifestTests(unittest.TestCase):
             "nuxie-apple-adapter",
             "nuxie-product",
             "nuxie-product-scripting",
-            "nuxie-project-data",
         ):
             with self.subTest(retired=retired):
                 document, _, _ = valid_build_inputs()
@@ -196,13 +225,15 @@ class BuildInputManifestTests(unittest.TestCase):
 
 
 class DistributionContractTests(unittest.TestCase):
-    def test_two_symbol_partitions_are_exact_and_disjoint(self) -> None:
+    def test_three_symbol_partitions_are_exact_and_disjoint(self) -> None:
         validate_symbol_partitions(
             {
                 "portable": "nux_file_free\nnux_player_step\n",
                 "appleExtension": "nux_renderer_free\n",
+                "productExtension": "nux_product_file_import_configured\n",
             },
-            "_nux_file_free\n_nux_player_step\n_nux_renderer_free\n_rust_eh_personality\n",
+            "_nux_file_free\n_nux_player_step\n_nux_renderer_free\n"
+            "_nux_product_file_import_configured\n_rust_eh_personality\n",
         )
         with self.assertRaisesRegex(ContractError, "overlap"):
             validate_symbol_partitions(
@@ -210,11 +241,16 @@ class DistributionContractTests(unittest.TestCase):
                 "_nux_file_free\n",
             )
 
-    def test_header_equals_the_two_manifests(self) -> None:
-        header = "NuxStatus nux_file_free(NuxFile *file);\nNuxStatus nux_renderer_free(NuxRenderer *renderer);\n"
+    def test_headers_equal_the_three_manifests(self) -> None:
+        header = (
+            "NuxStatus nux_file_free(NuxFile *file);\n"
+            "NuxStatus nux_renderer_free(NuxRenderer *renderer);\n"
+            "NuxStatus nux_product_file_import_configured(const uint8_t *bytes);\n"
+        )
         manifests = {
             "portable": "nux_file_free\n",
             "appleExtension": "nux_renderer_free\n",
+            "productExtension": "nux_product_file_import_configured\n",
         }
         validate_header_symbol_partitions(header, manifests)
         with self.assertRaisesRegex(ContractError, "missing=.*nux_player_step"):
@@ -228,17 +264,20 @@ class DistributionContractTests(unittest.TestCase):
         build_inputs = {
             "configuration": {"buildProfile": "release-apple", "rustc": "rustc 1.94.1"},
             "packages": [
-                {"name": "nux-capi", "targets": {target: ["apple-metal", "scripting"]}}
+                {
+                    "name": "nux-apple-product-extension",
+                    "targets": {target: ["apple-runtime"]},
+                }
             ],
         }
         provenance = {
             "schemaVersion": 6,
-            "rootPackage": "nux-capi",
-            "runtimeVersion": "0.5.0",
+            "rootPackage": "nux-apple-product-extension",
+            "runtimeVersion": "0.6.0",
             "buildSourceRevision": "a" * 40,
             "target": target,
             "profile": "release-apple",
-            "features": "apple-metal,scripting",
+            "features": "apple-runtime",
             "rustc": "rustc 1.94.1",
             "buildInputsHash": "c" * 64,
             "contractFingerprint": "b" * 64,
@@ -247,6 +286,14 @@ class DistributionContractTests(unittest.TestCase):
         validate_slice_provenance(encoded, metadata, build_inputs, target)
         with self.assertRaisesRegex(ContractError, "exactly one"):
             validate_slice_provenance(f"{encoded}\n{encoded}", metadata, build_inputs, target)
+        legacy = encoded.replace(
+            '"rootPackage":"nux-apple-product-extension"',
+            '"rootPackage":"nux-capi"',
+        )
+        with self.assertRaisesRegex(ContractError, "schema-6 provenance record"):
+            validate_slice_provenance(
+                f"{encoded}\n{legacy}", metadata, build_inputs, target
+            )
 
     def test_distribution_metadata_and_release_qualification(self) -> None:
         metadata = valid_distribution_metadata()

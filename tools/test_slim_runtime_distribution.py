@@ -33,12 +33,17 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         for relative in REMOVED_MIGRATION_FILES:
             self.assertFalse((REPO_ROOT / relative).exists(), relative)
 
-    def test_nux_capi_is_the_only_distribution_root(self) -> None:
-        manifest = (REPO_ROOT / "crates/nux-capi/Cargo.toml").read_text()
-        self.assertIn('version = "0.5.0"', manifest)
-        self.assertNotIn("legacy-migration", manifest)
+    def test_authored_data_extension_is_the_only_distribution_root(self) -> None:
+        capi_manifest = (REPO_ROOT / "crates/nux-capi/Cargo.toml").read_text()
+        extension_manifest = (
+            REPO_ROOT / "crates/nux-apple-product-extension/Cargo.toml"
+        ).read_text()
+        self.assertIn('version = "0.6.0"', capi_manifest)
+        self.assertIn('version = "0.6.0"', extension_manifest)
+        self.assertNotIn("legacy-migration", capi_manifest)
         for crate in REMOVED_CRATES:
-            self.assertNotIn(crate, manifest)
+            self.assertNotIn(crate, capi_manifest)
+            self.assertNotIn(crate, extension_manifest)
 
         plan = subprocess.run(
             [str(REPO_ROOT / "tools/build-nux-capi-xcframeworks.sh"), "--plan"],
@@ -47,28 +52,34 @@ class SlimRuntimeSourceTests(unittest.TestCase):
             capture_output=True,
             check=True,
         ).stdout
-        self.assertIn("root-package: nux-capi", plan)
-        self.assertIn("feature-set: apple-metal,scripting", plan)
+        self.assertIn("root-package: nux-apple-product-extension", plan)
+        self.assertIn("feature-set: apple-runtime", plan)
         self.assertNotIn("legacy", plan.lower())
 
-    def test_distribution_exposes_one_module_and_two_symbol_partitions(self) -> None:
-        module_map = (REPO_ROOT / "crates/nux-capi/include/module.modulemap").read_text()
+    def test_distribution_exposes_one_module_and_three_symbol_partitions(self) -> None:
+        extension_root = REPO_ROOT / "crates/nux-apple-product-extension"
+        module_map = (extension_root / "include/module.modulemap").read_text()
         self.assertEqual(module_map.count("module "), 1)
         self.assertIn("module NuxieRuntimeC", module_map)
+        self.assertIn('header "nux_product_extension.h"', module_map)
         self.assertNotIn("NuxieRuntimeFFI", module_map)
         self.assertNotIn("NuxieRuntimeInternal", module_map)
+        header = (extension_root / "include/nux_product_extension.h").read_text()
+        self.assertIn('#include "nux_capi_apple.h"', header)
+        self.assertIn("nux_product_file_import_configured", header)
         for smoke in ("capi_lifetime.swift", "capi_metal_smoke.swift"):
             source = (REPO_ROOT / "crates/nux-capi/smoke" / smoke).read_text()
             self.assertIn("import NuxieRuntimeC", source)
             self.assertNotIn("NuxieRuntimeInternal", source)
 
-        manifests = sorted(
-            path.name
-            for path in (REPO_ROOT / "crates/nux-capi").glob("exports-v3-*.txt")
-        )
+        manifests = sorted(path.name for path in extension_root.glob("exports-*.txt"))
         self.assertEqual(
             manifests,
-            ["exports-v3-apple-metal-extension.txt", "exports-v3-portable.txt"],
+            ["exports-v1-product-extension.txt"],
+        )
+        self.assertEqual(
+            (extension_root / manifests[0]).read_text(),
+            "nux_product_file_import_configured\n",
         )
 
     def test_release_size_evidence_pins_the_exact_v040_baseline(self) -> None:

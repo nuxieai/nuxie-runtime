@@ -2857,8 +2857,8 @@ impl nuxie_runtime::RuntimeExternalDataRegistry for ProductConverterRegistry {
     }
 }
 
-/// Install the ProjectDO converter implementation behind the baseline's
-/// product-neutral registry. Repeated calls are idempotent.
+/// Install Nuxie's authored-data converter implementation behind the baseline
+/// runtime's product-neutral registry. Repeated calls are idempotent.
 pub fn install_runtime_adapter() {
     nuxie_runtime::register_runtime_external_data_registry(Arc::new(ProductConverterRegistry));
 }

@@ -929,6 +929,39 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_the_authored_data_extension_above_capi_and_project_data(self) -> None:
+        self.create_package("crates/nux-capi", "nux-capi", "")
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        extension = self.create_package(
+            "crates/nux-apple-product-extension",
+            "nux-apple-product-extension",
+            """
+            [dependencies]
+            nux-capi = { path = "../nux-capi" }
+            nuxie-project-data = { path = "../nuxie-project-data" }
+            """,
+        )
+        (extension / "src/lib.rs").write_text(
+            "pub fn install() { nuxie_project_data::install_runtime_adapter(); }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_authored_data_extension_cannot_own_renderer_or_platform_code(self) -> None:
+        extension = self.create_package(
+            "crates/nux-apple-product-extension",
+            "nux-apple-product-extension",
+            "",
+        )
+        (extension / "src/lib.rs").write_text("use nuxie_renderer::WgpuFactory;\n")
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("platform/renderer ownership", result.stderr)
+
     def test_rejects_product_dependency_from_portable_abi(self) -> None:
         self.create_package(
             "crates/nux-capi",

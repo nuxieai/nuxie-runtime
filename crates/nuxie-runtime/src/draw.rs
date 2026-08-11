@@ -5234,15 +5234,12 @@ impl ArtboardInstance {
 
         let mut commands = Vec::with_capacity(container.paints.len());
         for (paint_index, paint) in container.paints.iter().enumerate() {
-            let (path_commands, prepared_raw_path) = match container.type_name {
-                "LayoutComponent" => (
-                    self.runtime_layout_component_paint_path_commands(
-                        container_local,
-                        paint,
-                        graph,
-                        layout_bounds,
-                    ),
-                    None,
+            let path_commands = match container.type_name {
+                "LayoutComponent" => self.runtime_layout_component_paint_path_commands(
+                    container_local,
+                    paint,
+                    graph,
+                    layout_bounds,
                 ),
                 "ForegroundLayoutDrawable" => {
                     // Ported from C++ `src/foreground_layout_drawable.cpp`:
@@ -5252,17 +5249,14 @@ impl ArtboardInstance {
                     let Some(layout_local) = layout_path_local else {
                         continue;
                     };
-                    (
-                        self.runtime_layout_component_paint_path_commands(
-                            layout_local,
-                            paint,
-                            graph,
-                            layout_bounds,
-                        ),
-                        None,
+                    self.runtime_layout_component_paint_path_commands(
+                        layout_local,
+                        paint,
+                        graph,
+                        layout_bounds,
                     )
                 }
-                _ => (Vec::new(), None),
+                _ => Vec::new(),
             };
             let Some(mut command) = runtime_shape_paint_command(
                 self,
@@ -5303,7 +5297,6 @@ impl ArtboardInstance {
             {
                 command.feather_state = Some(feather_state);
             }
-            command.prepared_raw_path = prepared_raw_path;
             if drawable.kind == DrawableOrderKind::LayoutProxy
                 || container.type_name == "ForegroundLayoutDrawable"
             {
@@ -5353,11 +5346,14 @@ impl ArtboardInstance {
                 continue;
             };
             let path_kind = runtime_live_owned_shape_paint_path_kind(self, owner);
-            let Some(source_path) = shape
+            let Some(source_path_owner) = shape
                 .paint_paths
                 .get(runtime_shape_paint_path_kind_slot(path_kind))
-                .and_then(|path| path.retained.borrow().as_ref().cloned())
             else {
+                continue;
+            };
+            let source_path = source_path_owner.retained.borrow();
+            let Some(source_path) = source_path.as_ref() else {
                 continue;
             };
             let path_commands = runtime_path_commands_from_raw_path(source_path.raw_path.as_ref());
@@ -5415,7 +5411,6 @@ impl ArtboardInstance {
                 text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
-                prepared_raw_path: Some(source_path.raw_path),
             });
         }
         assign_shape_paint_path_slot_indices(&mut commands);
@@ -14642,10 +14637,6 @@ pub struct RuntimeShapePaintCommand {
     pub(crate) text_paint_ref: Option<(usize, usize)>,
     pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
     pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
-    // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
-    // geometry is prepared behind path dirt and shared by every paint that
-    // selects the same shape path. RenderPath creation remains lazy in draw.
-    prepared_raw_path: Option<Arc<RawPath>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15821,23 +15812,9 @@ struct RuntimeGradientShaderCacheEntry {
 
 struct RuntimeCachedDrawPath {
     path: Box<dyn RenderPath>,
-    raw_path: RuntimeCachedDrawRawPath,
+    raw_path: RawPath,
     revision: RuntimeDrawPathRevision,
     fill_rule: RenderFillRule,
-}
-
-enum RuntimeCachedDrawRawPath {
-    Owned(RawPath),
-    Prepared(Arc<RawPath>),
-}
-
-impl RuntimeCachedDrawRawPath {
-    fn as_raw_path(&self) -> &RawPath {
-        match self {
-            Self::Owned(path) => path,
-            Self::Prepared(path) => path.as_ref(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15907,63 +15884,21 @@ impl RuntimeDrawPathSlots {
         fill_rule: RenderFillRule,
         replay_fill_rule: Option<RenderFillRule>,
     ) -> &mut Box<dyn RenderPath> {
-        self.draw_path_with_optional_fill_rule_and_prepared_raw_path(
-            key,
-            revision,
-            factory,
-            commands,
-            fill_rule,
-            replay_fill_rule,
-            None,
-        )
-    }
-
-    fn draw_path_with_optional_fill_rule_and_prepared_raw_path(
-        &mut self,
-        key: RuntimeDrawPathCacheKey,
-        revision: RuntimeDrawPathRevision,
-        factory: &mut dyn RenderFactory,
-        commands: &[RuntimePathCommand],
-        fill_rule: RenderFillRule,
-        replay_fill_rule: Option<RenderFillRule>,
-        prepared_raw_path: Option<&Arc<RawPath>>,
-    ) -> &mut Box<dyn RenderPath> {
         let cached = self.slot_mut(key).get_or_insert_with(|| {
-            let raw_path = match prepared_raw_path {
-                Some(path) => RuntimeCachedDrawRawPath::Prepared(path.clone()),
-                None => {
-                    record_runtime_draw_path_command_replay();
-                    RuntimeCachedDrawRawPath::Owned(runtime_raw_path_from_commands(commands))
-                }
-            };
+            record_runtime_draw_path_command_replay();
+            let raw_path = runtime_raw_path_from_commands(commands);
             RuntimeCachedDrawPath {
-                path: runtime_make_path_from_raw_path(factory, raw_path.as_raw_path(), fill_rule),
+                path: runtime_make_path_from_raw_path(factory, &raw_path, fill_rule),
                 raw_path,
                 revision,
                 fill_rule,
             }
         });
         if cached.revision != revision {
-            match prepared_raw_path {
-                Some(path) => cached.raw_path = RuntimeCachedDrawRawPath::Prepared(path.clone()),
-                None => match &mut cached.raw_path {
-                    RuntimeCachedDrawRawPath::Owned(raw_path) => {
-                        record_runtime_draw_path_command_replay();
-                        runtime_rebuild_raw_path_from_commands(raw_path, commands);
-                    }
-                    RuntimeCachedDrawRawPath::Prepared(_) => {
-                        record_runtime_draw_path_command_replay();
-                        cached.raw_path = RuntimeCachedDrawRawPath::Owned(
-                            runtime_raw_path_from_commands(commands),
-                        );
-                    }
-                },
-            }
+            record_runtime_draw_path_command_replay();
+            runtime_rebuild_raw_path_from_commands(&mut cached.raw_path, commands);
             let (path, raw_path) = (&mut cached.path, &cached.raw_path);
-            runtime_rebuild_path_from_raw_path_preserving_fill_rule(
-                path.as_mut(),
-                raw_path.as_raw_path(),
-            );
+            runtime_rebuild_path_from_raw_path_preserving_fill_rule(path.as_mut(), raw_path);
             cached.revision = revision;
         }
         if let Some(replay_fill_rule) = replay_fill_rule
@@ -16506,37 +16441,14 @@ impl RuntimeArtboardPathState {
         fill_rule: RenderFillRule,
         replay_fill_rule: Option<RenderFillRule>,
     ) -> &mut Box<dyn RenderPath> {
-        self.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+        self.draw_paths.draw_path_with_optional_fill_rule(
             key,
             revision,
             factory,
             commands,
             fill_rule,
             replay_fill_rule,
-            None,
         )
-    }
-
-    fn draw_path_with_optional_fill_rule_and_prepared_raw_path(
-        &mut self,
-        key: RuntimeDrawPathCacheKey,
-        revision: RuntimeDrawPathRevision,
-        factory: &mut dyn RenderFactory,
-        commands: &[RuntimePathCommand],
-        fill_rule: RenderFillRule,
-        replay_fill_rule: Option<RenderFillRule>,
-        prepared_raw_path: Option<&Arc<RawPath>>,
-    ) -> &mut Box<dyn RenderPath> {
-        self.draw_paths
-            .draw_path_with_optional_fill_rule_and_prepared_raw_path(
-                key,
-                revision,
-                factory,
-                commands,
-                fill_rule,
-                replay_fill_rule,
-                prepared_raw_path,
-            )
     }
 }
 
@@ -17730,7 +17642,6 @@ fn runtime_prepare_gradient_paint_command(
         text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
-        prepared_raw_path: None,
     }
 }
 
@@ -19485,14 +19396,7 @@ fn runtime_draw_live_shape_paint(
 
     let replay_fill_rule =
         (paint.paint_type == RuntimeShapePaintKind::Fill).then_some(paint.fill_rule);
-    let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
-        !paint
-            .feather_state
-            .as_ref()
-            .is_some_and(|feather| feather.inner)
-            && !paint.has_effect_path
-    });
-    let path = draw_paths.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+    let path = draw_paths.draw_path_with_optional_fill_rule(
         RuntimeDrawPathCacheKey {
             kind: RuntimeDrawPathCacheKind::Draw,
             path_kind: runtime_draw_path_cache_path_kind(paint),
@@ -19504,7 +19408,6 @@ fn runtime_draw_live_shape_paint(
         draw_path_commands,
         RenderFillRule::Clockwise,
         replay_fill_rule,
-        prepared_raw_path,
     );
     let render_paint = paint_by_global
         .paint(global_id)
@@ -19583,14 +19486,8 @@ fn runtime_draw_path_revision(
     let component_path_revision = instance
         .component(local_id)
         .map_or(0, |component| component.path_revision());
-    let prepared_revision = paint
-        .prepared_raw_path
-        .as_ref()
-        .map_or(0, |path| path.mutation_id());
     RuntimeDrawPathRevision {
-        path_epoch: component_path_revision
-            .wrapping_mul(31)
-            .wrapping_add(prepared_revision),
+        path_epoch: component_path_revision,
         world_epoch: if paint.path_kind == RuntimeShapePaintPathKind::World {
             instance.prepared_epoch()
         } else {
@@ -21379,7 +21276,6 @@ fn runtime_shape_paint_command_with_effect_path(
         text_paint_ref: None,
         text_paint_pool: None,
         ensure_text_paint_pool_after_draw: None,
-        prepared_raw_path: None,
     })
 }
 
@@ -28155,7 +28051,6 @@ mod tests {
                 text_paint_ref: None,
                 text_paint_pool: None,
                 ensure_text_paint_pool_after_draw: None,
-                prepared_raw_path: None,
             }]),
             replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
             paths: Arc::new(BTreeMap::new()),
@@ -34506,88 +34401,6 @@ mod tests {
         assert_eq!(stats.closes.get(), 0);
         assert_eq!(third_verbs, 3);
         assert_eq!(third_points, 2);
-    }
-
-    #[test]
-    fn draw_path_replays_prepared_raw_path_without_command_conversion() {
-        let stats = Rc::new(CountingStats::default());
-        let mut factory = CountingFactory {
-            stats: Rc::clone(&stats),
-            next_path_id: 0,
-        };
-        let mut cache = RuntimeArtboardPathState::default();
-        let key = RuntimeDrawPathCacheKey {
-            kind: RuntimeDrawPathCacheKind::Draw,
-            path_kind: RuntimeShapePaintPathKind::Local,
-            local_id: Some(7),
-            path_index: 0,
-        };
-        let revision = RuntimeDrawPathRevision {
-            path_epoch: 10,
-            world_epoch: 0,
-        };
-        let commands = vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
-        ];
-        let raw_path = Arc::new(runtime_raw_path_from_commands(&commands));
-        reset_runtime_draw_path_command_replays();
-
-        let first_id = cache
-            .draw_path_with_optional_fill_rule_and_prepared_raw_path(
-                key,
-                revision,
-                &mut factory,
-                &commands,
-                RenderFillRule::Clockwise,
-                None,
-                Some(&raw_path),
-            )
-            .as_any()
-            .downcast_ref::<CountingRenderPath>()
-            .expect("counting path")
-            .id;
-        assert_eq!(runtime_draw_path_command_replays(), 0);
-        assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 0);
-
-        let changed_commands = vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
-            RuntimePathCommand::Close,
-        ];
-        let changed_raw_path = Arc::new(runtime_raw_path_from_commands(&changed_commands));
-        let (second_id, second_verbs, second_points) = {
-            let path = cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
-                key,
-                RuntimeDrawPathRevision {
-                    path_epoch: 11,
-                    ..revision
-                },
-                &mut factory,
-                &changed_commands,
-                RenderFillRule::Clockwise,
-                None,
-                Some(&changed_raw_path),
-            );
-            let path = path
-                .as_any()
-                .downcast_ref::<CountingRenderPath>()
-                .expect("counting path");
-            (
-                path.id,
-                path.raw_path.verbs().len(),
-                path.raw_path.points().len(),
-            )
-        };
-
-        assert_eq!(second_id, first_id, "RenderPath identity remains retained");
-        assert_eq!(second_verbs, 3);
-        assert_eq!(second_points, 2);
-        assert_eq!(runtime_draw_path_command_replays(), 0);
-        assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
-        assert_eq!(stats.add_raw_paths.get(), 2);
     }
 
     #[test]

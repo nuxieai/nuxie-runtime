@@ -344,6 +344,10 @@ fn path_fixture_artboard() -> ArtboardInstance {
 }
 
 fn solid_color_fixture_artboard() -> ArtboardInstance {
+    solid_color_fixture().2
+}
+
+fn solid_color_fixture() -> (RuntimeFile, GraphFile, ArtboardInstance) {
     let file = RuntimeFile::from_fixture_records(vec![
         fixture_record("Backboard", vec![]),
         fixture_record("Artboard", vec![]),
@@ -373,8 +377,10 @@ fn solid_color_fixture_artboard() -> ArtboardInstance {
     ])
     .expect("solid-color fixture imports");
     let graphs = GraphFile::from_runtime_file(&file).expect("solid-color fixture graph builds");
-    ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
-        .expect("solid-color fixture instantiates")
+    let artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .expect("solid-color fixture instantiates");
+    (file, graphs, artboard)
 }
 
 fn stroke_fixture_artboard() -> ArtboardInstance {
@@ -2025,7 +2031,7 @@ fn semantic_geometry_revision_is_stable_across_non_geometry_settlement() {
 #[cfg(feature = "tools")]
 #[test]
 fn path_composer_reuses_retained_path_storage_across_rebuild() {
-    let mut artboard = solid_color_fixture_artboard();
+    let (_file, graphs, mut artboard) = solid_color_fixture();
     artboard.update_pass();
     let shape_local = artboard
         .components()
@@ -2037,8 +2043,22 @@ fn path_composer_reuses_retained_path_storage_across_rebuild() {
         .debug_runtime_shape_path_identities(shape_local)
         .expect("fixture retains Shape path owners");
     assert!(before.iter().all(Option::is_some));
+    let compatibility_report = artboard.draw_commands(&graphs.artboards[0]);
+    assert!(
+        compatibility_report
+            .iter()
+            .any(|command| !command.shape_paints.is_empty()),
+        "fixture exposes a compatibility ShapePaint report",
+    );
+    let rectangle_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Rectangle")
+        .map(|component| component.local_id)
+        .expect("fixture has a Rectangle");
+    let width = fixture_property("Rectangle", "width", FixtureValue::Double(20.0)).key;
 
-    assert!(artboard.set_transform_property(shape_local, TransformProperty::X, 5.0));
+    assert!(artboard.set_double_property(rectangle_local, width, 20.0));
     artboard.update_pass();
 
     assert_eq!(
@@ -2048,4 +2068,5 @@ fn path_composer_reuses_retained_path_storage_across_rebuild() {
         before,
         "pinned C++ PathComposer rewinds and reuses its three ShapePaintPaths"
     );
+    drop(compatibility_report);
 }

@@ -140,6 +140,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: make runtime-frame-loop-port-gate
 
+      - name: Proof-aware parity scorecard gate
+        if: ${{ !cancelled() }}
+        run: make parity-scorecard
+
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own
   # scorecard evidence, so this job no longer re-runs that floor on a second

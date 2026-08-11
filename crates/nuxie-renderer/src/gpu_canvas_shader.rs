@@ -22,12 +22,24 @@ use super::Context;
 
 pub(super) struct WgpuGpuCanvasShader {
     pub(super) occurrence_id: u64,
+    template: Arc<WgpuGpuCanvasShaderTemplate>,
+}
+
+pub(super) struct WgpuGpuCanvasShaderTemplate {
     pub(super) owner: Weak<Context>,
     pub(super) shader: GpuCanvasShader,
     pub(super) parsed: ParsedAuthoredWgsl,
     pub(super) uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
     pub(super) resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
     pub(super) module: wgpu::ShaderModule,
+}
+
+impl std::ops::Deref for WgpuGpuCanvasShader {
+    type Target = WgpuGpuCanvasShaderTemplate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.template
+    }
 }
 
 impl RenderGpuCanvasShader for WgpuGpuCanvasShader {
@@ -87,20 +99,47 @@ impl PreparedShader {
 
 impl UnvalidatedShader {
     fn publish(self) -> Arc<dyn RenderGpuCanvasShader> {
-        Arc::new(WgpuGpuCanvasShader {
-            occurrence_id: self
-                .prepared
-                .owner
-                .next_gpu_canvas_shader_occurrence_id
-                .fetch_add(1, Ordering::Relaxed),
-            owner: Arc::downgrade(&self.prepared.owner),
+        let owner = Arc::clone(&self.prepared.owner);
+        let template = Arc::new(WgpuGpuCanvasShaderTemplate {
+            owner: Arc::downgrade(&owner),
             shader: self.prepared.shader,
             parsed: self.prepared.parsed,
             uniform_requirements: self.prepared.uniform_requirements,
             resource_requirements: self.prepared.resource_requirements,
             module: self.module,
+        });
+        Arc::new(WgpuGpuCanvasShader {
+            occurrence_id: owner
+                .next_gpu_canvas_shader_occurrence_id
+                .fetch_add(1, Ordering::Relaxed),
+            template,
         })
     }
+}
+
+pub(super) fn publish_occurrence(
+    owner: &Arc<Context>,
+    prepared: &Arc<dyn RenderGpuCanvasShader>,
+) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+    let prepared = prepared
+        .as_any()
+        .downcast_ref::<WgpuGpuCanvasShader>()
+        .ok_or_else(|| GpuCanvasError::new("foreign shader backend"))?;
+    let prepared_owner = prepared
+        .owner
+        .upgrade()
+        .ok_or_else(|| GpuCanvasError::new("prepared shader device is unavailable"))?;
+    if !Arc::ptr_eq(owner, &prepared_owner) {
+        return Err(GpuCanvasError::new(
+            "prepared shader belongs to a different device",
+        ));
+    }
+    Ok(Arc::new(WgpuGpuCanvasShader {
+        occurrence_id: owner
+            .next_gpu_canvas_shader_occurrence_id
+            .fetch_add(1, Ordering::Relaxed),
+        template: Arc::clone(&prepared.template),
+    }))
 }
 
 fn validation_error(error: wgpu::Error) -> GpuCanvasError {

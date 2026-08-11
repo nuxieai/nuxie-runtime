@@ -1684,6 +1684,13 @@ impl Factory for WgpuFactory {
         }
     }
 
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        gpu_canvas_shader::publish_occurrence(&self.context, prepared)
+    }
+
     fn make_gpu_canvas_image(
         &mut self,
         vertex_shader: &Arc<dyn RenderGpuCanvasShader>,

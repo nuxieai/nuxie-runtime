@@ -253,6 +253,13 @@ impl Factory for AppleAssetFactory<'_> {
         self.inner.load_gpu_canvas_shader(shader)
     }
 
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.inner.make_gpu_canvas_shader_occurrence(prepared)
+    }
+
     fn make_gpu_canvas_image(
         &mut self,
         vertex_shader: &Arc<dyn RenderGpuCanvasShader>,

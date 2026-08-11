@@ -2,13 +2,11 @@
 
 //! UNIV-1764: native repro of the browser-only async instantiation path.
 //!
-//! Browser WebGPU resolves `context:shader` through an asynchronous device
-//! validation scope, so the implicit generator coroutine genuinely suspends
-//! between `context:gpuCanvas()` and the returned `drawCanvas` closure that
-//! captures the canvas userdata. These tests drive the exact production entry
-//! point (`instantiate_registered_script_with_factory_async`) with a factory
-//! whose `load_gpu_canvas_shader` stays `Pending` across polls, matching the
-//! real Chrome timeline without a browser.
+//! Browser WebGPU validates imported shader assets asynchronously before the
+//! synchronous script generator runs. These tests drive the exact production
+//! entry point (`instantiate_registered_script_with_factory_async`) with a
+//! factory whose `load_gpu_canvas_shader` stays `Pending` across polls,
+//! matching the real Chrome preparation timeline without a browser.
 
 use std::any::Any;
 use std::future::Future;
@@ -68,6 +66,60 @@ return function(context)
     }
 end
 "##;
+
+const LAZY_SHADER_SCRIPT: &[u8] = br#"
+return function(context)
+    local canvas = context:gpuCanvas()
+    local pipeline = nil
+    return {
+        drawCanvas = function(self)
+            if pipeline == nil then
+                local shader = context:shader("scene")
+                pipeline = GPUPipeline.new {
+                    vertex = { module = shader, entryPoint = "first_vertex" },
+                    fragment = { module = shader, entryPoint = "first_fragment" },
+                    vertexLayout = {},
+                    colorTargets = { { format = "rgba8unorm" } },
+                }
+                canvas:resize(8, 8)
+            end
+            local pass = canvas:beginRenderPass {
+                color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
+            }
+            pass:setPipeline(pipeline)
+            pass:draw(3)
+            pass:finish()
+        end,
+        draw = function(self, renderer) end,
+    }
+end
+"#;
+
+const TWO_LOOKUP_SHADER_SCRIPT: &[u8] = br#"
+return function(context)
+    local canvas = context:gpuCanvas()
+    local vertexShader = context:shader("scene")
+    local fragmentShader = context:shader("scene")
+    local pipeline = GPUPipeline.new {
+        vertex = { module = vertexShader, entryPoint = "first_vertex" },
+        fragment = { module = fragmentShader, entryPoint = "first_fragment" },
+        vertexLayout = {},
+        colorTargets = { { format = "rgba8unorm" } },
+    }
+    canvas:resize(8, 8)
+    return {
+        drawCanvas = function(self)
+            local pass = canvas:beginRenderPass {
+                color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
+            }
+            pass:setPipeline(pipeline)
+            pass:draw(3)
+            pass:finish()
+        end,
+        draw = function(self, renderer) end,
+    }
+end
+"#;
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
@@ -136,6 +188,7 @@ fn complete_shader_payload(color: &str) -> Vec<u8> {
 #[derive(Debug)]
 struct ObservedShader {
     domain: Weak<()>,
+    occurrence_id: u64,
 }
 
 impl RenderGpuCanvasShader for ObservedShader {
@@ -160,9 +213,9 @@ impl RenderImage for TestImage {
     }
 }
 
-/// Stays `Pending` for `pending_polls` polls before resolving, so the implicit
-/// generator coroutine suspends and resumes exactly like the browser's
-/// validation-scope promise.
+/// Stays `Pending` for `pending_polls` polls before resolving, so pre-generator
+/// preparation suspends and resumes exactly like the browser's validation
+/// promise.
 struct DeferredLoad {
     pending_polls: u32,
     result: Option<Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError>>,
@@ -190,6 +243,10 @@ struct AsyncFactory {
     domain: Arc<()>,
     reject_modules: bool,
     load_calls: u32,
+    make_calls: u32,
+    occurrence_calls: u32,
+    next_occurrence_id: u64,
+    image_occurrences: Vec<(u64, u64)>,
 }
 
 impl AsyncFactory {
@@ -199,7 +256,20 @@ impl AsyncFactory {
             domain: Arc::new(()),
             reject_modules,
             load_calls: 0,
+            make_calls: 0,
+            occurrence_calls: 0,
+            next_occurrence_id: 1,
+            image_occurrences: Vec::new(),
         }
+    }
+
+    fn fresh_observed_shader(&mut self) -> Arc<dyn RenderGpuCanvasShader> {
+        let occurrence_id = self.next_occurrence_id;
+        self.next_occurrence_id += 1;
+        Arc::new(ObservedShader {
+            domain: Arc::downgrade(&self.domain),
+            occurrence_id,
+        })
     }
 }
 
@@ -259,12 +329,32 @@ impl Factory for AsyncFactory {
         &mut self,
         _shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_calls += 1;
         if self.reject_modules {
             return Err(GpuCanvasError::new("device rejected the physical module"));
         }
-        Ok(Arc::new(ObservedShader {
-            domain: Arc::downgrade(&self.domain),
-        }))
+        Ok(self.fresh_observed_shader())
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.occurrence_calls += 1;
+        let observed = prepared
+            .as_any()
+            .downcast_ref::<ObservedShader>()
+            .ok_or_else(|| GpuCanvasError::new("foreign shader backend"))?;
+        let domain = observed
+            .domain
+            .upgrade()
+            .ok_or_else(|| GpuCanvasError::new("shader domain expired"))?;
+        if !Arc::ptr_eq(&domain, &self.domain) {
+            return Err(GpuCanvasError::new(
+                "shader belongs to another factory/device domain",
+            ));
+        }
+        Ok(self.fresh_observed_shader())
     }
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
@@ -282,7 +372,8 @@ impl Factory for AsyncFactory {
         fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         _plan: &nuxie_render_api::GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        for shader in [vertex_shader, fragment_shader] {
+        let mut occurrence_ids = [0; 2];
+        for (index, shader) in [vertex_shader, fragment_shader].into_iter().enumerate() {
             let observed = shader
                 .as_any()
                 .downcast_ref::<ObservedShader>()
@@ -296,7 +387,10 @@ impl Factory for AsyncFactory {
                     "shader belongs to another factory/device domain",
                 ));
             }
+            occurrence_ids[index] = observed.occurrence_id;
         }
+        self.image_occurrences
+            .push((occurrence_ids[0], occurrence_ids[1]));
         Ok(Box::new(TestImage))
     }
 }
@@ -343,6 +437,62 @@ fn awaited_shader_closure_keeps_captured_canvas_after_coroutine_completes() {
 }
 
 #[test]
+fn prepared_shader_is_available_to_lazy_draw_canvas_lookup() {
+    let vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("lazy"))
+        .unwrap();
+    let mut factory = PersistentFactory::new(AsyncFactory::new(false));
+    let program = vm
+        .register_protocol_script_with_factory(
+            "lazy",
+            &script_payload(LAZY_SHADER_SCRIPT),
+            &mut factory,
+        )
+        .unwrap();
+    let mut instance =
+        block_on(vm.instantiate_registered_script_with_factory_async(&program, &mut factory))
+            .expect("shader catalog preparation succeeds before a lazy lookup");
+    assert_eq!(factory.borrow().load_calls, 1);
+
+    let mut renderer = factory.borrow().inner.make_renderer();
+    let mut host = NoopScriptHost;
+    instance
+        .call_draw(&mut factory, &mut renderer, &mut host)
+        .expect("drawCanvas reuses the prepared physical module");
+    assert_eq!(factory.borrow().load_calls, 1);
+}
+
+#[test]
+fn prepared_same_name_lookups_publish_distinct_shader_occurrences() {
+    let vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("two-lookups"))
+        .unwrap();
+    let mut factory = PersistentFactory::new(AsyncFactory::new(false));
+    let program = vm
+        .register_protocol_script_with_factory(
+            "two-lookups",
+            &script_payload(TWO_LOOKUP_SHADER_SCRIPT),
+            &mut factory,
+        )
+        .unwrap();
+    let mut instance =
+        block_on(vm.instantiate_registered_script_with_factory_async(&program, &mut factory))
+            .expect("prepared asset publishes a fresh occurrence for each lookup");
+
+    assert_eq!(factory.borrow().load_calls, 1);
+    assert_eq!(factory.borrow().occurrence_calls, 2);
+
+    let mut renderer = factory.borrow().inner.make_renderer();
+    let mut host = NoopScriptHost;
+    instance
+        .call_draw(&mut factory, &mut renderer, &mut host)
+        .expect("distinct occurrences can be used in one pipeline");
+    let image_occurrences = factory.borrow().image_occurrences.clone();
+    assert_eq!(image_occurrences.len(), 1);
+    assert_ne!(image_occurrences[0].0, image_occurrences[0].1);
+}
+
+#[test]
 fn awaited_rejected_shader_returns_zero_values_and_execution_continues() {
     let vm = ScriptVm::new();
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("rejected"))
@@ -358,11 +508,24 @@ fn awaited_rejected_shader_returns_zero_values_and_execution_continues() {
     let mut instance =
         block_on(vm.instantiate_registered_script_with_factory_async(&program, &mut factory))
             .expect("a rejected physical module is zero Lua values, not an error");
-    assert_eq!(factory.borrow().load_calls, 2);
+    assert_eq!(factory.borrow().load_calls, 1);
+    assert_eq!(factory.borrow().make_calls, 3);
 
     let mut host = NoopScriptHost;
     assert_eq!(
         instance
+            .call_method(nuxie_runtime::ScriptMethod::Evaluate, &[], &mut host)
+            .unwrap(),
+        nuxie_runtime::ScriptValue::Bool(true)
+    );
+
+    let mut retry =
+        block_on(vm.instantiate_registered_script_with_factory_async(&program, &mut factory))
+            .expect("a later instantiation retries a previously rejected module");
+    assert_eq!(factory.borrow().load_calls, 2);
+    assert_eq!(factory.borrow().make_calls, 6);
+    assert_eq!(
+        retry
             .call_method(nuxie_runtime::ScriptMethod::Evaluate, &[], &mut host)
             .unwrap(),
         nuxie_runtime::ScriptValue::Bool(true)

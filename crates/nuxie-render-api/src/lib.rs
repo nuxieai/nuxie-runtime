@@ -1680,6 +1680,17 @@ pub trait Factory {
         GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader(shader))
     }
 
+    /// Publish one fresh lookup-owned occurrence from a module that this
+    /// factory previously validated asynchronously. Browser WebGPU uses this
+    /// to keep synchronous Lua lookup identity after `popErrorScope()` has
+    /// completed; native factories do not need to override it.
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        _prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
+
     /// Execute one imported GPU-canvas plan and retain its result as a normal
     /// render image suitable for `Renderer::draw_image`.
     ///
@@ -1776,6 +1787,14 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
         self.borrow_mut().load_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.borrow_mut()
+            .make_gpu_canvas_shader_occurrence(prepared)
     }
 
     fn make_gpu_canvas_image(

@@ -52,8 +52,10 @@ Experience lifecycle, Flow/session policy, `.nux` acquisition and
 authentication, product-specific host commands, and Apple application
 orchestration are no longer runtime crates. The Swift SDK owns those concepts
 on Apple platforms and consumes the raw C ABI. `nuxie-project-data` remains an
-authoring/project conversion owner in this workspace, but is forbidden from
-the distributed `nux-capi` dependency closure.
+authored-data conversion owner above the baseline. The distributed
+`nux-apple-product-extension` may install that converter through one explicit,
+product-named import entrypoint; `nux-capi` itself never depends on or installs
+the converter.
 
 ### Editor authoring
 
@@ -81,14 +83,20 @@ outcomes. `nux-capi` also composes the generic scripting and image-decoding
 seams required by the SDK. The caller owns layer configuration, drawable
 acquisition, actor and frame scheduling, and every product concept.
 
+The shipping Apple archive is rooted at `nux-apple-product-extension`. That
+upper leaf combines `nux-capi` with `nuxie-project-data` while exporting only
+`nux_product_file_import_configured` in addition to the product-neutral CAPI.
+It does not own platform rendering or lifecycle policy, and it does not revive
+the retired `NuxieRuntimeFFI` package.
+
 ### Portable ABI and oracle consumers
 
 `nux-capi` adapts baseline operations into C calling conventions, handles,
-errors, callbacks, and buffer negotiation. Its Apple feature is a platform
-extension of that same product-neutral distribution, not a product facade.
-Package, experience, screen, journey, authentication, and SDK-session
-operations are absent from the C distribution. Replay and oracle tools import
-the baseline directly so parity evidence cannot depend on product glue.
+errors, callbacks, and buffer negotiation. Its Apple feature is a
+product-neutral platform extension. Product lifecycle operations remain
+absent; the separately owned authored-data leaf adds only converter
+installation plus configured import. Replay and oracle tools import the
+baseline directly so parity evidence cannot depend on product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
 edge rather than migration debt. It reaches only the audited baseline facade:

@@ -10,6 +10,7 @@ members = [
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nuxie-project-data",
+    "crates/nux-apple-product-extension",
     "crates/nux-capi",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",

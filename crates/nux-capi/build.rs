@@ -7,6 +7,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=NUX_RUNTIME_CONTRACT_FINGERPRINT");
     println!("cargo:rerun-if-env-changed=NUX_RUNTIME_BUILD_PROFILE");
     println!("cargo:rerun-if-env-changed=NUX_RUNTIME_RUSTC_VERSION");
+    println!("cargo:rerun-if-env-changed=NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE");
     println!("cargo:rerun-if-env-changed=NUX_CAPI_UPDATE_HEADER");
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=cbindgen.toml");
@@ -25,6 +26,12 @@ fn main() {
 }
 
 fn emit_build_provenance(revision: &str) {
+    let distribution_root = std::env::var("NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE")
+        .unwrap_or_else(|_| "nux-capi".to_owned());
+    if distribution_root != "nux-capi" {
+        println!("cargo:rustc-env=NUX_CAPI_BUILD_PROVENANCE=dependency-of:{distribution_root}");
+        return;
+    }
     let required =
         |name: &str| std::env::var(name).unwrap_or_else(|_| format!("unqualified:{name}"));
     let target = required("TARGET");

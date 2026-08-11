@@ -53,9 +53,11 @@ PRODUCT_LAYER_FORBIDDEN_SOURCE = re.compile(
 # reviewed in the same diff as the new package.
 UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
+    "nux-apple-product-extension",
     "nuxie-project-data",
 }
 PRODUCT_LAYER_PACKAGES = {
+    "nux-apple-product-extension",
     "nuxie-project-data",
 }
 EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}

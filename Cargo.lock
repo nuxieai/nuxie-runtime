@@ -1248,8 +1248,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nux-apple-product-extension"
+version = "0.6.0"
+dependencies = [
+ "nux-capi",
+ "nuxie-project-data",
+ "nuxie-schema",
+]
+
+[[package]]
 name = "nux-capi"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "cbindgen",
  "dispatch2",

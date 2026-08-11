@@ -59,18 +59,38 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('full/NuxieRuntime.xcframework', self.builder)
         self.assertIn('ios/NuxieRuntime.xcframework', self.builder)
         self.assertIn('NuxieRuntime-iOS.xcframework.zip', self.builder)
-        self.assertEqual(self.builder.count('--package nux-capi'), 1)
+        self.assertEqual(
+            self.builder.count('--package nux-apple-product-extension'), 1
+        )
+        self.assertIn('--features apple-runtime', self.builder)
+        self.assertIn('libnux_apple_product_extension.a', self.builder)
+        self.assertNotIn('--package nux-capi', self.builder)
         self.assertNotIn('--package nux-apple-runtime', self.builder)
 
-    def test_build_strips_bitcode_and_uses_the_two_symbol_manifests(self) -> None:
+    def test_build_strips_bitcode_and_uses_the_three_symbol_manifests(self) -> None:
         self.assertIn('--remove-section=__LLVM,__bitcode', self.builder)
         self.assertIn('--remove-section=__LLVM,__cmdline', self.builder)
         for manifest in (
             'exports-v3-portable.txt',
             'exports-v3-apple-metal-extension.txt',
+            'exports-v1-product-extension.txt',
         ):
             self.assertIn(manifest, self.builder)
         self.assertNotIn('exports-v3-legacy-migration.txt', self.builder)
+
+    def test_build_packages_one_composed_nuxie_runtime_c_module(self) -> None:
+        for header in (
+            'nux_capi.h',
+            'nux_capi.generated.h',
+            'nux_capi_apple.h',
+            'nux_product_extension.h',
+        ):
+            self.assertIn(f'include/{header}', self.builder)
+        self.assertIn(
+            'nux-apple-product-extension/include/module.modulemap', self.builder
+        )
+        self.assertNotIn('nux-capi/include/module.modulemap', self.builder)
+        self.assertNotIn('NuxieRuntimeFFI', self.builder)
 
     def test_publisher_is_guarded_and_uploads_both_assets_atomically(self) -> None:
         self.assertIn('status --porcelain', self.publisher)
@@ -114,6 +134,63 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('"deltasFromBaseline"', self.verifier)
         self.assertIn("check-nux-capi-surface.py", self.verifier)
         self.assertNotIn("-lnux_capi", self.verifier)
+
+    def test_verifier_requires_the_product_extension_partition_and_header(self) -> None:
+        product_partition = (
+            'productExtension=${repo_root}/crates/nux-apple-product-extension/'
+            'exports-v1-product-extension.txt'
+        )
+        self.assertEqual(self.verifier.count(product_partition), 2)
+        self.assertIn(
+            "module.modulemap nux_capi.generated.h nux_capi.h "
+            "nux_capi_apple.h nux_product_extension.h",
+            self.verifier,
+        )
+        self.assertNotIn("NuxieRuntimeFFI", self.verifier)
+        self.assertIn('header_contract="${verification_root}/public-contract.h"', self.verifier)
+        self.assertIn(
+            'nux_product_extension.h" > "${header_contract}"', self.verifier
+        )
+        self.assertIn('"${header_contract}" \\', self.verifier)
+        self.assertLess(
+            self.verifier.index('header_contract='),
+            self.verifier.index('header-symbols'),
+        )
+
+    def test_packaged_swift_consumer_links_the_product_entrypoint(self) -> None:
+        self.assertGreaterEqual(
+            self.verifier.count("product_extension_consumer.swift"), 2
+        )
+        self.assertIn(
+            '"${consumer_root}/swift-product-extension-consumer"', self.verifier
+        )
+        self.assertIn(
+            '"${consumer_root}/swift-product-extension-consumer-ios"',
+            self.verifier,
+        )
+
+    def test_product_extension_owns_the_only_shipping_provenance_record(self) -> None:
+        extension_build = (
+            REPO_ROOT / "crates/nux-apple-product-extension/build.rs"
+        ).read_text()
+        extension_source = (
+            REPO_ROOT / "crates/nux-apple-product-extension/src/lib.rs"
+        ).read_text()
+        capi_build = (REPO_ROOT / "crates/nux-capi/build.rs").read_text()
+        self.assertIn(
+            'NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-apple-product-extension"',
+            self.builder,
+        )
+        self.assertIn('"rootPackage":"nux-apple-product-extension"', extension_build)
+        self.assertIn(
+            "NUX_APPLE_PRODUCT_EXTENSION_BUILD_PROVENANCE", extension_build
+        )
+        self.assertIn(
+            'env!("NUX_APPLE_PRODUCT_EXTENSION_BUILD_PROVENANCE")',
+            extension_source,
+        )
+        self.assertIn("NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE", capi_build)
+        self.assertIn("dependency-of:{distribution_root}", capi_build)
 
     def test_packaged_consumers_cover_portable_scheduling_and_presentation_ack(self) -> None:
         symbols = {
@@ -191,6 +268,19 @@ class DistributionToolTests(unittest.TestCase):
             '"$rust_sysroot/lib/rustlib/$target/lib"', self.apple_checker
         )
         self.assertNotIn("rustup target list --installed", self.apple_checker)
+
+    def test_apple_checker_builds_the_product_extension_root(self) -> None:
+        self.assertIn("-p nux-apple-product-extension", self.apple_checker)
+        self.assertIn("--features apple-runtime", self.apple_checker)
+        self.assertIn("libnux_apple_product_extension.a", self.apple_checker)
+        self.assertIn("nuxie-project-data", self.apple_checker)
+        self.assertNotIn(
+            "nuxie-product-scripting|nuxie-project-data", self.apple_checker
+        )
+        self.assertGreaterEqual(
+            self.apple_checker.count("product_extension_consumer.swift"), 1
+        )
+        self.assertNotIn("NuxieRuntimeFFI", self.apple_checker)
 
     def test_apple_checker_uses_the_ci_runtime_fixture_checkout(self) -> None:
         self.assertIn(

@@ -36,15 +36,14 @@ IOS_TARGETS = {
     "aarch64-apple-ios-sim",
     "x86_64-apple-ios",
 }
-SHIPPING_ROOT_PACKAGE = "nux-capi"
-SHIPPING_FEATURES = ["apple-metal", "scripting"]
+SHIPPING_ROOT_PACKAGE = "nux-apple-product-extension"
+SHIPPING_FEATURES = ["apple-runtime"]
 RETIRED_PACKAGES = {
     "nux-apple-runtime",
     "nux-container",
     "nuxie-apple-adapter",
     "nuxie-product",
     "nuxie-product-scripting",
-    "nuxie-project-data",
 }
 IMMUTABLE_V04_BASELINE_PATH = (
     pathlib.Path(__file__).resolve().parents[1]
@@ -145,12 +144,12 @@ def validate_slice_provenance(
     if not isinstance(build_inputs, dict):
         raise ContractError("build inputs must be an object")
     occurrences = re.findall(
-        r'\{"schemaVersion":6,"rootPackage":"nux-capi"[^{}]*\}',
-        strings_output,
+        r'\{"schemaVersion":6,"rootPackage":"[^"]+"[^{}]*\}', strings_output
     )
     if len(occurrences) != 1:
         raise ContractError(
-            f"{target} must contain exactly one nux-capi provenance record, found {len(occurrences)}"
+            f"{target} must contain exactly one schema-6 provenance record, "
+            f"found {len(occurrences)}"
         )
     try:
         provenance = json.loads(occurrences[0])
@@ -163,18 +162,23 @@ def validate_slice_provenance(
     roots = [
         package
         for package in packages
-        if isinstance(package, dict) and package.get("name") == "nux-capi"
+        if isinstance(package, dict)
+        and package.get("name") == SHIPPING_ROOT_PACKAGE
     ]
     if len(roots) != 1 or not isinstance(roots[0].get("targets"), dict):
-        raise ContractError("build inputs do not contain exactly one nux-capi package")
+        raise ContractError(
+            f"build inputs do not contain exactly one {SHIPPING_ROOT_PACKAGE} package"
+        )
     target_features = roots[0]["targets"].get(target)
     if not isinstance(target_features, list) or not all(
         isinstance(feature, str) for feature in target_features
     ):
-        raise ContractError(f"build inputs do not describe nux-capi features for {target}")
+        raise ContractError(
+            f"build inputs do not describe {SHIPPING_ROOT_PACKAGE} features for {target}"
+        )
     expected = {
         "schemaVersion": 6,
-        "rootPackage": "nux-capi",
+        "rootPackage": SHIPPING_ROOT_PACKAGE,
         "runtimeVersion": metadata["runtimeVersion"],
         "buildSourceRevision": metadata["buildSourceRevision"],
         "target": target,
@@ -468,7 +472,8 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
         raise ContractError("build-input manifest has a malformed feature set")
     if features != SHIPPING_FEATURES:
         raise ContractError(
-            "build-input manifest feature set must be exactly apple-metal,scripting"
+            "build-input manifest feature set must be exactly "
+            + ",".join(SHIPPING_FEATURES)
         )
     targets = document["targets"]
     if not isinstance(targets, list) or set(targets) != BUILD_TARGETS or targets != sorted(targets):
@@ -616,7 +621,7 @@ def validate_build_inputs(document: object, encoded: bytes, expected_hash: str) 
             raise ContractError("dependency has an invalid target closure")
     if shipping_roots != 1:
         raise ContractError(
-            "build-input manifest must contain exactly one nux-capi package"
+            f"build-input manifest must contain exactly one {SHIPPING_ROOT_PACKAGE} package"
         )
 
     canonical = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()

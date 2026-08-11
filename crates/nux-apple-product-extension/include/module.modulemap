@@ -1,0 +1,10 @@
+module NuxieRuntimeC {
+    header "nux_product_extension.h"
+    export *
+    link framework "Foundation"
+    link framework "QuartzCore"
+    link framework "Metal"
+    link framework "CoreGraphics"
+    link framework "ImageIO"
+    link framework "Security"
+}

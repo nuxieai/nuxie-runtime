@@ -110,10 +110,15 @@ for specification in \
     target_libraries+=("${target}:${thin}")
 done
 
-python3 "${script_dir}/apple_runtime_contract.py" header-symbols \
+header_contract="${verification_root}/public-contract.h"
+cat \
     "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
+    "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" > "${header_contract}"
+python3 "${script_dir}/apple_runtime_contract.py" header-symbols \
+    "${header_contract}" \
     "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-    "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
+    "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+    "productExtension=${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 
 for library in "${thin_libraries[@]}"; do
     sections="$("${rust_llvm_readobj}" --sections "${library}")"
@@ -126,7 +131,8 @@ for library in "${thin_libraries[@]}"; do
     python3 "${script_dir}/apple_runtime_contract.py" symbol-partitions \
         "${symbols_path}" \
         "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt"
+        "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "productExtension=${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 done
 
 for framework in "${full_framework}" "${ios_framework}"; do
@@ -150,7 +156,7 @@ done
 "${script_dir}/check-nux-capi-layout.py"
 
 headers_dir="$(dirname "${full_macos}")/Headers"
-expected_headers="$(printf '%s\n' module.modulemap nux_capi.generated.h nux_capi.h nux_capi_apple.h)"
+expected_headers="$(printf '%s\n' module.modulemap nux_capi.generated.h nux_capi.h nux_capi_apple.h nux_product_extension.h)"
 while IFS= read -r packaged_headers; do
     actual_headers="$(cd "${packaged_headers}" && find . -mindepth 1 -maxdepth 1 -print | sed 's#^./##' | LC_ALL=C sort)"
     test "${actual_headers}" = "${expected_headers}"
@@ -193,6 +199,16 @@ xcrun --sdk macosx swiftc \
     "${full_macos}" \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
+
+xcrun --sdk macosx swiftc \
+    -parse-as-library \
+    -sdk "${macos_sdk_path}" \
+    -target "arm64-apple-macos${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
+    -I "${headers_dir}" \
+    "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.swift" \
+    "${full_macos}" \
+    -o "${consumer_root}/swift-product-extension-consumer"
+"${consumer_root}/swift-product-extension-consumer"
 
 xcrun --sdk macosx clang \
     -std=c11 -Wall -Wextra -Werror \
@@ -240,6 +256,14 @@ xcrun --sdk iphoneos swiftc \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.swift" \
     "${full_device}" \
     -o "${consumer_root}/swift-consumer-ios"
+xcrun --sdk iphoneos swiftc \
+    -parse-as-library \
+    -sdk "${iphoneos_sdk_path}" \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -I "${device_headers}" \
+    "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.swift" \
+    "${full_device}" \
+    -o "${consumer_root}/swift-product-extension-consumer-ios"
 
 xcrun --sdk iphoneos clang \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \

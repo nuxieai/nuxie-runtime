@@ -17,8 +17,8 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-ROOT_PACKAGE = "nux-capi"
-DEFAULT_FEATURES = ("apple-metal", "scripting")
+ROOT_PACKAGE = "nux-apple-product-extension"
+DEFAULT_FEATURES = ("apple-runtime",)
 DEFAULT_TARGETS = (
     "aarch64-apple-ios",
     "aarch64-apple-ios-sim",
@@ -32,7 +32,6 @@ PACKAGING_INPUTS = (
     "crates/nux-capi/abi-layout-v3.json",
     "crates/nux-capi/exports-v3-apple-metal-extension.txt",
     "crates/nux-capi/exports-v3-portable.txt",
-    "crates/nux-capi/include/module.modulemap",
     "crates/nux-capi/include/nux_capi.generated.h",
     "crates/nux-capi/include/nux_capi.h",
     "crates/nux-capi/include/nux_capi_apple.h",
@@ -43,6 +42,10 @@ PACKAGING_INPUTS = (
     "crates/nux-capi/smoke/capi_metal_smoke.c",
     "crates/nux-capi/smoke/capi_metal_smoke.swift",
     "crates/nux-capi/smoke/composed_script_asset.riv.base64",
+    "crates/nux-apple-product-extension/exports-v1-product-extension.txt",
+    "crates/nux-apple-product-extension/include/module.modulemap",
+    "crates/nux-apple-product-extension/include/nux_product_extension.h",
+    "crates/nux-apple-product-extension/smoke/product_extension_consumer.swift",
     "tools/apple_runtime_contract.py",
     "tools/apple_runtime_input_digest.py",
     "tools/build-nux-capi-xcframeworks.sh",

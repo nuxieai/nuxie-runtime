@@ -5,7 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tools.apple_runtime_input_digest import DEFAULT_FEATURES
 from tools.apple_runtime_input_digest import PACKAGING_INPUTS
+from tools.apple_runtime_input_digest import ROOT_PACKAGE
 from tools.apple_runtime_input_digest import InputDigestError
 from tools.apple_runtime_input_digest import _fallback_apple_target_cfg
 from tools.apple_runtime_input_digest import _build_environment
@@ -32,7 +34,9 @@ def package(repo: Path, name: str, *, source: str | None = None) -> dict:
 
 def metadata(repo: Path, *, target_specific: bool) -> dict:
     packages = [
+        package(repo, "nux-apple-product-extension"),
         package(repo, "nux-capi"),
+        package(repo, "nuxie-project-data"),
         package(repo, "direct"),
         package(repo, "transitive"),
         package(repo, "target-only"),
@@ -40,7 +44,11 @@ def metadata(repo: Path, *, target_specific: bool) -> dict:
         package(repo, "registry", source="registry+https://example.invalid/index"),
     ]
     root_dependencies = [
-        {"dep_kinds": [{"kind": None, "target": None}], "pkg": "direct"},
+        {"dep_kinds": [{"kind": None, "target": None}], "pkg": "nux-capi"},
+        {
+            "dep_kinds": [{"kind": None, "target": None}],
+            "pkg": "nuxie-project-data",
+        },
         {"dep_kinds": [{"kind": "build", "target": None}], "pkg": "registry"},
         {"dep_kinds": [{"kind": "dev", "target": None}], "pkg": "unrelated"},
     ]
@@ -54,9 +62,20 @@ def metadata(repo: Path, *, target_specific: bool) -> dict:
             "nodes": [
                 {
                     "deps": root_dependencies,
+                    "features": ["apple-runtime"],
+                    "id": "nux-apple-product-extension",
+                },
+                {
+                    "deps": [
+                        {
+                            "dep_kinds": [{"kind": None, "target": None}],
+                            "pkg": "direct",
+                        }
+                    ],
                     "features": ["apple-metal", "scripting"],
                     "id": "nux-capi",
                 },
+                {"deps": [], "features": [], "id": "nuxie-project-data"},
                 {
                     "deps": [{"dep_kinds": [{"kind": None, "target": None}], "pkg": "transitive"}],
                     "features": [],
@@ -88,7 +107,9 @@ class InputDigestTests(unittest.TestCase):
             f"checksum = \"{'e' * 64}\"\n"
         )
         for name in (
+            "nux-apple-product-extension",
             "nux-capi",
+            "nuxie-project-data",
             "direct",
             "transitive",
             "target-only",
@@ -116,6 +137,17 @@ class InputDigestTests(unittest.TestCase):
     def manifest(self) -> dict:
         return build_manifest(self.repo, self.metadata, self.configuration)
 
+    def test_distribution_identity_is_the_authored_data_extension(self) -> None:
+        self.assertEqual(ROOT_PACKAGE, "nux-apple-product-extension")
+        self.assertEqual(DEFAULT_FEATURES, ("apple-runtime",))
+        for path in (
+            "crates/nux-apple-product-extension/include/module.modulemap",
+            "crates/nux-apple-product-extension/include/nux_product_extension.h",
+            "crates/nux-apple-product-extension/exports-v1-product-extension.txt",
+            "crates/nux-apple-product-extension/smoke/product_extension_consumer.swift",
+        ):
+            self.assertIn(path, PACKAGING_INPUTS)
+
     def assert_changes_manifest(self, path: Path, replacement: str) -> None:
         baseline = self.manifest()
         path.write_text(replacement)
@@ -139,7 +171,14 @@ class InputDigestTests(unittest.TestCase):
         self.assertEqual(baseline, self.manifest())
 
     def test_direct_transitive_and_target_specific_source_changes_invalidate(self) -> None:
-        for name in ("nux-capi", "direct", "transitive", "target-only"):
+        for name in (
+            "nux-apple-product-extension",
+            "nux-capi",
+            "nuxie-project-data",
+            "direct",
+            "transitive",
+            "target-only",
+        ):
             with self.subTest(name=name):
                 path = self.repo / "crates" / name / "src" / "lib.rs"
                 original = path.read_text()
@@ -243,7 +282,7 @@ class InputDigestTests(unittest.TestCase):
         root = next(
             node
             for node in host_metadata["resolve"]["nodes"]
-            if node["id"] == "nux-capi"
+            if node["id"] == "nux-apple-product-extension"
         )
         root["deps"].append(
             {
@@ -291,13 +330,17 @@ class InputDigestTests(unittest.TestCase):
     def test_exact_root_resolution_excludes_workspace_feature_pollution(self) -> None:
         exact = {
             TARGET_A: {
+                "nux-apple-product-extension": ["apple-runtime"],
                 "nux-capi": ["apple-metal", "scripting"],
+                "nuxie-project-data": [],
                 "direct": [],
                 "transitive": ["backend"],
                 "registry": [],
             },
             TARGET_B: {
+                "nux-apple-product-extension": ["apple-runtime"],
                 "nux-capi": ["apple-metal", "scripting"],
+                "nuxie-project-data": [],
                 "direct": [],
                 "transitive": ["backend"],
                 "target-only": [],

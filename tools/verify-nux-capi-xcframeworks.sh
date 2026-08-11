@@ -200,6 +200,18 @@ xcrun --sdk macosx swiftc \
     -o "${consumer_root}/swift-consumer"
 "${consumer_root}/swift-consumer"
 
+xcrun --sdk macosx clang \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${macos_sdk_path}" \
+    -mmacosx-version-min="${NUX_APPLE_MACOS_DEPLOYMENT_TARGET:-12.0}" \
+    -I"${headers_dir}" \
+    "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.c" \
+    "${full_macos}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreGraphics -framework ImageIO -framework Security \
+    -o "${consumer_root}/c-product-extension-consumer"
+"${consumer_root}/c-product-extension-consumer"
+
 xcrun --sdk macosx swiftc \
     -parse-as-library \
     -sdk "${macos_sdk_path}" \
@@ -264,6 +276,16 @@ xcrun --sdk iphoneos swiftc \
     "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.swift" \
     "${full_device}" \
     -o "${consumer_root}/swift-product-extension-consumer-ios"
+xcrun --sdk iphoneos clang \
+    -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
+    -std=c11 -Wall -Wextra -Werror \
+    -isysroot "${iphoneos_sdk_path}" \
+    -I"${device_headers}" \
+    "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.c" \
+    "${full_device}" \
+    -framework Foundation -framework QuartzCore -framework Metal \
+    -framework CoreGraphics -framework ImageIO -framework Security \
+    -o "${consumer_root}/c-product-extension-consumer-ios"
 
 xcrun --sdk iphoneos clang \
     -target "arm64-apple-ios${NUX_APPLE_DEPLOYMENT_TARGET:-15.0}" \
@@ -293,7 +315,9 @@ python3 - "${size_report_path}" \
     "${full_archive}" "${ios_archive}" \
     "${full_framework}" "${ios_framework}" \
     "${consumer_root}/c-behavior-consumer" "${consumer_root}/swift-behavior-consumer" \
+    "${consumer_root}/c-product-extension-consumer" "${consumer_root}/swift-product-extension-consumer" \
     "${consumer_root}/c-behavior-consumer-ios" "${consumer_root}/swift-behavior-consumer-ios" \
+    "${consumer_root}/c-product-extension-consumer-ios" "${consumer_root}/swift-product-extension-consumer-ios" \
     "${target_libraries[@]}" <<'PY'
 import json
 import pathlib
@@ -301,7 +325,9 @@ import sys
 
 (
     output, baseline_path, full_archive, ios_archive, full_framework, ios_framework,
-    c_macos, swift_macos, c_ios, swift_ios, *specs
+    c_behavior, swift_behavior, c_product, swift_product,
+    c_ios_behavior, swift_ios_behavior, c_ios_product, swift_ios_product,
+    *specs
 ) = sys.argv[1:]
 slice_bytes = {}
 for specification in specs:
@@ -316,8 +342,8 @@ current = {
             "compressedBytes": pathlib.Path(full_archive).stat().st_size,
             "expandedBytes": expanded(full_framework),
             "representativeLinkedBytes": {
-                "c-macos-arm64": pathlib.Path(c_macos).stat().st_size,
-                "swift-macos-arm64": pathlib.Path(swift_macos).stat().st_size,
+                "c-macos-arm64": max(pathlib.Path(c_behavior).stat().st_size, pathlib.Path(c_product).stat().st_size),
+                "swift-macos-arm64": max(pathlib.Path(swift_behavior).stat().st_size, pathlib.Path(swift_product).stat().st_size),
             },
             "sliceBytes": dict(sorted(slice_bytes.items())),
         },
@@ -325,8 +351,8 @@ current = {
             "compressedBytes": pathlib.Path(ios_archive).stat().st_size,
             "expandedBytes": expanded(ios_framework),
             "representativeLinkedBytes": {
-                "c-ios-arm64": pathlib.Path(c_ios).stat().st_size,
-                "swift-ios-arm64": pathlib.Path(swift_ios).stat().st_size,
+                "c-ios-arm64": max(pathlib.Path(c_ios_behavior).stat().st_size, pathlib.Path(c_ios_product).stat().st_size),
+                "swift-ios-arm64": max(pathlib.Path(swift_ios_behavior).stat().st_size, pathlib.Path(swift_ios_product).stat().st_size),
             },
             "sliceBytes": {key: slice_bytes[key] for key in sorted(slice_bytes) if "darwin" not in key},
         },

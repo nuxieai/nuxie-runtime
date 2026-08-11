@@ -133,6 +133,7 @@ for target in "${targets[@]}"; do
     sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     c_output="$work_dir/capi-metal-$target"
     swift_output="$work_dir/swift-capi-metal-$target"
+    product_c_output="$work_dir/c-product-extension-$target"
     product_swift_output="$work_dir/swift-product-extension-$target"
     xcrun --sdk "$sdk" clang -std=c11 -Wall -Wextra -Werror \
         -target "$clang_target" -isysroot "$sdk_path" \
@@ -146,6 +147,11 @@ for target in "${targets[@]}"; do
         -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
         -framework QuartzCore -framework Metal -framework Foundation -framework Security \
         -Xlinker -liconv -o "$swift_output"
+    xcrun --sdk "$sdk" clang -std=c11 -Wall -Wextra -Werror \
+        -target "$clang_target" -isysroot "$sdk_path" \
+        -I "$headers_dir" \
+        "$repo_dir/crates/nux-apple-product-extension/smoke/product_extension_consumer.c" \
+        "$archive" "${frameworks[@]}" -o "$product_c_output"
     xcrun --sdk "$sdk" swiftc -warnings-as-errors \
         -parse-as-library -target "$swift_target" -sdk "$sdk_path" \
         -I "$headers_dir" \
@@ -155,12 +161,14 @@ for target in "${targets[@]}"; do
     if [[ "$target" == "$host_target" ]]; then
         "$c_output" "$fixture"
         "$swift_output" "$fixture"
+        "$product_c_output"
         "$product_swift_output"
         echo "$target: C, Swift, and authored-data extension hosts executed natively"
     elif [[ "$target" == aarch64-apple-ios-sim ]] \
         && xcrun simctl list devices booted | grep -q '(Booted)'; then
         xcrun simctl spawn booted "$c_output" "$fixture"
         xcrun simctl spawn booted "$swift_output" "$fixture"
+        xcrun simctl spawn booted "$product_c_output"
         xcrun simctl spawn booted "$product_swift_output"
         echo "$target: C, Swift, and authored-data extension hosts executed in the booted iOS simulator"
     else

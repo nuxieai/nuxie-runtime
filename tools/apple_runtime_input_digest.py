@@ -45,6 +45,7 @@ PACKAGING_INPUTS = (
     "crates/nux-apple-product-extension/exports-v1-product-extension.txt",
     "crates/nux-apple-product-extension/include/module.modulemap",
     "crates/nux-apple-product-extension/include/nux_product_extension.h",
+    "crates/nux-apple-product-extension/smoke/product_extension_consumer.c",
     "crates/nux-apple-product-extension/smoke/product_extension_consumer.swift",
     "tools/apple_runtime_contract.py",
     "tools/apple_runtime_input_digest.py",

@@ -6276,6 +6276,41 @@ impl<'a> ArtboardInstance<'a> {
         Ok(())
     }
 
+    /// Await renderer-backed script construction without consuming the
+    /// scripted component update scheduled for the next factory-bearing
+    /// advance. Browser editor hosts use this before their ordinary retained
+    /// frame traversal; native hosts keep the synchronous lazy lifecycle.
+    #[doc(hidden)]
+    pub async fn mount_scripted_drawables_async(
+        &mut self,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        {
+            let artboard = self
+                .file
+                .graph
+                .artboards
+                .get(self.artboard_index)
+                .context("artboard instance graph is unavailable")?;
+            let root_view_model = retained_artboard_root_view_model(&self.raw);
+            return mount_scripted_artboard_tree_async(
+                self.file,
+                artboard,
+                &mut self.raw,
+                factory,
+                root_view_model.as_ref(),
+            )
+            .await
+            .context("failed to mount scripted drawables");
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            let _ = factory;
+            Ok(false)
+        }
+    }
+
     /// Draw after awaiting browser WebGPU's physical shader-module validation.
     /// Native callers may keep using [`Self::draw`]; browser GPU-canvas hosts
     /// use this once so the generator observes the pinned C++ fail-closed
@@ -7475,6 +7510,38 @@ impl OwnedArtboardInstance {
             .context("failed to draw Rive artboard")?;
         self.raw.observe_owned_images()?;
         Ok(())
+    }
+
+    /// Owning mirror of [`ArtboardInstance::mount_scripted_drawables_async`].
+    #[doc(hidden)]
+    pub async fn mount_scripted_drawables_async(
+        &mut self,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        #[cfg(feature = "scripting")]
+        {
+            let artboard = self
+                .file
+                .graph
+                .artboards
+                .get(self.artboard_index)
+                .context("owned artboard instance graph is unavailable")?;
+            let root_view_model = retained_artboard_root_view_model(&self.raw);
+            return mount_scripted_artboard_tree_async(
+                &self.file,
+                artboard,
+                &mut self.raw,
+                factory,
+                root_view_model.as_ref(),
+            )
+            .await
+            .context("failed to mount scripted drawables");
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            let _ = factory;
+            Ok(false)
+        }
     }
 
     /// Owning mirror of [`ArtboardInstance::draw_async`].

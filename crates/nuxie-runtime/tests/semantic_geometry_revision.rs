@@ -196,6 +196,74 @@ fn component_list_fixture_artboard() -> ArtboardInstance {
         .expect("component-list fixture instantiates")
 }
 
+fn clip_fixture_artboard(source_width: Option<f32>) -> ArtboardInstance {
+    let mut records = vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record("Artboard", vec![]),
+        fixture_record(
+            "Shape",
+            vec![fixture_property("Shape", "parentId", FixtureValue::Uint(0))],
+        ),
+    ];
+    records.push(match source_width {
+        Some(width) => fixture_record(
+            "Rectangle",
+            vec![
+                fixture_property("Rectangle", "parentId", FixtureValue::Uint(1)),
+                fixture_property("Rectangle", "width", FixtureValue::Double(width)),
+                fixture_property("Rectangle", "height", FixtureValue::Double(20.0)),
+            ],
+        ),
+        None => fixture_record(
+            "PointsPath",
+            vec![
+                fixture_property("PointsPath", "parentId", FixtureValue::Uint(1)),
+                fixture_property("PointsPath", "isClosed", FixtureValue::Bool(true)),
+            ],
+        ),
+    });
+    records.extend([
+        fixture_record(
+            "Node",
+            vec![fixture_property("Node", "parentId", FixtureValue::Uint(0))],
+        ),
+        fixture_record(
+            "Shape",
+            vec![fixture_property("Shape", "parentId", FixtureValue::Uint(3))],
+        ),
+        fixture_record(
+            "Fill",
+            vec![fixture_property("Fill", "parentId", FixtureValue::Uint(4))],
+        ),
+        fixture_record(
+            "SolidColor",
+            vec![
+                fixture_property("SolidColor", "parentId", FixtureValue::Uint(5)),
+                fixture_property("SolidColor", "colorValue", FixtureValue::Color(0xff33_66aa)),
+            ],
+        ),
+        fixture_record(
+            "Rectangle",
+            vec![
+                fixture_property("Rectangle", "parentId", FixtureValue::Uint(4)),
+                fixture_property("Rectangle", "width", FixtureValue::Double(100.0)),
+                fixture_property("Rectangle", "height", FixtureValue::Double(40.0)),
+            ],
+        ),
+        fixture_record(
+            "ClippingShape",
+            vec![
+                fixture_property("ClippingShape", "parentId", FixtureValue::Uint(3)),
+                fixture_property("ClippingShape", "sourceId", FixtureValue::Uint(1)),
+            ],
+        ),
+    ]);
+    let file = RuntimeFile::from_fixture_records(records).expect("clip fixture imports");
+    let graphs = GraphFile::from_runtime_file(&file).expect("clip fixture graph builds");
+    ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+        .expect("clip fixture instantiates")
+}
+
 fn nested_component_list_fixture_artboard() -> ArtboardInstance {
     let file = RuntimeFile::from_fixture_records(vec![
         fixture_record("Backboard", vec![]),
@@ -1096,6 +1164,80 @@ fn semantic_geometry_revision_authority_is_available_for_a_covered_artboard() {
     assert!(
         artboard.clone().try_semantic_geometry_revision().is_some(),
         "a covered cold clone recomputes covered authority",
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_changes_when_empty_clip_visibility_reveals_geometry() {
+    let mut artboard = clip_fixture_artboard(None);
+    artboard.update_pass();
+    assert!(
+        artboard.visible_geometry_with_bounds().is_empty(),
+        "the visible empty clip suppresses its drawable range",
+    );
+    let before = artboard
+        .try_semantic_geometry_revision()
+        .expect("clipping shapes remain within covered semantic geometry");
+    let clipping_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "ClippingShape")
+        .map(|component| component.local_id)
+        .expect("fixture has a ClippingShape");
+    let is_visible = fixture_property("ClippingShape", "isVisible", FixtureValue::Bool(true)).key;
+
+    assert!(artboard.set_bool_property(clipping_local, is_visible, false));
+    artboard.update_pass();
+
+    assert_eq!(
+        artboard.visible_geometry_with_bounds().len(),
+        1,
+        "disabling the empty clip reveals its painted Shape",
+    );
+    assert_ne!(
+        artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture remains covered after the visibility write"),
+        before,
+        "clipping visibility must invalidate the semantic geometry cache authority",
+    );
+}
+
+#[test]
+fn semantic_geometry_revision_is_stable_when_non_empty_clip_visibility_changes() {
+    let mut artboard = clip_fixture_artboard(Some(20.0));
+    artboard.update_pass();
+    let before_catalogue = artboard.visible_geometry_with_bounds();
+    assert_eq!(
+        before_catalogue.len(),
+        1,
+        "the clipped Shape remains visible"
+    );
+    let before = artboard
+        .try_semantic_geometry_revision()
+        .expect("clipping shapes remain within covered semantic geometry");
+    let clipping_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "ClippingShape")
+        .map(|component| component.local_id)
+        .expect("fixture has a ClippingShape");
+    let is_visible = fixture_property("ClippingShape", "isVisible", FixtureValue::Bool(true)).key;
+
+    assert!(artboard.set_bool_property(clipping_local, is_visible, false));
+    artboard.update_pass();
+
+    assert_eq!(
+        artboard.visible_geometry_with_bounds(),
+        before_catalogue,
+        "non-empty clipping affects pixels but not semantic catalogue geometry",
+    );
+    assert_eq!(
+        artboard
+            .try_semantic_geometry_revision()
+            .expect("fixture remains covered after the visibility write"),
+        before,
+        "a non-empty clip visibility write must not invalidate equal semantic geometry",
     );
 }
 

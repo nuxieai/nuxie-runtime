@@ -9120,6 +9120,22 @@ impl ArtboardInstance {
             })
     }
 
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn debug_runtime_shape_path_identities(
+        &self,
+        shape_local: usize,
+    ) -> Option<[Option<usize>; 3]> {
+        let shape = self.runtime_shapes.get(shape_local)?;
+        Some(std::array::from_fn(|index| {
+            shape.paint_paths[index]
+                .retained
+                .borrow()
+                .as_ref()
+                .map(|state| Arc::as_ptr(&state.raw_path) as usize)
+        }))
+    }
+
     pub(crate) fn runtime_layout_control_size_for_path(
         &self,
         path_local: usize,

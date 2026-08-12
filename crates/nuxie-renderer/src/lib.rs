@@ -61,6 +61,7 @@ use nuxie_render_api::{
     StrokeJoin, Vec2D,
 };
 use sha2::{Digest, Sha256};
+use smallvec::SmallVec;
 use std::any::Any;
 #[cfg(test)]
 use std::cell::Cell;
@@ -476,6 +477,7 @@ struct Context {
     // textures survive scene-owner replacement without crossing GPU devices.
     decoded_images: Mutex<DecodedImageCache>,
     stroke_preparation_scratch: Arc<StrokePreparationScratchPool>,
+    logical_frame_pool: Arc<logical_frame::LogicalFramePool>,
     logical_resources: logical_frame::LogicalResourceStore,
     intersection_board: Mutex<intersection_board::IntersectionBoard>,
     device_health: Arc<DeviceHealth>,
@@ -1268,6 +1270,7 @@ impl WgpuFactory {
                 queue,
                 decoded_images: Mutex::new(DecodedImageCache::default()),
                 stroke_preparation_scratch: Arc::new(StrokePreparationScratchPool::default()),
+                logical_frame_pool: Arc::new(logical_frame::LogicalFramePool::default()),
                 logical_resources: logical_frame::LogicalResourceStore::default(),
                 intersection_board: Mutex::new(intersection_board::IntersectionBoard::new(
                     intersection_board::GroupingType::Disjoint,
@@ -1321,7 +1324,10 @@ impl WgpuFactory {
             width: self.width,
             height: self.height,
             clear_color,
-            logical_frame: logical_frame::LogicalFrame::new(self.logical_frame_config()),
+            logical_frame: self
+                .context
+                .logical_frame_pool
+                .checkout(self.logical_frame_config()),
             stroke_preparation_scratch: self.context.stroke_preparation_scratch.checkout(),
             draw_calls: 0,
             unsupported: None,
@@ -2843,7 +2849,7 @@ pub struct WgpuFrame {
     width: u32,
     height: u32,
     clear_color: ColorInt,
-    logical_frame: logical_frame::LogicalFrame,
+    logical_frame: logical_frame::LogicalFrameLease,
     stroke_preparation_scratch: StrokePreparationScratchLease,
     draw_calls: u64,
     unsupported: Option<&'static str>,
@@ -3277,6 +3283,8 @@ impl WgpuFrame {
                     .unwrap_or(self.draws.len());
                 let mut start = flush_start;
                 while start < flush_end {
+                    #[cfg(test)]
+                    ATOMIC_METRICS_STRATEGY_EVALUATIONS.with(|count| count.set(count.get() + 1));
                     atomic_strategy_partitions = atomic_strategy_partitions.saturating_add(1);
                     start = advanced_segments
                         .as_ref()
@@ -3316,12 +3324,17 @@ impl WgpuFrame {
     /// Asynchronously encodes the frame, submits all work, and waits for GPU
     /// completion without copying the render target back to the CPU.
     pub async fn finish_for_benchmark_async(self) -> Result<WgpuFrameMetrics, RendererError> {
-        let mut metrics = self.metrics();
-        let (_, _, _, _, _, backend_work, _, _) = self
+        let draw_calls = self.draw_calls;
+        let logical_flushes = u64::try_from(self.logical_flush_starts.len()).unwrap_or(u64::MAX);
+        let (_, _, _, _, _, backend_work, atomic_strategy_partitions, _) = self
             .finish_internal(false, false, false, false, None)
             .await?;
-        metrics.backend_work = backend_work;
-        Ok(metrics)
+        Ok(WgpuFrameMetrics {
+            draw_calls,
+            logical_flushes,
+            atomic_strategy_partitions,
+            backend_work,
+        })
     }
 
     #[cfg(test)]
@@ -3392,16 +3405,19 @@ impl WgpuFrame {
             .intersection_board
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        self.logical_frame
-            .finalize(&mut board)
-            .map_err(RendererError::Unsupported)?;
+        if logical_diagnostics {
+            self.logical_frame
+                .finalize(&mut board)
+                .map_err(RendererError::Unsupported)?;
+        } else {
+            self.logical_frame
+                .finalize_for_production(&mut board)
+                .map_err(RendererError::Unsupported)?;
+        }
         drop(board);
         // GPU encoding consumes the production LogicalFrame's admitted draws
         // and cached resource layout directly. The null adapter consumes the
         // same plan into shadow buffers instead of entering this encoder.
-        self.logical_frame
-            .validate()
-            .map_err(RendererError::Unsupported)?;
         let prepared_logical_resources = if logical_diagnostics {
             self.context
                 .logical_resources
@@ -5033,9 +5049,10 @@ impl WgpuFrame {
                     hsl_blend: bool,
                     destination_copy_bounds: [u32; 4],
                 }
-                enum PendingPathGeometry {
+                enum PendingPathGeometry<'a> {
                     Shared {
-                        tessellation: draw::FillTessellation,
+                        resources: &'a logical_frame::PreparedTypedDrawResources,
+                        retained_tessellation: &'a draw::FillTessellation,
                         // Carried from the logical producer: stroke tessellation can
                         // skip empty butt-cap contours, leaving sparse local IDs even
                         // when the contour count alone looks dense.
@@ -5043,11 +5060,22 @@ impl WgpuFrame {
                     },
                     Owned(draw::FillTessellation),
                 }
-                impl PendingPathGeometry {
-                    fn tessellation(&self) -> &draw::FillTessellation {
+                impl PendingPathGeometry<'_> {
+                    fn tessellation(&self) -> MsaaTessellationSource<'_> {
                         match self {
-                            Self::Shared { tessellation, .. } => tessellation,
-                            Self::Owned(tessellation) => tessellation,
+                            Self::Shared {
+                                resources,
+                                retained_tessellation,
+                                ..
+                            } => MsaaTessellationSource {
+                                spans: &retained_tessellation.spans,
+                                path: resources.path,
+                                contours: &retained_tessellation.contours,
+                                base_instance: retained_tessellation.base_instance,
+                                instance_count: retained_tessellation.instance_count,
+                                contour_base: 0,
+                            },
+                            Self::Owned(tessellation) => tessellation.into(),
                         }
                     }
 
@@ -5063,8 +5091,8 @@ impl WgpuFrame {
                         }
                     }
                 }
-                struct PendingPathDraw {
-                    geometry: PendingPathGeometry,
+                struct PendingPathDraw<'a> {
+                    geometry: PendingPathGeometry<'a>,
                     path: gpu::PathData,
                     base_instance: u32,
                     instance_count: u32,
@@ -5107,21 +5135,9 @@ impl WgpuFrame {
                     Atlas(usize),
                     Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
                 }
-                enum PreparedDraw {
-                    Stroke(path_pipeline::PreparedPathDraw, DirectPathOptions),
-                    Fill(path_pipeline::PreparedPathDraw, FillRule, DirectPathOptions),
-                    ImageMesh(
-                        msaa_image_mesh_pipeline::PreparedImageMesh,
-                        ImageMeshOptions,
-                    ),
-                    OutermostClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
-                    NestedClipUpdate(path_pipeline::PreparedPathDraw, FillRule),
-                    ClipReset(
-                        msaa_stencil_pipeline::PreparedStencilDraw,
-                        MsaaClipResetAction,
-                    ),
-                    Atlas(msaa_atlas_pipeline::PreparedAtlasBlit),
-                    Bootstrap(wgpu::Buffer, wgpu::Buffer, FillRule),
+                struct PlannedMsaaDraw {
+                    draw: PendingDraw,
+                    schedule: MsaaPreparedDrawSchedule,
                 }
                 struct PreparedMsaaGradientFlush<'a> {
                     start: usize,
@@ -5130,7 +5146,7 @@ impl WgpuFrame {
                 }
 
                 let logical_flush_count = logical_flush_starts.len().max(1);
-                let mut gradient_flushes = Vec::with_capacity(logical_flush_count);
+                let mut gradient_flushes = SmallVec::<[PreparedMsaaGradientFlush<'_>; 1]>::new();
                 for logical_flush in 0..logical_flush_count {
                     let start = logical_flush_starts
                         .get(logical_flush)
@@ -5158,8 +5174,17 @@ impl WgpuFrame {
                         texture,
                     });
                 }
+                #[cfg(test)]
+                if gradient_flushes.spilled() {
+                    MSAA_TOP_LEVEL_PLAN_HEAP_ALLOCS.with(|count| count.set(count.get() + 1));
+                }
                 let typed_draws = prepared_logical_resources.typed_draws(draws);
-                let shared_tessellation = |shared: &logical_frame::PreparedTypedDrawResources| {
+                fn shared_tessellation_owned(
+                    shared: &logical_frame::PreparedTypedDrawResources,
+                ) -> draw::FillTessellation {
+                    #[cfg(test)]
+                    SHARED_TYPED_TESSELLATION_VECTOR_COPIES
+                        .with(|count| count.set(count.get() + 1));
                     let mut spans = shared.spans.clone();
                     for span in &mut spans {
                         let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
@@ -5176,20 +5201,66 @@ impl WgpuFrame {
                         base_instance: shared.base_instance,
                         instance_count: shared.instance_count,
                     }
-                };
-                let shared_geometry = |shared: &logical_frame::PreparedTypedDrawResources| {
+                }
+                fn shared_fill_geometry<'a>(
+                    draw: &'a SolidDraw,
+                    shared: &'a logical_frame::PreparedTypedDrawResources,
+                ) -> PendingPathGeometry<'a> {
+                    #[cold]
+                    #[inline(never)]
+                    fn copied_fallback(
+                        shared: &logical_frame::PreparedTypedDrawResources,
+                    ) -> PendingPathGeometry<'_> {
+                        PendingPathGeometry::Owned(shared_tessellation_owned(shared))
+                    }
+
+                    let retained_tessellation = if draw.authored_msaa_fill_requires_reverse() {
+                        draw.prepared_fill().and_then(|prepared| {
+                            prepared.reversed_midpoint(&draw.path, draw.state.transform)
+                        })
+                    } else {
+                        draw.prepared_fill().and_then(|prepared| {
+                            prepared.midpoint(&draw.path, draw.state.transform)
+                        })
+                    }
+                    .map(|prepared| &prepared.tessellation);
+                    match retained_tessellation {
+                        Some(retained_tessellation) => {
+                            #[cfg(test)]
+                            SHARED_TYPED_TESSELLATION_BORROWS
+                                .with(|count| count.set(count.get() + 1));
+                            PendingPathGeometry::Shared {
+                                resources: shared,
+                                retained_tessellation,
+                                local_contour_ids_are_dense: shared.local_contour_ids_are_dense,
+                            }
+                        }
+                        None => copied_fallback(shared),
+                    }
+                }
+                fn shared_stroke_geometry<'a>(
+                    draw: &'a SolidDraw,
+                    shared: &'a logical_frame::PreparedTypedDrawResources,
+                ) -> PendingPathGeometry<'a> {
+                    #[cfg(test)]
+                    SHARED_TYPED_TESSELLATION_BORROWS.with(|count| count.set(count.get() + 1));
+                    let retained_tessellation = &draw
+                        .prepared_stroke()
+                        .expect("typed MSAA stroke resources require retained stroke geometry")
+                        .tessellation;
                     PendingPathGeometry::Shared {
-                        tessellation: shared_tessellation(shared),
+                        resources: shared,
+                        retained_tessellation,
                         local_contour_ids_are_dense: shared.local_contour_ids_are_dense,
                     }
-                };
+                }
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::with_capacity(draws.len());
                 let mut pending_atlas_draws = Vec::new();
-                let mut prepared_schedules = Vec::with_capacity(draws.len());
                 let mut image_instances = Vec::<gpu::ImageDrawInstance>::new();
                 let mut image_mesh_resources = None;
                 let mut image_groups = std::collections::HashMap::new();
+                let mut logical_flush = 0usize;
                 for (draw_index, draw) in draws.iter().enumerate() {
                     // Reserve and consume this exact authored occurrence once;
                     // backend-specific fallbacks are explicitly None.
@@ -5202,12 +5273,15 @@ impl WgpuFrame {
                         },
                         |schedule| schedule.draw_group,
                     );
+                    while logical_flush + 1 < logical_flush_starts.len()
+                        && logical_flush_starts[logical_flush + 1] <= draw_index
+                    {
+                        logical_flush += 1;
+                    }
                     let schedule = MsaaPreparedDrawSchedule {
                         draw_group: z_index,
                         is_prepass: scheduled.is_some_and(|schedule| schedule.is_prepass),
-                        logical_flush: logical_flush_starts
-                            .partition_point(|&start| start <= draw_index)
-                            .saturating_sub(1),
+                        logical_flush,
                         authored_order: scheduled
                             .map_or(draw_index, |schedule| schedule.authored_order),
                     };
@@ -5215,21 +5289,24 @@ impl WgpuFrame {
                     let gradient = gradient_flush.batch.draw(draw_index - gradient_flush.start);
                     if let DrawRole::ClipReset { bounds, action } = draw.role {
                         let uniforms = analytic_uniforms(self.width, self.height, 1);
-                        pending_draws.push(PendingDraw::ClipReset(
-                            self.context.msaa_stencil_pipeline.prepare_clip_reset(
-                                &self.context.device,
-                                &uniforms,
-                                bounds,
-                                u16::try_from(z_index)
-                                    .expect("MSAA clip reset z-index must fit the shader contract"),
+                        pending_draws.push(PlannedMsaaDraw {
+                            draw: PendingDraw::ClipReset(
+                                self.context.msaa_stencil_pipeline.prepare_clip_reset(
+                                    &self.context.device,
+                                    &uniforms,
+                                    bounds,
+                                    u16::try_from(z_index).expect(
+                                        "MSAA clip reset z-index must fit the shader contract",
+                                    ),
+                                ),
+                                action,
                             ),
-                            action,
-                        ));
-                        prepared_schedules.push(schedule);
+                            schedule,
+                        });
                         continue;
                     }
                     if let DrawRole::ClipUpdate { parent_id, .. } = draw.role {
-                        let geometry = shared.map(shared_geometry);
+                        let geometry = shared.map(|shared| shared_fill_geometry(draw, shared));
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
                             let mut path = tessellation.path;
@@ -5254,12 +5331,17 @@ impl WgpuFrame {
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
-                            pending_draws.push(if parent_id == 0 {
-                                PendingDraw::OutermostClipUpdate(path_index, draw.path.fill_rule)
-                            } else {
-                                PendingDraw::NestedClipUpdate(path_index, draw.path.fill_rule)
+                            pending_draws.push(PlannedMsaaDraw {
+                                draw: if parent_id == 0 {
+                                    PendingDraw::OutermostClipUpdate(
+                                        path_index,
+                                        draw.path.fill_rule,
+                                    )
+                                } else {
+                                    PendingDraw::NestedClipUpdate(path_index, draw.path.fill_rule)
+                                },
+                                schedule,
                             });
-                            prepared_schedules.push(schedule);
                         }
                         continue;
                     }
@@ -5321,20 +5403,22 @@ impl WgpuFrame {
                                 mesh.sampler,
                             )
                         });
-                        pending_draws.push(PendingDraw::ImageMesh(
-                            self.context.msaa_image_mesh_pipeline.prepare(
-                                resources,
-                                image_group,
-                                advanced_blend,
-                                &mesh.vertices,
-                                &mesh.uvs,
-                                &mesh.indices,
-                                mesh.index_count,
-                                instance_index,
+                        pending_draws.push(PlannedMsaaDraw {
+                            draw: PendingDraw::ImageMesh(
+                                self.context.msaa_image_mesh_pipeline.prepare(
+                                    resources,
+                                    image_group,
+                                    advanced_blend,
+                                    &mesh.vertices,
+                                    &mesh.uvs,
+                                    &mesh.indices,
+                                    mesh.index_count,
+                                    instance_index,
+                                ),
+                                options,
                             ),
-                            options,
-                        ));
-                        prepared_schedules.push(schedule);
+                            schedule,
+                        });
                         continue;
                     }
                     if draw.paint.feather != 0.0
@@ -5348,7 +5432,7 @@ impl WgpuFrame {
                             stroke.is_some(),
                         );
                         if let (Some(mut tessellation), Some(placement)) = (
-                            shared.map(shared_tessellation).or_else(|| {
+                            shared.map(shared_tessellation_owned).or_else(|| {
                                 draw::build_feather_tessellation_with_direction(
                                     &draw.path.raw_path,
                                     draw.state.transform,
@@ -5407,8 +5491,10 @@ impl WgpuFrame {
                                 logical_flush: schedule.logical_flush,
                                 authored_order: schedule.authored_order,
                             });
-                            pending_draws.push(PendingDraw::Atlas(atlas_index));
-                            prepared_schedules.push(schedule);
+                            pending_draws.push(PlannedMsaaDraw {
+                                draw: PendingDraw::Atlas(atlas_index),
+                                schedule,
+                            });
                             continue;
                         }
                     }
@@ -5449,7 +5535,7 @@ impl WgpuFrame {
                         }
                         let geometry = match draw.paint.style {
                             RenderPaintStyle::Fill if draw.image.is_none() => {
-                                shared.map(shared_geometry)
+                                shared.map(|shared| shared_fill_geometry(draw, shared))
                             }
                             RenderPaintStyle::Fill => draw
                                 .prepared_fill()
@@ -5463,7 +5549,9 @@ impl WgpuFrame {
                                 .map(|prepared| {
                                     PendingPathGeometry::Owned(prepared.tessellation.clone())
                                 }),
-                            RenderPaintStyle::Stroke => shared.map(shared_geometry),
+                            RenderPaintStyle::Stroke => {
+                                shared.map(|shared| shared_stroke_geometry(draw, shared))
+                            }
                         };
                         if let Some(geometry) = geometry {
                             let tessellation = geometry.tessellation();
@@ -5566,12 +5654,14 @@ impl WgpuFrame {
                                 logical_flush: schedule.logical_flush,
                                 prepared: None,
                             });
-                            pending_draws.push(if draw.paint.style == RenderPaintStyle::Fill {
-                                PendingDraw::Fill(path_index, draw.path.fill_rule, options)
-                            } else {
-                                PendingDraw::Stroke(path_index, options)
+                            pending_draws.push(PlannedMsaaDraw {
+                                draw: if draw.paint.style == RenderPaintStyle::Fill {
+                                    PendingDraw::Fill(path_index, draw.path.fill_rule, options)
+                                } else {
+                                    PendingDraw::Stroke(path_index, options)
+                                },
+                                schedule,
                             });
-                            prepared_schedules.push(schedule);
                             continue;
                         }
                     }
@@ -5591,15 +5681,20 @@ impl WgpuFrame {
                                 usage: wgpu::BufferUsages::VERTEX,
                             },
                         );
-                        pending_draws.push(PendingDraw::Bootstrap(
-                            path_buffer,
-                            cover_buffer,
-                            draw.path.fill_rule,
-                        ));
-                        prepared_schedules.push(schedule);
+                        pending_draws.push(PlannedMsaaDraw {
+                            draw: PendingDraw::Bootstrap(
+                                path_buffer,
+                                cover_buffer,
+                                draw.path.fill_rule,
+                            ),
+                            schedule,
+                        });
                     }
                 }
-                debug_assert_eq!(pending_draws.len(), prepared_schedules.len());
+                #[cfg(test)]
+                MSAA_TOP_LEVEL_PLAN_HEAP_ALLOCS.with(|count| {
+                    count.set(count.get() + 2);
+                });
                 let image_instance_buffer = if image_instances.is_empty() {
                     None
                 } else {
@@ -6076,78 +6171,31 @@ impl WgpuFrame {
                         ));
                     }
                 }
-                let mut take_path = |index: usize| {
+                let prepared_draws = pending_draws;
+                let prepared_path = |index: usize| {
                     pending_paths[index]
                         .prepared
-                        .take()
+                        .as_ref()
                         .expect("MSAA path escaped flush-wide preparation")
                 };
-                let mut take_atlas = |index: usize| {
+                let prepared_atlas = |index: usize| {
                     prepared_atlas_draws[index]
-                        .take()
+                        .as_ref()
                         .expect("MSAA atlas escaped logical-flush preparation")
                 };
-                let prepared_draws = pending_draws
-                    .into_iter()
-                    .map(|draw| match draw {
-                        PendingDraw::Stroke(index, options) => {
-                            PreparedDraw::Stroke(take_path(index), options)
-                        }
-                        PendingDraw::Fill(index, fill_rule, options) => {
-                            PreparedDraw::Fill(take_path(index), fill_rule, options)
-                        }
-                        PendingDraw::ImageMesh(draw, options) => {
-                            PreparedDraw::ImageMesh(draw, options)
-                        }
-                        PendingDraw::OutermostClipUpdate(index, fill_rule) => {
-                            PreparedDraw::OutermostClipUpdate(take_path(index), fill_rule)
-                        }
-                        PendingDraw::NestedClipUpdate(index, fill_rule) => {
-                            PreparedDraw::NestedClipUpdate(take_path(index), fill_rule)
-                        }
-                        PendingDraw::ClipReset(draw, action) => {
-                            PreparedDraw::ClipReset(draw, action)
-                        }
-                        PendingDraw::Atlas(index) => PreparedDraw::Atlas(take_atlas(index)),
-                        PendingDraw::Bootstrap(path, cover, fill_rule) => {
-                            PreparedDraw::Bootstrap(path, cover, fill_rule)
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                debug_assert_eq!(prepared_draws.len(), prepared_schedules.len());
-                let prepared_advanced_count = prepared_draws
-                    .iter()
-                    .filter(|draw| match draw {
-                        PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options) => {
-                            options.advanced_blend
-                        }
-                        PreparedDraw::ImageMesh(_, options) => options.advanced_blend,
-                        PreparedDraw::Atlas(draw) => {
-                            msaa_atlas_pipeline::MsaaAtlasPipeline::uses_advanced_blend(draw)
-                        }
-                        _ => false,
-                    })
-                    .count();
-                let requested_advanced_count = draws
-                    .iter()
-                    .filter(|draw| draw_uses_advanced_blend(draw))
-                    .count();
-                if prepared_advanced_count != requested_advanced_count {
-                    return Err(RendererError::Unsupported(
-                        "advanced blending on unprepared msaa draws",
-                    ));
-                }
-                let destination_copy_bounds = |draw: &PreparedDraw| match draw {
-                    PreparedDraw::Stroke(_, options) | PreparedDraw::Fill(_, _, options)
+                let destination_copy_bounds = |draw: &PendingDraw| match draw {
+                    PendingDraw::Stroke(_, options) | PendingDraw::Fill(_, _, options)
                         if options.advanced_blend =>
                     {
                         Some(options.destination_copy_bounds)
                     }
-                    PreparedDraw::ImageMesh(_, options) if options.advanced_blend => {
+                    PendingDraw::ImageMesh(_, options) if options.advanced_blend => {
                         Some(options.destination_copy_bounds)
                     }
-                    PreparedDraw::Atlas(draw) => {
-                        msaa_atlas_pipeline::MsaaAtlasPipeline::destination_copy_bounds(draw)
+                    PendingDraw::Atlas(index) => {
+                        msaa_atlas_pipeline::MsaaAtlasPipeline::destination_copy_bounds(
+                            prepared_atlas(*index),
+                        )
                     }
                     _ => None,
                 };
@@ -6183,12 +6231,15 @@ impl WgpuFrame {
                 // interrupted by a resolve/copy.
                 // Fixed-color flushes have no such barriers, so keep their
                 // segment metadata empty without rescanning every draw.
-                if prepared_advanced_count != 0 {
-                    for (index, draw) in prepared_draws.iter().enumerate() {
-                        let Some(bounds) = destination_copy_bounds(draw) else {
+                if has_advanced_msaa {
+                    for (index, planned) in prepared_draws.iter().enumerate() {
+                        let Some(bounds) = destination_copy_bounds(&planned.draw) else {
                             continue;
                         };
-                        let group_head = msaa_destination_copy_head(&prepared_schedules, index);
+                        let group_head =
+                            msaa_destination_copy_head(&prepared_draws, index, |planned| {
+                                planned.schedule
+                            });
                         segment_ends.push(SegmentEnd {
                             index: group_head,
                             starts_logical_flush: false,
@@ -6309,29 +6360,27 @@ impl WgpuFrame {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    pass.set_stencil_reference(0);
                     let segment_draws = &prepared_draws[segment_start..segment_end.index];
-                    let segment_schedules = &prepared_schedules[segment_start..segment_end.index];
-                    let batched_fill = match (segment_draws.first(), segment_schedules.first()) {
-                        (
-                            Some(PreparedDraw::Fill(first, fill_rule, options)),
-                            Some(first_schedule),
-                        ) if segment_draws.len() > 1 && options.batchable_midpoint_fill => {
+                    let batched_fill = match segment_draws.first() {
+                        Some(PlannedMsaaDraw {
+                            draw: PendingDraw::Fill(first_index, fill_rule, options),
+                            schedule: first_schedule,
+                        }) if segment_draws.len() > 1 && options.batchable_midpoint_fill => {
+                            let first = prepared_path(*first_index);
                             let mut instance_end =
                                 first.base_instance.checked_add(first.instance_count);
                             let mut compatible = instance_end.is_some();
-                            for (candidate, schedule) in
-                                segment_draws.iter().zip(segment_schedules).skip(1)
-                            {
-                                let PreparedDraw::Fill(
-                                    candidate,
+                            for candidate_plan in segment_draws.iter().skip(1) {
+                                let PendingDraw::Fill(
+                                    candidate_index,
                                     candidate_fill_rule,
                                     candidate_options,
-                                ) = candidate
+                                ) = &candidate_plan.draw
                                 else {
                                     compatible = false;
                                     break;
                                 };
+                                let candidate = prepared_path(*candidate_index);
                                 let same_pipeline = candidate_fill_rule == fill_rule
                                     && candidate_options.path_clip == options.path_clip
                                     && candidate_options.clip_rect == options.clip_rect
@@ -6340,10 +6389,12 @@ impl WgpuFrame {
                                     && candidate_options.hsl_blend == options.hsl_blend
                                     && candidate_options.batchable_midpoint_fill
                                         == options.batchable_midpoint_fill;
-                                let same_schedule = schedule.draw_group
+                                let same_schedule = candidate_plan.schedule.draw_group
                                     == first_schedule.draw_group
-                                    && schedule.is_prepass == first_schedule.is_prepass
-                                    && schedule.logical_flush == first_schedule.logical_flush;
+                                    && candidate_plan.schedule.is_prepass
+                                        == first_schedule.is_prepass
+                                    && candidate_plan.schedule.logical_flush
+                                        == first_schedule.logical_flush;
                                 if !same_pipeline
                                     || !same_schedule
                                     || instance_end != Some(candidate.base_instance)
@@ -6365,9 +6416,10 @@ impl WgpuFrame {
                     };
                     let mut direct_path_bindings_active = false;
                     let mut batched_stroke_skip_until = 0;
-                    for (prepared_offset, prepared) in segment_draws.iter().enumerate() {
-                        match prepared {
-                            PreparedDraw::Stroke(draw, options) => {
+                    for (prepared_offset, planned) in segment_draws.iter().enumerate() {
+                        match &planned.draw {
+                            PendingDraw::Stroke(path_index, options) => {
+                                let draw = prepared_path(*path_index);
                                 if prepared_offset < batched_stroke_skip_until {
                                     continue;
                                 }
@@ -6379,12 +6431,14 @@ impl WgpuFrame {
                                     prepared_offset,
                                     segment_draws.len(),
                                     |candidate_offset| {
-                                        let PreparedDraw::Stroke(candidate, candidate_options) =
-                                            &segment_draws[candidate_offset]
+                                        let candidate_plan = &segment_draws[candidate_offset];
+                                        let PendingDraw::Stroke(candidate_index, candidate_options) =
+                                            &candidate_plan.draw
                                         else {
                                             return None;
                                         };
-                                        let schedule = segment_schedules[candidate_offset];
+                                        let candidate = prepared_path(*candidate_index);
+                                        let schedule = candidate_plan.schedule;
                                         Some(DirectStrokeBatchCandidate {
                                             base_instance: candidate.base_instance,
                                             instance_count: candidate.instance_count,
@@ -6414,11 +6468,9 @@ impl WgpuFrame {
                                 );
                                 batched_stroke_skip_until =
                                     batch.map_or(prepared_offset + 1, |batch| batch.end);
-                                pass.set_stencil_reference(if options.path_clip {
-                                    0x80
-                                } else {
-                                    0
-                                });
+                                if options.path_clip {
+                                    pass.set_stencil_reference(0x80);
+                                }
                                 pass.set_pipeline(self.context.path_pipeline.direct_pipeline(
                                     path_pipeline::DirectPathPipelineKind::Stroke,
                                     options.path_clip,
@@ -6443,7 +6495,8 @@ impl WgpuFrame {
                                     draw.base_instance..instance_end,
                                 );
                             }
-                            PreparedDraw::Fill(draw, fill_rule, options) => {
+                            PendingDraw::Fill(path_index, fill_rule, options) => {
+                                let draw = prepared_path(*path_index);
                                 if batched_fill.is_some() && prepared_offset != 0 {
                                     continue;
                                 }
@@ -6482,7 +6535,7 @@ impl WgpuFrame {
                                     );
                                 }
                             }
-                            PreparedDraw::ImageMesh(draw, options) => {
+                            PendingDraw::ImageMesh(draw, options) => {
                                 direct_path_bindings_active = false;
                                 pass.set_stencil_reference(if options.path_clip {
                                     0x80
@@ -6517,7 +6570,8 @@ impl WgpuFrame {
                                 );
                                 pass.draw_indexed(0..draw.index_count, 0, 0..1);
                             }
-                            PreparedDraw::OutermostClipUpdate(draw, fill_rule) => {
+                            PendingDraw::OutermostClipUpdate(path_index, fill_rule) => {
+                                let draw = prepared_path(*path_index);
                                 pass.set_stencil_reference(0x80);
                                 draw.bind_resources(&mut pass, !direct_path_bindings_active);
                                 direct_path_bindings_active = true;
@@ -6577,7 +6631,8 @@ impl WgpuFrame {
                                     }
                                 }
                             }
-                            PreparedDraw::NestedClipUpdate(draw, fill_rule) => {
+                            PendingDraw::NestedClipUpdate(path_index, fill_rule) => {
+                                let draw = prepared_path(*path_index);
                                 pass.set_stencil_reference(0x80);
                                 pass.set_pipeline(if *fill_rule == FillRule::EvenOdd {
                                     &self.context.path_pipeline.nested_even_odd_clip_pipeline
@@ -6601,7 +6656,7 @@ impl WgpuFrame {
                                     draw.base_instance..draw.base_instance + draw.instance_count,
                                 );
                             }
-                            PreparedDraw::ClipReset(draw, action) => {
+                            PendingDraw::ClipReset(draw, action) => {
                                 direct_path_bindings_active = false;
                                 let (reference, pipeline) = match action {
                                     MsaaClipResetAction::ClearPrevious => {
@@ -6635,7 +6690,8 @@ impl WgpuFrame {
                                 pass.set_vertex_buffer(0, draw.vertices.slice(..));
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
-                            PreparedDraw::Atlas(draw) => {
+                            PendingDraw::Atlas(atlas_index) => {
+                                let draw = prepared_atlas(*atlas_index);
                                 direct_path_bindings_active = false;
                                 pass.set_stencil_reference(
                                     if msaa_atlas_pipeline::MsaaAtlasPipeline::uses_path_clip(draw)
@@ -6652,7 +6708,7 @@ impl WgpuFrame {
                                 pass.set_vertex_buffer(0, draw.vertices.slice(..));
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
-                            PreparedDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
+                            PendingDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
                                 direct_path_bindings_active = false;
                                 pass.set_stencil_reference(0);
                                 pass.set_pipeline(match fill_rule {
@@ -6726,7 +6782,11 @@ impl WgpuFrame {
                 }
                 Ok(())
             };
-        let logical_flush_starts = self.logical_frame.logical_flush_starts.clone();
+        // Encoding needs a stable snapshot while the frame remains mutably
+        // borrowed. Keep the pooled Vec in place so lease reset can reuse its
+        // capacity instead of allocating the leading zero again every frame.
+        let logical_flush_starts =
+            SmallVec::<[usize; 4]>::from_slice(&self.logical_frame.logical_flush_starts);
         let independent_draw_limit = self
             .context
             .capabilities
@@ -6790,8 +6850,7 @@ impl WgpuFrame {
                 .then(|| AdvancedAtomicSegmentPlan::new(&self.draws));
             while start < self.draws.len() {
                 atomic_strategy_partitions = atomic_strategy_partitions.saturating_add(1);
-                let logical_flush_end = self
-                    .logical_flush_starts
+                let logical_flush_end = logical_flush_starts
                     .get(logical_flush_index + 1)
                     .copied()
                     .unwrap_or(self.draws.len());
@@ -7015,7 +7074,7 @@ impl WgpuFrame {
                 }
             }
             let backend_work = self.work_recorder.snapshot();
-            let logical_report = prepared_logical_resources.report_with_consumption();
+            let logical_report = prepared_logical_resources.into_report();
             return Ok((
                 Vec::new(),
                 Vec::new(),
@@ -7116,7 +7175,7 @@ impl WgpuFrame {
         let atomic_color_snapshots = read_atomic_snapshots(&pending_atomic_color_readbacks).await?;
         tessellation_texture_frame.borrow_mut().recycle();
         let backend_work = self.work_recorder.snapshot();
-        let logical_report = prepared_logical_resources.report_with_consumption();
+        let logical_report = prepared_logical_resources.into_report();
         Ok((
             pixels,
             coverage_snapshots,
@@ -8507,14 +8566,16 @@ fn msaa_draw_uses_opaque_prepass(draw: &SolidDraw) -> bool {
     msaa_draw_has_opaque_paint(draw) && matches!(draw.role, DrawRole::Content { clip_id: 0 })
 }
 
-fn msaa_destination_copy_head(
-    schedules: &[MsaaPreparedDrawSchedule],
+fn msaa_destination_copy_head<T>(
+    draws: &[T],
     destination_read_index: usize,
+    schedule_of: impl Fn(&T) -> MsaaPreparedDrawSchedule,
 ) -> usize {
-    let destination = schedules[destination_read_index];
-    schedules
+    let destination = schedule_of(&draws[destination_read_index]);
+    draws
         .iter()
         .position(|candidate| {
+            let candidate = schedule_of(candidate);
             candidate.draw_group == destination.draw_group
                 && candidate.logical_flush == destination.logical_flush
                 && !candidate.is_prepass
@@ -9222,6 +9283,50 @@ thread_local! {
 }
 
 #[cfg(test)]
+thread_local! {
+    static SHARED_TYPED_TESSELLATION_VECTOR_COPIES: Cell<usize> = const { Cell::new(0) };
+    static SHARED_TYPED_TESSELLATION_BORROWS: Cell<usize> = const { Cell::new(0) };
+    static MSAA_TOP_LEVEL_PLAN_HEAP_ALLOCS: Cell<usize> = const { Cell::new(0) };
+    static ATOMIC_METRICS_STRATEGY_EVALUATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_shared_typed_tessellation_vector_copies() {
+    SHARED_TYPED_TESSELLATION_VECTOR_COPIES.with(|count| count.set(0));
+    SHARED_TYPED_TESSELLATION_BORROWS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn reset_msaa_top_level_plan_heap_allocs() {
+    MSAA_TOP_LEVEL_PLAN_HEAP_ALLOCS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn msaa_top_level_plan_heap_allocs() -> usize {
+    MSAA_TOP_LEVEL_PLAN_HEAP_ALLOCS.with(Cell::get)
+}
+
+#[cfg(test)]
+fn reset_atomic_metrics_strategy_evaluations() {
+    ATOMIC_METRICS_STRATEGY_EVALUATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn atomic_metrics_strategy_evaluations() -> usize {
+    ATOMIC_METRICS_STRATEGY_EVALUATIONS.with(Cell::get)
+}
+
+#[cfg(test)]
+fn shared_typed_tessellation_vector_copies() -> usize {
+    SHARED_TYPED_TESSELLATION_VECTOR_COPIES.with(Cell::get)
+}
+
+#[cfg(test)]
+fn shared_typed_tessellation_borrows() -> usize {
+    SHARED_TYPED_TESSELLATION_BORROWS.with(Cell::get)
+}
+
+#[cfg(test)]
 fn reset_midpoint_contour_append_stats() {
     MIDPOINT_CONTOUR_APPEND_STATS.with(|stats| stats.set(MidpointContourAppendStats::default()));
 }
@@ -9234,6 +9339,7 @@ fn midpoint_contour_append_stats() -> MidpointContourAppendStats {
 fn append_relocated_midpoint_contours_to_flush(
     source_spans: &[gpu::TessVertexSpan],
     source_contours: &[gpu::ContourData],
+    source_contour_base: u32,
     source_contour_ids_are_dense: bool,
     path_id: u32,
     relocation: u32,
@@ -9275,7 +9381,10 @@ fn append_relocated_midpoint_contours_to_flush(
     local_contour_ids.extend(
         source_spans
             .iter()
-            .map(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK)
+            .map(|span| {
+                (span.contour_id_with_flags & gpu::CONTOUR_ID_MASK)
+                    .saturating_sub(source_contour_base)
+            })
             .filter(|id| *id != 0),
     );
     local_contour_ids.sort_unstable();
@@ -9299,8 +9408,13 @@ fn append_relocated_midpoint_contours_to_flush(
     contour_offset
 }
 
-fn globalize_midpoint_span_contour_id(span: &mut gpu::TessVertexSpan, contour_offset: u32) {
-    let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+fn globalize_midpoint_span_contour_id(
+    span: &mut gpu::TessVertexSpan,
+    source_contour_base: u32,
+    contour_offset: u32,
+) {
+    let local_id =
+        (span.contour_id_with_flags & gpu::CONTOUR_ID_MASK).saturating_sub(source_contour_base);
     if local_id == 0 {
         return;
     }
@@ -9311,8 +9425,31 @@ fn globalize_midpoint_span_contour_id(span: &mut gpu::TessVertexSpan, contour_of
     span.contour_id_with_flags = (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK) | global_id;
 }
 
-fn append_compact_midpoint_tessellation_to_flush(
-    tessellation: &draw::FillTessellation,
+#[derive(Clone, Copy)]
+struct MsaaTessellationSource<'a> {
+    spans: &'a [gpu::TessVertexSpan],
+    path: gpu::PathData,
+    contours: &'a [gpu::ContourData],
+    base_instance: u32,
+    instance_count: u32,
+    contour_base: u32,
+}
+
+impl<'a> From<&'a draw::FillTessellation> for MsaaTessellationSource<'a> {
+    fn from(tessellation: &'a draw::FillTessellation) -> Self {
+        Self {
+            spans: &tessellation.spans,
+            path: tessellation.path,
+            contours: &tessellation.contours,
+            base_instance: tessellation.base_instance,
+            instance_count: tessellation.instance_count,
+            contour_base: 0,
+        }
+    }
+}
+
+fn append_compact_midpoint_tessellation_to_flush<'a>(
+    tessellation: impl Into<MsaaTessellationSource<'a>>,
     source_contour_ids_are_dense: bool,
     path_id: u32,
     next_base_instance: u32,
@@ -9321,6 +9458,7 @@ fn append_compact_midpoint_tessellation_to_flush(
     contours: &mut Vec<gpu::ContourData>,
     local_contour_ids: &mut Vec<u32>,
 ) -> (u32, u32) {
+    let tessellation = tessellation.into();
     #[derive(PartialEq, Eq)]
     struct SourceSpanKey {
         points: [[u32; 2]; 4],
@@ -9349,8 +9487,9 @@ fn append_compact_midpoint_tessellation_to_flush(
         .checked_sub(old_base)
         .expect("compact tessellation layout must move forward");
     let contour_offset = append_relocated_midpoint_contours_to_flush(
-        &tessellation.spans,
-        &tessellation.contours,
+        tessellation.spans,
+        tessellation.contours,
+        tessellation.contour_base,
         source_contour_ids_are_dense,
         path_id,
         relocation,
@@ -9399,7 +9538,7 @@ fn append_compact_midpoint_tessellation_to_flush(
             continue;
         }
         previous_key = Some(key);
-        globalize_midpoint_span_contour_id(&mut span, contour_offset);
+        globalize_midpoint_span_contour_id(&mut span, tessellation.contour_base, contour_offset);
 
         let logical_x0 = u32::try_from(source_logical_x0)
             .expect("tessellation span start must be non-negative")
@@ -9463,8 +9602,8 @@ fn append_compact_midpoint_tessellation_to_flush(
     )
 }
 
-fn append_midpoint_tessellation_to_flush(
-    tessellation: &draw::FillTessellation,
+fn append_midpoint_tessellation_to_flush<'a>(
+    tessellation: impl Into<MsaaTessellationSource<'a>>,
     source_contour_ids_are_dense: bool,
     path_id: u32,
     x: u32,
@@ -9473,12 +9612,14 @@ fn append_midpoint_tessellation_to_flush(
     contours: &mut Vec<gpu::ContourData>,
     local_contour_ids: &mut Vec<u32>,
 ) -> u32 {
+    let tessellation = tessellation.into();
     let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
     let logical_offset = y * gpu::TESS_TEXTURE_WIDTH as u32 + x;
     assert_eq!(logical_offset % segment_span, 0);
     let contour_offset = append_relocated_midpoint_contours_to_flush(
-        &tessellation.spans,
-        &tessellation.contours,
+        tessellation.spans,
+        tessellation.contours,
+        tessellation.contour_base,
         source_contour_ids_are_dense,
         path_id,
         logical_offset,
@@ -9504,7 +9645,7 @@ fn append_midpoint_tessellation_to_flush(
             reflection_x1,
             reflection_y,
         );
-        globalize_midpoint_span_contour_id(&mut span, contour_offset);
+        globalize_midpoint_span_contour_id(&mut span, tessellation.contour_base, contour_offset);
         spans.push(span);
     }
     tessellation.base_instance + logical_offset / segment_span
@@ -10047,6 +10188,52 @@ mod tests {
         assert_eq!(report.production_typed_output_consumed_draws, 2);
         assert_eq!(report.production_fallback_draws, 0);
         assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn typed_msaa_fill_keeps_copied_fallback_when_reversed_geometry_is_unavailable() {
+        let mut state = DrawState::default();
+        state.transform = Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]);
+        let draw = SolidDraw::new(
+            rect_path([8.0, 8.0, 40.0, 40.0], FillRule::Clockwise),
+            LogicalPaint::default(),
+            state,
+            DrawRole::Content { clip_id: 0 },
+            None,
+        );
+        assert!(draw.authored_msaa_fill_requires_reverse());
+        let prepared_fill = draw.prepared_fill().unwrap();
+        assert!(prepared_fill
+            .midpoint(&draw.path, draw.state.transform)
+            .is_some());
+        assert!(prepared_fill.reversed_midpoint.set(None).is_ok());
+
+        let (frame, prepared) = prepared_typed_attestation_frame(RenderMode::Msaa, vec![draw]);
+        let typed_draws = prepared.typed_draws(&frame.draws);
+        let resources = typed_draws.draw(0).unwrap();
+
+        assert!(!resources.spans.is_empty());
+        assert!(!resources.contours.is_empty());
+    }
+
+    #[test]
+    fn typed_msaa_fill_finishes_with_copied_fallback_when_reversed_geometry_is_unavailable() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
+        let mut frame = factory.begin_frame_for_benchmark(0, true);
+        frame.transform(Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]));
+        let path = rect_path([8.0, 8.0, 40.0, 40.0], FillRule::Clockwise);
+        frame.draw_path(&path, &LogicalPaint::default());
+
+        let draw = frame.draws.first().expect("mirrored fill must be admitted");
+        assert!(draw.authored_msaa_fill_requires_reverse());
+        assert!(draw
+            .prepared_fill()
+            .unwrap()
+            .reversed_midpoint
+            .set(None)
+            .is_ok());
+
+        frame.finish_for_benchmark().unwrap();
     }
 
     #[test]
@@ -10708,7 +10895,7 @@ mod tests {
                 .iter()
                 .map(|draw| draw.paint.color)
                 .collect::<Vec<_>>(),
-            [0xff00_0003, 0xff00_0002, 0xff00_0001,]
+            [0xff00_0003, 0xff00_0002, 0xff00_0001]
         );
         assert_eq!(wgpu.plan_finalization_passes, 1);
         assert!(matches!(
@@ -11830,8 +12017,8 @@ mod tests {
         assert_eq!(batch.spans.len(), 3);
         assert_eq!(batch.spans[0].y_with_flags & 0x1fff_ffff, 0);
         assert_eq!(batch.spans[1].y_with_flags & 0x1fff_ffff, 1);
-        assert_eq!(batch.draws[0].unwrap().texture_y, 0.25);
-        assert_eq!(batch.draws[1].unwrap().texture_y, 0.75);
+        assert_eq!(batch.draw(0).unwrap().texture_y, 0.25);
+        assert_eq!(batch.draw(1).unwrap().texture_y, 0.75);
     }
 
     #[test]
@@ -11992,7 +12179,13 @@ mod tests {
             [(2, 5, vec![2, 2, 1]), (8_192, 2_049, vec![2_048, 1])]
         {
             let _ = logical_frame::take_gradient_batch_preparations();
+            logical_frame::reset_planned_draw_batch_heap_backings();
             let (frame, prepared) = prepare_frame(max_texture_dimension_2d, draw_count);
+            assert_eq!(
+                logical_frame::planned_draw_batch_heap_backings(),
+                0,
+                "single-draw gradient admission and rollover plans must stay inline"
+            );
             assert_eq!(
                 logical_frame::take_gradient_batch_preparations(),
                 expected_flush_sizes.len(),
@@ -12056,7 +12249,7 @@ mod tests {
 
         assert!(batch.is_empty());
         assert!(batch.spans.is_empty());
-        assert!(batch.draws.is_empty());
+        assert!(batch.draw_table_is_empty());
         assert!(batch.draw(0).is_none());
         assert!(batch.draw(1).is_none());
     }
@@ -14321,8 +14514,14 @@ mod tests {
             },
         ];
 
-        assert_eq!(msaa_destination_copy_head(&schedules, 2), 1);
-        assert_eq!(msaa_destination_copy_head(&schedules, 4), 4);
+        assert_eq!(
+            msaa_destination_copy_head(&schedules, 2, |schedule| *schedule),
+            1
+        );
+        assert_eq!(
+            msaa_destination_copy_head(&schedules, 4, |schedule| *schedule),
+            4
+        );
     }
 
     #[test]
@@ -14553,7 +14752,15 @@ mod tests {
             let mut frame =
                 factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
             stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+            logical_frame::reset_prepared_typed_tessellation_vector_copies();
             let work = frame.finish_for_benchmark().unwrap().backend_work;
+            if mode == RenderMode::Msaa {
+                assert_eq!(
+                    logical_frame::prepared_typed_tessellation_vector_copies(),
+                    0,
+                    "MSAA must consume retained fill tessellation without copying it out of the logical writer"
+                );
+            }
             (
                 work.tessellation_spans,
                 work.gpu_draw_calls,
@@ -14579,13 +14786,74 @@ mod tests {
             let mut factory = WgpuFactory::new_with_mode(width, height, mode).unwrap();
             let mut frame =
                 factory.begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true);
+            logical_frame::reset_planned_draw_batch_heap_backings();
             stream.replay_frame(0, &mut factory, &mut frame).unwrap();
+            let planned_draw_batch_heap_backings =
+                logical_frame::planned_draw_batch_heap_backings();
             draw::reset_fill_tessellation_clone_count();
-            let work = frame.finish_for_benchmark().unwrap().backend_work;
+            reset_shared_typed_tessellation_vector_copies();
+            logical_frame::reset_prepared_typed_tessellation_vector_copies();
+            logical_frame::reset_production_direct_msaa_logical_writer_tessellation_copies();
+            logical_frame::reset_logical_feather_atlas_placement_records();
+            logical_frame::reset_prepared_logical_frame_auxiliary_heap_backings();
+            reset_msaa_top_level_plan_heap_allocs();
+            reset_atomic_metrics_strategy_evaluations();
+            let metrics = frame.finish_for_benchmark().unwrap();
+            assert_eq!(
+                metrics.atomic_strategy_partitions,
+                u64::from(mode == RenderMode::ClockwiseAtomic),
+            );
+            let work = metrics.backend_work;
             assert_eq!(
                 draw::fill_tessellation_clone_count(),
                 0,
                 "{mode:?} must encode prepared strokes without cloning tessellation vectors"
+            );
+            assert_eq!(
+                shared_typed_tessellation_vector_copies(),
+                0,
+                "{mode:?} must borrow prepared tessellation vectors into the flush packer"
+            );
+            assert_eq!(
+                shared_typed_tessellation_borrows(),
+                usize::from(mode == RenderMode::Msaa) * 12,
+                "only MSAA should borrow each admitted OverStroke tessellation"
+            );
+            if mode == RenderMode::Msaa {
+                assert_eq!(
+                    logical_frame::prepared_typed_tessellation_vector_copies(),
+                    0,
+                        "MSAA must consume retained OverStroke tessellation without first copying it out of the logical writer"
+                );
+                assert_eq!(
+                    logical_frame::production_direct_msaa_logical_writer_tessellation_copies(),
+                    0,
+                    "production MSAA must not copy retained OverStroke tessellation into diagnostic shadow buffers"
+                );
+            }
+            assert_eq!(
+                logical_frame::logical_feather_atlas_placement_records(),
+                0,
+                "non-raster modes must not allocate per-draw raster atlas placement records"
+            );
+            assert_eq!(
+                planned_draw_batch_heap_backings, 0,
+                "single-draw admission plans must stay inline"
+            );
+            assert_eq!(
+                logical_frame::prepared_logical_frame_auxiliary_heap_backings(),
+                0,
+                "prepared logical frames must avoid auxiliary heap containers and terminal report clones"
+            );
+            assert_eq!(
+                msaa_top_level_plan_heap_allocs(),
+                usize::from(mode == RenderMode::Msaa) * 2,
+                "MSAA plan storage must use exactly two capacity-sized top-level vectors"
+            );
+            assert_eq!(
+                atomic_metrics_strategy_evaluations(),
+                0,
+                "benchmark completion must report encoder-owned atomic partitions without a second strategy scan"
             );
             work
         });

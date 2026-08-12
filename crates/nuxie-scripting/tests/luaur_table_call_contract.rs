@@ -1,3 +1,5 @@
+#![cfg(all(feature = "luau", feature = "compiler"))]
+
 use luaur_rt::{Function, Lua, Table};
 
 #[test]

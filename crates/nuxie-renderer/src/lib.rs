@@ -5218,6 +5218,7 @@ impl WgpuFrame {
                         pending_draws.push(PendingDraw::ClipReset(
                             self.context.msaa_stencil_pipeline.prepare_clip_reset(
                                 &self.context.device,
+                                &self.context.queue,
                                 &uniforms,
                                 bounds,
                                 u16::try_from(z_index)

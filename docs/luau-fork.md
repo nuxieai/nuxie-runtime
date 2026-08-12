@@ -32,7 +32,7 @@ crates.io, vendored byte-for-byte under `vendor/`:
 | `luaur-bytecode` | `vendor/luaur-bytecode-0.1.8` | no | `NUXIE_PROVENANCE.md` |
 | `luaur-common` | `vendor/luaur-common-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
 | `luaur-compiler` | `vendor/luaur-compiler-0.1.8` | no | `NUXIE_PROVENANCE.md` |
-| `luaur-rt` | `vendor/luaur-rt-0.1.8` | yes (async thread data, userdata dispatch) | `NUXIE_PATCH.md` |
+| `luaur-rt` | `vendor/luaur-rt-0.1.8` | yes (bytecode-only runtime feature, async thread data, userdata dispatch) | `NUXIE_PATCH.md` |
 | `luaur-vm` | `vendor/luaur-vm-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
 
 - Upstream repository: `https://github.com/pjankiewicz/luaur`

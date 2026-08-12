@@ -37,7 +37,7 @@ scripting ON).
 
 Measured 2026-07-20 at source revision `d8091cd5`, using the then-current
 42-entry core-renderer and Darwin-presentation consumer harness. The active
-harness now audits 43 renderer-owned roots, including the opaque Metal
+harness now audits 46 renderer-owned roots, including the opaque Metal
 presenter used by the runtime-owned Apple adapter.
 The committed baseline snapshot records its exact measurement revision,
 artifact digests, toolchain, public-root inventory, and symbol-size breakdown in
@@ -89,9 +89,9 @@ artifact mechanically:
    the non-shipping `nuxie-size-report-roots` tooling crate.
 2. Verify the resolved dependency graph contains `nuxie-renderer` and the
    repository's vendored `wgpu` 30.0.0.
-3. Verify the measurement consumer's 43 calls exactly match the public renderer
-   methods: 19 `WgpuFactory`/`WgpuFrame` methods, six opaque Metal-presenter
-   methods, ten `Factory` methods, and eight `Renderer` methods. Re-link both staticlibs as
+3. Verify the measurement consumer's 46 calls exactly match the public renderer
+   methods: 21 `WgpuFactory`/`WgpuFrame` methods, five opaque Metal-presenter
+   methods, 12 `Factory` methods, and eight `Renderer` methods. Re-link both staticlibs as
    one Mach-O dylib, retaining every public `_nux_*` C ABI export plus that
    exact consumer root.
 4. Link with `-dead_strip -dead_strip_dylibs`, verify the C ABI export set is

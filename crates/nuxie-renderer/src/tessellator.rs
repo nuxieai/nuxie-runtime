@@ -819,6 +819,11 @@ impl TessellationUploadFrame<'_> {
         self.slot.finish_submission(encoder);
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn recall_submitted_uploads(&mut self) {
+        self.slot.recall_submitted_uploads();
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn begin_next_submission(&mut self, device: &wgpu::Device) {
         self.slot.begin_submission(device);
@@ -901,6 +906,11 @@ impl TessellationUploadSlot {
     fn finish_submission(&mut self, encoder: &wgpu::CommandEncoder) {
         self.uploads.finish_submission(encoder);
         self.finish_msaa_packing_scratch();
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn recall_submitted_uploads(&mut self) {
+        self.uploads.recall_submitted_uploads();
     }
 
     fn finish_msaa_packing_scratch(&self) {
@@ -1273,12 +1283,24 @@ impl UploadArena {
                     .saturating_add(page.capacity);
             }
         }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = encoder;
+            self.staging_belt.finish();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        // Native encoders own the deferred remap callbacks, so submitted
+        // chunks return without an explicit post-submit recall call.
         self.staging_belt.finish_and_recall_on_submit(encoder);
-        // `finish_and_recall_on_submit` drains every active chunk into callbacks
-        // owned by the encoder. If that encoder is dropped instead of submitted,
-        // those chunks are dropped with it; only pre-finish active chunks need an
-        // explicit belt reset on `TessellationUploadFrame::drop`.
         self.has_active_staging_writes = false;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn recall_submitted_uploads(&mut self) {
+        // Browser WebGPU uses the canonical two-phase StagingBelt lifecycle.
+        // Begin recall only after the encoder carrying these copies has been
+        // submitted, rather than attaching remap callbacks to that encoder.
+        self.staging_belt.recall();
     }
 
     fn discard_active_writes(&mut self) {

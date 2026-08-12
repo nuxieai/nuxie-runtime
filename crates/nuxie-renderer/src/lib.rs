@@ -3466,6 +3466,8 @@ impl WgpuFrame {
             self.context
                 .queue
                 .submit_counted(Some(submitted_encoder.finish()));
+            #[cfg(target_arch = "wasm32")]
+            tessellation_uploads.borrow_mut().recall_submitted_uploads();
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
@@ -6963,6 +6965,8 @@ impl WgpuFrame {
                 .borrow_mut()
                 .finish_submission(&encoder);
             let submission = self.context.queue.submit_counted(Some(encoder.finish()));
+            #[cfg(target_arch = "wasm32")]
+            tessellation_uploads.borrow_mut().recall_submitted_uploads();
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
@@ -7061,6 +7065,8 @@ impl WgpuFrame {
             .borrow_mut()
             .finish_submission(&encoder);
         self.context.queue.submit_counted(Some(encoder.finish()));
+        #[cfg(target_arch = "wasm32")]
+        tessellation_uploads.borrow_mut().recall_submitted_uploads();
         if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
             backing.did_submit();
         }

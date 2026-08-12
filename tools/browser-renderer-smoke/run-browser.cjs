@@ -21,8 +21,8 @@ const fullCases = [
     path: "",
     expected: [
       "backend=webgpu",
-      "browser-presentation=direct-webgpu alpha=premultiplied exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0",
-      "browser-readback=explicit rgba-bytes=48 exact=true surface=0 mapAsync=1 putImageData=0",
+      "browser-presentation=direct-webgpu frames=4 alpha=premultiplied exact-rgba=true composite=over-blue surface=4 mapAsyncRead=0 mapAsyncWrite=3 putImageData=0",
+      "browser-readback=explicit rgba-bytes=48 exact=true surface=0 mapAsyncRead=1 mapAsyncWrite=3 putImageData=0",
       "direct-gpu-canvas=webgpu",
       "imported-gpu-canvas=webgpu",
       "gpu-canvas-physical-shader=rejected lua-values=zero device=clean valid=clean",

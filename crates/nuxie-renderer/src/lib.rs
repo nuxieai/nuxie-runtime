@@ -664,6 +664,12 @@ impl FrameAttachmentPool {
     }
 
     fn recycle(&self, attachments: Arc<FrameAttachments>) {
+        // Diagnostic for UNIV-1382: browser presentation currently returns
+        // before GPU completion. Drop this frame's attachments instead of
+        // making them available to the next presented frame.
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
         let mut state = self
             .state
             .lock()

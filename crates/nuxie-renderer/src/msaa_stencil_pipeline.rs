@@ -1,6 +1,7 @@
 //! MSAA stencil reset translated from Rive's WebGPU renderer.
 
 use crate::gpu::{FlushUniforms, TriangleVertex};
+use crate::tessellator::{TessellationUploadFrame, UploadSlice};
 use crate::work_metrics::CountedDeviceExt;
 
 pub(crate) struct MsaaStencilPipeline {
@@ -12,7 +13,9 @@ pub(crate) struct MsaaStencilPipeline {
 
 pub(crate) struct PreparedStencilDraw {
     pub flush_group: wgpu::BindGroup,
-    pub vertices: wgpu::Buffer,
+    #[cfg(test)]
+    pub uniforms: UploadSlice,
+    pub vertices: UploadSlice,
     pub vertex_count: u32,
 }
 
@@ -167,21 +170,22 @@ impl MsaaStencilPipeline {
     pub(crate) fn prepare_clip_reset(
         &self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        uploads: &mut TessellationUploadFrame<'_>,
         uniforms: &FlushUniforms,
         bounds: [f32; 4],
         z_index: u16,
     ) -> PreparedStencilDraw {
-        let uniform_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-msaa-stencil-uniforms"),
-            contents: bytemuck::bytes_of(uniforms),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        // Clip-heavy frames can prepare dozens of resets. Keep their small
+        // payloads on the frame upload page instead of creating one
+        // mapped-at-creation GPU buffer for every uniform and vertex block.
+        let uniform_buffer = uploads.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
         let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-stencil-flush-group"),
             layout: &self.flush_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
+                resource: uniform_buffer.binding(),
             }],
         });
         let [left, top, right, bottom] = bounds;
@@ -193,13 +197,12 @@ impl MsaaStencilPipeline {
             TriangleVertex::new([left, top], 0, z_index),
             TriangleVertex::new([right, top], 0, z_index),
         ];
-        let vertex_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-msaa-stencil-vertices"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buffer =
+            uploads.upload_vertices(device, encoder, bytemuck::cast_slice(&vertices));
         PreparedStencilDraw {
             flush_group,
+            #[cfg(test)]
+            uniforms: uniform_buffer,
             vertices: vertex_buffer,
             vertex_count: vertices.len() as u32,
         }

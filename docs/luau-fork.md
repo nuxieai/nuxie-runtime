@@ -51,8 +51,12 @@ crates.io, vendored byte-for-byte under `vendor/`:
   vendored patched packages; the other four were added at the fork point,
   verified against the Cargo.lock checksums before extraction.
 - `luaur-analysis` and `luaur-config` (optional `luaur-rt` dependencies)
-  are not in Nuxie's dependency graph and are not vendored. If a future
-  feature pulls them in, vendor them at the same fork point first.
+  are not in Nuxie's dependency graph and are not vendored. The authoring
+  decision is tracked by UNIV-1655: compile plus lint/type-check belongs in an
+  editor-owned, lazily loaded `script-tools` module, outside the device SDK and
+  its startup graph. When that module lands, vendor both analysis crates at
+  this same fork point and expose only strings, bytecode, and serializable
+  diagnostics across the tool boundary.
 
 ## Workspace wiring
 

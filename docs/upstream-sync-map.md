@@ -283,11 +283,13 @@ worker may act on that category.
   - `test-correspondence-manifest.toml` `upstream_ref`
   - `docs/parity-gap-register.md` current upstream-reference statement
   - `tools/parity-scorecard/test_parity_scorecard.py` current-pin assertion
-- Port-manifest inventory registry (advance these two together whenever an
+- Port-manifest inventory registry (advance these entries together whenever an
   approved manifest classification update changes its upstream cut; never
   strand CI and the generated manifest at different revisions):
   - `.github/workflows/ci.yml` top-level `PORT_MANIFEST_RIVE_RUNTIME_REF`
   - `port-manifest.toml` `upstream_ref`
+  - `runtime-behavior-inventory.json` `upstream_ref` (regenerate only after
+    reviewing every member/item delta at the new pin)
 - Historical parity-evidence registry (do not advance during a normal sync;
   regenerate the complete registry only after all enrolled proofs are reviewed
   and recaptured):

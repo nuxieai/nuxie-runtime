@@ -140,6 +140,11 @@ def source_binding(
     binding: dict[str, Any] = {"id": identifier, "path": path}
     if start is not None and end is not None:
         lines = payload.splitlines(keepends=True)
+        if start < 1 or end < start or end > len(lines):
+            raise FreshnessError(
+                f"invalid captured item range {identifier} at "
+                f"{path}:{start}-{end} for {len(lines)} lines"
+            )
         selected = b"".join(lines[start - 1 : end])
         while (
             sum(

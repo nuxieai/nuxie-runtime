@@ -1184,7 +1184,7 @@ sibling_files_swept: ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runt
 verdict: DIVERGENT
 axes:
   retained_identity: {status: "adapted-arena-identity", evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:8-22,24-42", "crates/nuxie-runtime/src/draw.rs:12640-12660", "crates/nuxie-graph/src/lib.rs:607-817"], note: "C++ additionally retains the object in the provider's applier list and the parent's dependent list; Rust resolves both by arena child scan, which is AF-3 correct for `from()` but not a retained registration."}
-  push_vs_poll: {status: "isomorphic push; extra drift tracking counted under compensation", cpp_pushes: true, evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:73-85", "crates/nuxie-runtime/src/layout/grid_item_placement.rs:13-48", "crates/nuxie-runtime/src/layout/layout_node_provider.rs:5-50"]}
+  push_vs_poll: {status: "isomorphic push; extra drift tracking counted under compensation", cpp_pushes: true, evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:73-84", "crates/nuxie-runtime/src/layout/grid_item_placement.rs:13-48", "crates/nuxie-runtime/src/layout/layout_node_provider.rs:5-50"]}
   update_ordering: {status: "phase-sequence-equivalent; representation divergent", phases_cpp: "placement property change -> markOwnerDirty -> provider markLayoutNodeDirty -> syncStyleChanges applier pass -> solve", phases_rust: "placement property write -> mark_owner_dirty -> owner layout node dirty + layout_revision -> style_for_node rebuild -> taffy tree rebuild -> solve"}
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@4ac7b327:src/layout/grid_item_placement.cpp:24-42", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:

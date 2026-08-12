@@ -30,6 +30,7 @@ make rust-sources-fresh || exit 1
 # real drift underneath stayed hidden until the tests were fixed.
 gates=(cpp-probe runtime-frame-loop-port-gate rust-attribution-gate
        pure-runtime-boundary-gate
+       parity-evidence-freshness
        runtime-drift-queue
        feature-compile-gate
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate

@@ -288,6 +288,10 @@ worker may act on that category.
   strand CI and the generated manifest at different revisions):
   - `.github/workflows/ci.yml` top-level `PORT_MANIFEST_RIVE_RUNTIME_REF`
   - `port-manifest.toml` `upstream_ref`
+- Historical parity-evidence registry (do not advance during a normal sync;
+  regenerate the complete registry only after all enrolled proofs are reviewed
+  and recaptured):
+  - `parity-evidence-proofs.json` capture refs
 - Historical Phase R oracle registry (do not advance during a runtime sync;
   regenerate and review the reference artifacts first):
   - `.github/workflows/ci.yml` `renderer-golden` override

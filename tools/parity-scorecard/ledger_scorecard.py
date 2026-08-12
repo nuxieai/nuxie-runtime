@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import collections
 import hashlib
+import json
 import re
 import subprocess
 import tomllib
 from pathlib import Path
 from typing import Any
-
 
 SILVER_STATUS_LABELS = {
     "diverges": "divergent",
@@ -25,7 +25,11 @@ DECISION_REFERENCE = re.compile(r"(?<![A-Za-z0-9-])D\d+\b")
 EXTENSION_REFERENCE = re.compile(r"(?<![A-Za-z0-9-])X\d+\b")
 
 
-def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
+def aggregate_ledger_scorecard(
+    repo_root: Path,
+    freshness_report: Path | None = None,
+    upstream_root: Path | None = None,
+) -> dict[str, Any]:
     """Return the parity facts recorded by the repository's existing ledgers."""
     file_manifest = load_toml(repo_root / "file-correspondence-manifest.toml")
     rust_additions = load_toml(repo_root / "rust-additions.toml")
@@ -38,10 +42,22 @@ def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
     frame_gaps = load_toml(repo_root / "docs" / "runtime-frame-loop-gaps.toml")
     d_rows = parse_d_rows((repo_root / "docs" / "parity-gap-register.md").read_text())
     x_rows = parse_x_rows((repo_root / "docs" / "parity-gap-register.md").read_text())
+    freshness_by_owner = (
+        load_structural_freshness(
+            repo_root, freshness_report, file_manifest, upstream_root
+        )
+        if freshness_report is not None
+        else {}
+    )
 
     file_rows = table_rows(file_manifest, "file")
     evidence_by_upstream = validate_file_correspondence_manifest(
-        repo_root, file_manifest, file_rows, d_rows, x_rows
+        repo_root,
+        file_manifest,
+        file_rows,
+        d_rows,
+        x_rows,
+        freshness_by_owner,
     )
     pending_by_family: dict[str, list[str]] = collections.defaultdict(list)
     for row in file_rows:
@@ -59,8 +75,7 @@ def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
     }
     addition_rows = table_rows(rust_additions, "addition")
     classified = {
-        required_string(row, "path", "classified Rust path")
-        for row in addition_rows
+        required_string(row, "path", "classified Rust path") for row in addition_rows
     }
 
     test_rows = table_rows(test_manifest, "file")
@@ -100,6 +115,7 @@ def aggregate_ledger_scorecard(repo_root: Path) -> dict[str, Any]:
             file_rows,
             d_rows,
             x_rows,
+            freshness_by_owner,
         ),
         "cpp_to_rust": {
             "status_counts": status_counts(file_rows),
@@ -153,6 +169,7 @@ def validate_file_correspondence_manifest(
     file_rows: list[dict[str, Any]],
     d_rows: list[dict[str, str]],
     x_rows: list[dict[str, str]],
+    freshness_by_owner: dict[str, dict[str, Any]],
 ) -> dict[str, str]:
     """Reject owner rows whose verification state cannot support a proof claim."""
     if document.get("schema") != "nuxie-file-correspondence/v1":
@@ -223,7 +240,9 @@ def validate_file_correspondence_manifest(
             repo_root, audit_record
         )
         if audit_contents is None:
-            raise ValueError(f"{upstream}: evidence record does not exist: {audit_record}")
+            raise ValueError(
+                f"{upstream}: evidence record does not exist: {audit_record}"
+            )
         if not audit_record_covers_row(audit_contents, b6_row_id):
             raise ValueError(
                 f"{upstream}: evidence record {audit_record} does not contain "
@@ -244,24 +263,22 @@ def validate_file_correspondence_manifest(
             )
         if (
             b6_row_id in declared_current_rows
-            and upstream_ref[:8]
-            not in audit_record_section(audit_contents, b6_row_id)
+            and upstream_ref[:8] not in audit_record_section(audit_contents, b6_row_id)
+            and not (
+                freshness_by_owner.get(upstream, {}).get("current_validity")
+                == "current"
+                and freshness_by_owner.get(upstream, {}).get("binding_completeness")
+                == "complete"
+            )
         ):
             raise ValueError(
                 f"{upstream}: current audit record does not cite {upstream_ref[:8]}"
             )
-        if b6_row_id in declared_current_rows:
-            reviewed_fingerprint = required_string(
-                row,
-                "audit_rust_source_sha256",
-                f"{upstream} reviewed Rust source fingerprint",
-            )
-            actual_fingerprint = rust_source_fingerprint(repo_root, rust_module)
-            if reviewed_fingerprint != actual_fingerprint:
-                raise ValueError(
-                    f"{upstream}: reviewed Rust source fingerprint mismatch; "
-                    f"expected {reviewed_fingerprint}, got {actual_fingerprint}"
-                )
+        # Whole-file review fingerprints are retained as historical migration
+        # metadata, but are no longer freshness authority. One shared Rust file
+        # can implement many owners, so an unrelated edit otherwise invalidates
+        # all of them. parity-evidence-proofs.json binds current evidence to the
+        # reviewed item windows, probes, and fixtures instead.
         evidence_by_upstream[upstream] = evidence_locator
         note = required_string(row, "note", f"{upstream} evidence note")
         decision_references = set(DECISION_REFERENCE.findall(note))
@@ -271,17 +288,13 @@ def validate_file_correspondence_manifest(
             key=lambda value: int(value[1:]),
         )
         if unknown_decisions:
-            raise ValueError(
-                f"{upstream}: unknown decision {unknown_decisions[0]}"
-            )
+            raise ValueError(f"{upstream}: unknown decision {unknown_decisions[0]}")
         unknown_extensions = sorted(
             extension_references - known_extensions,
             key=lambda value: int(value[1:]),
         )
         if unknown_extensions:
-            raise ValueError(
-                f"{upstream}: unknown extension {unknown_extensions[0]}"
-            )
+            raise ValueError(f"{upstream}: unknown extension {unknown_extensions[0]}")
         if row.get("status") == "divergent-by-decision" and not decision_references:
             raise ValueError(
                 f"{upstream}: divergent-by-decision requires a D-row reference"
@@ -311,25 +324,6 @@ def test_case_coverage(row: dict[str, Any]) -> int:
     return 0
 
 
-def rust_source_fingerprint(repo_root: Path, rust_module: str) -> str:
-    """Hash the path and bytes of every Rust source mapped to one reviewed owner."""
-    sources = sorted(
-        source.strip().split("::", 1)[0]
-        for source in rust_module.split(";")
-        if source.strip()
-    )
-    digest = hashlib.sha256(b"nuxie-reviewed-rust-sources/v1\0")
-    for source in sources:
-        path = repo_root / source
-        if not path.is_file():
-            raise ValueError(f"reviewed Rust source does not exist: {source}")
-        digest.update(source.encode())
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
-
-
 def build_owner_proof_report(
     upstream_ref: str,
     audit_upstream_ref: str,
@@ -338,6 +332,7 @@ def build_owner_proof_report(
     file_rows: list[dict[str, Any]],
     d_rows: list[dict[str, str]],
     x_rows: list[dict[str, str]],
+    freshness_by_owner: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Derive proof dimensions without treating correspondence as verification."""
     known_decisions = {row["id"] for row in d_rows}
@@ -368,8 +363,24 @@ def build_owner_proof_report(
         row_audit_upstream_ref = (
             upstream_ref if row_id in current_audit_rows else audit_upstream_ref
         )
+        item_freshness = freshness_by_owner.get(upstream)
+        content_bound = (
+            item_freshness is not None
+            and item_freshness.get("binding_completeness") == "complete"
+        )
         freshness = (
-            "current" if row_audit_upstream_ref == upstream_ref else "stale"
+            str(item_freshness["current_validity"])
+            if content_bound
+            else (
+                "stale"
+                if row_audit_upstream_ref != upstream_ref
+                else (
+                    "stale"
+                    if item_freshness is not None
+                    and item_freshness["current_validity"] == "stale"
+                    else "delegated"
+                )
+            )
         )
         note = str(row.get("note", ""))
         decisions = sorted(
@@ -383,16 +394,24 @@ def build_owner_proof_report(
         exception = (
             "intentional-extension"
             if extensions
-            else "intentional-divergence"
-            if status == "divergent-by-decision"
-            else "none"
+            else (
+                "intentional-divergence"
+                if status == "divergent-by-decision"
+                else "none"
+            )
         )
         effective_state = (
             "stale"
             if freshness == "stale"
-            else "known-divergent"
-            if structural in {"divergent", "tracked-gap"}
-            else behavioral
+            else (
+                "unverified-freshness"
+                if freshness != "current"
+                else (
+                    "known-divergent"
+                    if structural in {"divergent", "tracked-gap"}
+                    else behavioral
+                )
+            )
         )
         by_upstream[upstream] = {
             "upstream": upstream,
@@ -402,14 +421,34 @@ def build_owner_proof_report(
             "verification": str(row.get("verification")),
             "freshness": freshness,
             "freshness_basis": (
-                "row-audit-pin-and-rust-source"
-                if row_id in current_audit_rows
-                else "manifest-audit-pin"
+                "item-bound-parity-evidence"
+                if content_bound
+                else (
+                    "manifest-audit-pin"
+                    if row_audit_upstream_ref != upstream_ref
+                    else (
+                        "parity-evidence-inventory"
+                        if freshness == "stale"
+                        else "delegated-to-parity-evidence-report"
+                    )
+                )
             ),
             "freshness_reason": (
-                "structural audit upstream ref differs from owner upstream ref"
-                if freshness == "stale"
-                else "structural audit pin and reviewed Rust source fingerprint match"
+                "; ".join(item_freshness.get("stale_reasons", []))
+                if content_bound and freshness == "stale"
+                else (
+                    "content-bound proof inputs match current sources"
+                    if content_bound
+                    else (
+                        "structural audit upstream ref differs from owner upstream ref"
+                        if row_audit_upstream_ref != upstream_ref
+                        else (
+                            "; ".join(item_freshness.get("stale_reasons", []))
+                            if freshness == "stale" and item_freshness is not None
+                            else "source freshness requires the item-bound parity evidence report"
+                        )
+                    )
+                )
             ),
             "reviewed_rust_source_sha256": row.get("audit_rust_source_sha256"),
             "audit_record": audit_record,
@@ -421,9 +460,7 @@ def build_owner_proof_report(
             "effective_state": effective_state,
         }
     dimension_counts = {
-        dimension: sorted_counts(
-            proof[dimension] for proof in by_upstream.values()
-        )
+        dimension: sorted_counts(proof[dimension] for proof in by_upstream.values())
         for dimension in (
             "mapping",
             "structural",
@@ -473,6 +510,184 @@ def build_owner_proof_report(
         },
         "non_proven_by_dimension": non_proven_by_dimension,
     }
+
+
+def load_structural_freshness(
+    repo_root: Path,
+    report_path: Path,
+    file_manifest: dict[str, Any],
+    upstream_root: Path | None = None,
+) -> dict[str, dict[str, Any]]:
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(
+            f"cannot read parity evidence freshness report: {error}"
+        ) from error
+    if report.get("schema") != "nuxie-parity-evidence-freshness/v1":
+        raise ValueError("parity evidence freshness report has an unsupported schema")
+    current_ref = report.get("current_upstream_ref", report.get("upstream_ref"))
+    if current_ref != file_manifest.get("upstream_ref"):
+        raise ValueError(
+            "parity evidence freshness report has a different upstream ref"
+        )
+    git_result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if (
+        git_result.returncode == 0
+        and report.get("rust_commit") != git_result.stdout.strip()
+    ):
+        raise ValueError("parity evidence freshness report has a different Rust commit")
+    registry = json.loads((repo_root / "parity-evidence-proofs.json").read_text())
+    expected_paths = {
+        "file-correspondence-manifest.toml",
+        "parity-evidence-proofs.json",
+    }
+    for proof in registry.get("proofs", []):
+        if not isinstance(proof, dict) or proof.get("kind") != "structural":
+            continue
+        evidence = proof.get("evidence")
+        if isinstance(evidence, dict) and isinstance(evidence.get("path"), str):
+            expected_paths.add(evidence["path"])
+        for field in ("rust_items", "probes", "fixtures"):
+            for binding in proof.get(field, []):
+                if (
+                    isinstance(binding, dict)
+                    and binding.get("root", "repo") == "repo"
+                    and isinstance(binding.get("path"), str)
+                ):
+                    expected_paths.add(binding["path"])
+    state = report.get("repo_source_state")
+    if not isinstance(state, list):
+        raise ValueError("parity evidence freshness report has no source-state seal")
+    state_by_path = {}
+    for record in state:
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("path"), str)
+            or (
+                not isinstance(record.get("sha256"), str)
+                and record.get("missing") is not True
+            )
+            or (isinstance(record.get("sha256"), str) and "missing" in record)
+            or record["path"] in state_by_path
+        ):
+            raise ValueError("parity evidence freshness source-state seal is malformed")
+        state_by_path[record["path"]] = record
+    if set(state_by_path) != expected_paths:
+        raise ValueError(
+            "parity evidence freshness source-state coverage is incomplete"
+        )
+    for path, record in state_by_path.items():
+        source = repo_root / path
+        matches = (
+            not source.exists()
+            if record.get("missing") is True
+            else source.is_file()
+            and hashlib.sha256(source.read_bytes()).hexdigest() == record["sha256"]
+        )
+        if not matches:
+            raise ValueError(f"parity evidence freshness source state changed: {path}")
+    if upstream_root is None:
+        raise ValueError(
+            "parity evidence freshness validation requires an upstream checkout"
+        )
+    expected_upstream_paths = {
+        binding["path"]
+        for proof in registry.get("proofs", [])
+        if isinstance(proof, dict)
+        for binding in proof.get("cpp_items", [])
+        if isinstance(binding, dict) and isinstance(binding.get("path"), str)
+    }
+    expected_upstream_paths.update(
+        binding["path"]
+        for proof in registry.get("proofs", [])
+        if isinstance(proof, dict)
+        for binding in proof.get("fixtures", [])
+        if isinstance(binding, dict)
+        and binding.get("root") == "upstream"
+        and isinstance(binding.get("path"), str)
+    )
+    upstream_state = report.get("upstream_source_state")
+    if not isinstance(upstream_state, list):
+        raise ValueError(
+            "parity evidence freshness report has no upstream source-state seal"
+        )
+    upstream_state_by_path = {}
+    for record in upstream_state:
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("path"), str)
+            or (
+                not isinstance(record.get("sha256"), str)
+                and record.get("missing") is not True
+            )
+            or (isinstance(record.get("sha256"), str) and "missing" in record)
+            or record["path"] in upstream_state_by_path
+        ):
+            raise ValueError(
+                "parity evidence freshness upstream source-state seal is malformed"
+            )
+        upstream_state_by_path[record["path"]] = record
+    if set(upstream_state_by_path) != expected_upstream_paths:
+        raise ValueError(
+            "parity evidence freshness upstream source-state coverage is incomplete"
+        )
+    for path, record in upstream_state_by_path.items():
+        source = upstream_root / path
+        matches = (
+            not source.exists()
+            if record.get("missing") is True
+            else source.is_file()
+            and hashlib.sha256(source.read_bytes()).hexdigest() == record["sha256"]
+        )
+        if not matches:
+            raise ValueError(
+                f"parity evidence freshness upstream source state changed: {path}"
+            )
+    proofs = report.get("proofs")
+    if not isinstance(proofs, list):
+        raise ValueError("parity evidence freshness report proofs must be a list")
+    by_owner: dict[str, dict[str, Any]] = {}
+    for proof in proofs:
+        if not isinstance(proof, dict) or proof.get("kind") != "structural":
+            continue
+        owner = proof.get("owner")
+        validity = proof.get("current_validity")
+        reasons = proof.get("stale_reasons")
+        if (
+            not isinstance(owner, str)
+            or validity not in {"current", "stale"}
+            or not isinstance(reasons, list)
+            or not all(isinstance(reason, str) for reason in reasons)
+            or owner in by_owner
+        ):
+            raise ValueError("parity evidence freshness report has malformed owners")
+        by_owner[owner] = proof
+    expected = {
+        required_string(row, "upstream", "upstream owner")
+        for row in table_rows(file_manifest, "file")
+    }
+    changes = report.get("upstream_owner_changes")
+    removed = set(changes.get("removed", [])) if isinstance(changes, dict) else set()
+    extras = set(by_owner) - expected
+    removed_with_proofs = removed & set(by_owner)
+    if (
+        not expected.issubset(by_owner)
+        or extras != removed - expected
+        or any(
+            by_owner[owner]["current_validity"] != "stale"
+            for owner in removed_with_proofs
+        )
+    ):
+        raise ValueError(
+            "parity evidence freshness report owner coverage is incomplete"
+        )
+    return {owner: by_owner[owner] for owner in expected}
 
 
 def owner_proof_document(scorecard: dict[str, Any]) -> dict[str, Any]:
@@ -531,7 +746,7 @@ def audit_record_substantiates(
     record = contents[start:end]
     verdict_match = re.search(
         rf'(?:"verdict"\s*:\s*"{re.escape(verdict)}"|'
-        rf'verdict:\s*{re.escape(verdict)}(?=[;,\s]))',
+        rf"verdict:\s*{re.escape(verdict)}(?=[;,\s]))",
         record,
     )
     return upstream in record and verdict_match is not None
@@ -560,9 +775,7 @@ def audit_record_section(contents: str, row_id: str) -> str:
     return contents[row_marker.start() : end]
 
 
-def second_pass_record_substantiates(
-    contents: str, row_id: str, verdict: str
-) -> bool:
+def second_pass_record_substantiates(contents: str, row_id: str, verdict: str) -> bool:
     """Validate a row or compact row range in the B6 second-pass table."""
     return any(
         audit_record_covers_row(line, row_id) and verdict in line
@@ -757,9 +970,7 @@ def render_ledger_scorecard(scorecard: dict[str, Any]) -> str:
             for upstream in paths:
                 proof = owner_proofs["by_upstream"][upstream]
                 exceptions = proof["decisions"] + proof["extensions"]
-                suffix = (
-                    "; exceptions=" + ",".join(exceptions) if exceptions else ""
-                )
+                suffix = "; exceptions=" + ",".join(exceptions) if exceptions else ""
                 lines.append(
                     f"- `{upstream}` — mapping={proof['mapping']}; "
                     f"structural={proof['structural']}; "

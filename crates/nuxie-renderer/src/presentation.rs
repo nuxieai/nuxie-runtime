@@ -163,6 +163,14 @@ impl WgpuPresentationFrame {
             .finish_to_texture_view_async(&view, &self.presenter)
             .await?;
         self.context.queue.present(self.texture);
+        // Browser surface work cannot complete while the acquired texture is
+        // still unpresented. Present first, then keep the next frame from
+        // reusing submitted staging resources until this queue work settles.
+        #[cfg(target_arch = "wasm32")]
+        {
+            super::wait_for_queue_work(&self.context).await?;
+            super::return_uncaptured_device_error(&self.context)?;
+        }
         Ok(metrics)
     }
 }

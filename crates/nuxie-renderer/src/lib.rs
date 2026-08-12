@@ -6959,9 +6959,7 @@ impl WgpuFrame {
                 backing.did_submit();
             }
             #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-            // Browser presentation recycles frame-owned staging resources below,
-            // so its submitted work must complete before the next frame can reuse them.
-            if presentation.is_none() || cfg!(target_arch = "wasm32") {
+            if presentation.is_none() {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
             #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
@@ -7155,15 +7153,21 @@ async fn wait_for_submitted_work(
     #[cfg(target_arch = "wasm32")]
     {
         let _ = submission;
-        let (sender, receiver) = futures_channel::oneshot::channel();
-        context.queue.on_submitted_work_done(move || {
-            let _ = sender.send(());
-        });
-        receiver
-            .await
-            .map_err(|error| RendererError::Map(error.to_string()))?;
+        wait_for_queue_work(context).await?;
     }
 
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn wait_for_queue_work(context: &Context) -> Result<(), RendererError> {
+    let (sender, receiver) = futures_channel::oneshot::channel();
+    context.queue.on_submitted_work_done(move || {
+        let _ = sender.send(());
+    });
+    receiver
+        .await
+        .map_err(|error| RendererError::Map(error.to_string()))?;
     Ok(())
 }
 

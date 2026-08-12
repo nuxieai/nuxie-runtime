@@ -75,6 +75,9 @@ minimums, and device limits before its single unsafe passthrough leaf.
 pipeline-layout implementation and the target-10 validator call that same
 function. It models independent per-stage buffer, texture, and sampler tables,
 group ordering, visibility, immediates, and Metal argument-buffer allocation.
+When a pipeline selects vertex and fragment entries from different assets, the
+renderer runs that allocator again over the final merged layout and requires
+each selected stage's target-10 spaces and slots to match exactly.
 Any binding array consumes one buffer slot regardless of element kind, matching
 the pinned HAL path. Unit cases cover buffers, textures, samplers, arrays,
 multiple groups, sparse bindings, stage visibility, and single-slot mutation.

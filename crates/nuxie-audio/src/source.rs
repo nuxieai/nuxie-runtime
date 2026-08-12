@@ -540,6 +540,19 @@ mod tests {
             .unwrap_or_else(|error| panic!("read pinned audio fixture {}: {error}", path.display()))
     }
 
+    fn with_info_list(mut wav: Vec<u8>) -> Vec<u8> {
+        const INFO_LIST: &[u8] = b"LIST\x10\x00\x00\x00INFOINAM\x04\x00\x00\x00tag\x00";
+        assert!(wav.starts_with(b"RIFF"));
+        assert_eq!(wav.get(8..12), Some(b"WAVE".as_slice()));
+        let riff_len = u32::from_le_bytes(wav[4..8].try_into().expect("RIFF length"));
+        let tagged_riff_len = riff_len
+            .checked_add(u32::try_from(INFO_LIST.len()).expect("INFO LIST fits RIFF"))
+            .expect("tagged RIFF length fits u32");
+        wav.splice(12..12, INFO_LIST.iter().copied());
+        wav[4..8].copy_from_slice(&tagged_riff_len.to_le_bytes());
+        wav
+    }
+
     #[test]
     fn wav_source_metadata_and_reader_lengths_match_the_pinned_contract() {
         let source = AudioSource::from_encoded(pinned_fixture("audio/what.wav"))
@@ -557,6 +570,32 @@ mod tests {
         assert!(mono_48k.length_in_frames().abs_diff(10_544) <= 2);
         let stereo_32k = source.make_reader(2, 32_000).expect("32 kHz reader");
         assert!(stereo_32k.length_in_frames().abs_diff(7_029) <= 2);
+    }
+
+    #[test]
+    fn wav_info_list_is_skipped_without_changing_audio() {
+        let bytes = pinned_fixture("audio/what.wav");
+        let plain = AudioSource::from_encoded(bytes.clone()).expect("plain WAV validates");
+        let tagged =
+            AudioSource::from_encoded(with_info_list(bytes)).expect("tagged WAV validates");
+
+        assert_eq!(tagged.format(), plain.format());
+        assert_eq!(tagged.channels(), plain.channels());
+        assert_eq!(tagged.sample_rate(), plain.sample_rate());
+        assert_eq!(tagged.duration(), plain.duration());
+
+        let mut expected = plain
+            .make_reader(plain.channels(), plain.sample_rate())
+            .expect("plain native reader");
+        let mut actual = tagged
+            .make_reader(tagged.channels(), tagged.sample_rate())
+            .expect("tagged native reader");
+        let frame_count = expected.length_in_frames();
+        assert_eq!(actual.length_in_frames(), frame_count);
+        let expected_samples = expected.read(frame_count).to_vec();
+        assert_eq!(actual.read(frame_count), expected_samples.as_slice());
+        assert!(expected.read(1).is_empty());
+        assert!(actual.read(1).is_empty());
     }
 
     #[test]

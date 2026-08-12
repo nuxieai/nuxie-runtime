@@ -401,6 +401,9 @@ fn validate_lifecycle(manifest: &NuxPackageManifestV1) -> Result<()> {
         if !screen_ids.contains(transition.destination_screen_id.as_str()) {
             return invalid("transitions[].destinationScreenId does not name a screen");
         }
+        if !(1..=MAX_LIFECYCLE_DURATION_MS).contains(&transition.duration_ms) {
+            return invalid("transitions[].durationMs must be between 1 and 60000");
+        }
         non_empty(
             &transition.source.complete_event_name,
             "transitions[].source.completeEventName",
@@ -410,6 +413,12 @@ fn validate_lifecycle(manifest: &NuxPackageManifestV1) -> Result<()> {
             "transitions[].destination.completeEventName",
         )?;
         if let Some(reverse) = &transition.reverse {
+            if reverse
+                .duration_ms
+                .is_some_and(|duration_ms| !(1..=MAX_LIFECYCLE_DURATION_MS).contains(&duration_ms))
+            {
+                return invalid("transitions[].reverse.durationMs must be between 1 and 60000");
+            }
             non_empty(
                 &reverse.source.complete_event_name,
                 "transitions[].reverse.source.completeEventName",

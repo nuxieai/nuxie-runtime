@@ -180,6 +180,35 @@ fn lifecycle_and_transition_declarations_are_structurally_validated() {
         NuxContainerError::InvalidManifest(message)
             if message == "screens[].exit.durationMs must be between 1 and 60000"
     ));
+
+    let mut invalid_transition_duration = lifecycle_manifest();
+    invalid_transition_duration
+        .manifest
+        .transitions
+        .as_mut()
+        .unwrap()[0]
+        .duration_ms = 60_001;
+    assert!(matches!(
+        validation_error(&invalid_transition_duration),
+        NuxContainerError::InvalidManifest(message)
+            if message == "transitions[].durationMs must be between 1 and 60000"
+    ));
+
+    let mut invalid_reverse_duration = lifecycle_manifest();
+    invalid_reverse_duration
+        .manifest
+        .transitions
+        .as_mut()
+        .unwrap()[0]
+        .reverse
+        .as_mut()
+        .unwrap()
+        .duration_ms = Some(0);
+    assert!(matches!(
+        validation_error(&invalid_reverse_duration),
+        NuxContainerError::InvalidManifest(message)
+            if message == "transitions[].reverse.durationMs must be between 1 and 60000"
+    ));
 }
 
 #[test]

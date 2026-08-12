@@ -3,6 +3,7 @@
 use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TriangleVertex};
 use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
+use crate::tessellator::{TessellationUploadFrame, UploadSlice};
 use crate::work_metrics::CountedDeviceExt;
 use crate::RendererCapabilities;
 
@@ -27,7 +28,7 @@ pub(crate) struct PreparedAtlasBlit {
     pub flush_group: wgpu::BindGroup,
     pub image_group: wgpu::BindGroup,
     pub sampler_group: wgpu::BindGroup,
-    pub vertices: wgpu::Buffer,
+    pub vertices: UploadSlice,
     pub vertex_count: u32,
     clip_rect: bool,
     path_clip: bool,
@@ -318,6 +319,7 @@ impl MsaaAtlasPipeline {
         &self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
+        uploads: &mut TessellationUploadFrame<'_>,
         tessellation: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
@@ -335,12 +337,7 @@ impl MsaaAtlasPipeline {
         hsl_blend: bool,
         destination_copy_bounds: [u32; 4],
     ) -> PreparedAtlasBlit {
-        let uniform = upload(
-            device,
-            "nuxie-msaa-atlas-uniforms",
-            std::slice::from_ref(uniforms),
-            wgpu::BufferUsages::UNIFORM,
-        );
+        let uniform = uploads.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
         let polyfill = self.polyfill_vertex_storage_buffers;
         let path = StorageResource::upload(
             device,
@@ -374,12 +371,8 @@ impl MsaaAtlasPipeline {
             StorageBufferStructure::Uint32x4,
             polyfill,
         );
-        let vertex_buffer = upload(
-            device,
-            "nuxie-msaa-atlas-vertices",
-            vertices,
-            wgpu::BufferUsages::VERTEX,
-        );
+        let vertex_buffer =
+            uploads.upload_vertices(device, encoder, bytemuck::cast_slice(vertices));
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-msaa-atlas-dummy-texture"),
             size: wgpu::Extent3d {
@@ -405,7 +398,7 @@ impl MsaaAtlasPipeline {
             label: Some("nuxie-msaa-atlas-flush-group"),
             layout: &self.flush_layout,
             entries: &[
-                binding(0, uniform.as_entire_binding()),
+                binding(0, uniform.binding()),
                 binding(2, path.binding()),
                 binding(3, paint.binding()),
                 binding(4, paint_aux.binding()),
@@ -453,19 +446,6 @@ impl MsaaAtlasPipeline {
             destination_copy_bounds,
         }
     }
-}
-
-fn upload<T: bytemuck::Pod>(
-    device: &wgpu::Device,
-    label: &'static str,
-    values: &[T],
-    usage: wgpu::BufferUsages,
-) -> wgpu::Buffer {
-    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytemuck::cast_slice(values),
-        usage,
-    })
 }
 
 fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroupEntry<'_> {

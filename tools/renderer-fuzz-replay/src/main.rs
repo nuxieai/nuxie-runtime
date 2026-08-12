@@ -33,6 +33,7 @@ struct Rect {
 
 struct Options {
     replay: PathBuf,
+    reference_replay: Option<PathBuf>,
     output_dir: PathBuf,
     timeout: Duration,
     mode: String,
@@ -77,8 +78,26 @@ fn main() -> Result<()> {
     let control_stream_path = options.output_dir.join("control.stream");
     fs::write(&control_stream_path, &control.stream)
         .with_context(|| format!("write {}", control_stream_path.display()))?;
-    let rust_control = run_backend(&options, &control, &control_stream_path, "rust-wgpu")?;
-    let cpp_control = run_backend(&options, &control, &control_stream_path, "ffi-metal")?;
+    let reference_replay = options.reference_replay.as_ref().unwrap_or(&options.replay);
+    let reference_backend = if options.reference_replay.is_some() {
+        "rust-wgpu"
+    } else {
+        "ffi-metal"
+    };
+    let rust_control = run_backend(
+        &options,
+        &options.replay,
+        &control,
+        &control_stream_path,
+        "rust-wgpu",
+    )?;
+    let reference_control = run_backend(
+        &options,
+        reference_replay,
+        &control,
+        &control_stream_path,
+        reference_backend,
+    )?;
     for case in &cases {
         RenderStream::parse(&case.stream)
             .with_context(|| format!("generated stream {} is invalid", case.name))?;
@@ -86,8 +105,14 @@ fn main() -> Result<()> {
         fs::write(&stream_path, &case.stream)
             .with_context(|| format!("write {}", stream_path.display()))?;
 
-        let rust = run_backend(&options, case, &stream_path, "rust-wgpu")?;
-        let cpp = run_backend(&options, case, &stream_path, "ffi-metal")?;
+        let rust = run_backend(&options, &options.replay, case, &stream_path, "rust-wgpu")?;
+        let reference = run_backend(
+            &options,
+            reference_replay,
+            case,
+            &stream_path,
+            reference_backend,
+        )?;
         require_matching_region(
             case,
             "rust-wgpu",
@@ -97,21 +122,33 @@ fn main() -> Result<()> {
         )?;
         require_matching_region(
             case,
-            "ffi-metal",
-            &cpp_control.image,
-            &cpp.image,
+            reference_backend,
+            &reference_control.image,
+            &reference.image,
             CONTROL_FOOTPRINT,
         )?;
         let (different_pixels, max_channel_delta) =
-            compare_outside_control(&rust.image, &cpp.image, CONTROL_FOOTPRINT)?;
-        let relation = require_pixel_expectation(case, different_pixels, max_channel_delta)?;
+            compare_outside_control(&rust.image, &reference.image, CONTROL_FOOTPRINT)?;
+        let relation = if options.reference_replay.is_some() {
+            if different_pixels != 0 {
+                bail!(
+                    "{} WGSL/MSL replay mismatch: {} pixels/max delta {}",
+                    case.name,
+                    different_pixels,
+                    max_channel_delta
+                );
+            }
+            "exact-wgsl-msl"
+        } else {
+            require_pixel_expectation(case, different_pixels, max_channel_delta)?
+        };
         println!(
             "case={} finding={} result=pass relation={} rust_ms={} cpp_ms={} non_control_different_pixels={} non_control_max_channel_delta={}",
             case.name,
             case.id,
             relation,
             rust.elapsed.as_millis(),
-            cpp.elapsed.as_millis(),
+            reference.elapsed.as_millis(),
             different_pixels,
             max_channel_delta,
         );
@@ -180,6 +217,7 @@ fn require_pixel_expectation(
 
 fn run_backend(
     options: &Options,
+    replay: &Path,
     case: &Case,
     stream_path: &Path,
     backend: &str,
@@ -206,7 +244,7 @@ fn run_backend(
         File::create(&stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
 
     let started = Instant::now();
-    let mut child = Command::new(&options.replay)
+    let mut child = Command::new(replay)
         .arg("--stream")
         .arg(stream_path)
         .arg("--output")
@@ -350,12 +388,16 @@ fn compare_outside_control(rust: &RgbaImage, cpp: &RgbaImage, ignored: Rect) -> 
 fn parse_options() -> Result<Options> {
     let mut args = std::env::args().skip(1);
     let mut replay = None;
+    let mut reference_replay = None;
     let mut output_dir = PathBuf::from("target/renderer-fuzz-replay");
     let mut timeout = Duration::from_secs(20);
     let mut mode = String::from("clockwise-atomic");
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--replay" => replay = Some(PathBuf::from(args.next().context(usage())?)),
+            "--reference-replay" => {
+                reference_replay = Some(PathBuf::from(args.next().context(usage())?))
+            }
             "--output-dir" => output_dir = PathBuf::from(args.next().context(usage())?),
             "--timeout-seconds" => {
                 timeout = Duration::from_secs(args.next().context(usage())?.parse()?);
@@ -369,6 +411,7 @@ fn parse_options() -> Result<Options> {
     }
     Ok(Options {
         replay: replay.context(usage())?,
+        reference_replay,
         output_dir,
         timeout,
         mode,
@@ -376,7 +419,7 @@ fn parse_options() -> Result<Options> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-fuzz-replay --replay FILE [--output-dir DIR] [--timeout-seconds N] [--mode msaa|clockwise-atomic]"
+    "usage: renderer-fuzz-replay --replay FILE [--reference-replay FILE] [--output-dir DIR] [--timeout-seconds N] [--mode msaa|clockwise-atomic]"
 }
 
 fn read_log(path: &Path) -> String {

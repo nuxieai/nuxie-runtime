@@ -50,6 +50,7 @@ apple-msl-capture = [
     "naga/serialize",
     "wgpu-types/serde",
 ]
+apple-msl-replay = ["apple-msl-capture"]
 ########################
 ### Backend Features ###
 ########################

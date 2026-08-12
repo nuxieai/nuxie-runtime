@@ -37,6 +37,8 @@ EXPECTED_SHADER_MODULE_CREATION_SITES = {
     pathlib.PurePosixPath("shader_catalog.rs"): 1,
 }
 
+RAW_LITERAL_PREFIX = re.compile(r'(?:br|cr|r)(?P<hashes>#{0,255})"')
+
 
 def _blank_literal_or_comment(source: str) -> str:
     """Blank Rust comments and literals while preserving offsets and newlines."""
@@ -75,7 +77,11 @@ def _blank_literal_or_comment(source: str) -> str:
             blank(start, index)
             continue
 
-        raw = re.match(r"(?:br|cr|r)(?P<hashes>#{0,255})\"", source[index:])
+        raw = (
+            RAW_LITERAL_PREFIX.match(source, index)
+            if source[index] in {"b", "c", "r"}
+            else None
+        )
         if raw:
             start = index
             terminator = '"' + raw.group("hashes")

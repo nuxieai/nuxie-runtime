@@ -21,6 +21,12 @@ const REVIEWED_INVENTORY: &str = "tools/apple-msl-catalog/reviewed-inventory.jso
 const OUTPUT_DIR: &str = "crates/nuxie-renderer/apple-msl-catalog";
 const MANIFEST: &str = "manifest.json";
 
+// These are the language versions selected by the pinned wgpu Metal adapter
+// across the repository's supported macOS 12+/iOS 15+ deployment window.
+// Keep this list in lockstep with `wgpu-hal/src/metal/adapter.rs` when either
+// the deployment floor or the vendored backend changes.
+const SUPPORTED_MSL_VERSIONS: [[u8; 2]; 5] = [[2, 4], [3, 0], [3, 1], [3, 2], [4, 0]];
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Catalog {
@@ -158,13 +164,14 @@ pub struct CompileOptions {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 struct GeneratedManifest {
     schema_version: u32,
-    artifacts: Vec<GeneratedArtifact>,
+    artifacts: Vec<PhysicalArtifact>,
+    aliases: Vec<LogicalAlias>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-struct GeneratedArtifact {
-    id: String,
+struct PhysicalArtifact {
     key_sha256: String,
+    msl_version: [u8; 2],
     msl_path: String,
     msl_sha256: String,
     translated_entry_point: String,
@@ -173,6 +180,14 @@ struct GeneratedArtifact {
     sized_bindings: Vec<GeneratedBinding>,
     immutable_buffer_mask: usize,
     preserve_invariance: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct LogicalAlias {
+    id: String,
+    source_pipeline_id: String,
+    msl_version: [u8; 2],
+    key_sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -186,6 +201,8 @@ struct GeneratedBinding {
 #[serde(deny_unknown_fields)]
 struct ReviewedInventory {
     schema_version: u32,
+    supported_msl_versions: Vec<[u8; 2]>,
+    source_pipeline_permutations: InventoryFingerprint,
     logical_permutations: InventoryFingerprint,
     compiler_artifacts: InventoryFingerprint,
 }
@@ -201,6 +218,12 @@ struct InventoryFingerprint {
 struct LogicalPermutation<'a> {
     id: &'a str,
     key_sha256: &'a str,
+}
+
+#[derive(Serialize)]
+struct SourcePipelinePermutation {
+    id: String,
+    key_sha256: String,
 }
 
 pub fn generate(root: &Path) -> Result<()> {
@@ -280,162 +303,192 @@ fn render(root: &Path) -> Result<Rendered> {
         catalog.schema_version
     );
     validate_reviewed_inventory(root, &catalog)?;
-    let mut ids = BTreeSet::new();
-    let mut key_sources: BTreeMap<String, String> = BTreeMap::new();
+    let mut source_ids = BTreeSet::new();
+    let mut source_pipeline_keys = BTreeSet::new();
     let mut msls = BTreeMap::new();
-    let mut records = Vec::new();
-    for artifact in catalog.artifacts {
+    let mut physical = BTreeMap::new();
+    let mut aliases = Vec::new();
+    for captured_artifact in catalog.artifacts {
+        let source_pipeline_id = stable_source_pipeline_id(&captured_artifact)?;
         ensure!(
-            !artifact.id.is_empty()
-                && artifact
+            !captured_artifact.id.is_empty()
+                && captured_artifact
                     .id
                     .chars()
                     .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')),
             "invalid artifact id {:?}",
-            artifact.id
+            captured_artifact.id
         );
         ensure!(
-            ids.insert(artifact.id.clone()),
+            source_ids.insert(source_pipeline_id.clone()),
             "duplicate artifact id {:?}",
-            artifact.id
+            source_pipeline_id
         );
         ensure!(
-            artifact.msl_version == artifact.compile_options.language_version,
+            source_pipeline_keys.insert(source_pipeline_key_sha256(&captured_artifact)?),
+            "duplicate source pipeline inputs for {:?}",
+            captured_artifact.id
+        );
+        ensure!(
+            captured_artifact.msl_version == captured_artifact.compile_options.language_version,
             "{}: translation and Metal compile language versions differ",
-            artifact.id
+            captured_artifact.id
         );
-        let topology = match artifact.primitive_topology.as_str() {
-            "point_list" => wgpu_types::PrimitiveTopology::PointList,
-            "line_list" => wgpu_types::PrimitiveTopology::LineList,
-            "line_strip" => wgpu_types::PrimitiveTopology::LineStrip,
-            "triangle_list" => wgpu_types::PrimitiveTopology::TriangleList,
-            "triangle_strip" => wgpu_types::PrimitiveTopology::TriangleStrip,
-            "compute" if matches!(artifact.stage, Stage::Compute) => {
-                wgpu_types::PrimitiveTopology::TriangleList
-            }
-            unknown => anyhow::bail!("{}: unknown primitive topology {unknown:?}", artifact.id),
-        };
         ensure!(
-            artifact.allow_and_force_point_size
-                == matches!(topology, wgpu_types::PrimitiveTopology::PointList),
-            "{}: point-size setting does not match primitive topology",
-            artifact.id
+            SUPPORTED_MSL_VERSIONS.contains(&captured_artifact.msl_version),
+            "{}: captured host MSL version {:?} is outside the supported Apple matrix {:?}",
+            captured_artifact.id,
+            captured_artifact.msl_version,
+            SUPPORTED_MSL_VERSIONS
         );
-        let source = fs::read(root.join(&artifact.source.path))
-            .with_context(|| format!("read source for {}", artifact.id))?;
-        ensure!(
-            sha256(&source) == artifact.source.sha256,
-            "{}: source digest is stale",
-            artifact.id
-        );
-        // Human labels and repository paths are logical aliases, not compiler
-        // inputs. Byte-identical built-ins share one committed MSL artifact.
-        let key_sha256 = canonical_key_sha256(&artifact)?;
-        if let Some(previous_path) = key_sources.get(&key_sha256) {
-            ensure!(
-                previous_path != &artifact.source.path,
-                "duplicate canonical artifact key {key_sha256} for source {}",
-                artifact.source.path
+        for msl_version in SUPPORTED_MSL_VERSIONS {
+            let mut artifact = captured_artifact.clone();
+            artifact.msl_version = msl_version;
+            artifact.compile_options.language_version = msl_version;
+            let logical_id = format!(
+                "{}-msl-{}-{}",
+                source_pipeline_id, msl_version[0], msl_version[1]
             );
-        } else {
-            key_sources.insert(key_sha256.clone(), artifact.source.path.clone());
-        }
-        let wgsl = std::str::from_utf8(&source)?;
-        let module = naga::front::wgsl::parse_str(wgsl)
-            .with_context(|| format!("parse WGSL for {}", artifact.id))?;
-        let info = naga::valid::Validator::new(
-            naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::all(),
-        )
-        .validate(&module)
-        .with_context(|| format!("validate WGSL for {}", artifact.id))?;
-        let shader = wgpu_hal::NagaShader {
-            module: Cow::Owned(module),
-            info,
-            debug_source: None,
-        };
-        let resources = resources(&artifact.resources)?;
-        let arrays = artifact
-            .binding_array_lengths
-            .iter()
-            .map(|binding| {
-                (
-                    naga::ResourceBinding {
-                        group: binding.group,
-                        binding: binding.binding,
-                    },
-                    binding.length,
-                )
-            })
-            .collect();
-        let vertices = artifact
-            .vertex_buffers
-            .iter()
-            .map(vertex_buffer)
-            .collect::<Result<Vec<_>>>()?;
-        let output = translate(TranslationInput {
-            shader: &shader,
-            stage: artifact.stage.into(),
-            entry_point: &artifact.entry_point,
-            constants: &artifact
-                .constants
+            let topology = match artifact.primitive_topology.as_str() {
+                "point_list" => wgpu_types::PrimitiveTopology::PointList,
+                "line_list" => wgpu_types::PrimitiveTopology::LineList,
+                "line_strip" => wgpu_types::PrimitiveTopology::LineStrip,
+                "triangle_list" => wgpu_types::PrimitiveTopology::TriangleList,
+                "triangle_strip" => wgpu_types::PrimitiveTopology::TriangleStrip,
+                "compute" if matches!(artifact.stage, Stage::Compute) => {
+                    wgpu_types::PrimitiveTopology::TriangleList
+                }
+                unknown => anyhow::bail!("{}: unknown primitive topology {unknown:?}", artifact.id),
+            };
+            ensure!(
+                artifact.allow_and_force_point_size
+                    == matches!(topology, wgpu_types::PrimitiveTopology::PointList),
+                "{}: point-size setting does not match primitive topology",
+                artifact.id
+            );
+            let source = fs::read(root.join(&artifact.source.path))
+                .with_context(|| format!("read source for {}", artifact.id))?;
+            ensure!(
+                sha256(&source) == artifact.source.sha256,
+                "{}: source digest is stale",
+                artifact.id
+            );
+            // Human labels and repository paths are logical aliases, not compiler
+            // inputs. Byte-identical built-ins share one committed MSL artifact.
+            let key_sha256 = canonical_key_sha256(&artifact)?;
+            let wgsl = std::str::from_utf8(&source)?;
+            let module = naga::front::wgsl::parse_str(wgsl)
+                .with_context(|| format!("parse WGSL for {}", artifact.id))?;
+            let info = naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .with_context(|| format!("validate WGSL for {}", artifact.id))?;
+            let shader = wgpu_hal::NagaShader {
+                module: Cow::Owned(module),
+                info,
+                debug_source: None,
+            };
+            let resources = resources(&artifact.resources)?;
+            let arrays = artifact
+                .binding_array_lengths
                 .iter()
-                .map(|(key, value)| (key.clone(), *value))
-                .collect(),
-            resources: &resources,
-            binding_array_length_map: &arrays,
-            vertex_buffer_mappings: &vertices,
-            allow_and_force_point_size: artifact.allow_and_force_point_size,
-            msl_version: (artifact.msl_version[0], artifact.msl_version[1]),
-            zero_initialize_workgroup_memory: artifact.zero_initialize_workgroup_memory,
-            runtime_checks: artifact.runtime_checks.into(),
-            task_dispatch_limits: naga::back::TaskDispatchLimits {
-                max_mesh_workgroups_per_dim: artifact
-                    .task_dispatch_limits
-                    .max_mesh_workgroups_per_dim,
-                max_mesh_workgroups_total: artifact.task_dispatch_limits.max_mesh_workgroups_total,
-            },
-        })
-        .map_err(|error| anyhow::anyhow!("translate {}: {error:?}", artifact.id))?;
-        ensure!(
-            output.preserve_invariance == artifact.compile_options.preserve_invariance_expected,
-            "{}: preserveInvariance expectation differs from translated MSL",
-            artifact.id
-        );
-        let file = format!("{key_sha256}.metal");
-        let msl_sha256 = sha256(output.source.as_bytes());
-        let sized_bindings = output
-            .sized_bindings
-            .iter()
-            .map(|(binding, array_index)| GeneratedBinding {
-                group: binding.group,
-                binding: binding.binding,
-                array_index: *array_index,
+                .map(|binding| {
+                    (
+                        naga::ResourceBinding {
+                            group: binding.group,
+                            binding: binding.binding,
+                        },
+                        binding.length,
+                    )
+                })
+                .collect();
+            let vertices = artifact
+                .vertex_buffers
+                .iter()
+                .map(vertex_buffer)
+                .collect::<Result<Vec<_>>>()?;
+            let output = translate(TranslationInput {
+                shader: &shader,
+                stage: artifact.stage.into(),
+                entry_point: &artifact.entry_point,
+                constants: &artifact
+                    .constants
+                    .iter()
+                    .map(|(key, value)| (key.clone(), *value))
+                    .collect(),
+                resources: &resources,
+                binding_array_length_map: &arrays,
+                vertex_buffer_mappings: &vertices,
+                allow_and_force_point_size: artifact.allow_and_force_point_size,
+                msl_version: (artifact.msl_version[0], artifact.msl_version[1]),
+                zero_initialize_workgroup_memory: artifact.zero_initialize_workgroup_memory,
+                runtime_checks: artifact.runtime_checks.into(),
+                task_dispatch_limits: naga::back::TaskDispatchLimits {
+                    max_mesh_workgroups_per_dim: artifact
+                        .task_dispatch_limits
+                        .max_mesh_workgroups_per_dim,
+                    max_mesh_workgroups_total: artifact
+                        .task_dispatch_limits
+                        .max_mesh_workgroups_total,
+                },
             })
-            .collect();
-        records.push(GeneratedArtifact {
-            id: artifact.id,
-            key_sha256: key_sha256.clone(),
-            msl_path: file.clone(),
-            msl_sha256,
-            translated_entry_point: output.translated_entry_point,
-            workgroup_size: output.workgroup_size,
-            workgroup_memory_sizes: output.workgroup_memory_sizes,
-            sized_bindings,
-            immutable_buffer_mask: output.immutable_buffer_mask,
-            preserve_invariance: output.preserve_invariance,
-        });
-        if let Some(existing) = msls.insert(file.clone(), output.source.clone()) {
+            .map_err(|error| anyhow::anyhow!("translate {}: {error:?}", artifact.id))?;
             ensure!(
-                existing == output.source,
-                "canonical key {key_sha256} generated divergent MSL"
+                output.preserve_invariance == artifact.compile_options.preserve_invariance_expected,
+                "{}: preserveInvariance expectation differs from translated MSL",
+                artifact.id
             );
+            let file = format!("{key_sha256}.metal");
+            let msl_sha256 = sha256(output.source.as_bytes());
+            let sized_bindings = output
+                .sized_bindings
+                .iter()
+                .map(|(binding, array_index)| GeneratedBinding {
+                    group: binding.group,
+                    binding: binding.binding,
+                    array_index: *array_index,
+                })
+                .collect();
+            let record = PhysicalArtifact {
+                key_sha256: key_sha256.clone(),
+                msl_path: file.clone(),
+                msl_sha256,
+                msl_version,
+                translated_entry_point: output.translated_entry_point,
+                workgroup_size: output.workgroup_size,
+                workgroup_memory_sizes: output.workgroup_memory_sizes,
+                sized_bindings,
+                immutable_buffer_mask: output.immutable_buffer_mask,
+                preserve_invariance: output.preserve_invariance,
+            };
+            if let Some(existing) = physical.insert(key_sha256.clone(), record.clone()) {
+                ensure!(
+                    existing == record,
+                    "canonical key {key_sha256} generated divergent physical records"
+                );
+            }
+            aliases.push(LogicalAlias {
+                id: logical_id,
+                source_pipeline_id: source_pipeline_id.clone(),
+                msl_version,
+                key_sha256: key_sha256.clone(),
+            });
+            if let Some(existing) = msls.insert(file.clone(), output.source.clone()) {
+                ensure!(
+                    existing == output.source,
+                    "canonical key {key_sha256} generated divergent MSL"
+                );
+            }
         }
     }
-    records.sort_by(|a, b| a.id.cmp(&b.id));
+    aliases.sort_by(|a, b| a.id.cmp(&b.id));
+    let artifacts = physical.into_values().collect();
     let mut manifest = serde_json::to_string_pretty(&GeneratedManifest {
-        schema_version: 1,
-        artifacts: records,
+        schema_version: 2,
+        artifacts,
+        aliases,
     })?;
     manifest.push('\n');
     Ok(Rendered { manifest, msls })
@@ -545,26 +598,78 @@ fn canonical_key_sha256(artifact: &Artifact) -> Result<String> {
     Ok(sha256(&serde_json::to_vec(&key)?))
 }
 
+fn source_pipeline_key_sha256(artifact: &Artifact) -> Result<String> {
+    let mut key = serde_json::to_value(artifact)?;
+    let object = key
+        .as_object_mut()
+        .expect("Artifact always serializes as an object");
+    object.remove("id");
+    object.remove("msl_version");
+    object
+        .get_mut("compile_options")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("Artifact compile options always serialize as an object")
+        .remove("language_version");
+    Ok(sha256(&serde_json::to_vec(&key)?))
+}
+
+fn stable_source_pipeline_id(artifact: &Artifact) -> Result<String> {
+    let stem = artifact
+        .id
+        .rsplit_once('-')
+        .map_or(artifact.id.as_str(), |(stem, _)| stem);
+    let key = source_pipeline_key_sha256(artifact)?;
+    Ok(format!("{stem}-{}", &key[..12]))
+}
+
 fn reviewed_inventory(catalog: &Catalog) -> Result<ReviewedInventory> {
-    let mut logical = catalog
+    let mut source_pipelines = catalog
         .artifacts
         .iter()
-        .map(|artifact| Ok((artifact.id.as_str(), canonical_key_sha256(artifact)?)))
+        .map(|artifact| {
+            Ok(SourcePipelinePermutation {
+                id: stable_source_pipeline_id(artifact)?,
+                key_sha256: source_pipeline_key_sha256(artifact)?,
+            })
+        })
         .collect::<Result<Vec<_>>>()?;
+    source_pipelines.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut logical = Vec::new();
+    for artifact in &catalog.artifacts {
+        let source_pipeline_id = stable_source_pipeline_id(artifact)?;
+        for msl_version in SUPPORTED_MSL_VERSIONS {
+            let mut variant = artifact.clone();
+            variant.msl_version = msl_version;
+            variant.compile_options.language_version = msl_version;
+            logical.push((
+                format!(
+                    "{}-msl-{}-{}",
+                    source_pipeline_id, msl_version[0], msl_version[1]
+                ),
+                canonical_key_sha256(&variant)?,
+            ));
+        }
+    }
     logical.sort();
 
     let compiler_keys: BTreeSet<_> = logical.iter().map(|(_, key)| key.as_str()).collect();
     let logical_records: Vec<_> = logical
         .iter()
         .map(|(id, key)| LogicalPermutation {
-            id,
+            id: id.as_str(),
             key_sha256: key,
         })
         .collect();
     let compiler_keys: Vec<_> = compiler_keys.into_iter().collect();
 
     Ok(ReviewedInventory {
-        schema_version: 1,
+        schema_version: 2,
+        supported_msl_versions: SUPPORTED_MSL_VERSIONS.to_vec(),
+        source_pipeline_permutations: InventoryFingerprint {
+            count: source_pipelines.len(),
+            sha256: sha256(&serde_json::to_vec(&source_pipelines)?),
+        },
         logical_permutations: InventoryFingerprint {
             count: logical_records.len(),
             sha256: sha256(&serde_json::to_vec(&logical_records)?),
@@ -583,11 +688,23 @@ fn validate_reviewed_inventory(root: &Path, catalog: &Catalog) -> Result<()> {
     )
     .with_context(|| format!("parse reviewed inventory {}", path.display()))?;
     ensure!(
-        expected.schema_version == 1,
+        expected.schema_version == 2,
         "unsupported reviewed inventory schema version {}",
         expected.schema_version
     );
     let actual = reviewed_inventory(catalog)?;
+    ensure!(
+        actual.supported_msl_versions == expected.supported_msl_versions,
+        "reviewed Apple MSL support matrix changed: expected {:?}, found {:?}; review deployment support and deliberately update {REVIEWED_INVENTORY}",
+        expected.supported_msl_versions,
+        actual.supported_msl_versions
+    );
+    ensure!(
+        actual.source_pipeline_permutations == expected.source_pipeline_permutations,
+        "reviewed source pipeline permutation inventory changed: expected {:?}, found {:?}; review the capture and deliberately update {REVIEWED_INVENTORY}",
+        expected.source_pipeline_permutations,
+        actual.source_pipeline_permutations
+    );
     ensure!(
         actual.logical_permutations == expected.logical_permutations,
         "reviewed logical pipeline permutation inventory changed: expected {:?}, found {:?}; review the capture and deliberately update {REVIEWED_INVENTORY}",
@@ -653,19 +770,49 @@ mod tests {
             .canonicalize()
             .unwrap();
         check(&root).unwrap();
+        let catalog: Catalog =
+            serde_json::from_slice(&fs::read(root.join(INPUT)).unwrap()).unwrap();
         let manifest: GeneratedManifest = serde_json::from_str(
             &fs::read_to_string(root.join(OUTPUT_DIR).join(MANIFEST)).unwrap(),
         )
         .unwrap();
-        assert!(!manifest.artifacts.is_empty());
+        assert_eq!(
+            manifest.aliases.len(),
+            catalog.artifacts.len() * SUPPORTED_MSL_VERSIONS.len()
+        );
+        let manifest_versions: BTreeSet<_> = manifest
+            .aliases
+            .iter()
+            .map(|artifact| artifact.msl_version)
+            .collect();
+        assert_eq!(
+            manifest_versions,
+            SUPPORTED_MSL_VERSIONS.into_iter().collect()
+        );
+        let expected_matrix: BTreeSet<_> = catalog
+            .artifacts
+            .iter()
+            .flat_map(|artifact| {
+                let source_pipeline_id = stable_source_pipeline_id(artifact).unwrap();
+                SUPPORTED_MSL_VERSIONS
+                    .into_iter()
+                    .map(move |version| (source_pipeline_id.clone(), version))
+            })
+            .collect();
+        let actual_matrix: BTreeSet<_> = manifest
+            .aliases
+            .iter()
+            .map(|artifact| (artifact.source_pipeline_id.clone(), artifact.msl_version))
+            .collect();
+        assert_eq!(actual_matrix, expected_matrix);
+        assert_eq!(actual_matrix.len(), manifest.aliases.len());
+        assert_eq!(manifest.artifacts.len(), 445);
         assert!(
             manifest
                 .artifacts
                 .iter()
                 .all(|artifact| !artifact.translated_entry_point.is_empty())
         );
-        let catalog: Catalog =
-            serde_json::from_slice(&fs::read(root.join(INPUT)).unwrap()).unwrap();
         assert!(catalog.artifacts.iter().any(|artifact| {
             artifact
                 .resources
@@ -843,7 +990,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("duplicate canonical artifact key")
+                .contains("duplicate source pipeline inputs")
         );
     }
 
@@ -862,7 +1009,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("reviewed logical pipeline permutation inventory changed")
+                .contains("reviewed source pipeline permutation inventory changed")
         );
     }
 
@@ -884,15 +1031,22 @@ mod tests {
         write_catalog_and_reviewed_inventory(root.path(), &catalog);
 
         let inventory = reviewed_inventory(&catalog).unwrap();
-        assert_eq!(inventory.logical_permutations.count, 2);
-        assert_eq!(inventory.compiler_artifacts.count, 1);
+        assert_eq!(inventory.source_pipeline_permutations.count, 2);
+        assert_eq!(
+            inventory.logical_permutations.count,
+            2 * SUPPORTED_MSL_VERSIONS.len()
+        );
+        assert_eq!(
+            inventory.compiler_artifacts.count,
+            SUPPORTED_MSL_VERSIONS.len()
+        );
         generate(root.path()).unwrap();
         let generated_msl_count = fs::read_dir(root.path().join(OUTPUT_DIR))
             .unwrap()
             .filter_map(Result::ok)
             .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "metal"))
             .count();
-        assert_eq!(generated_msl_count, 1);
+        assert_eq!(generated_msl_count, SUPPORTED_MSL_VERSIONS.len());
 
         catalog.artifacts.pop();
         fs::write(path, serde_json::to_vec_pretty(&catalog).unwrap()).unwrap();
@@ -903,7 +1057,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("reviewed logical pipeline permutation inventory changed")
+                .contains("reviewed source pipeline permutation inventory changed")
         );
     }
 

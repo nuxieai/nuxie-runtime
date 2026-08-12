@@ -65,25 +65,48 @@ Repository-controlled renderer shaders have one typed ownership seam in
 seam and retains its separately validated WGSL path. On a real Metal adapter,
 `tools/capture-apple-msl-catalog.sh` constructs the reachable pipeline families
 and records the exact inputs passed to the pinned wgpu-hal WGSL-to-MSL
-translator. The offline generator then commits path-independent, content-keyed
+translator. The repository deployment floor is macOS 12/iOS 15, which the
+pinned wgpu Metal adapter maps to MSL 2.4. The same adapter selects MSL 3.0,
+3.1, 3.2, and 4.0 on newer supported OS releases. The offline generator fans
+every captured layout permutation through that exact translator once for each
+of those five language versions, then commits path-independent, content-keyed
 MSL and reflection records under `crates/nuxie-renderer/apple-msl-catalog`.
 Customer builds never run this capture or generator.
 
 `make renderer-shaders-check` regenerates every artifact and rejects source or
-manifest drift, duplicate logical inputs, unreferenced physical MSL, and any
-change to the separately reviewed inventory of 91 logical pipeline
-permutations and 89 deduplicated compiler artifacts. The artifact identity
-binds the WGSL digest, stage and entry point, pipeline constants, full resource
-and binding-array maps, vertex pulling layout, topology, MSL language version,
-workgroup initialization, runtime checks, task limits, and Metal invariance
-expectation.
+manifest drift, duplicate source-pipeline identities, unreferenced physical
+MSL, and any change to the separately reviewed inventory of 91 captured
+pipeline permutations, 455 versioned logical permutations, and 445
+deduplicated compiler artifacts. Byte-identical shaders at different
+repository paths remain distinct, uniquely named logical pipeline aliases, but
+share one physical content-keyed MSL artifact when every compiler input is
+equal. Repeating the same source path and compiler inputs is rejected. The
+artifact identity binds the WGSL digest, stage and entry point, pipeline
+constants, full resource and binding-array maps, vertex pulling layout,
+topology, MSL language version, workgroup initialization, runtime checks, task
+limits, and Metal invariance expectation. The reviewed inventory also pins the
+five-version support matrix, so changing the deployment floor or vendored
+adapter policy requires a deliberate catalog review.
 
 The Apple instance policy disables wgpu's two internal WGSL helper-pipeline
 flags. `make renderer-apple-msl-no-wgsl-probe` additionally resolves a pinned
 wgpu Metal graph without `wgpu/wgsl` or `naga/wgsl-in`, executes trusted MSL,
 and checks its pixel readback on a real Metal device. This catalog slice does
-not select MSL in `apple-runtime`; the support-matrix cutover and full dual-path
-device qualification remain the responsibility of UNIV-2074.
+not select MSL in `apple-runtime`; selecting the manifest entry for a device
+and full dual-path device qualification remain the responsibility of
+UNIV-2074.
+
+`make renderer-apple-msl-replay` builds two isolated renderer binaries and
+runs focused MSAA and clockwise-atomic goldens plus the deterministic hostile
+fuzz corpus on the same Metal adapter. The reference uses the normal WGSL/Naga
+path; the candidate enables the test-only HAL replay path and must resolve
+every pipeline stage to committed MSL by its complete layout-derived compiler
+key. Before Metal compilation, replay verifies the committed source digest,
+content-keyed filename, and every reflection field consumed by wgpu-hal. The
+gate is fail-closed: it requires a nonempty hit ledger written only after a
+validated MSL substitution and ratchets the focused run at 70 distinct
+compiler keys (the current Apple M5 Max run exercises 76). The feature is inert
+in production builds and when `NUXIE_APPLE_MSL_REPLAY_DIR` is absent.
 
 The renderer-source suffix above is reconstructable. It covers the runtime
 crates and the replay code linked into the two runners. The candidate
@@ -219,7 +242,7 @@ The patched package provenance is:
 - `wgpu-core` canonical source patch SHA-256:
   `9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`;
 - `wgpu-hal` canonical source patch SHA-256:
-  `07f5fb9869c202a5f165928676fef2449057a218744d32e38556ad2f88b092f7`;
+  `13595289b3b70bc3eaa440fdb4afd4aefa4e4ffcde0be290446d2df6871559bb`;
 - six-manifest distribution wiring SHA-256:
   `632166f561bda7ca790e97f5e28ccc8abefcca61d318fb686e56ba6f7faa79a5`;
 - direct-crate `wgpu`, core, and HAL lock SHA-256 values:
@@ -400,6 +423,7 @@ Final behavior verification:
 ```sh
 make renderer-shaders-check
 make renderer-wgpu-backend-check renderer-wgpu-consumer-check
+make renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 make browser-renderer-smoke
 make renderer-golden
 cargo test -p perf-compare

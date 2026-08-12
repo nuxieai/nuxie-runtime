@@ -417,7 +417,16 @@ jobs:
         run: make renderer-wgpu-backend-check renderer-wgpu-consumer-check
 
       - name: Execute committed Apple MSL without WGSL input support
+        if: ${{ !cancelled() }}
         run: make renderer-apple-msl-no-wgsl-probe
+
+      - name: Compare live Metal pipeline inputs with committed catalog
+        if: ${{ !cancelled() }}
+        run: make renderer-apple-msl-capture-check
+
+      - name: Compare committed Apple MSL with live WGSL renderer output
+        if: ${{ !cancelled() }}
+        run: make renderer-apple-msl-replay
 
       - name: Build reference runtime and renderer for dual fuzz replay
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}

@@ -339,9 +339,11 @@ fn id3v2_payload_offset(bytes: &[u8]) -> usize {
         let payload_len = size_bytes
             .iter()
             .fold(0usize, |size, byte| (size << 7) | usize::from(*byte));
+        let footer_len = usize::from(major_version == 4 && flags & 0x10 != 0) * 10;
         let Some(next) = offset
             .checked_add(10)
             .and_then(|value| value.checked_add(payload_len))
+            .and_then(|value| value.checked_add(footer_len))
         else {
             break;
         };
@@ -669,5 +671,11 @@ mod tests {
 
         let malformed = b"ID3\x04\x00\x00\x80\x00\x00\x03tag";
         assert_eq!(id3v2_payload_offset(malformed), 0);
+
+        let mut chained = b"ID3\x04\x00\x10\x00\x00\x00\x03tag".to_vec();
+        chained.extend_from_slice(b"3DI\x04\x00\x10\x00\x00\x00\x03");
+        chained.extend_from_slice(b"ID3\x04\x00\x00\x00\x00\x00\x03two");
+        chained.extend_from_slice(b"\xff\xfb");
+        assert_eq!(id3v2_payload_offset(&chained), 36);
     }
 }

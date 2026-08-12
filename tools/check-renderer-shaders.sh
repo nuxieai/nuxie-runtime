@@ -6,6 +6,9 @@ committed="$root/crates/nuxie-renderer/src/generated"
 work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shaders.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
+"$root/tools/check-renderer-shader-boundary.sh"
+"$root/tools/check-apple-msl-catalog.sh"
+
 expected_module_count="66"
 expected_module_digest="44841b4b740f5a45b91eef19c98a62a57239e4725628d54fc5bc1fbe678732ed"
 expected_cpp_header_count="56"

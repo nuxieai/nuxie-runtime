@@ -43,6 +43,13 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 [lib]
 
 [features]
+apple-msl-capture = [
+    "dep:serde",
+    "dep:serde_json",
+    "dep:sha2",
+    "naga/serialize",
+    "wgpu-types/serde",
+]
 ########################
 ### Backend Features ###
 ########################
@@ -208,6 +215,9 @@ naga.workspace = true
 wgpu-naga-bridge.workspace = true
 naga-types = { workspace = true }
 wgpu-types = { workspace = true, default-features = false }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 
 # Dependencies in the lib and empty backend
 bitflags.workspace = true

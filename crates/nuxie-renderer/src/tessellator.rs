@@ -3,6 +3,7 @@
 use crate::work_metrics::{record_buffer_upload, CountedCommandEncoderExt, CountedDeviceExt};
 use crate::{
     gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TessVertexSpan},
+    shader_catalog::{self, BuiltinShaderKey},
     storage_texture::{self, StorageBufferStructure, StorageResource},
     RendererCapabilities,
 };
@@ -204,23 +205,15 @@ pub(crate) struct Tessellator {
 impl Tessellator {
     pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
-        let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-tessellate-vertex"),
-            source: wgpu::ShaderSource::Wgsl(
-                if polyfill {
-                    include_str!("generated/tessellate.webgpu_nossbo_vert.wgsl")
-                } else {
-                    include_str!("generated/tessellate.webgpu_vert.wgsl")
-                }
-                .into(),
-            ),
-        });
-        let fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-tessellate-fragment"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/tessellate.webgpu_frag.wgsl").into(),
-            ),
-        });
+        let vertex = shader_catalog::create(
+            device,
+            if polyfill {
+                BuiltinShaderKey::TessellateVertexStorageTexture
+            } else {
+                BuiltinShaderKey::TessellateVertex
+            },
+        );
+        let fragment = shader_catalog::create(device, BuiltinShaderKey::TessellateFragment);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-tessellate-flush-layout"),
             entries: &[

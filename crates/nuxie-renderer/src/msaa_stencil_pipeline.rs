@@ -1,6 +1,7 @@
 //! MSAA stencil reset translated from Rive's WebGPU renderer.
 
 use crate::gpu::{FlushUniforms, TriangleVertex};
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::work_metrics::CountedDeviceExt;
 
 pub(crate) struct MsaaStencilPipeline {
@@ -18,16 +19,8 @@ pub(crate) struct PreparedStencilDraw {
 
 impl MsaaStencilPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let vertex = shader(
-            device,
-            "nuxie-msaa-stencil-vertex",
-            include_str!("generated/draw_msaa_stencil.webgpu_noclipdistance_vert.wgsl"),
-        );
-        let fragment = shader(
-            device,
-            "nuxie-msaa-stencil-fragment",
-            include_str!("generated/draw_msaa_stencil.webgpu_fixedcolor_frag.wgsl"),
-        );
+        let vertex = shader_catalog::create(device, BuiltinShaderKey::MsaaStencilVertex);
+        let fragment = shader_catalog::create(device, BuiltinShaderKey::MsaaStencilFragment);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-stencil-flush-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -204,11 +197,4 @@ impl MsaaStencilPipeline {
             vertex_count: vertices.len() as u32,
         }
     }
-}
-
-fn shader(device: &wgpu::Device, label: &str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    })
 }

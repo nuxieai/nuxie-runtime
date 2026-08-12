@@ -1,5 +1,6 @@
 //! Ordered composition of resolved fallback runs into the main color target.
 
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) struct CompositePipeline {
@@ -14,10 +15,7 @@ pub(crate) struct CompositePipeline {
 
 impl CompositePipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-composite-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("composite.wgsl").into()),
-        });
+        let shader = shader_catalog::create(device, BuiltinShaderKey::Composite);
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-composite-layout"),
             entries: &[
@@ -98,10 +96,7 @@ impl CompositePipeline {
                 multiview_mask: None,
                 cache: None,
             });
-        let advanced_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-advanced-composite-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("advanced_composite.wgsl").into()),
-        });
+        let advanced_shader = shader_catalog::create(device, BuiltinShaderKey::AdvancedComposite);
         let advanced_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-advanced-composite-layout"),
             entries: &[

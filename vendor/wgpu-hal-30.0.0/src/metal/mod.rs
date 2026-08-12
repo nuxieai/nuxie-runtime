@@ -25,6 +25,9 @@ mod command;
 mod conv;
 mod device;
 mod library_from_metallib;
+#[cfg(feature = "apple-msl-capture")]
+mod shader_capture;
+pub mod shader_translation;
 mod surface;
 mod time;
 

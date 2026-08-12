@@ -1,0 +1,2454 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "id": "nuxie-advanced-composite-shader-fragment-fragment-main-6fcce112ff76",
+      "key_sha256": "9f49564c70f0282aec6334dd40a7f405fb05d3cb4d032f00ff7f7ba4383bc2c7",
+      "msl_path": "9f49564c70f0282aec6334dd40a7f405fb05d3cb4d032f00ff7f7ba4383bc2c7.metal",
+      "msl_sha256": "76b9009782bfe5ae7b092c559b30ae642360a7b00eff1ad3b58f231b163248d4",
+      "translated_entry_point": "fragment_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-advanced-composite-shader-vertex-vertex-main-45650f375674",
+      "key_sha256": "2fce4087ab8c824a3fc98104fb4919ee157708238522a89e795b2bc5c99408d0",
+      "msl_path": "2fce4087ab8c824a3fc98104fb4919ee157708238522a89e795b2bc5c99408d0.metal",
+      "msl_sha256": "a82aec40f8d9977ecdec2fc7609069c84efd099ed0587c1eddf68b0be3304c31",
+      "translated_entry_point": "vertex_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atlas-fill-fragment-fragment-main-77794a43d4b5",
+      "key_sha256": "07cb639bd4f852ff60502845c928c04fe8595628956dffc8cccb9e69b853cdd0",
+      "msl_path": "07cb639bd4f852ff60502845c928c04fe8595628956dffc8cccb9e69b853cdd0.metal",
+      "msl_sha256": "7e912851a286ce0a07f847601b769e7c124586f991e3cbde2c7b10a57fe9b84a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atlas-stroke-fragment-fragment-main-a86f76be4769",
+      "key_sha256": "7085c05c4ec686b1f8b502f63a6db4ab81c93a98dd181286b298629f7c2361dd",
+      "msl_path": "7085c05c4ec686b1f8b502f63a6db4ab81c93a98dd181286b298629f7c2361dd.metal",
+      "msl_sha256": "6ae7dcd1fa290cc627caa80fed61070a8fce8ad4839f70a3c75143c3e6c6aeda",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atlas-vertex-vertex-main-11e14a18cdb7",
+      "key_sha256": "db23eea0c3e8e36171da0473ec500dab837ea68e216b70047f31b7fe5b280a80",
+      "msl_path": "db23eea0c3e8e36171da0473ec500dab837ea68e216b70047f31b7fe5b280a80.metal",
+      "msl_sha256": "afe48f510bc26ec824864d347c14e9a60158b7f49bb97a82b31e1a29c66fb5aa",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 19,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atlas-vertex-vertex-main-4e2f31837ca7",
+      "key_sha256": "bb2606ae91ce7e364221362789179df4192fd1fc04b82c7e83454d11c37d38ae",
+      "msl_path": "bb2606ae91ce7e364221362789179df4192fd1fc04b82c7e83454d11c37d38ae.metal",
+      "msl_sha256": "58483135b4ac021167622418b23b001722bd91b55fa9874a42eaccbfeed95d34",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-atlas-blit-fragment-fragment-main-b6085c5f0849",
+      "key_sha256": "d9b7b476aa17fca9c50f0c3a4d96b2f894c7dd3ccea55d15d1680f955ac6db7a",
+      "msl_path": "d9b7b476aa17fca9c50f0c3a4d96b2f894c7dd3ccea55d15d1680f955ac6db7a.metal",
+      "msl_sha256": "840fde75ba60d08513896b0b43bac1507eace2c240a8e24c42bc36023667225a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-atlas-blit-fragment-fragment-main-d16ecd9f4aaa",
+      "key_sha256": "8ab5d54ce9121e058f7c9122ef1d8ac21cac82f7960dadce7520cf345665242c",
+      "msl_path": "8ab5d54ce9121e058f7c9122ef1d8ac21cac82f7960dadce7520cf345665242c.metal",
+      "msl_sha256": "b3369bb58675f4b9ca8670a31b0b52cb12a928cf12990ac2c98d05c355c2c70a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-image-mesh-fragment-fragment-main-c8d24bd3da61",
+      "key_sha256": "1e4b7e7f48aa2c8700deec9c1d3ac05900e337e7ff856b3397e805b09a71edc6",
+      "msl_path": "1e4b7e7f48aa2c8700deec9c1d3ac05900e337e7ff856b3397e805b09a71edc6.metal",
+      "msl_sha256": "13b81c7d6537637444e4a41352fb71011d93e418aa52bc0003a87e1568729b26",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-image-rect-fragment-fragment-main-631ec08dc05e",
+      "key_sha256": "34ada52d2f3df7c6367054fc7787f9f0a3b148282ca619a91fbd3d9690445ff4",
+      "msl_path": "34ada52d2f3df7c6367054fc7787f9f0a3b148282ca619a91fbd3d9690445ff4.metal",
+      "msl_sha256": "ee2b158ecf2710ad10e3bf4b9fe6c1931e2c33a92dca56dd5d4ac729acd83c28",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-init-fragment-fragment-main-3e1d3980f5f8",
+      "key_sha256": "afe955d2a1cbfeadd261b5bd83ddc7d950cad5edaed4964bb65dd191617627ef",
+      "msl_path": "afe955d2a1cbfeadd261b5bd83ddc7d950cad5edaed4964bb65dd191617627ef.metal",
+      "msl_sha256": "d559375f9eb25c678587f5fb0096ebb91be0ca18aeb61ce4b2001d3964bd0614",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-init-fragment-fragment-main-671d05abd5ec",
+      "key_sha256": "d3b25f6de4b2ff687a2d83c18435fa9a4655cc07940998d578ae3e099ee6ff27",
+      "msl_path": "d3b25f6de4b2ff687a2d83c18435fa9a4655cc07940998d578ae3e099ee6ff27.metal",
+      "msl_sha256": "de016fb278a72213b5d0c3445373f9d4ce06cad57461363482d2fa212fd206d0",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-interior-fragment-fragment-main-29540693e86e",
+      "key_sha256": "df39dd22794750684474737f93f56f682a1d23063b8c0d6409e639cc3e1f6bd9",
+      "msl_path": "df39dd22794750684474737f93f56f682a1d23063b8c0d6409e639cc3e1f6bd9.metal",
+      "msl_sha256": "dd748e7618fdd871945ed152d75f707e901bf9c5e28b12aacdf0ef6e5cb79554",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-path-fragment-fragment-main-2937cdb19ad6",
+      "key_sha256": "af01155432655b2f7aad7a216a2bcd4e24f4d9b43fc7aae89d6192cea42f0f2e",
+      "msl_path": "af01155432655b2f7aad7a216a2bcd4e24f4d9b43fc7aae89d6192cea42f0f2e.metal",
+      "msl_sha256": "f284c5993563e1ca679eb7591ad548162a990a9a8e1cd7c725bcc56b7cfbe2fb",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-path-fragment-fragment-main-5d13be4bfdea",
+      "key_sha256": "07eb9561fa4aa2d09d14c30bc10b41afb0f26f380d512da2fc67df915dfae89c",
+      "msl_path": "07eb9561fa4aa2d09d14c30bc10b41afb0f26f380d512da2fc67df915dfae89c.metal",
+      "msl_sha256": "ff3f43e9d41dd58b32615fee84b47f783d523c5ab884b2cc3eec0cb0e570585b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-path-fragment-fragment-main-e63e7d3c1b3b",
+      "key_sha256": "c9ba9f33a1024622be37b0657e1681f47961db2e73eaff5b0c5bae49af3715e7",
+      "msl_path": "c9ba9f33a1024622be37b0657e1681f47961db2e73eaff5b0c5bae49af3715e7.metal",
+      "msl_sha256": "b9cc3f5ae39978097d5ce93cdc9cbe3765a125cf9fbe048c72acef8b0830a5a5",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-resolve-fragment-fragment-main-ddab8e6aabb5",
+      "key_sha256": "9afed5caf7db048d70e82e4eb07f4a32e9d548376530f6a3c5609f14c0b212e0",
+      "msl_path": "9afed5caf7db048d70e82e4eb07f4a32e9d548376530f6a3c5609f14c0b212e0.metal",
+      "msl_sha256": "be14364cda7f46427f8cbdb9736798243df55b4c1f1dd3c03c6a19f6f49eafc4",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 0,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-advanced-resolve-vertex-vertex-main-3290d13ec6ef",
+      "key_sha256": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9",
+      "msl_path": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9.metal",
+      "msl_sha256": "c4843eb4629bb6bec10f76ad15d2d9f2b6ddbd3d7cd6719838d4003289d7d91b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-atlas-blit-fragment-fragment-main-4fb4dde030ee",
+      "key_sha256": "7aa592b4c5614d92623e805858c06ae9cb209cbddad77c96661107016f116cad",
+      "msl_path": "7aa592b4c5614d92623e805858c06ae9cb209cbddad77c96661107016f116cad.metal",
+      "msl_sha256": "e916965f1973f89a1a201e852ec0c5448812646b358cb178bcef3e7af76aabcd",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-atlas-blit-vertex-vertex-main-94f00e7dc2f4",
+      "key_sha256": "1df7ba2b1bc4ca28542295074c0d858bbe5c053a9f3de5ed45cf6371562c3839",
+      "msl_path": "1df7ba2b1bc4ca28542295074c0d858bbe5c053a9f3de5ed45cf6371562c3839.metal",
+      "msl_sha256": "4c17b66227e3c47d49ecca1a293f9538e23f6607cf90cb66477bdaa3d5e91492",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 3,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-image-mesh-fragment-fragment-main-63b25ab181e3",
+      "key_sha256": "8f5134b0704410925bceb322295897e3bd6c54589494ce2247e85341a4609e49",
+      "msl_path": "8f5134b0704410925bceb322295897e3bd6c54589494ce2247e85341a4609e49.metal",
+      "msl_sha256": "1e45f41131ac4699a4e5576a2947af4939a4f40e1cf8f65fcec52a29de89c8a3",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-image-mesh-vertex-vertex-main-7f52294958bc",
+      "key_sha256": "3ecd79338d9ecb8baf217e074b4d3555588673fd508d1a040b7d901a16567c97",
+      "msl_path": "3ecd79338d9ecb8baf217e074b4d3555588673fd508d1a040b7d901a16567c97.metal",
+      "msl_sha256": "db5628add8addb713f1d11feff067028d7b982c6452e5305cb4385081f49803d",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-image-rect-fragment-fragment-main-e854b2ca2524",
+      "key_sha256": "d3e0fc2f22b731989038fa51a29a0347eb485a594c7497eeaeb2ec92c21d30ab",
+      "msl_path": "d3e0fc2f22b731989038fa51a29a0347eb485a594c7497eeaeb2ec92c21d30ab.metal",
+      "msl_sha256": "8bb3b53a63c0ec72d4a12b916fa4250f2d2320fa2fc6f9e244f8149166261516",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-image-rect-vertex-vertex-main-b4be6f09bd9f",
+      "key_sha256": "ab7596f671b22981632f323f2db3b95734f82d1eff51a02fcd1e7b9e434c2d2d",
+      "msl_path": "ab7596f671b22981632f323f2db3b95734f82d1eff51a02fcd1e7b9e434c2d2d.metal",
+      "msl_sha256": "3e07389db551031556ce3f2057aa0e942d64283c62034cf036e25566f0fed4eb",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-init-fragment-fragment-main-292041e11c06",
+      "key_sha256": "728aaf79b1ada976ef2417caf898ee502c72c0383df792c2d5b043540745de6d",
+      "msl_path": "728aaf79b1ada976ef2417caf898ee502c72c0383df792c2d5b043540745de6d.metal",
+      "msl_sha256": "c5d9370ed937986c7a4b0fc4633fbcfdb1b01ae060431c2024a53076304f45aa",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-init-fragment-fragment-main-b18af288c215",
+      "key_sha256": "19b0fcb796e88dc18ffd4b2fd39aba8813ddad4b5e8dc4b52e7841f1ad601f30",
+      "msl_path": "19b0fcb796e88dc18ffd4b2fd39aba8813ddad4b5e8dc4b52e7841f1ad601f30.metal",
+      "msl_sha256": "e136c898fc8c682e2976779eba3286af17af71a520e5867b5c1b9bfcfaad7866",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-init-vertex-vertex-main-3290d13ec6ef",
+      "key_sha256": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9",
+      "msl_path": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9.metal",
+      "msl_sha256": "c4843eb4629bb6bec10f76ad15d2d9f2b6ddbd3d7cd6719838d4003289d7d91b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-interior-fragment-fragment-main-1b5436fee687",
+      "key_sha256": "6f1fea031b32973bc4c580929ffe2ce6abdb2775f67a3acd08800d4e957f970e",
+      "msl_path": "6f1fea031b32973bc4c580929ffe2ce6abdb2775f67a3acd08800d4e957f970e.metal",
+      "msl_sha256": "4fc829cef003beb14266f6ef98bef179e062ee8f3498188d217df72e0fea464a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-interior-fragment-fragment-main-415730364eb8",
+      "key_sha256": "ce3144898051d64b0ae09052e832d1f0ffa7e00d2da0dd56b76eff14836b44c9",
+      "msl_path": "ce3144898051d64b0ae09052e832d1f0ffa7e00d2da0dd56b76eff14836b44c9.metal",
+      "msl_sha256": "03cb3286d4eacb8be6ef79a7aac65db893e52d4253c33680e24d850c040c38e7",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-interior-fragment-fragment-main-626d56d5ba62",
+      "key_sha256": "c6a308c6fedf33c466a0a3926cbcb3ea7aa7f90824a4f0eb7212aefc13c4baf2",
+      "msl_path": "c6a308c6fedf33c466a0a3926cbcb3ea7aa7f90824a4f0eb7212aefc13c4baf2.metal",
+      "msl_sha256": "c4b11597f994642d6ba5b757b4865685c2a2b4297a04b31d797e4f175884fdc4",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-interior-fragment-fragment-main-fd57f810d822",
+      "key_sha256": "1ab67b493c62d18ddd8ea332565d7924655974cc67db9d2ae5abba7e4067a789",
+      "msl_path": "1ab67b493c62d18ddd8ea332565d7924655974cc67db9d2ae5abba7e4067a789.metal",
+      "msl_sha256": "abfb6b2bc92be3291d618bf39d7956a844650e86bf3804029e59e034914c88f9",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-interior-vertex-vertex-main-8128948ca847",
+      "key_sha256": "b0033c27abe2590cb6182c9bd73495f09c8ab6f0399b36012845f3151b77495b",
+      "msl_path": "b0033c27abe2590cb6182c9bd73495f09c8ab6f0399b36012845f3151b77495b.metal",
+      "msl_sha256": "4d3222ea4f9b7278edd44cf32dd9b03422e7fd7798b5bcaa59ac9750900ec2f2",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 3,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-00cd8f8a13a3",
+      "key_sha256": "5b1ef7a9105c6f1fe9eda9ba8cd4fe012f490304969b2216951033500cd595a5",
+      "msl_path": "5b1ef7a9105c6f1fe9eda9ba8cd4fe012f490304969b2216951033500cd595a5.metal",
+      "msl_sha256": "7b1d2dbfbeadae13d32e2ab5cde2a433430e0a49b1679a36ac49b335d80382eb",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-067724ddebdf",
+      "key_sha256": "7c35f551bf3c63f8ef2796d4294a213d9c160aaefc2a248f8f358c0567d65088",
+      "msl_path": "7c35f551bf3c63f8ef2796d4294a213d9c160aaefc2a248f8f358c0567d65088.metal",
+      "msl_sha256": "574a3a7339dc76013f05ae385341aad61d21db026138f532ea109bf38f033e81",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-47701b87fce7",
+      "key_sha256": "157f010e2dbfce827609f7c305e3c178aef69bf10c302ed81716de6227c1a998",
+      "msl_path": "157f010e2dbfce827609f7c305e3c178aef69bf10c302ed81716de6227c1a998.metal",
+      "msl_sha256": "db1ab1b99cb956a5e5dec25c2069bfb97b926a9f9f3b09aad6c340c161450207",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-68099ddef039",
+      "key_sha256": "eb277b02eb88bd590283318c37c3c43be70a6c15d521739133e8fff900b2eca1",
+      "msl_path": "eb277b02eb88bd590283318c37c3c43be70a6c15d521739133e8fff900b2eca1.metal",
+      "msl_sha256": "812b37f90d83e47f853d17e7ce05f0d8aa179e1b11f0618ba3dd134dbcda391a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-682f5e14df23",
+      "key_sha256": "8b2986e2981b6e4d68202abf53196d0a1fffb499093ddab7f00d0a8a092335ef",
+      "msl_path": "8b2986e2981b6e4d68202abf53196d0a1fffb499093ddab7f00d0a8a092335ef.metal",
+      "msl_sha256": "d907825839e8ff64277d3e655ddacb48e4e6afafecf5effb6510a9d3216d748a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-9bd19cccad04",
+      "key_sha256": "c83020776ee8348bd907bea20f9c20ed2359d9f79bf2fff60a34565704bd2cf3",
+      "msl_path": "c83020776ee8348bd907bea20f9c20ed2359d9f79bf2fff60a34565704bd2cf3.metal",
+      "msl_sha256": "2f0389696c74b469d6f1a4be8bd9ecea7c811f4fc9c8bdd5331ef4547d7def4d",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-f7fa05475ecc",
+      "key_sha256": "ae2ac887fb30c46e1ac3b885cb25d0f3cb985dfb07443b6ee735c17fa049a16a",
+      "msl_path": "ae2ac887fb30c46e1ac3b885cb25d0f3cb985dfb07443b6ee735c17fa049a16a.metal",
+      "msl_sha256": "527b7047cd5e13db7e74006b6c564939d68dfc1bf34a49853fd7fd8efa216cc2",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-fragment-fragment-main-fd85f63e8436",
+      "key_sha256": "27f191e85a23b2c7245df47bdc2c649963a7a26c7593ac4fb26fbb1274f54079",
+      "msl_path": "27f191e85a23b2c7245df47bdc2c649963a7a26c7593ac4fb26fbb1274f54079.metal",
+      "msl_sha256": "f17ce9a918a882058692b048abf0a731db4613775d35e1f54ac6953e60a2389e",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-path-vertex-vertex-main-418ec75f6321",
+      "key_sha256": "f25dfa2b2686deccecbae60302a790a01621819def866d3008834c60aedfb2d2",
+      "msl_path": "f25dfa2b2686deccecbae60302a790a01621819def866d3008834c60aedfb2d2.metal",
+      "msl_sha256": "bb471fd83ae4dc89dcdcdfeb063d6d2ff3395a0f6aa1053cdb45fb8abc11ea89",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 7,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-resolve-fragment-fragment-main-4e86a6bff141",
+      "key_sha256": "62a8bd319db2865411062fa48aad81715d209133b986e6617ff91d4262d4dfa8",
+      "msl_path": "62a8bd319db2865411062fa48aad81715d209133b986e6617ff91d4262d4dfa8.metal",
+      "msl_sha256": "145b478234eafe81da5147a8db002bdda0d55c3b6aa1de2ccdc1df6432aab360",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-resolve-fragment-fragment-main-82b0963c0227",
+      "key_sha256": "29ac6b59719c3210add1180f3421ee269de6b937eb4a1f3d5da1afc8fd4cb5d4",
+      "msl_path": "29ac6b59719c3210add1180f3421ee269de6b937eb4a1f3d5da1afc8fd4cb5d4.metal",
+      "msl_sha256": "bf8b60bfc11847af03a56f9dac513f1058e5ed157027c415d915a783dc41f439",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-resolve-fragment-fragment-main-8e79278bb40c",
+      "key_sha256": "a2e5c4bd9a4760debe6b3767a1bc2c53e64d01a1c694b3311566c901a0c7bd7b",
+      "msl_path": "a2e5c4bd9a4760debe6b3767a1bc2c53e64d01a1c694b3311566c901a0c7bd7b.metal",
+      "msl_sha256": "6bc3328fb2de1aae1ebace6cdb1c2f6e680ecf1df861a2ab6770a1234641430b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-resolve-fragment-fragment-main-f260cc47b405",
+      "key_sha256": "cf20b7fc9a90af600b63c442aff38f827b945baddd7bb964405cd1bc8d0bee6d",
+      "msl_path": "cf20b7fc9a90af600b63c442aff38f827b945baddd7bb964405cd1bc8d0bee6d.metal",
+      "msl_sha256": "0e71fb4fedc7d788c87816a3a90aa71c51fe2c5fb4e8b530eb36c0de8b7b3d24",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 1,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 2,
+          "binding": 3,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 13,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-atomic-resolve-vertex-vertex-main-3290d13ec6ef",
+      "key_sha256": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9",
+      "msl_path": "12b80bc67c7526a4bef0083489f893240c3e1c8cfa35a116761f2b59510883c9.metal",
+      "msl_sha256": "c4843eb4629bb6bec10f76ad15d2d9f2b6ddbd3d7cd6719838d4003289d7d91b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-composite-shader-fragment-fragment-main-cd3387fed6c3",
+      "key_sha256": "1fc3ab2384ecd0bdc3af932db2a1e09f51334450bc3f6bf0d03b23612db71c83",
+      "msl_path": "1fc3ab2384ecd0bdc3af932db2a1e09f51334450bc3f6bf0d03b23612db71c83.metal",
+      "msl_sha256": "6c00a2c29d7bc98edad0c1592c00bb389f4b516c1d08d8680e5ccc1ae18dbd09",
+      "translated_entry_point": "fragment_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-composite-shader-vertex-vertex-main-fa5d0abe25a6",
+      "key_sha256": "a92fa187d0b416c5c0053abc174986e8717b111c44f8b6940f62f6bdb0b3b394",
+      "msl_path": "a92fa187d0b416c5c0053abc174986e8717b111c44f8b6940f62f6bdb0b3b394.metal",
+      "msl_sha256": "260f9a94b37e32f23ab07aef69360de0102dc26334cb412bf70a065a2c11204c",
+      "translated_entry_point": "vertex_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-gradient-fragment-fragment-main-86d68edb3f64",
+      "key_sha256": "89999d32bc3dc19205847dd3455dc2d2557e5c01bc5bcfe4333c7f90ac4d4100",
+      "msl_path": "89999d32bc3dc19205847dd3455dc2d2557e5c01bc5bcfe4333c7f90ac4d4100.metal",
+      "msl_sha256": "2ac8d8804597a830b41a40df8653028fae4593a43a6298589a3bfd971afd53e4",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-gradient-vertex-vertex-main-e8bdbfa2489a",
+      "key_sha256": "2f89280cbe4f0b17dc0d52dea9506bc92b98d3558d9125e0bec4678cefe4c57c",
+      "msl_path": "2f89280cbe4f0b17dc0d52dea9506bc92b98d3558d9125e0bec4678cefe4c57c.metal",
+      "msl_sha256": "cf1797a4d4b271e6fbd9ea0f4848a1cef8dd1f152aff2289c502f968df8ad4ef",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-mipmap-fragment-fragment-main-ffbf788c6af8",
+      "key_sha256": "a254052c02e200cfa3c168911501f99ae6a015242009826a5a7b7f85ad6e5d56",
+      "msl_path": "a254052c02e200cfa3c168911501f99ae6a015242009826a5a7b7f85ad6e5d56.metal",
+      "msl_sha256": "acf203ecc2594e612755e826ee295abbac4a4dadd26843cae08bd9eea193cca6",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-mipmap-vertex-vertex-main-f4e6c22dbcd6",
+      "key_sha256": "960823ea96272a1414415d454e21288dcfb1d264c81b5e9d4f739893f2b6b930",
+      "msl_path": "960823ea96272a1414415d454e21288dcfb1d264c81b5e9d4f739893f2b6b930.metal",
+      "msl_sha256": "408109b106100447dbb1bdc43d6f041dde2901ebbef091c923c7434be15668e1",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-advanced-blit-fragment-fragment-main-4898b12edf6c",
+      "key_sha256": "f951672962ed9ea15090d7a0ca665d401a31fe23743fa689411031f133ce69bf",
+      "msl_path": "f951672962ed9ea15090d7a0ca665d401a31fe23743fa689411031f133ce69bf.metal",
+      "msl_sha256": "880431b8ea32ce94fac4981f4ebb0ad8b52de5117f658335aa8573b10cf2e3f7",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-advanced-blit-fragment-fragment-main-eb02db1338da",
+      "key_sha256": "a2f255c76137bd3b25f8f6a1e2504f32513e610b3fa9daa330d1d19757cc7ffa",
+      "msl_path": "a2f255c76137bd3b25f8f6a1e2504f32513e610b3fa9daa330d1d19757cc7ffa.metal",
+      "msl_sha256": "e2c6c880b96d98c2757eb9b777e0eb516588bb6baa756e29e8ba686ab89936a7",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-clip-rect-vertex-vertex-main-1ce72dfa9c64",
+      "key_sha256": "4f25515b03acc3894b20109edda5a3c8a29e70f5e6f4ec5c6ba3f982d46c38be",
+      "msl_path": "4f25515b03acc3894b20109edda5a3c8a29e70f5e6f4ec5c6ba3f982d46c38be.metal",
+      "msl_sha256": "7d5cd16697ef8764710c439c6724ac8e8b90e75fbde276363cf29cdac173f660",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-clip-rect-vertex-vertex-main-1fb57dbecc47",
+      "key_sha256": "44e38238a5b25727752e01bb12ff29485facf74768fd837239e933e7ce88f9ec",
+      "msl_path": "44e38238a5b25727752e01bb12ff29485facf74768fd837239e933e7ce88f9ec.metal",
+      "msl_sha256": "7267eb34365ebcafb1425a8dc1956542794aa5ad4925eb797ac7347b7ae10090",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 15,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-clip-rect-vertex-vertex-main-8b74c367b662",
+      "key_sha256": "6591a27aae521a9757a17da511156c6c72b4e9a7e0d29e9b9438c7bc2e1e9e95",
+      "msl_path": "6591a27aae521a9757a17da511156c6c72b4e9a7e0d29e9b9438c7bc2e1e9e95.metal",
+      "msl_sha256": "b773c17b025710080ad6957ec30bc305cd39b66e589ec056044fef0989102494",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-clip-rect-vertex-vertex-main-f7a6e1e0b21a",
+      "key_sha256": "9b549bac519688241e179d980a91efabaf26b64ee7bd6aef9d6f4866fff7d820",
+      "msl_path": "9b549bac519688241e179d980a91efabaf26b64ee7bd6aef9d6f4866fff7d820.metal",
+      "msl_sha256": "c693d9d94120e9d57d019d2e472aaac88db240d3a832f9e103cb76b820bdc3a0",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 15,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-fragment-fragment-main-d5cc87f770b0",
+      "key_sha256": "4bafc62f8ec06965f741e6a37beb9010eef39ebfc23bb76cb42c55d06a5a88b3",
+      "msl_path": "4bafc62f8ec06965f741e6a37beb9010eef39ebfc23bb76cb42c55d06a5a88b3.metal",
+      "msl_sha256": "dbd13dbb9defa2a0035ec8b95059d65b405a6787c0ff9106c529e0a3c8b5e8a1",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-vertex-vertex-main-0a6e01885956",
+      "key_sha256": "35691e660116b1b4417c3b61025e8bf0e5bf709b6ae89e348c481e2b229af43c",
+      "msl_path": "35691e660116b1b4417c3b61025e8bf0e5bf709b6ae89e348c481e2b229af43c.metal",
+      "msl_sha256": "fc5a420e29227cd2afa3633ce364330e9474d0f4f761c70062094b3b8df90c33",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 15,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-vertex-vertex-main-7261da982650",
+      "key_sha256": "fd041c112cc5ee03da3e63c8c3c052cc67737d012ec0b90896f37d6073ba9107",
+      "msl_path": "fd041c112cc5ee03da3e63c8c3c052cc67737d012ec0b90896f37d6073ba9107.metal",
+      "msl_sha256": "267c8ce968fd8e08cd9d2de308b27b3374aa5e5b8c7485bb2f9097e1e434fc3d",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-vertex-vertex-main-ae9947a26da2",
+      "key_sha256": "d9ad1f407fbfc887dd4d3902d380f1ff96ab49df4c0a0c1334ad83542df2499c",
+      "msl_path": "d9ad1f407fbfc887dd4d3902d380f1ff96ab49df4c0a0c1334ad83542df2499c.metal",
+      "msl_sha256": "264d1fa16b19df341f768edb59b60abc33db7cd9c925e51ef7a4082049f28283",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-atlas-blit-vertex-vertex-main-ea7770b97f80",
+      "key_sha256": "c38c54b6419faa21159d6d7c0d9676280dc91f07987ed3632deb21fdf2d4bd55",
+      "msl_path": "c38c54b6419faa21159d6d7c0d9676280dc91f07987ed3632deb21fdf2d4bd55.metal",
+      "msl_sha256": "718cc0ccc83226e86685c8dce3e542bb3124fab2c73be9b64068d310ea3aa1da",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 15,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-advanced-fragment-fragment-main-04e238c127ca",
+      "key_sha256": "de9b7adb291a598a93cb6b1ab67b3d033dfabd04abf92b903e637a270301e71b",
+      "msl_path": "de9b7adb291a598a93cb6b1ab67b3d033dfabd04abf92b903e637a270301e71b.metal",
+      "msl_sha256": "2c2d402dff154bfa2c546bd65ed70e969eabb4f481f60641bd72a8f8ecea45f1",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-advanced-fragment-fragment-main-c7ec641e3444",
+      "key_sha256": "8c1a4773999c27e530e8ad3a218ecdd532e0bbf5a9d4d583bdbdd1ec8c156f55",
+      "msl_path": "8c1a4773999c27e530e8ad3a218ecdd532e0bbf5a9d4d583bdbdd1ec8c156f55.metal",
+      "msl_sha256": "1834369f012502cf918c8d7c37f1b12f6b4ea4466c432520ae3a501b11d0bea2",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-clip-rect-vertex-vertex-main-53c137fb39df",
+      "key_sha256": "dbbd6691e0f943471b699df3aec23361bf5f74706aab60fc01b2ed97dd20487f",
+      "msl_path": "dbbd6691e0f943471b699df3aec23361bf5f74706aab60fc01b2ed97dd20487f.metal",
+      "msl_sha256": "cc45ae99d935ded2deb3b1dc5a12cac66ed4ce241f63886fc5304a48a039025b",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-clip-rect-vertex-vertex-main-effbb2e55542",
+      "key_sha256": "7f4f54b1625396c4d30644a87e03fdab4ed8147eed5175a0f7f9ef3db894f14b",
+      "msl_path": "7f4f54b1625396c4d30644a87e03fdab4ed8147eed5175a0f7f9ef3db894f14b.metal",
+      "msl_sha256": "6def59cefa7893558aaadf791bdbd671eb81e1234837f553ff96eb051e992dce",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-fragment-fragment-main-3b2c4dcd8bc7",
+      "key_sha256": "13ef48e549141980ec518bc1cf0ebd9efad50962a3b568b11b13748b16a8d378",
+      "msl_path": "13ef48e549141980ec518bc1cf0ebd9efad50962a3b568b11b13748b16a8d378.metal",
+      "msl_sha256": "471a5a6072bf18e5c423fe91ba04491ab72c8b4ced7e93ca06a1d989a301098a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-vertex-vertex-main-11455ea915fc",
+      "key_sha256": "a3dce91b3c50c6588888596bdf76a853d2190df97a11825bd54f2c9154ec665b",
+      "msl_path": "a3dce91b3c50c6588888596bdf76a853d2190df97a11825bd54f2c9154ec665b.metal",
+      "msl_sha256": "5b1cef4a2ef1b39970fbc60f1399f487d1d31164f957a44bf75321c7c6b9895a",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-image-mesh-vertex-vertex-main-6f0345417f13",
+      "key_sha256": "ab02b4cc48441039d17a2131787b66fd9c9fc4e5b7102160b94c09cc00fe3cd8",
+      "msl_path": "ab02b4cc48441039d17a2131787b66fd9c9fc4e5b7102160b94c09cc00fe3cd8.metal",
+      "msl_sha256": "75d3e0085b2fe5ef973362dfcf1b5dbae0ed2fcb4fc3fd4bd25427791437a58f",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-advanced-fragment-fragment-main-000e7317f9e9",
+      "key_sha256": "33a4f3e4c7d029ea2701396869b4be96c4f5c6abc17be226fd00591df4d9643c",
+      "msl_path": "33a4f3e4c7d029ea2701396869b4be96c4f5c6abc17be226fd00591df4d9643c.metal",
+      "msl_sha256": "e1b6fac2655566498406649191afca46e190fb04850d6da5f163d21c34445cfb",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-advanced-fragment-fragment-main-4a64dde7c8aa",
+      "key_sha256": "16ada0883a4786083db693367bd0837663ea3e3a443f27a73b7850993fcc9d06",
+      "msl_path": "16ada0883a4786083db693367bd0837663ea3e3a443f27a73b7850993fcc9d06.metal",
+      "msl_sha256": "b035fef8be3862e18c5fbd0ac44a706bd107c30513897dc3317d5b2fbe437761",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-clip-rect-vertex-vertex-main-abadc48f4d07",
+      "key_sha256": "32fb6b6bdca5617430729e1d4f39e054b85d454f14ac6dd4f94a8082f4ab82c6",
+      "msl_path": "32fb6b6bdca5617430729e1d4f39e054b85d454f14ac6dd4f94a8082f4ab82c6.metal",
+      "msl_sha256": "01045100eefa0c94ea02f1645e48a097be49932843c5af5a587c5b83d2b0d661",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-clip-rect-vertex-vertex-main-d98d5ecda007",
+      "key_sha256": "190e7dbc13d8a721dfd535bb7c73242e7666188b39d872fc19198318bfbc8588",
+      "msl_path": "190e7dbc13d8a721dfd535bb7c73242e7666188b39d872fc19198318bfbc8588.metal",
+      "msl_sha256": "443054a77b8162ca4bbe137ed4d3acca1dff6ecab5c4e2d39940012107af7687",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 31,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-clip-rect-vertex-vertex-main-e17f904e62e2",
+      "key_sha256": "0c47b17fe0be1353cf73c1a3ddda12e16a38a7c1a4aa2a23aac1af6ba1c25e23",
+      "msl_path": "0c47b17fe0be1353cf73c1a3ddda12e16a38a7c1a4aa2a23aac1af6ba1c25e23.metal",
+      "msl_sha256": "3bf8c00c485b5613d2c12480b0cafcd8b5d692552668454ca389dea67161bb9c",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-clip-rect-vertex-vertex-main-efeded911b12",
+      "key_sha256": "bdc813434279f6ffde0e31457d3f1ac9f4a2a9005f5663fc1d2da05472c619d7",
+      "msl_path": "bdc813434279f6ffde0e31457d3f1ac9f4a2a9005f5663fc1d2da05472c619d7.metal",
+      "msl_sha256": "2eb4f2341e8630bcdc0cc1feab0f6ce7d7bd236cb5c2c3073796c5657088e108",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 31,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-fragment-fragment-main-48639376fafb",
+      "key_sha256": "4cd2d7e3821b1e65f12418c07195008e9a02af8fd25c0aa8e92865736f0e5de0",
+      "msl_path": "4cd2d7e3821b1e65f12418c07195008e9a02af8fd25c0aa8e92865736f0e5de0.metal",
+      "msl_sha256": "5e1dbea30001003b9506b07be849251d0e0708572a985df6585ddbea7880a6eb",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-vertex-vertex-main-5ac0bbd212c2",
+      "key_sha256": "3d80d3ea7ac1e4dcd31322f0e35da1caac925f54e7b2d7cadd514857f8d8f21c",
+      "msl_path": "3d80d3ea7ac1e4dcd31322f0e35da1caac925f54e7b2d7cadd514857f8d8f21c.metal",
+      "msl_sha256": "b3961ede92c3cabc60b7a9823b35ff84bad4a2c06f98541f101b6bc8b40a2cfd",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 31,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-vertex-vertex-main-a26b75f994c9",
+      "key_sha256": "15b37534d74e6853a7e96183364ddc068e246a6578e982ea9187d03eb25e5ef2",
+      "msl_path": "15b37534d74e6853a7e96183364ddc068e246a6578e982ea9187d03eb25e5ef2.metal",
+      "msl_sha256": "f0e161303bdc0a111608b37227d856c3d2a322360b39e962242b5d89a88d06ef",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-vertex-vertex-main-ccb26226478b",
+      "key_sha256": "3723d908266a9cc85dcfad53483530e5242b01bc084586f22f31e8fef34680dc",
+      "msl_path": "3723d908266a9cc85dcfad53483530e5242b01bc084586f22f31e8fef34680dc.metal",
+      "msl_sha256": "f87b7af69eec16c2bc59d996824a481dd94e46ea414b0432f39bd6dd2c5e2d34",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-path-vertex-vertex-main-f306fbc0b7a0",
+      "key_sha256": "d6457c771d1ce9d7a2029de358d71332394eb4f961b3a3184a37db16e287896a",
+      "msl_path": "d6457c771d1ce9d7a2029de358d71332394eb4f961b3a3184a37db16e287896a.metal",
+      "msl_sha256": "d10a99d1a5d653c4356d0628ece70a46178af34bfd5a5f3f533fd1fa49e446b0",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 3,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 4,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 31,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-stencil-fragment-fragment-main-56d8a3385a0b",
+      "key_sha256": "42e3ede5794e719b848bd5a685cad60a1eaec4387ee3e22bd63c66657b8405b5",
+      "msl_path": "42e3ede5794e719b848bd5a685cad60a1eaec4387ee3e22bd63c66657b8405b5.metal",
+      "msl_sha256": "f61c2354b889d2ec613772921c4260141709c7a20c9a5bb79ee51ae7e0853300",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-msaa-stencil-vertex-vertex-main-f3919bce7005",
+      "key_sha256": "227050a7285d1ac7d77a81fadcd08fdbc46ea8444a214bffd5004749a2a867dd",
+      "msl_path": "227050a7285d1ac7d77a81fadcd08fdbc46ea8444a214bffd5004749a2a867dd.metal",
+      "msl_sha256": "d5a3a39ce3467c54188ca257d5c17a68599e17c5cc471c988e18b351376f58ed",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-solid-shader-fragment-fragment-main-debc4cdc496d",
+      "key_sha256": "b7503f01d784621da9dd6f2b1b772506e8485f0ca00ff546dc747ef297858928",
+      "msl_path": "b7503f01d784621da9dd6f2b1b772506e8485f0ca00ff546dc747ef297858928.metal",
+      "msl_sha256": "21e47ef0a01032da612e0bdd301a40f53e4be8eb001fb15880b15ec714b42fb7",
+      "translated_entry_point": "fragment_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-solid-shader-vertex-vertex-main-6517e045a468",
+      "key_sha256": "dc5be448381e27d0b1b720464a44f4591ef253c602b8d3632a767b3a59c27576",
+      "msl_path": "dc5be448381e27d0b1b720464a44f4591ef253c602b8d3632a767b3a59c27576.metal",
+      "msl_sha256": "580909a7080320a75ffbf26d709059e23b387df055c03c727784e84df2810df0",
+      "translated_entry_point": "vertex_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-surface-present-shader-fragment-fragment-premultiplied-alpha-0c6e437ad275",
+      "key_sha256": "232ea5476dcccdf866163035fd93f7824bd3157279c467fcf18e51cedfe49a55",
+      "msl_path": "232ea5476dcccdf866163035fd93f7824bd3157279c467fcf18e51cedfe49a55.metal",
+      "msl_sha256": "65f6d5035e3059e6edf57997989f8091ae245dbe072a7bd0279d4e660db07038",
+      "translated_entry_point": "fragment_premultiplied_alpha",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-surface-present-shader-fragment-fragment-straight-alpha-9a011d3cb0fa",
+      "key_sha256": "fbd1f03564b247c6c721108f13e4f3fe1f3ba4c4a794245ba9b0b3f49f46f52c",
+      "msl_path": "fbd1f03564b247c6c721108f13e4f3fe1f3ba4c4a794245ba9b0b3f49f46f52c.metal",
+      "msl_sha256": "5ba29c20ac212214c6fd1f9c4582015daaede1021bf1a3f128ff078f17462c0b",
+      "translated_entry_point": "fragment_straight_alpha",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-surface-present-shader-vertex-vertex-main-0c766d8cd6f7",
+      "key_sha256": "7e06ff636505d10af72c8a15abc5868e4cda6feca50c0059faaa608339bfa667",
+      "msl_path": "7e06ff636505d10af72c8a15abc5868e4cda6feca50c0059faaa608339bfa667.metal",
+      "msl_sha256": "260f9a94b37e32f23ab07aef69360de0102dc26334cb412bf70a065a2c11204c",
+      "translated_entry_point": "vertex_main",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-tessellate-fragment-fragment-main-5b2652af513e",
+      "key_sha256": "72b4ffc8a588c2506a1461427ad9de70a927ce728c7981b098f2ce710c9776d4",
+      "msl_path": "72b4ffc8a588c2506a1461427ad9de70a927ce728c7981b098f2ce710c9776d4.metal",
+      "msl_sha256": "cac0cfdf66c75f6bd38c59801ab6a6f540d92bb4752ebbd8b6880e6b1456fd69",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 0,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-tessellate-vertex-vertex-main-340a0d65268b",
+      "key_sha256": "9701ca45667b1eb20b1e42560d2c46ac58fb749d649e5045f31e916d3a7b9760",
+      "msl_path": "9701ca45667b1eb20b1e42560d2c46ac58fb749d649e5045f31e916d3a7b9760.metal",
+      "msl_sha256": "f7c446419ea9ccf6bb7338cbd350d14ac3a25651163c3719d49e92def1fe1d36",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [],
+      "immutable_buffer_mask": 1,
+      "preserve_invariance": false
+    },
+    {
+      "id": "nuxie-tessellate-vertex-vertex-main-506b88143742",
+      "key_sha256": "b253071959c1b2fb0ca5e1fc98c94244f57e6e2a9fa5799d033b4a912b637eea",
+      "msl_path": "b253071959c1b2fb0ca5e1fc98c94244f57e6e2a9fa5799d033b4a912b637eea.metal",
+      "msl_sha256": "7b32ff6d7fa8037fa7d7a24bb955a452a322b082598c2bc8f4288e331cd18924",
+      "translated_entry_point": "main_",
+      "workgroup_size": [
+        0,
+        0,
+        0
+      ],
+      "workgroup_memory_sizes": [],
+      "sized_bindings": [
+        {
+          "group": 0,
+          "binding": 5,
+          "array_index": 0
+        },
+        {
+          "group": 0,
+          "binding": 2,
+          "array_index": 0
+        }
+      ],
+      "immutable_buffer_mask": 7,
+      "preserve_invariance": false
+    }
+  ]
+}

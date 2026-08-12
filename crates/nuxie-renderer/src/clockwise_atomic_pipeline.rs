@@ -4,6 +4,7 @@
 //! families use incompatible coverage-buffer encodings and pass schedules.
 
 use crate::gpu::{FlushUniforms, PaintAuxData, PaintData, PatchVertex, TriangleVertex};
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::tessellator::{FrameUploadPayload, TessellationFlushResources, TessellationUploadFrame};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 use std::{
@@ -378,65 +379,35 @@ fn clockwise_atomic_main_passes(
 
 impl ClockwiseAtomicPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let path_vertex = shader(
+        let path_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::ClockwiseAtomicPathVertex);
+        let path_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::ClockwiseAtomicPathFragment);
+        let borrowed_path_fragment = shader_catalog::create(
             device,
-            "nuxie-cwa-path-vertex",
-            include_str!("generated/clockwise_atomic_draw_path.webgpu_vert.wgsl"),
+            BuiltinShaderKey::ClockwiseAtomicBorrowedPathFragment,
         );
-        let path_fragment = shader(
+        let interior_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::ClockwiseAtomicInteriorVertex);
+        let interior_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::ClockwiseAtomicInteriorFragment);
+        let borrowed_interior_fragment = shader_catalog::create(
             device,
-            "nuxie-cwa-path-fragment",
-            include_str!("generated/clockwise_atomic_draw_path.webgpu_fixedcolor_frag.wgsl"),
+            BuiltinShaderKey::ClockwiseAtomicBorrowedInteriorFragment,
         );
-        let borrowed_path_fragment = shader(
+        let sampled_clip_path_fragment = shader_catalog::create(
             device,
-            "nuxie-cwa-borrowed-path-fragment",
-            include_str!("generated/clockwise_atomic_draw_path_borrowed.webgpu_frag.wgsl"),
+            BuiltinShaderKey::ClockwiseAtomicSampledClipPathFragment,
         );
-        let interior_vertex = shader(
+        let sampled_clip_interior_fragment = shader_catalog::create(
             device,
-            "nuxie-cwa-interior-vertex",
-            include_str!("generated/clockwise_atomic_draw_interior_triangles.webgpu_vert.wgsl"),
+            BuiltinShaderKey::ClockwiseAtomicSampledClipInteriorFragment,
         );
-        let interior_fragment = shader(
+        let clip_path_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::ClockwiseAtomicClipPathFragment);
+        let clip_interior_fragment = shader_catalog::create(
             device,
-            "nuxie-cwa-interior-fragment",
-            include_str!(
-                "generated/clockwise_atomic_draw_interior_triangles.webgpu_fixedcolor_frag.wgsl"
-            ),
-        );
-        let borrowed_interior_fragment = shader(
-            device,
-            "nuxie-cwa-borrowed-interior-fragment",
-            include_str!(
-                "generated/clockwise_atomic_draw_interior_triangles_borrowed.webgpu_frag.wgsl"
-            ),
-        );
-        let sampled_clip_path_fragment = shader(
-            device,
-            "nuxie-cwa-sampled-clip-path-fragment",
-            include_str!(
-                "generated/clockwise_atomic_draw_path_sampled_clip.webgpu_fixedcolor_frag.wgsl"
-            ),
-        );
-        let sampled_clip_interior_fragment = shader(
-            device,
-            "nuxie-cwa-sampled-clip-interior-fragment",
-            include_str!(
-                "generated/clockwise_atomic_draw_interior_triangles_sampled_clip.webgpu_fixedcolor_frag.wgsl"
-            ),
-        );
-        let clip_path_fragment = shader(
-            device,
-            "nuxie-cwa-clip-path-fragment",
-            include_str!("generated/clockwise_atomic_draw_clip.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let clip_interior_fragment = shader(
-            device,
-            "nuxie-cwa-clip-interior-fragment",
-            include_str!(
-                "generated/clockwise_atomic_draw_clip_interior_triangles.webgpu_fixedcolor_frag.wgsl"
-            ),
+            BuiltinShaderKey::ClockwiseAtomicClipInteriorFragment,
         );
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-cwa-flush-layout"),
@@ -1250,13 +1221,6 @@ fn set_groups<'a>(
     pass.set_bind_group(1, image, &[]);
     pass.set_bind_group(2, clip, &[]);
     pass.set_bind_group(3, samplers, &[]);
-}
-
-fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    })
 }
 
 fn options<'a>(constants: &'a [(&'a str, f64)]) -> wgpu::PipelineCompilationOptions<'a> {

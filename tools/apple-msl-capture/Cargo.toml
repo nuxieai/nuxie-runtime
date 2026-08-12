@@ -1,0 +1,15 @@
+[package]
+name = "apple-msl-capture"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["apple-msl-capture"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", features = ["apple-msl-capture"] }

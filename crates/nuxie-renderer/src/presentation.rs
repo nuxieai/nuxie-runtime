@@ -126,17 +126,17 @@ impl WgpuPresentationSurface {
             wgpu::CurrentSurfaceTexture::Success(texture)
             | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
             wgpu::CurrentSurfaceTexture::Timeout => {
-                return Err(WgpuPresentationAcquireError::Timeout)
+                return Err(WgpuPresentationAcquireError::Timeout);
             }
             wgpu::CurrentSurfaceTexture::Occluded => {
-                return Err(WgpuPresentationAcquireError::Occluded)
+                return Err(WgpuPresentationAcquireError::Occluded);
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
-                return Err(WgpuPresentationAcquireError::Outdated)
+                return Err(WgpuPresentationAcquireError::Outdated);
             }
             wgpu::CurrentSurfaceTexture::Lost => return Err(WgpuPresentationAcquireError::Lost),
             wgpu::CurrentSurfaceTexture::Validation => {
-                return Err(WgpuPresentationAcquireError::Validation)
+                return Err(WgpuPresentationAcquireError::Validation);
             }
         };
         Ok(WgpuPresentationFrame {

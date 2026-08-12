@@ -1,5 +1,6 @@
 .PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
+.PHONY: renderer-apple-msl-no-wgsl-probe
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
@@ -533,13 +534,20 @@ renderer-shaders-check:
 renderer-apple-passthrough-probe:
 	cargo test --locked -p nuxie-renderer --test apple_msl_passthrough -- --ignored --nocapture
 
+# This is intentionally a real-Metal gate rather than a cross-compile check:
+# it proves that wgpu can compile committed MSL without enabling either
+# wgpu's WGSL frontend or Naga's WGSL parser.
+renderer-apple-msl-no-wgsl-probe:
+	tools/apple-msl-no-wgsl-probe/check.sh
+
 # Exercise the focused invariants and transitive feature wiring across the
 # excluded, pinned wgpu packages. Their committed lockfiles keep this check
 # reproducible without mutating the vendored source directories.
 renderer-wgpu-backend-check:
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked --manifest-path vendor/wgpu-30.0.0/Cargo.toml --no-default-features --features std,metal,wgsl
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal coalescing
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal invariant_position
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal shader_translation
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked -p apple-msl-capture
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-core-30.0.0/Cargo.toml --lib command_buffer
 
 renderer-wgpu-consumer-check:

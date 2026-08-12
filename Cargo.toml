@@ -26,6 +26,9 @@ members = [
     "tools/rust-golden-runner",
     "tools/silver-corpus",
     "tools/size-report-roots",
+    "tools/apple-msl-catalog",
+    "tools/apple-msl-capture",
+    "tools/apple-msl-no-wgsl-probe",
 ]
 exclude = [
     "vendor/luaur-ast-0.1.8",

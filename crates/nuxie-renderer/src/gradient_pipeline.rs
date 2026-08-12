@@ -1,6 +1,7 @@
 //! Gradient-ramp rendering translated from `renderer/src/render_context.cpp`.
 
 use crate::gpu::{FlushUniforms, GradientSpan};
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 
 pub(crate) const TEXTURE_WIDTH: u32 = 512;
@@ -36,14 +37,8 @@ impl GradientPipeline {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-gradient-vertex"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("generated/color_ramp.vert.wgsl").into()),
-        });
-        let fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-gradient-fragment"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("generated/color_ramp.frag.wgsl").into()),
-        });
+        let vertex = shader_catalog::create(device, BuiltinShaderKey::ColorRampVertex);
+        let fragment = shader_catalog::create(device, BuiltinShaderKey::ColorRampFragment);
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-gradient-pipeline"),
             layout: Some(&pipeline_layout),

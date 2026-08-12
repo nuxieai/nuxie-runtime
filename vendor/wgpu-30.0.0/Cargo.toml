@@ -256,7 +256,6 @@ version = "30.0.0"
 path = "../wgpu-core-30.0.0"
 features = [
     "renderdoc",
-    "wgsl",
     "portable-atomic",
 ]
 

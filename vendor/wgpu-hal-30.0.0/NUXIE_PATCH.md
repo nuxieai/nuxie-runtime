@@ -12,6 +12,12 @@ The Metal shader compiler also mirrors Dawn/Tint's invariance contract:
 Enabling it for ordinary positions changes 4x-MSAA edge coverage on Apple
 Paravirtual devices.
 
+The `apple-msl-capture` feature is tooling-only. When it is explicitly enabled
+and `NUXIE_APPLE_MSL_CAPTURE_DIR` is set, the Metal pipeline path records the
+exact layout-derived Naga-to-MSL inputs and outputs used by the repository's
+offline shader catalog. Normal runtime builds do not enable the feature; a
+feature-enabled build is still inert when the environment variable is absent.
+
 Metal opts out of both capabilities after strict event sync is enabled, because
 continuing an older native command buffer or discarding a new one would bypass
 the relay wait prologue. Nuxie never calls `enable_strict_event_sync`; callers
@@ -25,6 +31,8 @@ The canonical source patch changes only:
 - `src/metal/command.rs`
 - `src/metal/device.rs`
 - `src/metal/mod.rs`
+- `src/metal/shader_capture.rs`
+- `src/metal/shader_translation.rs`
 
 `Cargo.toml` is otherwise the stock normalized manifest, with one addition: an
 empty `[workspace]` table so cargo stops its workspace search at this package
@@ -36,9 +44,9 @@ Upstream identity and review material:
 
 - Package: crates.io `wgpu-hal` 30.0.0
 - Package checksum in the original workspace lock: `cf765132d8d5f50e192e7880464890c13f4e7457aafe8e5466e8174586e9f101`
-- Canonical source patch SHA-256: `b6d2a27aa6fabe80bf02a0c3744819629894202ae7081a9035b6a49a3d3b0745`
+- Canonical source patch SHA-256: `07f5fb9869c202a5f165928676fef2449057a218744d32e38556ad2f88b092f7`
 - Companion core source patch SHA-256: `d73919c84bcf241e5ecece989bcd055eae3600d762ffab695bb25cc5ae8e95db`
-- Direct-crate test lock SHA-256: `bc27e50dd420d2dd78fdce4000b28fb8492fb07cda4da37c4fd488f0829a4476`
+- Direct-crate test lock SHA-256: `e1ee3eb0e8c7fbe3121021e867bc7ac5f9291a98cc4bda7b19af8ccdf20e4d15`
 
 The source-patch hash is the SHA-256 of `git diff --full-index --binary`
 against a Git snapshot of the exact unpacked crates.io package. The overlay

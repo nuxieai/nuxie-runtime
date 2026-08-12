@@ -4,6 +4,7 @@ use crate::gpu::{
     ImageDrawInstance, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
     PAINT_FLAG_HAS_CLIP_RECT,
 };
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::tessellator::{FrameUploadPayload, TessellationFlushResources, TessellationUploadFrame};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedRenderPass};
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
@@ -245,116 +246,45 @@ pub(crate) struct ImageMeshBuffers<'a> {
 
 impl AtomicPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let path_vertex = shader(
-            device,
-            "nuxie-atomic-path-vertex",
-            include_str!("generated/atomic_draw_path.webgpu_vert.wgsl"),
-        );
-        let path_fragment = shader(
-            device,
-            "nuxie-atomic-path-fragment",
-            include_str!("generated/atomic_draw_path.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let resolve_vertex = shader(
-            device,
-            "nuxie-atomic-resolve-vertex",
-            include_str!("generated/atomic_resolve.webgpu_vert.wgsl"),
-        );
-        let resolve_fragment = shader(
-            device,
-            "nuxie-atomic-resolve-fragment",
-            include_str!("generated/atomic_resolve.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let interior_vertex = shader(
-            device,
-            "nuxie-atomic-interior-vertex",
-            include_str!("generated/atomic_draw_interior_triangles.webgpu_vert.wgsl"),
-        );
-        let interior_fragment = shader(
-            device,
-            "nuxie-atomic-interior-fragment",
-            include_str!("generated/atomic_draw_interior_triangles.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let atlas_blit_vertex = shader(
-            device,
-            "nuxie-atomic-atlas-blit-vertex",
-            include_str!("generated/atomic_draw_atlas_blit.webgpu_vert.wgsl"),
-        );
-        let atlas_blit_fragment = shader(
-            device,
-            "nuxie-atomic-atlas-blit-fragment",
-            include_str!("generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let advanced_atlas_blit_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-atlas-blit-fragment",
-            include_str!("generated/atomic_draw_atlas_blit.webgpu_frag.wgsl"),
-        );
-        let image_rect_vertex = shader(
-            device,
-            "nuxie-atomic-image-rect-vertex",
-            include_str!("generated/atomic_draw_image_rect.webgpu_vert.wgsl"),
-        );
-        let image_rect_fragment = shader(
-            device,
-            "nuxie-atomic-image-rect-fragment",
-            include_str!("generated/atomic_draw_image_rect.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let image_mesh_vertex = shader(
-            device,
-            "nuxie-atomic-image-mesh-vertex",
-            include_str!("generated/atomic_draw_image_mesh.webgpu_vert.wgsl"),
-        );
-        let image_mesh_fragment = shader(
-            device,
-            "nuxie-atomic-image-mesh-fragment",
-            include_str!("generated/atomic_draw_image_mesh.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let advanced_path_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-path-fragment",
-            include_str!("generated/atomic_draw_path.webgpu_frag.wgsl"),
-        );
-        let advanced_interior_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-interior-fragment",
-            include_str!("generated/atomic_draw_interior_triangles.webgpu_frag.wgsl"),
-        );
-        let advanced_image_mesh_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-image-mesh-fragment",
-            include_str!("generated/atomic_draw_image_mesh.webgpu_frag.wgsl"),
-        );
-        let advanced_image_rect_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-image-rect-fragment",
-            include_str!("generated/atomic_draw_image_rect.webgpu_frag.wgsl"),
-        );
-        let init_vertex = shader(
-            device,
-            "nuxie-atomic-init-vertex",
-            include_str!("generated/atomic_init.webgpu_vert.wgsl"),
-        );
-        let init_fragment = shader(
-            device,
-            "nuxie-atomic-init-fragment",
-            include_str!("generated/atomic_init.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let advanced_init_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-init-fragment",
-            include_str!("generated/atomic_init.webgpu_frag.wgsl"),
-        );
-        let advanced_resolve_vertex = shader(
-            device,
-            "nuxie-atomic-advanced-resolve-vertex",
-            include_str!("generated/atomic_resolve_coalesced.webgpu_vert.wgsl"),
-        );
-        let advanced_resolve_fragment = shader(
-            device,
-            "nuxie-atomic-advanced-resolve-fragment",
-            include_str!("generated/atomic_resolve_coalesced.webgpu_frag.wgsl"),
-        );
+        let path_vertex = shader_catalog::create(device, BuiltinShaderKey::AtomicPathVertex);
+        let path_fragment = shader_catalog::create(device, BuiltinShaderKey::AtomicPathFragment);
+        let resolve_vertex = shader_catalog::create(device, BuiltinShaderKey::AtomicResolveVertex);
+        let resolve_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicResolveFragment);
+        let interior_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicInteriorVertex);
+        let interior_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicInteriorFragment);
+        let atlas_blit_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAtlasBlitVertex);
+        let atlas_blit_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAtlasBlitFragment);
+        let advanced_atlas_blit_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedAtlasBlitFragment);
+        let image_rect_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicImageRectVertex);
+        let image_rect_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicImageRectFragment);
+        let image_mesh_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicImageMeshVertex);
+        let image_mesh_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicImageMeshFragment);
+        let advanced_path_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedPathFragment);
+        let advanced_interior_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedInteriorFragment);
+        let advanced_image_mesh_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedImageMeshFragment);
+        let advanced_image_rect_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedImageRectFragment);
+        let init_vertex = shader_catalog::create(device, BuiltinShaderKey::AtomicInitVertex);
+        let init_fragment = shader_catalog::create(device, BuiltinShaderKey::AtomicInitFragment);
+        let advanced_init_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedInitFragment);
+        let advanced_resolve_vertex =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedResolveVertex);
+        let advanced_resolve_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::AtomicAdvancedResolveFragment);
         let flush_layout_entries = atomic_flush_layout_entries();
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atomic-flush-layout"),
@@ -1767,13 +1697,6 @@ fn image_mesh_vertex_layout(shader_location: u32) -> wgpu::VertexBufferLayout<'s
             _ => unreachable!("image mesh only has position and UV streams"),
         },
     }
-}
-
-fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    })
 }
 
 fn fixed_atomic_features(batch_shared_draws: bool, paints: &[PaintData]) -> FixedAtomicFeatures {

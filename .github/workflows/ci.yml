@@ -416,6 +416,9 @@ jobs:
       - name: Verify vendored wgpu backend and downstream graph
         run: make renderer-wgpu-backend-check renderer-wgpu-consumer-check
 
+      - name: Execute committed Apple MSL without WGSL input support
+        run: make renderer-apple-msl-no-wgsl-probe
+
       - name: Build reference runtime and renderer for dual fuzz replay
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |

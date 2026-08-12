@@ -1,5 +1,6 @@
 //! Mipmap generation translated from Rive's WebGPU RenderContext implementation.
 
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
 pub(crate) struct MipmapPipeline {
@@ -31,18 +32,8 @@ impl MipmapPipeline {
             bind_group_layouts: &[Some(&empty_layout), Some(&image_layout)],
             immediate_size: 0,
         });
-        let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-mipmap-vertex"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/blit_texture_as_draw_filtered.webgpu_vert.wgsl").into(),
-            ),
-        });
-        let fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-mipmap-fragment"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/blit_texture_as_draw_filtered.webgpu_frag.wgsl").into(),
-            ),
-        });
+        let vertex = shader_catalog::create(device, BuiltinShaderKey::MipmapVertex);
+        let fragment = shader_catalog::create(device, BuiltinShaderKey::MipmapFragment);
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nuxie-mipmap-pipeline"),
             layout: Some(&layout),

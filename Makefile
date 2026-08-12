@@ -2,6 +2,7 @@
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
 .PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
+.PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 RIVE_RUNTIME_REF ?= 4ac7b32798da0482e441ef09304dc3b480ed3ee5
@@ -36,6 +37,8 @@ RUNTIME_DIFFERENTIAL_LOG_DIR ?= $(RUNTIME_DIFFERENTIAL_REPORT_DIR)/diagnostics
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
+RUNTIME_BEHAVIOR_INVENTORY_TOOL ?= $(CURDIR)/tools/runtime-behavior-inventory/behavior_inventory.py
+RUNTIME_BEHAVIOR_INVENTORY ?= $(CURDIR)/runtime-behavior-inventory.json
 PURE_RUNTIME_BOUNDARY_TOOL ?= $(CURDIR)/tools/pure-runtime-boundary/check.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
 PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
@@ -238,6 +241,20 @@ rust-attribution-gate:
 	@tools/report-all.sh "rust-attribution" \
 		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
 		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
+
+runtime-behavior-inventory-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-behavior-inventory -p 'test_*.py' -v
+
+runtime-behavior-inventory-snapshot:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_BEHAVIOR_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --snapshot "$(RUNTIME_BEHAVIOR_INVENTORY)" --write
+
+runtime-behavior-inventory-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_BEHAVIOR_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --snapshot "$(RUNTIME_BEHAVIOR_INVENTORY)"
+
+runtime-behavior-inventory:
+	@tools/report-all.sh "runtime-behavior-inventory" \
+		"runtime behavior inventory unit tests" "$(MAKE) --no-print-directory runtime-behavior-inventory-test" \
+		"C++ member/header and Rust item inventory check" "$(MAKE) --no-print-directory runtime-behavior-inventory-check"
 
 pure-runtime-boundary-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/pure-runtime-boundary -p 'test_*.py' -v

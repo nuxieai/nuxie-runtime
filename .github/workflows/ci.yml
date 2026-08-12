@@ -87,6 +87,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: make rust-attribution-gate
 
+      # File-level correspondence cannot detect a new inline setter, callback,
+      # lifecycle hook, or handwritten item inside an already-known source.
+      - name: Verify runtime behavior member and item inventory
+        if: ${{ !cancelled() }}
+        run: make runtime-behavior-inventory
+
       # The boundary test and live workspace check are independent verdicts. This
       # runs on Ubuntu because it parses every declared dependency table,
       # including Apple target and optional feature tables, without compiling.

@@ -1447,6 +1447,30 @@ path.
   matching pinned C++ ownership. Never drop GPU-prefixed names, share the
   physical module across lookups, or substitute CPU rendering.
 
+## Named item-bound host adaptations
+
+These policies preserve a pinned C++ owner contract across a Rust host seam.
+The behavioral inventory binds each discovered Rust item on the named surface
+to the policy, its baseline owner, allowed call direction, forbidden effects,
+and concrete evidence.
+
+- **A1 retained-render-command-serialization:** retained render commands may be
+  serialized for transport, but their payload and order remain authoritative.
+- **A2 host-focus-bridge:** platform focus delivery may cross a host boundary;
+  it must preserve focus notification and ordering semantics.
+- **A3 external-data-converter-host:** host converter plumbing may adapt value
+  transport without changing conversion order or data-bind dirt publication.
+- **A4 authenticated-script-envelope:** import-time envelope authentication may
+  devirtualize validation under AF-5; it may not change the script payload.
+- **A5 script-host-command-bridge:** command transport is host-owned, while
+  command order and payload remain pinned behavior.
+- **A6 script-runtime-crate-boundary:** optional VM ownership may be inverted
+  under AF-1, without changing script lifecycle or bypassing resource limits.
+- **A7 validated-luau-bytecode:** bytecode is structurally validated before the
+  unsafe loader, without changing its ownership contract.
+- **A8 terminal-script-resource-limits:** terminal VM limit failures cannot be
+  retried or allowed to continue traversal.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

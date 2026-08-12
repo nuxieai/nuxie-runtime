@@ -144,6 +144,7 @@ jobs:
           repository: rive-app/rive-runtime
           ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
+          fetch-depth: 0
 
       - name: Install Python
         uses: actions/setup-python@v5
@@ -159,6 +160,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: make runtime-frame-loop-port-gate
 
+      - name: Freshness-aware parity evidence gate
+        if: ${{ !cancelled() }}
+        run: make parity-evidence-freshness
+
       - name: Proof-aware parity scorecard gate
         if: ${{ !cancelled() }}
         run: make parity-scorecard
@@ -166,6 +171,15 @@ jobs:
       - name: Clustered runtime drift queue gate
         if: ${{ !cancelled() }}
         run: make runtime-drift-queue
+
+      - name: Upload parity evidence freshness report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-evidence-freshness-${{ github.run_attempt }}
+          path: target/parity-evidence-freshness/*
+          if-no-files-found: warn
+          retention-days: 30
 
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own

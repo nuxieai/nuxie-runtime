@@ -21,7 +21,6 @@ from ledger_scorecard import (
     render_ledger_scorecard,
 )
 
-
 EVIDENCE_SCHEMA = "nuxie-parity-gate-evidence-v1"
 REPORT_SCHEMA = "nuxie-parity-scorecard-v1"
 MIN_RUNTIME_ENTRIES = 324
@@ -74,7 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    check = subparsers.add_parser("check", help="validate evidence and print the scorecard")
+    check = subparsers.add_parser(
+        "check", help="validate evidence and print the scorecard"
+    )
     check.add_argument("--repo-root", type=Path, default=Path.cwd())
     check.add_argument("--evidence-dir", type=Path)
     check.add_argument("--source-sha")
@@ -89,11 +90,14 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("gate_command", nargs=argparse.REMAINDER)
 
     snapshot = subparsers.add_parser(
-        "snapshot", help="aggregate checked-in parity ledgers and write the docs snapshot"
+        "snapshot",
+        help="aggregate checked-in parity ledgers and write the docs snapshot",
     )
     snapshot.add_argument("--repo-root", type=Path, default=Path.cwd())
     snapshot.add_argument("--output", type=Path)
     snapshot.add_argument("--json", type=Path, dest="json_output")
+    snapshot.add_argument("--freshness-report", type=Path)
+    snapshot.add_argument("--rive-runtime-dir", type=Path)
 
     options = parser.parse_args(argv)
     if options.command == "check":
@@ -110,7 +114,9 @@ def snapshot_scorecard(options: argparse.Namespace) -> int:
     repo_root = options.repo_root.resolve()
     output = options.output or repo_root / "docs" / "parity-scorecard.md"
     try:
-        scorecard = aggregate_ledger_scorecard(repo_root)
+        scorecard = aggregate_ledger_scorecard(
+            repo_root, options.freshness_report, options.rive_runtime_dir
+        )
         rendered = render_ledger_scorecard(scorecard)
         write_text_atomic(output, rendered)
         if options.json_output:
@@ -216,7 +222,9 @@ def check_scorecard(options: argparse.Namespace) -> int:
     )
     errors: list[str] = []
     source_sha = options.source_sha or git_source_sha(repo_root, errors)
-    definition = load_toml(repo_root / "parity-scorecard.toml", "scorecard definition", errors)
+    definition = load_toml(
+        repo_root / "parity-scorecard.toml", "scorecard definition", errors
+    )
     corpus = load_toml(repo_root / "corpus.toml", "runtime corpus", errors)
     renderer_corpus = load_toml(repo_root / "corpus-r.toml", "renderer corpus", errors)
 
@@ -316,7 +324,9 @@ def check_scorecard(options: argparse.Namespace) -> int:
 
     if options.json_output:
         options.json_output.parent.mkdir(parents=True, exist_ok=True)
-        options.json_output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        options.json_output.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n"
+        )
 
     if errors:
         for error in errors:
@@ -381,11 +391,7 @@ def floor_requirements(
 
 
 def minimum_integer(value: Any, label: str, minimum: int, errors: list[str]) -> int:
-    if (
-        not isinstance(value, int)
-        or isinstance(value, bool)
-        or value < minimum
-    ):
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         errors.append(f"{label} must be at least {minimum}")
         return minimum
     return value
@@ -402,7 +408,9 @@ def runtime_ratchet(
     if not isinstance(rows, list) or not rows:
         errors.append("runtime corpus must contain at least one [[file]] row")
         return 0, 0, 0, False
-    exact_rows = [row for row in rows if isinstance(row, dict) and row.get("status") == "exact"]
+    exact_rows = [
+        row for row in rows if isinstance(row, dict) and row.get("status") == "exact"
+    ]
     if len(exact_rows) != len(rows):
         errors.append(
             "runtime corpus contains a non-exact row; "
@@ -414,7 +422,9 @@ def runtime_ratchet(
     for row in exact_rows:
         samples = row.get("samples")
         if not isinstance(samples, list) or not samples:
-            errors.append(f"runtime corpus row {row.get('id', '<unknown>')} has no samples")
+            errors.append(
+                f"runtime corpus row {row.get('id', '<unknown>')} has no samples"
+            )
             valid = False
             continue
         if row.get("verification") != "rejects-malformed":
@@ -454,9 +464,7 @@ def renderer_ratchet(
     if not isinstance(rows, list) or not rows:
         errors.append("renderer corpus must contain at least one [[entry]] row")
         return 0, False
-    exact = sum(
-        isinstance(row, dict) and row.get("status") == "exact" for row in rows
-    )
+    exact = sum(isinstance(row, dict) and row.get("status") == "exact" for row in rows)
     if exact != len(rows):
         errors.append(
             "renderer corpus contains a non-exact row; "
@@ -475,7 +483,9 @@ def read_evidence(path: Path, expected_gate: str, errors: list[str]) -> Evidence
     try:
         document = json.loads(path.read_text())
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        errors.append(f"required {expected_gate} evidence is unavailable at {path}: {error}")
+        errors.append(
+            f"required {expected_gate} evidence is unavailable at {path}: {error}"
+        )
         return None
     if not isinstance(document, dict) or document.get("schema") != EVIDENCE_SCHEMA:
         errors.append(f"{expected_gate} evidence has an unsupported schema")
@@ -598,7 +608,9 @@ def validate_renderer_evidence(
         "total": expected_pixels,
     }
     if summary != expected or summary["byte_exact"] > expected_pixels:
-        errors.append(f"renderer-golden ratchet mismatch: expected {expected}, got {summary}")
+        errors.append(
+            f"renderer-golden ratchet mismatch: expected {expected}, got {summary}"
+        )
         valid = False
     return valid
 
@@ -674,16 +686,20 @@ def build_tiers(
                 ratchet(
                     "exact-segments",
                     "GREEN" if golden else "RED",
-                    f"exact-segments {expected_segments}/{expected_segments}"
-                    if golden
-                    else "exact-segments unavailable/red",
+                    (
+                        f"exact-segments {expected_segments}/{expected_segments}"
+                        if golden
+                        else "exact-segments unavailable/red"
+                    ),
                 ),
                 ratchet(
                     "scripted-exact-segments",
                     "GREEN" if scripted else "RED",
-                    f"scripted {expected_segments}/{expected_segments}"
-                    if scripted
-                    else "scripted unavailable/red",
+                    (
+                        f"scripted {expected_segments}/{expected_segments}"
+                        if scripted
+                        else "scripted unavailable/red"
+                    ),
                 ),
                 ratchet("e2e-exact", "NOT_BUILT", "e2e-exact not built (#OR-6)"),
             ],
@@ -695,11 +711,13 @@ def build_tiers(
                 ratchet(
                     "side-channel-segments",
                     "GREEN" if golden and scripted else "RED",
-                    f"side-channel-segments "
-                    f"{expected_side_channel_segments}/{expected_side_channel_segments}"
-                    " (V11 carve-out filed)"
-                    if golden and scripted
-                    else "side-channel-segments unavailable/red",
+                    (
+                        f"side-channel-segments "
+                        f"{expected_side_channel_segments}/{expected_side_channel_segments}"
+                        " (V11 carve-out filed)"
+                        if golden and scripted
+                        else "side-channel-segments unavailable/red"
+                    ),
                 ),
                 ratchet(
                     "script-verbs",
@@ -729,9 +747,11 @@ def build_tiers(
             [
                 ratchet(
                     "a-rows-closed",
-                    "GREEN"
-                    if register_rows and len(sdk_closed) == len(register_rows)
-                    else "RED",
+                    (
+                        "GREEN"
+                        if register_rows and len(sdk_closed) == len(register_rows)
+                        else "RED"
+                    ),
                     sdk_display(register_rows, sdk_closed),
                 )
             ],
@@ -743,9 +763,11 @@ def build_tiers(
                 ratchet(
                     "pixel-exact",
                     "GREEN" if renderer else "RED",
-                    f"pixel-exact {expected_pixels}/{expected_pixels}"
-                    if renderer
-                    else "pixel-exact unavailable/red",
+                    (
+                        f"pixel-exact {expected_pixels}/{expected_pixels}"
+                        if renderer
+                        else "pixel-exact unavailable/red"
+                    ),
                 ),
                 ratchet(
                     "verified-adapters",
@@ -755,9 +777,11 @@ def build_tiers(
                 ratchet(
                     "browser-backend-decision",
                     "GREEN" if browser_webgpu_only else "RED",
-                    "WebGPU-only browser support gate green; legacy backend retired (#HD-3)"
-                    if browser_webgpu_only
-                    else "WebGPU-only browser support evidence unavailable/red (#HD-3)",
+                    (
+                        "WebGPU-only browser support gate green; legacy backend retired (#HD-3)"
+                        if browser_webgpu_only
+                        else "WebGPU-only browser support evidence unavailable/red (#HD-3)"
+                    ),
                 ),
             ],
         ),
@@ -889,9 +913,7 @@ def blocking_perf(
         for ratio in ratios.values()
     )
     invalid_ceiling = any(
-        not isinstance(ceiling, int)
-        or isinstance(ceiling, bool)
-        or ceiling <= 0
+        not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling <= 0
         for ceiling in ceilings.values()
     )
     if invalid_ratio or invalid_ceiling or report_sha != source_sha:
@@ -979,11 +1001,7 @@ def performance_requirements(
     performance = definition.get("performance", {})
     minimum = performance.get("blocking_min_entries")
     maximum = performance.get("max_ratio")
-    if (
-        not isinstance(minimum, int)
-        or isinstance(minimum, bool)
-        or minimum < 20
-    ):
+    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 20:
         errors.append("performance.blocking_min_entries must be at least 20")
         minimum = 20
     if (

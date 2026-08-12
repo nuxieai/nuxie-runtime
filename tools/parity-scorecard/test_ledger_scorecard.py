@@ -1,4 +1,5 @@
 import json
+import hashlib
 import subprocess
 import sys
 import shutil
@@ -14,18 +15,116 @@ from ledger_scorecard import (
     resolve_evidence_record,
 )
 
-
 TOOL = Path(__file__).with_name("parity_scorecard.py")
 REPO_ROOT = TOOL.parents[2]
 
 
 class LedgerScorecardTests(unittest.TestCase):
+    def write_freshness_report(
+        self, directory: Path, *, stale_owner: str | None = None
+    ) -> Path:
+        source_root = (
+            directory
+            if (directory / "file-correspondence-manifest.toml").is_file()
+            else REPO_ROOT
+        )
+        manifest = tomllib.loads(
+            (source_root / "file-correspondence-manifest.toml").read_text()
+        )
+        current_rows = set(manifest["current_audit_rows"])
+        proofs = []
+        for row in manifest["file"]:
+            current = (
+                row["b6_row_id"] in current_rows and row["upstream"] != stale_owner
+            )
+            proofs.append(
+                {
+                    "kind": "structural",
+                    "owner": row["upstream"],
+                    "current_validity": "current" if current else "stale",
+                    "binding_completeness": (
+                        "complete"
+                        if row["b6_row_id"] in current_rows
+                        else "legacy-unbound"
+                    ),
+                    "stale_reasons": [] if current else ["rust-item-changed:test"],
+                }
+            )
+        registry = json.loads((source_root / "parity-evidence-proofs.json").read_text())
+        upstream_root = directory / "rive-runtime"
+        upstream_paths = {
+            binding["path"]
+            for proof in registry["proofs"]
+            for binding in proof["cpp_items"]
+        }
+        upstream_paths.update(
+            binding["path"]
+            for proof in registry["proofs"]
+            for binding in proof["fixtures"]
+            if binding.get("root") == "upstream"
+        )
+        upstream_state = []
+        for source in sorted(upstream_paths):
+            path = upstream_root / source
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"upstream:{source}\n".encode())
+            upstream_state.append(
+                {
+                    "path": source,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            )
+        state_paths = {
+            "file-correspondence-manifest.toml",
+            "parity-evidence-proofs.json",
+        }
+        for proof in registry["proofs"]:
+            if proof["kind"] != "structural":
+                continue
+            state_paths.add(proof["evidence"]["path"])
+            for field in ("rust_items", "probes", "fixtures"):
+                state_paths.update(
+                    binding["path"]
+                    for binding in proof[field]
+                    if binding.get("root", "repo") == "repo"
+                )
+        repo_state = []
+        for source in sorted(state_paths):
+            source_path = source_root / source
+            repo_state.append(
+                (
+                    {
+                        "path": source,
+                        "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+                    }
+                    if source_path.is_file()
+                    else {"path": source, "missing": True}
+                )
+            )
+        path = directory / "freshness.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "nuxie-parity-evidence-freshness/v1",
+                    "current_upstream_ref": manifest["upstream_ref"],
+                    "rust_commit": subprocess.run(
+                        ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+                        text=True,
+                        capture_output=True,
+                    ).stdout.strip(),
+                    "repo_source_state": repo_state,
+                    "upstream_source_state": upstream_state,
+                    "proofs": proofs,
+                    "upstream_owner_changes": {"removed": []},
+                }
+            )
+        )
+        return path
+
     def test_pending_verification_is_not_reported_as_behaviorally_proven(self):
         scorecard = aggregate_ledger_scorecard(REPO_ROOT)
 
-        proof = scorecard["owner_proofs"]["by_upstream"][
-            "src/assets/audio_asset.cpp"
-        ]
+        proof = scorecard["owner_proofs"]["by_upstream"]["src/assets/audio_asset.cpp"]
         self.assertEqual(proof["mapping"], "mapped")
         self.assertEqual(proof["behavioral"], "unverified")
         self.assertEqual(proof["effective_state"], "stale")
@@ -42,25 +141,25 @@ class LedgerScorecardTests(unittest.TestCase):
     def test_verified_classification_is_not_behavioral_proof(self):
         scorecard = aggregate_ledger_scorecard(REPO_ROOT)
 
-        proof = scorecard["owner_proofs"]["by_upstream"][
-            "src/advancing_component.cpp"
-        ]
+        proof = scorecard["owner_proofs"]["by_upstream"]["src/advancing_component.cpp"]
         self.assertEqual(proof["verification"], "orchestrator-verified")
         self.assertEqual(proof["behavioral"], "unverified")
 
     def test_decisions_and_extensions_are_independent_owner_dimensions(self):
         scorecard = aggregate_ledger_scorecard(REPO_ROOT)
 
-        proof = scorecard["owner_proofs"]["by_upstream"][
-            "src/lua/renderer/lua_gpu.cpp"
-        ]
+        proof = scorecard["owner_proofs"]["by_upstream"]["src/lua/renderer/lua_gpu.cpp"]
         self.assertEqual(proof["decisions"], ["D18"])
         self.assertEqual(proof["extensions"], ["X3"])
         self.assertEqual(proof["exception"], "intentional-extension")
         self.assertEqual(proof["behavioral"], "unverified")
 
     def test_owner_freshness_honors_current_post_audit_rows(self):
-        scorecard = aggregate_ledger_scorecard(REPO_ROOT)
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.write_freshness_report(Path(temporary))
+            scorecard = aggregate_ledger_scorecard(
+                REPO_ROOT, report, report.parent / "rive-runtime"
+            )
 
         self.assertEqual(
             scorecard["owner_proofs"]["freshness_counts"],
@@ -70,9 +169,7 @@ class LedgerScorecardTests(unittest.TestCase):
             "src/animation/keyframe_int.cpp"
         ]
         self.assertEqual(current["freshness"], "current")
-        self.assertEqual(
-            current["freshness_basis"], "row-audit-pin-and-rust-source"
-        )
+        self.assertEqual(current["freshness_basis"], "item-bound-parity-evidence")
         self.assertEqual(
             current["reviewed_rust_source_sha256"],
             "1a7d9862c077ed42f765aa6b2bef7c8a5a80a405134531f6c2ae7ab8424956f5",
@@ -179,7 +276,8 @@ class LedgerScorecardTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(
-                ValueError, "src/advancing_component.cpp.*evidence record does not exist"
+                ValueError,
+                "src/advancing_component.cpp.*evidence record does not exist",
             ):
                 aggregate_ledger_scorecard(repo)
 
@@ -232,29 +330,125 @@ class LedgerScorecardTests(unittest.TestCase):
             manifest = repo / "file-correspondence-manifest.toml"
             manifest.write_text(
                 manifest.read_text().replace(
-                    'current_audit_rows = [',
+                    "current_audit_rows = [",
                     'current_audit_rows = ["B6-0001", ',
                     1,
                 )
             )
 
             with self.assertRaisesRegex(
-                ValueError, "src/advancing_component.cpp.*current audit record does not cite 4ac7b327"
+                ValueError,
+                "src/advancing_component.cpp.*current audit record does not cite 4ac7b327",
             ):
                 aggregate_ledger_scorecard(repo)
 
-    def test_current_audit_row_must_match_reviewed_rust_sources(self):
+    def test_item_bound_freshness_invalidates_the_owner_downstream(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             self.copy_current_inputs(repo)
-            reviewed_source = repo / "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+            reviewed_source = (
+                repo / "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+            )
             reviewed_source.write_text(reviewed_source.read_text() + "\n// drift\n")
+            report = self.write_freshness_report(
+                repo, stale_owner="src/animation/keyframe_int.cpp"
+            )
 
-            with self.assertRaisesRegex(
-                ValueError,
-                "src/animation/keyframe_int.cpp.*reviewed Rust source fingerprint mismatch",
-            ):
-                aggregate_ledger_scorecard(repo)
+            scorecard = aggregate_ledger_scorecard(
+                repo, report, report.parent / "rive-runtime"
+            )
+
+            self.assertEqual(
+                scorecard["owner_proofs"]["by_upstream"][
+                    "src/animation/keyframe_int.cpp"
+                ]["freshness"],
+                "stale",
+            )
+
+    def test_scorecard_without_item_report_does_not_claim_current_source(self):
+        scorecard = aggregate_ledger_scorecard(REPO_ROOT)
+
+        current = scorecard["owner_proofs"]["by_upstream"][
+            "src/animation/keyframe_int.cpp"
+        ]
+        self.assertEqual(current["freshness"], "delegated")
+        self.assertEqual(current["effective_state"], "unverified-freshness")
+
+    def test_scorecard_rejects_report_replay_after_relevant_source_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.copy_current_inputs(repo)
+            report = self.write_freshness_report(repo)
+            source = repo / "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+            source.write_text(source.read_text() + "\n// changed after report\n")
+
+            with self.assertRaisesRegex(ValueError, "source state changed"):
+                aggregate_ledger_scorecard(repo, report, report.parent / "rive-runtime")
+
+    def test_scorecard_rejects_missing_source_reappearing_after_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.copy_current_inputs(repo)
+            source = repo / "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+            source.unlink()
+            report = self.write_freshness_report(repo)
+            source.write_text("// reappeared after report\n")
+
+            with self.assertRaisesRegex(ValueError, "source state changed"):
+                aggregate_ledger_scorecard(repo, report, report.parent / "rive-runtime")
+
+    def test_scorecard_rejects_report_replay_after_upstream_source_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.copy_current_inputs(repo)
+            report = self.write_freshness_report(repo)
+            upstream = report.parent / "rive-runtime"
+            source = next(upstream.rglob("*.cpp"))
+            source.write_text(source.read_text() + "// changed after report\n")
+
+            with self.assertRaisesRegex(ValueError, "upstream source state changed"):
+                aggregate_ledger_scorecard(repo, report, upstream)
+
+    def test_item_bound_current_proof_can_retain_historical_audit_pin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.copy_current_inputs(repo)
+            audit = repo / "docs/b6-audit/results/animation.md"
+            audit.write_text(audit.read_text().replace("4ac7b327", "00000000"))
+            report = self.write_freshness_report(repo)
+
+            scorecard = aggregate_ledger_scorecard(
+                repo, report, report.parent / "rive-runtime"
+            )
+
+            proof = scorecard["owner_proofs"]["by_upstream"][
+                "src/animation/keyframe_int.cpp"
+            ]
+            self.assertEqual(proof["freshness"], "current")
+
+    def test_removed_owner_extra_is_accepted_only_as_reported_stale_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.write_freshness_report(Path(temporary))
+            document = json.loads(report.read_text())
+            document["proofs"].append(
+                {
+                    "kind": "structural",
+                    "owner": "src/removed.cpp",
+                    "current_validity": "stale",
+                    "binding_completeness": "complete",
+                    "stale_reasons": ["cpp-item-changed:removed"],
+                }
+            )
+            document["upstream_owner_changes"]["removed"] = ["src/removed.cpp"]
+            report.write_text(json.dumps(document))
+
+            scorecard = aggregate_ledger_scorecard(
+                REPO_ROOT, report, report.parent / "rive-runtime"
+            )
+
+            self.assertNotIn(
+                "src/removed.cpp", scorecard["owner_proofs"]["by_upstream"]
+            )
 
     def test_second_pass_verdict_must_match_the_claim(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -293,7 +487,9 @@ class LedgerScorecardTests(unittest.TestCase):
             repo = Path(temporary)
             self.copy_current_inputs(repo)
             manifest = repo / "file-correspondence-manifest.toml"
-            manifest.write_text(manifest.read_text().replace("row_count = 456", "row_count = 455"))
+            manifest.write_text(
+                manifest.read_text().replace("row_count = 456", "row_count = 455")
+            )
 
             with self.assertRaisesRegex(
                 ValueError, "declares 455 owner rows but contains 456"
@@ -502,9 +698,7 @@ class LedgerScorecardTests(unittest.TestCase):
                     "faithful": 1,
                     "pending": 2,
                 },
-                "pending_by_family": {
-                    "audio": ["src/audio/a.cpp", "src/audio/b.cpp"]
-                },
+                "pending_by_family": {"audio": ["src/audio/a.cpp", "src/audio/b.cpp"]},
                 "total": 4,
             },
         )
@@ -640,7 +834,9 @@ class LedgerScorecardTests(unittest.TestCase):
         self.assertLess(rendered.index("`src/a.cpp`"), rendered.index("`src/b.cpp`"))
         self.assertIn("Exact ratchet: 1/1 (met)", rendered)
         self.assertIn("Gaps: 2 (`closed`: 1; `open`: 1)", rendered)
-        self.assertLess(rendered.index("- D2 — Earlier."), rendered.index("- D10 — Later."))
+        self.assertLess(
+            rendered.index("- D2 — Earlier."), rendered.index("- D10 — Later.")
+        )
         self.assertLess(
             rendered.index("- X1 — **Earlier extension.** Earlier."),
             rendered.index("- X2 — **Later extension.** Later."),
@@ -650,6 +846,7 @@ class LedgerScorecardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "parity-scorecard.md"
             json_output = Path(temporary) / "parity-owner-proofs.json"
+            freshness = self.write_freshness_report(Path(temporary))
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -661,6 +858,10 @@ class LedgerScorecardTests(unittest.TestCase):
                     str(output),
                     "--json",
                     str(json_output),
+                    "--freshness-report",
+                    str(freshness),
+                    "--rive-runtime-dir",
+                    str(freshness.parent / "rive-runtime"),
                 ],
                 text=True,
                 capture_output=True,
@@ -687,13 +888,15 @@ class LedgerScorecardTests(unittest.TestCase):
             self.assertIn("Covered test cases: 655/1404", completed.stdout)
             self.assertIn("Uncovered test cases: 749", completed.stdout)
             self.assertIn(
-                "Status counts: `diverges`: 10; `exact`: 349; `not-yet`: 5",
+                "Status counts: `diverges`: 5; `exact`: 354; `not-yet`: 5",
                 completed.stdout,
             )
             self.assertIn("Gaps: 10 (`closed`: 10; `open`: 0)", completed.stdout)
             self.assertIn("## D-row register", completed.stdout)
             self.assertIn("## Additive host-extension register", completed.stdout)
-            self.assertIn("- X1 — **semantic-geometry-cache-authority.**", completed.stdout)
+            self.assertIn(
+                "- X1 — **semantic-geometry-cache-authority.**", completed.stdout
+            )
             self.assertNotIn("- D12", completed.stdout)
             proof_document = json.loads(json_output.read_text())
             self.assertEqual(proof_document["schema"], "nuxie-owner-parity-proof/v1")
@@ -711,9 +914,7 @@ class LedgerScorecardTests(unittest.TestCase):
                 {"known-divergent": 3, "stale": 446, "unverified": 7},
             )
             self.assertEqual(
-                proof_document["evidence_dimensions"]["tests"][
-                    "uncovered_test_cases"
-                ],
+                proof_document["evidence_dimensions"]["tests"]["uncovered_test_cases"],
                 749,
             )
 
@@ -728,6 +929,10 @@ class LedgerScorecardTests(unittest.TestCase):
             '--output "$(PARITY_SCORECARD_DOC)" --json "$(PARITY_OWNER_PROOF_DOC)"',
             makefile,
         )
+        self.assertIn(
+            '--freshness-report "$(PARITY_EVIDENCE_FRESHNESS_JSON)"', makefile
+        )
+        self.assertIn('--rive-runtime-dir "$(RIVE_RUNTIME_DIR)"', makefile)
 
     def test_make_gate_rejects_stale_human_or_machine_snapshots(self):
         makefile = (REPO_ROOT / "Makefile").read_text()
@@ -761,6 +966,7 @@ class LedgerScorecardTests(unittest.TestCase):
         destination.mkdir(exist_ok=True)
         for name in (
             "file-correspondence-manifest.toml",
+            "parity-evidence-proofs.json",
             "rust-additions.toml",
             "test-correspondence-manifest.toml",
             "silver-corpus.toml",
@@ -789,6 +995,23 @@ class LedgerScorecardTests(unittest.TestCase):
                 target = destination / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(REPO_ROOT / relative, target)
+        registry = json.loads((REPO_ROOT / "parity-evidence-proofs.json").read_text())
+        for proof in registry["proofs"]:
+            if proof["kind"] != "structural":
+                continue
+            paths = [proof["evidence"]["path"]]
+            for field in ("rust_items", "probes", "fixtures"):
+                paths.extend(
+                    binding["path"]
+                    for binding in proof[field]
+                    if binding.get("root", "repo") == "repo"
+                )
+            for name in paths:
+                target = destination / name
+                if target.is_file():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO_ROOT / name, target)
         for report in (
             "LUABIND-report.md",
             "P1G-report.md",

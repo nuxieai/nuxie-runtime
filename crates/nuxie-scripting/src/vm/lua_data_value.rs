@@ -153,13 +153,17 @@ fn ensure_metatable_patcher(lua: &Lua) -> Result<Function> {
     {
         return Ok(patcher);
     }
-    let chunk = lua.load_bytecode(
-        "rive_data_value_metatable",
-        include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/data-value-metatable.luau-bytecode"
-        )),
-    )?;
+    // SAFETY: this bytecode is produced by the pinned build-time compiler from
+    // the embedded source below.
+    let chunk = unsafe {
+        lua.load_bytecode(
+            "rive_data_value_metatable",
+            include_bytes!(concat!(
+                env!("OUT_DIR"),
+                "/data-value-metatable.luau-bytecode"
+            )),
+        )?
+    };
     let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, &patcher)?;
     Ok(patcher)

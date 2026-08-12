@@ -522,11 +522,14 @@ impl Lua {
 
     /// Load precompiled Luau bytecode into an unexecuted function.
     ///
-    /// This is the compiler-free device-runtime seam. The caller is
-    /// responsible for accepting only bytecode produced by a compatible Luau
-    /// toolchain and for performing any structural or trust validation its
-    /// container contract requires.
-    pub fn load_bytecode(&self, name: &str, bytecode: &[u8]) -> Result<Function> {
+    /// This is the compiler-free device-runtime seam.
+    ///
+    /// # Safety
+    ///
+    /// `bytecode` must be structurally valid output from a compatible Luau
+    /// toolchain. Luau's pointer-based deserializer does not bounds-check every
+    /// read, so malformed or truncated input can read beyond this slice.
+    pub unsafe fn load_bytecode(&self, name: &str, bytecode: &[u8]) -> Result<Function> {
         let state = self.state();
         let name = std::ffi::CString::new(format!("={name}"))
             .unwrap_or_else(|_| std::ffi::CString::new("=bytecode").expect("static name"));

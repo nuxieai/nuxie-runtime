@@ -549,10 +549,14 @@ pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Resul
 
     // 5. Load the poller loop with that environment and return it as the async
     //    function.
-    let function = lua.load_bytecode(
-        "__luaur_async_poll",
-        include_bytes!(concat!(env!("OUT_DIR"), "/async-poller.luau-bytecode")),
-    )?;
+    // SAFETY: this bytecode is produced by this crate's pinned build-time
+    // compiler from an embedded source file.
+    let function = unsafe {
+        lua.load_bytecode(
+            "__luaur_async_poll",
+            include_bytes!(concat!(env!("OUT_DIR"), "/async-poller.luau-bytecode")),
+        )?
+    };
     if !function.set_environment(env)? {
         return Err(Error::runtime(
             "luaur-rt: async poller could not install its environment",

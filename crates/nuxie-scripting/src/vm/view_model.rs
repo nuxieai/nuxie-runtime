@@ -311,13 +311,17 @@ pub(super) fn install_property_binding_support(lua: &Lua) -> luaur_rt::Result<()
         Ok(())
     })?;
     lua.set_named_registry_value(PROPERTY_LISTENER_FLUSH, flush)?;
-    let chunk = lua.load_bytecode(
-        "rive_property_metatable",
-        include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/property-metatable.luau-bytecode"
-        )),
-    )?;
+    // SAFETY: this bytecode is produced by the pinned build-time compiler from
+    // the embedded source below.
+    let chunk = unsafe {
+        lua.load_bytecode(
+            "rive_property_metatable",
+            include_bytes!(concat!(
+                env!("OUT_DIR"),
+                "/property-metatable.luau-bytecode"
+            )),
+        )?
+    };
     let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(PROPERTY_METATABLE_PATCHER, patcher)
 }

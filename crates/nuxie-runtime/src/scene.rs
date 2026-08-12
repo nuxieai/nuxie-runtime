@@ -15,6 +15,36 @@ pub enum RuntimeArtboardDefaultScene {
     LinearAnimation(usize),
 }
 
+/// A default scene selected together with its instantiated player.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeDefaultSceneSelection<S, A> {
+    StateMachine { index: usize, instance: S },
+    LinearAnimation { index: usize, instance: A },
+    StaticArtboard,
+}
+
+/// Pinned C++ `defaultScene` order. Keeping the decision in this small generic
+/// helper makes every branch testable without requiring a binary Rive file.
+pub fn select_default_scene<C, S, A>(
+    context: &mut C,
+    authored_default: Option<usize>,
+    mut state_machine_at: impl FnMut(&mut C, usize) -> Option<S>,
+    mut animation_at: impl FnMut(&mut C, usize) -> Option<A>,
+) -> RuntimeDefaultSceneSelection<S, A> {
+    if let Some(index) = authored_default
+        && let Some(instance) = state_machine_at(context, index)
+    {
+        return RuntimeDefaultSceneSelection::StateMachine { index, instance };
+    }
+    if let Some(instance) = state_machine_at(context, 0) {
+        return RuntimeDefaultSceneSelection::StateMachine { index: 0, instance };
+    }
+    if let Some(instance) = animation_at(context, 0) {
+        return RuntimeDefaultSceneSelection::LinearAnimation { index: 0, instance };
+    }
+    RuntimeDefaultSceneSelection::StaticArtboard
+}
+
 pub(crate) fn select_default_state_machine(
     authored_index: Option<u64>,
     state_machine_count: usize,
@@ -24,19 +54,26 @@ pub(crate) fn select_default_state_machine(
         .filter(|index| *index < state_machine_count)
 }
 
-fn select_default_scene(
+fn select_default_scene_from_counts(
     authored_index: Option<u64>,
     state_machine_count: usize,
     animation_count: usize,
 ) -> Option<RuntimeArtboardDefaultScene> {
-    select_default_state_machine(authored_index, state_machine_count)
-        .map(RuntimeArtboardDefaultScene::StateMachine)
-        .or_else(|| {
-            (state_machine_count != 0).then_some(RuntimeArtboardDefaultScene::StateMachine(0))
-        })
-        .or_else(|| {
-            (animation_count != 0).then_some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        })
+    let mut counts = (state_machine_count, animation_count);
+    match select_default_scene(
+        &mut counts,
+        select_default_state_machine(authored_index, state_machine_count),
+        |counts, index| (index < counts.0).then_some(()),
+        |counts, index| (index < counts.1).then_some(()),
+    ) {
+        RuntimeDefaultSceneSelection::StateMachine { index, .. } => {
+            Some(RuntimeArtboardDefaultScene::StateMachine(index))
+        }
+        RuntimeDefaultSceneSelection::LinearAnimation { index, .. } => {
+            Some(RuntimeArtboardDefaultScene::LinearAnimation(index))
+        }
+        RuntimeDefaultSceneSelection::StaticArtboard => None,
+    }
 }
 
 /// Root C++ `Artboard::advance` settlement boundary.
@@ -126,7 +163,7 @@ impl ArtboardInstance {
     /// Pinned C++ selection order: explicit default state machine, state
     /// machine zero, linear animation zero, then null.
     pub fn default_scene(&self) -> Option<RuntimeArtboardDefaultScene> {
-        select_default_scene(
+        select_default_scene_from_counts(
             property_key_for_name("Artboard", "defaultStateMachineId")
                 .and_then(|key| self.uint_property(0, key)),
             self.state_machines.len(),
@@ -145,17 +182,56 @@ mod tests {
         assert_eq!(select_default_state_machine(None, 2), None);
         assert_eq!(select_default_state_machine(Some(2), 2), None);
         assert_eq!(
-            select_default_scene(Some(1), 2, 1),
+            select_default_scene_from_counts(Some(1), 2, 1),
             Some(RuntimeArtboardDefaultScene::StateMachine(1))
         );
         assert_eq!(
-            select_default_scene(Some(9), 2, 1),
+            select_default_scene_from_counts(Some(9), 2, 1),
             Some(RuntimeArtboardDefaultScene::StateMachine(0))
         );
         assert_eq!(
-            select_default_scene(None, 0, 1),
+            select_default_scene_from_counts(None, 0, 1),
             Some(RuntimeArtboardDefaultScene::LinearAnimation(0))
         );
-        assert_eq!(select_default_scene(None, 0, 0), None);
+        assert_eq!(select_default_scene_from_counts(None, 0, 0), None);
+    }
+
+    #[test]
+    fn shared_default_scene_selection_covers_all_four_rungs() {
+        let select = |authored_default, state_machine_count, animation_count| {
+            let mut counts = (state_machine_count, animation_count);
+            select_default_scene(
+                &mut counts,
+                authored_default,
+                |counts, index| (index < counts.0).then_some(index),
+                |counts, index| (index < counts.1).then_some(index),
+            )
+        };
+
+        assert_eq!(
+            select(Some(1), 2, 1),
+            RuntimeDefaultSceneSelection::StateMachine {
+                index: 1,
+                instance: 1,
+            }
+        );
+        assert_eq!(
+            select(Some(7), 1, 1),
+            RuntimeDefaultSceneSelection::StateMachine {
+                index: 0,
+                instance: 0,
+            }
+        );
+        assert_eq!(
+            select(None, 0, 1),
+            RuntimeDefaultSceneSelection::LinearAnimation {
+                index: 0,
+                instance: 0,
+            }
+        );
+        assert_eq!(
+            select(None, 0, 0),
+            RuntimeDefaultSceneSelection::StaticArtboard
+        );
     }
 }

@@ -28,7 +28,10 @@ pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
 };
 
-use nuxie::host_interfaces::{RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction};
+use nuxie::host_interfaces::{
+    RuntimeDefaultSceneSelection, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction,
+    select_default_scene,
+};
 #[cfg(feature = "scripting")]
 use nuxie::{
     ArtboardTransaction, HostCommand, HostCommandImportConfig, HostCommandLimits, HostValue,
@@ -478,12 +481,6 @@ enum PlayerInstance {
     LinearAnimation(Box<LinearAnimationInstance>),
 }
 
-enum DefaultSceneSelection<S, A> {
-    StateMachine { index: usize, instance: S },
-    LinearAnimation { index: usize, instance: A },
-    StaticArtboard,
-}
-
 #[derive(Debug, Default)]
 struct TransactionalScriptHost;
 
@@ -491,29 +488,6 @@ impl ScriptHost for TransactionalScriptHost {
     fn requires_atomic_script_callbacks(&self) -> bool {
         true
     }
-}
-
-/// Pinned C++ `defaultScene` order. Keeping the decision in this small generic
-/// helper makes every branch testable without teaching the C layer how to
-/// synthesize binary Rive files.
-fn select_default_scene<C, S, A>(
-    context: &mut C,
-    authored_default: Option<usize>,
-    mut state_machine_at: impl FnMut(&mut C, usize) -> Option<S>,
-    mut animation_at: impl FnMut(&mut C, usize) -> Option<A>,
-) -> DefaultSceneSelection<S, A> {
-    if let Some(index) = authored_default
-        && let Some(instance) = state_machine_at(context, index)
-    {
-        return DefaultSceneSelection::StateMachine { index, instance };
-    }
-    if let Some(instance) = state_machine_at(context, 0) {
-        return DefaultSceneSelection::StateMachine { index: 0, instance };
-    }
-    if let Some(instance) = animation_at(context, 0) {
-        return DefaultSceneSelection::LinearAnimation { index: 0, instance };
-    }
-    DefaultSceneSelection::StaticArtboard
 }
 
 /// Product-neutral selected player. This surface establishes selection,
@@ -2717,7 +2691,7 @@ pub unsafe extern "C" fn nux_player_new_default(
             |artboard, index| artboard.linear_animation_instance(index),
         );
         let (player, index, name) = match selection {
-            DefaultSceneSelection::StateMachine { index, instance } => {
+            RuntimeDefaultSceneSelection::StateMachine { index, instance } => {
                 let name = artboard
                     .artboard()
                     .state_machine_name(index)
@@ -2729,7 +2703,7 @@ pub unsafe extern "C" fn nux_player_new_default(
                     name,
                 )
             }
-            DefaultSceneSelection::LinearAnimation { index, instance } => {
+            RuntimeDefaultSceneSelection::LinearAnimation { index, instance } => {
                 let name = artboard
                     .artboard()
                     .animation_name(index)
@@ -2741,7 +2715,7 @@ pub unsafe extern "C" fn nux_player_new_default(
                     name,
                 )
             }
-            DefaultSceneSelection::StaticArtboard => {
+            RuntimeDefaultSceneSelection::StaticArtboard => {
                 (PlayerInstance::StaticArtboard, usize::MAX, String::new())
             }
         };
@@ -5868,7 +5842,7 @@ mod firewall_tests {
         );
         assert!(matches!(
             selection,
-            DefaultSceneSelection::StateMachine {
+            RuntimeDefaultSceneSelection::StateMachine {
                 index: 0,
                 instance: "state-machine-zero"
             }

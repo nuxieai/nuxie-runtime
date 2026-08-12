@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{KNOWN_CAPABILITIES, NUX_MAX_EXTERNAL_ASSET_BYTES, NuxContainerError, Result};
 
+const MAX_LIFECYCLE_DURATION_MS: u32 = 60_000;
+
 fn option_vec_is_none_or_empty<T>(value: &Option<Vec<T>>) -> bool {
     value.as_ref().is_none_or(Vec::is_empty)
 }
@@ -332,6 +334,7 @@ impl NuxPackageManifestV1 {
 
         validate_required_strings(self)?;
         validate_screens(self)?;
+        validate_lifecycle(self)?;
         validate_text_inputs(self)?;
         validate_members(self)?;
         validate_assets(self)?;
@@ -363,6 +366,59 @@ fn validate_screens(manifest: &NuxPackageManifestV1) -> Result<()> {
     }
     if !ids.contains(manifest.entry.screen_id.as_str()) {
         return invalid("entry.screenId does not name a screen");
+    }
+    Ok(())
+}
+
+fn validate_lifecycle(manifest: &NuxPackageManifestV1) -> Result<()> {
+    let screen_ids = manifest
+        .screens
+        .iter()
+        .map(|screen| screen.screen_id.as_str())
+        .collect::<HashSet<_>>();
+    for screen in &manifest.screens {
+        let Some(exit) = &screen.exit else {
+            continue;
+        };
+        non_empty(
+            &exit.complete_event_name,
+            "screens[].exit.completeEventName",
+        )?;
+        if !(1..=MAX_LIFECYCLE_DURATION_MS).contains(&exit.duration_ms) {
+            return invalid("screens[].exit.durationMs must be between 1 and 60000");
+        }
+    }
+
+    let mut transition_ids = HashSet::new();
+    for transition in manifest.transitions.iter().flatten() {
+        non_empty(&transition.id, "transitions[].id")?;
+        if !transition_ids.insert(transition.id.as_str()) {
+            return invalid("transition ids must be unique");
+        }
+        if !screen_ids.contains(transition.source_screen_id.as_str()) {
+            return invalid("transitions[].sourceScreenId does not name a screen");
+        }
+        if !screen_ids.contains(transition.destination_screen_id.as_str()) {
+            return invalid("transitions[].destinationScreenId does not name a screen");
+        }
+        non_empty(
+            &transition.source.complete_event_name,
+            "transitions[].source.completeEventName",
+        )?;
+        non_empty(
+            &transition.destination.complete_event_name,
+            "transitions[].destination.completeEventName",
+        )?;
+        if let Some(reverse) = &transition.reverse {
+            non_empty(
+                &reverse.source.complete_event_name,
+                "transitions[].reverse.source.completeEventName",
+            )?;
+            non_empty(
+                &reverse.destination.complete_event_name,
+                "transitions[].reverse.destination.completeEventName",
+            )?;
+        }
     }
     Ok(())
 }

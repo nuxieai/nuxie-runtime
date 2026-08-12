@@ -95,6 +95,94 @@ fn lifecycle_and_transition_declarations_roundtrip() {
 }
 
 #[test]
+fn lifecycle_and_transition_declarations_are_structurally_validated() {
+    let validation_error = |source: &GoldenSource| {
+        let bytes = write_package(&source.model()).expect("invalid manifest still encodes");
+        read_package(&bytes).expect_err("manifest structure must be rejected")
+    };
+    let lifecycle_manifest = || {
+        let mut source = GoldenSource::new();
+        source.manifest.screens[0].exit = Some(ScreenExitV1 {
+            complete_event_name: "screen.exit.complete".to_owned(),
+            duration_ms: 300,
+        });
+        source.manifest.transitions = Some(vec![TransitionV1 {
+            id: "transition.home".to_owned(),
+            kind: TransitionKindV1::Choreographed,
+            source_screen_id: "screen-home".to_owned(),
+            destination_screen_id: "screen-home".to_owned(),
+            duration_ms: 450,
+            incoming_on_top: true,
+            source: TransitionEndpointV1 {
+                complete_event_name: "transition.source.complete".to_owned(),
+            },
+            destination: TransitionEndpointV1 {
+                complete_event_name: "transition.destination.complete".to_owned(),
+            },
+            reverse: Some(TransitionReverseV1 {
+                duration_ms: Some(400),
+                incoming_on_top: Some(false),
+                source: TransitionEndpointV1 {
+                    complete_event_name: "transition.reverse.source.complete".to_owned(),
+                },
+                destination: TransitionEndpointV1 {
+                    complete_event_name: "transition.reverse.destination.complete".to_owned(),
+                },
+            }),
+        }]);
+        source
+    };
+
+    let mut duplicate = lifecycle_manifest();
+    let repeated_transition = duplicate.manifest.transitions.as_ref().unwrap()[0].clone();
+    duplicate
+        .manifest
+        .transitions
+        .as_mut()
+        .unwrap()
+        .push(repeated_transition);
+    assert!(matches!(
+        validation_error(&duplicate),
+        NuxContainerError::InvalidManifest(message)
+            if message == "transition ids must be unique"
+    ));
+
+    let mut unknown_screen = lifecycle_manifest();
+    unknown_screen.manifest.transitions.as_mut().unwrap()[0].source_screen_id =
+        "missing".to_owned();
+    assert!(matches!(
+        validation_error(&unknown_screen),
+        NuxContainerError::InvalidManifest(message)
+            if message == "transitions[].sourceScreenId does not name a screen"
+    ));
+
+    let mut empty_event = lifecycle_manifest();
+    empty_event.manifest.transitions.as_mut().unwrap()[0]
+        .reverse
+        .as_mut()
+        .unwrap()
+        .destination
+        .complete_event_name = "".to_owned();
+    assert!(matches!(
+        validation_error(&empty_event),
+        NuxContainerError::InvalidManifest(message)
+            if message == "transitions[].reverse.destination.completeEventName must not be empty"
+    ));
+
+    let mut invalid_exit_duration = lifecycle_manifest();
+    invalid_exit_duration.manifest.screens[0]
+        .exit
+        .as_mut()
+        .unwrap()
+        .duration_ms = 0;
+    assert!(matches!(
+        validation_error(&invalid_exit_duration),
+        NuxContainerError::InvalidManifest(message)
+            if message == "screens[].exit.durationMs must be between 1 and 60000"
+    ));
+}
+
+#[test]
 fn acquisition_contract_exposes_only_identity_and_external_fetch_descriptors() {
     let mut bytes = golden_bytes();
     let journey_offset = {

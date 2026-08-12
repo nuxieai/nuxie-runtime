@@ -163,6 +163,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: make parity-scorecard
 
+      - name: Clustered runtime drift queue gate
+        if: ${{ !cancelled() }}
+        run: make runtime-drift-queue
+
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own
   # scorecard evidence, so this job no longer re-runs that floor on a second

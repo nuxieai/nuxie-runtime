@@ -166,6 +166,10 @@ feature profile decodes WAV/MP3/FLAC samples without shipping unused tag and
 charset tables. The command restores Cargo's
 renderer-on/scripting-off `release-size` output after measuring both variants.
 
+The accepted [UNIV-1642 renderer stack decision](evidence/univ-1642-renderer-stack-decision-2026-08-12.md)
+keeps WGSL/Naga in editor, browser, and development tiers while defining the
+evidence required before Apple can switch to committed, layout-aware MSL.
+
 ## Budget status
 
 The budget decision is recorded at the top of this document: 9 MiB, blocking

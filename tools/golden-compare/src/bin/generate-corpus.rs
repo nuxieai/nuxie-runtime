@@ -122,6 +122,17 @@ fn generate(options: Options) -> Result<()> {
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
         output.push_str(&format!("samples = [{}]\n", samples.join(", ")));
         output.push_str(&format!("status = {}\n", quoted(&status)));
+        if let Some(signature) = previous.and_then(|entry| entry.divergence_signature.as_ref()) {
+            output.push_str(&format!("divergence_signature = {}\n", quoted(signature)));
+        }
+        if let Some(signature) =
+            previous.and_then(|entry| entry.scripted_divergence_signature.as_ref())
+        {
+            output.push_str(&format!(
+                "scripted_divergence_signature = {}\n",
+                quoted(signature)
+            ));
+        }
         if let Some(verification) = previous
             .and_then(|entry| entry.verification.as_ref())
             .filter(|verification| verification.as_str() != "exact")
@@ -222,9 +233,29 @@ struct ExistingEntry {
     semantic_side_channel_only: bool,
     samples: Vec<String>,
     status: String,
+    divergence_signature: Option<String>,
+    scripted_divergence_signature: Option<String>,
     verification: Option<String>,
     milestone: Option<String>,
     features: Vec<String>,
+}
+
+fn strip_toml_comment(line: &str) -> &str {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if quoted && escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '#' if !quoted => return &line[..index],
+            _ => {}
+        }
+    }
+    line
 }
 
 fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
@@ -235,7 +266,7 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
     let mut entry = ExistingEntry::default();
 
     for raw_line in text.lines() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
+        let line = strip_toml_comment(raw_line).trim();
         if line.is_empty() {
             continue;
         }
@@ -262,6 +293,10 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "semantic_side_channel_only" => entry.semantic_side_channel_only = parse_bool(value)?,
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
+            "divergence_signature" => entry.divergence_signature = Some(parse_string(value)?),
+            "scripted_divergence_signature" => {
+                entry.scripted_divergence_signature = Some(parse_string(value)?)
+            }
             "verification" => entry.verification = Some(parse_string(value)?),
             "milestone" => entry.milestone = Some(parse_string(value)?),
             "features" => entry.features = parse_string_array(value).unwrap_or_default(),
@@ -448,6 +483,58 @@ features = []
         let ordinary = regenerated.get("ordinary").unwrap();
         assert_eq!(ordinary.status, "unsupported-feature");
         assert_eq!(ordinary.verification, None);
+
+        std::fs::remove_dir_all(test_dir).ok();
+    }
+
+    #[test]
+    fn regeneration_preserves_reviewed_divergence_signatures() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "generate-corpus-divergence-signatures-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let assets_dir = test_dir.join("assets");
+        let existing_path = test_dir.join("existing.toml");
+        let output_path = test_dir.join("output.toml");
+        std::fs::create_dir_all(&assets_dir).unwrap();
+        std::fs::write(assets_dir.join("gap.riv"), []).unwrap();
+        std::fs::write(
+            &existing_path,
+            r#"
+[[file]]
+id = "gap"
+path = "tests/unit_tests/assets/gap.riv"
+samples = [0.0]
+status = "diverges"
+divergence_signature = "line 1: rust `text=#a` vs c++ `text=#b`" # real comment
+scripted_divergence_signature = "line 2: rust `path=#c` vs c++ `path=#d`"
+features = ["scripted-status:diverges"]
+"#,
+        )
+        .unwrap();
+
+        generate(Options {
+            assets_dir,
+            existing: Some(existing_path),
+            out: Some(output_path.clone()),
+            relative_prefix: "tests/unit_tests/assets".to_owned(),
+        })
+        .unwrap();
+
+        let regenerated = parse_existing(&output_path).unwrap();
+        let gap = regenerated.get("gap").unwrap();
+        assert_eq!(
+            gap.divergence_signature.as_deref(),
+            Some("line 1: rust `text=#a` vs c++ `text=#b`")
+        );
+        assert_eq!(
+            gap.scripted_divergence_signature.as_deref(),
+            Some("line 2: rust `path=#c` vs c++ `path=#d`")
+        );
 
         std::fs::remove_dir_all(test_dir).ok();
     }

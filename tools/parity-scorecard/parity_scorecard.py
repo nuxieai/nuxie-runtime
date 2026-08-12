@@ -31,6 +31,7 @@ MIN_RENDERER_ENTRIES = 1468
 GATE_COMMANDS = {
     "golden-compare": ("make", "golden-compare"),
     "scripted-golden-compare": ("make", "scripted-golden-compare"),
+    "silver-corpus-validate": ("make", "silver-corpus-validate"),
     "renderer-golden": ("make", "renderer-golden"),
     "cargo-test-workspace": ("make", "cpp-oracle-workspace-tests"),
     "capi-smoke": ("make", "capi-smoke"),

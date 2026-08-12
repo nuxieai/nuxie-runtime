@@ -18,6 +18,7 @@ RENDERER_ENTRIES = 1468
 GATE_COMMANDS = {
     "golden-compare": ["make", "golden-compare"],
     "scripted-golden-compare": ["make", "scripted-golden-compare"],
+    "silver-corpus-validate": ["make", "silver-corpus-validate"],
     "renderer-golden": ["make", "renderer-golden"],
     "cargo-test-workspace": ["make", "cpp-oracle-workspace-tests"],
     "capi-smoke": ["make", "capi-smoke"],
@@ -50,6 +51,34 @@ def size_summary(off=7534056, on=8335288, budget=8388608):
 
 
 class ParityScorecardCliTests(unittest.TestCase):
+    def test_silver_differential_gate_has_a_canonical_record_command(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "record",
+                    "--gate",
+                    "silver-corpus-validate",
+                    "--output",
+                    str(Path(temporary_directory) / "evidence.json"),
+                    "--source-sha",
+                    "test-sha",
+                    "--",
+                    "make",
+                    "silver-corpus-validate",
+                ],
+                cwd=REPO_ROOT,
+                env={**os.environ, "PATH": ""},
+                capture_output=True,
+                text=True,
+            )
+
+        # An empty PATH proves the command passed canonical-command validation
+        # and reached process launch, instead of being rejected as unknown.
+        self.assertEqual(completed.returncode, 127)
+        self.assertNotIn("has no canonical command", completed.stderr)
+
     def test_ci_uses_explicit_evidence_check_after_make_target_became_snapshot(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 

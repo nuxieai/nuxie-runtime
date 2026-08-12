@@ -32,7 +32,8 @@ gates=(cpp-probe runtime-frame-loop-port-gate rust-attribution-gate
        pure-runtime-boundary-gate
        feature-compile-gate
        cargo-test-runtime cargo-test-scripting cargo-test-scripting-crate
-       scripted-golden-compare silver-corpus-test)
+       rust-runner-provenance-test
+       scripted-golden-compare silver-corpus)
 # Every performance landing remeasures the full ratchet three times and applies
 # only lower baselines/ceilings. If it finds an improvement, the generated
 # manifest delta is a required part of the landing rather than hidden slack.

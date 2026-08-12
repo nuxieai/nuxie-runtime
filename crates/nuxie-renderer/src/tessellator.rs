@@ -957,6 +957,17 @@ impl UploadArena {
     }
 
     fn begin_submission(&mut self, device: &wgpu::Device) {
+        // Diagnostic for UNIV-1382: browser presentation currently returns
+        // before GPU completion. Allocate fresh destination buffers per frame
+        // so a later frame cannot reuse a three-slot upload page still owned by
+        // an earlier presented submission.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = device;
+            self.pages.clear();
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
         if self.pages.len() > 1 {
             let previous_usage = self.pages.iter().map(|page| page.used).sum::<u64>();
             self.pages.clear();

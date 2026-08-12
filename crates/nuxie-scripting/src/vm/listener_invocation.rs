@@ -691,7 +691,7 @@ impl UserData for ScriptedInvocation {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
 

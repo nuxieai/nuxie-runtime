@@ -242,7 +242,7 @@ impl UserData for ScriptedRenderer {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
     use crate::vm::ScriptVm;

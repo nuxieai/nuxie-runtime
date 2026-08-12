@@ -1895,7 +1895,7 @@ impl UserData for ScriptedPropertyTrigger {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::super::{ScriptProgram, ScriptVm};
     use super::*;

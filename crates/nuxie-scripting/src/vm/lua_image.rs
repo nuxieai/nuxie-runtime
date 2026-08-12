@@ -122,7 +122,7 @@ pub(super) fn create_asset_image(lua: &Lua, image: ScriptImage) -> Result<Option
         .transpose()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
     use nuxie_render_api::Mat2D;

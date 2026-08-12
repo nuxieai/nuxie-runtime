@@ -270,7 +270,7 @@ pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
     Ok(settled)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
     use std::cell::Cell;

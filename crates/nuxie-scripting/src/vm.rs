@@ -1599,7 +1599,7 @@ impl ScriptVm {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "compiler"))]
     fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
         self.ensure_initialized()?;
         self.reserve_parent_stack_headroom()?;
@@ -1608,7 +1608,7 @@ impl ScriptVm {
         self.track_resource_result(result)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "compiler"))]
     fn load(&self, name: &str, source: &str) -> Result<Function> {
         self.ensure_initialized()?;
         self.reserve_parent_stack_headroom()?;
@@ -1822,7 +1822,7 @@ impl ScriptVm {
         Ok(result)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "compiler"))]
     fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {
         self.install_rive_globals()?;
         if let value @ (Value::Table(_) | Value::Function(_)) =
@@ -2771,7 +2771,7 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod context_init_tests {
     use super::*;
     use luaur_rt::UserData;

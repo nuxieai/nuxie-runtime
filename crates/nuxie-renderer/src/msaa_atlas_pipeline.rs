@@ -2,7 +2,7 @@
 
 use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TriangleVertex};
 use crate::shader_catalog::{self, BuiltinShaderKey};
-use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
+use crate::storage_texture::{self, StorageBufferStructure};
 use crate::tessellator::{TessellationUploadFrame, UploadSlice};
 use crate::work_metrics::CountedDeviceExt;
 use crate::RendererCapabilities;
@@ -339,38 +339,42 @@ impl MsaaAtlasPipeline {
     ) -> PreparedAtlasBlit {
         let uniform = uploads.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
         let polyfill = self.polyfill_vertex_storage_buffers;
-        let path = StorageResource::upload(
-            device,
-            encoder,
-            "nuxie-msaa-atlas-paths",
-            paths,
-            StorageBufferStructure::Uint32x4,
-            polyfill,
-        );
-        let paint = StorageResource::upload(
-            device,
-            encoder,
-            "nuxie-msaa-atlas-paints",
-            paints,
-            StorageBufferStructure::Uint32x2,
-            polyfill,
-        );
-        let paint_aux = StorageResource::upload(
-            device,
-            encoder,
-            "nuxie-msaa-atlas-paint-aux",
-            paint_aux,
-            StorageBufferStructure::Float32x4,
-            polyfill,
-        );
-        let contours = StorageResource::upload(
-            device,
-            encoder,
-            "nuxie-msaa-atlas-contours",
-            contours,
-            StorageBufferStructure::Uint32x4,
-            polyfill,
-        );
+        let path = uploads
+            .upload_storage(device, encoder, bytemuck::cast_slice(paths))
+            .into_storage_resource(
+                device,
+                encoder,
+                "nuxie-msaa-atlas-paths",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
+            );
+        let paint = uploads
+            .upload_storage(device, encoder, bytemuck::cast_slice(paints))
+            .into_storage_resource(
+                device,
+                encoder,
+                "nuxie-msaa-atlas-paints",
+                StorageBufferStructure::Uint32x2,
+                polyfill,
+            );
+        let paint_aux = uploads
+            .upload_storage(device, encoder, bytemuck::cast_slice(paint_aux))
+            .into_storage_resource(
+                device,
+                encoder,
+                "nuxie-msaa-atlas-paint-aux",
+                StorageBufferStructure::Float32x4,
+                polyfill,
+            );
+        let contours = uploads
+            .upload_storage(device, encoder, bytemuck::cast_slice(contours))
+            .into_storage_resource(
+                device,
+                encoder,
+                "nuxie-msaa-atlas-contours",
+                StorageBufferStructure::Uint32x4,
+                polyfill,
+            );
         let vertex_buffer =
             uploads.upload_vertices(device, encoder, bytemuck::cast_slice(vertices));
         let dummy = device.create_texture(&wgpu::TextureDescriptor {

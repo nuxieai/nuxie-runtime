@@ -239,11 +239,20 @@ fn run() -> Result<(), String> {
                                         options.verify_scripted_diagnostics,
                                         entry_side_channel,
                                     ) {
-                                        Ok(rust_stream) if status == Status::Diverges => println!(
-                                            "[diverges] {}: rust stream ok ({} bytes)",
-                                            entry.id,
-                                            rust_stream.len()
-                                        ),
+                                        Ok(rust_stream) if status == Status::Diverges => {
+                                            match verify_known_divergence(
+                                                entry,
+                                                &rust_stream,
+                                                &cpp_stream,
+                                                options.verify_scripted_diagnostics,
+                                            ) {
+                                                Ok(()) => println!(
+                                                    "[diverges] {}: signature verified",
+                                                    entry.id
+                                                ),
+                                                Err(error) => failures.push(error),
+                                            }
+                                        }
                                         Ok(rust_stream) if status == Status::NotYet => {
                                             not_yet_rust_probed += 1;
                                             if let Some(difference) = entry
@@ -289,8 +298,14 @@ fn run() -> Result<(), String> {
                                                     "{}: stream differs from C++ under {} verification: {difference}",
                                                     entry.id, entry.verification
                                                 ));
-                                            } else if options.require_composed_session {
-                                                composed_sessions += 1;
+                                            } else {
+                                                if options.require_composed_session {
+                                                    composed_sessions += 1;
+                                                }
+                                                println!(
+                                                    "[exact] {}: rust comparison verified",
+                                                    entry.id
+                                                );
                                             }
                                         }
                                         Err(error) if status == Status::NotYet => {
@@ -528,6 +543,8 @@ struct CorpusEntry {
     samples: Vec<f32>,
     status: Status,
     verification: VerificationMode,
+    divergence_signature: Option<String>,
+    scripted_divergence_signature: Option<String>,
     milestone: Option<String>,
     features: Vec<String>,
 }
@@ -547,6 +564,8 @@ impl CorpusEntry {
             samples: vec![0.0],
             status: Status::NotYet,
             verification: VerificationMode::Exact,
+            divergence_signature: None,
+            scripted_divergence_signature: None,
             milestone: None,
             features: Vec::new(),
         }
@@ -593,6 +612,30 @@ impl CorpusEntry {
                 "entry {} semantic-side-channel-only evidence must be exact with no filed side-channel divergence",
                 self.id
             ));
+        }
+        if self.status == Status::Diverges {
+            validate_divergence_signature(
+                &self.id,
+                "divergence_signature",
+                self.divergence_signature.as_deref(),
+            )?;
+        }
+        if self
+            .features
+            .iter()
+            .any(|feature| feature == "scripted-status:diverges")
+        {
+            validate_divergence_signature(
+                &self.id,
+                "scripted_divergence_signature",
+                self.scripted_divergence_signature.as_deref(),
+            )
+            .map_err(|error| {
+                error.replace(
+                    "diverges without a reviewed scripted_divergence_signature",
+                    "scripted divergence has no reviewed scripted_divergence_signature",
+                )
+            })?;
         }
         Ok(())
     }
@@ -676,6 +719,38 @@ impl CorpusEntry {
         }
         self.status
     }
+
+    fn effective_divergence_signature(&self, scripted: bool) -> Option<&str> {
+        if scripted
+            && self
+                .features
+                .iter()
+                .any(|feature| feature == "scripted-status:diverges")
+        {
+            return self.scripted_divergence_signature.as_deref();
+        }
+        self.divergence_signature.as_deref()
+    }
+}
+
+fn validate_divergence_signature(
+    id: &str,
+    field: &str,
+    signature: Option<&str>,
+) -> Result<(), String> {
+    let Some(signature) = signature else {
+        return Err(format!("entry {id} diverges without a reviewed {field}"));
+    };
+    let canonical_shape = signature.starts_with("line ")
+        || signature.starts_with("stream newline termination differs");
+    if signature.is_empty()
+        || signature.len() > 600
+        || signature.contains(['\n', '\r'])
+        || !canonical_shape
+    {
+        return Err(format!("entry {id} has malformed {field}"));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -773,6 +848,24 @@ impl Display for VerificationMode {
     }
 }
 
+fn strip_toml_comment(line: &str) -> &str {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if quoted && escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '#' if !quoted => return &line[..index],
+            _ => {}
+        }
+    }
+    line
+}
+
 fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
@@ -781,7 +874,7 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
 
     for (index, raw_line) in text.lines().enumerate() {
         let line_number = index + 1;
-        let line = raw_line.split('#').next().unwrap_or("").trim();
+        let line = strip_toml_comment(raw_line).trim();
         if line.is_empty() {
             continue;
         }
@@ -823,6 +916,12 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
             "verification" => {
                 entry.verification = VerificationMode::parse(&parse_string(value, line_number)?)?
+            }
+            "divergence_signature" => {
+                entry.divergence_signature = Some(parse_string(value, line_number)?)
+            }
+            "scripted_divergence_signature" => {
+                entry.scripted_divergence_signature = Some(parse_string(value, line_number)?)
             }
             "milestone" => entry.milestone = Some(parse_string(value, line_number)?),
             "features" => entry.features = parse_string_array(value, line_number)?,
@@ -986,12 +1085,54 @@ fn stream_difference_with_epsilon(left: &str, right: &str, epsilon: f64) -> Opti
     }
 }
 
+fn verify_known_divergence(
+    entry: &CorpusEntry,
+    rust_stream: &str,
+    cpp_stream: &str,
+    scripted: bool,
+) -> Result<(), String> {
+    let recorded = entry
+        .effective_divergence_signature(scripted)
+        .ok_or_else(|| format!("{} divergence has no reviewed signature", entry.id))?;
+    let Some(actual) = entry
+        .verification
+        .stream_difference(rust_stream, cpp_stream)
+    else {
+        return Err(format!(
+            "{} now compares exact; promote it explicitly",
+            entry.id
+        ));
+    };
+    if actual == recorded {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} divergence changed: recorded {recorded}; actual {actual}",
+            entry.id
+        ))
+    }
+}
+
 fn summarize_stream_line(line: &str) -> String {
     const MAX_LEN: usize = 240;
     if line.len() <= MAX_LEN {
         return line.to_owned();
     }
-    format!("{}...", &line[..MAX_LEN])
+    let prefix = line.chars().take(MAX_LEN - 64).collect::<String>();
+    format!(
+        "{prefix}...[bytes={} fnv1a={:016x}]",
+        line.len(),
+        stable_line_hash(line.as_bytes())
+    )
+}
+
+fn stable_line_hash(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 fn line_equivalent(left: &str, right: &str, epsilon: f64) -> bool {
@@ -1276,6 +1417,89 @@ mod tests {
 
         assert_eq!(entry.effective_status(false), Status::Exact);
         assert_eq!(entry.effective_status(true), Status::Diverges);
+    }
+
+    #[test]
+    fn known_divergence_requires_and_preserves_its_first_difference() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "known-gap".to_owned();
+        entry.status = Status::Diverges;
+        let cpp = "rive-golden-stream-v1\ncolor value=1\n";
+        let rust = "rive-golden-stream-v1\ncolor value=2\n";
+
+        assert_eq!(
+            verify_known_divergence(&entry, rust, cpp, false),
+            Err("known-gap divergence has no reviewed signature".to_owned())
+        );
+
+        entry.divergence_signature =
+            Some("line 2: rust `color value=2` vs c++ `color value=1`".to_owned());
+        assert_eq!(verify_known_divergence(&entry, rust, cpp, false), Ok(()));
+        assert_eq!(
+            verify_known_divergence(
+                &entry,
+                "rive-golden-stream-v1\ncolor value=3\n",
+                cpp,
+                false,
+            ),
+            Err(concat!(
+                "known-gap divergence changed: recorded line 2: rust `color value=2` vs c++ `color value=1`; ",
+                "actual line 2: rust `color value=3` vs c++ `color value=1`"
+            )
+            .to_owned())
+        );
+        assert_eq!(
+            verify_known_divergence(&entry, cpp, cpp, false),
+            Err("known-gap now compares exact; promote it explicitly".to_owned())
+        );
+    }
+
+    #[test]
+    fn long_first_differences_keep_a_stable_distinguishing_fingerprint() {
+        let prefix = "drawPath ".to_owned() + &"x".repeat(400);
+        let left = summarize_stream_line(&(prefix.clone() + "left"));
+        let right = summarize_stream_line(&(prefix + "right"));
+
+        assert_ne!(left, right);
+        assert!(left.contains("fnv1a="));
+        assert!(right.contains("fnv1a="));
+    }
+
+    #[test]
+    fn divergent_entries_reject_missing_or_malformed_signatures() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "known-gap".to_owned();
+        entry.path = "fixture.riv".to_owned();
+        entry.status = Status::Diverges;
+
+        assert_eq!(
+            entry.validate(1),
+            Err("entry known-gap diverges without a reviewed divergence_signature".to_owned())
+        );
+        entry.divergence_signature = Some("hand-waved mismatch".to_owned());
+        assert_eq!(
+            entry.validate(1),
+            Err("entry known-gap has malformed divergence_signature".to_owned())
+        );
+        entry.divergence_signature = Some("line 2: rust `value=2` vs c++ `value=1`".to_owned());
+        assert_eq!(entry.validate(1), Ok(()));
+
+        entry.status = Status::Exact;
+        entry.features.push("scripted-status:diverges".to_owned());
+        assert_eq!(
+            entry.validate(1),
+            Err(
+                "entry known-gap scripted divergence has no reviewed scripted_divergence_signature"
+                    .to_owned()
+            )
+        );
+
+        entry.status = Status::Diverges;
+        entry.features.clear();
+        assert_eq!(
+            entry.effective_divergence_signature(true),
+            entry.divergence_signature.as_deref()
+        );
     }
 
     #[test]
@@ -1602,6 +1826,14 @@ path = "tests/unit_tests/assets/scripted.riv"
 samples = [0.0]
 status = "exact"
 features = ["scripted-runner-only", "scripted-status:exact"]
+
+[[file]]
+id = "hash-signature"
+path = "tests/unit_tests/assets/hash-signature.riv"
+samples = [0.0]
+status = "diverges"
+divergence_signature = "line 2: rust `text=#a` vs c++ `text=#b`" # real comment
+features = []
 "#,
         )
         .unwrap();
@@ -1609,7 +1841,7 @@ features = ["scripted-runner-only", "scripted-status:exact"]
         let entries = parse_corpus(&path).unwrap();
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(entries.len(), 3);
+        assert_eq!(entries.len(), 4);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
         assert!(entries[0].rust_execute_scripts);
         assert!(entries[0].requires_scripted_runner());
@@ -1621,6 +1853,10 @@ features = ["scripted-runner-only", "scripted-status:exact"]
         assert!(!entries[2].rust_execute_scripts);
         assert!(entries[2].requires_scripted_runner());
         assert!(entries[2].executes_scripts_in_rust());
+        assert_eq!(
+            entries[3].divergence_signature.as_deref(),
+            Some("line 2: rust `text=#a` vs c++ `text=#b`")
+        );
     }
 
     #[test]

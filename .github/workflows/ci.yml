@@ -100,6 +100,25 @@ jobs:
         if: ${{ !cancelled() }}
         run: make microbench-gate
 
+  runtime-differential-tooling:
+    name: Runtime differential tooling
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify report and stale-runner guards
+        run: make runtime-differential-report-test rust-runner-provenance-test
+
   # Pure-Python ledger checks over checked-in correspondence manifests. These
   # rotted while nothing ran them (see docs/README.md migration cleanup); this
   # job is what keeps them green. Each -gate target runs the tool's unit tests

@@ -263,6 +263,7 @@ worker may act on that category.
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `.github/workflows/ci.yml` `RIVE_SHADER_RUNTIME_REF`
   - `.github/workflows/ci.yml` `RIVE_SAME_RUNNER_RUNTIME_REF`
+  - `Makefile` `RIVE_RUNTIME_REF`
   - `Makefile` `PERF_EXPECTED_RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`
   - `tools/check-renderer-decoder-provenance.sh`

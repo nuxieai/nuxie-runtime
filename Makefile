@@ -1,6 +1,7 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
+RIVE_RUNTIME_REF ?= 4ac7b32798da0482e441ef09304dc3b480ed3ee5
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 MICROBENCH_RUN_DIR ?= $(CURDIR)/target/microbench/run
 MICROBENCH_RUN_MANIFEST ?= $(MICROBENCH_RUN_DIR)/run.json
@@ -26,6 +27,9 @@ RUNTIME_FRAME_LOOP_TRACE_DIR ?= $(CURDIR)/target/runtime-frame-loop-trace/$(shel
 RUNTIME_FRAME_LOOP_TRACE_EVIDENCE ?= $(CURDIR)/docs/runtime-frame-loop-trace.json
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
 SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
+RUNTIME_DIFFERENTIAL_REPORT_TOOL ?= $(CURDIR)/tools/runtime-differentials/report.py
+RUNTIME_DIFFERENTIAL_REPORT_DIR ?= $(CURDIR)/target/runtime-differentials
+RUNTIME_DIFFERENTIAL_LOG_DIR ?= $(RUNTIME_DIFFERENTIAL_REPORT_DIR)/diagnostics
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
@@ -448,11 +452,21 @@ rust-runner-provenance-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/golden-runner -p 'test_*.py' -v
 
 golden-compare: fixtures golden-runner rust-golden-runner
-	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
+	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
+	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/golden-ordinary.log"; \
+	set +e; GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	cat "$$log"; report_rc=0; \
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" golden --manifest corpus.toml --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --mode ordinary --cpp-ref "$(RIVE_RUNTIME_REF)" --rust-commit "$$(git rev-parse HEAD)" --runner "cpp=$(GOLDEN_RUNNER)" --runner "rust=$(RUST_GOLDEN_RUNNER)" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/golden-ordinary.json" || report_rc=$$?; \
+	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
 
 scripted-golden-compare: CPP_CONFIG=release
 scripted-golden-compare: fixtures scripted-golden-runner scripted-rust-golden-runner
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
+	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
+	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/golden-scripted.log"; \
+	set +e; RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	cat "$$log"; report_rc=0; \
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" golden --manifest corpus.toml --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --mode scripted --cpp-ref "$(RIVE_RUNTIME_REF)" --rust-commit "$$(git rev-parse HEAD)" --runner "cpp=$(SCRIPTED_GOLDEN_RUNNER)" --runner "rust=$(SCRIPTED_RUST_GOLDEN_RUNNER)" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/golden-scripted.json" || report_rc=$$?; \
+	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
 
 e2e-composed-compare: CPP_CONFIG=release
 e2e-composed-compare: RUST_PROFILE=release
@@ -463,6 +477,9 @@ silver-corpus-test:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo test -p silver-corpus
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/silver-corpus -p 'test_*.py' -v
 
+runtime-differential-report-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-differentials -p 'test_*.py' -v
+
 silver-corpus-manifest-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(SILVER_CORPUS_GENERATOR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(SILVER_CORPUS_MANIFEST)" --check
 
@@ -471,11 +488,17 @@ silver-corpus-manifest-check:
 # as one a red suite stopped both the manifest check and the validation from
 # running at all.
 silver-corpus-validate: silver-corpus-manifest-check
-	cargo run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime
+	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
+	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/silver.log"; \
+	set +e; cargo run --quiet -p silver-corpus -- validate --manifest "$(SILVER_CORPUS_MANIFEST)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --lane runtime >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	cat "$$log"; report_rc=0; \
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" silver --manifest "$(SILVER_CORPUS_MANIFEST)" --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --rust-commit "$$(git rev-parse HEAD)" --runner "validator=$(CURDIR)/target/debug/silver-corpus" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/silver.json" || report_rc=$$?; \
+	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
 
 silver-corpus:
 	@tools/report-all.sh "silver-corpus" \
 		"silver corpus unit tests" "$(MAKE) --no-print-directory silver-corpus-test" \
+		"runtime differential report tests" "$(MAKE) --no-print-directory runtime-differential-report-test" \
 		"silver corpus manifest check and validation" "$(MAKE) --no-print-directory silver-corpus-validate"
 
 # b6-audit-check is deliberately NOT a prerequisite here: it is an unrelated

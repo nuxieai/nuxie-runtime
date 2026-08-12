@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: false
+      runtime_differentials_only:
+        description: Run only the sharded exhaustive runtime differential jobs.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,10 +32,10 @@ jobs:
   # it to put a fork pull request on a persistent Nuxie runner.
   golden-compare:
     name: Golden compare
-    # Push-only: the pinned C++ oracle build plus both compare lanes take ~50+
-    # minutes; PRs run make golden-compare locally and the merge's push run
-    # still enforces it. The C ABI smoke job below stays on PRs.
-    if: github.event_name != 'pull_request'
+    # Push-only: the pinned C++ oracle build and comparison are expensive; PRs
+    # run make golden-compare locally and the merge's push run still enforces
+    # it. The C ABI smoke job below stays on PRs.
+    if: github.event_name != 'pull_request' && !inputs.runtime_differentials_only
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     # Hang guard at >2x the observed worst case (~51 min hosted). This gate
     # must always end in a real conclusion; see the concurrency note in
@@ -96,15 +101,6 @@ jobs:
             --output target/parity-scorecard/evidence/golden-compare.json \
             -- make golden-compare
 
-      - name: Run forced-scripted golden compare
-        if: ${{ !cancelled() }}
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate scripted-golden-compare \
-            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
-            -- make scripted-golden-compare
-
       # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
       # an audit drift is a distinct failure and must not stop the workspace
       # tests below from running and reporting.
@@ -131,8 +127,112 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Upload runtime differential fingerprints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-differentials-${{ github.run_attempt }}
+          path: rive-rust/target/runtime-differentials/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # The expensive exhaustive lanes are independent jobs with independent hang
+  # guards and artifacts. A setup failure or timeout in one cannot hide the
+  # other; runtime-differentials.yml schedules both twice weekly in addition
+  # to main pushes.
+  runtime-differentials:
+    name: Runtime differential (${{ matrix.lane }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - scripted-golden
+          - silver
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+        with:
+          path: rive-rust
+
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install Rust stable
+        run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
+
+      - name: Install Python (hosted)
+        if: runner.environment == 'github-hosted'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify system Python (self-hosted)
+        if: runner.environment != 'github-hosted'
+        run: python3 -c 'import sys, tomllib; assert sys.version_info >= (3, 11), sys.version'
+
+      - name: Build reference Rive runtime
+        if: matrix.lane == 'scripted-golden'
+        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
+        run: |
+          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
+          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
+
+      - name: Fetch pinned test assets
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make fixtures
+
+      - name: Run forced-scripted golden compare
+        if: matrix.lane == 'scripted-golden'
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate scripted-golden-compare \
+            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
+            -- make scripted-golden-compare
+
+      - name: Run executable silver corpus
+        if: matrix.lane == 'silver'
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate silver-corpus-validate \
+            --output target/parity-scorecard/evidence/silver-corpus-validate.json \
+            -- make silver-corpus-validate
+
+      - name: Upload lane differential fingerprints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-differentials-${{ matrix.lane }}-${{ github.run_attempt }}
+          path: rive-rust/target/runtime-differentials/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload lane scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-${{ matrix.lane }}-${{ github.run_attempt }}
+          path: rive-rust/target/parity-scorecard/evidence/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
   capi-smoke:
     name: C ABI smoke test
+    if: ${{ !inputs.runtime_differentials_only }}
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     timeout-minutes: 30
     env:

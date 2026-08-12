@@ -1,0 +1,22 @@
+name: Scheduled runtime differentials
+
+on:
+  schedule:
+    # Re-run the pinned inventory even when main is quiet, so runner or
+    # toolchain drift cannot silently age out the last proof.
+    - cron: "23 10 * * 1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-runtime-differentials
+  cancel-in-progress: false
+
+jobs:
+  runtime-differentials:
+    uses: ./.github/workflows/_trusted-macos.yml
+    with:
+      force_hosted: ${{ github.ref != 'refs/heads/main' }}
+      runtime_differentials_only: true

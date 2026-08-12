@@ -4801,6 +4801,7 @@ impl WgpuFrame {
                             self.context.atlas_pipeline.encode_mask(
                                 &self.context.device,
                                 encoder,
+                                &mut tessellation_uploads.borrow_mut(),
                                 &view,
                                 &self.context.patch_vertex_buffer,
                                 &self.context.patch_index_buffer,
@@ -5893,6 +5894,7 @@ impl WgpuFrame {
                             self.context.atlas_pipeline.encode_mask(
                                 &self.context.device,
                                 encoder,
+                                &mut tessellation_uploads.borrow_mut(),
                                 &atlas_view,
                                 &self.context.patch_vertex_buffer,
                                 &self.context.patch_index_buffer,
@@ -18406,28 +18408,12 @@ mod tests {
 
         work_metrics::reset_counted_buffer_init_labels();
         let work = frame.finish_for_benchmark().unwrap().backend_work;
-        let mapped_uploads = [
-            (
-                "nuxie-msaa-image-mesh-uniforms",
-                work_metrics::counted_buffer_init_label("nuxie-msaa-image-mesh-uniforms"),
-            ),
-            (
-                "nuxie-msaa-atlas-uniforms",
-                work_metrics::counted_buffer_init_label("nuxie-msaa-atlas-uniforms"),
-            ),
-            (
-                "nuxie-msaa-atlas-vertices",
-                work_metrics::counted_buffer_init_label("nuxie-msaa-atlas-vertices"),
-            ),
-        ];
+        let mapped_uploads = work_metrics::counted_buffer_init_labels();
 
         assert_eq!(
             mapped_uploads,
-            [
-                ("nuxie-msaa-image-mesh-uniforms", 0),
-                ("nuxie-msaa-atlas-uniforms", 0),
-                ("nuxie-msaa-atlas-vertices", 0),
-            ]
+            Vec::<(String, u64)>::new(),
+            "ProductHost-shaped frame must not create per-frame mapped buffers"
         );
         assert!(
             work.buffer_upload_calls > 0,
@@ -19275,6 +19261,7 @@ mod tests {
         factory.context.atlas_pipeline.encode_mask(
             &factory.context.device,
             &mut encoder,
+            &mut tessellation_uploads,
             &atlas_view,
             &factory.context.patch_vertex_buffer,
             &factory.context.patch_index_buffer,

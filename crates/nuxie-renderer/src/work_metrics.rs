@@ -41,8 +41,16 @@ pub(crate) fn reset_counted_buffer_init_labels() {
 }
 
 #[cfg(all(test, feature = "perf-counters"))]
-pub(crate) fn counted_buffer_init_label(label: &str) -> u64 {
-    COUNTED_BUFFER_INIT_LABELS.with(|labels| labels.borrow().get(label).copied().unwrap_or(0))
+pub(crate) fn counted_buffer_init_labels() -> Vec<(String, u64)> {
+    COUNTED_BUFFER_INIT_LABELS.with(|labels| {
+        let mut labels = labels
+            .borrow()
+            .iter()
+            .map(|(label, count)| (label.clone(), *count))
+            .collect::<Vec<_>>();
+        labels.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        labels
+    })
 }
 
 pub(crate) struct FrameWorkRecorder {

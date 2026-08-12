@@ -619,6 +619,40 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("data include form could not be verified", result.stderr)
 
+    def test_package_can_include_generated_bytes_from_own_out_dir(self) -> None:
+        (self.package / "src/lib.rs").write_text(
+            'const BYTECODE: &[u8] = include_bytes!(concat!(\n'
+            '    env!("OUT_DIR"),\n'
+            '    "/module.luau-bytecode"\n'
+            '));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_package_cannot_escape_own_out_dir_data_include(self) -> None:
+        (self.package / "src/lib.rs").write_text(
+            'const SECRET: &[u8] = include_bytes!('
+            'concat!(env!("OUT_DIR"), "/../secret"));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("data include form could not be verified", result.stderr)
+
+    def test_package_cannot_include_generated_text_from_out_dir(self) -> None:
+        (self.package / "src/lib.rs").write_text(
+            'const SOURCE: &str = include_str!('
+            'concat!(env!("OUT_DIR"), "/generated.rs"));\n'
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("data include form could not be verified", result.stderr)
+
     def test_package_cannot_include_str_from_another_package(self) -> None:
         product = self.create_package(
             "crates/nuxie-product", "nuxie-product", ""
@@ -1948,6 +1982,32 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             "    let _ = File::import(bytes);\n"
             "    let _ = File::import_trusted_with_host_commands;\n"
             "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_allows_product_neutral_default_scene_symbols_in_portable_abi_facade(
+        self,
+    ) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "use nuxie::host_interfaces::{\n"
+            "    RuntimeDefaultSceneSelection, select_default_scene,\n"
+            "};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_allows_product_neutral_artboard_transaction_in_portable_abi_facade(
+        self,
+    ) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/lib.rs").write_text(
+            "use nuxie::ArtboardTransaction;\n"
         )
 
         result = self.run_check()

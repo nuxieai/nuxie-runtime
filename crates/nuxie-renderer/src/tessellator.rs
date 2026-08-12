@@ -957,6 +957,14 @@ impl UploadArena {
     }
 
     fn begin_submission(&mut self, device: &wgpu::Device) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Browser WebGPU can leave deferred remap callbacks pending past
+            // the next presented frame. Retire those source chunks instead of
+            // letting a later frame observe them as writable belt storage.
+            self.staging_belt =
+                wgpu::util::StagingBelt::new(self.device.clone(), STAGING_CHUNK_SIZE);
+        }
         if self.pages.len() > 1 {
             let previous_usage = self.pages.iter().map(|page| page.used).sum::<u64>();
             self.pages.clear();
@@ -1273,11 +1281,18 @@ impl UploadArena {
                     .saturating_add(page.capacity);
             }
         }
-        self.staging_belt.finish_and_recall_on_submit(encoder);
-        // `finish_and_recall_on_submit` drains every active chunk into callbacks
-        // owned by the encoder. If that encoder is dropped instead of submitted,
-        // those chunks are dropped with it; only pre-finish active chunks need an
-        // explicit belt reset on `TessellationUploadFrame::drop`.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = encoder;
+            // Presented browser frames are intentionally nonblocking. Close
+            // their staging chunks for this submission, then retire the belt
+            // at the next frame boundary without scheduling remap callbacks.
+            self.staging_belt.finish();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.staging_belt.finish_and_recall_on_submit(encoder);
+        }
         self.has_active_staging_writes = false;
     }
 

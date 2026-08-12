@@ -311,55 +311,61 @@ pub(super) fn install_property_binding_support(lua: &Lua) -> luaur_rt::Result<()
         Ok(())
     })?;
     lua.set_named_registry_value(PROPERTY_LISTENER_FLUSH, flush)?;
-    let patcher: Function = lua
-        .load(
-            r#"
-            local getmetatable = getmetatable
-            local pack = table.pack
-            local type = type
-            local unpack = table.unpack
-            return function(property, writableValue, mutatingMethods, flush)
-                local metatable = getmetatable(property)
-                if metatable.__rivePropertyPatched then
-                    return property
-                end
-                local index = metatable.__index
-                local newindex = metatable.__newindex
-                metatable.__index = function(self, key)
-                    local result
-                    if type(index) == "function" then
-                        result = index(self, key)
-                    else
-                        result = index[key]
-                    end
-                    if type(result) == "function" and mutatingMethods[key] then
-                        return function(...)
-                            local values = pack(result(...))
-                            flush()
-                            return unpack(values, 1, values.n)
-                        end
-                    end
-                    return result
-                end
-                if writableValue then
-                    metatable.__newindex = function(self, key, value)
-                        if type(key) ~= "string" then
-                            error(`string expected, got {type(key)}`, 2)
-                        end
-                        if key == "value" then
-                            newindex(self, key, value)
-                            flush()
-                        end
-                    end
-                end
-                metatable.__rivePropertyPatched = true
-                return property
-            end
-            "#,
-        )
-        .eval()?;
+    let chunk = lua.load_bytecode(
+        "rive_property_metatable",
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/property-metatable.luau-bytecode"
+        )),
+    )?;
+    let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(PROPERTY_METATABLE_PATCHER, patcher)
 }
+
+#[allow(dead_code)]
+const PROPERTY_METATABLE_PATCHER_SOURCE: &str = r#"
+local getmetatable = getmetatable
+local pack = table.pack
+local type = type
+local unpack = table.unpack
+return function(property, writableValue, mutatingMethods, flush)
+    local metatable = getmetatable(property)
+    if metatable.__rivePropertyPatched then
+        return property
+    end
+    local index = metatable.__index
+    local newindex = metatable.__newindex
+    metatable.__index = function(self, key)
+        local result
+        if type(index) == "function" then
+            result = index(self, key)
+        else
+            result = index[key]
+        end
+        if type(result) == "function" and mutatingMethods[key] then
+            return function(...)
+                local values = pack(result(...))
+                flush()
+                return unpack(values, 1, values.n)
+            end
+        end
+        return result
+    end
+    if writableValue then
+        metatable.__newindex = function(self, key, value)
+            if type(key) ~= "string" then
+                error(`string expected, got {type(key)}`, 2)
+            end
+            if key == "value" then
+                newindex(self, key, value)
+                flush()
+            end
+        end
+    end
+    metatable.__rivePropertyPatched = true
+    return property
+end
+"#;
 
 fn patch_property_userdata(
     lua: &Lua,

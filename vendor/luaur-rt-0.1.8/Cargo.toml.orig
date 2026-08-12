@@ -8,8 +8,15 @@ repository.workspace = true
 description = "Safe, ergonomic, mlua-style API for luaur (pure-Rust Luau)."
 keywords = ["luau", "lua", "mlua", "scripting", "embedding"]
 categories = ["api-bindings", "development-tools::ffi", "game-development"]
+build = "build.rs"
 
 [features]
+default = ["compiler"]
+# Source-to-bytecode compilation. Device runtimes can disable this while still
+# using the VM and the high-level bytecode loader. luaur-rt's own small helper
+# closures are compiled by build.rs, so they do not force the compiler into a
+# target's normal dependency closure.
+compiler = ["dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
 # Rust <-> Lua value (de)serialization via serde, mirroring mlua's `serde`
 # feature. Off by default so the base build/API is unchanged.
 serde = ["dep:serde"]
@@ -31,7 +38,7 @@ async = ["dep:futures-util"]
 # `check_with_definitions` functions, the structured `TypeDiagnostic` type, and
 # the `Error::TypeError` variant. Off by default so the base build/API + `Error`
 # enum are byte-for-byte unchanged.
-typecheck = ["dep:luaur-analysis", "dep:luaur-config"]
+typecheck = ["compiler", "dep:luaur-analysis", "dep:luaur-config"]
 # Makes `Lua` and all of its handles (`Table`/`Function`/`String`/
 # `AnyUserData`/`Thread`/`Buffer`/`Value`/`RegistryKey`) `Send`, mirroring
 # mlua's `send` feature: the whole VM can be **moved** to another thread (the
@@ -52,12 +59,12 @@ luaur-common = { path = "../luaur-common", version = "0.1.8" }
 # Optional: only pulled in by the `macros` feature. Provides the
 # `#[derive(UserData)]` / `#[derive(FromLua)]` proc-macros, re-exported below.
 luaur-rt-derive = { path = "../luaur-rt-derive", version = "0.1.8", optional = true }
-luaur-compiler = { path = "../luaur-compiler", version = "0.1.8" }
+luaur-compiler = { path = "../luaur-compiler", version = "0.1.8", optional = true }
 luaur-vm = { path = "../luaur-vm", version = "0.1.8" }
 # Needed by `Chunk` to drive the compiler with default parse/encode options,
 # mirroring the umbrella `luaur` crate's `compile` helper.
-luaur-ast = { path = "../luaur-ast", version = "0.1.8" }
-luaur-bytecode = { path = "../luaur-bytecode", version = "0.1.8" }
+luaur-ast = { path = "../luaur-ast", version = "0.1.8", optional = true }
+luaur-bytecode = { path = "../luaur-bytecode", version = "0.1.8", optional = true }
 # Optional: only pulled in by the `typecheck` feature. Provides Luau's static
 # type checker (the `Frontend` + builtins) used by `Lua::check` / `Chunk::check`
 # and the free `check` / `check_with_definitions` helpers.
@@ -75,6 +82,10 @@ serde = { version = "1.0", optional = true, default-features = false, features =
 # (implemented by `AsyncThread`) and small future combinators used by the
 # bridge. We keep it lightweight (default features, no executor).
 futures-util = { version = "0.3", optional = true }
+
+[build-dependencies]
+luaur-common = { path = "../luaur-common", version = "0.1.8" }
+luaur-compiler = { path = "../luaur-compiler", version = "0.1.8" }
 
 [dev-dependencies]
 # The ported mlua serde tests assert round-trips against `serde_json` and use

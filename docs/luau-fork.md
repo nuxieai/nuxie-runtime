@@ -98,6 +98,13 @@ Verified at the fork switch (both green, no behavioral diff):
    `lua_g_indexerror`; native `index2addr` assert). Lua-closure dispatch runs
    on whichever live thread invokes the metamethod, matching mlua's
    current-state dispatch and C++ Luau's C-function metamethods.
+4. **Bytecode-only device runtime** (`luaur-rt`, UNIV-1644). Source compilation
+   and its `luaur-ast`/`luaur-bytecode`/`luaur-compiler` dependencies are behind
+   the default-on `compiler` feature. Compiler-free builds expose
+   `Lua::load_bytecode`; small runtime-owned helper closures are precompiled by
+   the package build script so they do not pull the compiler into the target
+   dependency graph. `nuxie-scripting` mirrors the feature, keeps it on for
+   editor/dev builds, and leaves it off in the shipped Apple feature graph.
 
 Every future engine change lands as a documented entry in the affected
 package's `NUXIE_PATCH.md` (create one when a baseline package is first

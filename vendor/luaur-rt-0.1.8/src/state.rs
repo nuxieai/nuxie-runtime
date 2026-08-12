@@ -296,6 +296,7 @@ impl WeakLua {
 // ---------------------------------------------------------------------------
 
 use crate::callback::{create_callback_function, BoxedCallback};
+#[cfg(feature = "compiler")]
 use crate::chunk::Chunk;
 use crate::function::Function;
 use crate::multi::MultiValue;
@@ -507,6 +508,8 @@ impl Lua {
     ///
     /// Mirrors `mlua::Lua::load`. Returns a [`Chunk`]; finalize with
     /// [`Chunk::exec`] / [`Chunk::eval`] / [`Chunk::into_function`].
+    #[cfg(feature = "compiler")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
     pub fn load(&self, source: impl AsRef<str>) -> Chunk {
         Chunk {
             lua: self.clone(),
@@ -514,6 +517,31 @@ impl Lua {
             name: "chunk".to_string(),
             environment: None,
             compiler: None,
+        }
+    }
+
+    /// Load precompiled Luau bytecode into an unexecuted function.
+    ///
+    /// This is the compiler-free device-runtime seam. The caller is
+    /// responsible for accepting only bytecode produced by a compatible Luau
+    /// toolchain and for performing any structural or trust validation its
+    /// container contract requires.
+    pub fn load_bytecode(&self, name: &str, bytecode: &[u8]) -> Result<Function> {
+        let state = self.state();
+        let name = std::ffi::CString::new(format!("={name}"))
+            .unwrap_or_else(|_| std::ffi::CString::new("=bytecode").expect("static name"));
+        unsafe {
+            let rc = luau_load(
+                state,
+                name.as_ptr(),
+                bytecode.as_ptr().cast(),
+                bytecode.len(),
+                0,
+            );
+            if rc != 0 {
+                return Err(self.pop_error(rc));
+            }
+            Ok(Function::from_ref(self.pop_ref()))
         }
     }
 

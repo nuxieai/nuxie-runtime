@@ -210,9 +210,7 @@ fn promise_public_contract_and_registry_lifetime() {
     assert!(matches!(weak.get::<Value>(3).unwrap(), Value::UserData(_)));
 
     let cancel_retained_chain: Function = vm
-        .lua()
-        .load("return function(values) values[2]:cancel() end")
-        .eval()
+        .eval("return function(values) values[2]:cancel() end")
         .unwrap();
     cancel_retained_chain.call::<()>(weak.clone()).unwrap();
     vm.lua().gc_collect().unwrap();

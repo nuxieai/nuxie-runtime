@@ -14,7 +14,7 @@ edition = "2021"
 name = "luaur-rt"
 version = "0.1.8"
 authors = ["Pawel Jankiewicz <p.jankiewicz@gmail.com>"]
-build = false
+build = "build.rs"
 autolib = false
 autobins = false
 autoexamples = false
@@ -39,10 +39,17 @@ repository = "https://github.com/pjankiewicz/luaur"
 
 [features]
 async = ["dep:futures-util"]
+compiler = [
+    "dep:luaur-ast",
+    "dep:luaur-bytecode",
+    "dep:luaur-compiler",
+]
+default = ["compiler"]
 macros = ["dep:luaur-rt-derive"]
 send = []
 serde = ["dep:serde"]
 typecheck = [
+    "compiler",
     "dep:luaur-analysis",
     "dep:luaur-config",
 ]
@@ -201,15 +208,18 @@ optional = true
 
 [dependencies.luaur-ast]
 version = "0.1.8"
+optional = true
 
 [dependencies.luaur-bytecode]
 version = "0.1.8"
+optional = true
 
 [dependencies.luaur-common]
 version = "0.1.8"
 
 [dependencies.luaur-compiler]
 version = "0.1.8"
+optional = true
 
 [dependencies.luaur-config]
 version = "0.1.8"
@@ -224,9 +234,15 @@ version = "0.1.8"
 
 [dependencies.serde]
 version = "1.0"
-features = ["std"]
 optional = true
 default-features = false
+features = ["std"]
+
+[build-dependencies.luaur-common]
+version = "0.1.8"
+
+[build-dependencies.luaur-compiler]
+version = "0.1.8"
 
 [dev-dependencies.bstr]
 version = "1"

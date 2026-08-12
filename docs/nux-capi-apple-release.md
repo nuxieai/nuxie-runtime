@@ -40,6 +40,15 @@ The `apple-runtime` target-graph check rejects `symphonia-metadata` and
 `encoding_rs`. Apple audio keeps WAV/MP3/FLAC sample decoding but omits
 container text-tag and artwork parsing that the public runtime never exposes.
 
+The `apple-runtime` feature is also the device build tier. Scripting remains
+enabled, but the target dependency graph contains only the Luau VM and accepts
+validated editor-emitted bytecode; `luaur-compiler`, `luaur-ast`, and
+`luaur-bytecode` are host/editor tools and must not appear as normal target
+dependencies. The Apple compile/link matrix checks that boundary for every
+packaged architecture. Build scripts may use the pinned compiler on the host to
+precompile runtime-owned helper closures without adding it to an XCFramework
+slice.
+
 ## Candidate qualification
 
 From a clean checkout of the exact intended release commit:

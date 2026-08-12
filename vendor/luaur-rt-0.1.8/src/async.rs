@@ -485,41 +485,6 @@ unsafe fn raise_destructed(state: *mut lua_State) -> c_int {
 }
 
 // ---------------------------------------------------------------------------
-// The Lua poller loop source (identical control flow to mlua's)
-// ---------------------------------------------------------------------------
-
-const POLLER_SOURCE: &str = r#"
-local poll, yield = poll, yield
-local future = get_future(...)
-local nres, res, res2 = poll(future)
-while true do
-    if nres ~= nil then
-        if nres == 0 then
-            return
-        elseif nres == 1 then
-            return res
-        elseif nres == 2 then
-            return res, res2
-        elseif nres < 0 then
-            yield()
-        else
-            return unpack(res, nres)
-        end
-    end
-
-    if res2 == nil then
-        nres, res, res2 = poll(future, yield(res))
-    elseif res2 == 0 then
-        nres, res, res2 = poll(future, yield())
-    elseif res2 == 1 then
-        nres, res, res2 = poll(future, yield(res))
-    else
-        nres, res, res2 = poll(future, yield(unpack(res, res2)))
-    end
-end
-"#;
-
-// ---------------------------------------------------------------------------
 // Building the async function
 // ---------------------------------------------------------------------------
 
@@ -584,10 +549,16 @@ pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Resul
 
     // 5. Load the poller loop with that environment and return it as the async
     //    function.
-    lua.load(POLLER_SOURCE)
-        .set_name("__luaur_async_poll")
-        .set_environment(env)
-        .into_function()
+    let function = lua.load_bytecode(
+        "__luaur_async_poll",
+        include_bytes!(concat!(env!("OUT_DIR"), "/async-poller.luau-bytecode")),
+    )?;
+    if !function.set_environment(env)? {
+        return Err(Error::runtime(
+            "luaur-rt: async poller could not install its environment",
+        ));
+    }
+    Ok(function)
 }
 
 // ---------------------------------------------------------------------------

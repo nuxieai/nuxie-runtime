@@ -772,6 +772,17 @@ impl TessellationUploadFrame<'_> {
         self.slot.uploads.upload(device, encoder, bytes, alignment)
     }
 
+    pub(crate) fn upload_vertices(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        bytes: &[u8],
+    ) -> UploadSlice {
+        self.slot
+            .uploads
+            .upload(device, encoder, bytes, wgpu::COPY_BUFFER_ALIGNMENT)
+    }
+
     pub(crate) fn upload_group(
         &mut self,
         device: &wgpu::Device,
@@ -1468,6 +1479,11 @@ impl UploadSlice {
     pub(crate) fn slice(&self) -> wgpu::BufferSlice<'_> {
         self.buffer
             .slice(self.offset..self.offset + self.size.get())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn shares_buffer_with(&self, other: &Self) -> bool {
+        self.buffer == other.buffer
     }
 
     pub(crate) fn slice_at(&self, relative_offset: u64, size: u64) -> wgpu::BufferSlice<'_> {

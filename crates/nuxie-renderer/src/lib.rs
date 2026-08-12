@@ -5326,6 +5326,8 @@ impl WgpuFrame {
                             draw: PendingDraw::ClipReset(
                                 self.context.msaa_stencil_pipeline.prepare_clip_reset(
                                     &self.context.device,
+                                    encoder,
+                                    &mut tessellation_uploads.borrow_mut(),
                                     &uniforms,
                                     bounds,
                                     u16::try_from(z_index).expect(
@@ -6720,7 +6722,7 @@ impl WgpuFrame {
                                 pass.set_stencil_reference(reference);
                                 pass.set_pipeline(pipeline);
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
-                                pass.set_vertex_buffer(0, draw.vertices.slice(..));
+                                pass.set_vertex_buffer(0, draw.vertices.slice());
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
                             PendingDraw::Atlas(atlas_index) => {
@@ -18261,6 +18263,43 @@ mod tests {
             .validate(&module)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         }
+    }
+
+    #[test]
+    fn clip_reset_uploads_share_one_frame_buffer() {
+        let Ok(factory) = WgpuFactory::new_with_mode(32, 32, RenderMode::Msaa) else {
+            return;
+        };
+        let mut encoder = factory.context.device.create_counted_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("nuxie-clip-reset-upload-test"),
+            },
+        );
+        let mut uploads = factory
+            .context
+            .tessellator
+            .begin_frame_uploads(&factory.context.device);
+        let uniforms = gpu::FlushUniforms::zeroed();
+        let first = factory.context.msaa_stencil_pipeline.prepare_clip_reset(
+            &factory.context.device,
+            &mut encoder,
+            &mut uploads,
+            &uniforms,
+            [0.0, 0.0, 16.0, 16.0],
+            1,
+        );
+        let second = factory.context.msaa_stencil_pipeline.prepare_clip_reset(
+            &factory.context.device,
+            &mut encoder,
+            &mut uploads,
+            &uniforms,
+            [16.0, 16.0, 32.0, 32.0],
+            2,
+        );
+
+        assert!(first.uniforms.shares_buffer_with(&first.vertices));
+        assert!(first.vertices.shares_buffer_with(&second.uniforms));
+        assert!(second.uniforms.shares_buffer_with(&second.vertices));
     }
 
     #[test]

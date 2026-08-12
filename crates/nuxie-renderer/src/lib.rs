@@ -5423,8 +5423,11 @@ impl WgpuFrame {
                             .expect("MSAA image instance index overflow");
                         image_instances.push(image_instance);
                         let resources = image_mesh_resources.get_or_insert_with(|| {
+                            let mut uploads = tessellation_uploads.borrow_mut();
                             self.context.msaa_image_mesh_pipeline.prepare_resources(
                                 &self.context.device,
+                                encoder,
+                                &mut uploads,
                                 &uniforms,
                                 destination_view.as_ref(),
                             )
@@ -5916,6 +5919,7 @@ impl WgpuFrame {
                                 Some(self.context.msaa_atlas_pipeline.prepare(
                                     &self.context.device,
                                     encoder,
+                                    &mut tessellation_uploads.borrow_mut(),
                                     &tessellation_view,
                                     &self.context.feather_lut.view,
                                     gradient_flush.texture.as_ref().map(|texture| &texture.view),
@@ -6740,7 +6744,7 @@ impl WgpuFrame {
                                 pass.set_bind_group(0, &draw.flush_group, &[]);
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_bind_group(3, &draw.sampler_group, &[]);
-                                pass.set_vertex_buffer(0, draw.vertices.slice(..));
+                                pass.set_vertex_buffer(0, draw.vertices.slice());
                                 pass.draw(0..draw.vertex_count, 0..1);
                             }
                             PendingDraw::Bootstrap(path_buffer, cover_buffer, fill_rule) => {
@@ -18300,6 +18304,135 @@ mod tests {
         assert!(first.uniforms.shares_buffer_with(&first.vertices));
         assert!(first.vertices.shares_buffer_with(&second.uniforms));
         assert!(second.uniforms.shares_buffer_with(&second.vertices));
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn product_host_shaped_msaa_frame_avoids_per_draw_mapped_uploads() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 255, 255, 255])
+                .unwrap();
+        }
+
+        let mut factory = WgpuFactory::new_with_mode(640, 480, RenderMode::Msaa).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [320.0, 0.0],
+            [0.0, 240.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+
+        let left_clip = rect_path([0.0, 0.0, 320.0, 480.0], FillRule::NonZero);
+        let right_clip = rect_path([320.0, 0.0, 640.0, 480.0], FillRule::NonZero);
+        let feathered = rect_path([40.0, 40.0, 280.0, 200.0], FillRule::NonZero);
+        let feather_paint = LogicalPaint {
+            color: 0xff40_80c0,
+            feather: 4.0,
+            ..LogicalPaint::default()
+        };
+        let mut frame = factory.begin_frame_for_benchmark(0xff10_1010, true);
+        let draw_product = |frame: &mut WgpuFrame| {
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.draw_path(&feathered, &feather_paint);
+        };
+
+        for logical_flush in 0..4 {
+            frame.save();
+            frame.clip_path(&left_clip);
+            draw_product(&mut frame);
+            frame.restore();
+
+            frame.save();
+            frame.clip_path(&right_clip);
+            draw_product(&mut frame);
+            frame.restore();
+
+            if logical_flush != 3 {
+                frame.logical_frame.begin_logical_flush();
+            }
+        }
+        assert_eq!(frame.logical_flush_starts.len(), 4);
+        assert!(
+            frame
+                .draws
+                .iter()
+                .filter(|draw| matches!(draw.role, DrawRole::ClipReset { .. }))
+                .count()
+                >= 4
+        );
+
+        work_metrics::reset_counted_buffer_init_labels();
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+        let mapped_uploads = [
+            (
+                "nuxie-msaa-image-mesh-uniforms",
+                work_metrics::counted_buffer_init_label("nuxie-msaa-image-mesh-uniforms"),
+            ),
+            (
+                "nuxie-msaa-atlas-uniforms",
+                work_metrics::counted_buffer_init_label("nuxie-msaa-atlas-uniforms"),
+            ),
+            (
+                "nuxie-msaa-atlas-vertices",
+                work_metrics::counted_buffer_init_label("nuxie-msaa-atlas-vertices"),
+            ),
+        ];
+
+        assert_eq!(
+            mapped_uploads,
+            [
+                ("nuxie-msaa-image-mesh-uniforms", 0),
+                ("nuxie-msaa-atlas-uniforms", 0),
+                ("nuxie-msaa-atlas-vertices", 0),
+            ]
+        );
+        assert!(
+            work.buffer_upload_calls > 0,
+            "the frame must still upload dynamic data"
+        );
     }
 
     #[test]

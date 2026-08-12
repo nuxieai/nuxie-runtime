@@ -5,6 +5,7 @@ use crate::{
     atomic_pipeline::image_sampler,
     gpu::{FlushUniforms, ImageDrawInstance},
     shader_catalog::{self, BuiltinShaderKey},
+    tessellator::TessellationUploadFrame,
 };
 use nuxie_render_api::ImageSampler;
 use std::sync::Arc;
@@ -263,16 +264,18 @@ impl MsaaImageMeshPipeline {
     pub(crate) fn prepare_resources(
         &self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        uploads: &mut TessellationUploadFrame<'_>,
         uniforms: &FlushUniforms,
         destination: Option<&wgpu::TextureView>,
     ) -> PreparedImageMeshResources {
-        let uniform_buffer = upload(device, "nuxie-msaa-image-mesh-uniforms", uniforms);
+        let uniform_buffer = uploads.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
         let make_flush_group = |destination: &wgpu::TextureView| {
             device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-msaa-image-mesh-flush-group"),
                 layout: &self.flush_layout,
                 entries: &[
-                    binding(0, uniform_buffer.as_entire_binding()),
+                    binding(0, uniform_buffer.binding()),
                     binding(12, wgpu::BindingResource::TextureView(destination)),
                 ],
             })
@@ -330,14 +333,6 @@ impl MsaaImageMeshPipeline {
             instance_index,
         }
     }
-}
-
-fn upload<T: bytemuck::Pod>(device: &wgpu::Device, label: &'static str, value: &T) -> wgpu::Buffer {
-    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytemuck::bytes_of(value),
-        usage: wgpu::BufferUsages::UNIFORM,
-    })
 }
 
 const IMAGE_MESH_POSITION_ATTRIBUTE: [wgpu::VertexAttribute; 1] = [wgpu::VertexAttribute {

@@ -18277,7 +18277,7 @@ mod tests {
 
     #[cfg(feature = "perf-counters")]
     #[test]
-    fn product_host_shaped_msaa_frame_avoids_per_draw_mapped_uploads() {
+    fn product_host_shaped_msaa_frame_batches_evidenced_per_draw_uploads() {
         let mut encoded = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
@@ -18377,10 +18377,23 @@ mod tests {
         let work = frame.finish_for_benchmark().unwrap().backend_work;
         let mapped_uploads = work_metrics::counted_buffer_init_labels();
 
-        assert_eq!(
-            mapped_uploads,
-            Vec::<(String, u64)>::new(),
-            "ProductHost-shaped frame must not create per-frame mapped buffers"
+        for migrated_label in [
+            "nuxie-msaa-image-mesh-uniforms",
+            "nuxie-msaa-atlas-uniforms",
+            "nuxie-msaa-atlas-vertices",
+        ] {
+            assert!(
+                mapped_uploads
+                    .iter()
+                    .all(|(label, _)| label != migrated_label),
+                "ProductHost-shaped frame must batch evidenced per-draw upload {migrated_label}: {mapped_uploads:?}"
+            );
+        }
+        assert!(
+            mapped_uploads
+                .iter()
+                .any(|(label, _)| label == "nuxie-msaa-atlas-paths"),
+            "browser texture-polyfill storage must retain its standalone zero-offset upload: {mapped_uploads:?}"
         );
         assert!(
             work.buffer_upload_calls > 0,

@@ -5,7 +5,7 @@ use crate::gpu::{
     MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
     MIDPOINT_FAN_PATCH_INDEX_COUNT,
 };
-use crate::storage_texture::{self, StorageBufferStructure};
+use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
 use crate::tessellator::TessellationUploadFrame;
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 use crate::RendererCapabilities;
@@ -180,42 +180,38 @@ impl AtlasPipeline {
     ) {
         let uniform = uploads.upload_uniforms(device, encoder, bytemuck::bytes_of(uniforms));
         let polyfill = self.polyfill_vertex_storage_buffers;
-        let path = uploads
-            .upload_storage(device, encoder, bytemuck::cast_slice(paths))
-            .into_storage_resource(
-                device,
-                encoder,
-                "nuxie-atlas-path",
-                StorageBufferStructure::Uint32x4,
-                polyfill,
-            );
-        let paint = uploads
-            .upload_storage(device, encoder, bytemuck::cast_slice(paints))
-            .into_storage_resource(
-                device,
-                encoder,
-                "nuxie-atlas-paint",
-                StorageBufferStructure::Uint32x2,
-                polyfill,
-            );
-        let paint_aux = uploads
-            .upload_storage(device, encoder, bytemuck::cast_slice(paint_aux))
-            .into_storage_resource(
-                device,
-                encoder,
-                "nuxie-atlas-paint-aux",
-                StorageBufferStructure::Float32x4,
-                polyfill,
-            );
-        let contours = uploads
-            .upload_storage(device, encoder, bytemuck::cast_slice(contours))
-            .into_storage_resource(
-                device,
-                encoder,
-                "nuxie-atlas-contours",
-                StorageBufferStructure::Uint32x4,
-                polyfill,
-            );
+        let path = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-path",
+            paths,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
+        );
+        let paint = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-paint",
+            paints,
+            StorageBufferStructure::Uint32x2,
+            polyfill,
+        );
+        let paint_aux = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-paint-aux",
+            paint_aux,
+            StorageBufferStructure::Float32x4,
+            polyfill,
+        );
+        let contours = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-contours",
+            contours,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
+        );
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-atlas-dummy-texture"),
             size: wgpu::Extent3d {

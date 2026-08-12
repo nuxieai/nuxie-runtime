@@ -790,16 +790,6 @@ impl TessellationUploadFrame<'_> {
             .upload(device, encoder, bytes, wgpu::COPY_BUFFER_ALIGNMENT)
     }
 
-    pub(crate) fn upload_storage(
-        &mut self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        bytes: &[u8],
-    ) -> UploadSlice {
-        let alignment = self.slot.storage_alignment;
-        self.slot.uploads.upload(device, encoder, bytes, alignment)
-    }
-
     pub(crate) fn upload_group(
         &mut self,
         device: &wgpu::Device,

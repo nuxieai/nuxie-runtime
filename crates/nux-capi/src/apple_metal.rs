@@ -11,7 +11,7 @@ use super::{
     remove_handle, struct_size_supports, write_caller_struct,
 };
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
-use nuxie::PersistentFactory;
+use nuxie::{Mat2D, PersistentFactory, Renderer};
 use nuxie_renderer::{
     AppleMetalDevice, ApplePresentationCompletion, AppleSurface, RenderMode, RendererError,
     SurfaceDisposition, SurfaceError, WgpuDeviceHealth, WgpuFactory, WgpuFrameMetrics,
@@ -40,6 +40,12 @@ pub const NUX_RENDERER_HEALTH_DEVICE_LOST: NuxRendererHealth = 1;
 pub const NUX_RENDERER_HEALTH_OUT_OF_MEMORY: NuxRendererHealth = 2;
 pub const NUX_RENDERER_HEALTH_FAILED: NuxRendererHealth = 3;
 
+pub type NuxRendererFit = u32;
+/// Preserve authored artboard coordinates without applying a viewport fit.
+pub const NUX_RENDERER_FIT_NONE: NuxRendererFit = 0;
+/// Uniformly scale and center the authored artboard inside the renderer surface.
+pub const NUX_RENDERER_FIT_CONTAIN_CENTER: NuxRendererFit = 1;
+
 pub type NuxMetalDrawableState = u32;
 pub const NUX_METAL_DRAWABLE_STATE_AVAILABLE: NuxMetalDrawableState = 0;
 pub const NUX_METAL_DRAWABLE_STATE_TIMEOUT: NuxMetalDrawableState = 1;
@@ -65,6 +71,8 @@ pub struct NuxMetalRenderOperation {
     pub completion_context: *mut c_void,
     /// Both completion fields must be null or non-null together.
     pub completion_callback: Option<unsafe extern "C" fn(context: *mut c_void)>,
+    /// Optional viewport-fit policy. Older struct prefixes default to NONE.
+    pub fit: NuxRendererFit,
 }
 
 pub const NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE: usize =
@@ -80,6 +88,7 @@ impl Default for NuxMetalRenderOperation {
             clear_color: 0,
             completion_context: ptr::null_mut(),
             completion_callback: None,
+            fit: NUX_RENDERER_FIT_NONE,
         }
     }
 }
@@ -364,7 +373,54 @@ unsafe fn read_operation(
             read_len,
         );
     }
+    match value.fit {
+        NUX_RENDERER_FIT_NONE | NUX_RENDERER_FIT_CONTAIN_CENTER => {}
+        _ => {
+            return Err(ApiFailure::new(
+                NuxStatus::InvalidArgument,
+                "render operation fit is unsupported",
+            ));
+        }
+    }
     Ok(value)
+}
+
+fn centered_contain_transform(
+    bounds: (f32, f32, f32, f32),
+    viewport: (u32, u32),
+) -> Result<Mat2D, ApiFailure> {
+    let (x, y, width, height) = bounds;
+    let (viewport_width, viewport_height) = viewport;
+    if !x.is_finite()
+        || !y.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+        || viewport_width == 0
+        || viewport_height == 0
+    {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidArgument,
+            "artboard bounds and renderer dimensions must be finite and positive",
+        ));
+    }
+    let scale = (viewport_width as f32 / width).min(viewport_height as f32 / height);
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidArgument,
+            "artboard fit scale must be finite and positive",
+        ));
+    }
+    let offset_x = (viewport_width as f32 - width * scale) * 0.5 - x * scale;
+    let offset_y = (viewport_height as f32 - height * scale) * 0.5 - y * scale;
+    if !offset_x.is_finite() || !offset_y.is_finite() {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidArgument,
+            "artboard fit translation must be finite",
+        ));
+    }
+    Ok(Mat2D([scale, 0.0, 0.0, scale, offset_x, offset_y]))
 }
 
 fn validate_completion_fields(
@@ -912,6 +968,12 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;
+            if operation.fit == NUX_RENDERER_FIT_CONTAIN_CENTER {
+                frame.transform(centered_contain_transform(
+                    artboard.artboard_bounds(),
+                    surface.dimensions(),
+                )?);
+            }
             if let Some(assets) = player.artboard.apple_assets.as_ref() {
                 let mut factory = assets.wrap_factory(factory);
                 artboard
@@ -1050,6 +1112,66 @@ mod tests {
         assert_eq!(NUX_RENDERER_DISPOSITION_OUT_OF_MEMORY, 8);
         assert_eq!(std::mem::size_of::<NuxRendererDisposition>(), 4);
         assert_eq!(std::mem::size_of::<NuxRendererHealth>(), 4);
+    }
+
+    #[test]
+    fn centered_contain_fit_scales_and_letterboxes_authored_bounds() {
+        assert_eq!(NUX_RENDERER_FIT_NONE, 0);
+        assert_eq!(NUX_RENDERER_FIT_CONTAIN_CENTER, 1);
+        assert_eq!(std::mem::size_of::<NuxRendererFit>(), 4);
+
+        assert_eq!(
+            centered_contain_transform((0.0, 0.0, 100.0, 50.0), (300, 300))
+                .expect("landscape bounds fit"),
+            Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 75.0])
+        );
+        assert_eq!(
+            centered_contain_transform((0.0, 0.0, 100.0, 200.0), (300, 300))
+                .expect("portrait bounds fit"),
+            Mat2D([1.5, 0.0, 0.0, 1.5, 75.0, 0.0])
+        );
+        assert_eq!(
+            centered_contain_transform((10.0, -5.0, 100.0, 50.0), (300, 300))
+                .expect("offset bounds fit"),
+            Mat2D([3.0, 0.0, 0.0, 3.0, -30.0, 90.0])
+        );
+        for bounds in [(0.0, 0.0, 0.0, 50.0), (0.0, 0.0, 100.0, f32::NAN)] {
+            assert!(centered_contain_transform(bounds, (300, 300)).is_err());
+        }
+        assert!(centered_contain_transform((0.0, 0.0, 100.0, 50.0), (0, 300)).is_err());
+    }
+
+    #[test]
+    fn legacy_render_operation_prefix_defaults_to_raw_coordinates() {
+        #[repr(C)]
+        struct LegacyRenderOperation {
+            struct_size: u32,
+            drawable_state: NuxMetalDrawableState,
+            drawable: *mut c_void,
+            clear_color: u32,
+            completion_context: *mut c_void,
+            completion_callback: Option<RendererCompletionCallback>,
+        }
+
+        let legacy = LegacyRenderOperation {
+            struct_size: u32::try_from(std::mem::size_of::<LegacyRenderOperation>())
+                .expect("legacy operation size fits u32"),
+            drawable_state: NUX_METAL_DRAWABLE_STATE_TIMEOUT,
+            drawable: ptr::null_mut(),
+            clear_color: 0,
+            completion_context: ptr::null_mut(),
+            completion_callback: None,
+        };
+        let operation =
+            unsafe { read_operation((&raw const legacy).cast::<NuxMetalRenderOperation>()) }
+                .expect("legacy operation prefix remains accepted");
+        assert_eq!(operation.fit, NUX_RENDERER_FIT_NONE);
+
+        let invalid = NuxMetalRenderOperation {
+            fit: u32::MAX,
+            ..NuxMetalRenderOperation::default()
+        };
+        assert!(unsafe { read_operation(&raw const invalid) }.is_err());
     }
 
     #[test]

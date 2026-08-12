@@ -1030,6 +1030,10 @@ typedef uint32_t NuxMetalDrawableState;
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+typedef uint32_t NuxRendererFit;
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef struct NuxMetalRenderOperation {
   /**
    * Must be initialized to `sizeof(NuxMetalRenderOperation)`.
@@ -1055,6 +1059,10 @@ typedef struct NuxMetalRenderOperation {
    * Both completion fields must be null or non-null together.
    */
   void (*completion_callback)(void *context);
+  /**
+   * Optional viewport-fit policy. Older struct prefixes default to NONE.
+   */
+  NuxRendererFit fit;
 } NuxMetalRenderOperation;
 #endif
 
@@ -1252,6 +1260,20 @@ typedef struct NuxViewModelSnapshotValueView {
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE 2
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Uniformly scale and center the authored artboard inside the renderer surface.
+ */
+#define NUX_RENDERER_FIT_CONTAIN_CENTER 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Preserve authored artboard coordinates without applying a viewport fit.
+ */
+#define NUX_RENDERER_FIT_NONE 0
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))

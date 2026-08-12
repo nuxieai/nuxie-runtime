@@ -430,7 +430,7 @@
     },
     {
       "name": "NuxMetalRenderOperation",
-      "size": 40,
+      "size": 48,
       "alignment": 8,
       "fields": [
         {
@@ -456,6 +456,10 @@
         {
           "name": "completion_callback",
           "offset": 32
+        },
+        {
+          "name": "fit",
+          "offset": 40
         }
       ]
     },

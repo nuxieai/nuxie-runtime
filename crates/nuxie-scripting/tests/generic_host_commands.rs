@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(all(feature = "luau", feature = "compiler"))]
 
 use std::collections::BTreeMap;
 

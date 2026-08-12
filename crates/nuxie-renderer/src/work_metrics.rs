@@ -1,5 +1,7 @@
 #[cfg(feature = "perf-counters")]
 use std::cell::RefCell;
+#[cfg(all(test, feature = "perf-counters"))]
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut, Range};
 use wgpu::util::DeviceExt;
 
@@ -26,6 +28,21 @@ pub struct BackendWorkMetrics {
 #[cfg(feature = "perf-counters")]
 thread_local! {
     static ACTIVE: RefCell<Option<BackendWorkMetrics>> = const { RefCell::new(None) };
+}
+
+#[cfg(all(test, feature = "perf-counters"))]
+thread_local! {
+    static COUNTED_BUFFER_INIT_LABELS: RefCell<HashMap<String, u64>> = RefCell::default();
+}
+
+#[cfg(all(test, feature = "perf-counters"))]
+pub(crate) fn reset_counted_buffer_init_labels() {
+    COUNTED_BUFFER_INIT_LABELS.with(|labels| labels.borrow_mut().clear());
+}
+
+#[cfg(all(test, feature = "perf-counters"))]
+pub(crate) fn counted_buffer_init_label(label: &str) -> u64 {
+    COUNTED_BUFFER_INIT_LABELS.with(|labels| labels.borrow().get(label).copied().unwrap_or(0))
 }
 
 pub(crate) struct FrameWorkRecorder {
@@ -134,6 +151,13 @@ impl CountedDeviceExt for wgpu::Device {
         &self,
         descriptor: &wgpu::util::BufferInitDescriptor<'_>,
     ) -> wgpu::Buffer {
+        #[cfg(all(test, feature = "perf-counters"))]
+        if let Some(label) = descriptor.label {
+            COUNTED_BUFFER_INIT_LABELS.with(|labels| {
+                let mut labels = labels.borrow_mut();
+                *labels.entry(label.to_owned()).or_default() += 1;
+            });
+        }
         let bytes = descriptor.contents.len() as u64;
         record_buffer_upload(bytes);
         self.create_buffer_init(descriptor)

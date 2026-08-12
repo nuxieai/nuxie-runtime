@@ -75,6 +75,7 @@ PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer", "scripting"}
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Artboard",
     "ArtboardInstance",
+    "ArtboardTransaction",
     "BlendMode",
     "ColorInt",
     "Factory",
@@ -134,9 +135,11 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
 }
 PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
     "host_interfaces": {
+        "RuntimeDefaultSceneSelection",
         "RuntimeOwnedViewModelHandle",
         "RuntimeOwnedViewModelTransaction",
         "RuntimeViewModelLinkError",
+        "select_default_scene",
     },
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
@@ -351,6 +354,12 @@ RUST_DATA_INCLUDE_SOURCE_EDGE = re.compile(
 RUST_DATA_INCLUDE_MANIFEST_EDGE = re.compile(
     rf"\b(?P<macro>include_(?:bytes|str))\s*!\s*\(\s*concat\s*!\s*\(\s*"
     rf'env\s*!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,\s*'
+    rf"{RUST_STRING_LITERAL}\s*\)\s*\)",
+    re.DOTALL,
+)
+RUST_DATA_INCLUDE_OUT_DIR_EDGE = re.compile(
+    rf'\binclude_bytes\s*!\s*\(\s*concat\s*!\s*\(\s*'
+    rf'env\s*!\s*\(\s*"OUT_DIR"\s*\)\s*,\s*'
     rf"{RUST_STRING_LITERAL}\s*\)\s*\)",
     re.DOTALL,
 )
@@ -1493,6 +1502,17 @@ def cross_package_source_edge_errors(
                 f"{relative}:{line}: protected source {edge_kind} crosses "
                 f"a package boundary to {resolved}"
             )
+    for match in RUST_DATA_INCLUDE_OUT_DIR_EDGE.finditer(source):
+        if code_mask[match.start()].isspace():
+            continue
+        suffix = rust_string_literal_value(match)
+        if (
+            suffix is not None
+            and suffix.startswith("/")
+            and "\\" not in suffix
+            and ".." not in pathlib.PurePosixPath(suffix).parts
+        ):
+            verified_data_include_starts.add(match.start())
     for invocation in RUST_DATA_INCLUDE_INVOCATION.finditer(code_mask):
         if invocation.start() in verified_data_include_starts:
             continue

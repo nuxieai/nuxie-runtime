@@ -174,6 +174,9 @@ conditional `path` attributes and `include!` forms it cannot prove local. The
 runtime's exact generated-object include is the sole audited dynamic exception.
 Literal `include_bytes!` and `include_str!` data paths may use neutral
 repository fixtures but may not reach into another Cargo package's ownership.
+`include_bytes!(concat!(env!("OUT_DIR"), "/literal"))` may consume a
+non-traversing build output owned by the same protected package; other dynamic
+data-include forms still fail closed.
 The check prevents every audited internal-debt family from appearing outside
 its exact files. Comments and literals are stripped before matching. Cleared or
 deleted exceptions fail as stale so debt cannot be silently reintroduced later.

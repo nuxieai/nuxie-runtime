@@ -6959,7 +6959,9 @@ impl WgpuFrame {
                 backing.did_submit();
             }
             #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-            if presentation.is_none() {
+            // Browser presentation recycles frame-owned staging resources below,
+            // so its submitted work must complete before the next frame can reuse them.
+            if presentation.is_none() || cfg!(target_arch = "wasm32") {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
             #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]

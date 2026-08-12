@@ -702,7 +702,7 @@ fn step_rejects_invalid_wire_values_and_bounds_before_dispatch() {
             x: 0.0,
             y: 0.0,
             pointer_id: 0,
-            timestamp_seconds: 1.0,
+            timestamp_seconds: f32::NAN,
         },
     ] {
         let (status, result) = step(player, &[], &[pointer], 0.0);
@@ -745,6 +745,41 @@ fn step_rejects_invalid_wire_values_and_bounds_before_dispatch() {
         nux_artboard_instance_free(instance);
         nux_file_free(file);
     }
+}
+
+#[test]
+fn step_accepts_nonzero_timestamps_for_every_pointer_kind() {
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let player = state_player(instance, "State Machine 1");
+
+    for (kind, timestamp_seconds) in [
+        (NUX_PLAYER_POINTER_KIND_DOWN, 1.0),
+        (NUX_PLAYER_POINTER_KIND_MOVE, 2.0),
+        (NUX_PLAYER_POINTER_KIND_UP, 3.0),
+        (NUX_PLAYER_POINTER_KIND_EXIT, 4.0),
+    ] {
+        let pointer = NuxPlayerPointerEvent {
+            kind,
+            x: 5.0,
+            y: 6.0,
+            pointer_id: 7,
+            timestamp_seconds,
+        };
+        let (status, result) = step(player, &[], &[pointer], 0.0);
+        assert_eq!(status, NuxStatus::Ok, "pointer kind {kind}");
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+    }
+
+    assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
 }
 
 #[test]

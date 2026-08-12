@@ -3211,12 +3211,6 @@ fn validate_player_pointers(
                 ));
             }
         };
-        if !matches!(kind, PreparedPointerKind::Move) && pointer.timestamp_seconds != 0.0 {
-            return Err((
-                NuxStatus::InvalidArgument,
-                "only pointer move accepts a nonzero C++ timestamp",
-            ));
-        }
         prepared.push(PreparedPlayerPointer {
             kind,
             x: pointer.x,

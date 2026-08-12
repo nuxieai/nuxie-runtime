@@ -1494,11 +1494,33 @@ fn imported_supplemental_interface(
                         | GpuCanvasShaderInterfaceType::Uint3
                         | GpuCanvasShaderInterfaceType::Uint4
                 );
+                let invalid_sampling = !matches!(
+                    (interpolation, sampling),
+                    (_, None)
+                        | (
+                            Some(
+                                nuxie_render_api::GpuCanvasShaderInterpolation::Perspective
+                                    | nuxie_render_api::GpuCanvasShaderInterpolation::Linear
+                            ),
+                            Some(
+                                nuxie_render_api::GpuCanvasShaderSampling::Center
+                                    | nuxie_render_api::GpuCanvasShaderSampling::Centroid
+                                    | nuxie_render_api::GpuCanvasShaderSampling::Sample
+                            )
+                        )
+                        | (
+                            Some(nuxie_render_api::GpuCanvasShaderInterpolation::Flat),
+                            Some(
+                                nuxie_render_api::GpuCanvasShaderSampling::First
+                                    | nuxie_render_api::GpuCanvasShaderSampling::Either
+                            )
+                        )
+                );
                 if variable.interface_type == GpuCanvasShaderInterfaceType::Bool
                     || (integer
                         && *interpolation
                             != Some(nuxie_render_api::GpuCanvasShaderInterpolation::Flat))
-                    || (sampling.is_some() && interpolation.is_none())
+                    || invalid_sampling
                 {
                     return Err(invalid(format!(
                         "supplemental interface location {location} has an illegal type/interpolation/sampling combination"
@@ -4670,6 +4692,61 @@ mod tests {
             )],
         )
         .is_err());
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn supplemental_locations_enforce_naga_interpolation_sampling_matrix() {
+        use nuxie_render_api::{
+            GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterfaceType,
+            GpuCanvasShaderInterfaceVariable, GpuCanvasShaderInterpolation as Interpolation,
+            GpuCanvasShaderSampling as Sampling,
+        };
+
+        let variable = |interpolation, sampling| GpuCanvasShaderInterfaceVariable {
+            binding: GpuCanvasShaderInterfaceBinding::Location {
+                location: 0,
+                interpolation,
+                sampling,
+            },
+            interface_type: GpuCanvasShaderInterfaceType::Float4,
+        };
+        for (interpolation, sampling) in [
+            (None, None),
+            (Some(Interpolation::Perspective), Some(Sampling::Center)),
+            (Some(Interpolation::Linear), Some(Sampling::Centroid)),
+            (Some(Interpolation::Perspective), Some(Sampling::Sample)),
+            (Some(Interpolation::Flat), Some(Sampling::First)),
+            (Some(Interpolation::Flat), Some(Sampling::Either)),
+        ] {
+            imported_supplemental_interface(
+                GpuCanvasShaderStage::Fragment,
+                true,
+                &[variable(interpolation, sampling)],
+            )
+            .expect("Naga-compatible interpolation/sampling pair");
+        }
+        for (interpolation, sampling) in [
+            (None, Some(Sampling::Center)),
+            (Some(Interpolation::Flat), Some(Sampling::Center)),
+            (Some(Interpolation::Flat), Some(Sampling::Centroid)),
+            (Some(Interpolation::Flat), Some(Sampling::Sample)),
+            (Some(Interpolation::Perspective), Some(Sampling::First)),
+            (Some(Interpolation::Linear), Some(Sampling::Either)),
+        ] {
+            assert!(
+                imported_supplemental_interface(
+                    GpuCanvasShaderStage::Fragment,
+                    true,
+                    &[variable(interpolation, sampling)],
+                )
+                .is_err(),
+                "illegal pair {interpolation:?}/{sampling:?} must fail closed"
+            );
+        }
     }
 
     #[test]

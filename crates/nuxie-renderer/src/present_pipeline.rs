@@ -1,5 +1,7 @@
 //! GPU-only final blit shared by platform presentation adapters.
 
+use crate::shader_catalog::{self, BuiltinShaderKey};
+
 #[derive(Clone, Copy)]
 pub(crate) enum PresentTargetAlpha {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -20,10 +22,7 @@ impl PresentPipeline {
         format: wgpu::TextureFormat,
         target_alpha: PresentTargetAlpha,
     ) -> Self {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-surface-present-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("surface_present.wgsl").into()),
-        });
+        let shader = shader_catalog::create(device, BuiltinShaderKey::SurfacePresent);
         let fragment_entry_point = match target_alpha {
             PresentTargetAlpha::Straight => "fragment_straight_alpha",
             PresentTargetAlpha::Premultiplied => "fragment_premultiplied_alpha",

@@ -117,6 +117,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
+name = "apple-msl-capture"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nuxie-renderer",
+ "serde",
+ "serde_json",
+ "sha2",
+ "wgpu-hal",
+]
+
+[[package]]
+name = "apple-msl-catalog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "naga",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "wgpu-hal",
+ "wgpu-types",
+]
+
+[[package]]
+name = "apple-msl-no-wgsl-probe"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pollster",
+ "serde",
+ "serde_json",
+ "sha2",
+ "wgpu",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -169,6 +207,9 @@ name = "bitflags"
 version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
+dependencies = [
+ "serde_core",
+]
 
 [[package]]
 name = "block-buffer"
@@ -821,6 +862,7 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "num-traits",
+ "serde",
  "zerocopy",
 ]
 
@@ -854,6 +896,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "foldhash",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -880,6 +924,8 @@ checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -1149,6 +1195,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "rustc-hash",
+ "serde",
  "spirv",
  "thiserror 2.0.18",
  "unicode-ident",
@@ -1163,6 +1210,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "rustc-hash",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -2611,6 +2659,9 @@ dependencies = [
  "raw-window-handle",
  "raw-window-metal",
  "renderdoc-sys",
+ "serde",
+ "serde_json",
+ "sha2",
  "smallvec",
  "static_assertions",
  "thiserror 2.0.18",
@@ -2646,6 +2697,7 @@ dependencies = [
  "log",
  "naga-types",
  "raw-window-handle",
+ "serde",
  "static_assertions",
  "web-sys",
 ]

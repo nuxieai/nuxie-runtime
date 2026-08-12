@@ -58,6 +58,33 @@ Any decision report must record source revisions, runner hashes, adapter
 identity, mode, dimensions, warmups, measured frames, and completion scope.
 Never overwrite an accepted runner while collecting its comparison.
 
+## Apple built-in MSL catalog
+
+Repository-controlled renderer shaders have one typed ownership seam in
+`shader_catalog`. Authored GPU-canvas content is deliberately outside that
+seam and retains its separately validated WGSL path. On a real Metal adapter,
+`tools/capture-apple-msl-catalog.sh` constructs the reachable pipeline families
+and records the exact inputs passed to the pinned wgpu-hal WGSL-to-MSL
+translator. The offline generator then commits path-independent, content-keyed
+MSL and reflection records under `crates/nuxie-renderer/apple-msl-catalog`.
+Customer builds never run this capture or generator.
+
+`make renderer-shaders-check` regenerates every artifact and rejects source or
+manifest drift, duplicate logical inputs, unreferenced physical MSL, and any
+change to the separately reviewed inventory of 91 logical pipeline
+permutations and 89 deduplicated compiler artifacts. The artifact identity
+binds the WGSL digest, stage and entry point, pipeline constants, full resource
+and binding-array maps, vertex pulling layout, topology, MSL language version,
+workgroup initialization, runtime checks, task limits, and Metal invariance
+expectation.
+
+The Apple instance policy disables wgpu's two internal WGSL helper-pipeline
+flags. `make renderer-apple-msl-no-wgsl-probe` additionally resolves a pinned
+wgpu Metal graph without `wgpu/wgsl` or `naga/wgsl-in`, executes trusted MSL,
+and checks its pixel readback on a real Metal device. This catalog slice does
+not select MSL in `apple-runtime`; the support-matrix cutover and full dual-path
+device qualification remain the responsibility of UNIV-2074.
+
 The renderer-source suffix above is reconstructable. It covers the runtime
 crates and the replay code linked into the two runners. The candidate
 executable hash binds all code actually linked into the runner, while the
@@ -192,13 +219,13 @@ The patched package provenance is:
 - `wgpu-core` canonical source patch SHA-256:
   `9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`;
 - `wgpu-hal` canonical source patch SHA-256:
-  `b6d2a27aa6fabe80bf02a0c3744819629894202ae7081a9035b6a49a3d3b0745`;
+  `07f5fb9869c202a5f165928676fef2449057a218744d32e38556ad2f88b092f7`;
 - six-manifest distribution wiring SHA-256:
-  `693f49693094a63d258bf151bb462f1345a37bd1720e828c427c79edc874791a`;
+  `632166f561bda7ca790e97f5e28ccc8abefcca61d318fb686e56ba6f7faa79a5`;
 - direct-crate `wgpu`, core, and HAL lock SHA-256 values:
   `3f2d79fa13fcedee842d5ca987245d8e01025469bf119c193197b6236c8ccd48`,
   `f57c034f1479e0fcc1257c094521091d3ebb99775a988902f8cf42dae083b7e0`,
-  and `bc27e50dd420d2dd78fdce4000b28fb8492fb07cda4da37c4fd488f0829a4476`.
+  and `e1ee3eb0e8c7fbe3121021e867bc7ac5f9291a98cc4bda7b19af8ccdf20e4d15`.
 
 The embedded `wgpu-core` source hash predates its final formatting-only source
 normalization; the recomputed core hash above is authoritative. The companion

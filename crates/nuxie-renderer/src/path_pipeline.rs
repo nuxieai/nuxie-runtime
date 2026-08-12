@@ -3,6 +3,7 @@
 use crate::{
     atomic_pipeline::image_sampler,
     gpu::PatchVertex,
+    shader_catalog::{self, BuiltinShaderKey},
     storage_texture::{self, StorageBufferStructure, StorageResource},
     tessellator::TessellationFlushResources,
     work_metrics::{CountedDeviceExt, CountedRenderPass},
@@ -105,45 +106,31 @@ impl UploadedPathPaints {
 impl PathPipeline {
     pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
-        let no_clip_vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-msaa-path-vertex"),
-            source: wgpu::ShaderSource::Wgsl(
-                if polyfill {
-                    include_str!("generated/draw_msaa_path.webgpu_nossbo_noclipdistance_vert.wgsl")
-                } else {
-                    include_str!("generated/draw_msaa_path.webgpu_noclipdistance_vert.wgsl")
-                }
-                .into(),
-            ),
-        });
+        let no_clip_vertex = shader_catalog::create(
+            device,
+            if polyfill {
+                BuiltinShaderKey::MsaaPathVertexStorageTexture
+            } else {
+                BuiltinShaderKey::MsaaPathVertex
+            },
+        );
         let clip_rect_vertex = device
             .features()
             .contains(wgpu::Features::CLIP_DISTANCES)
             .then(|| {
-                device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some("nuxie-msaa-path-clip-rect-vertex"),
-                    source: wgpu::ShaderSource::Wgsl(
-                        if polyfill {
-                            include_str!("generated/draw_msaa_path.webgpu_nossbo_vert.wgsl")
-                        } else {
-                            include_str!("generated/draw_msaa_path.webgpu_vert.wgsl")
-                        }
-                        .into(),
-                    ),
-                })
+                shader_catalog::create(
+                    device,
+                    if polyfill {
+                        BuiltinShaderKey::MsaaPathVertexStorageTextureClipDistance
+                    } else {
+                        BuiltinShaderKey::MsaaPathVertexClipDistance
+                    },
+                )
             });
-        let fixed_fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-msaa-path-fragment"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/draw_msaa_path.webgpu_fixedcolor_frag.wgsl").into(),
-            ),
-        });
-        let advanced_fragment = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-msaa-path-advanced-fragment"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/draw_msaa_path.webgpu_frag.wgsl").into(),
-            ),
-        });
+        let fixed_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaPathFixedFragment);
+        let advanced_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaPathAdvancedFragment);
         let flush_layout_entries = msaa_flush_layout_entries(polyfill);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-path-flush-layout"),

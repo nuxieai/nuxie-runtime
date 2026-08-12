@@ -37,10 +37,6 @@ type DeviceResult<T> = Result<T, crate::DeviceError>;
 /// require workarounds gated on this flag.
 const IS_WATCHOS_ILP32: bool = cfg!(target_pointer_width = "32");
 
-fn msl_has_invariant_position(source: &str) -> bool {
-    source.contains("[[position, invariant]]")
-}
-
 struct CompiledShader {
     library: Retained<ProtocolObject<dyn MTLLibrary>>,
     function: Retained<ProtocolObject<dyn MTLFunction>>,
@@ -169,31 +165,27 @@ impl super::Device {
         vertex_buffer_mappings: &[naga::back::msl::VertexBufferMapping],
         layout: &super::PipelineLayout,
         primitive_class: MTLPrimitiveTopologyClass,
+        #[cfg_attr(not(feature = "apple-msl-capture"), allow(unused_variables))]
+        primitive_topology: Option<wgt::PrimitiveTopology>,
         naga_stage: naga::ShaderStage,
     ) -> Result<CompiledShader, crate::PipelineError> {
         match stage.module.source {
             ShaderModuleSource::Naga(ref naga_shader) => {
                 let stage_bit = map_naga_stage(naga_stage);
-                let (module, module_info) = naga::back::pipeline_constants::process_overrides(
-                    &naga_shader.module,
-                    &naga_shader.info,
-                    Some((naga_stage, stage.entry_point)),
-                    stage.constants,
-                )
-                .map_err(|e| {
-                    crate::PipelineError::PipelineConstants(stage_bit, format!("MSL: {e:?}"))
-                })?;
-
                 let ep_resources = &layout.per_stage_map[naga_stage];
-
-                let bounds_check_policy = if stage.module.runtime_checks.bounds_checks {
-                    naga::proc::BoundsCheckPolicy::Restrict
-                } else {
-                    naga::proc::BoundsCheckPolicy::Unchecked
-                };
-
-                let options = naga::back::msl::Options {
-                    lang_version: match self.shared.private_caps.msl_version {
+                let translation_input = super::shader_translation::TranslationInput {
+                    shader: naga_shader,
+                    stage: naga_stage,
+                    entry_point: stage.entry_point,
+                    constants: stage.constants,
+                    resources: ep_resources,
+                    binding_array_length_map: &layout.binding_array_length_map,
+                    vertex_buffer_mappings,
+                    allow_and_force_point_size: matches!(
+                        primitive_class,
+                        MTLPrimitiveTopologyClass::Point
+                    ),
+                    msl_version: match self.shared.private_caps.msl_version {
                         #[allow(deprecated)]
                         MTLLanguageVersion::Version1_0 => (1, 0),
                         MTLLanguageVersion::Version1_1 => (1, 1),
@@ -210,67 +202,48 @@ impl super::Device {
                         // Newer version, fall back to 3.2
                         _ => (4, 0),
                     },
-                    inline_samplers: Default::default(),
-                    spirv_cross_compatibility: false,
-                    fake_missing_bindings: false,
-                    per_entry_point_map: naga::back::msl::EntryPointResourceMap::from([(
-                        stage.entry_point.to_owned(),
-                        ep_resources.clone(),
-                    )]),
-                    bounds_check_policies: naga::proc::BoundsCheckPolicies {
-                        index: bounds_check_policy,
-                        buffer: bounds_check_policy,
-                        image_load: bounds_check_policy,
-                        // TODO: support bounds checks on binding arrays
-                        binding_array: naga::proc::BoundsCheckPolicy::Unchecked,
-                    },
                     zero_initialize_workgroup_memory: stage.zero_initialize_workgroup_memory,
-                    force_loop_bounding: stage.module.runtime_checks.force_loop_bounding,
-                    task_dispatch_limits: stage
-                        .module
-                        .runtime_checks
-                        .task_shader_dispatch_tracking
-                        .then_some(naga::back::TaskDispatchLimits {
-                            max_mesh_workgroups_per_dim: self
-                                .limits
-                                .max_mesh_workgroups_per_dimension,
-                            max_mesh_workgroups_total: self.limits.max_mesh_workgroup_total_count,
-                        }),
-                    mesh_shader_primitive_indices_clamp: stage
-                        .module
-                        .runtime_checks
-                        .mesh_shader_primitive_indices_clamp,
-                    emit_int_div_checks: stage.module.runtime_checks.int_div_checks,
-                    ray_query_initialization_tracking: stage
-                        .module
-                        .runtime_checks
-                        .ray_query_initialization_tracking,
-                };
-
-                let pipeline_options = naga::back::msl::PipelineOptions {
-                    entry_point: Some((naga_stage, stage.entry_point.to_owned())),
-                    allow_and_force_point_size: match primitive_class {
-                        MTLPrimitiveTopologyClass::Point => true,
-                        _ => false,
+                    runtime_checks: stage.module.runtime_checks,
+                    task_dispatch_limits: naga::back::TaskDispatchLimits {
+                        max_mesh_workgroups_per_dim: self.limits.max_mesh_workgroups_per_dimension,
+                        max_mesh_workgroups_total: self.limits.max_mesh_workgroup_total_count,
                     },
-                    vertex_pulling_transform: true,
-                    vertex_buffer_mappings: vertex_buffer_mappings.to_vec(),
-                    binding_array_length_map: layout.binding_array_length_map.clone(),
                 };
+                let translation =
+                    super::shader_translation::translate(translation_input).map_err(|error| {
+                        match error {
+                        super::shader_translation::TranslationError::PipelineConstants(error) => {
+                            crate::PipelineError::PipelineConstants(
+                                stage_bit,
+                                format!("MSL: {error:?}"),
+                            )
+                        }
+                        super::shader_translation::TranslationError::Msl(error) => {
+                            crate::PipelineError::Linkage(stage_bit, format!("MSL: {error:?}"))
+                        }
+                        super::shader_translation::TranslationError::MissingEntryPoint => {
+                            crate::PipelineError::EntryPoint(naga_stage)
+                        }
+                        super::shader_translation::TranslationError::InvalidTranslatedEntryPoint(
+                            error,
+                        ) => crate::PipelineError::Linkage(stage_bit, error),
+                    }
+                    })?;
 
-                let (source, info) = naga::back::msl::write_string(
-                    &module,
-                    &module_info,
-                    &options,
-                    &pipeline_options,
-                )
-                .map_err(|e| crate::PipelineError::Linkage(stage_bit, format!("MSL: {e:?}")))?;
+                #[cfg(feature = "apple-msl-capture")]
+                {
+                    super::shader_capture::record(
+                        &translation_input,
+                        &translation,
+                        primitive_topology,
+                    );
+                }
 
                 log::debug!(
                     "Naga generated shader for entry point '{}' and stage {:?}\n{}",
                     stage.entry_point,
                     naga_stage,
-                    &source
+                    &translation.source
                 );
 
                 let options = MTLCompileOptions::new();
@@ -282,7 +255,7 @@ impl super::Device {
                 // coverage relative to Dawn/Tint. Mirror Dawn and opt in only when Naga emitted
                 // an invariant position for this entry point.
                 // https://developer.apple.com/documentation/metal/mtlcompileoptions/preserveinvariance
-                if msl_has_invariant_position(&source)
+                if translation.preserve_invariance
                     && available!(macos = 11.0, ios = 13.0, tvos = 14.0, visionos = 1.0)
                 {
                     options.setPreserveInvariance(true);
@@ -292,102 +265,37 @@ impl super::Device {
                     .shared
                     .device
                     .newLibraryWithSource_options_error(
-                        &NSString::from_str(&source),
+                        &NSString::from_str(&translation.source),
                         Some(&options),
                     )
                     .map_err(|err| {
-                        log::debug!("Naga generated shader:\n{source}");
+                        log::debug!("Naga generated shader:\n{}", translation.source);
                         crate::PipelineError::Linkage(stage_bit, format!("Metal: {err}"))
                     })?;
 
-                let ep_index = module
-                    .entry_points
-                    .iter()
-                    .position(|ep| ep.stage == naga_stage && ep.name == stage.entry_point)
-                    .ok_or(crate::PipelineError::EntryPoint(naga_stage))?;
-                let ep = &module.entry_points[ep_index];
-                let translated_ep_name = info.entry_point_names[0]
-                    .as_ref()
-                    .map_err(|e| crate::PipelineError::Linkage(stage_bit, format!("{e}")))?;
-
                 let wg_size = MTLSize {
-                    width: ep.workgroup_size[0] as _,
-                    height: ep.workgroup_size[1] as _,
-                    depth: ep.workgroup_size[2] as _,
+                    width: translation.workgroup_size[0] as _,
+                    height: translation.workgroup_size[1] as _,
+                    depth: translation.workgroup_size[2] as _,
                 };
 
                 let function = library
-                    .newFunctionWithName(&NSString::from_str(translated_ep_name))
+                    .newFunctionWithName(&NSString::from_str(&translation.translated_entry_point))
                     .ok_or_else(|| {
-                        log::error!("Function '{translated_ep_name}' does not exist");
+                        log::error!(
+                            "Function '{}' does not exist",
+                            translation.translated_entry_point
+                        );
                         crate::PipelineError::EntryPoint(naga_stage)
                     })?;
-
-                // collect sizes indices, immutable buffers, and work group memory sizes
-                let ep_info = &module_info.get_entry_point(ep_index);
-                let mut wg_memory_sizes = Vec::new();
-                let mut sized_bindings = Vec::new();
-                let mut immutable_buffer_mask = 0;
-                for (var_handle, var) in module.global_variables.iter() {
-                    match var.space {
-                        naga::AddressSpace::WorkGroup => {
-                            if !ep_info[var_handle].is_empty() {
-                                let size = module.types[var.ty].inner.size(module.to_ctx());
-                                wg_memory_sizes.push(size);
-                            }
-                        }
-                        naga::AddressSpace::Uniform | naga::AddressSpace::Storage { .. } => {
-                            let br = match var.binding {
-                                Some(br) => br,
-                                None => continue,
-                            };
-                            let storage_access_store = match var.space {
-                                naga::AddressSpace::Storage { access } => {
-                                    access.contains(naga::StorageAccess::STORE)
-                                }
-                                _ => false,
-                            };
-
-                            // check for an immutable buffer
-                            if !ep_info[var_handle].is_empty() && !storage_access_store {
-                                let slot = ep_resources.resources[&br].buffer.unwrap();
-                                immutable_buffer_mask |= 1 << slot;
-                            }
-
-                            if module.types[var.ty]
-                                .inner
-                                .needs_host_buffer_byte_size(&module.types)
-                            {
-                                let n = match module.types[var.ty].inner {
-                                    naga::TypeInner::BindingArray { size, .. } => {
-                                        let from_shader = match size {
-                                            naga::ArraySize::Constant(n) => n.get(),
-                                            naga::ArraySize::Pending(_)
-                                            | naga::ArraySize::Dynamic => 0,
-                                        };
-                                        let from_layout = layout
-                                            .binding_array_length_map
-                                            .get(&br)
-                                            .copied()
-                                            .unwrap_or(0);
-                                        from_shader.max(from_layout).max(1)
-                                    }
-                                    _ => 1,
-                                };
-                                sized_bindings.extend((0..n).map(|i| (br, i)));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
 
                 Ok(CompiledShader {
                     library,
                     function,
                     wg_size,
-                    wg_memory_sizes,
-                    sized_bindings,
-                    immutable_buffer_mask,
+                    wg_memory_sizes: translation.workgroup_memory_sizes,
+                    sized_bindings: translation.sized_bindings,
+                    immutable_buffer_mask: translation.immutable_buffer_mask,
                 })
             }
             ShaderModuleSource::Passthrough(ref shader) => {
@@ -467,23 +375,6 @@ impl super::Device {
 
     pub fn raw_device(&self) -> &Retained<ProtocolObject<dyn MTLDevice>> {
         &self.shared.device
-    }
-}
-
-#[cfg(test)]
-mod invariant_position_tests {
-    use super::msl_has_invariant_position;
-
-    #[test]
-    fn ordinary_position_does_not_request_preserved_invariance() {
-        assert!(!msl_has_invariant_position("float4 position [[position]];"));
-    }
-
-    #[test]
-    fn invariant_position_requests_preserved_invariance() {
-        assert!(msl_has_invariant_position(
-            "float4 position [[position, invariant]];"
-        ));
     }
 }
 
@@ -1484,6 +1375,7 @@ impl crate::Device for super::Device {
                             &vertex_buffer_mappings,
                             desc.layout,
                             primitive_class,
+                            Some(desc.primitive.topology),
                             naga::ShaderStage::Vertex,
                         )?;
 
@@ -1581,6 +1473,7 @@ impl crate::Device for super::Device {
                             &[],
                             desc.layout,
                             primitive_class,
+                            Some(desc.primitive.topology),
                             naga::ShaderStage::Task,
                         )?;
                         unsafe { descriptor.setObjectFunction(Some(&ts.function)) };
@@ -1610,6 +1503,7 @@ impl crate::Device for super::Device {
                             &[],
                             desc.layout,
                             primitive_class,
+                            Some(desc.primitive.topology),
                             naga::ShaderStage::Mesh,
                         )?;
                         unsafe { descriptor.setMeshFunction(Some(&ms.function)) };
@@ -1651,6 +1545,7 @@ impl crate::Device for super::Device {
                         &[],
                         desc.layout,
                         primitive_class,
+                        Some(desc.primitive.topology),
                         naga::ShaderStage::Fragment,
                     )?;
 
@@ -1858,6 +1753,7 @@ impl crate::Device for super::Device {
                     &[],
                     desc.layout,
                     MTLPrimitiveTopologyClass::Unspecified,
+                    None,
                     naga::ShaderStage::Compute,
                 )?
             };

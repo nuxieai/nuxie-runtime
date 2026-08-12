@@ -6,6 +6,11 @@ points to Nuxie's vendored `wgpu-core`, `wgpu-hal`, and platform feature-helper
 packages. Those relative dependencies make the parity-critical Metal
 command-buffer coalescing transitive for both workspace builds and downstream
 git/path consumers; it no longer relies on a root-only Cargo `[patch]` table.
+The native `wgpu-core` dependency also leaves WGSL input support to wgpu's
+public `wgsl` feature instead of enabling it unconditionally. Default builds
+still enable `wgsl`; `default-features = false` Metal consumers can now omit
+Naga's `wgsl-in` parser when they use only trusted passthrough MSL and disable
+wgpu's internal WGSL helper pipelines.
 
 The four `wgpu-core-deps-*` directories are otherwise exact crates.io package
 sources. Their normalized manifests point to the same vendored HAL so backend
@@ -31,8 +36,11 @@ Provenance:
   treats the clean JavaScript `null` result as no error before converting
   present `GpuError` values. Rejected promises and real errors retain their
   upstream behavior.
+- Native feature-wiring change: the target-specific `wgpu-core` dependency no
+  longer force-enables `wgsl`. The existing public `wgsl` feature remains the
+  single owner of `wgpu-core/wgsl`, and it remains part of wgpu's defaults.
 - Upstream issue: https://github.com/wasm-bindgen/wasm-bindgen/issues/5234
-- Distribution-manifest wiring SHA-256: `6467ef6c7710d213551530bdbb4a82ed200a46810dcb920d7ff9309b6c9e2ecc`
+- Distribution-manifest wiring SHA-256: `632166f561bda7ca790e97f5e28ccc8abefcca61d318fb686e56ba6f7faa79a5`
   (was `693f49693094a63d258bf151bb462f1345a37bd1720e828c427c79edc874791a`
   before the empty `[workspace]` tables described above)
 - Direct-crate test lock SHA-256: `3f2d79fa13fcedee842d5ca987245d8e01025469bf119c193197b6236c8ccd48`

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "logical_permutations": {
+    "count": 91,
+    "sha256": "7863cc677185d6ba2ae0d71a1a8de711ce5835fbb71463d78028080bca6a1fda"
+  },
+  "compiler_artifacts": {
+    "count": 89,
+    "sha256": "821e77bde85b0cf0ab86e4f1eef723c3348b6f49277129ccbc2480d02fe9383e"
+  }
+}

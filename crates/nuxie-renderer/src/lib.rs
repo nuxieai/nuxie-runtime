@@ -29,6 +29,8 @@ use logical_frame::PreparedGradient;
 use logical_frame::{normalize_gradient, prepare_gradient_batch, LogicalFlushAllocations};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod apple_surface;
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+mod apple_wgpu_policy;
 mod logical_flush;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod metal;
@@ -41,6 +43,12 @@ mod path_pipeline;
 mod present_pipeline;
 #[cfg(target_arch = "wasm32")]
 mod presentation;
+mod shader_catalog;
+#[cfg(feature = "apple-msl-capture")]
+#[doc(hidden)]
+pub use shader_catalog::{
+    capture_inventory as builtin_shader_capture_inventory, BuiltinShaderCaptureIdentity,
+};
 mod skyline;
 mod storage_texture;
 #[cfg(test)]
@@ -1059,6 +1067,31 @@ impl WgpuFactory {
         Self::new_async_with_mode_inner(width, height, mode, false).await
     }
 
+    #[cfg(all(feature = "apple-msl-capture", not(target_arch = "wasm32")))]
+    #[doc(hidden)]
+    pub fn new_with_forced_vertex_storage_polyfill(
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+    ) -> Result<Self, RendererError> {
+        pollster::block_on(Self::new_async_with_mode_inner(width, height, mode, true))
+    }
+
+    #[cfg(all(feature = "apple-msl-capture", not(target_arch = "wasm32")))]
+    #[doc(hidden)]
+    pub fn capture_builtin_present_pipeline_variants(&self) {
+        for alpha in [
+            present_pipeline::PresentTargetAlpha::Straight,
+            present_pipeline::PresentTargetAlpha::Premultiplied,
+        ] {
+            let _ = present_pipeline::PresentPipeline::new(
+                &self.context.device,
+                wgpu::TextureFormat::Bgra8Unorm,
+                alpha,
+            );
+        }
+    }
+
     async fn new_async_with_mode_inner(
         width: u32,
         height: u32,
@@ -1066,6 +1099,9 @@ impl WgpuFactory {
         force_vertex_storage_polyfill: bool,
     ) -> Result<Self, RendererError> {
         validate_wgpu_render_mode(mode)?;
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
+        let instance = wgpu::Instance::new(apple_wgpu_policy::apple_instance_descriptor());
+        #[cfg(not(any(target_os = "ios", target_os = "macos")))]
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         #[cfg(not(target_arch = "wasm32"))]
         let requested_device = request_core_wgpu_device(
@@ -1129,10 +1165,7 @@ impl WgpuFactory {
                 message: format!("{reason:?}: {message}"),
             });
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("nuxie-solid-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("solid.wgsl").into()),
-        });
+        let shader = shader_catalog::create(&device, shader_catalog::BuiltinShaderKey::Solid);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-solid-pipeline-layout"),
             bind_group_layouts: &[],

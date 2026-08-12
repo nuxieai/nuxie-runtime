@@ -5,6 +5,7 @@ use crate::gpu::{
     MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
     MIDPOINT_FAN_PATCH_INDEX_COUNT,
 };
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
 use crate::RendererCapabilities;
@@ -21,25 +22,16 @@ pub(crate) struct AtlasPipeline {
 impl AtlasPipeline {
     pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
-        let vertex = shader(
+        let vertex = shader_catalog::create(
             device,
-            "nuxie-atlas-vertex",
             if polyfill {
-                include_str!("generated/render_atlas.webgpu_nossbo_vert.wgsl")
+                BuiltinShaderKey::AtlasVertexStorageTexture
             } else {
-                include_str!("generated/render_atlas.webgpu_vert.wgsl")
+                BuiltinShaderKey::AtlasVertex
             },
         );
-        let fill_fragment = shader(
-            device,
-            "nuxie-atlas-fill-fragment",
-            include_str!("generated/render_atlas_fill.webgpu_frag.wgsl"),
-        );
-        let stroke_fragment = shader(
-            device,
-            "nuxie-atlas-stroke-fragment",
-            include_str!("generated/render_atlas_stroke.webgpu_frag.wgsl"),
-        );
+        let fill_fragment = shader_catalog::create(device, BuiltinShaderKey::AtlasFillFragment);
+        let stroke_fragment = shader_catalog::create(device, BuiltinShaderKey::AtlasStrokeFragment);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atlas-flush-layout"),
             entries: &[
@@ -321,13 +313,6 @@ fn blend_component(operation: wgpu::BlendOperation) -> wgpu::BlendComponent {
         dst_factor: wgpu::BlendFactor::One,
         operation,
     }
-}
-
-fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    })
 }
 
 fn upload_uniform<T: bytemuck::Pod>(

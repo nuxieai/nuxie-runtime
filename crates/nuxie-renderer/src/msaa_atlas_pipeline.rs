@@ -1,6 +1,7 @@
 //! Fixed-function MSAA atlas blit translated from Rive's WebGPU renderer.
 
 use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TriangleVertex};
+use crate::shader_catalog::{self, BuiltinShaderKey};
 use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
 use crate::work_metrics::CountedDeviceExt;
 use crate::RendererCapabilities;
@@ -38,27 +39,18 @@ pub(crate) struct PreparedAtlasBlit {
 impl MsaaAtlasPipeline {
     pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
-        let no_clip_vertex = shader(
+        let no_clip_vertex = shader_catalog::create(
             device,
-            "nuxie-msaa-atlas-blit-vertex",
             if polyfill {
-                include_str!(
-                    "generated/draw_msaa_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
-                )
+                BuiltinShaderKey::MsaaAtlasVertexStorageTexture
             } else {
-                include_str!("generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl")
+                BuiltinShaderKey::MsaaAtlasVertex
             },
         );
-        let fixed_fragment = shader(
-            device,
-            "nuxie-msaa-atlas-blit-fragment",
-            include_str!("generated/draw_msaa_atlas_blit.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let advanced_fragment = shader(
-            device,
-            "nuxie-msaa-atlas-advanced-blit-fragment",
-            include_str!("generated/draw_msaa_atlas_blit.webgpu_frag.wgsl"),
-        );
+        let fixed_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaAtlasFixedFragment);
+        let advanced_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaAtlasAdvancedFragment);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-atlas-flush-layout"),
             entries: &[
@@ -207,13 +199,12 @@ impl MsaaAtlasPipeline {
             .features()
             .contains(wgpu::Features::CLIP_DISTANCES)
             .then(|| {
-                shader(
+                shader_catalog::create(
                     device,
-                    "nuxie-msaa-atlas-blit-clip-rect-vertex",
                     if polyfill {
-                        include_str!("generated/draw_msaa_atlas_blit.webgpu_nossbo_vert.wgsl")
+                        BuiltinShaderKey::MsaaAtlasVertexStorageTextureClipDistance
                     } else {
-                        include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl")
+                        BuiltinShaderKey::MsaaAtlasVertexClipDistance
                     },
                 )
             });
@@ -474,13 +465,6 @@ fn upload<T: bytemuck::Pod>(
         label: Some(label),
         contents: bytemuck::cast_slice(values),
         usage,
-    })
-}
-
-fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
     })
 }
 

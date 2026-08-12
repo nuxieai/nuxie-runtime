@@ -4,6 +4,7 @@ use crate::work_metrics::CountedDeviceExt;
 use crate::{
     atomic_pipeline::image_sampler,
     gpu::{FlushUniforms, ImageDrawInstance},
+    shader_catalog::{self, BuiltinShaderKey},
 };
 use nuxie_render_api::ImageSampler;
 use std::sync::Arc;
@@ -42,31 +43,17 @@ pub(crate) struct PreparedImageMeshResources {
 
 impl MsaaImageMeshPipeline {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let no_clip_vertex = shader(
-            device,
-            "nuxie-msaa-image-mesh-vertex",
-            include_str!("generated/draw_msaa_image_mesh.webgpu_noclipdistance_vert.wgsl"),
-        );
+        let no_clip_vertex = shader_catalog::create(device, BuiltinShaderKey::MsaaImageMeshVertex);
         let clip_rect_vertex = device
             .features()
             .contains(wgpu::Features::CLIP_DISTANCES)
             .then(|| {
-                shader(
-                    device,
-                    "nuxie-msaa-image-mesh-clip-rect-vertex",
-                    include_str!("generated/draw_msaa_image_mesh.webgpu_vert.wgsl"),
-                )
+                shader_catalog::create(device, BuiltinShaderKey::MsaaImageMeshVertexClipDistance)
             });
-        let fixed_fragment = shader(
-            device,
-            "nuxie-msaa-image-mesh-fragment",
-            include_str!("generated/draw_msaa_image_mesh.webgpu_fixedcolor_frag.wgsl"),
-        );
-        let advanced_fragment = shader(
-            device,
-            "nuxie-msaa-image-mesh-advanced-fragment",
-            include_str!("generated/draw_msaa_image_mesh.webgpu_frag.wgsl"),
-        );
+        let fixed_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaImageMeshFixedFragment);
+        let advanced_fragment =
+            shader_catalog::create(device, BuiltinShaderKey::MsaaImageMeshAdvancedFragment);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-image-mesh-flush-layout"),
             entries: &[
@@ -343,13 +330,6 @@ impl MsaaImageMeshPipeline {
             instance_index,
         }
     }
-}
-
-fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    })
 }
 
 fn upload<T: bytemuck::Pod>(device: &wgpu::Device, label: &'static str, value: &T) -> wgpu::Buffer {

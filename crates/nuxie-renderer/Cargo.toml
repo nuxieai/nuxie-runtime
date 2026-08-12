@@ -7,6 +7,7 @@ publish = false
 
 [features]
 default = []
+apple-msl-capture = []
 perf-diagnostics = []
 perf-counters = []
 # Exposes a deliberately narrow, doc-hidden seam into production-compiled

@@ -7,6 +7,7 @@ pub(crate) mod webgpu_sys;
 
 use alloc::{
     boxed::Box,
+    collections::VecDeque,
     format,
     rc::Rc,
     string::{String, ToString as _},
@@ -1046,6 +1047,7 @@ fn future_request_device(
                     inner: device,
                     ident: crate::cmp::Identifier::create(),
                     error_scope_count: Rc::new(Cell::new(0)),
+                    recent_mapped_buffer_creations: Rc::new(RefCell::new(VecDeque::new())),
                 }
                 .into(),
                 WebQueue {
@@ -1341,6 +1343,8 @@ pub struct WebDevice {
     ident: crate::cmp::Identifier,
     /// Current number of error scopes that have been pushed on the device.
     error_scope_count: Rc<Cell<u32>>,
+    /// Bounded error-path context for mapped-at-creation allocation failures.
+    recent_mapped_buffer_creations: Rc<RefCell<VecDeque<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -2522,7 +2526,32 @@ impl dispatch::DeviceInterface for WebDevice {
         if let Some(label) = desc.label {
             mapped_desc.set_label(label);
         }
-        WebBuffer::new(self.inner.create_buffer(&mapped_desc).unwrap(), desc).into()
+        if desc.mapped_at_creation {
+            let mut recent = self.recent_mapped_buffer_creations.borrow_mut();
+            if recent.len() == 32 {
+                recent.pop_front();
+            }
+            recent.push_back(format!(
+                "label={:?} size={} usage={:?}",
+                desc.label, desc.size, desc.usage,
+            ));
+        }
+        WebBuffer::new(
+            self.inner.create_buffer(&mapped_desc).unwrap_or_else(|error| {
+                let recent = self.recent_mapped_buffer_creations.borrow();
+                panic!(
+                    "GPUDevice.createBuffer failed for label {:?}, size {}, usage {:?}, mapped_at_creation {}: {:?}; recent mapped buffer creations: {:?}",
+                    desc.label,
+                    desc.size,
+                    desc.usage,
+                    desc.mapped_at_creation,
+                    error,
+                    &*recent,
+                )
+            }),
+            desc,
+        )
+        .into()
     }
 
     fn create_texture(&self, desc: &crate::TextureDescriptor<'_>) -> dispatch::DispatchTexture {

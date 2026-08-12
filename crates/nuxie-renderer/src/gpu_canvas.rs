@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
     any(target_os = "ios", target_os = "macos")
 ))]
 use nuxie_render_api::{
-    GpuCanvasAppleMetalShader, GpuCanvasShaderEntryReflection, GpuCanvasShaderInterfaceBinding,
-    GpuCanvasShaderInterfaceType, GpuCanvasShaderInterfaceVariable,
+    GpuCanvasAppleMetalShader, GpuCanvasShaderBinding, GpuCanvasShaderEntryReflection,
+    GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterfaceType,
+    GpuCanvasShaderInterfaceVariable, GpuCanvasShaderProfile,
 };
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
@@ -22,10 +23,9 @@ pub use nuxie_render_api::{
 };
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderArtifact, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
-    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader,
-    RenderImage,
+    GpuCanvasShaderArtifact, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
+    GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
+    GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader, RenderImage,
 };
 use wgpu::util::DeviceExt;
 
@@ -899,17 +899,36 @@ struct ImportedGpuCanvasShaderRef<'a> {
     entry_reflections: &'a BTreeMap<(u8, String), ImportedEntryPointReflection>,
     uniform_requirements: &'a BTreeMap<(u32, u32), ImportedUniformRequirement>,
     resource_requirements: &'a BTreeMap<(u32, u32), ImportedResourceRequirement>,
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
     apple_metal_bindings: Option<&'a [GpuCanvasShaderBinding]>,
 }
 
 impl WgpuGpuCanvasShader {
     fn imported(&self) -> ImportedGpuCanvasShaderRef<'_> {
+        #[cfg(all(
+            feature = "apple-authored-msl",
+            any(target_os = "ios", target_os = "macos")
+        ))]
+        let apple_metal_bindings = self
+            .owner
+            .upgrade()
+            .is_some_and(|owner| {
+                owner.gpu_canvas_shader_profile == GpuCanvasShaderProfile::TrustedAppleMetal
+            })
+            .then_some(self.shader.bindings.as_slice());
         ImportedGpuCanvasShaderRef {
             entries: &self.shader.entries,
             entry_reflections: &self.entry_reflections,
             uniform_requirements: &self.uniform_requirements,
             resource_requirements: &self.resource_requirements,
-            apple_metal_bindings: self.apple_metal_bindings.as_deref(),
+            #[cfg(all(
+                feature = "apple-authored-msl",
+                any(target_os = "ios", target_os = "macos")
+            ))]
+            apple_metal_bindings,
         }
     }
 }
@@ -1486,21 +1505,15 @@ pub(super) fn imported_wgsl_entry_reflections(
             })?;
         let workgroup_size = entry.workgroup_size;
         let key = (record.stage as u8, record.physical_entry_point.clone());
-        if reflections
-            .insert(
+        if !reflections.contains_key(&key) {
+            reflections.insert(
                 key,
                 ImportedEntryPointReflection {
                     inputs: imported_function_inputs(&parsed.module, &entry.function)?,
                     outputs: imported_function_output(&parsed.module, &entry.function)?,
                     workgroup_size,
                 },
-            )
-            .is_some()
-        {
-            return Err(invalid(format!(
-                "duplicate {:?} physical entry point '{}'",
-                record.stage, record.physical_entry_point
-            )));
+            );
         }
     }
     Ok(reflections)
@@ -4618,6 +4631,40 @@ mod tests {
         );
     }
 
+    #[test]
+    fn wgsl_logical_aliases_share_one_physical_entry_reflection() {
+        let shader = GpuCanvasShader {
+            source: r#"
+@vertex
+fn physical_vertex(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), 0.0, 0.0, 1.0);
+}
+"#
+            .into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "first_alias".into(),
+                    physical_entry_point: "physical_vertex".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "second_alias".into(),
+                    physical_entry_point: "physical_vertex".into(),
+                },
+            ],
+            bindings: Vec::new(),
+        };
+        let parsed = parse_authored_wgsl(&shader.source).expect("valid WGSL fixture");
+        let reflections = imported_wgsl_entry_reflections(&shader, &parsed)
+            .expect("logical aliases may share one physical WGSL entry");
+        assert_eq!(reflections.len(), 1);
+        assert!(reflections.contains_key(&(
+            GpuCanvasShaderStage::Vertex as u8,
+            "physical_vertex".to_owned(),
+        )));
+    }
+
     #[cfg(all(
         feature = "apple-authored-msl",
         any(target_os = "ios", target_os = "macos")
@@ -5562,6 +5609,10 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 entry_reflections: &vertex_entry_reflections,
                 uniform_requirements: &vertex_requirements,
                 resource_requirements: &vertex_resources,
+                #[cfg(all(
+                    feature = "apple-authored-msl",
+                    any(target_os = "ios", target_os = "macos")
+                ))]
                 apple_metal_bindings: None,
             },
             ImportedGpuCanvasShaderRef {
@@ -5569,6 +5620,10 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 entry_reflections: &fragment_entry_reflections,
                 uniform_requirements: &fragment_requirements,
                 resource_requirements: &fragment_resources,
+                #[cfg(all(
+                    feature = "apple-authored-msl",
+                    any(target_os = "ios", target_os = "macos")
+                ))]
                 apple_metal_bindings: None,
             },
             plan,

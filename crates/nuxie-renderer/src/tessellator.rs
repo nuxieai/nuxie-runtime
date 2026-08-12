@@ -7,6 +7,8 @@ use crate::{
     RendererCapabilities,
 };
 use bytemuck::Zeroable;
+#[cfg(test)]
+use std::cell::Cell;
 #[cfg(feature = "perf-diagnostics")]
 use std::time::Instant;
 use std::{
@@ -17,6 +19,32 @@ use std::{
         Arc, Mutex, MutexGuard,
     },
 };
+
+#[cfg(test)]
+thread_local! {
+    static GROUPED_UPLOAD_PADDING_ZERO_BYTES: Cell<usize> = const { Cell::new(0) };
+    static TESSELLATION_UPLOAD_SCRATCH_FINALIZATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_grouped_upload_zero_bytes() {
+    GROUPED_UPLOAD_PADDING_ZERO_BYTES.with(|bytes| bytes.set(0));
+}
+
+#[cfg(test)]
+fn grouped_upload_padding_zero_bytes() -> usize {
+    GROUPED_UPLOAD_PADDING_ZERO_BYTES.with(Cell::get)
+}
+
+#[cfg(test)]
+fn reset_tessellation_upload_scratch_finalizations() {
+    TESSELLATION_UPLOAD_SCRATCH_FINALIZATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn tessellation_upload_scratch_finalizations() -> usize {
+    TESSELLATION_UPLOAD_SCRATCH_FINALIZATIONS.with(Cell::get)
+}
 
 // Mirrors C++ `gpu::kBufferRingSize`; the frame guard owns its slot through GPU completion.
 const BUFFER_RING_SIZE: usize = 3;
@@ -317,7 +345,10 @@ impl Tessellator {
         #[cfg(feature = "perf-diagnostics")]
         slot.reset_diagnostics();
         slot.begin_submission(device);
-        TessellationUploadFrame { slot }
+        TessellationUploadFrame {
+            slot,
+            submission_finished: false,
+        }
     }
 
     pub(crate) fn begin_frame_textures(&self) -> TessellationTextureFrame<'_> {
@@ -686,6 +717,7 @@ impl TessellationTextureFrame<'_> {
 
 pub(crate) struct TessellationUploadFrame<'a> {
     slot: MutexGuard<'a, TessellationUploadSlot>,
+    submission_finished: bool,
 }
 
 impl Drop for TessellationUploadFrame<'_> {
@@ -694,7 +726,9 @@ impl Drop for TessellationUploadFrame<'_> {
         // are scoped inside packing, so every path keeps the slot -> scratch
         // lock order, including unwind and recoverable-error cleanup.
         self.slot.discard_active_uploads();
-        self.slot.finish_msaa_packing_scratch();
+        if !self.submission_finished {
+            self.slot.finish_msaa_packing_scratch();
+        }
     }
 }
 
@@ -816,16 +850,22 @@ impl TessellationUploadFrame<'_> {
     }
 
     pub(crate) fn finish_submission(&mut self, encoder: &wgpu::CommandEncoder) {
+        debug_assert!(!self.submission_finished);
         self.slot.finish_submission(encoder);
+        self.submission_finished = true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn begin_next_submission(&mut self, device: &wgpu::Device) {
+        debug_assert!(self.submission_finished);
+        self.submission_finished = false;
         self.slot.begin_submission(device);
     }
 
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn begin_next_submission_without_reuse(&mut self) {
+        debug_assert!(self.submission_finished);
+        self.submission_finished = false;
         self.slot.uploads.pages.clear();
     }
 
@@ -904,6 +944,9 @@ impl TessellationUploadSlot {
     }
 
     fn finish_msaa_packing_scratch(&self) {
+        #[cfg(test)]
+        TESSELLATION_UPLOAD_SCRATCH_FINALIZATIONS
+            .with(|count| count.set(count.get().saturating_add(1)));
         self.msaa_packing_scratch
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -937,6 +980,40 @@ struct UploadRequest<'a> {
 impl<'a> UploadRequest<'a> {
     fn new(bytes: &'a [u8], alignment: u64) -> Self {
         Self { bytes, alignment }
+    }
+}
+
+fn write_grouped_upload_bytes<'a, I>(mut mapped: wgpu::WriteOnly<'_, [u8]>, payloads: I)
+where
+    I: Iterator<Item = (usize, &'a [u8])>,
+{
+    let mapped_len = mapped.len();
+    let mut cursor = 0;
+    let mut padding_bytes = 0;
+    for (start, bytes) in payloads {
+        assert!(start >= cursor, "grouped upload payloads must not overlap");
+        if cursor != start {
+            mapped.slice(cursor..start).fill(0);
+            padding_bytes += start - cursor;
+        }
+        let end = start
+            .checked_add(bytes.len())
+            .expect("grouped upload range overflow");
+        assert!(end <= mapped_len, "grouped upload payload exceeds mapping");
+        mapped.slice(start..end).copy_from_slice(bytes);
+        cursor = end;
+    }
+    if cursor != mapped_len {
+        mapped.slice(cursor..).fill(0);
+        padding_bytes += mapped_len - cursor;
+    }
+    #[cfg(test)]
+    GROUPED_UPLOAD_PADDING_ZERO_BYTES.with(|count| {
+        count.set(count.get().saturating_add(padding_bytes));
+    });
+    #[cfg(not(test))]
+    {
+        let _ = padding_bytes;
     }
 }
 
@@ -1122,15 +1199,20 @@ impl UploadArena {
             NonZeroU64::new(write_size).expect("nonempty grouped frame upload"),
         );
         record_buffer_upload(write_size);
-        mapped.slice(..).fill(0);
-        for (payload, offset) in payloads.iter().zip(relative_offsets) {
-            let (FrameUploadPayload::Storage(bytes) | FrameUploadPayload::Vertex(bytes)) = payload;
-            let start = usize::try_from(offset).expect("grouped upload offset fits usize");
-            let end = start
-                .checked_add(bytes.len())
-                .expect("grouped upload range overflow");
-            mapped.slice(start..end).copy_from_slice(bytes);
-        }
+        write_grouped_upload_bytes(
+            mapped.slice(..),
+            payloads
+                .iter()
+                .zip(relative_offsets.iter().copied())
+                .map(|(payload, offset)| {
+                    let (FrameUploadPayload::Storage(bytes) | FrameUploadPayload::Vertex(bytes)) =
+                        payload;
+                    (
+                        usize::try_from(offset).expect("grouped upload offset fits usize"),
+                        *bytes,
+                    )
+                }),
+        );
         drop(mapped);
         #[cfg(feature = "perf-diagnostics")]
         {
@@ -1219,14 +1301,18 @@ impl UploadArena {
             NonZeroU64::new(write_size).expect("nonempty grouped tessellation upload"),
         );
         record_buffer_upload(write_size);
-        mapped.slice(..).fill(0);
-        for (request, offset) in requests.iter().zip(relative_offsets) {
-            let start = usize::try_from(offset).expect("grouped upload offset fits usize");
-            let end = start
-                .checked_add(request.bytes.len())
-                .expect("grouped upload range overflow");
-            mapped.slice(start..end).copy_from_slice(request.bytes);
-        }
+        write_grouped_upload_bytes(
+            mapped.slice(..),
+            requests
+                .iter()
+                .zip(relative_offsets.iter().copied())
+                .map(|(request, offset)| {
+                    (
+                        usize::try_from(offset).expect("grouped upload offset fits usize"),
+                        request.bytes,
+                    )
+                }),
+        );
         drop(mapped);
         #[cfg(feature = "perf-diagnostics")]
         {
@@ -1522,6 +1608,7 @@ mod tests {
     #[test]
     fn abandoned_upload_frame_clears_and_bounds_msaa_packing_scratch() {
         let factory = crate::WgpuFactory::new(2, 2).unwrap();
+        reset_tessellation_upload_scratch_finalizations();
         let uploads = factory
             .context
             .tessellator
@@ -1540,6 +1627,11 @@ mod tests {
         }
 
         drop(uploads);
+        assert_eq!(
+            tessellation_upload_scratch_finalizations(),
+            1,
+            "an abandoned upload frame must still finalize its MSAA scratch"
+        );
 
         let scratch = scratch
             .lock()
@@ -1624,6 +1716,7 @@ mod tests {
     #[test]
     fn next_submission_abandonment_resets_only_its_pending_staging_writes() {
         let factory = crate::WgpuFactory::new(2, 2).unwrap();
+        reset_tessellation_upload_scratch_finalizations();
         let mut uploads = factory
             .context
             .tessellator
@@ -1643,6 +1736,7 @@ mod tests {
         );
         assert!(uploads.slot.uploads.has_active_staging_writes);
         uploads.finish_submission(&submitted_encoder);
+        assert_eq!(tessellation_upload_scratch_finalizations(), 1);
         assert!(!uploads.slot.uploads.has_active_staging_writes);
         assert_eq!(
             uploads.slot.uploads.abandoned_staging_belt_resets,
@@ -1675,6 +1769,11 @@ mod tests {
 
         drop(uploads);
         drop(abandoned_encoder);
+        assert_eq!(
+            tessellation_upload_scratch_finalizations(),
+            2,
+            "each completed or abandoned submission must finalize scratch exactly once"
+        );
 
         let slot = factory.context.tessellator.upload_slots[0]
             .lock()
@@ -1689,6 +1788,7 @@ mod tests {
     #[test]
     fn completed_upload_frame_drop_keeps_its_clean_staging_belt() {
         let factory = crate::WgpuFactory::new(2, 2).unwrap();
+        reset_tessellation_upload_scratch_finalizations();
         let mut uploads = factory
             .context
             .tessellator
@@ -1703,6 +1803,7 @@ mod tests {
                 });
         uploads.upload_uniforms(&factory.context.device, &mut encoder, &[1, 2, 3, 4]);
         uploads.finish_submission(&encoder);
+        assert_eq!(tessellation_upload_scratch_finalizations(), 1);
         factory.context.queue.submit(Some(encoder.finish()));
         factory
             .context
@@ -1711,6 +1812,11 @@ mod tests {
             .unwrap();
 
         drop(uploads);
+        assert_eq!(
+            tessellation_upload_scratch_finalizations(),
+            1,
+            "a completed upload frame must not finalize empty MSAA scratch again on drop"
+        );
 
         let slot = factory.context.tessellator.upload_slots[0]
             .lock()
@@ -1840,6 +1946,27 @@ mod tests {
         let (offsets, size) = upload_group_layout([3, 5, 7], [256, 4, 256]);
         assert_eq!(offsets, [0, 4, 256]);
         assert_eq!(size, 264);
+
+        let first = [1u8; 3];
+        let second = [2u8; 5];
+        let third = [3u8; 7];
+        let mut mapped = vec![0xff; size as usize];
+        reset_grouped_upload_zero_bytes();
+        write_grouped_upload_bytes(
+            wgpu::WriteOnly::from_mut(mapped.as_mut_slice()),
+            offsets
+                .into_iter()
+                .map(usize::try_from)
+                .map(Result::unwrap)
+                .zip([first.as_slice(), second.as_slice(), third.as_slice()]),
+        );
+        assert_eq!(grouped_upload_padding_zero_bytes(), 249);
+        assert_eq!(&mapped[0..3], &first);
+        assert_eq!(mapped[3], 0);
+        assert_eq!(&mapped[4..9], &second);
+        assert!(mapped[9..256].iter().all(|byte| *byte == 0));
+        assert_eq!(&mapped[256..263], &third);
+        assert_eq!(mapped[263], 0);
     }
 
     #[test]

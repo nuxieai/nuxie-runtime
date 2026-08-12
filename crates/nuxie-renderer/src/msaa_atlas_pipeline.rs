@@ -318,10 +318,6 @@ impl MsaaAtlasPipeline {
         draw.path_clip
     }
 
-    pub(crate) fn uses_advanced_blend(draw: &PreparedAtlasBlit) -> bool {
-        draw.advanced_blend
-    }
-
     pub(crate) fn destination_copy_bounds(draw: &PreparedAtlasBlit) -> Option<[u32; 4]> {
         draw.advanced_blend.then_some(draw.destination_copy_bounds)
     }

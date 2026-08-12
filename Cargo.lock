@@ -1443,6 +1443,7 @@ dependencies = [
  "sha2",
  "smallvec",
  "wgpu",
+ "wgpu-hal",
 ]
 
 [[package]]

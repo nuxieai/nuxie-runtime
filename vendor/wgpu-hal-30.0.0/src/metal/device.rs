@@ -165,7 +165,10 @@ impl super::Device {
         vertex_buffer_mappings: &[naga::back::msl::VertexBufferMapping],
         layout: &super::PipelineLayout,
         primitive_class: MTLPrimitiveTopologyClass,
-        #[cfg_attr(not(feature = "apple-msl-capture"), allow(unused_variables))]
+        #[cfg_attr(
+            not(any(feature = "apple-msl-capture", feature = "apple-msl-replay")),
+            allow(unused_variables)
+        )]
         primitive_topology: Option<wgt::PrimitiveTopology>,
         naga_stage: naga::ShaderStage,
     ) -> Result<CompiledShader, crate::PipelineError> {
@@ -209,8 +212,9 @@ impl super::Device {
                         max_mesh_workgroups_total: self.limits.max_mesh_workgroup_total_count,
                     },
                 };
-                let translation =
-                    super::shader_translation::translate(translation_input).map_err(|error| {
+                #[cfg_attr(not(feature = "apple-msl-replay"), allow(unused_mut))]
+                let mut translation = super::shader_translation::translate(translation_input)
+                    .map_err(|error| {
                         match error {
                         super::shader_translation::TranslationError::PipelineConstants(error) => {
                             crate::PipelineError::PipelineConstants(
@@ -237,6 +241,19 @@ impl super::Device {
                         &translation,
                         primitive_topology,
                     );
+                }
+
+                #[cfg(feature = "apple-msl-replay")]
+                if let Some(replayed) =
+                    super::shader_replay::load(translation_input, &translation, primitive_topology)
+                        .map_err(|error| {
+                            crate::PipelineError::Linkage(
+                                stage_bit,
+                                format!("committed Apple MSL replay: {error}"),
+                            )
+                        })?
+                {
+                    translation = replayed;
                 }
 
                 log::debug!(

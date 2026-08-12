@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         validate_reference_identity(&reference_base, &manifest.entry)?;
         validate_adapter_reference_provenance(&reference_base, &manifest.entry)?;
     }
-    let entries = selected_entries(&manifest.entry, &options.probe_gated)?;
+    let entries = selected_entries(&manifest.entry, &options.probe_gated, &options.entry_ids)?;
     fs::create_dir_all(&options.output_dir)?;
     let mut counts = Counts::default();
     let stdout = io::stdout();
@@ -124,8 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     if options.expect_all_fail {
         validate_stub_baseline(&counts)?;
-    } else if manifest
-        .entry
+    } else if entries
         .iter()
         .filter(|entry| entry.status == "exact")
         .count()
@@ -1045,20 +1044,29 @@ where
 fn selected_entries<'a>(
     entries: &'a [Entry],
     probe_gated: &[String],
+    entry_ids: &[String],
 ) -> Result<Vec<&'a Entry>, String> {
-    if probe_gated.is_empty() {
+    if !probe_gated.is_empty() && !entry_ids.is_empty() {
+        return Err("--entry and --probe-gated cannot be combined".to_owned());
+    }
+    if probe_gated.is_empty() && entry_ids.is_empty() {
         return Ok(entries.iter().collect());
     }
-    let mut selected = Vec::with_capacity(probe_gated.len());
-    for id in probe_gated {
+    let requested = if probe_gated.is_empty() {
+        entry_ids
+    } else {
+        probe_gated
+    };
+    let mut selected = Vec::with_capacity(requested.len());
+    for id in requested {
         if selected.iter().any(|entry: &&Entry| entry.id == *id) {
-            return Err(format!("duplicate --probe-gated id `{id}`"));
+            return Err(format!("duplicate selected entry id `{id}`"));
         }
         let entry = entries
             .iter()
             .find(|entry| entry.id == *id)
             .ok_or_else(|| format!("no manifest entry has id `{id}`"))?;
-        if entry.status != "gated" {
+        if !probe_gated.is_empty() && entry.status != "gated" {
             return Err(format!(
                 "--probe-gated entry `{id}` has status `{}`",
                 entry.status
@@ -1405,6 +1413,7 @@ struct Options {
     jobs: usize,
     expect_all_fail: bool,
     probe_gated: Vec<String>,
+    entry_ids: Vec<String>,
     reference_replay: Option<PathBuf>,
     reference_backend: Option<String>,
     replay_timeout: Duration,
@@ -1423,6 +1432,7 @@ impl Options {
         let mut jobs = 1;
         let mut expect_all_fail = false;
         let mut probe_gated = Vec::new();
+        let mut entry_ids = Vec::new();
         let mut reference_replay = None;
         let mut reference_backend = None;
         let mut replay_timeout = Duration::from_secs(DEFAULT_REPLAY_TIMEOUT_SECONDS);
@@ -1444,6 +1454,7 @@ impl Options {
                 }
                 "--expect-all-fail" => expect_all_fail = true,
                 "--probe-gated" => probe_gated.push(args.next().ok_or(usage())?),
+                "--entry" => entry_ids.push(args.next().ok_or(usage())?),
                 "--reference-replay" => {
                     reference_replay = Some(PathBuf::from(args.next().ok_or(usage())?))
                 }
@@ -1473,9 +1484,9 @@ impl Options {
         }
         if reference_backend
             .as_deref()
-            .is_some_and(|backend| backend != "ffi-dawn")
+            .is_some_and(|backend| !matches!(backend, "ffi-dawn" | "rust-wgpu"))
         {
-            return Err("--reference-backend must be `ffi-dawn`".into());
+            return Err("--reference-backend must be `ffi-dawn` or `rust-wgpu`".into());
         }
         Ok(Self {
             manifest,
@@ -1485,6 +1496,7 @@ impl Options {
             jobs,
             expect_all_fail,
             probe_gated,
+            entry_ids,
             reference_replay,
             reference_backend,
             replay_timeout,
@@ -1506,7 +1518,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend BACKEND] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend ffi-dawn|rust-wgpu] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--entry ID ...] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -1677,7 +1689,7 @@ mod tests {
             entry("first", "clockwise-atomic", "first.png"),
             entry("second", "clockwise-atomic", "second.png"),
         ];
-        let selected = selected_entries(&entries, &["second".to_owned()]).unwrap();
+        let selected = selected_entries(&entries, &["second".to_owned()], &[]).unwrap();
         assert_eq!(
             selected
                 .iter()
@@ -1685,12 +1697,29 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["second"]
         );
-        assert!(selected_entries(&entries, &["missing".to_owned()]).is_err());
-        assert!(selected_entries(&entries, &["first".to_owned(), "first".to_owned()]).is_err());
+        assert!(selected_entries(&entries, &["missing".to_owned()], &[]).is_err());
+        assert!(
+            selected_entries(&entries, &["first".to_owned(), "first".to_owned()], &[]).is_err()
+        );
 
         let mut exact = entry("exact", "clockwise-atomic", "exact.png");
         exact.status = "exact".to_owned();
-        assert!(selected_entries(&[exact], &["exact".to_owned()]).is_err());
+        assert!(selected_entries(&[exact], &["exact".to_owned()], &[]).is_err());
+    }
+
+    #[test]
+    fn focused_entry_selection_accepts_exact_entries_and_rejects_ambiguity() {
+        let mut exact = entry("exact", "msaa", "exact.png");
+        exact.status = "exact".to_owned();
+        let entries = [exact];
+        let selected = selected_entries(&entries, &[], &["exact".to_owned()]).unwrap();
+        assert_eq!(selected[0].id, "exact");
+        assert!(selected_entries(
+            &[entry("gated", "msaa", "gated.png")],
+            &["gated".to_owned()],
+            &["gated".to_owned()]
+        )
+        .is_err());
     }
 
     #[test]
@@ -2094,18 +2123,28 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_reference_rejects_a_non_dawn_oracle_backend() {
-        let error = Options::parse_args([
+    fn dynamic_reference_accepts_same_backend_replay_and_rejects_other_backends() {
+        let options = Options::parse_args([
             "--reference-replay".to_owned(),
             "renderer-replay".to_owned(),
             "--reference-backend".to_owned(),
             "rust-wgpu".to_owned(),
         ])
-        .err()
         .unwrap();
+        assert_eq!(options.dynamic_reference().unwrap().backend, "rust-wgpu");
 
-        assert!(error
-            .to_string()
-            .contains("--reference-backend must be `ffi-dawn`"));
+        for backend in ["stub", "ffi-metal"] {
+            let error = Options::parse_args([
+                "--reference-replay".to_owned(),
+                "renderer-replay".to_owned(),
+                "--reference-backend".to_owned(),
+                backend.to_owned(),
+            ])
+            .err()
+            .unwrap();
+            assert!(error
+                .to_string()
+                .contains("--reference-backend must be `ffi-dawn` or `rust-wgpu`"));
+        }
     }
 }

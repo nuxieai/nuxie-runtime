@@ -14,46 +14,43 @@ const CATALOG_PATH: &str = "tools/apple-msl-catalog/catalog.json";
 const GENERATED_DIR: &str = "crates/nuxie-renderer/apple-msl-catalog";
 const GENERATED_MANIFEST: &str = "crates/nuxie-renderer/apple-msl-catalog/manifest.json";
 const SURFACE_PRESENT_SOURCE: &str = "crates/nuxie-renderer/src/surface_present.wgsl";
+const SUPPORTED_MSL_VERSIONS: [[u8; 2]; 5] = [[2, 4], [3, 0], [3, 1], [3, 2], [4, 0]];
+const LIVE_MSL_VERSION: [u8; 2] = [4, 0];
 
 #[derive(Deserialize)]
 struct Catalog {
     schema_version: u32,
-    artifacts: Vec<CatalogArtifact>,
-}
-
-#[derive(Deserialize)]
-struct CatalogArtifact {
-    id: String,
-    source: CatalogSource,
-    stage: String,
-    entry_point: String,
-}
-
-#[derive(Deserialize)]
-struct CatalogSource {
-    path: String,
+    artifacts: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
 struct Manifest {
     schema_version: u32,
     artifacts: Vec<ManifestArtifact>,
+    aliases: Vec<ManifestAlias>,
 }
 
 #[derive(Clone, Deserialize)]
 struct ManifestArtifact {
-    id: String,
     key_sha256: String,
+    msl_version: [u8; 2],
     msl_path: String,
     msl_sha256: String,
     translated_entry_point: String,
     workgroup_size: [u32; 3],
 }
 
+#[derive(Deserialize)]
+struct ManifestAlias {
+    id: String,
+    source_pipeline_id: String,
+    msl_version: [u8; 2],
+    key_sha256: String,
+}
+
 struct PhysicalArtifact {
     label: String,
     path: String,
-    sha256: String,
     entry_point: String,
     workgroup_size: [u32; 3],
     source: String,
@@ -126,7 +123,8 @@ async fn run() -> Result<()> {
     execute_surface_present(&device, &queue, &root, &catalog, &manifest, &modules).await?;
 
     println!(
-        "PASS: compiled {} committed MSL artifacts and executed both SurfacePresent alpha paths on Metal without WGSL input support",
+        "PASS: validated {} logical MSL aliases, compiled {} committed physical MSL artifacts, and executed both SurfacePresent alpha paths on Metal without WGSL input support",
+        manifest.aliases.len(),
         modules.len()
     );
     Ok(())
@@ -138,38 +136,105 @@ fn verify_catalog(
     manifest: &Manifest,
 ) -> Result<BTreeMap<String, PhysicalArtifact>> {
     ensure!(
-        catalog.schema_version == 1 && manifest.schema_version == 1,
+        catalog.schema_version == 1 && manifest.schema_version == 2,
         "unsupported Apple MSL catalog or manifest schema"
     );
     let catalog_ids: BTreeSet<_> = catalog
         .artifacts
         .iter()
-        .map(|artifact| artifact.id.as_str())
-        .collect();
-    let manifest_ids: BTreeSet<_> = manifest
-        .artifacts
+        .map(stable_source_pipeline_id)
+        .collect::<Result<_>>()?;
+    let alias_ids: BTreeSet<_> = manifest
+        .aliases
         .iter()
-        .map(|artifact| artifact.id.as_str())
+        .map(|alias| alias.id.as_str())
         .collect();
     ensure!(
         catalog_ids.len() == catalog.artifacts.len(),
         "input catalog contains duplicate logical artifact ids"
     );
     ensure!(
-        manifest_ids.len() == manifest.artifacts.len(),
-        "generated manifest contains duplicate logical artifact ids"
+        alias_ids.len() == manifest.aliases.len(),
+        "generated manifest contains duplicate alias ids"
+    );
+
+    let expected_aliases: BTreeSet<_> = catalog_ids
+        .iter()
+        .flat_map(|id| {
+            SUPPORTED_MSL_VERSIONS
+                .into_iter()
+                .map(move |version| (id.clone(), version))
+        })
+        .collect();
+    let actual_aliases: BTreeSet<_> = manifest
+        .aliases
+        .iter()
+        .map(|alias| (alias.source_pipeline_id.clone(), alias.msl_version))
+        .collect();
+    ensure!(
+        actual_aliases.len() == manifest.aliases.len(),
+        "generated manifest contains duplicate source-pipeline/MSL-version aliases"
     );
     ensure!(
-        catalog_ids == manifest_ids,
-        "input catalog and generated manifest logical artifacts differ"
+        expected_aliases == actual_aliases,
+        "generated aliases are not the exact catalog pipeline × supported MSL version cross-product"
     );
+
+    let artifact_keys: BTreeSet<_> = manifest
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.key_sha256.as_str())
+        .collect();
+    ensure!(
+        artifact_keys.len() == manifest.artifacts.len(),
+        "generated manifest contains duplicate physical artifact keys"
+    );
+    let referenced_keys: BTreeSet<_> = manifest
+        .aliases
+        .iter()
+        .map(|alias| alias.key_sha256.as_str())
+        .collect();
+    ensure!(
+        artifact_keys == referenced_keys,
+        "generated manifest contains missing or unreferenced physical artifacts"
+    );
+    let artifacts_by_key: BTreeMap<_, _> = manifest
+        .artifacts
+        .iter()
+        .map(|artifact| (artifact.key_sha256.as_str(), artifact))
+        .collect();
+    for alias in &manifest.aliases {
+        let artifact = artifacts_by_key
+            .get(alias.key_sha256.as_str())
+            .with_context(|| {
+                format!(
+                    "alias {} references missing physical key {}",
+                    alias.id, alias.key_sha256
+                )
+            })?;
+        ensure!(
+            artifact.msl_version == alias.msl_version,
+            "alias {} MSL version differs from physical artifact {}",
+            alias.id,
+            alias.key_sha256
+        );
+        ensure!(
+            alias.id
+                == format!(
+                    "{}-msl-{}-{}",
+                    alias.source_pipeline_id, alias.msl_version[0], alias.msl_version[1]
+                ),
+            "alias {} does not encode its source pipeline and MSL version",
+            alias.id
+        );
+    }
 
     let mut physical = BTreeMap::<String, PhysicalArtifact>::new();
     for artifact in &manifest.artifacts {
         ensure!(
             artifact.msl_path == format!("{}.metal", artifact.key_sha256),
             "{}: MSL path does not match its canonical key",
-            artifact.id
+            artifact.key_sha256
         );
         let path = root.join(GENERATED_DIR).join(&artifact.msl_path);
         let source = fs::read_to_string(&path)
@@ -177,38 +242,31 @@ fn verify_catalog(
         ensure!(
             sha256(source.as_bytes()) == artifact.msl_sha256,
             "{}: committed MSL digest differs from the manifest",
-            artifact.id
+            artifact.key_sha256
         );
         ensure!(
             !artifact.translated_entry_point.is_empty()
                 && source.contains(&format!(" {}(", artifact.translated_entry_point)),
             "{}: translated entry point {:?} is absent from committed MSL",
-            artifact.id,
+            artifact.key_sha256,
             artifact.translated_entry_point
         );
-
-        if let Some(existing) = physical.get(&artifact.msl_path) {
-            ensure!(
-                existing.sha256 == artifact.msl_sha256
-                    && existing.entry_point == artifact.translated_entry_point
-                    && existing.workgroup_size == artifact.workgroup_size,
-                "{}: logical aliases disagree about physical artifact {}",
-                artifact.id,
-                artifact.msl_path
-            );
-        } else {
-            physical.insert(
-                artifact.msl_path.clone(),
-                PhysicalArtifact {
-                    label: artifact.id.clone(),
-                    path: artifact.msl_path.clone(),
-                    sha256: artifact.msl_sha256.clone(),
-                    entry_point: artifact.translated_entry_point.clone(),
-                    workgroup_size: artifact.workgroup_size,
-                    source,
-                },
-            );
-        }
+        ensure!(
+            physical
+                .insert(
+                    artifact.key_sha256.clone(),
+                    PhysicalArtifact {
+                        label: artifact.key_sha256.clone(),
+                        path: artifact.msl_path.clone(),
+                        entry_point: artifact.translated_entry_point.clone(),
+                        workgroup_size: artifact.workgroup_size,
+                        source,
+                    },
+                )
+                .is_none(),
+            "duplicate physical artifact key {}",
+            artifact.key_sha256
+        );
     }
 
     let committed: BTreeSet<_> = fs::read_dir(root.join(GENERATED_DIR))
@@ -223,7 +281,10 @@ fn verify_catalog(
             .flatten()
         })
         .collect();
-    let referenced: BTreeSet<_> = physical.keys().cloned().collect();
+    let referenced: BTreeSet<_> = physical
+        .values()
+        .map(|artifact| artifact.path.clone())
+        .collect();
     ensure!(
         committed == referenced,
         "committed and manifest-referenced physical MSL artifacts differ"
@@ -261,7 +322,7 @@ async fn compile_all(
                 artifact.path
             );
         }
-        modules.insert(artifact.path.clone(), module);
+        modules.insert(artifact.label.clone(), module);
     }
     ensure!(
         modules.len() == physical.len(),
@@ -324,7 +385,7 @@ async fn execute_surface_present(
         immediate_size: 0,
     });
     let vertex_module = modules
-        .get(&vertex.msl_path)
+        .get(&vertex.key_sha256)
         .context("compiled SurfacePresent vertex module")?;
     let straight_pipeline = create_present_pipeline(
         device,
@@ -332,7 +393,7 @@ async fn execute_surface_present(
         vertex_module,
         &vertex.translated_entry_point,
         modules
-            .get(&straight.msl_path)
+            .get(&straight.key_sha256)
             .context("compiled straight-alpha fragment module")?,
         &straight.translated_entry_point,
         "committed SurfacePresent straight-alpha pipeline",
@@ -343,7 +404,7 @@ async fn execute_surface_present(
         vertex_module,
         &vertex.translated_entry_point,
         modules
-            .get(&premultiplied.msl_path)
+            .get(&premultiplied.key_sha256)
             .context("compiled premultiplied-alpha fragment module")?,
         &premultiplied.translated_entry_point,
         "committed SurfacePresent premultiplied-alpha pipeline",
@@ -423,9 +484,15 @@ fn surface_artifact<'a>(
         .artifacts
         .iter()
         .filter(|artifact| {
-            artifact.source.path == SURFACE_PRESENT_SOURCE
-                && artifact.stage == stage
-                && artifact.entry_point == entry_point
+            artifact
+                .pointer("/source/path")
+                .and_then(serde_json::Value::as_str)
+                == Some(SURFACE_PRESENT_SOURCE)
+                && artifact.get("stage").and_then(serde_json::Value::as_str) == Some(stage)
+                && artifact
+                    .get("entry_point")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(entry_point)
         })
         .collect();
     ensure!(
@@ -433,12 +500,25 @@ fn surface_artifact<'a>(
         "expected exactly one SurfacePresent {stage} {entry_point:?} catalog artifact, found {}",
         matches.len()
     );
-    let id = &matches[0].id;
+    let source_pipeline_id = stable_source_pipeline_id(matches[0])?;
+    let aliases: Vec<_> = manifest
+        .aliases
+        .iter()
+        .filter(|alias| {
+            alias.source_pipeline_id == source_pipeline_id && alias.msl_version == LIVE_MSL_VERSION
+        })
+        .collect();
+    ensure!(
+        aliases.len() == 1,
+        "expected exactly one SurfacePresent {source_pipeline_id} MSL 4.0 alias, found {}",
+        aliases.len()
+    );
+    let key = &aliases[0].key_sha256;
     manifest
         .artifacts
         .iter()
-        .find(|artifact| &artifact.id == id)
-        .with_context(|| format!("generated manifest lacks SurfacePresent artifact {id}"))
+        .find(|artifact| &artifact.key_sha256 == key)
+        .with_context(|| format!("SurfacePresent alias references missing physical key {key}"))
 }
 
 #[cfg(target_os = "macos")]
@@ -567,4 +647,25 @@ fn render_present_pixel(
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn stable_source_pipeline_id(artifact: &serde_json::Value) -> Result<String> {
+    let id = artifact
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .context("catalog artifact has no string id")?;
+    let stem = id.rsplit_once('-').map_or(id, |(stem, _)| stem);
+    let mut key = artifact.clone();
+    let object = key
+        .as_object_mut()
+        .context("catalog artifact is not an object")?;
+    object.remove("id");
+    object.remove("msl_version");
+    object
+        .get_mut("compile_options")
+        .and_then(serde_json::Value::as_object_mut)
+        .context("catalog artifact compile_options is not an object")?
+        .remove("language_version");
+    let digest = sha256(&serde_json::to_vec(&key)?);
+    Ok(format!("{stem}-{}", &digest[..12]))
 }

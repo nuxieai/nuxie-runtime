@@ -18,6 +18,13 @@ exact layout-derived Naga-to-MSL inputs and outputs used by the repository's
 offline shader catalog. Normal runtime builds do not enable the feature; a
 feature-enabled build is still inert when the environment variable is absent.
 
+The `apple-msl-replay` feature is likewise test-only. When both replay
+environment paths are set, it resolves the exact layout-derived compiler key
+against the committed schema-2 catalog, verifies the content-keyed MSL path,
+source digest, language version, and every reflection field consumed by the
+HAL, then substitutes the committed MSL. It fails closed and records a hit
+only after all checks pass. Production builds do not enable this feature.
+
 Metal opts out of both capabilities after strict event sync is enabled, because
 continuing an older native command buffer or discarding a new one would bypass
 the relay wait prologue. Nuxie never calls `enable_strict_event_sync`; callers
@@ -32,19 +39,23 @@ The canonical source patch changes only:
 - `src/metal/device.rs`
 - `src/metal/mod.rs`
 - `src/metal/shader_capture.rs`
+- `src/metal/shader_replay.rs`
 - `src/metal/shader_translation.rs`
 
-`Cargo.toml` is otherwise the stock normalized manifest, with one addition: an
-empty `[workspace]` table so cargo stops its workspace search at this package
-instead of walking up into an enclosing checkout. See
-`../wgpu-30.0.0/NUXIE_PATCH.md` for why. It is Cargo extraction metadata, so it
-is outside the source-patch hash below.
+The normalized `Cargo.toml` and preserved `Cargo.toml.orig` add the tooling-only
+`apple-msl-capture` and `apple-msl-replay` features plus their optional
+`serde`, `serde_json`, and `sha2` dependencies. The normalized manifest also
+retains the empty `[workspace]` table that stops Cargo from walking into an
+enclosing checkout; see
+`../wgpu-30.0.0/NUXIE_PATCH.md`. These manifest-only changes and Cargo
+extraction metadata are outside the source-patch hash below and are covered by
+the committed manifest and direct-lock review instead.
 
 Upstream identity and review material:
 
 - Package: crates.io `wgpu-hal` 30.0.0
 - Package checksum in the original workspace lock: `cf765132d8d5f50e192e7880464890c13f4e7457aafe8e5466e8174586e9f101`
-- Canonical source patch SHA-256: `07f5fb9869c202a5f165928676fef2449057a218744d32e38556ad2f88b092f7`
+- Canonical source patch SHA-256: `13595289b3b70bc3eaa440fdb4afd4aefa4e4ffcde0be290446d2df6871559bb`
 - Companion core source patch SHA-256: `d73919c84bcf241e5ecece989bcd055eae3600d762ffab695bb25cc5ae8e95db`
 - Direct-crate test lock SHA-256: `e1ee3eb0e8c7fbe3121021e867bc7ac5f9291a98cc4bda7b19af8ccdf20e4d15`
 

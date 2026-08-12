@@ -1,11 +1,16 @@
 {
-  "schema_version": 1,
-  "logical_permutations": {
+  "schema_version": 2,
+  "supported_msl_versions": [[2, 4], [3, 0], [3, 1], [3, 2], [4, 0]],
+  "source_pipeline_permutations": {
     "count": 91,
-    "sha256": "7863cc677185d6ba2ae0d71a1a8de711ce5835fbb71463d78028080bca6a1fda"
+    "sha256": "461bb0c97c3efad10b0d09455d11a964757e27a33c2f19612d7514ab751ad040"
+  },
+  "logical_permutations": {
+    "count": 455,
+    "sha256": "f0314fbb09e524010e923fb73e71963c9051775fde6ac57793dc35f27433ed38"
   },
   "compiler_artifacts": {
-    "count": 89,
-    "sha256": "821e77bde85b0cf0ab86e4f1eef723c3348b6f49277129ccbc2480d02fe9383e"
+    "count": 445,
+    "sha256": "4a5207199087b25710bda71535ba7bfe02ddf63b432af674ef4d9e0e10fdfd34"
   }
 }

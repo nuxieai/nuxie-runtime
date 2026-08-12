@@ -22,9 +22,10 @@ pub use nuxie_render_api::{
 };
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderArtifact, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
-    GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
-    GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader, RenderImage,
+    GpuCanvasShaderArtifact, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
+    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader,
+    RenderImage,
 };
 use wgpu::util::DeviceExt;
 
@@ -898,6 +899,7 @@ struct ImportedGpuCanvasShaderRef<'a> {
     entry_reflections: &'a BTreeMap<(u8, String), ImportedEntryPointReflection>,
     uniform_requirements: &'a BTreeMap<(u32, u32), ImportedUniformRequirement>,
     resource_requirements: &'a BTreeMap<(u32, u32), ImportedResourceRequirement>,
+    apple_metal_bindings: Option<&'a [GpuCanvasShaderBinding]>,
 }
 
 impl WgpuGpuCanvasShader {
@@ -907,6 +909,7 @@ impl WgpuGpuCanvasShader {
             entry_reflections: &self.entry_reflections,
             uniform_requirements: &self.uniform_requirements,
             resource_requirements: &self.resource_requirements,
+            apple_metal_bindings: self.apple_metal_bindings.as_deref(),
         }
     }
 }
@@ -987,12 +990,125 @@ fn prepare_imported_gpu_canvas_modules(
     } else {
         vertex_shader.resource_requirements.clone()
     };
+    validate_merged_apple_metal_layout(
+        vertex_shader,
+        fragment_shader,
+        fragment_record.is_some(),
+        &resource_requirements,
+    )?;
     validate_imported_resource_plan(&resource_requirements, plan)?;
     Ok(PreparedImportedGpuCanvas {
         vertex_entry_point: vertex_record.physical_entry_point.clone(),
         fragment_entry_point: fragment_record.map(|record| record.physical_entry_point.clone()),
         resource_requirements,
     })
+}
+
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+fn validate_merged_apple_metal_layout(
+    vertex_shader: ImportedGpuCanvasShaderRef<'_>,
+    fragment_shader: ImportedGpuCanvasShaderRef<'_>,
+    has_fragment: bool,
+    merged: &BTreeMap<(u32, u32), ImportedResourceRequirement>,
+) -> Result<(), GpuCanvasError> {
+    use wgpu_hal::metal::{BindingSlotKind, BindingSlotStage, MetalBindingSlotAllocator};
+
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let (Some(vertex_bindings), Some(fragment_bindings)) = (
+        vertex_shader.apple_metal_bindings,
+        fragment_shader.apple_metal_bindings,
+    ) else {
+        if vertex_shader.apple_metal_bindings.is_some()
+            || fragment_shader.apple_metal_bindings.is_some()
+        {
+            return Err(invalid(
+                "pipeline mixes trusted Apple Metal and WebGPU shader contracts".into(),
+            ));
+        }
+        return Ok(());
+    };
+
+    let mut allocator = MetalBindingSlotAllocator::new(0);
+    let mut assignments = BTreeMap::new();
+    for (&key, &requirement) in merged {
+        let group = u8::try_from(key.0)
+            .map_err(|_| invalid(format!("binding group {} exceeds target-10", key.0)))?;
+        let kind = match requirement {
+            ImportedResourceRequirement::Uniform(_) => BindingSlotKind::Buffer,
+            ImportedResourceRequirement::Texture { .. } => BindingSlotKind::Texture,
+            ImportedResourceRequirement::Sampler { .. } => BindingSlotKind::Sampler,
+        };
+        assignments.insert(
+            key,
+            allocator.allocate(group, kind, requirement.visibility(), false),
+        );
+    }
+
+    let validate_stage = |label: &str,
+                          stage: GpuCanvasShaderStage,
+                          slot_stage: BindingSlotStage,
+                          bindings: &[GpuCanvasShaderBinding]|
+     -> Result<(), GpuCanvasError> {
+        let stage_bit = 1 << stage as u8;
+        let expected = bindings
+            .iter()
+            .filter(|binding| binding.stage_mask & stage_bit != 0)
+            .map(|binding| {
+                (
+                    (u32::from(binding.group), u32::from(binding.binding)),
+                    (binding.backend_space, binding.backend_slots[stage as usize]),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let actual = assignments
+            .iter()
+            .filter_map(|(&key, &assignment)| {
+                assignment
+                    .for_stage(slot_stage)
+                    .map(|slot| (key, (assignment.backend_space(), Some(slot))))
+            })
+            .collect::<BTreeMap<_, _>>();
+        if expected != actual {
+            return Err(invalid(format!(
+                "merged Metal pipeline layout does not exactly match {label} target-10 assignments: expected {expected:?}, got {actual:?}"
+            )));
+        }
+        Ok(())
+    };
+
+    validate_stage(
+        "vertex",
+        GpuCanvasShaderStage::Vertex,
+        BindingSlotStage::Vertex,
+        vertex_bindings,
+    )?;
+    if has_fragment {
+        validate_stage(
+            "fragment",
+            GpuCanvasShaderStage::Fragment,
+            BindingSlotStage::Fragment,
+            fragment_bindings,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(not(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+)))]
+fn validate_merged_apple_metal_layout(
+    _vertex_shader: ImportedGpuCanvasShaderRef<'_>,
+    _fragment_shader: ImportedGpuCanvasShaderRef<'_>,
+    _has_fragment: bool,
+    _merged: &BTreeMap<(u32, u32), ImportedResourceRequirement>,
+) -> Result<(), GpuCanvasError> {
+    Ok(())
 }
 
 fn validate_imported_resource_plan(
@@ -4582,6 +4698,92 @@ mod tests {
         any(target_os = "ios", target_os = "macos")
     ))]
     #[test]
+    fn merged_metal_layout_revalidates_distinct_shader_asset_slots() {
+        let fragment = 1 << GpuCanvasShaderStage::Fragment as u8;
+        let uniform = |binding, slot| GpuCanvasShaderBinding {
+            group: 0,
+            binding,
+            kind: GpuCanvasShaderResourceKind::UniformBuffer,
+            stage_mask: fragment,
+            backend_space: 0,
+            backend_slots: [None, Some(slot), None],
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
+            texture_multisampled: false,
+        };
+        let reflection = |binding| nuxie_render_api::GpuCanvasShaderBindingReflection {
+            group: 0,
+            binding,
+            array_count: 1,
+            min_buffer_size: 16,
+        };
+
+        let vertex_bindings = vec![uniform(0, 0), uniform(1, 1)];
+        let shifted_fragment_bindings = vec![uniform(1, 0)];
+        imported_apple_metal_resource_requirements(&trusted_metal_shader(
+            vertex_bindings.clone(),
+            vec![reflection(0), reflection(1)],
+        ))
+        .expect("the vertex artifact's target-10 is independently valid");
+        imported_apple_metal_resource_requirements(&trusted_metal_shader(
+            shifted_fragment_bindings.clone(),
+            vec![reflection(1)],
+        ))
+        .expect("the fragment artifact's target-10 is independently valid");
+
+        let merged = BTreeMap::from([
+            (
+                (0, 0),
+                ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
+                    required_size: 16,
+                    stage_mask: fragment,
+                }),
+            ),
+            (
+                (0, 1),
+                ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
+                    required_size: 16,
+                    stage_mask: fragment,
+                }),
+            ),
+        ]);
+        let entries = Vec::new();
+        let entry_reflections = BTreeMap::new();
+        let uniform_requirements = BTreeMap::new();
+        let vertex_ref = ImportedGpuCanvasShaderRef {
+            entries: &entries,
+            entry_reflections: &entry_reflections,
+            uniform_requirements: &uniform_requirements,
+            resource_requirements: &merged,
+            apple_metal_bindings: Some(&vertex_bindings),
+        };
+        let fragment_ref = ImportedGpuCanvasShaderRef {
+            apple_metal_bindings: Some(&shifted_fragment_bindings),
+            ..vertex_ref
+        };
+        let error = validate_merged_apple_metal_layout(vertex_ref, fragment_ref, true, &merged)
+            .expect_err("the final layout shifts the fragment artifact's binding from slot 0 to 1");
+        assert!(
+            error
+                .to_string()
+                .contains("does not exactly match fragment target-10"),
+            "{error}"
+        );
+
+        let compatible_fragment_bindings = vertex_bindings.clone();
+        let compatible_fragment_ref = ImportedGpuCanvasShaderRef {
+            apple_metal_bindings: Some(&compatible_fragment_bindings),
+            ..vertex_ref
+        };
+        validate_merged_apple_metal_layout(vertex_ref, compatible_fragment_ref, true, &merged)
+            .expect("distinct shader assets with the final layout's slots remain compatible");
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
     fn supplemental_reflection_is_exact_and_validates_compute_workgroups() {
         let record = GpuCanvasShaderEntry {
             stage: GpuCanvasShaderStage::Compute,
@@ -5360,12 +5562,14 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 entry_reflections: &vertex_entry_reflections,
                 uniform_requirements: &vertex_requirements,
                 resource_requirements: &vertex_resources,
+                apple_metal_bindings: None,
             },
             ImportedGpuCanvasShaderRef {
                 entries: &fragment_shader.entries,
                 entry_reflections: &fragment_entry_reflections,
                 uniform_requirements: &fragment_requirements,
                 resource_requirements: &fragment_resources,
+                apple_metal_bindings: None,
             },
             plan,
         )

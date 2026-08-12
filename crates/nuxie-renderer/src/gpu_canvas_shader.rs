@@ -44,6 +44,7 @@ pub(super) struct WgpuGpuCanvasShaderTemplate {
     pub(super) entry_reflections: BTreeMap<(u8, String), ImportedEntryPointReflection>,
     pub(super) uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
     pub(super) resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
+    pub(super) apple_metal_bindings: Option<Vec<nuxie_render_api::GpuCanvasShaderBinding>>,
     pub(super) module: wgpu::ShaderModule,
 }
 
@@ -67,6 +68,7 @@ struct PreparedShader {
     entry_reflections: BTreeMap<(u8, String), ImportedEntryPointReflection>,
     uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
     resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
+    apple_metal_bindings: Option<Vec<nuxie_render_api::GpuCanvasShaderBinding>>,
 }
 
 struct UnvalidatedShader {
@@ -76,14 +78,14 @@ struct UnvalidatedShader {
 
 impl PreparedShader {
     fn new(owner: Arc<Context>, artifact: GpuCanvasShaderArtifact) -> Result<Self, GpuCanvasError> {
-        let (shader, entry_reflections, resource_requirements) =
+        let (shader, entry_reflections, resource_requirements, apple_metal_bindings) =
             match (owner.gpu_canvas_shader_profile, artifact) {
                 (GpuCanvasShaderProfile::WebGpu, GpuCanvasShaderArtifact::WebGpu(shader)) => {
                     let parsed = parse_authored_wgsl(&shader.source)?;
                     let entry_reflections = imported_wgsl_entry_reflections(&shader, &parsed)?;
                     let resource_requirements =
                         imported_resource_requirements(&shader, &parsed.module, &parsed.info)?;
-                    (shader, entry_reflections, resource_requirements)
+                    (shader, entry_reflections, resource_requirements, None)
                 }
                 #[cfg(all(
                     feature = "apple-authored-msl",
@@ -99,6 +101,7 @@ impl PreparedShader {
                     )?;
                     let resource_requirements =
                         super::gpu_canvas::imported_apple_metal_resource_requirements(&shader)?;
+                    let apple_metal_bindings = shader.bindings().to_vec();
                     (
                         GpuCanvasShader {
                             source: shader.source().to_owned(),
@@ -107,6 +110,7 @@ impl PreparedShader {
                         },
                         entry_reflections,
                         resource_requirements,
+                        Some(apple_metal_bindings),
                     )
                 }
                 (profile, _) => {
@@ -129,6 +133,7 @@ impl PreparedShader {
             entry_reflections,
             uniform_requirements,
             resource_requirements,
+            apple_metal_bindings,
         })
     }
 
@@ -185,6 +190,7 @@ impl UnvalidatedShader {
             entry_reflections: self.prepared.entry_reflections,
             uniform_requirements: self.prepared.uniform_requirements,
             resource_requirements: self.prepared.resource_requirements,
+            apple_metal_bindings: self.prepared.apple_metal_bindings,
             module: self.module,
         });
         Arc::new(WgpuGpuCanvasShader {
@@ -299,6 +305,7 @@ pub(super) fn publish_occurrence(
             entry_reflections: prepared.entry_reflections.clone(),
             uniform_requirements: prepared.uniform_requirements.clone(),
             resource_requirements: prepared.resource_requirements.clone(),
+            apple_metal_bindings: prepared.apple_metal_bindings.clone(),
             module,
         }),
     }))

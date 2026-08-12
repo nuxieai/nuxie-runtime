@@ -2522,7 +2522,20 @@ impl dispatch::DeviceInterface for WebDevice {
         if let Some(label) = desc.label {
             mapped_desc.set_label(label);
         }
-        WebBuffer::new(self.inner.create_buffer(&mapped_desc).unwrap(), desc).into()
+        WebBuffer::new(
+            self.inner.create_buffer(&mapped_desc).unwrap_or_else(|error| {
+                panic!(
+                    "GPUDevice.createBuffer failed for label {:?}, size {}, usage {:?}, mapped_at_creation {}: {:?}",
+                    desc.label,
+                    desc.size,
+                    desc.usage,
+                    desc.mapped_at_creation,
+                    error,
+                )
+            }),
+            desc,
+        )
+        .into()
     }
 
     fn create_texture(&self, desc: &crate::TextureDescriptor<'_>) -> dispatch::DispatchTexture {

@@ -756,6 +756,7 @@ impl crate::Device for super::Device {
         });
         let mut bind_group_infos = [const { None }; crate::MAX_BIND_GROUPS];
         let mut binding_array_length_map = naga::FastHashMap::default();
+        let mut binding_slot_allocator = super::MetalBindingSlotAllocator::new(desc.immediate_size);
 
         // First, place the immediates
         for info in stage_data.iter_mut() {
@@ -782,6 +783,23 @@ impl crate::Device for super::Device {
                     group: group_index as u32,
                     binding: entry.binding,
                 };
+                let slot_kind = match entry.ty {
+                    wgt::BindingType::Buffer { .. }
+                    | wgt::BindingType::AccelerationStructure { .. } => {
+                        super::BindingSlotKind::Buffer
+                    }
+                    wgt::BindingType::Sampler { .. } => super::BindingSlotKind::Sampler,
+                    wgt::BindingType::Texture { .. } | wgt::BindingType::StorageTexture { .. } => {
+                        super::BindingSlotKind::Texture
+                    }
+                    wgt::BindingType::ExternalTexture => super::BindingSlotKind::ExternalTexture,
+                };
+                let assigned_slots = binding_slot_allocator.allocate(
+                    group_index as u8,
+                    slot_kind,
+                    entry.visibility,
+                    entry.count.is_some(),
+                );
                 if let Some(count) = entry.count {
                     if matches!(
                         entry.ty,
@@ -812,14 +830,35 @@ impl crate::Device for super::Device {
                     }
 
                     let mut target = naga::back::msl::BindTarget::default();
+                    let fallback_slot = || match entry.ty {
+                        wgt::BindingType::Sampler { .. } => info.counters.samplers as _,
+                        wgt::BindingType::Texture { .. }
+                        | wgt::BindingType::StorageTexture { .. }
+                        | wgt::BindingType::ExternalTexture => info.counters.textures as _,
+                        _ => info.counters.buffers as _,
+                    };
+                    let assigned_slot = match info.stage {
+                        naga::ShaderStage::Vertex => assigned_slots
+                            .for_stage(super::BindingSlotStage::Vertex)
+                            .unwrap_or_else(fallback_slot),
+                        naga::ShaderStage::Fragment => assigned_slots
+                            .for_stage(super::BindingSlotStage::Fragment)
+                            .unwrap_or_else(fallback_slot),
+                        naga::ShaderStage::Compute => assigned_slots
+                            .for_stage(super::BindingSlotStage::Compute)
+                            .unwrap_or_else(fallback_slot),
+                        // Authored Rive BindingMaps currently expose VS/FS/CS only.
+                        naga::ShaderStage::Task | naga::ShaderStage::Mesh => fallback_slot(),
+                        _ => unreachable!("unsupported Metal shader stage"),
+                    };
                     // Bindless path
                     if let Some(_) = entry.count {
-                        target.buffer = Some(info.counters.buffers as _);
+                        target.buffer = Some(assigned_slot as _);
                         info.counters.buffers += 1;
                     } else {
                         match entry.ty {
                             wgt::BindingType::Buffer { ty, .. } => {
-                                target.buffer = Some(info.counters.buffers as _);
+                                target.buffer = Some(assigned_slot as _);
                                 info.counters.buffers += 1;
                                 if let wgt::BufferBindingType::Storage { read_only } = ty {
                                     target.mutable = !read_only;
@@ -828,16 +867,16 @@ impl crate::Device for super::Device {
                             wgt::BindingType::Sampler { .. } => {
                                 target.sampler =
                                     Some(naga::back::msl::BindSamplerTarget::Resource(
-                                        info.counters.samplers as _,
+                                        assigned_slot as _,
                                     ));
                                 info.counters.samplers += 1;
                             }
                             wgt::BindingType::Texture { .. } => {
-                                target.texture = Some(info.counters.textures as _);
+                                target.texture = Some(assigned_slot as _);
                                 info.counters.textures += 1;
                             }
                             wgt::BindingType::StorageTexture { access, .. } => {
-                                target.texture = Some(info.counters.textures as _);
+                                target.texture = Some(assigned_slot as _);
                                 info.counters.textures += 1;
                                 target.mutable = match access {
                                     wgt::StorageTextureAccess::ReadOnly => false,
@@ -847,7 +886,7 @@ impl crate::Device for super::Device {
                                 };
                             }
                             wgt::BindingType::AccelerationStructure { .. } => {
-                                target.buffer = Some(info.counters.buffers as _);
+                                target.buffer = Some(assigned_slot as _);
                                 info.counters.buffers += 1;
                             }
                             wgt::BindingType::ExternalTexture => {
@@ -1237,6 +1276,12 @@ impl crate::Device for super::Device {
                 num_workgroups,
             } => {
                 let options = MTLCompileOptions::new();
+                options.setLanguageVersion(self.shared.private_caps.msl_version);
+                if super::shader_translation::msl_has_invariant_position(source)
+                    && available!(macos = 11.0, ios = 13.0, tvos = 14.0, visionos = 1.0)
+                {
+                    options.setPreserveInvariance(true);
+                }
                 // Obtain the device from shared
                 let device = &self.shared.device;
                 let library = device

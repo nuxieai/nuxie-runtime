@@ -242,7 +242,7 @@ The patched package provenance is:
 - `wgpu-core` canonical source patch SHA-256:
   `9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`;
 - `wgpu-hal` canonical source patch SHA-256:
-  `13595289b3b70bc3eaa440fdb4afd4aefa4e4ffcde0be290446d2df6871559bb`;
+  `a52a026d5da90f8bef23380be105d26e4cc7e0d1ef9992735f3aed6253ee3950`;
 - six-manifest distribution wiring SHA-256:
   `632166f561bda7ca790e97f5e28ccc8abefcca61d318fb686e56ba6f7faa79a5`;
 - direct-crate `wgpu`, core, and HAL lock SHA-256 values:

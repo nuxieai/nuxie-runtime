@@ -49,14 +49,15 @@ pub use nuxie_render_api::{
     GpuCanvasDepthStencilState, GpuCanvasDrawCommand, GpuCanvasError, GpuCanvasIndexBuffer,
     GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders,
     GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
-    GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderLoad, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
-    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError,
-    ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, PersistentFactory,
-    PersistentFactoryContext, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderBinding,
+    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderLoad,
+    GpuCanvasShaderProfile, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
+    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
+    GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
+    ImageWrap, Mat2D, PathVerb, PersistentFactory, PersistentFactoryContext, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
+    StrokeJoin, Vec2D,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
@@ -370,6 +371,7 @@ enum ScriptExecutionBinding {
 pub struct ScriptExecutionCapability {
     binding: ScriptExecutionBinding,
     extension: Arc<dyn ScriptHostExtension>,
+    native_shader_code: bool,
 }
 
 #[cfg(feature = "scripting")]
@@ -405,6 +407,33 @@ impl ScriptExecutionCapability {
                 artifact_sha256: Sha256::digest(artifact_bytes).into(),
             },
             extension,
+            native_shader_code: false,
+        })
+    }
+
+    /// Mint script and native-shader authority for exact trusted-exporter bytes.
+    ///
+    /// # Safety
+    ///
+    /// In addition to authenticating `artifact_bytes`, the caller must have
+    /// established that every native shader payload was produced by the
+    /// product's trusted MSL compiler/exporter and is valid for unsafe Metal
+    /// passthrough. A signature or digest alone does not establish this.
+    #[doc(hidden)]
+    pub unsafe fn for_verified_native_shader_artifact_unchecked(
+        artifact_bytes: &[u8],
+        extension: Arc<dyn ScriptHostExtension>,
+    ) -> Result<Self> {
+        use sha2::{Digest as _, Sha256};
+
+        Ok(Self {
+            binding: ScriptExecutionBinding::ExactArtifact {
+                artifact_size: u64::try_from(artifact_bytes.len())
+                    .context("script artifact length does not fit in u64")?,
+                artifact_sha256: Sha256::digest(artifact_bytes).into(),
+            },
+            extension,
+            native_shader_code: true,
         })
     }
 
@@ -421,6 +450,7 @@ impl ScriptExecutionCapability {
         Self {
             binding: ScriptExecutionBinding::LocallyAuthoredRuntime,
             extension,
+            native_shader_code: false,
         }
     }
 
@@ -440,6 +470,13 @@ impl ScriptExecutionCapability {
 
     fn authorizes_locally_authored_runtime(&self) -> bool {
         matches!(self.binding, ScriptExecutionBinding::LocallyAuthoredRuntime)
+    }
+
+    /// Native code requires the stronger, compiler-provenance-bearing exact
+    /// artifact constructor. Generic script authority is intentionally inert.
+    fn authorizes_native_shader_code(&self) -> bool {
+        self.native_shader_code
+            && matches!(self.binding, ScriptExecutionBinding::ExactArtifact { .. })
     }
 }
 
@@ -581,7 +618,46 @@ struct FileScriptAsset {
     is_module: bool,
     serialized_implemented_methods: u32,
     payload: Option<Vec<u8>>,
+    /// Authority derived only while importing exact bytes admitted as trusted
+    /// native-shader exporter output. Ordinary and script-only imports never
+    /// receive this proof.
+    shader_provenance: Option<nuxie_render_api::GpuCanvasShaderProvenance>,
     is_external_data_converter: bool,
+}
+
+#[cfg(all(feature = "scripting", feature = "apple-authored-msl"))]
+fn mint_shader_provenance(
+    native_shaders_are_authorized: bool,
+    type_name: &str,
+    payload: Option<&[u8]>,
+) -> Option<nuxie_render_api::GpuCanvasShaderProvenance> {
+    if !native_shaders_are_authorized || type_name != "ShaderAsset" {
+        return None;
+    }
+    let payload = payload?;
+    use sha2::{Digest as _, Sha256};
+
+    let artifact_size = u64::try_from(payload.len()).ok()?;
+    let artifact_sha256 = Sha256::digest(payload).into();
+    // SAFETY: the dedicated native-shader capability and non-zero execution
+    // policy admitted this exact imported artifact as trusted exporter output.
+    // `payload` is owned by that decoded file; no safe caller-provided boolean
+    // can mint or retarget this proof.
+    Some(unsafe {
+        nuxie_render_api::GpuCanvasShaderProvenance::for_verified_artifact_digest_unchecked(
+            artifact_size,
+            artifact_sha256,
+        )
+    })
+}
+
+#[cfg(all(feature = "scripting", not(feature = "apple-authored-msl")))]
+fn mint_shader_provenance(
+    _native_shaders_are_authorized: bool,
+    _type_name: &str,
+    _payload: Option<&[u8]>,
+) -> Option<nuxie_render_api::GpuCanvasShaderProvenance> {
+    None
 }
 
 #[cfg(feature = "scripting")]
@@ -624,6 +700,10 @@ impl FileScriptRuntime {
         capability: Option<ScriptExecutionCapability>,
         execution_limits: Option<ScriptExecutionLimits>,
     ) -> Self {
+        let native_shaders_are_authorized = capability
+            .as_ref()
+            .is_some_and(ScriptExecutionCapability::authorizes_native_shader_code)
+            && execution_limits.is_some();
         let entries = runtime.scripting_file_assets_with_contents();
         let assets = entries
             .iter()
@@ -655,6 +735,11 @@ impl FileScriptRuntime {
                         && payload
                             .as_deref()
                             .is_some_and(nuxie_runtime::runtime_external_data_payload_is_claimed),
+                    shader_provenance: mint_shader_provenance(
+                        native_shaders_are_authorized,
+                        entry.asset.type_name,
+                        payload.as_deref(),
+                    ),
                     payload,
                 }
             })
@@ -726,10 +811,11 @@ impl FileScriptRuntime {
             .iter()
             .filter(|asset| asset.type_name == "ShaderAsset")
         {
-            vm.register_gpu_canvas_shader_asset_with_short_name(
+            vm.register_gpu_canvas_shader_asset_with_short_name_and_provenance(
                 &asset.name,
                 &asset.bare_name,
                 asset.payload.as_deref().unwrap_or_default(),
+                asset.shader_provenance.clone(),
             )
             .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
         }
@@ -7968,6 +8054,22 @@ mod inert_script_import_tests {
         imported_script_assets_bytes(&[&[0, 1, 2, 3]])
     }
 
+    fn imported_shader_asset_bytes(payload: &[u8]) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 991);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ShaderAsset", |bytes| {
+            push_uint(bytes, "ShaderAsset", "assetId", 0);
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(bytes, "FileAssetContents", "bytes", payload);
+        });
+        bytes
+    }
+
     fn external_fixture(relative: &str) -> Vec<u8> {
         let path = std::path::PathBuf::from(
             std::env::var_os("RIVE_RUNTIME_DIR")
@@ -8237,6 +8339,58 @@ mod inert_script_import_tests {
         let assets = scripts.assets.as_ref();
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
+    }
+
+    #[cfg(feature = "apple-authored-msl")]
+    #[test]
+    fn only_trusted_exporter_exact_artifacts_mint_shader_provenance() {
+        let shader_payload = [0, 1, 2, 3];
+        let bytes = imported_shader_asset_bytes(&shader_payload);
+
+        let inert = File::import(&bytes).expect("ordinary shader import remains visual-only");
+        assert!(
+            inert.scripts.borrow().assets[0].shader_provenance.is_none(),
+            "an ordinary import must not authorize unsafe native shader source"
+        );
+
+        let generic = File::import_with_unsigned_scripts(&bytes)
+            .expect("the test-only script trust boundary imports");
+        assert!(
+            generic.scripts.borrow().assets[0]
+                .shader_provenance
+                .is_none(),
+            "generic script authority must not authorize native passthrough"
+        );
+
+        // SAFETY: this synthetic fixture stands in for output from the trusted
+        // native-shader exporter; the test never submits its payload to Metal.
+        let capability = unsafe {
+            ScriptExecutionCapability::for_verified_native_shader_artifact_unchecked(
+                &bytes,
+                Arc::new(TestNoopScriptHostExtension),
+            )
+            .expect("test native-shader authority")
+        };
+        let trusted = File::import_with_execution_capability(
+            &bytes,
+            capability,
+            ScriptExecutionLimits::new(),
+        )
+        .expect("trusted-exporter exact-artifact boundary imports");
+        let scripts = trusted.scripts.borrow();
+        let proof = scripts.assets[0]
+            .shader_provenance
+            .as_ref()
+            .expect("authenticated exact bytes mint shader provenance");
+        use sha2::{Digest as _, Sha256};
+        assert!(proof.authorizes_digest(
+            u64::try_from(shader_payload.len()).expect("tiny fixture length"),
+            &Sha256::digest(shader_payload).into(),
+        ));
+        assert!(!proof.authorizes_digest(
+            u64::try_from(shader_payload.len()).expect("tiny fixture length"),
+            &Sha256::digest([0, 1, 2, 4]).into(),
+        ));
     }
 
     #[test]

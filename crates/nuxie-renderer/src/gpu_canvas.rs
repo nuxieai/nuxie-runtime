@@ -4,6 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+use nuxie_render_api::{
+    GpuCanvasAppleMetalShader, GpuCanvasShaderEntryReflection, GpuCanvasShaderInterfaceBinding,
+    GpuCanvasShaderInterfaceType, GpuCanvasShaderInterfaceVariable,
+};
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
@@ -13,10 +21,10 @@ pub use nuxie_render_api::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 use nuxie_render_api::{
-    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
-    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader,
-    RenderImage,
+    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
+    GpuCanvasShaderArtifact, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
+    GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
+    GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader, RenderImage,
 };
 use wgpu::util::DeviceExt;
 
@@ -826,7 +834,7 @@ struct ImportedWgpuGpuCanvasPipeline {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ImportedUniformRequirement {
-    pub(super) required_size: u32,
+    pub(super) required_size: u64,
     pub(super) stage_mask: u8,
 }
 
@@ -886,8 +894,8 @@ pub(super) struct ParsedAuthoredWgsl {
 
 #[derive(Clone, Copy)]
 struct ImportedGpuCanvasShaderRef<'a> {
-    shader: &'a GpuCanvasShader,
-    parsed: &'a ParsedAuthoredWgsl,
+    entries: &'a [GpuCanvasShaderEntry],
+    entry_reflections: &'a BTreeMap<(u8, String), ImportedEntryPointReflection>,
     uniform_requirements: &'a BTreeMap<(u32, u32), ImportedUniformRequirement>,
     resource_requirements: &'a BTreeMap<(u32, u32), ImportedResourceRequirement>,
 }
@@ -895,8 +903,8 @@ struct ImportedGpuCanvasShaderRef<'a> {
 impl WgpuGpuCanvasShader {
     fn imported(&self) -> ImportedGpuCanvasShaderRef<'_> {
         ImportedGpuCanvasShaderRef {
-            shader: &self.shader,
-            parsed: &self.parsed,
+            entries: &self.shader.entries,
+            entry_reflections: &self.entry_reflections,
             uniform_requirements: &self.uniform_requirements,
             resource_requirements: &self.resource_requirements,
         }
@@ -910,10 +918,24 @@ struct ImportedLocation {
     sampling: Option<naga::Sampling>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ImportedStageInterface {
     locations: BTreeMap<u32, ImportedLocation>,
     builtins: Vec<naga::BuiltIn>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct ImportedEntryPointReflection {
+    inputs: ImportedStageInterface,
+    outputs: ImportedStageInterface,
+    #[cfg_attr(
+        not(all(
+            feature = "apple-authored-msl",
+            any(target_os = "ios", target_os = "macos")
+        )),
+        allow(dead_code)
+    )]
+    pub(super) workgroup_size: [u32; 3],
 }
 
 fn prepare_imported_gpu_canvas(
@@ -932,7 +954,7 @@ fn prepare_imported_gpu_canvas_modules(
     validate_imported_gpu_canvas_plan(plan)
         .map_err(|error| GpuCanvasError::new(error.to_string()))?;
     let vertex_record = resolve_imported_entry(
-        vertex_shader.shader,
+        vertex_shader.entries,
         GpuCanvasShaderStage::Vertex,
         plan.vertex_entry.as_ref(),
         "vertex",
@@ -940,7 +962,7 @@ fn prepare_imported_gpu_canvas_modules(
     let fragment_record =
         if plan.fragment_entry.is_some() || !plan.pipeline_state.color_targets.is_empty() {
             Some(resolve_imported_entry(
-                fragment_shader.shader,
+                fragment_shader.entries,
                 GpuCanvasShaderStage::Fragment,
                 plan.fragment_entry.as_ref(),
                 "fragment",
@@ -1083,18 +1105,18 @@ fn merge_imported_resource_requirements(
 }
 
 fn resolve_imported_entry<'a>(
-    shader: &'a GpuCanvasShader,
+    entries: &'a [GpuCanvasShaderEntry],
     stage: GpuCanvasShaderStage,
     selection: Option<&GpuCanvasShaderEntrySelection>,
     stage_name: &str,
 ) -> Result<&'a GpuCanvasShaderEntry, GpuCanvasError> {
     let entry = match selection {
-        Some(selection) => shader.entries.iter().find(|entry| {
+        Some(selection) => entries.iter().find(|entry| {
             entry.stage == stage
                 && entry.logical_entry_point == selection.logical_entry_point
                 && entry.physical_entry_point == selection.physical_entry_point
         }),
-        None => shader.entries.iter().find(|entry| entry.stage == stage),
+        None => entries.iter().find(|entry| entry.stage == stage),
     };
     entry.ok_or_else(|| {
         let requested = selection
@@ -1106,7 +1128,7 @@ fn resolve_imported_entry<'a>(
             })
             .unwrap_or_default();
         GpuCanvasError::new(format!(
-            "authored WGSL has no matching {stage_name}{requested} entry"
+            "authored shader has no matching {stage_name}{requested} entry"
         ))
     })
 }
@@ -1121,21 +1143,20 @@ fn validate_imported_interface(
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
     };
-    let vertex_entry = imported_entry_point(
-        &vertex_shader.parsed.module,
-        naga::ShaderStage::Vertex,
-        &vertex_record.physical_entry_point,
-    )
-    .ok_or_else(|| {
-        invalid(format!(
-            "vertex stage has no physical entry point '{}'",
-            vertex_record.physical_entry_point
+    let vertex_entry = vertex_shader
+        .entry_reflections
+        .get(&(
+            GpuCanvasShaderStage::Vertex as u8,
+            vertex_record.physical_entry_point.clone(),
         ))
-    })?;
-    let vertex_inputs =
-        imported_function_inputs(&vertex_shader.parsed.module, &vertex_entry.function)?;
-    let vertex_outputs =
-        imported_function_output(&vertex_shader.parsed.module, &vertex_entry.function)?;
+        .ok_or_else(|| {
+            invalid(format!(
+                "vertex stage has no physical entry point '{}'",
+                vertex_record.physical_entry_point
+            ))
+        })?;
+    let vertex_inputs = &vertex_entry.inputs;
+    let vertex_outputs = &vertex_entry.outputs;
 
     if vertex_inputs.builtins.iter().any(|builtin| {
         !matches!(
@@ -1182,21 +1203,20 @@ fn validate_imported_interface(
     }
 
     if let Some(fragment_record) = fragment_record {
-        let fragment_entry = imported_entry_point(
-            &fragment_shader.parsed.module,
-            naga::ShaderStage::Fragment,
-            &fragment_record.physical_entry_point,
-        )
-        .ok_or_else(|| {
-            invalid(format!(
-                "fragment stage has no physical entry point '{}'",
-                fragment_record.physical_entry_point
+        let fragment_entry = fragment_shader
+            .entry_reflections
+            .get(&(
+                GpuCanvasShaderStage::Fragment as u8,
+                fragment_record.physical_entry_point.clone(),
             ))
-        })?;
-        let fragment_inputs =
-            imported_function_inputs(&fragment_shader.parsed.module, &fragment_entry.function)?;
-        let fragment_outputs =
-            imported_function_output(&fragment_shader.parsed.module, &fragment_entry.function)?;
+            .ok_or_else(|| {
+                invalid(format!(
+                    "fragment stage has no physical entry point '{}'",
+                    fragment_record.physical_entry_point
+                ))
+            })?;
+        let fragment_inputs = &fragment_entry.inputs;
+        let fragment_outputs = &fragment_entry.outputs;
         if fragment_inputs.builtins.iter().any(|builtin| {
             !matches!(
                 builtin,
@@ -1279,7 +1299,7 @@ fn validate_imported_interface(
     }
     for (&binding, requirement) in &required_uniforms {
         let supplied_size = planned_uniforms[&binding];
-        if supplied_size < requirement.required_size as usize {
+        if u64::try_from(supplied_size).unwrap_or(u64::MAX) < requirement.required_size {
             return Err(invalid(format!(
                 "uniform group {} binding {} supplies {supplied_size} bytes but its layout requires {}",
                 binding.0, binding.1, requirement.required_size
@@ -1325,6 +1345,289 @@ fn imported_function_output(
         collect_imported_interface(module, result.binding.as_ref(), result.ty, &mut interface)?;
     }
     Ok(interface)
+}
+
+pub(super) fn imported_wgsl_entry_reflections(
+    shader: &GpuCanvasShader,
+    parsed: &ParsedAuthoredWgsl,
+) -> Result<BTreeMap<(u8, String), ImportedEntryPointReflection>, GpuCanvasError> {
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let mut reflections = BTreeMap::new();
+    for record in &shader.entries {
+        let stage = match record.stage {
+            GpuCanvasShaderStage::Vertex => naga::ShaderStage::Vertex,
+            GpuCanvasShaderStage::Fragment => naga::ShaderStage::Fragment,
+            GpuCanvasShaderStage::Compute => naga::ShaderStage::Compute,
+        };
+        let entry = imported_entry_point(&parsed.module, stage, &record.physical_entry_point)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "{:?} stage has no physical entry point '{}'",
+                    record.stage, record.physical_entry_point
+                ))
+            })?;
+        let workgroup_size = entry.workgroup_size;
+        let key = (record.stage as u8, record.physical_entry_point.clone());
+        if reflections
+            .insert(
+                key,
+                ImportedEntryPointReflection {
+                    inputs: imported_function_inputs(&parsed.module, &entry.function)?,
+                    outputs: imported_function_output(&parsed.module, &entry.function)?,
+                    workgroup_size,
+                },
+            )
+            .is_some()
+        {
+            return Err(invalid(format!(
+                "duplicate {:?} physical entry point '{}'",
+                record.stage, record.physical_entry_point
+            )));
+        }
+    }
+    Ok(reflections)
+}
+
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+pub(super) fn imported_supplemental_entry_reflections(
+    entries: &[GpuCanvasShaderEntry],
+    supplemental: &[GpuCanvasShaderEntryReflection],
+) -> Result<BTreeMap<(u8, String), ImportedEntryPointReflection>, GpuCanvasError> {
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let expected = entries
+        .iter()
+        .map(|entry| {
+            (
+                entry.stage as u8,
+                entry.logical_entry_point.as_str(),
+                entry.physical_entry_point.as_str(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    let actual = supplemental
+        .iter()
+        .map(|entry| {
+            (
+                entry.stage as u8,
+                entry.logical_entry_point.as_str(),
+                entry.physical_entry_point.as_str(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    if expected != actual || expected.len() != entries.len() || actual.len() != supplemental.len() {
+        return Err(invalid(
+            "supplemental entry reflection does not exactly match the source container".into(),
+        ));
+    }
+
+    let mut result = BTreeMap::new();
+    for entry in supplemental {
+        if entry.stage == GpuCanvasShaderStage::Compute {
+            if entry.workgroup_size.contains(&0) {
+                return Err(invalid(format!(
+                    "compute entry '{}' has a zero workgroup dimension",
+                    entry.physical_entry_point
+                )));
+            }
+        } else if entry.workgroup_size != [1, 1, 1] {
+            return Err(invalid(format!(
+                "graphics entry '{}' has a noncanonical workgroup size",
+                entry.physical_entry_point
+            )));
+        }
+        let reflection = ImportedEntryPointReflection {
+            inputs: imported_supplemental_interface(entry.stage, true, &entry.inputs)?,
+            outputs: imported_supplemental_interface(entry.stage, false, &entry.outputs)?,
+            workgroup_size: entry.workgroup_size,
+        };
+        if result
+            .insert(
+                (entry.stage as u8, entry.physical_entry_point.clone()),
+                reflection,
+            )
+            .is_some()
+        {
+            return Err(invalid(format!(
+                "duplicate {:?} physical entry point '{}'",
+                entry.stage, entry.physical_entry_point
+            )));
+        }
+    }
+    Ok(result)
+}
+
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+fn imported_supplemental_interface(
+    stage: GpuCanvasShaderStage,
+    is_input: bool,
+    variables: &[GpuCanvasShaderInterfaceVariable],
+) -> Result<ImportedStageInterface, GpuCanvasError> {
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let mut result = ImportedStageInterface::default();
+    for variable in variables {
+        match &variable.binding {
+            GpuCanvasShaderInterfaceBinding::Location {
+                location,
+                interpolation,
+                sampling,
+            } => {
+                let integer = matches!(
+                    variable.interface_type,
+                    GpuCanvasShaderInterfaceType::Sint
+                        | GpuCanvasShaderInterfaceType::Sint2
+                        | GpuCanvasShaderInterfaceType::Sint3
+                        | GpuCanvasShaderInterfaceType::Sint4
+                        | GpuCanvasShaderInterfaceType::Uint
+                        | GpuCanvasShaderInterfaceType::Uint2
+                        | GpuCanvasShaderInterfaceType::Uint3
+                        | GpuCanvasShaderInterfaceType::Uint4
+                );
+                if variable.interface_type == GpuCanvasShaderInterfaceType::Bool
+                    || (integer
+                        && *interpolation
+                            != Some(nuxie_render_api::GpuCanvasShaderInterpolation::Flat))
+                    || (sampling.is_some() && interpolation.is_none())
+                {
+                    return Err(invalid(format!(
+                        "supplemental interface location {location} has an illegal type/interpolation/sampling combination"
+                    )));
+                }
+                let value = ImportedLocation {
+                    format: imported_interface_type(variable.interface_type),
+                    interpolation: interpolation.map(|value| match value {
+                        nuxie_render_api::GpuCanvasShaderInterpolation::Perspective => {
+                            naga::Interpolation::Perspective
+                        }
+                        nuxie_render_api::GpuCanvasShaderInterpolation::Linear => {
+                            naga::Interpolation::Linear
+                        }
+                        nuxie_render_api::GpuCanvasShaderInterpolation::Flat => {
+                            naga::Interpolation::Flat
+                        }
+                    }),
+                    sampling: sampling.map(|value| match value {
+                        nuxie_render_api::GpuCanvasShaderSampling::Center => naga::Sampling::Center,
+                        nuxie_render_api::GpuCanvasShaderSampling::Centroid => {
+                            naga::Sampling::Centroid
+                        }
+                        nuxie_render_api::GpuCanvasShaderSampling::Sample => naga::Sampling::Sample,
+                        nuxie_render_api::GpuCanvasShaderSampling::First => naga::Sampling::First,
+                        nuxie_render_api::GpuCanvasShaderSampling::Either => naga::Sampling::Either,
+                    }),
+                };
+                if result
+                    .locations
+                    .insert(u32::from(*location), value)
+                    .is_some()
+                {
+                    return Err(invalid(format!(
+                        "supplemental interface location {location} appears more than once"
+                    )));
+                }
+            }
+            GpuCanvasShaderInterfaceBinding::Builtin(value) => {
+                let expected = match value {
+                    nuxie_render_api::GpuCanvasShaderBuiltin::VertexIndex
+                    | nuxie_render_api::GpuCanvasShaderBuiltin::InstanceIndex => (
+                        GpuCanvasShaderStage::Vertex,
+                        true,
+                        GpuCanvasShaderInterfaceType::Uint,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::Position if is_input => (
+                        GpuCanvasShaderStage::Fragment,
+                        true,
+                        GpuCanvasShaderInterfaceType::Float4,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::Position => (
+                        GpuCanvasShaderStage::Vertex,
+                        false,
+                        GpuCanvasShaderInterfaceType::Float4,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::FrontFacing => (
+                        GpuCanvasShaderStage::Fragment,
+                        true,
+                        GpuCanvasShaderInterfaceType::Bool,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::FragDepth => (
+                        GpuCanvasShaderStage::Fragment,
+                        false,
+                        GpuCanvasShaderInterfaceType::Float,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::SampleIndex => (
+                        GpuCanvasShaderStage::Fragment,
+                        true,
+                        GpuCanvasShaderInterfaceType::Uint,
+                    ),
+                    nuxie_render_api::GpuCanvasShaderBuiltin::SampleMask => (
+                        GpuCanvasShaderStage::Fragment,
+                        is_input,
+                        GpuCanvasShaderInterfaceType::Uint,
+                    ),
+                };
+                if (stage, is_input, variable.interface_type) != expected {
+                    return Err(invalid(format!(
+                        "supplemental builtin {value:?} has an illegal stage, direction, or type"
+                    )));
+                }
+                result.builtins.push(match value {
+                    nuxie_render_api::GpuCanvasShaderBuiltin::VertexIndex => {
+                        naga::BuiltIn::VertexIndex
+                    }
+                    nuxie_render_api::GpuCanvasShaderBuiltin::InstanceIndex => {
+                        naga::BuiltIn::InstanceIndex
+                    }
+                    nuxie_render_api::GpuCanvasShaderBuiltin::Position => {
+                        naga::BuiltIn::Position { invariant: false }
+                    }
+                    nuxie_render_api::GpuCanvasShaderBuiltin::FrontFacing => {
+                        naga::BuiltIn::FrontFacing
+                    }
+                    nuxie_render_api::GpuCanvasShaderBuiltin::FragDepth => naga::BuiltIn::FragDepth,
+                    nuxie_render_api::GpuCanvasShaderBuiltin::SampleIndex => {
+                        naga::BuiltIn::SampleIndex
+                    }
+                    nuxie_render_api::GpuCanvasShaderBuiltin::SampleMask => {
+                        naga::BuiltIn::SampleMask
+                    }
+                });
+            }
+        }
+    }
+    Ok(result)
+}
+
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+fn imported_interface_type(value: GpuCanvasShaderInterfaceType) -> &'static str {
+    match value {
+        GpuCanvasShaderInterfaceType::Float => "float32",
+        GpuCanvasShaderInterfaceType::Float2 => "float32x2",
+        GpuCanvasShaderInterfaceType::Float3 => "float32x3",
+        GpuCanvasShaderInterfaceType::Float4 => "float32x4",
+        GpuCanvasShaderInterfaceType::Sint => "sint32",
+        GpuCanvasShaderInterfaceType::Sint2 => "sint32x2",
+        GpuCanvasShaderInterfaceType::Sint3 => "sint32x3",
+        GpuCanvasShaderInterfaceType::Sint4 => "sint32x4",
+        GpuCanvasShaderInterfaceType::Uint => "uint32",
+        GpuCanvasShaderInterfaceType::Uint2 => "uint32x2",
+        GpuCanvasShaderInterfaceType::Uint3 => "uint32x3",
+        GpuCanvasShaderInterfaceType::Uint4 => "uint32x4",
+        GpuCanvasShaderInterfaceType::Bool => "bool",
+    }
 }
 
 fn collect_imported_interface(
@@ -1555,12 +1858,12 @@ pub(super) fn imported_resource_requirements(
         let requirement = match binding.kind {
             GpuCanvasShaderResourceKind::UniformBuffer => {
                 ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
-                    required_size: uniform_size.ok_or_else(|| {
+                    required_size: u64::from(uniform_size.ok_or_else(|| {
                         invalid(format!(
                             "uniform group {} binding {} has no layout size",
                             binding.group, binding.binding
                         ))
-                    })?,
+                    })?),
                     stage_mask: binding.stage_mask,
                 })
             }
@@ -1600,6 +1903,152 @@ pub(super) fn imported_resource_requirements(
             requirements.keys().collect::<Vec<_>>(),
             authored_resources.keys().collect::<Vec<_>>()
         )));
+    }
+    Ok(requirements)
+}
+
+#[cfg(all(
+    feature = "apple-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+pub(super) fn imported_apple_metal_resource_requirements(
+    shader: &GpuCanvasAppleMetalShader,
+) -> Result<BTreeMap<(u32, u32), ImportedResourceRequirement>, GpuCanvasError> {
+    use wgpu_hal::metal::{BindingSlotKind, MetalBindingSlotAllocator};
+
+    let invalid = |message: String| {
+        GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
+    };
+    let reflection = shader
+        .binding_reflection()
+        .iter()
+        .map(|entry| ((entry.group, entry.binding), entry))
+        .collect::<BTreeMap<_, _>>();
+    if reflection.len() != shader.binding_reflection().len() {
+        return Err(invalid(
+            "supplemental binding reflection contains duplicate keys".into(),
+        ));
+    }
+    let binding_keys = shader
+        .bindings()
+        .iter()
+        .map(|entry| (entry.group, entry.binding))
+        .collect::<BTreeSet<_>>();
+    if binding_keys.len() != shader.bindings().len()
+        || binding_keys.iter().copied().ne(reflection.keys().copied())
+    {
+        return Err(invalid(
+            "supplemental binding reflection does not exactly match target-10".into(),
+        ));
+    }
+
+    // wgpu-core constructs bind-group layouts in group order and wgpu-hal
+    // retains each layout's binding-sorted entries. Feed that same ordering to
+    // the production allocator exported by the pinned Metal HAL.
+    let mut ordered = shader.bindings().iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|entry| (entry.group, entry.binding));
+    let mut allocator = MetalBindingSlotAllocator::new(0);
+    let mut requirements = BTreeMap::new();
+    for binding in ordered {
+        if binding.stage_mask == 0 || binding.stage_mask & !0b111 != 0 {
+            return Err(invalid(format!(
+                "binding group {} binding {} has invalid stage mask {:#x}",
+                binding.group, binding.binding, binding.stage_mask
+            )));
+        }
+        let reflected = reflection[&(binding.group, binding.binding)];
+        let mut visibility = wgpu::ShaderStages::empty();
+        if binding.stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0 {
+            visibility |= wgpu::ShaderStages::VERTEX;
+        }
+        if binding.stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0 {
+            visibility |= wgpu::ShaderStages::FRAGMENT;
+        }
+        if binding.stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0 {
+            visibility |= wgpu::ShaderStages::COMPUTE;
+        }
+        let slot_kind = match binding.kind {
+            GpuCanvasShaderResourceKind::UniformBuffer
+            | GpuCanvasShaderResourceKind::StorageBufferReadOnly
+            | GpuCanvasShaderResourceKind::StorageBufferReadWrite => BindingSlotKind::Buffer,
+            GpuCanvasShaderResourceKind::SampledTexture
+            | GpuCanvasShaderResourceKind::StorageTexture => BindingSlotKind::Texture,
+            GpuCanvasShaderResourceKind::Sampler
+            | GpuCanvasShaderResourceKind::ComparisonSampler => BindingSlotKind::Sampler,
+        };
+        let assignment = allocator.allocate(
+            binding.group,
+            slot_kind,
+            visibility,
+            reflected.array_count > 1,
+        );
+        if binding.backend_space != assignment.backend_space()
+            || binding.backend_slots != assignment.slots()
+        {
+            return Err(invalid(format!(
+                "binding group {} binding {} target-10 Metal assignment ({}, {:?}) disagrees with pinned wgpu-hal ({}, {:?})",
+                binding.group,
+                binding.binding,
+                binding.backend_space,
+                binding.backend_slots,
+                assignment.backend_space(),
+                assignment.slots()
+            )));
+        }
+        if reflected.array_count != 1 {
+            return Err(invalid(format!(
+                "binding group {} binding {} is an array; GPU-canvas resource arrays are validated but not executable yet",
+                binding.group, binding.binding
+            )));
+        }
+        let requirement = match binding.kind {
+            GpuCanvasShaderResourceKind::UniformBuffer => {
+                if reflected.min_buffer_size == 0 {
+                    return Err(invalid(format!(
+                        "uniform group {} binding {} has zero minimum size",
+                        binding.group, binding.binding
+                    )));
+                }
+                ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
+                    required_size: reflected.min_buffer_size,
+                    stage_mask: binding.stage_mask,
+                })
+            }
+            GpuCanvasShaderResourceKind::SampledTexture => {
+                if reflected.min_buffer_size != 0 {
+                    return Err(invalid(format!(
+                        "texture group {} binding {} has a buffer size",
+                        binding.group, binding.binding
+                    )));
+                }
+                ImportedResourceRequirement::Texture {
+                    stage_mask: binding.stage_mask,
+                    view_dimension: binding.texture_view_dimension,
+                    sample_type: binding.texture_sample_type,
+                    multisampled: binding.texture_multisampled,
+                }
+            }
+            GpuCanvasShaderResourceKind::Sampler => ImportedResourceRequirement::Sampler {
+                stage_mask: binding.stage_mask,
+                comparison: false,
+            },
+            GpuCanvasShaderResourceKind::ComparisonSampler => {
+                ImportedResourceRequirement::Sampler {
+                    stage_mask: binding.stage_mask,
+                    comparison: true,
+                }
+            }
+            unsupported => {
+                return Err(invalid(format!(
+                    "binding group {} binding {} has unsupported resource kind {unsupported:?}",
+                    binding.group, binding.binding
+                )));
+            }
+        };
+        requirements.insert(
+            (u32::from(binding.group), u32::from(binding.binding)),
+            requirement,
+        );
     }
     Ok(requirements)
 }
@@ -2234,6 +2683,15 @@ impl WgpuFactory {
     pub(super) fn make_imported_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_shader_artifact(&GpuCanvasShaderArtifact::WebGpu(
+            shader.clone(),
+        ))
+    }
+
+    pub(super) fn make_imported_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -3910,6 +4368,310 @@ mod tests {
         GpuCanvasShaderTextureViewDimension,
     };
 
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    fn trusted_metal_shader(
+        bindings: Vec<GpuCanvasShaderBinding>,
+        binding_reflection: Vec<nuxie_render_api::GpuCanvasShaderBindingReflection>,
+    ) -> nuxie_render_api::GpuCanvasAppleMetalShader {
+        let digest = [0x5a; 32];
+        // SAFETY: This test-only proof is scoped to synthetic bytes and never
+        // reaches a passthrough shader-module call.
+        let provenance = unsafe {
+            nuxie_render_api::GpuCanvasShaderProvenance::for_verified_artifact_digest_unchecked(
+                123, digest,
+            )
+        };
+        // SAFETY: the helper never submits this synthetic shader to a device;
+        // it exercises only the target-10/reflection validator.
+        unsafe {
+            nuxie_render_api::GpuCanvasAppleMetalShader::from_verified_parts(
+                provenance,
+                123,
+                digest,
+                "synthetic MSL".into(),
+                Vec::new(),
+                bindings,
+                Vec::new(),
+                binding_reflection,
+            )
+        }
+        .unwrap()
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn target_10_metal_slots_match_the_production_hal_allocator() {
+        let both =
+            (1 << GpuCanvasShaderStage::Vertex as u8) | (1 << GpuCanvasShaderStage::Fragment as u8);
+        let fragment = 1 << GpuCanvasShaderStage::Fragment as u8;
+        let vertex = 1 << GpuCanvasShaderStage::Vertex as u8;
+        let binding = |group, binding, kind, stage_mask, backend_slots| GpuCanvasShaderBinding {
+            group,
+            binding,
+            kind,
+            stage_mask,
+            backend_space: group,
+            backend_slots,
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::D2,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Float,
+            texture_multisampled: false,
+        };
+        let bindings = vec![
+            binding(
+                0,
+                0,
+                GpuCanvasShaderResourceKind::UniformBuffer,
+                both,
+                [Some(0), Some(0), None],
+            ),
+            binding(
+                1,
+                3,
+                GpuCanvasShaderResourceKind::SampledTexture,
+                fragment,
+                [None, Some(0), None],
+            ),
+            binding(
+                1,
+                4,
+                GpuCanvasShaderResourceKind::Sampler,
+                fragment,
+                [None, Some(0), None],
+            ),
+            binding(
+                2,
+                0,
+                GpuCanvasShaderResourceKind::UniformBuffer,
+                vertex,
+                [Some(1), None, None],
+            ),
+        ];
+        let reflected = bindings
+            .iter()
+            .map(
+                |binding| nuxie_render_api::GpuCanvasShaderBindingReflection {
+                    group: binding.group,
+                    binding: binding.binding,
+                    array_count: 1,
+                    min_buffer_size: matches!(
+                        binding.kind,
+                        GpuCanvasShaderResourceKind::UniformBuffer
+                    )
+                    .then_some(16)
+                    .unwrap_or(0),
+                },
+            )
+            .collect();
+        let shader = trusted_metal_shader(bindings, reflected);
+        let requirements = imported_apple_metal_resource_requirements(&shader).unwrap();
+        assert_eq!(requirements.len(), 4);
+        assert_eq!(
+            requirements[&(2, 0)],
+            ImportedResourceRequirement::Uniform(ImportedUniformRequirement {
+                required_size: 16,
+                stage_mask: vertex,
+            })
+        );
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn target_10_metal_slot_mismatch_fails_closed() {
+        let binding = GpuCanvasShaderBinding {
+            group: 0,
+            binding: 9,
+            kind: GpuCanvasShaderResourceKind::SampledTexture,
+            stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
+            backend_space: 0,
+            backend_slots: [None, Some(7), None],
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::D2,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Float,
+            texture_multisampled: false,
+        };
+        let reflected = nuxie_render_api::GpuCanvasShaderBindingReflection {
+            group: 0,
+            binding: 9,
+            array_count: 1,
+            min_buffer_size: 0,
+        };
+        let error = imported_apple_metal_resource_requirements(&trusted_metal_shader(
+            vec![binding],
+            vec![reflected],
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("disagrees with pinned wgpu-hal"));
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn target_10_array_slots_use_the_production_argument_buffer_allocator() {
+        let binding = GpuCanvasShaderBinding {
+            group: 2,
+            binding: 9,
+            kind: GpuCanvasShaderResourceKind::SampledTexture,
+            stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
+            backend_space: 2,
+            // Metal binding arrays of every resource kind consume one buffer
+            // (argument-buffer) slot, not a texture/sampler namespace slot.
+            backend_slots: [None, Some(0), None],
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::D2,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Float,
+            texture_multisampled: false,
+        };
+        let reflected = nuxie_render_api::GpuCanvasShaderBindingReflection {
+            group: 2,
+            binding: 9,
+            array_count: 4,
+            min_buffer_size: 0,
+        };
+        let error = imported_apple_metal_resource_requirements(&trusted_metal_shader(
+            vec![binding.clone()],
+            vec![reflected.clone()],
+        ))
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("arrays are validated but not executable"));
+
+        let mut wrong_slot = binding;
+        wrong_slot.backend_slots = [None, Some(1), None];
+        let error = imported_apple_metal_resource_requirements(&trusted_metal_shader(
+            vec![wrong_slot],
+            vec![reflected],
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("disagrees with pinned wgpu-hal"));
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn supplemental_reflection_is_exact_and_validates_compute_workgroups() {
+        let record = GpuCanvasShaderEntry {
+            stage: GpuCanvasShaderStage::Compute,
+            logical_entry_point: "main".into(),
+            physical_entry_point: "compute_main".into(),
+        };
+        let reflection = nuxie_render_api::GpuCanvasShaderEntryReflection {
+            stage: record.stage,
+            logical_entry_point: record.logical_entry_point.clone(),
+            physical_entry_point: record.physical_entry_point.clone(),
+            workgroup_size: [8, 4, 1],
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        };
+        let validated = imported_supplemental_entry_reflections(
+            std::slice::from_ref(&record),
+            std::slice::from_ref(&reflection),
+        )
+        .unwrap();
+        assert_eq!(
+            validated[&(record.stage as u8, record.physical_entry_point.clone(),)].workgroup_size,
+            [8, 4, 1]
+        );
+
+        let mut invalid = reflection;
+        invalid.workgroup_size[1] = 0;
+        assert!(imported_supplemental_entry_reflections(&[record], &[invalid]).is_err());
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn supplemental_reflection_rejects_duplicate_physical_entry_points() {
+        let entry = |logical: &str| GpuCanvasShaderEntry {
+            stage: GpuCanvasShaderStage::Fragment,
+            logical_entry_point: logical.into(),
+            physical_entry_point: "fragment_main".into(),
+        };
+        let reflection = |logical: &str| GpuCanvasShaderEntryReflection {
+            stage: GpuCanvasShaderStage::Fragment,
+            logical_entry_point: logical.into(),
+            physical_entry_point: "fragment_main".into(),
+            workgroup_size: [1, 1, 1],
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        };
+        let error = imported_supplemental_entry_reflections(
+            &[entry("first"), entry("second")],
+            &[reflection("first"), reflection("second")],
+        )
+        .err()
+        .expect("duplicate physical entry point must fail closed");
+        assert!(error
+            .to_string()
+            .contains("duplicate Fragment physical entry point"));
+    }
+
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos")
+    ))]
+    #[test]
+    fn supplemental_builtins_require_exact_stage_direction_and_type() {
+        use nuxie_render_api::{
+            GpuCanvasShaderBuiltin, GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterfaceType,
+            GpuCanvasShaderInterfaceVariable,
+        };
+
+        let record = GpuCanvasShaderEntry {
+            stage: GpuCanvasShaderStage::Fragment,
+            logical_entry_point: "fragment".into(),
+            physical_entry_point: "fragment_main".into(),
+        };
+        let reflection = |builtin, interface_type| GpuCanvasShaderEntryReflection {
+            stage: record.stage,
+            logical_entry_point: record.logical_entry_point.clone(),
+            physical_entry_point: record.physical_entry_point.clone(),
+            workgroup_size: [1, 1, 1],
+            inputs: vec![GpuCanvasShaderInterfaceVariable {
+                binding: GpuCanvasShaderInterfaceBinding::Builtin(builtin),
+                interface_type,
+            }],
+            outputs: Vec::new(),
+        };
+        imported_supplemental_entry_reflections(
+            std::slice::from_ref(&record),
+            &[reflection(
+                GpuCanvasShaderBuiltin::FrontFacing,
+                GpuCanvasShaderInterfaceType::Bool,
+            )],
+        )
+        .expect("fragment front-facing input is boolean");
+        assert!(imported_supplemental_entry_reflections(
+            std::slice::from_ref(&record),
+            &[reflection(
+                GpuCanvasShaderBuiltin::FrontFacing,
+                GpuCanvasShaderInterfaceType::Uint,
+            )],
+        )
+        .is_err());
+        assert!(imported_supplemental_entry_reflections(
+            std::slice::from_ref(&record),
+            &[reflection(
+                GpuCanvasShaderBuiltin::VertexIndex,
+                GpuCanvasShaderInterfaceType::Uint,
+            )],
+        )
+        .is_err());
+    }
+
     #[test]
     fn multi_occurrence_retained_targets_share_budget_and_release_on_replacement() {
         let budget = Arc::new(RetainedGpuCanvasTargetBudget::default());
@@ -4491,6 +5253,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             &vertex_parsed.module,
             &vertex_parsed.info,
         )?;
+        let vertex_entry_reflections =
+            imported_wgsl_entry_reflections(vertex_shader, &vertex_parsed)?;
         let vertex_requirements = vertex_resources
             .iter()
             .filter_map(|(&binding, requirement)| match requirement {
@@ -4504,6 +5268,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             &fragment_parsed.module,
             &fragment_parsed.info,
         )?;
+        let fragment_entry_reflections =
+            imported_wgsl_entry_reflections(fragment_shader, &fragment_parsed)?;
         let fragment_requirements = fragment_resources
             .iter()
             .filter_map(|(&binding, requirement)| match requirement {
@@ -4513,14 +5279,14 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             .collect::<BTreeMap<_, _>>();
         prepare_imported_gpu_canvas_modules(
             ImportedGpuCanvasShaderRef {
-                shader: vertex_shader,
-                parsed: &vertex_parsed,
+                entries: &vertex_shader.entries,
+                entry_reflections: &vertex_entry_reflections,
                 uniform_requirements: &vertex_requirements,
                 resource_requirements: &vertex_resources,
             },
             ImportedGpuCanvasShaderRef {
-                shader: fragment_shader,
-                parsed: &fragment_parsed,
+                entries: &fragment_shader.entries,
+                entry_reflections: &fragment_entry_reflections,
                 uniform_requirements: &fragment_requirements,
                 resource_requirements: &fragment_resources,
             },

@@ -10,6 +10,12 @@ publish = false
 default = ["renderer", "js-host-seed"]
 js-host-seed = ["nuxie-runtime/js-host-seed", "nuxie-scripting?/js-host-seed"]
 renderer = ["dep:nuxie-renderer"]
+apple-authored-msl = [
+    "renderer",
+    "scripting",
+    "nuxie-renderer/apple-authored-msl",
+    "nuxie-scripting/apple-authored-msl",
+]
 threading = ["nuxie-runtime/threading"]
 test-support = []
 scripting = [

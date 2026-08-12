@@ -21,6 +21,7 @@ end of the VS buffer table.
         TODO: Eventually all deprecated features should be abstracted and use new api when available."
 )]
 mod adapter;
+mod binding_slots;
 mod command;
 mod conv;
 mod device;
@@ -32,6 +33,10 @@ mod shader_replay;
 pub mod shader_translation;
 mod surface;
 mod time;
+
+pub use binding_slots::{
+    BindingSlotAssignment, BindingSlotKind, BindingSlotStage, MetalBindingSlotAllocator,
+};
 
 use alloc::{
     string::{String, ToString as _},

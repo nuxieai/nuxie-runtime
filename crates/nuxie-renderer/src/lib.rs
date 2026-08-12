@@ -63,10 +63,10 @@ use bytemuck::{Pod, Zeroable};
 use nuxie_image_codec::{decode_image_rgba, preflight_encoded_image};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
-    GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderLoad, ImageDecodeError, ImageSampler, Mat2D,
-    PathVerb, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
-    StrokeJoin, Vec2D,
+    GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad,
+    GpuCanvasShaderProfile, ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use sha2::{Digest, Sha256};
 use smallvec::SmallVec;
@@ -492,6 +492,7 @@ struct Context {
     next_gpu_canvas_shader_occurrence_id: AtomicU64,
     adapter_info: WgpuAdapterInfo,
     capabilities: RendererCapabilities,
+    gpu_canvas_shader_profile: GpuCanvasShaderProfile,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
     even_odd_stencil_pipeline: wgpu::RenderPipeline,
     cover_pipeline: wgpu::RenderPipeline,
@@ -894,6 +895,7 @@ async fn finish_wgpu_device_request(
     mode: RenderMode,
     force_vertex_storage_polyfill: bool,
     compatibility_plan: Option<CompatibilityVertexStoragePlan>,
+    gpu_canvas_shader_profile: GpuCanvasShaderProfile,
 ) -> Result<RequestedWgpuDevice, RendererError> {
     let raw_adapter_info = adapter.get_info();
     let adapter_info = WgpuAdapterInfo {
@@ -927,11 +929,27 @@ async fn finish_wgpu_device_request(
     // Compatibility adapters can advertise Core-only optional features. Do
     // not request one while opening a Compatibility device; the no-clip WGSL
     // variants are already selected when the resulting device lacks it.
-    let required_features = if compatibility_plan.is_some() {
+    let mut required_features = if compatibility_plan.is_some() {
         wgpu::Features::empty()
     } else {
         adapter.features() & wgpu::Features::CLIP_DISTANCES
     };
+    if gpu_canvas_shader_profile == GpuCanvasShaderProfile::TrustedAppleMetal {
+        if raw_adapter_info.backend != wgpu::Backend::Metal {
+            return Err(RendererError::Unsupported(
+                "trusted authored MSL requires the Metal backend",
+            ));
+        }
+        if !adapter
+            .features()
+            .contains(wgpu::Features::PASSTHROUGH_SHADERS)
+        {
+            return Err(RendererError::Unsupported(
+                "Metal adapter does not support passthrough shaders",
+            ));
+        }
+        required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
+    }
     let descriptor = wgpu::DeviceDescriptor {
         label: Some("nuxie-renderer-device"),
         required_features,
@@ -977,6 +995,7 @@ async fn request_core_wgpu_device(
     height: u32,
     mode: RenderMode,
     force_vertex_storage_polyfill: bool,
+    gpu_canvas_shader_profile: GpuCanvasShaderProfile,
 ) -> Result<RequestedWgpuDevice, RendererError> {
     let adapter = instance
         .request_adapter(&webgpu_adapter_options())
@@ -989,6 +1008,7 @@ async fn request_core_wgpu_device(
         mode,
         force_vertex_storage_polyfill,
         None,
+        gpu_canvas_shader_profile,
     )
     .await
 }
@@ -1000,6 +1020,7 @@ async fn request_compatibility_wgpu_device(
     height: u32,
     mode: RenderMode,
     force_vertex_storage_polyfill: bool,
+    gpu_canvas_shader_profile: GpuCanvasShaderProfile,
 ) -> Result<RequestedWgpuDevice, RendererError> {
     let adapter = instance
         .request_adapter_with_feature_level(
@@ -1018,6 +1039,7 @@ async fn request_compatibility_wgpu_device(
         mode,
         force_vertex_storage_polyfill,
         Some(compatibility_plan),
+        gpu_canvas_shader_profile,
     )
     .await
 }
@@ -1064,7 +1086,30 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
-        Self::new_async_with_mode_inner(width, height, mode, false).await
+        Self::new_async_with_mode_inner(width, height, mode, false, GpuCanvasShaderProfile::WebGpu)
+            .await
+    }
+
+    /// Creates an opt-in Metal renderer which accepts only cryptographically
+    /// trusted target-2 authored MSL artifacts. This is deliberately excluded
+    /// from the shipping Apple runtime feature until its cutover issue lands.
+    #[cfg(all(
+        feature = "apple-authored-msl",
+        any(target_os = "ios", target_os = "macos"),
+        not(target_arch = "wasm32")
+    ))]
+    pub fn new_with_trusted_apple_metal_shaders(
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+    ) -> Result<Self, RendererError> {
+        pollster::block_on(Self::new_async_with_mode_inner(
+            width,
+            height,
+            mode,
+            false,
+            GpuCanvasShaderProfile::TrustedAppleMetal,
+        ))
     }
 
     #[cfg(all(feature = "apple-msl-capture", not(target_arch = "wasm32")))]
@@ -1074,7 +1119,13 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
-        pollster::block_on(Self::new_async_with_mode_inner(width, height, mode, true))
+        pollster::block_on(Self::new_async_with_mode_inner(
+            width,
+            height,
+            mode,
+            true,
+            GpuCanvasShaderProfile::WebGpu,
+        ))
     }
 
     #[cfg(all(feature = "apple-msl-capture", not(target_arch = "wasm32")))]
@@ -1097,6 +1148,7 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
         force_vertex_storage_polyfill: bool,
+        gpu_canvas_shader_profile: GpuCanvasShaderProfile,
     ) -> Result<Self, RendererError> {
         validate_wgpu_render_mode(mode)?;
         #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -1110,6 +1162,7 @@ impl WgpuFactory {
             height,
             mode,
             force_vertex_storage_polyfill,
+            gpu_canvas_shader_profile,
         )
         .await?;
         #[cfg(target_arch = "wasm32")]
@@ -1119,6 +1172,7 @@ impl WgpuFactory {
             height,
             mode,
             force_vertex_storage_polyfill,
+            gpu_canvas_shader_profile,
         )
         .await
         {
@@ -1130,6 +1184,7 @@ impl WgpuFactory {
                     height,
                     mode,
                     force_vertex_storage_polyfill,
+                    gpu_canvas_shader_profile,
                 )
                 .await
                 .map_err(|compatibility_error| {
@@ -1312,6 +1367,7 @@ impl WgpuFactory {
                 next_gpu_canvas_shader_occurrence_id: AtomicU64::new(1),
                 adapter_info,
                 capabilities,
+                gpu_canvas_shader_profile,
                 non_zero_stencil_pipeline,
                 even_odd_stencil_pipeline,
                 cover_pipeline,
@@ -1705,6 +1761,10 @@ impl Factory for WgpuFactory {
         }))
     }
 
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.context.gpu_canvas_shader_profile
+    }
+
     fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
@@ -1713,9 +1773,23 @@ impl Factory for WgpuFactory {
     }
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        self.load_gpu_canvas_shader_artifact(&GpuCanvasShaderArtifact::WebGpu(shader.clone()))
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_shader_artifact(shader)
+    }
+
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            GpuCanvasShaderLoad::Ready(self.make_imported_gpu_canvas_shader(shader))
+            GpuCanvasShaderLoad::Ready(self.make_imported_gpu_canvas_shader_artifact(shader))
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -11833,6 +11907,7 @@ mod tests {
                 64,
                 RenderMode::Msaa,
                 force_polyfill,
+                GpuCanvasShaderProfile::WebGpu,
             ))
             .unwrap();
             let mut raw_path = RawPath::new();

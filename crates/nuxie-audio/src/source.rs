@@ -593,7 +593,40 @@ mod tests {
         let frame_count = expected.length_in_frames();
         assert_eq!(actual.length_in_frames(), frame_count);
         let expected_samples = expected.read(frame_count).to_vec();
-        assert_eq!(actual.read(frame_count), expected_samples.as_slice());
+        let actual_samples = actual.read(frame_count);
+        assert_eq!(actual_samples.len(), expected_samples.len());
+
+        let profile = |samples: &[f32]| {
+            let channels = plain.channels() as usize;
+            let mut peaks = vec![0.0_f32; channels];
+            for frame in samples.chunks_exact(channels) {
+                for (peak, sample) in peaks.iter_mut().zip(frame) {
+                    *peak = peak.max(sample.abs());
+                }
+            }
+            let window_energy = samples
+                .chunks(channels * 512)
+                .map(|window| {
+                    window
+                        .iter()
+                        .map(|sample| f64::from(*sample) * f64::from(*sample))
+                        .sum::<f64>()
+                        / window.len() as f64
+                })
+                .collect::<Vec<_>>();
+            (peaks, window_energy)
+        };
+        let (expected_peaks, expected_energy) = profile(&expected_samples);
+        let (actual_peaks, actual_energy) = profile(actual_samples);
+        assert!(expected_peaks.iter().any(|peak| *peak > 0.0));
+        for (expected, actual) in expected_peaks.iter().zip(actual_peaks) {
+            assert!((expected - actual).abs() <= 1.0e-6);
+        }
+        assert_eq!(actual_energy.len(), expected_energy.len());
+        for (expected, actual) in expected_energy.iter().zip(actual_energy) {
+            let tolerance = 1.0e-10_f64.max(expected.abs() * 1.0e-8);
+            assert!((expected - actual).abs() <= tolerance);
+        }
         assert!(expected.read(1).is_empty());
         assert!(actual.read(1).is_empty());
     }

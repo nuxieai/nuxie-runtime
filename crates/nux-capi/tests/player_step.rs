@@ -783,6 +783,88 @@ fn step_accepts_nonzero_timestamps_for_every_pointer_kind() {
 }
 
 #[test]
+fn player_step_preserves_bound_view_model_context_for_timestamped_pointer_actions() {
+    let bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/univ-1995/seeded_button_pointer_vm.riv"),
+    )
+    .expect("read exact generated seeded Button regression fixture");
+    for timestamp_seconds in [0.0, 123_456.0] {
+        let mut file = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+            NuxStatus::Ok
+        );
+        let mut instance = std::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_artboard_instance_new_named(file, view("Seeded Button host"), &mut instance)
+            },
+            NuxStatus::Ok
+        );
+        let mut view_model = std::ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_default(instance, &mut view_model) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_artboard_instance_bind_view_model(instance, view_model) },
+            NuxStatus::Ok
+        );
+        let player = state_player(instance, "Generated Nuxie Nested Dispatch");
+        for _ in 0..3 {
+            let (status, result) = step(player, &[], &[], 0.016);
+            assert_eq!(status, NuxStatus::Ok);
+            assert_eq!(
+                unsafe { nux_player_step_result_free(result) },
+                NuxStatus::Ok
+            );
+        }
+        let pointer = [NuxPlayerPointerEvent {
+            kind: NUX_PLAYER_POINTER_KIND_DOWN,
+            x: 160.0,
+            y: 52.0,
+            pointer_id: 1,
+            timestamp_seconds,
+        }];
+        let (status, result) = step(player, &[], &pointer, 0.016);
+        assert_eq!(status, NuxStatus::Ok);
+        let mut hit = NUX_PLAYER_POINTER_HIT_NONE;
+        assert_eq!(
+            unsafe { nux_player_step_result_pointer(result, 0, &mut hit) },
+            NuxStatus::Ok
+        );
+        let step_info = info(result);
+        let scheduling = scheduling(result);
+        assert_ne!(hit, NUX_PLAYER_POINTER_HIT_NONE);
+        assert_eq!(step_info.view_model_change_count, 2);
+        let mut changes = Vec::new();
+        for index in 0..step_info.view_model_change_count {
+            let mut change = NuxViewModelChangeView::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_view_model_change(result, index, &mut change) },
+                NuxStatus::Ok
+            );
+            changes.push(change);
+        }
+        assert!(changes.iter().all(|change| {
+            change.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME
+                && change.kind == NUX_VIEW_MODEL_VALUE_KIND_BOOL
+        }));
+        assert!(changes.iter().any(|change| change.bool_value == 1));
+        assert!(scheduling.dirty);
+        assert!(scheduling.render_required);
+        unsafe {
+            nux_player_step_result_free(result);
+            nux_player_free(player);
+            nux_view_model_instance_free(view_model);
+            nux_artboard_instance_free(instance);
+            nux_file_free(file);
+        }
+    }
+}
+
+#[test]
 fn linear_static_and_nested_steps_match_runtime_oracles() {
     let bytes = fixture_bytes("smi_test.riv");
     let file = import("smi_test.riv");

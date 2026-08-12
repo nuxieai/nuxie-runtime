@@ -29,16 +29,17 @@ pub use render_callbacks::{
 };
 
 use nuxie::host_interfaces::{RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction};
+#[cfg(feature = "scripting")]
+use nuxie::{
+    ArtboardTransaction, HostCommand, HostCommandImportConfig, HostCommandLimits, HostValue,
+    ScriptExecutionLimits,
+};
 use nuxie::{
     File, LinearAnimationInstance, OwnedArtboardInstance, PersistentFactory,
     RuntimeEventPropertyValue, RuntimeHitResult, RuntimeOwnedViewModelGraphTransaction,
     RuntimeViewModelChange, RuntimeViewModelChangeCapture, RuntimeViewModelChangeValue,
     RuntimeViewModelGraphTransactionError, ScriptHost, StateMachineInstance,
     StateMachineReportedEvent, ViewModelInstance,
-};
-#[cfg(feature = "scripting")]
-use nuxie::{
-    HostCommand, HostCommandImportConfig, HostCommandLimits, HostValue, ScriptExecutionLimits,
 };
 use render_callbacks::{CallbackFactory, CallbackRenderer};
 use std::cell::{Cell, RefCell};
@@ -3617,7 +3618,7 @@ fn player_step_body(
             "player render revision overflowed during view-model invalidation",
         );
     }
-    let bound_view_model = match player.artboard.bound_view_model.try_borrow() {
+    let mut bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
             return publish_player_step_failure(
@@ -3716,7 +3717,31 @@ fn player_step_body(
     let mut script_host = TransactionalScriptHost;
     let (keep_going, mut runtime_dirty) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
-            let mut input_dirty = false;
+            #[cfg(feature = "scripting")]
+            let preparation_changed = match ArtboardTransaction::prepare_player_for_input(
+                &mut artboard,
+                Some(machine),
+                None,
+                bound_view_model.as_ref(),
+                true,
+            ) {
+                Ok(changed) => changed,
+                Err(error) => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        NuxStatus::RuntimeError,
+                        format!("scripted pointer preparation failed: {error}"),
+                    );
+                }
+            };
+            #[cfg(not(feature = "scripting"))]
+            let preparation_changed = false;
+            #[cfg(not(feature = "scripting"))]
+            if let Some(view_model) = bound_view_model.as_ref() {
+                machine.bind_owned_view_model_handle(view_model.handle());
+            }
+            let mut input_dirty = preparation_changed;
             for input in prepared.inputs {
                 match input {
                     PlannedPlayerInput::Bool { index, value } => {
@@ -3755,11 +3780,21 @@ fn player_step_body(
             // those before advancement, then append events authored by the
             // advance itself so the result preserves C++ production order.
             reported_events = machine.take_reported_events(artboard.raw());
-            let advance = match artboard.try_advance_with_state_machines_and_script_host_result(
-                std::slice::from_mut(machine),
-                prepared.elapsed_seconds,
-                &mut script_host,
-            ) {
+            let advance_result = match bound_view_model.as_mut() {
+                Some(view_model) => artboard
+                    .try_advance_with_state_machines_and_view_model_and_script_host_result(
+                        std::slice::from_mut(machine),
+                        prepared.elapsed_seconds,
+                        view_model,
+                        &mut script_host,
+                    ),
+                None => artboard.try_advance_with_state_machines_and_script_host_result(
+                    std::slice::from_mut(machine),
+                    prepared.elapsed_seconds,
+                    &mut script_host,
+                ),
+            };
+            let advance = match advance_result {
                 Ok(advance) => advance,
                 Err(error) => {
                     player.artboard.poisoned.set(true);

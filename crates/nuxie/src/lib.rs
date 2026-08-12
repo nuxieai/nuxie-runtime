@@ -7268,6 +7268,61 @@ impl OwnedArtboardInstance {
         )
     }
 
+    /// Rich owning advance for a host that already owns the exact bound
+    /// ViewModel graph and must retain its script-host effects atomically.
+    #[doc(hidden)]
+    pub fn try_advance_with_state_machines_and_view_model_and_script_host_result(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeStateMachineAdvanceResult> {
+        if state_machines.is_empty() {
+            bail!("fallible state-machine advance requires at least one state machine");
+        }
+        #[cfg(any(test, feature = "test-support"))]
+        if std::mem::take(&mut self.fail_next_fallible_state_machine_advance) {
+            bail!("injected non-retained fallible state-machine advance failure");
+        }
+        nuxie_runtime::poll_async_work();
+        let binding_changed = self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
+        #[cfg(not(feature = "scripting"))]
+        for state_machine in state_machines.iter_mut() {
+            state_machine.bind_owned_view_model_handle(view_model.handle());
+        }
+        #[cfg(feature = "scripting")]
+        for state_machine in state_machines.iter_mut() {
+            try_prepare_state_machine_scripted_data_context_without_factory(
+                &self.file,
+                &self.raw,
+                state_machine,
+                Some(view_model),
+            )?;
+        }
+        #[cfg(feature = "scripting")]
+        let file = Arc::clone(&self.file);
+        let mut result = StateMachineInstance::advance_and_apply_state_machines_with_view_models_and_script_host_result(
+            &mut self.raw,
+            state_machines,
+            elapsed_seconds,
+            true,
+            host,
+            || {
+                #[cfg(feature = "scripting")]
+                {
+                    return file.advance_detached_view_models();
+                }
+                #[cfg(not(feature = "scripting"))]
+                false
+            },
+        )?;
+        result.changed |= binding_changed;
+        Ok(result)
+    }
+
     /// Owning mirror of [`ArtboardInstance::advance_with_state_machines`].
     pub fn advance_with_state_machines(
         &mut self,

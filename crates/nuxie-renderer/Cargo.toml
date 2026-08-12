@@ -8,7 +8,10 @@ publish = false
 [features]
 default = []
 apple-msl-capture = []
-apple-msl-replay = ["dep:wgpu-hal"]
+apple-msl-replay = ["dep:wgpu-hal", "wgpu-hal/apple-msl-replay"]
+# Compiles the explicit, dormant trusted authored-MSL factory profile. The
+# shipping `apple-runtime` feature does not enable this cutover gate.
+apple-authored-msl = ["dep:wgpu-hal"]
 perf-diagnostics = []
 perf-counters = []
 # Exposes a deliberately narrow, doc-hidden seam into production-compiled
@@ -37,7 +40,7 @@ block2 = "0.6.2"
 objc2 = "0.6.4"
 objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLCommandBuffer", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLPixelFormat", "MTLResource", "MTLTexture"] }
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
-wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", optional = true, features = ["apple-msl-replay"] }
+wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", optional = true }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFCGTypes", "objc2"] }

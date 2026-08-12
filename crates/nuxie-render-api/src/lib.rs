@@ -990,6 +990,206 @@ pub struct GpuCanvasShaderBinding {
     pub texture_multisampled: bool,
 }
 
+/// The authored shader representation requested by a renderer factory.
+///
+/// WebGPU remains the default. Apple Metal is an explicit opt-in so adding the
+/// native decoder cannot change editor, browser, or existing runtime behavior.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GpuCanvasShaderProfile {
+    #[default]
+    WebGpu,
+    TrustedAppleMetal,
+}
+
+/// Opaque authority for one cryptographically authenticated ShaderAsset.
+/// Safe callers can carry this proof, but cannot mint or retarget it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderProvenance {
+    artifact_size: u64,
+    artifact_sha256: [u8; 32],
+}
+
+impl std::fmt::Debug for GpuCanvasShaderProvenance {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasShaderProvenance")
+            .field("artifact_size", &self.artifact_size)
+            .finish_non_exhaustive()
+    }
+}
+
+impl GpuCanvasShaderProvenance {
+    /// Mint provenance after an upper layer admitted trusted exporter output.
+    ///
+    /// # Safety
+    ///
+    /// The digest and size must describe bytes authenticated according to the
+    /// product's trust policy, and the upper layer must establish that their
+    /// native shader payload was produced by the trusted compiler/exporter and
+    /// is valid for unsafe backend passthrough. Authentication or parsing a
+    /// SignedContent header alone is not enough.
+    #[doc(hidden)]
+    pub const unsafe fn for_verified_artifact_digest_unchecked(
+        artifact_size: u64,
+        artifact_sha256: [u8; 32],
+    ) -> Self {
+        Self {
+            artifact_size,
+            artifact_sha256,
+        }
+    }
+
+    pub fn authorizes_digest(&self, artifact_size: u64, artifact_sha256: &[u8; 32]) -> bool {
+        self.artifact_size == artifact_size && self.artifact_sha256 == *artifact_sha256
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderInterfaceType {
+    Float = 0,
+    Float2 = 1,
+    Float3 = 2,
+    Float4 = 3,
+    Sint = 4,
+    Sint2 = 5,
+    Sint3 = 6,
+    Sint4 = 7,
+    Uint = 8,
+    Uint2 = 9,
+    Uint3 = 10,
+    Uint4 = 11,
+    Bool = 12,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderInterpolation {
+    Perspective = 0,
+    Linear = 1,
+    Flat = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderSampling {
+    Center = 0,
+    Centroid = 1,
+    Sample = 2,
+    First = 3,
+    Either = 4,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderBuiltin {
+    VertexIndex = 0,
+    InstanceIndex = 1,
+    Position = 2,
+    FrontFacing = 3,
+    FragDepth = 4,
+    SampleIndex = 5,
+    SampleMask = 6,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GpuCanvasShaderInterfaceBinding {
+    Location {
+        location: u16,
+        interpolation: Option<GpuCanvasShaderInterpolation>,
+        sampling: Option<GpuCanvasShaderSampling>,
+    },
+    Builtin(GpuCanvasShaderBuiltin),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderInterfaceVariable {
+    pub binding: GpuCanvasShaderInterfaceBinding,
+    pub interface_type: GpuCanvasShaderInterfaceType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderEntryReflection {
+    pub stage: GpuCanvasShaderStage,
+    pub logical_entry_point: String,
+    pub physical_entry_point: String,
+    pub workgroup_size: [u32; 3],
+    pub inputs: Vec<GpuCanvasShaderInterfaceVariable>,
+    pub outputs: Vec<GpuCanvasShaderInterfaceVariable>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderBindingReflection {
+    pub group: u8,
+    pub binding: u8,
+    pub array_count: u16,
+    pub min_buffer_size: u64,
+}
+
+/// Trusted authored MSL plus the metadata Metal cannot recover safely from a
+/// BindingMap alone. Construction requires exact-artifact provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasAppleMetalShader {
+    source: String,
+    entries: Vec<GpuCanvasShaderEntry>,
+    bindings: Vec<GpuCanvasShaderBinding>,
+    entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
+    binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
+    provenance: GpuCanvasShaderProvenance,
+}
+
+impl GpuCanvasAppleMetalShader {
+    /// Assemble a native artifact after decoding every part from the exact
+    /// authenticated byte sequence described by `provenance`.
+    ///
+    /// # Safety
+    ///
+    /// `source`, the entry and binding maps, and both reflection tables must
+    /// all have been decoded and cross-validated from `artifact_sha256` at
+    /// `artifact_size`. The source must also retain the trusted exporter's
+    /// validity guarantee for unsafe backend passthrough. Supplying arbitrary,
+    /// merely authenticated, unrelated, or hand-mutated code invalidates the
+    /// safety argument.
+    #[doc(hidden)]
+    pub unsafe fn from_verified_parts(
+        provenance: GpuCanvasShaderProvenance,
+        artifact_size: u64,
+        artifact_sha256: [u8; 32],
+        source: String,
+        entries: Vec<GpuCanvasShaderEntry>,
+        bindings: Vec<GpuCanvasShaderBinding>,
+        entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
+        binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
+    ) -> Option<Self> {
+        provenance
+            .authorizes_digest(artifact_size, &artifact_sha256)
+            .then_some(Self {
+                source,
+                entries,
+                bindings,
+                entry_reflection,
+                binding_reflection,
+                provenance,
+            })
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+    pub fn entries(&self) -> &[GpuCanvasShaderEntry] {
+        &self.entries
+    }
+    pub fn bindings(&self) -> &[GpuCanvasShaderBinding] {
+        &self.bindings
+    }
+    pub fn entry_reflection(&self) -> &[GpuCanvasShaderEntryReflection] {
+        &self.entry_reflection
+    }
+    pub fn binding_reflection(&self) -> &[GpuCanvasShaderBindingReflection] {
+        &self.binding_reflection
+    }
+}
+
 /// The authored WGSL module selected by WebGPU from a Rive `ShaderAsset`.
 ///
 /// Rive target 0 stores one source module shared by every entry. Target 16
@@ -1010,6 +1210,28 @@ impl GpuCanvasShader {
         self.entries
             .iter()
             .find(|entry| entry.stage == stage && entry.logical_entry_point == logical_entry_point)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GpuCanvasShaderArtifact {
+    WebGpu(GpuCanvasShader),
+    TrustedAppleMetal(GpuCanvasAppleMetalShader),
+}
+
+impl GpuCanvasShaderArtifact {
+    pub fn entries(&self) -> &[GpuCanvasShaderEntry] {
+        match self {
+            Self::WebGpu(shader) => &shader.entries,
+            Self::TrustedAppleMetal(shader) => shader.entries(),
+        }
+    }
+
+    pub fn bindings(&self) -> &[GpuCanvasShaderBinding] {
+        match self {
+            Self::WebGpu(shader) => &shader.bindings,
+            Self::TrustedAppleMetal(shader) => shader.bindings(),
+        }
     }
 }
 
@@ -1664,6 +1886,10 @@ pub trait Factory {
         AudioSource::from_encoded(data.to_vec()).map(Arc::new)
     }
 
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        GpuCanvasShaderProfile::WebGpu
+    }
+
     /// Parse, validate, and materialize one fresh authored shader occurrence
     /// in this factory's backend/device domain.
     fn make_gpu_canvas_shader(
@@ -1678,6 +1904,34 @@ pub trait Factory {
     /// `popErrorScope()` is asynchronous.
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
         GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader(shader))
+    }
+
+    /// Materialize the exact artifact selected by this factory's authored
+    /// shader profile. Existing factories retain their WGSL-only surface;
+    /// trusted native artifacts require an explicit override.
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        match shader {
+            GpuCanvasShaderArtifact::WebGpu(shader) => self.make_gpu_canvas_shader(shader),
+            GpuCanvasShaderArtifact::TrustedAppleMetal(_) => Err(GpuCanvasError::unsupported()),
+        }
+    }
+
+    /// Begin physical creation for the exact selected artifact. WebGPU keeps
+    /// the established asynchronous override; native artifacts are immediate
+    /// unless a profile-aware factory overrides this method.
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
+        match shader {
+            GpuCanvasShaderArtifact::WebGpu(shader) => self.load_gpu_canvas_shader(shader),
+            GpuCanvasShaderArtifact::TrustedAppleMetal(_) => {
+                GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader_artifact(shader))
+            }
+        }
     }
 
     /// Publish one fresh lookup-owned occurrence from a module that this
@@ -1778,6 +2032,10 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
         self.borrow_mut().decode_image(data)
     }
 
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.borrow().gpu_canvas_shader_profile()
+    }
+
     fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
@@ -1787,6 +2045,20 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
         self.borrow_mut().load_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.borrow_mut().make_gpu_canvas_shader_artifact(shader)
+    }
+
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
+        self.borrow_mut().load_gpu_canvas_shader_artifact(shader)
     }
 
     fn make_gpu_canvas_shader_occurrence(

@@ -16,9 +16,9 @@ use luaur_rt::{
     UserDataMethods, Value, VmState,
 };
 use nuxie_render_api::{
-    Factory as RenderFactory, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderStage,
-    RenderGpuCanvasShader, RenderImage,
+    Factory as RenderFactory, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
+    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderProfile,
+    GpuCanvasShaderProvenance, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
@@ -856,7 +856,8 @@ impl UserData for GpuCanvasImage {}
 
 pub(crate) struct RegisteredGpuCanvasShaderAsset {
     asset: RegisteredGpuCanvasShaderAssetState,
-    decoded: Option<GpuCanvasShader>,
+    provenance: Option<GpuCanvasShaderProvenance>,
+    decoded: Option<(GpuCanvasShaderProfile, GpuCanvasShaderArtifact)>,
     prepared_module: Option<Arc<dyn RenderGpuCanvasShader>>,
     module_prepared: bool,
 }
@@ -879,7 +880,11 @@ enum RegisteredGpuCanvasShaderAssetState {
 }
 
 impl RegisteredGpuCanvasShaderAsset {
-    pub(crate) fn new(name: &str, payload: &[u8]) -> Self {
+    pub(crate) fn new(
+        name: &str,
+        payload: &[u8],
+        provenance: Option<GpuCanvasShaderProvenance>,
+    ) -> Self {
         let asset = match ShaderAsset::decode(name, payload) {
             Ok(asset) => RegisteredGpuCanvasShaderAssetState::Valid(asset),
             Err(error) => RegisteredGpuCanvasShaderAssetState::Invalid(format!(
@@ -888,27 +893,44 @@ impl RegisteredGpuCanvasShaderAsset {
         };
         Self {
             asset,
+            provenance,
             decoded: None,
             prepared_module: None,
             module_prepared: false,
         }
     }
 
-    fn resolve(&mut self, name: &str) -> Result<&GpuCanvasShader> {
-        if self.decoded.is_none() {
+    fn resolve(
+        &mut self,
+        name: &str,
+        profile: GpuCanvasShaderProfile,
+    ) -> Result<&GpuCanvasShaderArtifact> {
+        if self
+            .decoded
+            .as_ref()
+            .is_none_or(|(decoded, _)| *decoded != profile)
+        {
             let asset = match &self.asset {
                 RegisteredGpuCanvasShaderAssetState::Valid(asset) => asset,
                 RegisteredGpuCanvasShaderAssetState::Invalid(error) => {
                     return Err(Error::runtime(error.clone()));
                 }
             };
-            self.decoded = Some(asset.decode_webgpu(name)?);
+            self.decoded = Some((
+                profile,
+                asset.decode_for_profile(name, profile, self.provenance.clone())?,
+            ));
+            self.prepared_module = None;
+            self.module_prepared = false;
         }
-        self.decoded.as_ref().ok_or_else(|| {
-            Error::runtime(format!(
-                "GPU-canvas shader '{name}' resolved without a decoded shader"
-            ))
-        })
+        self.decoded
+            .as_ref()
+            .map(|(_, shader)| shader)
+            .ok_or_else(|| {
+                Error::runtime(format!(
+                    "GPU-canvas shader '{name}' resolved without a decoded shader"
+                ))
+            })
     }
 }
 
@@ -960,9 +982,12 @@ impl GpuCanvasShaderCatalog {
                     }
                 }
                 let (registered_name, owner) = selected?;
+                let profile = renderer_bindings?
+                    .with_factory(|factory| Ok(factory.gpu_canvas_shader_profile()))
+                    .ok()?;
                 let mut owner = owner.borrow_mut();
-                let shader = owner.resolve(&registered_name).ok()?.clone();
-                if shader.entries.is_empty() {
+                let shader = owner.resolve(&registered_name, profile).ok()?.clone();
+                if shader.entries().is_empty() {
                     return None;
                 }
                 let module = if owner.module_prepared {
@@ -978,14 +1003,14 @@ impl GpuCanvasShaderCatalog {
                     renderer_bindings?
                         .with_factory(|factory| {
                             factory
-                                .make_gpu_canvas_shader(&shader)
+                                .make_gpu_canvas_shader_artifact(&shader)
                                 .map_err(|error| Error::runtime(error.to_string()))
                         })
                         .ok()?
                 };
                 Some(GpuShader {
                     name: name.to_owned(),
-                    entries: shader.entries,
+                    entries: shader.entries().to_vec(),
                     module: Some(module),
                 })
             }
@@ -1013,17 +1038,19 @@ impl GpuCanvasContextBindings {
         let entries = shaders.borrow().clone();
         for entry in entries {
             let shader = {
+                let profile =
+                    bindings.with_factory(|factory| Ok(factory.gpu_canvas_shader_profile()))?;
                 let mut owner = entry.owner.borrow_mut();
                 if owner.module_prepared {
                     continue;
                 }
-                match owner.resolve(&entry.name) {
+                match owner.resolve(&entry.name, profile) {
                     Ok(shader) => shader.clone(),
                     Err(_) => continue,
                 }
             };
-            let load =
-                bindings.with_factory(|factory| Ok(factory.load_gpu_canvas_shader(&shader)))?;
+            let load = bindings
+                .with_factory(|factory| Ok(factory.load_gpu_canvas_shader_artifact(&shader)))?;
             if let Ok(module) = load.resolve().await {
                 let mut owner = entry.owner.borrow_mut();
                 owner.prepared_module = Some(module);

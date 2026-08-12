@@ -397,6 +397,7 @@ feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
 		"nuxie-size-report-roots" "cargo check -p nuxie-size-report-roots --lib" \
 		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
+		"nuxie --features apple-authored-msl" "cargo check -p nuxie --features apple-authored-msl --lib" \
 		"Darwin renderer measurement seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
@@ -532,7 +533,7 @@ renderer-shaders-check:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-shaders.sh
 
 renderer-apple-passthrough-probe:
-	cargo test --locked -p nuxie-renderer --test apple_msl_passthrough -- --ignored --nocapture
+	cargo test --locked -p nuxie-renderer --features apple-authored-msl --test apple_msl_passthrough -- --ignored --nocapture
 
 # This is intentionally a real-Metal gate rather than a cross-compile check:
 # it proves that wgpu can compile committed MSL without enabling either
@@ -564,6 +565,7 @@ renderer-wgpu-backend-check:
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked --manifest-path vendor/wgpu-30.0.0/Cargo.toml --no-default-features --features std,metal,wgsl
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal coalescing
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal shader_translation
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal binding_slots
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked -p apple-msl-capture
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-core-30.0.0/Cargo.toml --lib command_buffer
 

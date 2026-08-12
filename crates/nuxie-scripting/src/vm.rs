@@ -1405,8 +1405,24 @@ impl ScriptVm {
         short_name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
+        self.register_gpu_canvas_shader_asset_with_short_name_and_provenance(
+            name, short_name, payload, None,
+        )
+    }
+
+    /// Register a ShaderAsset with authority previously minted for these exact
+    /// authenticated bytes. Native target 2/10 selection rejects registrations
+    /// made through the baseline methods above.
+    #[doc(hidden)]
+    pub fn register_gpu_canvas_shader_asset_with_short_name_and_provenance(
+        &self,
+        name: &str,
+        short_name: &str,
+        payload: &[u8],
+        provenance: Option<nuxie_render_api::GpuCanvasShaderProvenance>,
+    ) -> std::result::Result<(), ScriptError> {
         let owner = Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::new(
-            name, payload,
+            name, payload, provenance,
         )));
         self.gpu_canvas_shaders
             .borrow_mut()
@@ -1504,7 +1520,7 @@ impl ScriptVm {
         drop(shaders);
 
         let owner = Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::new(
-            owner_name, payload,
+            owner_name, payload, None,
         )));
         let mut shaders = self.gpu_canvas_shaders.borrow_mut();
         for alias in aliases {

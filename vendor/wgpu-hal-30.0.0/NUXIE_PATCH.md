@@ -10,7 +10,15 @@ answers; every other backend retains stock behavior.
 The Metal shader compiler also mirrors Dawn/Tint's invariance contract:
 `preserveInvariance` is enabled only when Naga emitted an invariant position.
 Enabling it for ordinary positions changes 4x-MSAA edge coverage on Apple
-Paravirtual devices.
+Paravirtual devices. Trusted passthrough MSL now receives the device-selected
+language version and the same source-derived invariance option instead of
+Metal's unspecified defaults.
+
+The Metal pipeline-layout resource allocator is factored into
+`binding_slots.rs`. Production layout creation and the dormant trusted authored
+MSL validator call this same pure implementation, so target-10 BindingMaps are
+checked against the exact pinned per-stage buffer/texture/sampler assignment,
+including argument-buffer slots for binding arrays.
 
 The `apple-msl-capture` feature is tooling-only. When it is explicitly enabled
 and `NUXIE_APPLE_MSL_CAPTURE_DIR` is set, the Metal pipeline path records the
@@ -36,6 +44,7 @@ The canonical source patch changes only:
 - `src/dynamic/command.rs`
 - `src/lib.rs`
 - `src/metal/command.rs`
+- `src/metal/binding_slots.rs`
 - `src/metal/device.rs`
 - `src/metal/mod.rs`
 - `src/metal/shader_capture.rs`
@@ -55,7 +64,7 @@ Upstream identity and review material:
 
 - Package: crates.io `wgpu-hal` 30.0.0
 - Package checksum in the original workspace lock: `cf765132d8d5f50e192e7880464890c13f4e7457aafe8e5466e8174586e9f101`
-- Canonical source patch SHA-256: `13595289b3b70bc3eaa440fdb4afd4aefa4e4ffcde0be290446d2df6871559bb`
+- Canonical source patch SHA-256: `a52a026d5da90f8bef23380be105d26e4cc7e0d1ef9992735f3aed6253ee3950`
 - Companion core source patch SHA-256: `d73919c84bcf241e5ecece989bcd055eae3600d762ffab695bb25cc5ae8e95db`
 - Direct-crate test lock SHA-256: `e1ee3eb0e8c7fbe3121021e867bc7ac5f9291a98cc4bda7b19af8ccdf20e4d15`
 

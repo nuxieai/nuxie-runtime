@@ -7,9 +7,10 @@ use super::{
 };
 use nuxie::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
-    GpuCanvasShader, GpuCanvasShaderLoad, ImageDecodeError, PersistentFactory,
-    PersistentFactoryContext, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
+    GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
+    ImageDecodeError, PersistentFactory, PersistentFactoryContext, RawPath, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPath, RenderShader,
 };
 use nuxie::{File, FileAssetKind};
 use nuxie_renderer::WgpuFactory;
@@ -251,6 +252,24 @@ impl Factory for AppleAssetFactory<'_> {
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
         self.inner.load_gpu_canvas_shader(shader)
+    }
+
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.inner.gpu_canvas_shader_profile()
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.inner.make_gpu_canvas_shader_artifact(shader)
+    }
+
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
+        self.inner.load_gpu_canvas_shader_artifact(shader)
     }
 
     fn make_gpu_canvas_shader_occurrence(

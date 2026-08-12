@@ -34,7 +34,7 @@ Upstream identity and review material:
 - Package: crates.io `wgpu-core` 30.0.0
 - Package checksum in the original workspace lock: `08763620e76fc980bca7bf84de82568614487a53172dd968d89187282eb87fa2`
 - Canonical source patch SHA-256: `d73919c84bcf241e5ecece989bcd055eae3600d762ffab695bb25cc5ae8e95db`
-- Companion HAL source patch SHA-256: `13595289b3b70bc3eaa440fdb4afd4aefa4e4ffcde0be290446d2df6871559bb`
+- Companion HAL source patch SHA-256: `a52a026d5da90f8bef23380be105d26e4cc7e0d1ef9992735f3aed6253ee3950`
 - Direct-crate test lock SHA-256: `f57c034f1479e0fcc1257c094521091d3ebb99775a988902f8cf42dae083b7e0`
 
 The behavioral source-patch hash is the SHA-256 of `git diff --full-index

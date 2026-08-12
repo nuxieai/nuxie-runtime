@@ -2,6 +2,8 @@
 
 use crate::gpu::{FlushUniforms, TriangleVertex};
 use crate::work_metrics::CountedDeviceExt;
+#[cfg(target_arch = "wasm32")]
+use crate::work_metrics::record_buffer_upload;
 
 pub(crate) struct MsaaStencilPipeline {
     pub clip_reset_pipeline: wgpu::RenderPipeline,
@@ -167,15 +169,18 @@ impl MsaaStencilPipeline {
     pub(crate) fn prepare_clip_reset(
         &self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         uniforms: &FlushUniforms,
         bounds: [f32; 4],
         z_index: u16,
     ) -> PreparedStencilDraw {
-        let uniform_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-msaa-stencil-uniforms"),
-            contents: bytemuck::bytes_of(uniforms),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let uniform_buffer = create_uploaded_buffer(
+            device,
+            queue,
+            "nuxie-msaa-stencil-uniforms",
+            bytemuck::bytes_of(uniforms),
+            wgpu::BufferUsages::UNIFORM,
+        );
         let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-stencil-flush-group"),
             layout: &self.flush_layout,
@@ -193,17 +198,53 @@ impl MsaaStencilPipeline {
             TriangleVertex::new([left, top], 0, z_index),
             TriangleVertex::new([right, top], 0, z_index),
         ];
-        let vertex_buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("nuxie-msaa-stencil-vertices"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buffer = create_uploaded_buffer(
+            device,
+            queue,
+            "nuxie-msaa-stencil-vertices",
+            bytemuck::cast_slice(&vertices),
+            wgpu::BufferUsages::VERTEX,
+        );
         PreparedStencilDraw {
             flush_group,
             vertices: vertex_buffer,
             vertex_count: vertices.len() as u32,
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn create_uploaded_buffer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &'static str,
+    contents: &[u8],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size: contents.len() as u64,
+        usage: usage | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    record_buffer_upload(contents.len() as u64);
+    queue.write_buffer(&buffer, 0, contents);
+    buffer
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn create_uploaded_buffer(
+    device: &wgpu::Device,
+    _queue: &wgpu::Queue,
+    label: &'static str,
+    contents: &[u8],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents,
+        usage,
+    })
 }
 
 fn shader(device: &wgpu::Device, label: &str, source: &'static str) -> wgpu::ShaderModule {

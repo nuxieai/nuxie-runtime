@@ -21,6 +21,7 @@ use std::{
 // Mirrors C++ `gpu::kBufferRingSize`; the frame guard owns its slot through GPU completion.
 const BUFFER_RING_SIZE: usize = 3;
 const MIN_UPLOAD_CAPACITY: u64 = 4 * 1024;
+#[cfg(not(target_arch = "wasm32"))]
 const STAGING_CHUNK_SIZE: u64 = 64 * 1024;
 const MAX_CACHED_TESSELLATION_TEXTURES: usize = 1;
 // C++ keeps its first 1 MiB transient arena block but releases overflow blocks
@@ -174,7 +175,11 @@ pub(crate) struct Tessellator {
 }
 
 impl Tessellator {
-    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        capabilities: RendererCapabilities,
+    ) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-tessellate-vertex"),
@@ -302,7 +307,9 @@ impl Tessellator {
             _linear_sampler: linear_sampler,
             sampler_group,
             upload_slots: std::array::from_fn(|_| {
-                Mutex::new(TessellationUploadSlot::new(device, &limits, polyfill))
+                Mutex::new(TessellationUploadSlot::new(
+                    device, queue, &limits, polyfill,
+                ))
             }),
             next_upload_slot: AtomicUsize::new(0),
             texture_pool: TessellationTexturePool::default(),
@@ -859,6 +866,7 @@ struct TessellationUploadSlot {
 impl TessellationUploadSlot {
     fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         limits: &wgpu::Limits,
         polyfill_vertex_storage_buffers: bool,
     ) -> Self {
@@ -870,6 +878,7 @@ impl TessellationUploadSlot {
         Self {
             uploads: UploadArena::new(
                 device,
+                queue,
                 "nuxie-tessellation-upload-ring",
                 wgpu::BufferUsages::VERTEX
                     | wgpu::BufferUsages::UNIFORM
@@ -919,8 +928,13 @@ struct UploadArena {
     label: &'static str,
     usage: wgpu::BufferUsages,
     pages: Vec<UploadPage>,
+    #[cfg(not(target_arch = "wasm32"))]
     device: wgpu::Device,
+    #[cfg(target_arch = "wasm32")]
+    queue: wgpu::Queue,
+    #[cfg(not(target_arch = "wasm32"))]
     staging_belt: wgpu::util::StagingBelt,
+    #[cfg(not(target_arch = "wasm32"))]
     has_active_staging_writes: bool,
     #[cfg(test)]
     abandoned_staging_belt_resets: u64,
@@ -941,13 +955,27 @@ impl<'a> UploadRequest<'a> {
 }
 
 impl UploadArena {
-    fn new(device: &wgpu::Device, label: &'static str, usage: wgpu::BufferUsages) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &'static str,
+        usage: wgpu::BufferUsages,
+    ) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        let _ = device;
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = queue;
         Self {
             label,
             usage: usage | wgpu::BufferUsages::COPY_DST,
             pages: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             device: device.clone(),
+            #[cfg(target_arch = "wasm32")]
+            queue: queue.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
             staging_belt: wgpu::util::StagingBelt::new(device.clone(), STAGING_CHUNK_SIZE),
+            #[cfg(not(target_arch = "wasm32"))]
             has_active_staging_writes: false,
             #[cfg(test)]
             abandoned_staging_belt_resets: 0,
@@ -1028,21 +1056,35 @@ impl UploadArena {
         };
         #[cfg(feature = "perf-diagnostics")]
         let write_started = Instant::now();
-        // Record the copy at allocation time so it precedes the first render
-        // pass that can consume the returned slice. `finish_submission` only
-        // closes and schedules recall of the mapped staging chunks; deferring
-        // copies there would place them after their consumers.
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
-            encoder,
-            &destination,
-            upload.offset,
-            NonZeroU64::new(write_size).expect("nonempty aligned tessellation upload"),
-        );
+        // Record the upload at allocation time so it precedes the first render
+        // pass that can consume the returned slice. Browser WebGPU queue writes
+        // avoid retaining mapped staging buffers across presented frames.
         record_buffer_upload(write_size);
-        mapped.slice(..bytes.len()).copy_from_slice(bytes);
-        mapped.slice(bytes.len()..).fill(0);
-        drop(mapped);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = encoder;
+            if size == write_size {
+                self.queue.write_buffer(&destination, upload.offset, bytes);
+            } else {
+                let mut padded = vec![0; write_size as usize];
+                padded[..bytes.len()].copy_from_slice(bytes);
+                self.queue
+                    .write_buffer(&destination, upload.offset, &padded);
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.has_active_staging_writes = true;
+            let mut mapped = self.staging_belt.write_buffer(
+                encoder,
+                &destination,
+                upload.offset,
+                NonZeroU64::new(write_size).expect("nonempty aligned tessellation upload"),
+            );
+            mapped.slice(..bytes.len()).copy_from_slice(bytes);
+            mapped.slice(bytes.len()..).fill(0);
+            drop(mapped);
+        }
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1114,24 +1156,43 @@ impl UploadArena {
             .collect::<Vec<_>>();
         #[cfg(feature = "perf-diagnostics")]
         let write_started = Instant::now();
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
-            encoder,
-            &destination,
-            base_offset,
-            NonZeroU64::new(write_size).expect("nonempty grouped frame upload"),
-        );
         record_buffer_upload(write_size);
-        mapped.slice(..).fill(0);
-        for (payload, offset) in payloads.iter().zip(relative_offsets) {
-            let (FrameUploadPayload::Storage(bytes) | FrameUploadPayload::Vertex(bytes)) = payload;
-            let start = usize::try_from(offset).expect("grouped upload offset fits usize");
-            let end = start
-                .checked_add(bytes.len())
-                .expect("grouped upload range overflow");
-            mapped.slice(start..end).copy_from_slice(bytes);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = encoder;
+            let mut packed = vec![0; write_size as usize];
+            for (payload, offset) in payloads.iter().zip(relative_offsets) {
+                let (FrameUploadPayload::Storage(bytes) | FrameUploadPayload::Vertex(bytes)) =
+                    payload;
+                let start = usize::try_from(offset).expect("grouped upload offset fits usize");
+                let end = start
+                    .checked_add(bytes.len())
+                    .expect("grouped upload range overflow");
+                packed[start..end].copy_from_slice(bytes);
+            }
+            self.queue.write_buffer(&destination, base_offset, &packed);
         }
-        drop(mapped);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.has_active_staging_writes = true;
+            let mut mapped = self.staging_belt.write_buffer(
+                encoder,
+                &destination,
+                base_offset,
+                NonZeroU64::new(write_size).expect("nonempty grouped frame upload"),
+            );
+            mapped.slice(..).fill(0);
+            for (payload, offset) in payloads.iter().zip(relative_offsets) {
+                let (FrameUploadPayload::Storage(bytes) | FrameUploadPayload::Vertex(bytes)) =
+                    payload;
+                let start = usize::try_from(offset).expect("grouped upload offset fits usize");
+                let end = start
+                    .checked_add(bytes.len())
+                    .expect("grouped upload range overflow");
+                mapped.slice(start..end).copy_from_slice(bytes);
+            }
+            drop(mapped);
+        }
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1211,23 +1272,39 @@ impl UploadArena {
         // Every member of this group is consumed by the same first render
         // pass. One contiguous copy keeps the upload before that consumer while
         // avoiding six separate wgpu validation and Metal copy commands.
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
-            encoder,
-            &destination,
-            base_offset,
-            NonZeroU64::new(write_size).expect("nonempty grouped tessellation upload"),
-        );
         record_buffer_upload(write_size);
-        mapped.slice(..).fill(0);
-        for (request, offset) in requests.iter().zip(relative_offsets) {
-            let start = usize::try_from(offset).expect("grouped upload offset fits usize");
-            let end = start
-                .checked_add(request.bytes.len())
-                .expect("grouped upload range overflow");
-            mapped.slice(start..end).copy_from_slice(request.bytes);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = encoder;
+            let mut packed = vec![0; write_size as usize];
+            for (request, offset) in requests.iter().zip(relative_offsets) {
+                let start = usize::try_from(offset).expect("grouped upload offset fits usize");
+                let end = start
+                    .checked_add(request.bytes.len())
+                    .expect("grouped upload range overflow");
+                packed[start..end].copy_from_slice(request.bytes);
+            }
+            self.queue.write_buffer(&destination, base_offset, &packed);
         }
-        drop(mapped);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.has_active_staging_writes = true;
+            let mut mapped = self.staging_belt.write_buffer(
+                encoder,
+                &destination,
+                base_offset,
+                NonZeroU64::new(write_size).expect("nonempty grouped tessellation upload"),
+            );
+            mapped.slice(..).fill(0);
+            for (request, offset) in requests.iter().zip(relative_offsets) {
+                let start = usize::try_from(offset).expect("grouped upload offset fits usize");
+                let end = start
+                    .checked_add(request.bytes.len())
+                    .expect("grouped upload range overflow");
+                mapped.slice(start..end).copy_from_slice(request.bytes);
+            }
+            drop(mapped);
+        }
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1273,24 +1350,37 @@ impl UploadArena {
                     .saturating_add(page.capacity);
             }
         }
-        self.staging_belt.finish_and_recall_on_submit(encoder);
-        // `finish_and_recall_on_submit` drains every active chunk into callbacks
-        // owned by the encoder. If that encoder is dropped instead of submitted,
-        // those chunks are dropped with it; only pre-finish active chunks need an
-        // explicit belt reset on `TessellationUploadFrame::drop`.
-        self.has_active_staging_writes = false;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.staging_belt.finish_and_recall_on_submit(encoder);
+            // `finish_and_recall_on_submit` drains every active chunk into callbacks
+            // owned by the encoder. If that encoder is dropped instead of submitted,
+            // those chunks are dropped with it; only pre-finish active chunks need an
+            // explicit belt reset on `TessellationUploadFrame::drop`.
+            self.has_active_staging_writes = false;
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = encoder;
     }
 
     fn discard_active_writes(&mut self) {
-        if !self.has_active_staging_writes {
+        #[cfg(target_arch = "wasm32")]
+        {
             return;
         }
-        self.staging_belt = wgpu::util::StagingBelt::new(self.device.clone(), STAGING_CHUNK_SIZE);
-        self.has_active_staging_writes = false;
-        #[cfg(test)]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            self.abandoned_staging_belt_resets =
-                self.abandoned_staging_belt_resets.saturating_add(1);
+            if !self.has_active_staging_writes {
+                return;
+            }
+            self.staging_belt =
+                wgpu::util::StagingBelt::new(self.device.clone(), STAGING_CHUNK_SIZE);
+            self.has_active_staging_writes = false;
+            #[cfg(test)]
+            {
+                self.abandoned_staging_belt_resets =
+                    self.abandoned_staging_belt_resets.saturating_add(1);
+            }
         }
     }
 }

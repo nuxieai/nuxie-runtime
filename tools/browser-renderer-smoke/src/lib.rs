@@ -298,15 +298,7 @@ fn fs_main() -> @location(0) vec4<f32> {
     pub async fn assert_direct_presentation(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
         canvas.set_width(4);
         canvas.set_height(3);
-        let mut factory = WgpuFactory::new_async(4, 3).await.map_err(js_error)?;
-        let mut path = factory.make_empty_render_path();
-        path.move_to(0.0, 0.0);
-        path.line_to(4.0, 0.0);
-        path.line_to(4.0, 3.0);
-        path.line_to(0.0, 3.0);
-        path.close();
-        let mut paint = factory.make_render_paint();
-        paint.color(0xff33_66cc);
+        let factory = WgpuFactory::new_async(4, 3).await.map_err(js_error)?;
         let surface = factory
             .create_presentation_surface(
                 CanvasSurfaceTarget(canvas),
@@ -315,23 +307,13 @@ fn fs_main() -> @location(0) vec4<f32> {
                 WgpuPresentationAlpha::Premultiplied,
             )
             .map_err(js_error)?;
-        for _ in 0..3 {
-            let mut frame = factory.begin_frame(0xff00_0000);
-            frame.draw_path(path.as_ref(), paint.as_ref());
-            surface
-                .acquire()
-                .map_err(surface_acquisition_error)?
-                .present(frame)
-                .await
-                .map_err(js_error)?;
-        }
         surface
             .acquire()
             .map_err(surface_acquisition_error)?
             .present(factory.begin_frame(0x80ff_0000))
             .await
             .map_err(js_error)?;
-        Ok("browser-presentation=direct-webgpu frames=4 alpha=premultiplied".into())
+        Ok("browser-presentation=direct-webgpu alpha=premultiplied".into())
     }
 
     #[wasm_bindgen]

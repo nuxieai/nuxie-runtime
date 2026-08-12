@@ -5,7 +5,7 @@
     "behavioral_rust_commit": "da40884fddb1b7a5cf3f29aad53584aea7193ca5",
     "behavioral_trace_rust_ref": "d570d89668e8270adfbad36c7efa453901404f06",
     "behavioral_trace_rust_tree": "1659c8d3266aaee932f248cd6039a3bfe36f35be",
-    "structural_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c"
+    "structural_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3"
   },
   "correspondence_manifest": "file-correspondence-manifest.toml",
   "proofs": [
@@ -11070,8 +11070,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/animation/keyframe_int.cpp:6-24",
@@ -11172,8 +11172,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/component_origin.cpp:10-14",
@@ -11314,8 +11314,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/core/field_types/core_int_type.cpp:6-9",
@@ -11386,8 +11386,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/data_bind/context/context_value_asset_blob.cpp:10-13",
@@ -11548,8 +11548,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/layout/grid_item_placement.cpp:24-42",
@@ -11562,14 +11562,14 @@
           "sha256": "cf63347c16e19a5a92b26fe40fb769827ee84ccd6d3ac319c7251ef128451fef"
         },
         {
-          "id": "cpp@4ac7b327:src/layout/grid_item_placement.cpp:73-85",
+          "id": "cpp@4ac7b327:src/layout/grid_item_placement.cpp:73-84",
           "path": "src/layout/grid_item_placement.cpp",
           "selector": {
             "end": 84,
             "kind": "line-window",
-            "start": 72
+            "start": 73
           },
-          "sha256": "f3200d7c79292a1b57edb165b46375e5bb8e518a3b0df4272f1c581278589d23"
+          "sha256": "e58f0da7c8902e22dd6fafcc6de68a2216ae2c0103e899e01097de363169270a"
         },
         {
           "id": "cpp@4ac7b327:src/layout/grid_item_placement.cpp:8-22",
@@ -11588,7 +11588,7 @@
           "id": "B6-0453",
           "kind": "audit-row"
         },
-        "sha256": "1ce33c95c5d6f8ea08c7b7cde9ac10962d8311f9922c0fcb7bf2cb155f9fb713"
+        "sha256": "0030650b8dcf193464ec7a6e1f6d424b07c6f4a068e78c82e14b5aca2008481e"
       },
       "fixtures": [],
       "id": "structural:B6-0453",
@@ -11681,8 +11681,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/layout/grid_track.cpp:10-24",
@@ -11804,8 +11804,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/layout/layout_participant.cpp:114-127",
@@ -12007,8 +12007,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/layout/layout_sizing_style.cpp:12-36",
@@ -12109,8 +12109,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp:7-10",
@@ -12201,8 +12201,8 @@
       "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
     },
     {
-      "captured_evidence_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
-      "captured_rust_commit": "e5718ed1a45e9a4faa2fb667cae8c9fb10cab03c",
+      "captured_evidence_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
+      "captured_rust_commit": "ad25fd99d5d17f6f1f2eb1abf2cd57089c2e39b3",
       "cpp_items": [
         {
           "id": "cpp@4ac7b327:src/viewmodel/viewmodel_instance_asset_blob.cpp:15-25",

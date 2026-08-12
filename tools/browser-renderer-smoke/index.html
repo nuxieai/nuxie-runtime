@@ -32,7 +32,8 @@
       function installPresentationCallCounters() {
         const counters = {
           getCurrentTexture: 0,
-          mapAsync: 0,
+          mapAsyncRead: 0,
+          mapAsyncWrite: 0,
           putImageData: 0,
         };
         const restore = [];
@@ -47,7 +48,11 @@
           Object.defineProperty(prototype, name, {
             ...descriptor,
             value(...args) {
-              counters[counter] += 1;
+              if (typeof counter === "function") {
+                counter(args);
+              } else {
+                counters[counter] += 1;
+              }
               return descriptor.value.apply(this, args);
             },
           });
@@ -58,7 +63,10 @@
           "getCurrentTexture",
           "getCurrentTexture",
         );
-        wrap(globalThis.GPUBuffer?.prototype, "mapAsync", "mapAsync");
+        wrap(globalThis.GPUBuffer?.prototype, "mapAsync", ([mode]) => {
+          if ((mode & GPUMapMode.READ) !== 0) counters.mapAsyncRead += 1;
+          if ((mode & GPUMapMode.WRITE) !== 0) counters.mapAsyncWrite += 1;
+        });
         wrap(
           globalThis.CanvasRenderingContext2D?.prototype,
           "putImageData",
@@ -355,37 +363,41 @@
             );
             await assertPremultipliedPresentationPixels(directCanvas);
             if (
-              presentationCalls.counters.getCurrentTexture !== 1 ||
-              presentationCalls.counters.mapAsync !== 0 ||
+              presentationCalls.counters.getCurrentTexture !== 4 ||
+              presentationCalls.counters.mapAsyncRead !== 0 ||
+              presentationCalls.counters.mapAsyncWrite !== 3 ||
               presentationCalls.counters.putImageData !== 0
             ) {
               throw new Error(
                 "ordinary direct presentation called " +
                   `getCurrentTexture=${presentationCalls.counters.getCurrentTexture} ` +
-                  `mapAsync=${presentationCalls.counters.mapAsync} ` +
+                  `mapAsyncRead=${presentationCalls.counters.mapAsyncRead} ` +
+                  `mapAsyncWrite=${presentationCalls.counters.mapAsyncWrite} ` +
                   `putImageData=${presentationCalls.counters.putImageData}`,
               );
             }
             results.push(
-              `${directPresentation} exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0`,
+              `${directPresentation} exact-rgba=true composite=over-blue surface=4 mapAsyncRead=0 mapAsyncWrite=3 putImageData=0`,
             );
             const explicitReadback = await assert_explicit_readback(
               document.createElement("canvas"),
             );
             if (
-              presentationCalls.counters.getCurrentTexture !== 1 ||
-              presentationCalls.counters.mapAsync !== 1 ||
+              presentationCalls.counters.getCurrentTexture !== 4 ||
+              presentationCalls.counters.mapAsyncRead !== 1 ||
+              presentationCalls.counters.mapAsyncWrite !== 3 ||
               presentationCalls.counters.putImageData !== 0
             ) {
               throw new Error(
                 "explicit readback called " +
                   `getCurrentTexture=${presentationCalls.counters.getCurrentTexture} ` +
-                  `mapAsync=${presentationCalls.counters.mapAsync} ` +
+                  `mapAsyncRead=${presentationCalls.counters.mapAsyncRead} ` +
+                  `mapAsyncWrite=${presentationCalls.counters.mapAsyncWrite} ` +
                   `putImageData=${presentationCalls.counters.putImageData}`,
               );
             }
             results.push(
-              `${explicitReadback} surface=0 mapAsync=1 putImageData=0`,
+              `${explicitReadback} surface=0 mapAsyncRead=1 mapAsyncWrite=3 putImageData=0`,
             );
           } finally {
             presentationCalls.restore();

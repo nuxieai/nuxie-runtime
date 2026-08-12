@@ -7020,7 +7020,7 @@ impl WgpuFrame {
                 backing.did_submit();
             }
             #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-            if presentation.is_none() {
+            if submitted_work_requires_wait(CURRENT_SUBMISSION_TARGET, presentation.is_some()) {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
             #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
@@ -7195,6 +7195,57 @@ fn return_uncaptured_device_error(context: &Context) -> Result<(), RendererError
     match context.device_health.current() {
         Some(failure) => Err(RendererError::Device(failure.message)),
         None => Ok(()),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubmissionCompletionTarget {
+    Wasm,
+    AppleNative,
+    Other,
+}
+
+#[cfg(target_arch = "wasm32")]
+const CURRENT_SUBMISSION_TARGET: SubmissionCompletionTarget = SubmissionCompletionTarget::Wasm;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "ios", target_os = "macos")
+))]
+const CURRENT_SUBMISSION_TARGET: SubmissionCompletionTarget =
+    SubmissionCompletionTarget::AppleNative;
+
+const fn submitted_work_requires_wait(
+    target: SubmissionCompletionTarget,
+    has_presentation: bool,
+) -> bool {
+    match target {
+        SubmissionCompletionTarget::Wasm => true,
+        SubmissionCompletionTarget::AppleNative => !has_presentation,
+        SubmissionCompletionTarget::Other => true,
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn submitted_work_wait_policy_reclaims_presented_wasm_uploads_only() {
+    assert!(submitted_work_requires_wait(
+        SubmissionCompletionTarget::Wasm,
+        true
+    ));
+    assert!(!submitted_work_requires_wait(
+        SubmissionCompletionTarget::AppleNative,
+        true
+    ));
+    assert!(submitted_work_requires_wait(
+        SubmissionCompletionTarget::Other,
+        true
+    ));
+    for target in [
+        SubmissionCompletionTarget::Wasm,
+        SubmissionCompletionTarget::AppleNative,
+        SubmissionCompletionTarget::Other,
+    ] {
+        assert!(submitted_work_requires_wait(target, false));
     }
 }
 

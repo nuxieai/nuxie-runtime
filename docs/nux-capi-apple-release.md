@@ -36,6 +36,10 @@ to baseline configured import. Package, experience, screen, session,
 authentication, and product host-command policy remain Swift SDK
 responsibilities and cannot enter the shipped Rust closure.
 
+The `apple-runtime` target-graph check rejects `symphonia-metadata` and
+`encoding_rs`. Apple audio keeps WAV/MP3/FLAC sample decoding but omits
+container text-tag and artwork parsing that the public runtime never exposes.
+
 ## Candidate qualification
 
 From a clean checkout of the exact intended release commit:

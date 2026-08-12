@@ -140,7 +140,7 @@ struct DeviceHealth {
 }
 
 impl DeviceHealth {
-    fn record(&self, failure: WgpuDeviceFailure) {
+    fn record(&self, mut failure: WgpuDeviceFailure) {
         let mut current = self
             .failure
             .lock()
@@ -151,6 +151,14 @@ impl DeviceHealth {
             .map(|failure| device_failure_priority(failure.kind))
             .unwrap_or(0);
         if incoming_priority >= current_priority {
+            if let Some(previous) = current.as_ref() {
+                if previous.kind != failure.kind && previous.message != failure.message {
+                    failure.message = format!(
+                        "{}; preceding {:?}: {}",
+                        failure.message, previous.kind, previous.message
+                    );
+                }
+            }
             *current = Some(failure);
         }
     }
@@ -10787,6 +10795,26 @@ mod tests {
             Err(RendererError::Device(message)) if message == "test terminal device loss"
         ));
         assert!(!frame.logical_frame.is_finalized());
+    }
+
+    #[test]
+    fn terminal_device_loss_preserves_the_preceding_gpu_failure() {
+        let health = DeviceHealth::default();
+        health.record(WgpuDeviceFailure {
+            kind: WgpuDeviceFailureKind::Validation,
+            message: "upload buffer validation failed".to_owned(),
+        });
+        health.record(WgpuDeviceFailure {
+            kind: WgpuDeviceFailureKind::DeviceLost,
+            message: "Destroyed: Device was destroyed".to_owned(),
+        });
+
+        let failure = health.current().expect("device failure is retained");
+        assert_eq!(failure.kind, WgpuDeviceFailureKind::DeviceLost);
+        assert_eq!(
+            failure.message,
+            "Destroyed: Device was destroyed; preceding Validation: upload buffer validation failed"
+        );
     }
 
     #[derive(Clone)]

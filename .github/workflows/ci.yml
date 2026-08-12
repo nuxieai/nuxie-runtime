@@ -224,6 +224,10 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make feature-compile-gate-apple crate-seams-apple-check
 
+      - name: Probe pinned wgpu MSL passthrough on Metal
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make renderer-apple-passthrough-probe
+
       - name: Install Python
         uses: actions/setup-python@v5
         with:

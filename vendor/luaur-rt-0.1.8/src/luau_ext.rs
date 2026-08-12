@@ -4,6 +4,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+#[cfg(feature = "compiler")]
 use crate::compiler::Compiler;
 use crate::error::{Error, Result};
 use crate::state::Lua;
@@ -13,6 +14,7 @@ use crate::thread::Thread;
 
 thread_local! {
     /// Per-VM compiler installed via `Lua::set_compiler`, keyed by global state.
+    #[cfg(feature = "compiler")]
     static VM_COMPILERS: RefCell<HashMap<*mut core::ffi::c_void, Compiler>> =
         RefCell::new(HashMap::new());
 
@@ -44,6 +46,7 @@ unsafe fn global_key(state: *mut lua_State) -> *mut core::ffi::c_void {
 /// lives in the registry and is freed with the state on `lua_close`.)
 pub(crate) fn clear_vm_state(state: *mut lua_State) {
     let key = unsafe { global_key(state) };
+    #[cfg(feature = "compiler")]
     VM_COMPILERS.with(|m| {
         m.borrow_mut().remove(&key);
     });
@@ -147,6 +150,8 @@ impl Lua {
     /// VM (unless a chunk overrides it via
     /// [`Chunk::set_compiler`](crate::Chunk::set_compiler)). Mirrors
     /// `mlua::Lua::set_compiler`.
+    #[cfg(feature = "compiler")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
     pub fn set_compiler(&self, compiler: Compiler) {
         let state = self.state();
         let key = unsafe { global_key(state) };
@@ -179,6 +184,7 @@ impl Lua {
     }
 
     /// The VM-default compiler installed via [`Lua::set_compiler`], if any.
+    #[cfg(feature = "compiler")]
     pub(crate) fn vm_compiler(&self) -> Option<Compiler> {
         let state = self.state();
         let key = unsafe { global_key(state) };
@@ -345,7 +351,7 @@ unsafe fn noop_cfn(_state: *mut lua_State) -> c_int {
     0
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 pub(crate) fn vm_compilers_len() -> usize {
     VM_COMPILERS.with(|m| m.borrow().len())
 }

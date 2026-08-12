@@ -5,13 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (luaur) foundation."
+build = "build.rs"
 
 [features]
 # `luau` pulls in the pure-Rust Luau VM (luaur-rt). Default-on so
 # `cargo test --workspace` and the editor ProductHost exercise the same VM.
 # Build with `--no-default-features` for the dependency-free envelope-parsing
 # subset.
-default = ["luau", "js-host-seed"]
+default = ["luau", "compiler", "js-host-seed"]
+compiler = ["luau", "luaur-rt/compiler"]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
 luau = [
     "dep:luaur-common",
@@ -27,7 +29,7 @@ nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 # Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
 # against upstream Luau commit 8f33df9 per the luaur README).
 luaur-common = { version = "=0.1.8", optional = true }
-luaur-rt = { version = "=0.1.8", optional = true, features = ["async"] }
+luaur-rt = { version = "=0.1.8", optional = true, default-features = false }
 # The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
 # version as luaur-rt's own dependency so cargo unifies to one copy.
 luaur-vm = { version = "=0.1.8", optional = true }
@@ -41,3 +43,7 @@ nuxie-binary = { path = "../nuxie-binary" }
 luaur-compiler = "=0.1.8"
 image-webp = "0.2.4"
 sha2 = "0.10"
+
+[build-dependencies]
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"

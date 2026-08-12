@@ -291,6 +291,13 @@ build_full_link() { # profile variant features
       echo "scripting dependency is absent from ${variant} feature graph" >&2
       return 1
     fi
+    local compiler_dependency
+    for compiler_dependency in luaur-ast luaur-bytecode luaur-compiler; do
+      if grep -Eq "^${compiler_dependency} v" "$dependency_tree"; then
+        echo "${compiler_dependency} leaked into bytecode-only ${variant} feature graph" >&2
+        return 1
+      fi
+    done
   elif grep -Eq '^nuxie-scripting v' "$dependency_tree"; then
     echo "scripting dependency leaked into ${variant} feature graph" >&2
     return 1

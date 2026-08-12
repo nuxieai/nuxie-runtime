@@ -99,7 +99,11 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     // validates its function argument, creates and returns one child thread,
     // and copies the invoking thread's host data before the child can resume.
     let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
-    let install: Function = lua.load(PROMISE_LIBRARY).set_name("rive_promise").eval()?;
+    let install = lua.load_bytecode(
+        "rive_promise",
+        include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode")),
+    )?;
+    let install: Function = install.call(())?;
     let exports: Table = install.call((new_promise, new_async_thread))?;
 
     let engine: Table = exports.get("engine")?;
@@ -113,6 +117,7 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 const PROMISE_LIBRARY: &str = r##"
 return function(newPromise, newAsyncThread)
     local PENDING = "Pending"

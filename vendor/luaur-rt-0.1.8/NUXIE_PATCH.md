@@ -1,5 +1,18 @@
 # Nuxie patches for luaur-rt 0.1.8
 
+## Bytecode-only device runtime (UNIV-1644)
+
+- Source compilation and the `Chunk`/`Compiler` API are behind the default-on
+  `compiler` feature. Disabling default features retains the VM, the high-level
+  handle API, and `Lua::load_bytecode` without normal target dependencies on
+  `luaur-ast`, `luaur-bytecode`, or `luaur-compiler`.
+- Runtime-owned Lua helper closures used by bind, userdata dispatch, table
+  length, and the optional async bridge are compiled by `build.rs`. The pinned
+  compiler is therefore a host build dependency, not device code.
+- Touched files: `Cargo.toml`, `Cargo.toml.orig`, `build.rs`, `src/lib.rs`,
+  `src/state.rs`, `src/luau_ext.rs`, `src/function.rs`, `src/table.rs`,
+  `src/userdata.rs`, and `src/async.rs`.
+
 ## Async coroutine host-data inheritance
 
 - `Function::call_async` copies the invoking thread's

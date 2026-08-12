@@ -133,6 +133,10 @@ for target in "${targets[@]}"; do
         echo "unused audio metadata/charset tables leaked into Apple runtime for $target" >&2
         exit 4
     fi
+    if grep -Eq '(^| )(?:luaur-ast|luaur-bytecode|luaur-compiler) v' <<< "$tree_output"; then
+        echo "Luau source compiler toolchain leaked into bytecode-only Apple runtime for $target" >&2
+        exit 4
+    fi
 
     sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     c_output="$work_dir/capi-metal-$target"

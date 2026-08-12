@@ -83,7 +83,9 @@ mod app_data;
 mod async_support;
 mod buffer;
 mod callback;
+#[cfg(feature = "compiler")]
 mod chunk;
+#[cfg(feature = "compiler")]
 mod compiler;
 mod conversion;
 mod debug;
@@ -122,7 +124,11 @@ mod value;
 mod vector;
 
 pub use buffer::Buffer;
+#[cfg(feature = "compiler")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
 pub use chunk::{Chunk, ChunkMode};
+#[cfg(feature = "compiler")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
 pub use compiler::Compiler;
 pub use debug::{Debug, DebugWhat};
 pub use error::{Error, ExternalError, ExternalResult, Result};
@@ -184,11 +190,14 @@ pub use serde::{
 /// ergonomic surface into scope.
 pub mod prelude {
     pub use crate::{
-        AnyUserData, Buffer, Chunk, Error, ExternalError, ExternalResult, FromLua, FromLuaMulti,
-        Function, IntoLua, IntoLuaMulti, Lua, LuaString, MetaMethod, MultiValue, RegistryKey,
-        Result, Scope, Table, Thread, ThreadStatus, UserData, UserDataFields, UserDataMethods,
-        Value, Variadic, Vector,
+        AnyUserData, Buffer, Error, ExternalError, ExternalResult, FromLua, FromLuaMulti, Function,
+        IntoLua, IntoLuaMulti, Lua, LuaString, MetaMethod, MultiValue, RegistryKey, Result, Scope,
+        Table, Thread, ThreadStatus, UserData, UserDataFields, UserDataMethods, Value, Variadic,
+        Vector,
     };
+
+    #[cfg(feature = "compiler")]
+    pub use crate::Chunk;
 
     // mlua-style `Lua*`-prefixed aliases for users coming from mlua's prelude.
     pub use crate::AnyUserData as LuaAnyUserData;

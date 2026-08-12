@@ -1121,29 +1121,10 @@ fn create_field_dispatchers(
     setters: &Table,
     method_table: &Table,
 ) -> Result<(crate::function::Function, crate::function::Function)> {
-    let builder: crate::function::Function = lua
-        .load(
-            r#"
-local getters, setters, methods = ...
-local function index(ud, key)
-    local getter = getters[key]
-    if getter ~= nil then
-        return getter(ud)
-    end
-    return methods[key]
-end
-local function newindex(ud, key, value)
-    local setter = setters[key]
-    if setter ~= nil then
-        return setter(ud, value)
-    end
-    error(string.format("attempt to set unknown field '%s' on userdata", tostring(key)), 0)
-end
-return index, newindex
-"#,
-        )
-        .set_name("__luaur_userdata_dispatch")
-        .into_function()?;
+    let builder = lua.load_bytecode(
+        "__luaur_userdata_dispatch",
+        include_bytes!(concat!(env!("OUT_DIR"), "/userdata-dispatch.luau-bytecode")),
+    )?;
     builder.call((getters.clone(), setters.clone(), method_table.clone()))
 }
 

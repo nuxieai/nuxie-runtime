@@ -46,11 +46,11 @@ pub trait ScriptVmSourceTestExt {
 
 impl ScriptVmSourceTestExt for ScriptVm {
     fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
-        self.lua().load(source).eval()
+        self.eval_bytecode("test", &compile_source(source)?)
     }
 
     fn load(&self, name: &str, source: &str) -> Result<Function> {
-        self.lua().load(source).set_name(name).into_function()
+        self.load_bytecode(name, &compile_source(source)?)
     }
 
     fn run_source_bytecode<R: FromLuaMulti>(&self, name: &str, source: &str) -> Result<R> {

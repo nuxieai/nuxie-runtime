@@ -338,6 +338,14 @@ class DistributionToolTests(unittest.TestCase):
         )
         self.assertNotIn("NuxieRuntimeFFI", self.apple_checker)
 
+    def test_apple_checker_rejects_luau_compiler_toolchain_leaks(self) -> None:
+        for package in ("luaur-ast", "luaur-bytecode", "luaur-compiler"):
+            self.assertIn(package, self.apple_checker)
+        self.assertIn(
+            "Luau source compiler toolchain leaked into bytecode-only Apple runtime",
+            self.apple_checker,
+        )
+
     def test_apple_checker_uses_the_ci_runtime_fixture_checkout(self) -> None:
         self.assertIn(
             'runtime_dir="${NUX_RUNTIME_DIR:-${RIVE_RUNTIME_DIR:-',

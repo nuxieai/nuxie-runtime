@@ -153,39 +153,45 @@ fn ensure_metatable_patcher(lua: &Lua) -> Result<Function> {
     {
         return Ok(patcher);
     }
-    let patcher: Function = lua
-        .load(
-            r#"
-            local getmetatable = getmetatable
-            return function(value)
-                local metatable = getmetatable(value)
-                if metatable.__riveDataValuePatched then
-                    return value
-                end
-                local index = metatable.__index
-                local newindex = metatable.__newindex
-                metatable.__index = function(self, key)
-                    local result = index(self, key)
-                    if result ~= nil then
-                        return result
-                    end
-                    error(`'{tostring(key)}' is not a valid index of DataValue`, 2)
-                end
-                metatable.__newindex = function(self, key, newValue)
-                    if key == "value" or key == "red" or key == "green"
-                        or key == "blue" or key == "alpha" then
-                        return newindex(self, key, newValue)
-                    end
-                end
-                metatable.__riveDataValuePatched = true
-                return value
-            end
-            "#,
-        )
-        .eval()?;
+    let chunk = lua.load_bytecode(
+        "rive_data_value_metatable",
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/data-value-metatable.luau-bytecode"
+        )),
+    )?;
+    let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, &patcher)?;
     Ok(patcher)
 }
+
+#[allow(dead_code)]
+const DATA_VALUE_METATABLE_PATCHER_SOURCE: &str = r#"
+local getmetatable = getmetatable
+return function(value)
+    local metatable = getmetatable(value)
+    if metatable.__riveDataValuePatched then
+        return value
+    end
+    local index = metatable.__index
+    local newindex = metatable.__newindex
+    metatable.__index = function(self, key)
+        local result = index(self, key)
+        if result ~= nil then
+            return result
+        end
+        error(`'{tostring(key)}' is not a valid index of DataValue`, 2)
+    end
+    metatable.__newindex = function(self, key, newValue)
+        if key == "value" or key == "red" or key == "green"
+            or key == "blue" or key == "alpha" then
+            return newindex(self, key, newValue)
+        end
+    end
+    metatable.__riveDataValuePatched = true
+    return value
+end
+"#;
 
 pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
     ensure_metatable_patcher(lua)?;

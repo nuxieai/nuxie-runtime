@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{KNOWN_CAPABILITIES, NUX_MAX_EXTERNAL_ASSET_BYTES, NuxContainerError, Result};
 
+fn option_vec_is_none_or_empty<T>(value: &Option<Vec<T>>) -> bool {
+    value.as_ref().is_none_or(Vec::is_empty)
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NuxPackageManifestV1 {
@@ -16,6 +20,8 @@ pub struct NuxPackageManifestV1 {
     pub journey: JourneyMember,
     pub entry: Entry,
     pub screens: Vec<Screen>,
+    #[serde(skip_serializing_if = "option_vec_is_none_or_empty")]
+    pub transitions: Option<Vec<TransitionV1>>,
     pub text_inputs: Vec<TextInput>,
     pub assets: Assets,
     pub members: Vec<MemberInventoryEntry>,
@@ -85,6 +91,53 @@ pub struct Screen {
     pub artboard_name: String,
     pub width: f64,
     pub height: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit: Option<ScreenExitV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScreenExitV1 {
+    pub complete_event_name: String,
+    pub duration_ms: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TransitionKindV1 {
+    Choreographed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransitionEndpointV1 {
+    pub complete_event_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransitionReverseV1 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incoming_on_top: Option<bool>,
+    pub source: TransitionEndpointV1,
+    pub destination: TransitionEndpointV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransitionV1 {
+    pub id: String,
+    pub kind: TransitionKindV1,
+    pub source_screen_id: String,
+    pub destination_screen_id: String,
+    pub duration_ms: u32,
+    pub incoming_on_top: bool,
+    pub source: TransitionEndpointV1,
+    pub destination: TransitionEndpointV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverse: Option<TransitionReverseV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

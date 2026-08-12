@@ -22,7 +22,8 @@ pub use manifest::{
     AssetLocation, Assets, Entry, FontAsset, FontContentType, FontFormat, FontStyle,
     FontStyleValue, Geometry, Identity, ImageAsset, ImageContentType, JourneyMember, LuauProducer,
     MemberInventoryEntry, MemberRole, NuxPackageManifestV1, Producer, SceneFormat, SceneMember,
-    Screen, TextInput, TextInputStyle,
+    Screen, ScreenExitV1, TextInput, TextInputStyle, TransitionEndpointV1, TransitionKindV1,
+    TransitionReverseV1, TransitionV1,
 };
 pub use signature::{
     ManifestSigner, SignatureEnvelopeV1, SignatureVerification, VerifiedScene, verify_signature,

@@ -17,7 +17,8 @@ use nux_container::{
     NUX_MAX_EXTERNAL_ASSET_TOTAL_BYTES, NUX_MAX_EXTERNAL_ASSETS, NUX_MAX_JOURNEY_BYTES,
     NUX_MAX_MANIFEST_BYTES, NUX_MAX_MEMBERS, NUX_MAX_PACKAGE_BYTES, NUX_MAX_SIGNATURE_BYTES,
     NuxAcquisitionAssetKind, NuxAcquisitionErrorCode, NuxContainerError, NuxPackageModel,
-    SignatureSource, SignatureVerification, read_acquisition_metadata, read_package,
+    ScreenExitV1, SignatureSource, SignatureVerification, TransitionEndpointV1, TransitionKindV1,
+    TransitionReverseV1, TransitionV1, read_acquisition_metadata, read_package,
     validate_nux_roundtrip, verify_signature, write_package,
 };
 
@@ -43,6 +44,54 @@ fn writer_reader_signature_and_roundtrip_form_a_complete_tracer_path() {
     assert_eq!(key_id, TEST_ONLY_DEV_KEY_ID);
     assert_eq!(scene.bytes(), package.member("scene").expect("scene"));
     validate_nux_roundtrip(&bytes).expect("writer output is canonical");
+}
+
+#[test]
+fn lifecycle_and_transition_declarations_roundtrip() {
+    let mut source = GoldenSource::new();
+    source.manifest.transitions = Some(Vec::new());
+    let empty_transitions =
+        serde_json::to_value(&source.manifest).expect("serialize manifest with empty transitions");
+    assert!(empty_transitions.get("transitions").is_none());
+
+    source.manifest.screens[0].exit = Some(ScreenExitV1 {
+        complete_event_name: "nx_screen_exit_done:screen-home".to_owned(),
+        duration_ms: 300,
+    });
+    source.manifest.transitions = Some(vec![TransitionV1 {
+        id: "transition.home_to_home".to_owned(),
+        kind: TransitionKindV1::Choreographed,
+        source_screen_id: "screen-home".to_owned(),
+        destination_screen_id: "screen-home".to_owned(),
+        duration_ms: 450,
+        incoming_on_top: true,
+        source: TransitionEndpointV1 {
+            complete_event_name: "nx_exit_done:transition.home_to_home".to_owned(),
+        },
+        destination: TransitionEndpointV1 {
+            complete_event_name: "nx_enter_done:transition.home_to_home".to_owned(),
+        },
+        reverse: Some(TransitionReverseV1 {
+            duration_ms: Some(400),
+            incoming_on_top: Some(false),
+            source: TransitionEndpointV1 {
+                complete_event_name: "nx_exit_done:transition.home_to_home.reverse".to_owned(),
+            },
+            destination: TransitionEndpointV1 {
+                complete_event_name: "nx_enter_done:transition.home_to_home.reverse".to_owned(),
+            },
+        }),
+    }]);
+
+    let bytes = write_package(&source.model()).expect("write lifecycle package");
+    let package = read_package(&bytes).expect("read lifecycle package");
+    validate_nux_roundtrip(&bytes).expect("lifecycle package roundtrips");
+
+    assert_eq!(
+        package.manifest().screens[0].exit,
+        source.manifest.screens[0].exit
+    );
+    assert_eq!(package.manifest().transitions, source.manifest.transitions);
 }
 
 #[test]

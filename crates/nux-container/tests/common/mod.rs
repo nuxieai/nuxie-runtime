@@ -68,7 +68,9 @@ impl GoldenSource {
                     artboard_name: "Home".to_owned(),
                     width: 390.0,
                     height: 844.0,
+                    exit: None,
                 }],
+                transitions: None,
                 text_inputs: vec![TextInput {
                     input_id: "email".to_owned(),
                     screen_id: "screen-home".to_owned(),

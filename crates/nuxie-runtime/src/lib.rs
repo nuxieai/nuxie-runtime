@@ -252,7 +252,7 @@ pub use profiler::{
     ProfileCaptureTimer, ProfilePathSegment, RiveProfile, TransitionFlushCallback,
     TransitionRecord, with_rive_profile,
 };
-pub use scene::RuntimeArtboardDefaultScene;
+pub use scene::{RuntimeArtboardDefaultScene, RuntimeDefaultSceneSelection, select_default_scene};
 #[doc(hidden)]
 pub use script_asset::scripted_object_inits;
 pub use script_input_viewmodel_property::{

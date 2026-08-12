@@ -92,8 +92,9 @@ use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelIn
 pub mod host_interfaces {
     pub use nuxie_binary::{RuntimeFile, RuntimeObject};
     pub use nuxie_runtime::{
-        RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-        RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError, StateMachineReportedEvent,
+        RuntimeDefaultSceneSelection, RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle,
+        RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError,
+        StateMachineReportedEvent, select_default_scene,
     };
 }
 

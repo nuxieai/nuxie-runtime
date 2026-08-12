@@ -15,6 +15,7 @@ sys.path.insert(0, str(TOOL.parent))
 from bootstrap_registry import (  # noqa: E402
     anchors_from_audit,
     behavioral_trace_tree,
+    source_binding,
     structural_proofs,
 )
 from freshness import FreshnessError  # noqa: E402
@@ -604,6 +605,21 @@ audit_record = "docs/audit.md"
                 rust_revision=revision,
                 upstream_revision=self.upstream_ref,
             )
+
+    def test_source_binding_rejects_invalid_line_windows(self) -> None:
+        payload = b"one\ntwo\nthree\n"
+        for start, end in ((0, 1), (2, 1), (4, 4), (1, 999)):
+            with self.subTest(start=start, end=end):
+                with self.assertRaisesRegex(
+                    FreshnessError, "invalid captured item range"
+                ):
+                    source_binding(
+                        identifier="test:item",
+                        path="src/item.rs",
+                        payload=payload,
+                        start=start,
+                        end=end,
+                    )
 
     def test_freshness_rejects_incomplete_captured_structural_bindings(self) -> None:
         registry_path = self.repo / "parity-evidence-proofs.json"

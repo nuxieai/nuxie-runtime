@@ -129,6 +129,10 @@ for target in "${targets[@]}"; do
         echo "retired product/runtime package leaked into authored-data distribution for $target" >&2
         exit 4
     fi
+    if grep -Eq '(^| )(?:symphonia-metadata|encoding_rs) v' <<< "$tree_output"; then
+        echo "unused audio metadata/charset tables leaked into Apple runtime for $target" >&2
+        exit 4
+    fi
 
     sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     c_output="$work_dir/capi-metal-$target"

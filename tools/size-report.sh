@@ -303,6 +303,13 @@ build_full_link() { # profile variant features
       fi
     done
   fi
+  local audio_metadata_dependency
+  for audio_metadata_dependency in symphonia-metadata encoding_rs; do
+    if grep -Eq "^${audio_metadata_dependency} v" "$dependency_tree"; then
+      echo "${audio_metadata_dependency} leaked into metadata-free ${variant} audio graph" >&2
+      return 1
+    fi
+  done
 
   nm -gjU "$cargo_dylib" | grep '^_nux_' | sort -u >"$exports"
   "$ARCHIVE_NM" -gjU "$renderer_roots_archive" 2>/dev/null \

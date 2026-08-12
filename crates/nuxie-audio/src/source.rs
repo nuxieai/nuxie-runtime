@@ -1,13 +1,17 @@
 use std::io::Cursor;
 use std::sync::{Arc, OnceLock};
 
-use symphonia::core::audio::SampleBuffer;
-use symphonia::core::codecs::DecoderOptions;
-use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
+use symphonia_bundle_flac::{FlacDecoder, FlacReader};
+use symphonia_bundle_mp3::{MpaDecoder, MpaReader};
+use symphonia_codec_pcm::PcmDecoder;
+use symphonia_core::audio::SampleBuffer;
+use symphonia_core::codecs::{CodecRegistry, DecoderOptions};
+use symphonia_core::errors::Error as SymphoniaError;
+use symphonia_core::formats::FormatOptions;
+use symphonia_core::io::{MediaSourceStream, MediaSourceStreamOptions};
+use symphonia_core::meta::MetadataOptions;
+use symphonia_core::probe::{Hint, Probe};
+use symphonia_format_riff::WavReader;
 
 /// Encoded format recognized by the pinned Rive audio interface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +91,7 @@ enum AudioSourceData {
 
 /// Owned encoded bytes or owned interleaved `f32` samples.
 ///
-/// Encoded construction validates the stream and reads metadata, while PCM
+/// Encoded construction validates the stream parameters, while PCM
 /// decoding remains lazy until a reader, duration query, or engine asks for
 /// samples. Each reader owns an independent cursor and resampled buffer.
 #[derive(Debug)]
@@ -297,11 +301,78 @@ impl AudioReader {
     }
 }
 
-fn media_source(bytes: Arc<[u8]>) -> MediaSourceStream {
-    MediaSourceStream::new(
-        Box::new(Cursor::new(bytes)),
-        MediaSourceStreamOptions::default(),
-    )
+fn media_source(bytes: Arc<[u8]>, format: AudioFormat) -> MediaSourceStream {
+    let mut cursor = Cursor::new(bytes);
+    if format == AudioFormat::Mp3 {
+        cursor.set_position(id3v2_payload_offset(cursor.get_ref()) as u64);
+    }
+    MediaSourceStream::new(Box::new(cursor), MediaSourceStreamOptions::default())
+}
+
+fn id3v2_payload_offset(bytes: &[u8]) -> usize {
+    let mut offset = 0usize;
+    while let Some(header) = bytes.get(offset..offset.saturating_add(10)) {
+        let Ok(header) = <&[u8; 10]>::try_from(header) else {
+            break;
+        };
+        let [
+            magic_i,
+            magic_d,
+            magic_3,
+            major_version,
+            minor_version,
+            flags,
+            size_0,
+            size_1,
+            size_2,
+            size_3,
+        ] = *header;
+        let size_bytes = [size_0, size_1, size_2, size_3];
+        if [magic_i, magic_d, magic_3] != *b"ID3"
+            || !(2..=4).contains(&major_version)
+            || minor_version == 0xff
+            || (major_version == 2 && flags & 0x40 != 0)
+            || size_bytes.iter().any(|byte| byte & 0x80 != 0)
+        {
+            break;
+        }
+        let payload_len = size_bytes
+            .iter()
+            .fold(0usize, |size, byte| (size << 7) | usize::from(*byte));
+        let Some(next) = offset
+            .checked_add(10)
+            .and_then(|value| value.checked_add(payload_len))
+        else {
+            break;
+        };
+        if next > bytes.len() {
+            break;
+        }
+        offset = next;
+    }
+    offset
+}
+
+fn codec_registry() -> &'static CodecRegistry {
+    static CODECS: OnceLock<CodecRegistry> = OnceLock::new();
+    CODECS.get_or_init(|| {
+        let mut codecs = CodecRegistry::new();
+        codecs.register_all::<FlacDecoder>();
+        codecs.register_all::<MpaDecoder>();
+        codecs.register_all::<PcmDecoder>();
+        codecs
+    })
+}
+
+fn format_probe() -> &'static Probe {
+    static FORMATS: OnceLock<Probe> = OnceLock::new();
+    FORMATS.get_or_init(|| {
+        let mut probe = Probe::default();
+        probe.register_all::<FlacReader>();
+        probe.register_all::<MpaReader>();
+        probe.register_all::<WavReader>();
+        probe
+    })
 }
 
 fn hint_for(format: AudioFormat) -> Hint {
@@ -313,10 +384,10 @@ fn hint_for(format: AudioFormat) -> Hint {
 }
 
 fn validate_encoded(bytes: Arc<[u8]>, format: AudioFormat) -> Result<(u32, u32), AudioDecodeError> {
-    let probed = symphonia::default::get_probe()
+    let probed = format_probe()
         .format(
             &hint_for(format),
-            media_source(bytes),
+            media_source(bytes, format),
             &FormatOptions::default(),
             &MetadataOptions::default(),
         )
@@ -334,7 +405,7 @@ fn validate_encoded(bytes: Arc<[u8]>, format: AudioFormat) -> Result<(u32, u32),
         .codec_params
         .sample_rate
         .ok_or(AudioDecodeError::InvalidData)?;
-    symphonia::default::get_codecs()
+    codec_registry()
         .make(&track.codec_params, &DecoderOptions::default())
         .map_err(|_| AudioDecodeError::InvalidData)?;
     Ok((channels, sample_rate))
@@ -344,10 +415,10 @@ fn decode_encoded(
     bytes: Arc<[u8]>,
     audio_format: AudioFormat,
 ) -> Result<DecodedAudio, AudioDecodeError> {
-    let probed = symphonia::default::get_probe()
+    let probed = format_probe()
         .format(
             &hint_for(audio_format),
-            media_source(bytes),
+            media_source(bytes, audio_format),
             &FormatOptions::default(),
             &MetadataOptions::default(),
         )
@@ -357,7 +428,7 @@ fn decode_encoded(
         .default_track()
         .ok_or(AudioDecodeError::InvalidData)?;
     let track_id = track.id;
-    let mut decoder = symphonia::default::get_codecs()
+    let mut decoder = codec_registry()
         .make(&track.codec_params, &DecoderOptions::default())
         .map_err(|_| AudioDecodeError::InvalidData)?;
     let mut samples = Vec::new();
@@ -516,5 +587,15 @@ mod tests {
             AudioSource::from_encoded(bytes).expect_err("Vorbis decoder stays unwired"),
             AudioDecodeError::UnsupportedFormat(AudioFormat::Vorbis)
         );
+    }
+
+    #[test]
+    fn id3v2_headers_are_skipped_without_decoding_tag_text() {
+        let mut tagged = b"ID3\x04\x00\x00\x00\x00\x00\x03tag".to_vec();
+        tagged.extend_from_slice(b"\xff\xfb");
+        assert_eq!(id3v2_payload_offset(&tagged), 13);
+
+        let malformed = b"ID3\x04\x00\x00\x80\x00\x00\x03tag";
+        assert_eq!(id3v2_payload_offset(malformed), 0);
     }
 }

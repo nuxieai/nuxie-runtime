@@ -20,7 +20,10 @@ D17 is deliberately narrower:
 - WAV, MP3, and FLAC are accepted by this pinned feature set. An `OggS`
   stream is recognized as Vorbis but rejected as unsupported because the
   pinned Rive build does not wire its optional Vorbis decoder.
-- Native WAV metadata and native frame count are exact. A resampled frame
+- Native WAV stream parameters and native frame count are exact. Container
+  text tags and artwork are not part of the runtime API and are skipped before
+  decode; tagged MP3 streams retain support through structural ID3v2 skipping.
+  A resampled frame
   count may differ from the pinned miniaudio oracle by at most two frames.
 - PCM bytes and individual sample arrays are never equality-pinned. Offline
   differentials compare silence/activity windows, channel peak presence, and

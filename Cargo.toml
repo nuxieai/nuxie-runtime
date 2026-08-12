@@ -34,6 +34,10 @@ exclude = [
     "vendor/luaur-compiler-0.1.8",
     "vendor/luaur-rt-0.1.8",
     "vendor/luaur-vm-0.1.8",
+    "vendor/symphonia-bundle-flac-0.5.5",
+    "vendor/symphonia-bundle-mp3-0.5.5",
+    "vendor/symphonia-format-riff-0.5.5",
+    "vendor/symphonia-utils-xiph-0.5.5",
     "vendor/wgpu-30.0.0",
     "vendor/wgpu-core-30.0.0",
     "vendor/wgpu-core-deps-apple-30.0.0",
@@ -63,6 +67,15 @@ luaur-common = { path = "vendor/luaur-common-0.1.8" }
 luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
 luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
+
+# Metadata-free audio fork (docs/symphonia-fork.md): the Apple runtime decodes
+# audio samples but never exposes container tags or artwork. These component
+# patches keep the exact Symphonia decoders while allowing that unused metadata
+# path (and encoding_rs's charset tables) to be disabled.
+symphonia-bundle-flac = { path = "vendor/symphonia-bundle-flac-0.5.5" }
+symphonia-bundle-mp3 = { path = "vendor/symphonia-bundle-mp3-0.5.5" }
+symphonia-format-riff = { path = "vendor/symphonia-format-riff-0.5.5" }
+symphonia-utils-xiph = { path = "vendor/symphonia-utils-xiph-0.5.5" }
 
 # Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates

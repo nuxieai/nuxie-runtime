@@ -157,7 +157,10 @@ the public source API or the consumer harness, the selector cannot reach every
 root, the compiled consumer root is not unique, the C ABI closure is
 incomplete, or the linked export set changes.
 The scripting-on variant must retain `nuxie-scripting` + `luaur-vm`, and the
-scripting-off variant must retain neither. The command restores Cargo's
+scripting-off variant must retain neither. Both variants reject
+`symphonia-metadata` and `encoding_rs`: the runtime's metadata-free Symphonia
+feature profile decodes WAV/MP3/FLAC samples without shipping unused tag and
+charset tables. The command restores Cargo's
 renderer-on/scripting-off `release-size` output after measuring both variants.
 
 ## Budget status

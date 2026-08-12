@@ -38,8 +38,8 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         extension_manifest = (
             REPO_ROOT / "crates/nux-apple-product-extension/Cargo.toml"
         ).read_text()
-        self.assertIn('version = "0.6.0"', capi_manifest)
-        self.assertIn('version = "0.6.0"', extension_manifest)
+        self.assertIn('version = "0.7.0"', capi_manifest)
+        self.assertIn('version = "0.7.0"', extension_manifest)
         self.assertNotIn("legacy-migration", capi_manifest)
         for crate in REMOVED_CRATES:
             self.assertNotIn(crate, capi_manifest)

@@ -209,7 +209,7 @@ fn number_to_frame(value: f64) -> u64 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
 

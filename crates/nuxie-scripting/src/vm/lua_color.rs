@@ -159,7 +159,7 @@ fn color_lerp(from: ColorInt, to: ColorInt, mix: f32) -> ColorInt {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use luaur_rt::Table;
 

@@ -4,7 +4,6 @@
 //! 128-texel-wide texture and each logical storage-buffer binding is copied to
 //! the texture starting at texel zero.
 
-use crate::work_metrics::CountedDeviceExt;
 use std::num::NonZeroU64;
 
 pub(crate) const STORAGE_TEXTURE_WIDTH: u32 = 128;
@@ -53,38 +52,6 @@ pub(crate) enum StorageResource {
 }
 
 impl StorageResource {
-    pub(crate) fn upload<T: bytemuck::Pod>(
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        label: &'static str,
-        values: &[T],
-        structure: StorageBufferStructure,
-        polyfill: bool,
-    ) -> Self {
-        let bytes = bytemuck::cast_slice(values);
-        assert!(!bytes.is_empty(), "storage upload must not be empty");
-        let usage = if polyfill {
-            wgpu::BufferUsages::COPY_SRC
-        } else {
-            wgpu::BufferUsages::STORAGE
-        };
-        let buffer = device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(label),
-            contents: bytes,
-            usage,
-        });
-        Self::from_buffer(
-            device,
-            encoder,
-            label,
-            &buffer,
-            0,
-            NonZeroU64::new(bytes.len() as u64).expect("nonempty storage upload"),
-            structure,
-            polyfill,
-        )
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_buffer(
         device: &wgpu::Device,

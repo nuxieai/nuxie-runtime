@@ -145,10 +145,14 @@ impl Function {
 
         // Build the wrapper closure in Lua so the inner `func(...)` is a Lua
         // call (yield-transparent), capturing `func` and `prepend` as upvalues.
-        let builder = lua.load_bytecode(
-            "__luaur_bind",
-            include_bytes!(concat!(env!("OUT_DIR"), "/bind.luau-bytecode")),
-        )?;
+        // SAFETY: this bytecode is produced by this crate's pinned build-time
+        // compiler from an embedded source file.
+        let builder = unsafe {
+            lua.load_bytecode(
+                "__luaur_bind",
+                include_bytes!(concat!(env!("OUT_DIR"), "/bind.luau-bytecode")),
+            )?
+        };
         builder.call::<Function>((self.clone(), prepend))
     }
 

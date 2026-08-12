@@ -181,10 +181,14 @@ impl Table {
             return Ok(self.raw_len());
         }
         // Evaluate `#self` protected so a raising/returning `__len` is honored.
-        let f = lua.load_bytecode(
-            "__luaur_table_len",
-            include_bytes!(concat!(env!("OUT_DIR"), "/table-len.luau-bytecode")),
-        )?;
+        // SAFETY: this bytecode is produced by this crate's pinned build-time
+        // compiler from an embedded source file.
+        let f = unsafe {
+            lua.load_bytecode(
+                "__luaur_table_len",
+                include_bytes!(concat!(env!("OUT_DIR"), "/table-len.luau-bytecode")),
+            )?
+        };
         let n: i64 = f.call(self.clone())?;
         Ok(n.max(0) as usize)
     }

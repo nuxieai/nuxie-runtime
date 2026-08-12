@@ -1121,10 +1121,14 @@ fn create_field_dispatchers(
     setters: &Table,
     method_table: &Table,
 ) -> Result<(crate::function::Function, crate::function::Function)> {
-    let builder = lua.load_bytecode(
-        "__luaur_userdata_dispatch",
-        include_bytes!(concat!(env!("OUT_DIR"), "/userdata-dispatch.luau-bytecode")),
-    )?;
+    // SAFETY: this bytecode is produced by this crate's pinned build-time
+    // compiler from an embedded source file.
+    let builder = unsafe {
+        lua.load_bytecode(
+            "__luaur_userdata_dispatch",
+            include_bytes!(concat!(env!("OUT_DIR"), "/userdata-dispatch.luau-bytecode")),
+        )?
+    };
     builder.call((getters.clone(), setters.clone(), method_table.clone()))
 }
 

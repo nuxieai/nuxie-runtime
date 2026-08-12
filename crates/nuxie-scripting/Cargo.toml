@@ -12,7 +12,8 @@ build = "build.rs"
 # `cargo test --workspace` and the editor ProductHost exercise the same VM.
 # Build with `--no-default-features` for the envelope-parsing target/runtime
 # subset. Host build dependencies may still precompile embedded Luau helpers.
-default = ["luau", "compiler", "js-host-seed"]
+default = ["luau", "compiler", "async", "js-host-seed"]
+async = ["luau", "luaur-rt/async"]
 compiler = ["luau", "luaur-rt/compiler"]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
 luau = [

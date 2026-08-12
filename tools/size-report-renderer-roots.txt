@@ -10,6 +10,7 @@ inherent WgpuFactory::device_is_lost
 inherent WgpuFactory::logical_frame_config
 inherent WgpuFactory::resize
 inherent WgpuFactory::new_session_factory
+inherent WgpuFactory::upload_rgba8_premul_srgb
 inherent WgpuFrame::finish
 inherent WgpuFrame::finish_async
 inherent WgpuFrame::finish_for_benchmark
@@ -23,6 +24,7 @@ trait Factory::make_empty_render_path
 trait Factory::make_render_paint
 trait Factory::decode_image
 trait Factory::make_gpu_canvas_shader
+trait Factory::make_gpu_canvas_shader_occurrence
 trait Factory::load_gpu_canvas_shader
 trait Factory::make_gpu_canvas_image
 trait Factory::make_gpu_canvas_image_with_pipelines

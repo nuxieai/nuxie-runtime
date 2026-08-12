@@ -159,7 +159,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 44 {
+    match selector % 46 {
         0 => root!("inherent WgpuFactory::new", {
             black_box(WgpuFactory::new(args.width, args.height).is_ok());
             0
@@ -595,7 +595,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             ));
             0
         }),
-        _ => root!("inherent WgpuMetalPresenter::render_to_texture", {
+        43 => root!("inherent WgpuMetalPresenter::render_to_texture", {
             let Some(presenter) = (unsafe { args.presenter.as_ref() }) else {
                 return 0;
             };
@@ -613,6 +613,36 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                 }
                 .is_ok(),
             );
+            0
+        }),
+        44 => root!("inherent WgpuFactory::upload_rgba8_premul_srgb", {
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            black_box(
+                factory
+                    .upload_rgba8_premul_srgb(
+                        args.width,
+                        args.height,
+                        args.width.saturating_mul(4),
+                        bytes,
+                    )
+                    .is_ok(),
+            );
+            0
+        }),
+        _ => root!("trait Factory::make_gpu_canvas_shader_occurrence", {
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            let shader = GpuCanvasShader {
+                source: "@vertex fn vs_main() -> @builtin(position) vec4<f32> { return vec4<f32>(); }\n@fragment fn fs_main() -> @location(0) vec4<f32> { return vec4<f32>(); }".into(),
+                entries: Vec::new(),
+                bindings: Vec::new(),
+            };
+            if let Ok(shader) = Factory::make_gpu_canvas_shader(factory, &shader) {
+                black_box(Factory::make_gpu_canvas_shader_occurrence(factory, &shader).is_ok());
+            }
             0
         }),
     }

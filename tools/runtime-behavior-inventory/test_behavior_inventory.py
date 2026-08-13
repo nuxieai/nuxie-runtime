@@ -1752,6 +1752,54 @@ class GateTests(unittest.TestCase):
             self.assertIn(unreachable.resolve(), excluded)
             self.assertNotIn(test_only.resolve(), candidates)
 
+    def test_manifest_target_outside_crate_directory_is_inventoried(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/demo"
+            shared = repo_root / "shared"
+            crate.mkdir(parents=True)
+            shared.mkdir()
+            target = shared / "lib.rs"
+            target.write_text("pub fn shipped() {}\n")
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "demo"\nversion = "0.1.0"\n'
+                '[lib]\npath = "../../shared/lib.rs"\n'
+            )
+
+            candidates = behavior_inventory.rust_source_candidates(
+                repo_root, crate_names=("demo",)
+            )
+            self.assertIn(target.resolve(), {path.resolve() for path in candidates})
+            self.assertNotIn(
+                target.resolve(),
+                behavior_inventory.external_test_module_paths(repo_root, candidates),
+            )
+
+    def test_repo_local_path_module_outside_crate_directory_is_inventoried(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/demo"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "demo"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            shared = repo_root / "shared.rs"
+            lib.write_text('#[path = "../../../shared.rs"]\nmod shared;\n')
+            shared.write_text("fn shipped() {}\n")
+            candidates = behavior_inventory.rust_source_candidates(
+                repo_root, crate_names=("demo",)
+            )
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, candidates
+            )
+            self.assertIn(shared.resolve(), {path.resolve() for path in candidates})
+            self.assertNotIn(shared.resolve(), excluded)
+
     def test_macro_expanded_production_module_is_reachable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

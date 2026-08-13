@@ -3368,7 +3368,7 @@ impl WgpuFrame {
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
         let (_, _, _, _, _, backend_work, _, _) = self
-            .finish_internal(false, false, false, false, Some((target, presenter)))
+            .finish_internal(false, false, false, true, Some((target, presenter)))
             .await?;
         metrics.backend_work = backend_work;
         Ok(metrics)

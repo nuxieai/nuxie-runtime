@@ -4569,13 +4569,22 @@ def external_test_module_paths(
         ) in rust_identifier_macro_invocation_specs(masked, source):
             if any(start <= invocation_start < end for start, end in definition_ranges):
                 continue
+            invocation_path = rust_macro_invocation_path(masked, invocation_start, name)
+            qualified_definition = any(
+                position == invocation_start - 1 and imported_name == name
+                for position, imported_name, _generates, _arms in (
+                    scoped_macro_imports.get(owner_resolved, [])
+                )
+            ) or (invocation_path[:-1] == ("crate",) and name in imported_definitions)
             environment = macro_environment_at(
                 owner_resolved,
                 invocation_start,
                 imported_definitions,
                 definition_stream,
             )
-            if name in environment:
+            if name in environment and (
+                len(invocation_path) == 1 or qualified_definition
+            ):
                 modules = rust_resolve_macro_modules(
                     name, identifiers, environment, raw_arguments=raw_arguments
                 )

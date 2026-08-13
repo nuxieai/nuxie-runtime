@@ -2944,12 +2944,22 @@ def rust_inline_module_contexts(masked: str) -> list[tuple[int, int, str]]:
 
 
 def rust_crate_roots(
-    repo_root: pathlib.Path, files: list[pathlib.Path]
+    repo_root: pathlib.Path,
+    files: list[pathlib.Path],
+    *,
+    include_manifest_targets: bool = False,
+    crate_names: tuple[str, ...] | None = None,
 ) -> set[pathlib.Path]:
     """Return conventional and manifest-declared Cargo target roots in scope."""
     candidates = {path.resolve() for path in files}
+    resolved_repo_root = repo_root.resolve()
     roots: set[pathlib.Path] = set()
-    manifests = list((repo_root / "crates").glob("*/Cargo.toml"))
+    manifests = (
+        [repo_root / "crates" / crate / "Cargo.toml" for crate in crate_names]
+        if crate_names is not None
+        else list((repo_root / "crates").glob("*/Cargo.toml"))
+    )
+    manifests = [manifest for manifest in manifests if manifest.is_file()]
     if not manifests:
         return {
             path.resolve()
@@ -2957,6 +2967,15 @@ def rust_crate_roots(
             if path.name in {"lib.rs", "main.rs"} and path.parent.name == "src"
         }
     roots.update(rust_generator_paths(repo_root) & candidates)
+
+    def target_is_in_scope(path: pathlib.Path) -> bool:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(resolved_repo_root):
+            raise ValueError(f"Cargo target is outside the repository: {resolved}")
+        return resolved in candidates or (
+            include_manifest_targets and resolved.is_file()
+        )
+
     for manifest_path in manifests:
         manifest = tomllib.loads(manifest_path.read_text())
         package = manifest.get("package", {})
@@ -2967,7 +2986,7 @@ def rust_crate_roots(
             lib_path = lib.get("path", "src/lib.rs")
             if isinstance(lib_path, str):
                 resolved = (manifest_path.parent / lib_path).resolve()
-                if resolved in candidates:
+                if target_is_in_scope(resolved):
                     roots.add(resolved)
         elif package.get("autolib", True) and src_dir / "lib.rs" in candidates:
             roots.add(src_dir / "lib.rs")
@@ -2998,7 +3017,7 @@ def rust_crate_roots(
                 resolved = flat if flat in candidates else nested
             else:
                 resolved = (manifest_path.parent / relative).resolve()
-            if resolved in candidates:
+            if target_is_in_scope(resolved):
                 roots.add(resolved)
     return roots
 
@@ -4419,12 +4438,10 @@ def external_test_module_paths(
         resolved = path.resolve()
         if resolved in candidates:
             return True
-        if (
-            (require_rust_suffix and resolved.suffix != ".rs")
-            or not resolved.is_file()
-            or not any(resolved.is_relative_to(root) for root in crate_roots)
-        ):
+        if (require_rust_suffix and resolved.suffix != ".rs") or not resolved.is_file():
             return False
+        if not resolved.is_relative_to(repo_root.resolve()):
+            raise ValueError(f"Rust source is outside the repository: {resolved}")
         candidates.add(resolved)
         files.append(resolved)
         parse_candidate(resolved)
@@ -5119,7 +5136,14 @@ def rust_source_candidates(
         for path in (repo_root / "crates" / crate).rglob("*.rs")
         if path.is_file()
     ]
-    sources.update(rust_crate_roots(repo_root, all_crate_sources))
+    sources.update(
+        rust_crate_roots(
+            repo_root,
+            all_crate_sources,
+            include_manifest_targets=True,
+            crate_names=crate_names,
+        )
+    )
     return sorted(sources)
 
 

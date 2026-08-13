@@ -5,7 +5,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use nuxie_renderer::{RenderMode, WgpuFactory, builtin_shader_capture_inventory};
+use nuxie_renderer::builtin_shader_capture_inventory;
+#[cfg(target_os = "macos")]
+use nuxie_renderer::{RenderMode, WgpuFactory};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -73,14 +75,19 @@ fn main() -> Result<()> {
     unsafe { env::set_var("NUXIE_APPLE_MSL_CAPTURE_DIR", &captures) };
 
     // Construction eagerly creates all built-in pipeline families. Running
-    // both modes covers the conditional atomic and MSAA permutations.
-    let factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa)
-        .context("create MSAA pipeline catalog on Metal")?;
-    factory.capture_builtin_present_pipeline_variants();
-    WgpuFactory::new_with_mode(8, 8, RenderMode::ClockwiseAtomic)
-        .context("create clockwise-atomic pipeline catalog on Metal")?;
-    WgpuFactory::new_with_forced_vertex_storage_polyfill(8, 8, RenderMode::Msaa)
-        .context("create vertex-storage-polyfill MSAA pipeline catalog on Metal")?;
+    // both modes covers the conditional atomic and MSAA permutations. Keep
+    // the Metal-only entrypoint out of portable feature-unified builds; the
+    // runtime guard above remains the user-facing failure on other hosts.
+    #[cfg(target_os = "macos")]
+    {
+        let factory = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa)
+            .context("create MSAA pipeline catalog on Metal")?;
+        factory.capture_builtin_present_pipeline_variants();
+        WgpuFactory::new_with_mode(8, 8, RenderMode::ClockwiseAtomic)
+            .context("create clockwise-atomic pipeline catalog on Metal")?;
+        WgpuFactory::new_with_forced_vertex_storage_polyfill(8, 8, RenderMode::Msaa)
+            .context("create vertex-storage-polyfill MSAA pipeline catalog on Metal")?;
+    }
 
     let builtin_identities: BTreeMap<_, _> = builtin_shader_capture_inventory()
         .into_iter()

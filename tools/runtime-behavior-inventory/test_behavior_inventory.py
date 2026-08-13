@@ -1355,8 +1355,10 @@ class RustDiscoveryTests(unittest.TestCase):
     def test_inline_cfg_test_items_are_not_shipped_inventory(self) -> None:
         source = """
         pub fn shipped() {}
+        /// Fixture documentation one.
         #[cfg(test)]
         mod tests { fn fixture_only() {} }
+        /** Inline fixture documentation one. */
         #[test]
         fn inline_test() { fn local_fixture() {} }
         """
@@ -1368,6 +1370,18 @@ class RustDiscoveryTests(unittest.TestCase):
                     "crates/demo/src/lib.rs", source
                 )
             ],
+        )
+        changed_docs = source.replace("documentation one", "documentation two")
+        self.assertEqual(
+            behavior_inventory.rust_shipped_source(source),
+            behavior_inventory.rust_shipped_source(changed_docs),
+        )
+        self.assertNotIn(
+            "Fixture documentation", behavior_inventory.rust_shipped_source(source)
+        )
+        self.assertNotIn(
+            "Inline fixture documentation",
+            behavior_inventory.rust_shipped_source(source),
         )
 
     def test_inner_cfg_test_excludes_the_enclosing_source_or_module(self) -> None:

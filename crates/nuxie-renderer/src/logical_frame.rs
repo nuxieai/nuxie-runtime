@@ -429,6 +429,16 @@ impl LogicalFramePool {
             pool: Arc::clone(self),
         }
     }
+
+    pub(crate) fn checkout_fresh(
+        self: &Arc<Self>,
+        config: LogicalFrameConfig,
+    ) -> LogicalFrameLease {
+        LogicalFrameLease {
+            frame: Some(LogicalFrame::new(config)),
+            pool: Arc::clone(self),
+        }
+    }
 }
 
 pub(crate) struct LogicalFrameLease {

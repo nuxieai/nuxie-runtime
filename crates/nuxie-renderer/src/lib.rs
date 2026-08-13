@@ -1327,7 +1327,7 @@ impl WgpuFactory {
             logical_frame: self
                 .context
                 .logical_frame_pool
-                .checkout(self.logical_frame_config()),
+                .checkout_fresh(self.logical_frame_config()),
             stroke_preparation_scratch: self.context.stroke_preparation_scratch.checkout(),
             draw_calls: 0,
             unsupported: None,

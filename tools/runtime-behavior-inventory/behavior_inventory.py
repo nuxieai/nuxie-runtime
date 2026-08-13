@@ -86,6 +86,11 @@ RUST_GENERATOR_OUTPUTS = {
         "OUT_DIR/property-metatable.luau-bytecode",
     ],
 }
+RUST_GENERATOR_INPUT_GLOBS = {
+    "crates/nuxie-renderer-ffi/build.rs": [
+        "crates/nuxie-renderer-ffi/cpp/*",
+    ],
+}
 NAMED_ADAPTATION_PATH_RULES = {
     "crates/nuxie-audio/src/source.rs": (
         "decoded-pcm-resampler",
@@ -3058,6 +3063,23 @@ def rust_generator_paths(
     return generators
 
 
+def rust_generator_input_records(
+    repo_root: pathlib.Path, generator: str
+) -> list[dict[str, str]]:
+    """Hash non-Rust repository inputs compiled by a Cargo build script."""
+    records = []
+    for pattern in RUST_GENERATOR_INPUT_GLOBS.get(generator, []):
+        for path in sorted(repo_root.glob(pattern)):
+            if path.is_file():
+                records.append(
+                    {
+                        "path": path.relative_to(repo_root).as_posix(),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                )
+    return records
+
+
 def rust_identifier_tokens(source: str) -> list[tuple[int, int, str]]:
     """Return Rust-like identifiers, including raw and Unicode XID spellings."""
     tokens = []
@@ -5282,6 +5304,9 @@ def discover_rust(
             file_record["generated_by"] = GENERATED_RUST_FILES[relative]
         if generator_outputs is not None:
             file_record["generator_outputs"] = generator_outputs
+            generator_inputs = rust_generator_input_records(repo_root, relative)
+            if generator_inputs:
+                file_record["generator_inputs"] = generator_inputs
         file_records.append(file_record)
         item_records.extend(items)
     return file_records, item_records
@@ -5374,6 +5399,15 @@ def validate_configuration(repo_root: pathlib.Path) -> list[str]:
     for path, outputs in RUST_GENERATOR_OUTPUTS.items():
         if not outputs or len(outputs) != len(set(outputs)):
             errors.append(f"[generated] invalid runtime generator outputs: {path}")
+    for generator, patterns in RUST_GENERATOR_INPUT_GLOBS.items():
+        if generator not in declared_generators:
+            errors.append(
+                f"[generated] input owner is not a runtime generator: {generator}"
+            )
+        if not patterns or not rust_generator_input_records(repo_root, generator):
+            errors.append(
+                f"[generated] runtime generator inputs are empty: {generator}"
+            )
     additions = tomllib.loads((repo_root / "rust-additions.toml").read_text())
     manifest = tomllib.loads(
         (repo_root / "file-correspondence-manifest.toml").read_text()

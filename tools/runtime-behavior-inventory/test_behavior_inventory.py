@@ -1683,6 +1683,33 @@ class GateTests(unittest.TestCase):
             )
             self.assertEqual({custom_generator.resolve()}, generators)
 
+    def test_runtime_generator_native_inputs_are_hashed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            native = repo_root / "crates/demo/cpp/native.cpp"
+            native.parent.mkdir(parents=True)
+            native.write_text("int behavior() { return 1; }\n")
+            generator = "crates/demo/build.rs"
+            prior = behavior_inventory.RUST_GENERATOR_INPUT_GLOBS.get(generator)
+            behavior_inventory.RUST_GENERATOR_INPUT_GLOBS[generator] = [
+                "crates/demo/cpp/*"
+            ]
+            try:
+                before = behavior_inventory.rust_generator_input_records(
+                    repo_root, generator
+                )
+                native.write_text("int behavior() { return 2; }\n")
+                after = behavior_inventory.rust_generator_input_records(
+                    repo_root, generator
+                )
+            finally:
+                if prior is None:
+                    del behavior_inventory.RUST_GENERATOR_INPUT_GLOBS[generator]
+                else:
+                    behavior_inventory.RUST_GENERATOR_INPUT_GLOBS[generator] = prior
+            self.assertEqual("crates/demo/cpp/native.cpp", before[0]["path"])
+            self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
+
     def test_rust_candidates_cover_shipped_sources_outside_src(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

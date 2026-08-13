@@ -4218,8 +4218,12 @@ def external_test_module_paths(
         path.resolve(): {(path.parent, False)}
         for path in rust_crate_roots(repo_root, files)
     }
+    lexical_scope_cache: dict[tuple[pathlib.Path, int], tuple[int, int]] = {}
 
     def lexical_scope(owner_resolved: pathlib.Path, position: int) -> tuple[int, int]:
+        cache_key = (owner_resolved, position)
+        if cache_key in lexical_scope_cache:
+            return lexical_scope_cache[cache_key]
         masked = parsed[owner_resolved][1]
         stack = []
         containing = [(-1, len(masked))]
@@ -4230,7 +4234,9 @@ def external_test_module_paths(
                 opening = stack.pop()
                 if opening < position < cursor:
                     containing.append((opening, cursor))
-        return max(containing, key=lambda scope: scope[0])
+        scope = max(containing, key=lambda candidate: candidate[0])
+        lexical_scope_cache[cache_key] = scope
+        return scope
 
     def add_macro_modules(
         owner_resolved: pathlib.Path,
@@ -4240,7 +4246,7 @@ def external_test_module_paths(
     ) -> bool:
         source, masked, inline_modules, test_ranges = parsed[owner_resolved]
         changed = False
-        local_definitions = macro_definition_stream(
+        definition_stream = macro_definition_stream(
             owner_resolved, include_test_definitions=inherited_requires_test
         )
         definition_ranges = rust_macro_definition_ranges(masked)
@@ -4254,7 +4260,10 @@ def external_test_module_paths(
             if any(start <= invocation_start < end for start, end in definition_ranges):
                 continue
             environment = macro_environment_at(
-                owner_resolved, invocation_start, imported_definitions
+                owner_resolved,
+                invocation_start,
+                imported_definitions,
+                definition_stream,
             )
             modules = rust_resolve_macro_modules(
                 name, identifiers, environment, raw_arguments=raw_arguments
@@ -4382,6 +4391,7 @@ def external_test_module_paths(
         owner_resolved: pathlib.Path,
         position: int,
         imported_definitions: dict[str, tuple[bool, tuple]],
+        definition_stream: list[tuple[int, str, bool, tuple, int, int]] | None = None,
     ) -> dict[str, tuple[bool, tuple]]:
         environment = dict(imported_definitions)
         for (
@@ -4391,7 +4401,11 @@ def external_test_module_paths(
             arms,
             scope_start,
             scope_end,
-        ) in macro_definition_stream(owner_resolved):
+        ) in (
+            macro_definition_stream(owner_resolved)
+            if definition_stream is None
+            else definition_stream
+        ):
             if definition_position >= position:
                 break
             if not scope_start < position < scope_end:

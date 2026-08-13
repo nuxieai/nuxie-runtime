@@ -92,12 +92,36 @@ RUST_GENERATOR_OUTPUTS = {
     ],
 }
 RUST_GENERATOR_INPUT_GLOBS = {
+    "crates/nux-capi/build.rs": [
+        "crates/nux-capi/cbindgen.toml",
+    ],
     "crates/nuxie-renderer-ffi/build.rs": [
         "crates/nuxie-renderer-ffi/cpp/*",
     ],
 }
 RUST_GENERATOR_UPSTREAM_INPUT_GLOBS = {
     "crates/nuxie-renderer-ffi/build.rs": [
+        "renderer/src/draw.cpp",
+        "renderer/src/gpu.cpp",
+        "renderer/src/gpu_resource.cpp",
+        "renderer/src/gr_triangulator.cpp",
+        "renderer/src/gradient.cpp",
+        "renderer/src/intersection_board.cpp",
+        "renderer/src/render_context.cpp",
+        "renderer/src/render_context_helper_impl.cpp",
+        "renderer/src/rive_render_factory.cpp",
+        "renderer/src/rive_render_image.cpp",
+        "renderer/src/rive_render_paint.cpp",
+        "renderer/src/rive_render_path.cpp",
+        "renderer/src/rive_renderer.cpp",
+        "renderer/src/sk_rectanizer_skyline.cpp",
+        "renderer/include/**/*.h",
+        "renderer/include/**/*.hpp",
+        "renderer/src/*.hpp",
+        "renderer/src/metal/*.h",
+        "renderer/src/ore/**/*.hpp",
+        "renderer/src/vulkan/**/*.hpp",
+        "renderer/src/webgpu/**/*.h",
         "tests/common/render_context_null.cpp",
         "tests/common/render_context_null.hpp",
     ],
@@ -5455,7 +5479,10 @@ def validate_configuration(
             errors.append(
                 f"[generated] input owner is not a runtime generator: {generator}"
             )
-        if not patterns or not rust_generator_input_records(repo_root, generator):
+        if not patterns or any(
+            not any(path.is_file() for path in repo_root.glob(pattern))
+            for pattern in patterns
+        ):
             errors.append(
                 f"[generated] runtime generator inputs are empty: {generator}"
             )
@@ -5860,6 +5887,14 @@ def git_head(root: pathlib.Path) -> str:
 
 
 def git_worktree_clean(root: pathlib.Path) -> bool:
+    inventory_paths = set(UPSTREAM_SOURCE_ROOTS)
+    for patterns in RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.values():
+        for pattern in patterns:
+            inventory_paths.update(
+                path.relative_to(root).as_posix()
+                for path in root.glob(pattern)
+                if path.is_file()
+            )
     changed = subprocess.run(
         [
             "git",
@@ -5867,7 +5902,7 @@ def git_worktree_clean(root: pathlib.Path) -> bool:
             "--porcelain=v1",
             "--untracked-files=all",
             "--",
-            *UPSTREAM_SOURCE_ROOTS,
+            *sorted(inventory_paths),
         ],
         cwd=root,
         check=True,
@@ -5883,7 +5918,7 @@ def git_worktree_clean(root: pathlib.Path) -> bool:
             "--exclude-standard",
             "-z",
             "--",
-            *UPSTREAM_SOURCE_ROOTS,
+            *sorted(inventory_paths),
         ],
         cwd=root,
         check=True,

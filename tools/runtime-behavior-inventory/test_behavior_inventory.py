@@ -1710,6 +1710,16 @@ class GateTests(unittest.TestCase):
             self.assertEqual("crates/demo/cpp/native.cpp", before[0]["path"])
             self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
 
+    def test_cbindgen_configuration_is_a_runtime_generator_input(self) -> None:
+        repo_root = pathlib.Path(__file__).parents[2]
+        records = behavior_inventory.rust_generator_input_records(
+            repo_root, "crates/nux-capi/build.rs"
+        )
+        self.assertEqual(
+            ["crates/nux-capi/cbindgen.toml"],
+            [record["path"] for record in records],
+        )
+
     def test_runtime_generator_upstream_native_inputs_are_hashed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -3807,8 +3817,17 @@ class GateTests(unittest.TestCase):
             native = root / "tests/common/render_context_null.cpp"
             native.parent.mkdir(parents=True)
             native.write_text("int native_owner() { return 1; }\n")
+            renderer_header = root / "renderer/include/rive/renderer/render_context.hpp"
+            renderer_header.parent.mkdir(parents=True)
+            renderer_header.write_text("int renderer_owner();\n")
             subprocess.run(
-                ["git", "add", "src/owner.cpp", "tests/common/render_context_null.cpp"],
+                [
+                    "git",
+                    "add",
+                    "src/owner.cpp",
+                    "tests/common/render_context_null.cpp",
+                    "renderer/include/rive/renderer/render_context.hpp",
+                ],
                 cwd=root,
                 check=True,
             )
@@ -3840,6 +3859,18 @@ class GateTests(unittest.TestCase):
             self.assertFalse(behavior_inventory.git_worktree_clean(root))
             subprocess.run(
                 ["git", "checkout", "--", "tests/common/render_context_null.cpp"],
+                cwd=root,
+                check=True,
+            )
+            renderer_header.write_text("int changed_renderer_owner();\n")
+            self.assertFalse(behavior_inventory.git_worktree_clean(root))
+            subprocess.run(
+                [
+                    "git",
+                    "checkout",
+                    "--",
+                    "renderer/include/rive/renderer/render_context.hpp",
+                ],
                 cwd=root,
                 check=True,
             )

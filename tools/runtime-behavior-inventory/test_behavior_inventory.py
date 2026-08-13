@@ -3283,6 +3283,30 @@ class GateTests(unittest.TestCase):
             self.assertNotIn(grouped.resolve(), excluded)
             self.assertNotIn(grouped_renamed.resolve(), excluded)
 
+    def test_macro_export_reaches_crate_root_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\nedition = "2024"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text("mod macros;\ncrate::make_mod!(behavior);\n")
+            macros.write_text(
+                "#[macro_export]\n"
+                "macro_rules! make_mod { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
     def test_included_macro_is_visible_only_after_include(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

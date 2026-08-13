@@ -4191,6 +4191,7 @@ def external_test_module_paths(
     ] = {}
     macro_includes: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
     macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
+    crate_exported_macro_names: dict[pathlib.Path, set[str]] = {}
 
     def add_candidate(path: pathlib.Path, *, require_rust_suffix: bool = True) -> bool:
         resolved = path.resolve()
@@ -4222,6 +4223,16 @@ def external_test_module_paths(
             for definition in rust_macro_definition_specs(masked, source)
             if not any(start <= definition[0] < end for start, end in test_ranges)
         ]
+        crate_exported_macro_names[owner.resolve()] = {
+            definition[1]
+            for definition in macro_definition_events[owner.resolve()]
+            if re.search(
+                r"#\s*\[\s*macro_export(?:\s*\([^]]*\))?\s*\]",
+                masked[
+                    rust_leading_attribute_start(masked, definition[0]) : definition[0]
+                ],
+            )
+        }
 
     for owner in list(files):
         parse_candidate(owner)
@@ -4481,14 +4492,43 @@ def external_test_module_paths(
                         before = dict(include_imports[included])
                         include_imports[included].update(environment)
                         imports_changed |= include_imports[included] != before
+            crate_macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
+            for owner, names in crate_exported_macro_names.items():
+                if not any(
+                    not requires_test
+                    for _base, requires_test in owner_states.get(owner, set())
+                ):
+                    continue
+                crate_root = next(
+                    (root for root in crate_roots if owner.is_relative_to(root)), None
+                )
+                if crate_root is None:
+                    continue
+                exported = crate_macro_exports.setdefault(crate_root, {})
+                for name in names:
+                    definition = macro_exports.get(owner, {}).get(name)
+                    if definition is not None:
+                        exported[name] = definition
             changed = False
             for owner_resolved, states in list(owner_states.items()):
+                crate_root = next(
+                    (
+                        root
+                        for root in crate_roots
+                        if owner_resolved.is_relative_to(root)
+                    ),
+                    None,
+                )
+                imported_definitions = dict(
+                    crate_macro_exports.get(crate_root, {}) if crate_root else {}
+                )
+                imported_definitions.update(include_imports[owner_resolved])
                 for base, inherited_requires_test in list(states):
                     changed |= add_macro_modules(
                         owner_resolved,
                         base,
                         inherited_requires_test,
-                        include_imports[owner_resolved],
+                        imported_definitions,
                     )
             if changed:
                 continue

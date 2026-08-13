@@ -3927,7 +3927,7 @@ def rust_macro_arm_modules(
                     kind == "variable" and value in non_identifier_bindings
                     for kind, value, _requires_test, _explicit_path in direct_targets
                 )
-                or delegated
+                or any(callee != "include" for callee, *_rest in delegated)
             ):
                 raise ValueError(
                     "unsupported Rust tt fragment controls module generation"
@@ -3952,14 +3952,23 @@ def rust_macro_arm_modules(
                 delegated_arguments,
                 requires_test,
             ) in delegated:
+                concrete_raw_arguments = substitute_bindings(
+                    delegated_arguments, bindings
+                )
+                if callee == "include":
+                    include_path = rust_static_include_path(concrete_raw_arguments, 0)
+                    if include_path is None:
+                        raise ValueError(
+                            "unsupported Rust include expansion controls source "
+                            "reachability"
+                        )
+                    modules.append((f"@include:{include_path}", requires_test))
+                    continue
                 concrete_arguments = [
                     identifier_bindings[value] if kind == "variable" else value
                     for kind, value in argument_tokens
                     if kind == "literal" or value in bindings
                 ]
-                concrete_raw_arguments = substitute_bindings(
-                    delegated_arguments, bindings
-                )
                 modules.extend(
                     (module, requires_test or module_requires_test)
                     for module, module_requires_test in rust_resolve_macro_modules(
@@ -4235,21 +4244,32 @@ def external_test_module_paths(
                     if module.startswith("@path:")
                     else None
                 )
+                include_path = (
+                    module.removeprefix("@include:")
+                    if module.startswith("@include:")
+                    else None
+                )
                 targets = (
-                    ((explicit_base / explicit_path, True),)
-                    if explicit_path is not None
+                    ((owner_resolved.parent / include_path, "include"),)
+                    if include_path is not None
                     else (
-                        (declaration_base / f"{module}.rs", False),
-                        (declaration_base / module / "mod.rs", False),
+                        ((explicit_base / explicit_path, "explicit"),)
+                        if explicit_path is not None
+                        else (
+                            (declaration_base / f"{module}.rs", "module"),
+                            (declaration_base / module / "mod.rs", "module"),
+                        )
                     )
                 )
-                for target, target_is_explicit in targets:
+                for target, target_kind in targets:
                     resolved = target.resolve()
-                    if add_candidate(resolved):
+                    if add_candidate(
+                        resolved, require_rust_suffix=target_kind != "include"
+                    ):
                         state = (
                             (
                                 resolved.parent
-                                if target_is_explicit
+                                if target_kind in {"explicit", "include"}
                                 else declaration_base / module
                             ),
                             inherited_requires_test
@@ -4406,6 +4426,7 @@ def external_test_module_paths(
         for owner_resolved, base, inherited_requires_test in pending:
             processed.add((owner_resolved, base, inherited_requires_test))
             source, masked, inline_modules, test_ranges = parsed[owner_resolved]
+            definition_ranges = rust_macro_definition_ranges(masked)
             add_macro_modules(
                 owner_resolved,
                 base,
@@ -4413,6 +4434,10 @@ def external_test_module_paths(
                 {},
             )
             for match in include_declaration.finditer(masked):
+                if any(
+                    start <= match.start() < end for start, end in definition_ranges
+                ):
+                    continue
                 macro_start = match.start("macro")
                 if source[max(0, macro_start - 2) : macro_start] == "r#" or (
                     macro_start
@@ -4469,8 +4494,7 @@ def external_test_module_paths(
                 )
             for match in declaration.finditer(masked):
                 if any(
-                    start <= match.start() < end
-                    for start, end in rust_macro_definition_ranges(masked)
+                    start <= match.start() < end for start, end in definition_ranges
                 ):
                     continue
                 attributes = source[match.start(1) : match.end(1)]

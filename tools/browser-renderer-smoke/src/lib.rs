@@ -631,6 +631,48 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
     }
 
     #[wasm_bindgen]
+    pub async fn run_stream_presentation_reference(
+        canvas: HtmlCanvasElement,
+        stream_text: String,
+    ) -> Result<Vec<u8>, JsValue> {
+        let stream = RenderStream::parse(&stream_text).map_err(js_error)?;
+        let (width, height) = stream
+            .frame_size
+            .ok_or_else(|| JsValue::from_str("stream does not declare frameSize"))?;
+        let clear = stream.clear_color.unwrap_or(0);
+        canvas.set_width(width);
+        canvas.set_height(height);
+
+        let mut factory = WgpuFactory::new_async(width, height)
+            .await
+            .map_err(js_error)?;
+        let surface = factory
+            .create_presentation_surface(
+                CanvasSurfaceTarget(canvas),
+                width,
+                height,
+                WgpuPresentationAlpha::Premultiplied,
+            )
+            .map_err(js_error)?;
+        let mut presented = factory.begin_frame(clear);
+        stream
+            .replay_frame(0, &mut factory, &mut presented)
+            .map_err(js_error)?;
+        surface
+            .acquire()
+            .map_err(surface_acquisition_error)?
+            .present(presented)
+            .await
+            .map_err(js_error)?;
+
+        let mut reference = factory.begin_frame(clear);
+        stream
+            .replay_frame(0, &mut factory, &mut reference)
+            .map_err(js_error)?;
+        reference.finish_async().await.map_err(js_error)
+    }
+
+    #[wasm_bindgen]
     pub async fn run_stream_case(
         _canvas: HtmlCanvasElement,
         stream_name: String,

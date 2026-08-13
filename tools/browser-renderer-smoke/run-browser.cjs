@@ -22,6 +22,7 @@ const fullCases = [
     expected: [
       "backend=webgpu",
       "browser-presentation=direct-webgpu alpha=premultiplied exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0",
+      "browser-presentation=direct-webgpu stream=riv-superbowl exact-readback=true",
       "browser-readback=explicit rgba-bytes=48 exact=true surface=0 mapAsync=1 putImageData=0",
       "direct-gpu-canvas=webgpu",
       "imported-gpu-canvas=webgpu",

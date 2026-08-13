@@ -2873,16 +2873,23 @@ def rust_cfg_attr_paths(
 
 
 def rust_inline_module_contexts(masked: str) -> list[tuple[int, int, str]]:
-    pattern = re.compile(
-        r"(?m)(?:#\s*\[[^]]+\]\s*)*(?:pub(?:\([^)]*\))?\s+)?"
-        r"mod\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)\s*\{"
-    )
+    pattern = re.compile(r"(?m)(?:#\s*\[[^]]+\]\s*)*(?:pub(?:\([^)]*\))?\s+)?mod\s+")
     contexts = []
     for match in pattern.finditer(masked):
-        opening = masked.rfind("{", match.start(), match.end())
+        identifiers = rust_identifier_tokens(masked[match.end() :])
+        if not identifiers or identifiers[0][0] != 0:
+            continue
+        _start, relative_end, identifier = identifiers[0]
+        opening = match.end() + relative_end
+        while opening < len(masked) and masked[opening].isspace():
+            opening += 1
+        if opening >= len(masked) or masked[opening] != "{":
+            continue
         closing = matching_brace(masked, opening)
         if closing is not None:
-            contexts.append((opening, closing, match.group(1)))
+            contexts.append(
+                (opening, closing, unicodedata.normalize("NFC", identifier))
+            )
     return contexts
 
 
@@ -2999,6 +3006,33 @@ def rust_identifier_tokens(source: str) -> list[tuple[int, int, str]]:
         tokens.append((start, end, source[identifier_start:end]))
         cursor = end
     return tokens
+
+
+def rust_external_module_declarations(
+    masked: str,
+) -> list[tuple[int, int, int, str]]:
+    """Return external module declarations with Rust XID identifiers."""
+    prefix = re.compile(r"(?ms)((?:#\s*\[[^]]+\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?mod\s+")
+    declarations = []
+    for match in prefix.finditer(masked):
+        identifiers = rust_identifier_tokens(masked[match.end() :])
+        if not identifiers or identifiers[0][0] != 0:
+            continue
+        _start, relative_end, identifier = identifiers[0]
+        cursor = match.end() + relative_end
+        while cursor < len(masked) and masked[cursor].isspace():
+            cursor += 1
+        if cursor >= len(masked) or masked[cursor] != ";":
+            continue
+        declarations.append(
+            (
+                match.start(),
+                match.start(1),
+                match.end(1),
+                unicodedata.normalize("NFC", identifier),
+            )
+        )
+    return declarations
 
 
 def rust_macro_definition_specs(
@@ -4187,10 +4221,6 @@ def external_test_module_paths(
             relative_generator = generator.relative_to(repo_root.resolve()).as_posix()
             outputs.update(RUST_GENERATOR_OUTPUTS.get(relative_generator, []))
         generator_outputs_by_crate[crate_root] = outputs
-    declaration = re.compile(
-        r"(?ms)((?:#\s*\[[^]]+\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?mod\s+"
-        r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)\s*;"
-    )
     include_declaration = re.compile(
         r"(?ms)((?:#\s*\[[^]]+\]\s*)*)(?P<macro>include)\s*!\s*([({\[])"
     )
@@ -4326,12 +4356,12 @@ def external_test_module_paths(
                 argument_mask = mask_noncode(raw_arguments, nested_block_comments=True)
                 modules = [
                     (
-                        match.group(2),
-                        attributes_require_test(
-                            raw_arguments[match.start(1) : match.end(1)]
-                        ),
+                        module,
+                        attributes_require_test(raw_arguments[attr_start:attr_end]),
                     )
-                    for match in declaration.finditer(argument_mask)
+                    for _start, attr_start, attr_end, module in (
+                        rust_external_module_declarations(argument_mask)
+                    )
                 ]
             if not modules:
                 continue
@@ -4658,17 +4688,20 @@ def external_test_module_paths(
                     (match.start(), included)
                 )
             module_targets: dict[str, set[pathlib.Path]] = {}
-            for match in declaration.finditer(masked):
-                if any(
-                    start <= match.start() < end for start, end in definition_ranges
-                ):
+            for (
+                match_start,
+                attr_start,
+                attr_end,
+                module,
+            ) in rust_external_module_declarations(masked):
+                if any(start <= match_start < end for start, end in definition_ranges):
                     continue
-                attributes = source[match.start(1) : match.end(1)]
+                attributes = source[attr_start:attr_end]
                 ancestors = sorted(
                     (
                         context
                         for context in inline_modules
-                        if context[0] < match.start() < context[1]
+                        if context[0] < match_start < context[1]
                     ),
                     key=lambda context: context[0],
                 )
@@ -4677,7 +4710,6 @@ def external_test_module_paths(
                 for _opening, _closing, name in ancestors:
                     declaration_base /= name
                     explicit_base /= name
-                module = match.group(2)
                 explicit_path = rust_path_attribute(attributes)
                 cfg_attr_paths = rust_cfg_attr_paths(attributes)
                 if explicit_path is not None and cfg_attr_paths:
@@ -4726,7 +4758,7 @@ def external_test_module_paths(
                         local_requires_test = attributes_require_test(
                             attributes
                         ) or any(
-                            start <= match.start() < end for start, end in test_ranges
+                            start <= match_start < end for start, end in test_ranges
                         )
                         if (
                             not inherited_requires_test
@@ -4738,7 +4770,7 @@ def external_test_module_paths(
                             )
                         ):
                             macro_imports.setdefault(owner_resolved, []).append(
-                                (match.start(), resolved, None, None)
+                                (match_start, resolved, None, None)
                             )
                         owner_states.setdefault(resolved, set()).add(
                             (

@@ -3822,6 +3822,30 @@ class GateTests(unittest.TestCase):
                 ),
             )
 
+    def test_path_module_with_unicode_identifier_is_not_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "crates/demo/src"
+            inline = source / "naïve"
+            inline.mkdir(parents=True)
+            owner = source / "lib.rs"
+            owner.write_text(
+                '#[path = "behavior.rs"]\nmod café;\n'
+                'mod naïve { #[path = "nested.rs"] mod nested; }\n'
+            )
+            behavior = source / "behavior.rs"
+            behavior.write_text("pub fn shipped() {}\n")
+            nested = inline / "nested.rs"
+            nested.write_text("pub fn nested_shipped() {}\n")
+
+            self.assertTrue(
+                {behavior.resolve(), nested.resolve()}.isdisjoint(
+                    behavior_inventory.external_test_module_paths(
+                        root, [owner, behavior, nested]
+                    )
+                )
+            )
+
     def test_path_inside_inline_module_uses_inline_module_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

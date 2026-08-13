@@ -203,7 +203,11 @@ pub(crate) struct Tessellator {
 }
 
 impl Tessellator {
-    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        capabilities: RendererCapabilities,
+    ) -> Self {
         let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let vertex = shader_catalog::create(
             device,
@@ -323,7 +327,9 @@ impl Tessellator {
             _linear_sampler: linear_sampler,
             sampler_group,
             upload_slots: std::array::from_fn(|_| {
-                Mutex::new(TessellationUploadSlot::new(device, &limits, polyfill))
+                Mutex::new(TessellationUploadSlot::new(
+                    device, queue, &limits, polyfill,
+                ))
             }),
             next_upload_slot: AtomicUsize::new(0),
             texture_pool: TessellationTexturePool::default(),
@@ -913,6 +919,7 @@ struct TessellationUploadSlot {
 impl TessellationUploadSlot {
     fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         limits: &wgpu::Limits,
         polyfill_vertex_storage_buffers: bool,
     ) -> Self {
@@ -924,6 +931,7 @@ impl TessellationUploadSlot {
         Self {
             uploads: UploadArena::new(
                 device,
+                queue,
                 "nuxie-tessellation-upload-ring",
                 wgpu::BufferUsages::VERTEX
                     | wgpu::BufferUsages::UNIFORM
@@ -977,13 +985,28 @@ struct UploadArena {
     usage: wgpu::BufferUsages,
     pages: Vec<UploadPage>,
     device: wgpu::Device,
-    staging_belt: wgpu::util::StagingBelt,
+    queue: wgpu::Queue,
+    transport_kind: UploadTransportKind,
+    staging_belt: Option<wgpu::util::StagingBelt>,
+    queue_write_scratch: Vec<u8>,
     has_active_staging_writes: bool,
     #[cfg(test)]
     abandoned_staging_belt_resets: u64,
     #[cfg(feature = "perf-diagnostics")]
     diagnostics: TessellationUploadDiagnostics,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UploadTransportKind {
+    StagingBelt,
+    #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
+    QueueWrite,
+}
+
+#[cfg(target_arch = "wasm32")]
+const PLATFORM_UPLOAD_TRANSPORT: UploadTransportKind = UploadTransportKind::QueueWrite;
+#[cfg(not(target_arch = "wasm32"))]
+const PLATFORM_UPLOAD_TRANSPORT: UploadTransportKind = UploadTransportKind::StagingBelt;
 
 #[derive(Clone, Copy)]
 struct UploadRequest<'a> {
@@ -1032,13 +1055,32 @@ where
 }
 
 impl UploadArena {
-    fn new(device: &wgpu::Device, label: &'static str, usage: wgpu::BufferUsages) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &'static str,
+        usage: wgpu::BufferUsages,
+    ) -> Self {
+        Self::new_with_transport(device, queue, label, usage, PLATFORM_UPLOAD_TRANSPORT)
+    }
+
+    fn new_with_transport(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &'static str,
+        usage: wgpu::BufferUsages,
+        transport_kind: UploadTransportKind,
+    ) -> Self {
         Self {
             label,
             usage: usage | wgpu::BufferUsages::COPY_DST,
             pages: Vec::new(),
             device: device.clone(),
-            staging_belt: wgpu::util::StagingBelt::new(device.clone(), STAGING_CHUNK_SIZE),
+            queue: queue.clone(),
+            transport_kind,
+            staging_belt: (transport_kind == UploadTransportKind::StagingBelt)
+                .then(|| wgpu::util::StagingBelt::new(device.clone(), STAGING_CHUNK_SIZE)),
+            queue_write_scratch: Vec::new(),
             has_active_staging_writes: false,
             #[cfg(test)]
             abandoned_staging_belt_resets: 0,
@@ -1119,21 +1161,10 @@ impl UploadArena {
         };
         #[cfg(feature = "perf-diagnostics")]
         let write_started = Instant::now();
-        // Record the copy at allocation time so it precedes the first render
-        // pass that can consume the returned slice. `finish_submission` only
-        // closes and schedules recall of the mapped staging chunks; deferring
-        // copies there would place them after their consumers.
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
-            encoder,
-            &destination,
-            upload.offset,
-            NonZeroU64::new(write_size).expect("nonempty aligned tessellation upload"),
-        );
+        // Record the upload at allocation time so it precedes the first render
+        // pass that can consume the returned slice.
         record_buffer_upload(write_size);
-        mapped.slice(..bytes.len()).copy_from_slice(bytes);
-        mapped.slice(bytes.len()..).fill(0);
-        drop(mapped);
+        self.write_upload_bytes(encoder, &destination, upload.offset, write_size, bytes);
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1205,16 +1236,12 @@ impl UploadArena {
             .collect::<Vec<_>>();
         #[cfg(feature = "perf-diagnostics")]
         let write_started = Instant::now();
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
+        record_buffer_upload(write_size);
+        self.write_grouped_upload(
             encoder,
             &destination,
             base_offset,
-            NonZeroU64::new(write_size).expect("nonempty grouped frame upload"),
-        );
-        record_buffer_upload(write_size);
-        write_grouped_upload_bytes(
-            mapped.slice(..),
+            write_size,
             payloads
                 .iter()
                 .zip(relative_offsets.iter().copied())
@@ -1227,7 +1254,6 @@ impl UploadArena {
                     )
                 }),
         );
-        drop(mapped);
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1307,16 +1333,12 @@ impl UploadArena {
         // Every member of this group is consumed by the same first render
         // pass. One contiguous copy keeps the upload before that consumer while
         // avoiding six separate wgpu validation and Metal copy commands.
-        self.has_active_staging_writes = true;
-        let mut mapped = self.staging_belt.write_buffer(
+        record_buffer_upload(write_size);
+        self.write_grouped_upload(
             encoder,
             &destination,
             base_offset,
-            NonZeroU64::new(write_size).expect("nonempty grouped tessellation upload"),
-        );
-        record_buffer_upload(write_size);
-        write_grouped_upload_bytes(
-            mapped.slice(..),
+            write_size,
             requests
                 .iter()
                 .zip(relative_offsets.iter().copied())
@@ -1327,7 +1349,6 @@ impl UploadArena {
                     )
                 }),
         );
-        drop(mapped);
         #[cfg(feature = "perf-diagnostics")]
         {
             self.diagnostics.upload_calls = self.diagnostics.upload_calls.saturating_add(1);
@@ -1353,6 +1374,90 @@ impl UploadArena {
         uploads
     }
 
+    fn write_upload_bytes(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        destination: &wgpu::Buffer,
+        offset: u64,
+        write_size: u64,
+        bytes: &[u8],
+    ) {
+        match self.transport_kind {
+            UploadTransportKind::StagingBelt => {
+                self.has_active_staging_writes = true;
+                let mut mapped = self
+                    .staging_belt
+                    .as_mut()
+                    .expect("staging transport owns a staging belt")
+                    .write_buffer(
+                        encoder,
+                        destination,
+                        offset,
+                        NonZeroU64::new(write_size).expect("nonempty aligned upload"),
+                    );
+                mapped.slice(..bytes.len()).copy_from_slice(bytes);
+                mapped.slice(bytes.len()..).fill(0);
+            }
+            UploadTransportKind::QueueWrite => {
+                // Match upstream Rive's WebGPU dynamic-buffer model: keep the
+                // destination pages persistent and enqueue CPU bytes directly,
+                // without retaining mapped source buffers across presentations.
+                let write_size = usize::try_from(write_size).expect("upload size fits usize");
+                if bytes.len() == write_size {
+                    self.queue.write_buffer(destination, offset, bytes);
+                } else {
+                    self.queue_write_scratch.resize(write_size, 0);
+                    self.queue_write_scratch.fill(0);
+                    self.queue_write_scratch[..bytes.len()].copy_from_slice(bytes);
+                    self.queue
+                        .write_buffer(destination, offset, &self.queue_write_scratch);
+                }
+            }
+        }
+    }
+
+    fn write_grouped_upload<'a, I>(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        destination: &wgpu::Buffer,
+        offset: u64,
+        write_size: u64,
+        payloads: I,
+    ) where
+        I: Iterator<Item = (usize, &'a [u8])>,
+    {
+        match self.transport_kind {
+            UploadTransportKind::StagingBelt => {
+                self.has_active_staging_writes = true;
+                let mut mapped = self
+                    .staging_belt
+                    .as_mut()
+                    .expect("staging transport owns a staging belt")
+                    .write_buffer(
+                        encoder,
+                        destination,
+                        offset,
+                        NonZeroU64::new(write_size).expect("nonempty grouped upload"),
+                    );
+                write_grouped_upload_bytes(mapped.slice(..), payloads);
+            }
+            UploadTransportKind::QueueWrite => {
+                // A single queue write preserves the grouped copy's ordering
+                // while avoiding one mapped source allocation per submission.
+                self.queue_write_scratch.resize(
+                    usize::try_from(write_size).expect("grouped upload size fits usize"),
+                    0,
+                );
+                write_grouped_upload_bytes(
+                    wgpu::WriteOnly::from_mut(self.queue_write_scratch.as_mut_slice()),
+                    payloads,
+                );
+                self.queue
+                    .write_buffer(destination, offset, &self.queue_write_scratch);
+            }
+        }
+    }
+
     fn finish_submission(&mut self, encoder: &wgpu::CommandEncoder) {
         #[cfg(feature = "perf-diagnostics")]
         {
@@ -1373,11 +1478,11 @@ impl UploadArena {
                     .saturating_add(page.capacity);
             }
         }
-        self.staging_belt.finish_and_recall_on_submit(encoder);
-        // `finish_and_recall_on_submit` drains every active chunk into callbacks
-        // owned by the encoder. If that encoder is dropped instead of submitted,
-        // those chunks are dropped with it; only pre-finish active chunks need an
-        // explicit belt reset on `TessellationUploadFrame::drop`.
+        if let Some(staging_belt) = &mut self.staging_belt {
+            staging_belt.finish_and_recall_on_submit(encoder);
+        }
+        // Finishing a staging belt drains every active chunk into callbacks
+        // owned by the encoder. Queue writes have no mapped source ownership.
         self.has_active_staging_writes = false;
     }
 
@@ -1385,7 +1490,10 @@ impl UploadArena {
         if !self.has_active_staging_writes {
             return;
         }
-        self.staging_belt = wgpu::util::StagingBelt::new(self.device.clone(), STAGING_CHUNK_SIZE);
+        self.staging_belt = Some(wgpu::util::StagingBelt::new(
+            self.device.clone(),
+            STAGING_CHUNK_SIZE,
+        ));
         self.has_active_staging_writes = false;
         #[cfg(test)]
         {
@@ -1915,6 +2023,155 @@ mod tests {
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .unwrap();
+    }
+
+    #[test]
+    fn browser_queue_upload_transport_writes_exact_single_and_group_without_staging() {
+        let factory = crate::WgpuFactory::new(2, 2).unwrap();
+        let mut arena = UploadArena::new_with_transport(
+            &factory.context.device,
+            &factory.context.queue,
+            "nuxie-browser-queue-upload-test",
+            wgpu::BufferUsages::COPY_SRC,
+            UploadTransportKind::QueueWrite,
+        );
+        let mut encoder =
+            factory
+                .context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-browser-queue-upload-test-encoder"),
+                });
+        let first = [1u8, 2, 3];
+        let second = [4u8, 5, 6, 7, 8];
+        let single_bytes = [9u8, 10, 11];
+        let single = arena.upload(
+            &factory.context.device,
+            &mut encoder,
+            &single_bytes,
+            wgpu::COPY_BUFFER_ALIGNMENT,
+        );
+        let uploads = arena.upload_group(
+            &factory.context.device,
+            &mut encoder,
+            [
+                UploadRequest::new(&first, wgpu::COPY_BUFFER_ALIGNMENT),
+                UploadRequest::new(&second, 8),
+            ],
+        );
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-browser-queue-upload-test-readback"),
+                size: 20,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+        encoder.copy_buffer_to_buffer(&single.buffer, single.offset, &readback, 0, 4);
+        encoder.copy_buffer_to_buffer(&uploads[0].buffer, uploads[0].offset, &readback, 4, 16);
+
+        assert!(!arena.has_active_staging_writes);
+        arena.finish_submission(&encoder);
+        factory.context.queue.submit(Some(encoder.finish()));
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+
+        let slice = readback.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        assert_eq!(
+            &*slice.get_mapped_range().unwrap(),
+            &[9, 10, 11, 0, 1, 2, 3, 0, 0, 0, 0, 0, 4, 5, 6, 7, 8, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn browser_queue_upload_transport_reuses_pages_across_four_submissions() {
+        let factory = crate::WgpuFactory::new(2, 2).unwrap();
+        let mut arena = UploadArena::new_with_transport(
+            &factory.context.device,
+            &factory.context.queue,
+            "nuxie-browser-queue-upload-reuse-test",
+            wgpu::BufferUsages::COPY_SRC,
+            UploadTransportKind::QueueWrite,
+        );
+        let readback = factory
+            .context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("nuxie-browser-queue-upload-reuse-readback"),
+                size: 16,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+
+        let mut retained_scratch_capacity = None;
+        for frame in 0..4u8 {
+            arena.begin_submission(&factory.context.device);
+            let mut encoder =
+                factory
+                    .context
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("nuxie-browser-queue-upload-reuse-encoder"),
+                    });
+            let bytes = [frame + 1; 3];
+            let upload = arena.upload(
+                &factory.context.device,
+                &mut encoder,
+                &bytes,
+                wgpu::COPY_BUFFER_ALIGNMENT,
+            );
+            encoder.copy_buffer_to_buffer(
+                &upload.buffer,
+                upload.offset,
+                &readback,
+                u64::from(frame) * 4,
+                4,
+            );
+            assert!(!arena.has_active_staging_writes);
+            match retained_scratch_capacity {
+                Some(capacity) => assert_eq!(arena.queue_write_scratch.capacity(), capacity),
+                None => retained_scratch_capacity = Some(arena.queue_write_scratch.capacity()),
+            }
+            arena.finish_submission(&encoder);
+            factory.context.queue.submit(Some(encoder.finish()));
+        }
+        assert!(arena.staging_belt.is_none());
+        assert_eq!(arena.pages.len(), 1);
+
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        let slice = readback.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        factory
+            .context
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        receiver.recv().unwrap().unwrap();
+        assert_eq!(
+            &*slice.get_mapped_range().unwrap(),
+            &[1, 1, 1, 0, 2, 2, 2, 0, 3, 3, 3, 0, 4, 4, 4, 0]
+        );
     }
 
     #[cfg(feature = "perf-diagnostics")]

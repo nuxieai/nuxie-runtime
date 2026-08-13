@@ -1334,7 +1334,7 @@ impl WgpuFactory {
                 contents: bytemuck::cast_slice(&patch_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let tessellator = tessellator::Tessellator::new(&device, capabilities);
+        let tessellator = tessellator::Tessellator::new(&device, &queue, capabilities);
         let path_pipeline = path_pipeline::PathPipeline::new(&device, capabilities);
         let atomic_pipeline = matches!(mode, RenderMode::ClockwiseAtomic)
             .then(|| atomic_pipeline::AtomicPipeline::new(&device));

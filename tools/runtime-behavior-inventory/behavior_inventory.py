@@ -1298,13 +1298,13 @@ def cpp_constructor_body_opening(
     return None
 
 
-RUST_FN_HEAD = re.compile(
-    r"(?<![A-Za-z0-9_])(?:#\[[^\n]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?"
+RUST_FN_PREFIX = re.compile(
+    r"(?<!\w)(?:#\[[^\n]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?"
     r"(?:(?:async|const|unsafe)\s+)*(?:extern\s+)?"
-    r"fn\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)\s*"
+    r"fn\s+"
 )
 RUST_CONTEXT = re.compile(
-    r"(?m)^[ \t]*((?:#\s*\[[^]]+\]\s*)*(?:(?:unsafe\s+)?(?:impl|trait)\b[^;{]+|(?:pub(?:\([^)]*\))?\s+)?mod\s+(?:r#)?[A-Za-z_][A-Za-z0-9_]*\s*))\{"
+    r"(?m)^[ \t]*((?:#\s*\[[^]]+\]\s*)*(?:unsafe\s+)?(?:impl|trait)\b[^;{]+)\{"
 )
 
 
@@ -1330,8 +1330,13 @@ def rust_function_matches(masked: str) -> list[RustFunctionMatch]:
     """Discover Rust function heads with balanced generic parameter syntax."""
     matches = []
     opening_to_closing = {"<": ">", "(": ")", "[": "]", "{": "}"}
-    for head in RUST_FN_HEAD.finditer(masked):
-        cursor = head.end()
+    for head in RUST_FN_PREFIX.finditer(masked):
+        identifier_token = rust_identifier_token_at(masked, head.end())
+        if identifier_token is None:
+            continue
+        _start, cursor, identifier = identifier_token
+        while cursor < len(masked) and masked[cursor].isspace():
+            cursor += 1
         if cursor < len(masked) and masked[cursor] == "<":
             stack = [">"]
             cursor += 1
@@ -1353,7 +1358,13 @@ def rust_function_matches(masked: str) -> list[RustFunctionMatch]:
                 cursor += 1
         if cursor >= len(masked) or masked[cursor] != "(":
             continue
-        matches.append(RustFunctionMatch(head.start(), cursor + 1, head.group(1)))
+        matches.append(
+            RustFunctionMatch(
+                head.start(),
+                cursor + 1,
+                unicodedata.normalize("NFC", identifier),
+            )
+        )
     return matches
 
 
@@ -1435,11 +1446,17 @@ def rust_context_identity(source: str, masked: str, start: int, end: int) -> str
     """Build context identity while normalizing only a raw module-name token."""
     context_source = source[start:end]
     context_masked = masked[start:end]
-    raw_name = re.search(r"\bmod\s+(r#)(?=[A-Za-z_])", context_masked)
-    if raw_name is not None:
-        prefix_start, prefix_end = raw_name.span(1)
-        context_source = context_source[:prefix_start] + context_source[prefix_end:]
-        context_masked = mask_noncode(context_source, nested_block_comments=True)
+    module = re.search(r"\bmod\s+", context_masked)
+    if module is not None:
+        identifier_token = rust_identifier_token_at(context_masked, module.end())
+        if identifier_token is not None:
+            name_start, name_end, identifier = identifier_token
+            context_source = (
+                context_source[:name_start]
+                + unicodedata.normalize("NFC", identifier)
+                + context_source[name_end:]
+            )
+            context_masked = mask_noncode(context_source, nested_block_comments=True)
     return rust_identity_text(context_source, context_masked, 0, len(context_source))
 
 
@@ -1557,11 +1574,17 @@ def rust_projected_identity(
 ) -> str:
     projected = project_source_ranges(source, ranges, start, end)
     projected_masked = mask_noncode(projected, nested_block_comments=True)
-    raw_name = re.search(r"\bfn\s+(r#)(?=[A-Za-z_])", projected_masked)
-    if raw_name is not None:
-        prefix_start, prefix_end = raw_name.span(1)
-        projected = projected[:prefix_start] + projected[prefix_end:]
-        projected_masked = mask_noncode(projected, nested_block_comments=True)
+    function = re.search(r"\bfn\s+", projected_masked)
+    if function is not None:
+        identifier_token = rust_identifier_token_at(projected_masked, function.end())
+        if identifier_token is not None:
+            name_start, name_end, identifier = identifier_token
+            projected = (
+                projected[:name_start]
+                + unicodedata.normalize("NFC", identifier)
+                + projected[name_end:]
+            )
+            projected_masked = mask_noncode(projected, nested_block_comments=True)
     return rust_identity_text(projected, projected_masked, 0, len(projected))
 
 
@@ -1580,6 +1603,14 @@ def rust_source_contexts(
                     rust_context_identity(source, masked, match.start(1), match.end(1)),
                 )
             )
+    for start, end, opening, closing, _name in rust_inline_module_context_specs(masked):
+        contexts.append(
+            (
+                opening,
+                closing,
+                rust_context_identity(source, masked, start, end),
+            )
+        )
     for match in rust_function_matches(masked):
         cursor = match.end()
         depth = 1
@@ -2872,15 +2903,16 @@ def rust_cfg_attr_paths(
     return results
 
 
-def rust_inline_module_contexts(masked: str) -> list[tuple[int, int, str]]:
+def rust_inline_module_context_specs(
+    masked: str,
+) -> list[tuple[int, int, int, int, str]]:
     pattern = re.compile(r"(?m)(?:#\s*\[[^]]+\]\s*)*(?:pub(?:\([^)]*\))?\s+)?mod\s+")
     contexts = []
     for match in pattern.finditer(masked):
-        identifiers = rust_identifier_tokens(masked[match.end() :])
-        if not identifiers or identifiers[0][0] != 0:
+        identifier_token = rust_identifier_token_at(masked, match.end())
+        if identifier_token is None:
             continue
-        _start, relative_end, identifier = identifiers[0]
-        opening = match.end() + relative_end
+        _start, opening, identifier = identifier_token
         while opening < len(masked) and masked[opening].isspace():
             opening += 1
         if opening >= len(masked) or masked[opening] != "{":
@@ -2888,9 +2920,24 @@ def rust_inline_module_contexts(masked: str) -> list[tuple[int, int, str]]:
         closing = matching_brace(masked, opening)
         if closing is not None:
             contexts.append(
-                (opening, closing, unicodedata.normalize("NFC", identifier))
+                (
+                    match.start(),
+                    opening,
+                    opening,
+                    closing,
+                    unicodedata.normalize("NFC", identifier),
+                )
             )
     return contexts
+
+
+def rust_inline_module_contexts(masked: str) -> list[tuple[int, int, str]]:
+    return [
+        (opening, closing, name)
+        for _start, _end, opening, closing, name in rust_inline_module_context_specs(
+            masked
+        )
+    ]
 
 
 def rust_crate_roots(
@@ -2994,18 +3041,27 @@ def rust_identifier_tokens(source: str) -> list[tuple[int, int, str]]:
     tokens = []
     cursor = 0
     while cursor < len(source):
-        start = cursor
-        identifier_start = cursor + 2 if source.startswith("r#", cursor) else cursor
-        first = source[identifier_start : identifier_start + 1]
-        if not first or not first.isidentifier():
+        token = rust_identifier_token_at(source, cursor)
+        if token is None:
             cursor += 1
             continue
-        end = identifier_start + 1
-        while end < len(source) and source[identifier_start : end + 1].isidentifier():
-            end += 1
-        tokens.append((start, end, source[identifier_start:end]))
+        _start, end, _identifier = token
+        tokens.append(token)
         cursor = end
     return tokens
+
+
+def rust_identifier_token_at(source: str, cursor: int) -> tuple[int, int, str] | None:
+    """Return the Rust XID identifier beginning exactly at ``cursor``."""
+    start = cursor
+    identifier_start = cursor + 2 if source.startswith("r#", cursor) else cursor
+    first = source[identifier_start : identifier_start + 1]
+    if not first or not first.isidentifier():
+        return None
+    end = identifier_start + 1
+    while end < len(source) and source[identifier_start : end + 1].isidentifier():
+        end += 1
+    return start, end, source[identifier_start:end]
 
 
 def rust_external_module_declarations(
@@ -3015,11 +3071,10 @@ def rust_external_module_declarations(
     prefix = re.compile(r"(?ms)((?:#\s*\[[^]]+\]\s*)*)(?:pub(?:\([^)]*\))?\s+)?mod\s+")
     declarations = []
     for match in prefix.finditer(masked):
-        identifiers = rust_identifier_tokens(masked[match.end() :])
-        if not identifiers or identifiers[0][0] != 0:
+        identifier_token = rust_identifier_token_at(masked, match.end())
+        if identifier_token is None:
             continue
-        _start, relative_end, identifier = identifiers[0]
-        cursor = match.end() + relative_end
+        _start, cursor, identifier = identifier_token
         while cursor < len(masked) and masked[cursor].isspace():
             cursor += 1
         if cursor >= len(masked) or masked[cursor] != ";":

@@ -7,6 +7,7 @@ import json
 import pathlib
 import subprocess
 import tempfile
+import unicodedata
 import unittest
 from unittest import mock
 
@@ -1259,6 +1260,20 @@ class RustDiscoveryTests(unittest.TestCase):
         self.assertEqual(
             [item["id"] for item in items], [item["id"] for item in raw_items]
         )
+
+    def test_unicode_function_and_module_identifiers_are_itemized(self) -> None:
+        composed = "mod café { fn résumé() { publish_dirt(); } }"
+        decomposed = unicodedata.normalize("NFD", composed)
+        composed_item = behavior_inventory.rust_items(
+            "crates/demo/src/lib.rs", composed
+        )[0]
+        decomposed_item = behavior_inventory.rust_items(
+            "crates/demo/src/lib.rs", decomposed
+        )[0]
+
+        self.assertEqual("résumé", composed_item["name"])
+        self.assertIn("::mod café::résumé@", composed_item["id"])
+        self.assertEqual(composed_item["id"], decomposed_item["id"])
 
     def test_rust_lifetimes_do_not_mask_following_items(self) -> None:
         source = """

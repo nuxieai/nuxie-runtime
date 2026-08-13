@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "52614fca690fe6a44dfae09db42f8383fc8619ed46919341bd5330951acd2af1",
-    "cpp_coverage_sha256": "63d95c82618f3c60a1ab2f10d8532602d9468eb01345a967065908e1e3662c7b",
-    "cpp_mechanism_coverage_sha256": "64ae9f8a22c063f4e926b81cec577a28923ecafaa4558273961b1574e1c2408d",
-    "cpp_steady_coverage_sha256": "5fa59bc68457e6411e85b884096dcb26b6b19c1b083c38a938584ee5343b7f79",
-    "rust_binary_sha256": "7a2ab446d3341f28a2552641737f6230dc1f5e3776e77fd131fab5d125582e48",
-    "rust_coverage_sha256": "4255f994faedb4ede37d81965b0b32350881c6bdbaa9edbbe5fa50f95b085ebf",
-    "rust_mechanism_coverage_sha256": "3d0c628825eaff1b411da9acc16f0e220d977660b7dbfea620eff268604368d1",
-    "rust_steady_coverage_sha256": "02d1421b3212831127e093af883fd78dd036e385130d410f61070813b1aca4f7"
+    "cpp_binary_sha256": "8319b9ebea7e1f87b77537fbfa4b924dd2b5ae0dc64dc666a892653b8ed3c882",
+    "cpp_coverage_sha256": "cef277dd061dc71fcf537d0040c08140199e07185acd3cac2b1394f7b26673f3",
+    "cpp_mechanism_coverage_sha256": "0d44c54de19fbc00c2624b37d1d07c5bf944efbe256fcae01d597de638dacb5f",
+    "cpp_steady_coverage_sha256": "fa8b5dda924315ad6a7d6f63246f0deec7808d5bf048af6ddbac13764181200b",
+    "rust_binary_sha256": "478f5b913186ecdadd7aa5c682fd07d4768e9cecfe1deea4dfb9626b760c9787",
+    "rust_coverage_sha256": "21994484c4a274eed9457ad21e05e5580a74b183488d874e22d6cea4c3874193",
+    "rust_mechanism_coverage_sha256": "acd4d7cabfebadf678e2abc58f7352fa40cf52cceff54a407fb78179f991d238",
+    "rust_steady_coverage_sha256": "37ed055cb035f911f148f3a9e26cb010706f05511853b55206575b4318f5dc01"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -63,12 +63,12 @@
   ],
   "dirty_text_clean_guard_artifacts": {
     "local_bounds": {
-      "cpp_coverage_sha256": "e28dbc9a821d9d04cd6f86e26819f3b2045d084e4e4620353ffa271d2095cc06",
-      "rust_coverage_sha256": "459b125c59ea46e2e6739d2992e06a2e3f1f0080a057832736dc82f062ed2817"
+      "cpp_coverage_sha256": "ae14f519eebe7acd9220b5a49bf6094c34a66d3d785c7418603b1f18d825c1a3",
+      "rust_coverage_sha256": "063bbcd45e15c1e6406dada30f9767691289cde55c60206001ac131bc555dacd"
     },
     "viewmodel_based_condition": {
-      "cpp_coverage_sha256": "9c46d2a0cbbf700a18bd7cde9863aefcf40d12dcf6e76250edc114ba9eb6dacf",
-      "rust_coverage_sha256": "2ecb529c5d25c5b1e22ac54a00812edc47c06b7244b8737c47c78f08836039fe"
+      "cpp_coverage_sha256": "c0c334a43713a765e312a7dba30706ad3c533a75e03ec6ced20c17c52290ba74",
+      "rust_coverage_sha256": "347295fca87be87051209034877e6e7a7bacc0ada2f6070539715536f2510114"
     }
   },
   "dirty_text_clean_guard_corpus": [
@@ -206,15 +206,15 @@
     }
   },
   "dirty_text_clean_guard_rust_candidate_source": {
-    "file_count": 8870,
+    "file_count": 9418,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "604dc5c93fdf04b44624db31f6101383e51a0b04c204550aaccbc526c96a526e"
+    "sha256": "f418caee8901c2d89efd474d86b8cd2eb101d9256f3e9187e62c76c99e68c043"
   },
   "dirty_text_clean_guard_rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 8870,
+      "file_count": 9418,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "604dc5c93fdf04b44624db31f6101383e51a0b04c204550aaccbc526c96a526e"
+      "sha256": "f418caee8901c2d89efd474d86b8cd2eb101d9256f3e9187e62c76c99e68c043"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -9625,16 +9625,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 8870,
+    "file_count": 9418,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "604dc5c93fdf04b44624db31f6101383e51a0b04c204550aaccbc526c96a526e"
+    "sha256": "f418caee8901c2d89efd474d86b8cd2eb101d9256f3e9187e62c76c99e68c043"
   },
-  "rust_ref": "d570d89668e8270adfbad36c7efa453901404f06",
+  "rust_ref": "de142d146d61d4a3146bb84b361b8dd772afcf52",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 8870,
+      "file_count": 9418,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "604dc5c93fdf04b44624db31f6101383e51a0b04c204550aaccbc526c96a526e"
+      "sha256": "f418caee8901c2d89efd474d86b8cd2eb101d9256f3e9187e62c76c99e68c043"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

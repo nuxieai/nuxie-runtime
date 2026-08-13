@@ -4177,7 +4177,9 @@ def external_test_module_paths(
     macro_definition_events: dict[
         pathlib.Path, list[tuple[int, str, bool, frozenset[str], int]]
     ] = {}
-    macro_imports: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
+    macro_imports: dict[
+        pathlib.Path, list[tuple[int, pathlib.Path, str | None, str | None]]
+    ] = {}
     macro_includes: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
     macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
 
@@ -4367,18 +4369,24 @@ def external_test_module_paths(
                 )
                 for name, (generates, arms) in exports.get(included, {}).items()
             )
-        for import_position, imported in macro_imports.get(owner_resolved, []):
+        for (
+            import_position,
+            imported,
+            imported_name,
+            local_name,
+        ) in macro_imports.get(owner_resolved, []):
             scope_start, scope_end = lexical_scope(owner_resolved, import_position)
             definitions.extend(
                 (
                     import_position,
-                    name,
+                    local_name if imported_name == name and local_name else name,
                     generates,
                     arms,
                     scope_start,
                     scope_end,
                 )
                 for name, (generates, arms) in exports.get(imported, {}).items()
+                if imported_name is None or name == imported_name
             )
         resolved = []
         for position, name, direct, arms, scope_start, scope_end in sorted(
@@ -4545,6 +4553,7 @@ def external_test_module_paths(
                 macro_includes.setdefault(owner_resolved, []).append(
                     (match.start(), included)
                 )
+            module_targets: dict[str, set[pathlib.Path]] = {}
             for match in declaration.finditer(masked):
                 if any(
                     start <= match.start() < end for start, end in definition_ranges
@@ -4600,6 +4609,12 @@ def external_test_module_paths(
                 for target, path_requires_test, target_is_explicit in targets:
                     resolved = target.resolve()
                     if add_candidate(resolved):
+                        if not (
+                            inherited_requires_test
+                            or attributes_require_test(attributes)
+                            or path_requires_test
+                        ):
+                            module_targets.setdefault(module, set()).add(resolved)
                         if target_is_explicit:
                             child_base = resolved.parent
                         else:
@@ -4619,7 +4634,7 @@ def external_test_module_paths(
                             )
                         ):
                             macro_imports.setdefault(owner_resolved, []).append(
-                                (match.start(), resolved)
+                                (match.start(), resolved, None, None)
                             )
                         owner_states.setdefault(resolved, set()).add(
                             (
@@ -4629,6 +4644,23 @@ def external_test_module_paths(
                                 or path_requires_test,
                             )
                         )
+            use_import = re.compile(
+                r"(?m)(?<![A-Za-z0-9_])use\s+"
+                r"(?:(?:crate|self)::)?"
+                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)::"
+                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)"
+                r"(?:\s+as\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*))?\s*;"
+            )
+            for match in use_import.finditer(masked):
+                if any(
+                    start <= match.start() < end for start, end in definition_ranges
+                ) or any(start <= match.start() < end for start, end in test_ranges):
+                    continue
+                module, imported_name, alias = match.groups()
+                for imported in module_targets.get(module, set()):
+                    macro_imports.setdefault(owner_resolved, []).append(
+                        (match.start(), imported, imported_name, alias or imported_name)
+                    )
 
     production_reachable = {
         owner

@@ -1128,7 +1128,11 @@ impl WgpuFactory {
         ))
     }
 
-    #[cfg(all(feature = "apple-msl-capture", not(target_arch = "wasm32")))]
+    #[cfg(all(
+        feature = "apple-msl-capture",
+        any(target_os = "ios", target_os = "macos"),
+        not(target_arch = "wasm32")
+    ))]
     #[doc(hidden)]
     pub fn capture_builtin_present_pipeline_variants(&self) {
         for alpha in [

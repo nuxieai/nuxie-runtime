@@ -3226,6 +3226,39 @@ class GateTests(unittest.TestCase):
             self.assertIn(ghost.resolve(), excluded)
             self.assertNotIn(behavior.resolve(), excluded)
 
+    def test_standard_use_import_reaches_exported_module_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\nedition = "2024"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            renamed = source / "renamed.rs"
+            lib.write_text(
+                "mod macros;\n"
+                "use macros::load;\n"
+                "use crate::macros::load as renamed_load;\n"
+                "load!(behavior);\n"
+                "renamed_load!(renamed);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "pub(crate) use load;\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+            renamed.write_text("fn renamed_shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior, renamed]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+            self.assertNotIn(renamed.resolve(), excluded)
+
     def test_included_macro_is_visible_only_after_include(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

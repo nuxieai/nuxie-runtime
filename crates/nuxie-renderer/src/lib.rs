@@ -5226,14 +5226,13 @@ impl WgpuFrame {
                     .map(|prepared| &prepared.tessellation);
                     match retained_tessellation {
                         Some(retained_tessellation) => {
-                            #[cfg(test)]
-                            SHARED_TYPED_TESSELLATION_BORROWS
-                                .with(|count| count.set(count.get() + 1));
-                            PendingPathGeometry::Shared {
-                                resources: shared,
-                                retained_tessellation,
-                                local_contour_ids_are_dense: shared.local_contour_ids_are_dense,
-                            }
+                            PendingPathGeometry::Owned(draw::FillTessellation {
+                                spans: retained_tessellation.spans.clone(),
+                                path: shared.path,
+                                contours: retained_tessellation.contours.clone(),
+                                base_instance: retained_tessellation.base_instance,
+                                instance_count: retained_tessellation.instance_count,
+                            })
                         }
                         None => copied_fallback(shared),
                     }
@@ -5242,17 +5241,17 @@ impl WgpuFrame {
                     draw: &'a SolidDraw,
                     shared: &'a logical_frame::PreparedTypedDrawResources,
                 ) -> PendingPathGeometry<'a> {
-                    #[cfg(test)]
-                    SHARED_TYPED_TESSELLATION_BORROWS.with(|count| count.set(count.get() + 1));
                     let retained_tessellation = &draw
                         .prepared_stroke()
                         .expect("typed MSAA stroke resources require retained stroke geometry")
                         .tessellation;
-                    PendingPathGeometry::Shared {
-                        resources: shared,
-                        retained_tessellation,
-                        local_contour_ids_are_dense: shared.local_contour_ids_are_dense,
-                    }
+                    PendingPathGeometry::Owned(draw::FillTessellation {
+                        spans: retained_tessellation.spans.clone(),
+                        path: shared.path,
+                        contours: retained_tessellation.contours.clone(),
+                        base_instance: retained_tessellation.base_instance,
+                        instance_count: retained_tessellation.instance_count,
+                    })
                 }
                 let mut pending_draws = Vec::with_capacity(draws.len());
                 let mut pending_paths = Vec::with_capacity(draws.len());

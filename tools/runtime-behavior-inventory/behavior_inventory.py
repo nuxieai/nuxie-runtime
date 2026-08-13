@@ -4370,6 +4370,44 @@ def rust_identifier_macro_invocation_specs(
     return invocations
 
 
+def rust_macro_invocation_path(
+    masked: str, invocation_start: int, name: str
+) -> tuple[str, ...]:
+    """Return the qualified Rust path ending at one macro invocation name."""
+    segments = [unicodedata.normalize("NFC", name)]
+    cursor = invocation_start
+    while True:
+        while cursor and masked[cursor - 1].isspace():
+            cursor -= 1
+        if cursor < 2 or masked[cursor - 2 : cursor] != "::":
+            break
+        cursor -= 2
+        while cursor and masked[cursor - 1].isspace():
+            cursor -= 1
+        identifier_end = cursor
+        identifier_start = identifier_end
+        while identifier_start:
+            candidate = masked[identifier_start - 1 : identifier_end]
+            if not candidate.isidentifier():
+                break
+            identifier_start -= 1
+        if identifier_start == identifier_end:
+            break
+        raw_start = identifier_start - 2
+        if raw_start >= 0 and masked[raw_start:identifier_start] == "r#":
+            identifier_start = raw_start
+        identifier = masked[
+            (
+                identifier_start + 2
+                if masked.startswith("r#", identifier_start)
+                else identifier_start
+            ) : identifier_end
+        ]
+        cursor = identifier_start
+        segments.append(unicodedata.normalize("NFC", identifier))
+    return tuple(reversed(segments))
+
+
 def rust_identifier_macro_invocations(
     masked: str,
 ) -> list[tuple[int, str, list[str]]]:
@@ -4485,8 +4523,8 @@ def external_test_module_paths(
 
     for owner in list(files):
         parse_candidate(owner)
-    owner_states: dict[pathlib.Path, set[tuple[pathlib.Path, bool]]] = {
-        path.resolve(): {(path.parent, False)}
+    owner_states: dict[pathlib.Path, set[tuple[pathlib.Path, pathlib.Path, bool]]] = {
+        path.resolve(): {(path.parent, path.parent, False)}
         for path in rust_crate_roots(repo_root, files)
     }
     lexical_scope_cache: dict[tuple[pathlib.Path, int], tuple[int, int]] = {}
@@ -4512,6 +4550,7 @@ def external_test_module_paths(
     def add_macro_modules(
         owner_resolved: pathlib.Path,
         base: pathlib.Path,
+        crate_source_root: pathlib.Path,
         inherited_requires_test: bool,
         imported_definitions: dict[str, tuple[bool, tuple]],
     ) -> bool:
@@ -4608,6 +4647,7 @@ def external_test_module_paths(
                                 if target_kind in {"explicit", "include"}
                                 else declaration_base / module
                             ),
+                            crate_source_root,
                             inherited_requires_test
                             or local_requires_test
                             or expansion_requires_test,
@@ -4733,13 +4773,14 @@ def external_test_module_paths(
                 environment[name] = definition
         return environment
 
-    processed: set[tuple[pathlib.Path, pathlib.Path, bool]] = set()
+    processed: set[tuple[pathlib.Path, pathlib.Path, pathlib.Path, bool]] = set()
     while True:
         pending = [
-            (owner, base, inherited_requires_test)
+            (owner, base, crate_source_root, inherited_requires_test)
             for owner, states in owner_states.items()
-            for base, inherited_requires_test in states
-            if (owner, base, inherited_requires_test) not in processed
+            for base, crate_source_root, inherited_requires_test in states
+            if (owner, base, crate_source_root, inherited_requires_test)
+            not in processed
         ]
         if not pending:
             macro_exports = {owner: {} for owner in macro_definition_events}
@@ -4788,7 +4829,9 @@ def external_test_module_paths(
             for owner, names in crate_exported_macro_names.items():
                 if not any(
                     not requires_test
-                    for _base, requires_test in owner_states.get(owner, set())
+                    for _base, _source_root, requires_test in owner_states.get(
+                        owner, set()
+                    )
                 ):
                     continue
                 crate_root = next(
@@ -4815,23 +4858,27 @@ def external_test_module_paths(
                     crate_macro_exports.get(crate_root, {}) if crate_root else {}
                 )
                 imported_definitions.update(include_imports[owner_resolved])
-                for base, inherited_requires_test in list(states):
+                for base, crate_source_root, inherited_requires_test in list(states):
                     changed |= add_macro_modules(
                         owner_resolved,
                         base,
+                        crate_source_root,
                         inherited_requires_test,
                         imported_definitions,
                     )
             if changed:
                 continue
             break
-        for owner_resolved, base, inherited_requires_test in pending:
-            processed.add((owner_resolved, base, inherited_requires_test))
+        for owner_resolved, base, crate_source_root, inherited_requires_test in pending:
+            processed.add(
+                (owner_resolved, base, crate_source_root, inherited_requires_test)
+            )
             source, masked, inline_modules, test_ranges = parsed[owner_resolved]
             definition_ranges = rust_macro_definition_ranges(masked)
             add_macro_modules(
                 owner_resolved,
                 base,
+                crate_source_root,
                 inherited_requires_test,
                 {},
             )
@@ -4889,7 +4936,11 @@ def external_test_module_paths(
                         f"{included} from {owner_resolved}"
                     )
                 owner_states.setdefault(included, set()).add(
-                    (included.parent, inherited_requires_test or local_requires_test)
+                    (
+                        included.parent,
+                        crate_source_root,
+                        inherited_requires_test or local_requires_test,
+                    )
                 )
                 macro_includes.setdefault(owner_resolved, []).append(
                     (match.start(), included)
@@ -4984,6 +5035,7 @@ def external_test_module_paths(
                         owner_states.setdefault(resolved, set()).add(
                             (
                                 child_base,
+                                crate_source_root,
                                 inherited_requires_test
                                 or local_requires_test
                                 or path_requires_test,
@@ -4994,19 +5046,9 @@ def external_test_module_paths(
                 module_path: tuple[str, ...],
             ) -> set[pathlib.Path]:
                 segments = list(module_path)
-                crate_root = next(
-                    (
-                        root
-                        for root in crate_roots
-                        if owner_resolved.is_relative_to(root)
-                    ),
-                    None,
-                )
-                if crate_root is None:
-                    return set()
                 if segments and segments[0] == "crate":
                     segments.pop(0)
-                    import_base = crate_root / "src"
+                    import_base = crate_source_root
                 elif segments and segments[0] == "self":
                     segments.pop(0)
                     import_base = base
@@ -5016,7 +5058,7 @@ def external_test_module_paths(
                         segments.pop(0)
                         import_base = import_base.parent
                 else:
-                    import_base = crate_root / "src"
+                    import_base = crate_source_root
                 if not segments:
                     return set()
                 first = segments.pop(0)
@@ -5110,10 +5152,52 @@ def external_test_module_paths(
                             (import_start, alias or name, generates, arms)
                         )
 
+            for (
+                invocation_start,
+                _end,
+                name,
+                _identifiers,
+                _arguments,
+            ) in rust_identifier_macro_invocation_specs(masked, source):
+                invocation_path = rust_macro_invocation_path(
+                    masked, invocation_start, name
+                )
+                if len(invocation_path) < 2:
+                    continue
+                module_path, imported_name = invocation_path[:-1], invocation_path[-1]
+                definitions = []
+                for imported in imported_module_owners(module_path):
+                    definition = macro_exports.get(imported, {}).get(imported_name)
+                    if definition is not None:
+                        definitions.append((imported_name, *definition))
+                        continue
+                    for (
+                        _position,
+                        candidate_name,
+                        generates,
+                        arms,
+                        scope_start,
+                        scope_end,
+                    ) in macro_definition_stream(imported):
+                        if candidate_name == imported_name and (
+                            scope_start,
+                            scope_end,
+                        ) == (-1, len(parsed[imported][1])):
+                            definitions.append((candidate_name, generates, arms))
+                if not definitions:
+                    definitions.extend(
+                        inline_module_definitions(module_path, imported_name)
+                    )
+                for resolved_name, generates, arms in definitions:
+                    event = (invocation_start - 1, resolved_name, generates, arms)
+                    imports = scoped_macro_imports.setdefault(owner_resolved, [])
+                    if event not in imports:
+                        imports.append(event)
+
     production_reachable = {
         owner
         for owner, states in owner_states.items()
-        if any(not requires_test for _base, requires_test in states)
+        if any(not requires_test for _base, _source_root, requires_test in states)
     }
     return candidates - production_reachable
 

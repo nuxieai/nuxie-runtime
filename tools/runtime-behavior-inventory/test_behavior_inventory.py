@@ -1646,6 +1646,1594 @@ class GateTests(unittest.TestCase):
             self.assertIn(unreachable.resolve(), excluded)
             self.assertNotIn(test_only.resolve(), candidates)
 
+    def test_macro_expanded_production_module_is_reachable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            unicode_behavior = source / "béhavior.rs"
+            raw_behavior = source / "raw_behavior.rs"
+            test_only = source / "test_only.rs"
+            lib.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! chargé { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! r#type { ($module:ident) => { mod $module; } }\n"
+                "load!(behavior);\n"
+                "chargé!(béhavior);\n"
+                "r#type!(raw_behavior);\n"
+                "#[cfg(test)]\nload!(test_only);\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+            unicode_behavior.write_text("fn unicode_shipped() {}\n")
+            raw_behavior.write_text("fn raw_shipped() {}\n")
+            test_only.write_text("fn fixture() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root,
+                [lib, behavior, unicode_behavior, raw_behavior, test_only],
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+            self.assertNotIn(unicode_behavior.resolve(), excluded)
+            self.assertNotIn(raw_behavior.resolve(), excluded)
+            self.assertIn(test_only.resolve(), excluded)
+
+            for variable in ("módulo", "mo\u0301dulo"):
+                with self.subTest(unicode_metavariable=variable):
+                    lib.write_text(
+                        f"macro_rules! load {{ (${variable}:ident) => "
+                        f"{{ mod ${variable}; }} }}\n"
+                        f"macro_rules! wrapper {{ (${variable}:ident) => "
+                        f"{{ load!(${variable}); }} }}\n"
+                        "wrapper!(behavior);\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load { () => {\n"
+                '    #[path = "behavior.rs"] mod béhavior;\n'
+                "} }\n"
+                "load!();\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            for literal in ('"x"', "'x'", 'r#"x"#', '"/*"', '"//"'):
+                with self.subTest(literal_pattern=literal):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        "    () => {};\n"
+                        f"    ({literal}) => {{ mod behavior; }};\n"
+                        "}\n"
+                        f"load!({literal});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                '    ("x" $($value:ident),*) => {};\n'
+                '    ("x" foo) => { mod behavior; };\n'
+                "}\n"
+                'load!("x" foo);\n'
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertIn(behavior.resolve(), excluded)
+
+            for pattern, invocation in (
+                ('"$(" +', '"$(" +'),
+                ("foo /* $( */ +", "foo +"),
+            ):
+                with self.subTest(non_repetition_payload=pattern):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        f"    ({pattern}) => {{ mod behavior; }};\n"
+                        "    ($token:tt) => {};\n"
+                        "}\n"
+                        f"load!({invocation});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertNotIn(behavior.resolve(), excluded)
+
+            for pattern in (
+                "$ /* trivia */ ($module:ident),*",
+                "$ // trivia\n ($module:ident),*",
+                "$($module:ident) /* trivia */ ,*",
+            ):
+                with self.subTest(commented_repetition=pattern):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        f"    ({pattern}) => {{}};\n"
+                        "    ($module:ident) => { mod behavior; };\n"
+                        "}\n"
+                        "load!(item);\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertIn(behavior.resolve(), excluded)
+
+            for suffix, invocation in (
+                ('"$("', 'foo "$("'),
+                ("/* $( */ end", "foo end"),
+            ):
+                with self.subTest(repetition_suffix_payload=suffix):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        f"    ($($module:ident),* {suffix}) => {{}};\n"
+                        f"    ({invocation}) => {{ mod behavior; }};\n"
+                        "}\n"
+                        f"load!({invocation});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertIn(behavior.resolve(), excluded)
+
+            for separator in ("*=", "+=", '"x"', 'r#"x"#', "123", "'x'", "'a"):
+                with self.subTest(joint_repetition_separator=separator):
+                    invocation = f"foo {separator} bar"
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        f"    ($($module:ident){separator}*) => {{}};\n"
+                        f"    ({invocation}) => {{ mod behavior; }};\n"
+                        "}\n"
+                        f"load!({invocation});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertIn(behavior.resolve(), excluded)
+
+            for attached, separated in (
+                ("123foo", "123 foo"),
+                ('"x"foo', '"x" foo'),
+                ('"é"', '"é"'),
+                ("=>", "= >"),
+                ("..", ". ."),
+            ):
+                with self.subTest(attached_literal=attached, separated=separated):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        f"    ({separated}) => {{}};\n"
+                        f"    ({attached}) => {{ mod behavior; }};\n"
+                        "}\n"
+                        f"load!({attached});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    (1 .. 2) => { mod behavior; };\n"
+                "    ($token:tt) => {};\n"
+                "}\n"
+                "load!(1..2);\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! inner {\n"
+                "    (behavior) => { mod shipped; };\n"
+                "    ($other:ident) => {};\n"
+                "}\n"
+                "macro_rules! outer {\n"
+                "    ($módulo:ident) => { inner!($módulo); }\n"
+                "}\n"
+                "outer!(behavior);\n"
+            )
+            shipped = source / "shipped.rs"
+            shipped.write_text("fn shipped() {}\n")
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior, shipped]
+            )
+            self.assertNotIn(shipped.resolve(), excluded)
+
+            for literal in ('"$module"', 'r#"$module"#', 'b"$module"'):
+                with self.subTest(delegated_literal=literal):
+                    lib.write_text(
+                        "macro_rules! inner {\n"
+                        f"    ({literal}, behavior) => {{ mod shipped; }};\n"
+                        "    ($literal:tt, $other:ident) => {};\n"
+                        "}\n"
+                        "macro_rules! outer {\n"
+                        f"    ($module:ident) => {{ inner!({literal}, $module); }}\n"
+                        "}\n"
+                        "outer!(behavior);\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior, shipped]
+                    )
+                    self.assertNotIn(shipped.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                '    ("x" /* matcher /* nested */ trivia */) => { mod behavior; };\n'
+                "    () => {};\n"
+                "}\n"
+                'load!(/* invocation trivia */ "x");\n'
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ({ /* matcher trivia */ value }) => { mod behavior; };\n"
+                "    () => {};\n"
+                "}\n"
+                "load!({ value });\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ($module /* matcher trivia */ : ident) => { mod $module; };\n"
+                "    ($module:ident) => {};\n"
+                "}\n"
+                "load!(behavior);\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            for invocation in (
+                "/* leading trivia */ behavior",
+                '/* leading trivia */ "x"',
+                '"x" /* trailing trivia */',
+                '/* leading trivia */ b"x"',
+                '/* leading trivia */ br#"x"#',
+                "/* leading trivia */ { value }",
+            ):
+                with self.subTest(tt_invocation=invocation):
+                    lib.write_text(
+                        "macro_rules! load {\n"
+                        "    ($token:tt) => { mod behavior; };\n"
+                        "    () => {};\n"
+                        "}\n"
+                        f"load!({invocation});\n"
+                    )
+                    excluded = behavior_inventory.external_test_module_paths(
+                        repo_root, [lib, behavior]
+                    )
+                    self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load { ($token:tt) => { mod $token; }; }\n"
+                "load!(/* leading trivia */ behavior /* trailing trivia */);\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_cross_file_macro_expanded_module_inherits_test_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            test_only = source / "test_only.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "load!(behavior);\n"
+                "#[cfg(test)]\nload!(test_only);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+            test_only.write_text("fn fixture() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior, test_only]
+            )
+            self.assertNotIn(macros.resolve(), excluded)
+            self.assertNotIn(behavior.resolve(), excluded)
+            self.assertIn(test_only.resolve(), excluded)
+
+    def test_private_macro_does_not_redefine_root_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            private = source / "private.rs"
+            ghost = source / "ghost.rs"
+            lib.write_text(
+                "mod private;\n"
+                "macro_rules! load { ($module:ident) => {}; }\n"
+                "load!(ghost);\n"
+            )
+            private.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            ghost.write_text('compile_error!("not shipped");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, private, ghost]
+            )
+            self.assertNotIn(private.resolve(), excluded)
+            self.assertIn(ghost.resolve(), excluded)
+
+    def test_imported_macro_is_visible_until_locally_shadowed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            ghost = source / "ghost.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "load!(behavior);\n"
+                "macro_rules! load { ($module:ident) => {}; }\n"
+                "load!(ghost);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+            ghost.write_text('compile_error!("shadowed");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior, ghost]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+            self.assertIn(ghost.resolve(), excluded)
+
+    def test_test_only_macro_does_not_shadow_production_import(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "#[cfg(test)]\n"
+                "macro_rules! load { ($module:ident) => {}; }\n"
+                "load!(behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_block_local_macro_does_not_shadow_outer_scope_after_block(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            inner = source / "inner.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "fn scope() {\n"
+                "    macro_rules! load { ($module:ident) => {}; }\n"
+                "    load!(inner);\n"
+                "}\n"
+                "load!(behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            inner.write_text('compile_error!("shadowed in block");\n')
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, inner, behavior]
+            )
+            self.assertIn(inner.resolve(), excluded)
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_unexpanded_macro_body_does_not_reach_literal_metavariable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            module = source / "module.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => { load!($module); }\n"
+                "}\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            module.write_text('compile_error!("wrapper was not invoked");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, module]
+            )
+            self.assertIn(module.resolve(), excluded)
+
+    def test_unexpanded_macro_literal_module_is_not_reachable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text("macro_rules! hidden { () => { mod behavior; } }\n")
+            behavior.write_text('compile_error!("macro was not invoked");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! hidden { () => { mod behavior; } }\n" "hidden!();\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            alternate = source / "feature_behavior.rs"
+            alternate.write_text("fn feature_shipped() {}\n")
+            default = source / "behavior.rs"
+            default.write_text("fn default_shipped() {}\n")
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    () => {\n"
+                '        #[cfg_attr(feature = "x", path = "feature_behavior.rs")]\n'
+                "        mod behavior;\n"
+                "    };\n"
+                "}\n"
+                "load!();\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, default, alternate]
+            )
+            self.assertNotIn(default.resolve(), excluded)
+            self.assertNotIn(alternate.resolve(), excluded)
+
+    def test_invoked_wrapper_macro_reaches_concrete_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => { load!($module); }\n"
+                "}\n"
+                "wrapper!(behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_wrapper_selects_only_the_invoked_macro_arm(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            ghost = source / "ghost.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => {};\n"
+                "    (generate $module:ident) => { load!($module); };\n"
+                "}\n"
+                "wrapper!(ghost);\n"
+                "wrapper!(generate behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            ghost.write_text('compile_error!("no-op arm");\n')
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, ghost, behavior]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_wrapper_resolves_callee_at_invocation_position(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => { load!($module); }\n"
+                "}\n"
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "wrapper!(behavior);\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_imported_wrapper_retains_arm_behavior(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            ghost = source / "ghost.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "wrapper!(ghost);\n"
+                "wrapper!(generate behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => {};\n"
+                "    (generate $module:ident) => { load!($module); };\n"
+                "}\n"
+            )
+            ghost.write_text('compile_error!("no-op imported arm");\n')
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, ghost, behavior]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_nested_imported_wrapper_retains_delegated_behavior(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            outer = source / "outer.rs"
+            inner = source / "outer/inner.rs"
+            behavior = source / "behavior.rs"
+            inner.parent.mkdir()
+            lib.write_text("#[macro_use]\nmod outer;\nwrapper!(behavior);\n")
+            outer.write_text("#[macro_use]\nmod inner;\n")
+            inner.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! wrapper { ($module:ident) => { load!($module); } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, outer, inner, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_transitive_local_and_imported_wrappers_reach_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod macros;\n"
+                "macro_rules! outer { ($module:ident) => { inner!($module); } }\n"
+                "outer!(behavior);\n"
+            )
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! inner { ($module:ident) => { load!($module); } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_delegated_wrapper_binds_literal_and_variable_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    (generate $module:ident) => { mod $module; }\n"
+                "}\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => { load!(generate $module); }\n"
+                "}\n"
+                "wrapper!(behavior);\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_multiple_delegated_calls_have_independent_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            first = source / "first.rs"
+            second = source / "second.rs"
+            unrelated = source / "load.rs"
+            lib.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! wrapper {\n"
+                "    ($a:ident, $b:ident) => { load!($a); load!($b); }\n"
+                "}\n"
+                "wrapper!(first, second);\n"
+            )
+            first.write_text("fn first_shipped() {}\n")
+            second.write_text("fn second_shipped() {}\n")
+            unrelated.write_text('compile_error!("not an argument");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, first, second, unrelated]
+            )
+            self.assertNotIn(first.resolve(), excluded)
+            self.assertNotIn(second.resolve(), excluded)
+            self.assertIn(unrelated.resolve(), excluded)
+
+    def test_nested_invocation_tokens_are_owned_by_outer_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            ghost = source / "ghost.rs"
+            lib.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! noop { ($($tokens:tt)*) => {}; }\n"
+                "macro_rules! wrapper {\n"
+                "    ($module:ident) => { noop!(load!($module)); }\n"
+                "}\n"
+                "wrapper!(ghost);\n"
+            )
+            ghost.write_text('compile_error!("nested load is inert");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, ghost]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+
+    def test_nested_literal_mod_tokens_are_owned_by_outer_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            ghost = source / "ghost.rs"
+            lib.write_text(
+                "macro_rules! noop { ($($tokens:tt)*) => {}; }\n"
+                "macro_rules! wrapper { () => { noop!(mod ghost;); } }\n"
+                "wrapper!();\n"
+            )
+            ghost.write_text('compile_error!("nested mod is inert");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, ghost]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+
+    def test_cyclic_wrapper_expansion_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! first { ($module:ident) => { second!($module); } }\n"
+                "macro_rules! second { ($module:ident) => { first!($module); } }\n"
+                "first!(behavior);\n"
+            )
+            behavior.write_text("fn should_not_be_guessed() {}\n")
+
+            with self.assertRaisesRegex(
+                ValueError, "cyclic module-generating macro expansion"
+            ):
+                behavior_inventory.external_test_module_paths(
+                    repo_root, [lib, behavior]
+                )
+
+    def test_macro_uses_first_matching_arm(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "($module:ident) => {}; ($other:ident) => { mod $other; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                arms, ["ghost"], {}, frozenset({"wrapper"})
+            ),
+            [],
+        )
+
+    def test_tt_fragment_preserves_first_matching_arm(self) -> None:
+        no_op_first = behavior_inventory.rust_macro_arms(
+            "($module:tt) => {}; ($module:ident) => { mod $module; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                no_op_first, ["ghost"], {}, frozenset({"wrapper"})
+            ),
+            [],
+        )
+        generating_first = behavior_inventory.rust_macro_arms(
+            "($module:tt) => { mod $module; }; ($module:ident) => {};"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                generating_first, ["behavior"], {}, frozenset({"wrapper"})
+            ),
+            [("behavior", False)],
+        )
+        punctuation_first = behavior_inventory.rust_macro_arms(
+            "($token:tt) => {}; (+) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                punctuation_first,
+                [],
+                {},
+                frozenset({"wrapper"}),
+                "+",
+            ),
+            [],
+        )
+        delimited_first = behavior_inventory.rust_macro_arms(
+            "($token:tt) => {}; ({ value }) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                delimited_first,
+                ["value"],
+                {},
+                frozenset({"wrapper"}),
+                "{ value }",
+            ),
+            [],
+        )
+        decomposed_lifetime = "'be\N{COMBINING ACUTE ACCENT}"
+        for literal in (
+            '"x"',
+            "42",
+            "0xff_u8",
+            "'x'",
+            "'a",
+            decomposed_lifetime,
+            "1.",
+            "&&",
+            "..=",
+        ):
+            with self.subTest(literal=literal):
+                literal_first = behavior_inventory.rust_macro_arms(
+                    "($token:tt) => { mod behavior; }; () => {};"
+                )
+                self.assertEqual(
+                    behavior_inventory.rust_macro_arm_modules(
+                        literal_first,
+                        [],
+                        {},
+                        frozenset({"wrapper"}),
+                        literal,
+                    ),
+                    [("behavior", False)],
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ($token:tt) => { mod behavior; };\n"
+                "}\n"
+                'load!("x");\n'
+            )
+            behavior.write_text("fn shipped() {}\n")
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_identifier_compatible_fragments_preserve_first_arm(self) -> None:
+        for fragment in ("path", "ty", "expr", "pat", "stmt", "meta"):
+            with self.subTest(fragment=fragment):
+                arms = behavior_inventory.rust_macro_arms(
+                    f"($module:{fragment}) => {{}}; "
+                    "($module:ident) => { mod $module; };"
+                )
+                self.assertEqual(
+                    behavior_inventory.rust_macro_arm_modules(
+                        arms, ["ghost"], {}, frozenset({"wrapper"})
+                    ),
+                    [],
+                )
+
+    def test_unsupported_fragment_arm_selection_fails_closed(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "($module:block) => {}; ($module:ident) => { mod $module; };"
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported Rust macro fragment"):
+            behavior_inventory.rust_macro_arm_modules(
+                arms, ["ghost"], {}, frozenset({"wrapper"})
+            )
+
+    def test_non_identifier_unsupported_fragment_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ($value:block) => {};\n"
+                "    () => { mod behavior; };\n"
+                "}\n"
+                "load!({});\n"
+            )
+            behavior.write_text('compile_error!("wrong arm");\n')
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported Rust macro fragment controls raw arm selection"
+            ):
+                behavior_inventory.external_test_module_paths(
+                    repo_root, [lib, behavior]
+                )
+
+    def test_empty_visibility_fragment_fails_closed_before_fallthrough(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "($visibility:vis behavior) => {}; (behavior) => { mod behavior; };"
+        )
+        with self.assertRaisesRegex(ValueError, "raw arm selection: vis"):
+            behavior_inventory.rust_macro_arm_modules(
+                arms,
+                ["behavior"],
+                {},
+                frozenset({"load"}),
+                "behavior",
+            )
+
+    def test_delegated_identifier_precedes_irrelevant_unsupported_arm(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! inner {\n"
+                "    ($module:ident) => { mod $module; };\n"
+                "    ($value:block) => {};\n"
+                "}\n"
+                "macro_rules! outer {\n"
+                "    ($module:ident) => { inner!($module); }\n"
+                "}\n"
+                "outer!(behavior);\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_delegated_raw_substitution_preserves_structural_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! inner {\n"
+                "    ($value:block) => {};\n"
+                "    ($prefix:ident $module:ident) => { mod $module; };\n"
+                "}\n"
+                "macro_rules! outer {\n"
+                "    ($module:ident) => { inner!({ prefix $module }); }\n"
+                "}\n"
+                "outer!(behavior);\n"
+            )
+            behavior.write_text('compile_error!("block arm is no-op");\n')
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported Rust macro fragment controls raw arm selection"
+            ):
+                behavior_inventory.external_test_module_paths(
+                    repo_root, [lib, behavior]
+                )
+
+    def test_repetition_matcher_preserves_first_no_op_arm(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ($($module:ident),*) => {};\n"
+                "    ($a:ident, $b:ident) => { mod behavior; };\n"
+                "}\n"
+                "load!(first, second);\n"
+            )
+            behavior.write_text('compile_error!("repetition arm wins");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    ($($module:ident),*) => { mod behavior; };\n"
+                "    ($a:ident, $b:ident) => {};\n"
+                "}\n"
+                "load!(first, second);\n"
+            )
+            with self.assertRaisesRegex(ValueError, "repetition"):
+                behavior_inventory.external_test_module_paths(
+                    repo_root, [lib, behavior]
+                )
+
+    def test_later_repetition_arm_precedes_fixed_arity_fallthrough(self) -> None:
+        no_op_repetition = behavior_inventory.rust_macro_arms(
+            "(single) => {}; "
+            "($($module:ident),*) => {}; "
+            "($a:ident, $b:ident, $c:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                no_op_repetition,
+                ["first", "second", "third"],
+                {},
+                frozenset({"load"}),
+                "first, second, third",
+            ),
+            [],
+        )
+        effectful_repetition = behavior_inventory.rust_macro_arms(
+            "(single) => {}; "
+            "($($module:ident),*) => { mod behavior; }; "
+            "($a:ident, $b:ident, $c:ident) => {};"
+        )
+        with self.assertRaisesRegex(ValueError, "repetition"):
+            behavior_inventory.rust_macro_arm_modules(
+                effectful_repetition,
+                ["first", "second", "third"],
+                {},
+                frozenset({"load"}),
+                "first, second, third",
+            )
+
+    def test_nonmatching_repetition_literals_fall_through(self) -> None:
+        no_op_repetition = behavior_inventory.rust_macro_arms(
+            "(only $($module:ident),*) => {}; "
+            "($a:ident, $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                no_op_repetition,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first, second",
+            ),
+            [("behavior", False)],
+        )
+
+    def test_repetition_cardinality_and_separator_must_match(self) -> None:
+        plus_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident)+) => {}; () => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                plus_repetition,
+                [],
+                {},
+                frozenset({"load"}),
+                "",
+            ),
+            [("behavior", False)],
+        )
+        unicode_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident),*) => {}; " "($module:ident) => { mod $module; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                unicode_repetition,
+                ["béhavior"],
+                {},
+                frozenset({"load"}),
+                "béhavior",
+            ),
+            [],
+        )
+        noncomposing = "a\N{COMBINING LONG SOLIDUS OVERLAY}"
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                unicode_repetition,
+                [noncomposing],
+                {},
+                frozenset({"load"}),
+                noncomposing,
+            ),
+            [],
+        )
+        decomposed = "be\N{COMBINING ACUTE ACCENT}havior"
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                unicode_repetition,
+                [decomposed],
+                {},
+                frozenset({"load"}),
+                decomposed,
+            ),
+            [],
+        )
+        arrow_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident)=>*) => {}; "
+            "($a:ident => $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                arrow_repetition,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first => second",
+            ),
+            [],
+        )
+        star_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident)*) => {}; () => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                star_repetition,
+                [],
+                {},
+                frozenset({"load"}),
+                "",
+            ),
+            [],
+        )
+        comma_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident),*) => {}; " "($a:ident $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                comma_repetition,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first second",
+            ),
+            [("behavior", False)],
+        )
+
+    def test_later_unsupported_arm_does_not_reject_supported_punctuation(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "(special => $module:ident) => { mod $module; }; " "($value:block) => {};"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                arms,
+                ["special", "behavior"],
+                {},
+                frozenset({"load"}),
+                "special => behavior",
+            ),
+            [("behavior", False)],
+        )
+
+    def test_multitoken_fragment_does_not_fall_through(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "($value:expr) => {}; " "($a:ident + $b:ident) => { mod behavior; };"
+        )
+        with self.assertRaisesRegex(ValueError, "raw arm selection"):
+            behavior_inventory.rust_macro_arm_modules(
+                arms,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first + second",
+            )
+
+        prefixed = behavior_inventory.rust_macro_arms(
+            "(only $value:expr) => {}; " "($a:ident + $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                prefixed,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first + second",
+            ),
+            [("behavior", False)],
+        )
+        suffixed = behavior_inventory.rust_macro_arms(
+            "($value:expr only) => {}; " "($a:ident + $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                suffixed,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first + second",
+            ),
+            [("behavior", False)],
+        )
+
+    def test_raw_identifier_does_not_match_ordinary_literal_arm(self) -> None:
+        for name in ("foo", "type"):
+            with self.subTest(name=name):
+                arms = behavior_inventory.rust_macro_arms(
+                    f"({name}) => {{}}; ($module:ident) => {{ mod behavior; }};"
+                )
+                self.assertEqual(
+                    behavior_inventory.rust_macro_arm_modules(
+                        arms,
+                        [name],
+                        {},
+                        frozenset({"load"}),
+                        f"r#{name}",
+                    ),
+                    [("behavior", False)],
+                )
+
+    def test_repetition_preserves_prefix_suffix_token_boundary(self) -> None:
+        arms = behavior_inventory.rust_macro_arms(
+            "(start$($module:ident),+end) => {}; "
+            "(start $one:ident end) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                arms,
+                ["start", "middle", "end"],
+                {},
+                frozenset({"load"}),
+                "start middle end",
+            ),
+            [],
+        )
+
+        path_prefix = behavior_inventory.rust_macro_arms(
+            "($path:path ; $($module:ident),*) => {}; "
+            "($a:ident :: $b:ident ; $module:ident) => { mod behavior; };"
+        )
+        with self.assertRaisesRegex(ValueError, "repetition"):
+            behavior_inventory.rust_macro_arm_modules(
+                path_prefix,
+                ["foo", "bar", "item"],
+                {},
+                frozenset({"load"}),
+                "foo::bar ; item",
+            )
+
+    def test_delegated_raw_identifier_spelling_is_preserved(self) -> None:
+        inner = behavior_inventory.rust_macro_arms(
+            "(foo) => {}; ($module:ident) => { mod $module; };"
+        )
+        outer = behavior_inventory.rust_macro_arms(
+            "($module:ident) => { inner!($module); };"
+        )
+        environment = {
+            "inner": (False, inner),
+            "outer": (False, outer),
+        }
+        self.assertEqual(
+            behavior_inventory.rust_resolve_macro_modules(
+                "outer", ["foo"], environment, raw_arguments="r#foo"
+            ),
+            [("foo", False)],
+        )
+
+    def test_macro_expanded_path_module_is_production_reachable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            generated = source / "generated"
+            generated.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = generated / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load {\n"
+                '    () => { #[path = "generated/behavior.rs"] mod behavior; };\n'
+                "}\n"
+                "load!();\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+            lib.write_text(
+                "macro_rules! load {\n"
+                "    () => {\n"
+                '        #[cfg_attr(not(test), path = "generated/behavior.rs")]\n'
+                "        mod behavior;\n"
+                "    };\n"
+                "}\n"
+                "load!();\n"
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+        effectful_repetition = behavior_inventory.rust_macro_arms(
+            "($($module:ident),* only) => { mod ghost; }; "
+            "($a:ident, $b:ident) => { mod behavior; };"
+        )
+        self.assertEqual(
+            behavior_inventory.rust_macro_arm_modules(
+                effectful_repetition,
+                ["first", "second"],
+                {},
+                frozenset({"load"}),
+                "first, second",
+            ),
+            [("behavior", False)],
+        )
+
+    def test_macro_expansion_target_carries_cfg_test_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            direct = source / "direct.rs"
+            delegated = source / "delegated.rs"
+            lib.write_text(
+                "macro_rules! direct_load {\n"
+                "    ($module:ident) => { #[cfg(test)] mod $module; }\n"
+                "}\n"
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "macro_rules! delegated_load {\n"
+                "    ($module:ident) => { #[cfg(test)] load!($module); }\n"
+                "}\n"
+                "direct_load!(direct);\n"
+                "delegated_load!(delegated);\n"
+            )
+            direct.write_text('compile_error!("test-only direct");\n')
+            delegated.write_text('compile_error!("test-only delegated");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, direct, delegated]
+            )
+            self.assertIn(direct.resolve(), excluded)
+            self.assertIn(delegated.resolve(), excluded)
+
+    def test_test_only_macro_in_production_module_is_not_imported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            ghost = source / "ghost.rs"
+            lib.write_text("#[macro_use]\nmod macros;\nload!(ghost);\n")
+            macros.write_text(
+                "#[cfg(test)]\n"
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            ghost.write_text('compile_error!("not shipped");\n')
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, ghost]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+
+    def test_macro_use_import_is_visible_only_after_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            no_op = source / "no_op.rs"
+            generator = source / "generator.rs"
+            ghost = source / "ghost.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "#[macro_use]\nmod no_op;\n"
+                "load!(ghost);\n"
+                "#[macro_use]\nmod generator;\n"
+                "load!(behavior);\n"
+            )
+            no_op.write_text("macro_rules! load { ($module:ident) => {}; }\n")
+            generator.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            ghost.write_text('compile_error!("not shipped");\n')
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, no_op, generator, ghost, behavior]
+            )
+            self.assertIn(ghost.resolve(), excluded)
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_included_macro_is_visible_only_after_include(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            definitions = source / "defs.inc"
+            before = source / "before.rs"
+            after = source / "after.rs"
+            lib.write_text(
+                "macro_rules! load { ($module:ident) => {}; }\n"
+                "load!(before);\n"
+                'include!("defs.inc");\n'
+                "load!(after);\n"
+            )
+            definitions.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            before.write_text('compile_error!("not shipped");\n')
+            after.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, definitions, before, after]
+            )
+            self.assertIn(before.resolve(), excluded)
+            self.assertNotIn(after.resolve(), excluded)
+
+    def test_outer_macro_is_visible_inside_nested_includes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            outer = source / "outer.inc"
+            inner = source / "inner.inc"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                'include!("outer.inc");\n'
+            )
+            outer.write_text('include!("inner.inc");\n')
+            inner.write_text("load!(behavior);\n")
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, outer, inner, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_nested_include_macro_is_visible_after_outer_include(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            outer = source / "outer.inc"
+            inner = source / "inner.inc"
+            behavior = source / "behavior.rs"
+            lib.write_text('include!("outer.inc");\nload!(behavior);\n')
+            outer.write_text('include!("inner.inc");\n')
+            inner.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, outer, inner, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_macro_imported_inside_include_is_visible_after_include(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            included = source / "defs.inc"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text('include!("defs.inc");\nload!(behavior);\n')
+            included.write_text("#[macro_use]\nmod macros;\n")
+            macros.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, included, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
     def test_upstream_worktree_must_be_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

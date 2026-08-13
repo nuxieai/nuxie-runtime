@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tomllib
+import unicodedata
 from typing import Any
 
 SCHEMA = "nuxie-runtime-behavior-inventory/v1"
@@ -1448,6 +1449,36 @@ def rust_string_token_length(source: str) -> int | None:
     terminator = '"' + raw_opening.group("hashes")
     closing = source.find(terminator, raw_opening.end())
     return closing + len(terminator) if closing != -1 else None
+
+
+def rust_literal_token_length(source: str) -> int | None:
+    """Return one Rust literal token length, including an attached suffix."""
+    length = rust_string_token_length(source)
+    if length is None and source[:1] in {"b", "c"}:
+        suffix_length = rust_string_token_length(source[1:])
+        if suffix_length is not None:
+            length = suffix_length + 1
+    if length is None:
+        match = re.match(
+            r"(?:b)?'(?:\\.|[^'\\\n])+'|"
+            r"(?:0x[0-9A-Fa-f](?:_?[0-9A-Fa-f]|_)*|"
+            r"0o[0-7](?:_?[0-7]|_)*|0b[01](?:_?[01]|_)*|"
+            r"[0-9](?:_?[0-9]|_)*(?:\.(?!\.)(?:[0-9](?:_?[0-9])*)?)?"
+            r"(?:[eE][+-]?[0-9](?:_?[0-9])*)?)",
+            source,
+        )
+        length = match.end() if match is not None else None
+    if length is None:
+        return None
+    suffix = next(
+        (
+            token
+            for token in rust_identifier_tokens(source[length:])
+            if token[0] == 0 and not source[length:].startswith("r#")
+        ),
+        None,
+    )
+    return length + suffix[1] if suffix is not None else length
 
 
 def rust_string_value(token: str) -> str:
@@ -2903,6 +2934,1169 @@ def rust_generator_paths(
     return generators
 
 
+def rust_identifier_tokens(source: str) -> list[tuple[int, int, str]]:
+    """Return Rust-like identifiers, including raw and Unicode XID spellings."""
+    tokens = []
+    cursor = 0
+    while cursor < len(source):
+        start = cursor
+        identifier_start = cursor + 2 if source.startswith("r#", cursor) else cursor
+        first = source[identifier_start : identifier_start + 1]
+        if not first or not first.isidentifier():
+            cursor += 1
+            continue
+        end = identifier_start + 1
+        while end < len(source) and source[identifier_start : end + 1].isidentifier():
+            end += 1
+        tokens.append((start, end, source[identifier_start:end]))
+        cursor = end
+    return tokens
+
+
+def rust_macro_definition_specs(
+    masked: str,
+    source: str | None = None,
+) -> list[tuple[int, str, bool, tuple, int]]:
+    """Return local macro definitions with direct behavior and callees."""
+    source = masked if source is None else source
+    if len(source) != len(masked):
+        raise ValueError("Rust macro source and structural mask lengths differ")
+    definitions = []
+    definition = re.compile(r"\bmacro_rules\s*!\s*")
+    for match in definition.finditer(masked):
+        suffix = masked[match.end() :]
+        name = next(
+            (
+                token
+                for token in rust_identifier_tokens(suffix)
+                if not suffix[: token[0]].strip()
+            ),
+            None,
+        )
+        if name is None:
+            continue
+        _name_start, relative_name_end, normalized_name = name
+        name_end = match.end() + relative_name_end
+        opening = masked.find("{", name_end)
+        if opening == -1 or masked[name_end:opening].strip():
+            continue
+        closing = matching_brace(masked, opening)
+        if closing is not None:
+            body = masked[opening + 1 : closing]
+            source_body = source[opening + 1 : closing]
+            arms = rust_macro_arms(body, source_body)
+            definitions.append(
+                (
+                    match.start(),
+                    normalized_name,
+                    bool(re.search(r"\bmod\s+\$[^;]*;", body)),
+                    arms,
+                    closing + 1,
+                )
+            )
+    return definitions
+
+
+def rust_macro_arms(body: str, source_body: str | None = None) -> tuple:
+    """Return supported identifier-pattern macro arms and expansion effects."""
+    source_body = body if source_body is None else source_body
+    if len(source_body) != len(body):
+        raise ValueError("Rust macro arm source and structural mask lengths differ")
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    identifier_fragments = {
+        "expr",
+        "expr_2021",
+        "ident",
+        "meta",
+        "pat",
+        "pat_param",
+        "path",
+        "stmt",
+        "tt",
+        "ty",
+    }
+
+    def matcher_tokens(text: str) -> tuple:
+        identifiers = {
+            start: (end, value) for start, end, value in rust_identifier_tokens(text)
+        }
+        tokens = []
+        cursor = 0
+        while cursor < len(text):
+            if text[cursor] == "$":
+                name_start = cursor + 1
+                while name_start < len(text) and text[name_start].isspace():
+                    name_start += 1
+                name_token = identifiers.get(name_start)
+                if name_token is not None:
+                    name_end, name = name_token
+                    name = unicodedata.normalize("NFC", name)
+                    colon = name_end
+                    while colon < len(text) and text[colon].isspace():
+                        colon += 1
+                    fragment_start = colon + 1
+                    while (
+                        colon < len(text)
+                        and text[colon] == ":"
+                        and fragment_start < len(text)
+                        and text[fragment_start].isspace()
+                    ):
+                        fragment_start += 1
+                    fragment_token = identifiers.get(fragment_start)
+                    if colon < len(text) and text[colon] == ":" and fragment_token:
+                        fragment_end, fragment = fragment_token
+                        fragment = unicodedata.normalize("NFC", fragment)
+                        tokens.append(
+                            (
+                                (
+                                    "variable"
+                                    if fragment in identifier_fragments
+                                    else f"unsupported:{fragment}"
+                                ),
+                                name,
+                            )
+                        )
+                        cursor = fragment_end
+                        continue
+            identifier = identifiers.get(cursor)
+            if identifier is not None:
+                end, value = identifier
+                value = unicodedata.normalize("NFC", value)
+                tokens.append(("literal", value))
+                cursor = end
+                continue
+            cursor += 1
+        return tuple(tokens)
+
+    def repetition_constraints(pattern: str, source_pattern: str) -> tuple | None:
+        """Return the fixed and repeated portions of the first repetition."""
+        for match in re.finditer(r"\$", pattern):
+            opening = rust_skip_trivia(pattern, match.end())
+            if (
+                opening is None
+                or opening >= len(pattern)
+                or pattern[opening] not in pairs
+            ):
+                continue
+            stack = [pairs[pattern[opening]]]
+            cursor = opening + 1
+            while cursor < len(pattern) and stack:
+                character = pattern[cursor]
+                if character in pairs:
+                    stack.append(pairs[character])
+                elif character == stack[-1]:
+                    stack.pop()
+                cursor += 1
+            if stack:
+                return ("", "", "", "", "*")
+            source_separator = rust_skip_trivia(source_pattern, cursor)
+            source_separator = (
+                len(source_pattern) if source_separator is None else source_separator
+            )
+            separator_start = source_separator
+            literal_length = rust_literal_token_length(
+                source_pattern[source_separator:]
+            )
+            lifetime = None
+            if literal_length is None and source_pattern.startswith(
+                "'", source_separator
+            ):
+                lifetime = next(
+                    (
+                        token
+                        for token in rust_identifier_tokens(
+                            source_pattern[source_separator + 1 :]
+                        )
+                        if token[0] == 0
+                    ),
+                    None,
+                )
+            if literal_length is not None:
+                quantifier = source_separator + literal_length
+            elif lifetime is not None:
+                quantifier = source_separator + 1 + lifetime[1]
+            else:
+                skipped = rust_skip_trivia(pattern, cursor)
+                quantifier = len(pattern) if skipped is None else skipped
+                separator_start = quantifier
+            compound_separator = next(
+                (
+                    punctuation
+                    for punctuation in (
+                        "<<=",
+                        ">>=",
+                        "...",
+                        "..=",
+                        "&&",
+                        "||",
+                        "<<",
+                        ">>",
+                        "+=",
+                        "-=",
+                        "*=",
+                        "/=",
+                        "%=",
+                        "^=",
+                        "&=",
+                        "|=",
+                        "==",
+                        "!=",
+                        ">=",
+                        "<=",
+                        "->",
+                        "=>",
+                        "..",
+                        "::",
+                    )
+                    if pattern.startswith(punctuation, quantifier)
+                ),
+                None,
+            )
+            if literal_length is not None or lifetime is not None:
+                skipped = rust_skip_trivia(pattern, quantifier)
+                quantifier = len(pattern) if skipped is None else skipped
+            elif compound_separator is not None:
+                quantifier += len(compound_separator)
+                skipped = rust_skip_trivia(pattern, quantifier)
+                quantifier = len(pattern) if skipped is None else skipped
+            elif quantifier < len(pattern) and pattern[quantifier] not in "*+?":
+                separator_identifiers = rust_identifier_tokens(pattern[quantifier:])
+                identifier = next(
+                    (token for token in separator_identifiers if token[0] == 0), None
+                )
+                if identifier is not None:
+                    quantifier += identifier[1]
+                else:
+                    quantifier += 1
+                skipped = rust_skip_trivia(pattern, quantifier)
+                quantifier = len(pattern) if skipped is None else skipped
+            if quantifier < len(pattern) and pattern[quantifier] in "*+?":
+                return (
+                    source_pattern[: match.start()],
+                    source_pattern[quantifier + 1 :],
+                    source_pattern[opening + 1 : cursor - 1],
+                    source_pattern[separator_start:quantifier].strip(),
+                    pattern[quantifier],
+                )
+        return None
+
+    def delimited_end(start: int) -> int | None:
+        stack = [pairs[body[start]]]
+        cursor = start + 1
+        while cursor < len(body) and stack:
+            character = body[cursor]
+            if character in pairs:
+                stack.append(pairs[character])
+            elif character == stack[-1]:
+                stack.pop()
+            cursor += 1
+        return cursor if not stack else None
+
+    arms = []
+    cursor = 0
+    while cursor < len(body):
+        while cursor < len(body) and (body[cursor].isspace() or body[cursor] in ",;"):
+            cursor += 1
+        if cursor >= len(body) or body[cursor] not in pairs:
+            break
+        pattern_end = delimited_end(cursor)
+        if pattern_end is None:
+            break
+        pattern = body[cursor + 1 : pattern_end - 1]
+        source_pattern = source_body[cursor + 1 : pattern_end - 1]
+        cursor = pattern_end
+        while cursor < len(body) and body[cursor].isspace():
+            cursor += 1
+        if not body.startswith("=>", cursor):
+            break
+        cursor += 2
+        while cursor < len(body) and body[cursor].isspace():
+            cursor += 1
+        if cursor >= len(body) or body[cursor] not in pairs:
+            break
+        expansion_start = cursor
+        expansion_end = delimited_end(cursor)
+        if expansion_end is None:
+            break
+        expansion = body[cursor + 1 : expansion_end - 1]
+        source_expansion = source_body[expansion_start + 1 : expansion_end - 1]
+        cursor = expansion_end
+        pattern_tokens = list(matcher_tokens(pattern))
+        pattern_tokens.insert(0, ("matcher:raw", source_pattern))
+        fixed_constraints = repetition_constraints(pattern, source_pattern)
+        if fixed_constraints is not None:
+            pattern_tokens.insert(0, ("unsupported:repetition", fixed_constraints))
+        top_level_expansion = list(expansion)
+        owned_end = -1
+        expansion_invocations = rust_identifier_macro_invocation_specs(
+            expansion, source_expansion
+        )
+        for (
+            position,
+            end,
+            _callee,
+            _identifiers,
+            _arguments,
+        ) in expansion_invocations:
+            if position < owned_end:
+                continue
+            owned_end = end
+            top_level_expansion[position:end] = " " * (end - position)
+        top_level_expansion = "".join(top_level_expansion)
+        direct_targets = []
+        identifiers = rust_identifier_tokens(top_level_expansion)
+        identifiers_by_start = {
+            start: (end, value) for start, end, value in identifiers
+        }
+        for module_start, module_end, keyword in identifiers:
+            if keyword != "mod":
+                continue
+            target_start = module_end
+            while (
+                target_start < len(top_level_expansion)
+                and top_level_expansion[target_start].isspace()
+            ):
+                target_start += 1
+            variable = (
+                target_start < len(top_level_expansion)
+                and top_level_expansion[target_start] == "$"
+            )
+            if variable:
+                target_start += 1
+                while (
+                    target_start < len(top_level_expansion)
+                    and top_level_expansion[target_start].isspace()
+                ):
+                    target_start += 1
+            target = identifiers_by_start.get(target_start)
+            if target is None:
+                continue
+            target_end, target_name = target
+            target_name = unicodedata.normalize("NFC", target_name)
+            semicolon = target_end
+            while (
+                semicolon < len(top_level_expansion)
+                and top_level_expansion[semicolon].isspace()
+            ):
+                semicolon += 1
+            if (
+                semicolon >= len(top_level_expansion)
+                or top_level_expansion[semicolon] != ";"
+            ):
+                continue
+            attribute_match = re.search(
+                r"((?:#\s*\[[^]]+\]\s*)*)$",
+                top_level_expansion[:module_start],
+                re.S,
+            )
+            requires_test = bool(
+                attribute_match and attributes_require_test(attribute_match.group(1))
+            )
+            path_targets = ((None, False),)
+            if attribute_match:
+                source_attributes = source_expansion[
+                    attribute_match.start(1) : attribute_match.end(1)
+                ]
+                explicit_path = rust_path_attribute(source_attributes)
+                cfg_attr_paths = rust_cfg_attr_paths(source_attributes)
+                if explicit_path is not None and cfg_attr_paths:
+                    raise ValueError(
+                        "macro-expanded module has both path and cfg_attr(path)"
+                    )
+                if len(cfg_attr_paths) > 1:
+                    raise ValueError(
+                        "multiple macro-expanded cfg_attr(path) alternatives"
+                    )
+                if explicit_path is not None:
+                    path_targets = ((explicit_path, False),)
+                elif cfg_attr_paths:
+                    predicate, alternate_path = cfg_attr_paths[0]
+                    path_targets = (
+                        (None, cfg_requires_test(f"not({predicate})")),
+                        (alternate_path, cfg_requires_test(predicate)),
+                    )
+            direct_targets.extend(
+                (
+                    "variable" if variable else "literal",
+                    target_name,
+                    requires_test or path_requires_test,
+                    explicit_path,
+                )
+                for explicit_path, path_requires_test in path_targets
+            )
+        delegated = []
+        outer_end = -1
+        for (
+            position,
+            end,
+            callee,
+            _identifiers,
+            arguments,
+        ) in expansion_invocations:
+            if position < outer_end:
+                continue
+            outer_end = end
+            attribute_match = re.search(
+                r"((?:#\s*\[[^]]+\]\s*)*)$",
+                expansion[:position],
+                re.S,
+            )
+            requires_test = bool(
+                attribute_match and attributes_require_test(attribute_match.group(1))
+            )
+            argument_tokens = []
+            masked_arguments = mask_noncode(arguments, nested_block_comments=True)
+            argument_identifiers = rust_identifier_tokens(masked_arguments)
+            identifiers_by_start = {
+                start: (end, value) for start, end, value in argument_identifiers
+            }
+            argument_cursor = 0
+            while argument_cursor < len(masked_arguments):
+                if masked_arguments[argument_cursor].isspace():
+                    argument_cursor += 1
+                    continue
+                variable = masked_arguments[argument_cursor] == "$"
+                if variable:
+                    argument_cursor += 1
+                    while (
+                        argument_cursor < len(masked_arguments)
+                        and masked_arguments[argument_cursor].isspace()
+                    ):
+                        argument_cursor += 1
+                identifier = identifiers_by_start.get(argument_cursor)
+                if identifier is None:
+                    argument_cursor += 1
+                    continue
+                identifier_end, identifier_name = identifier
+                identifier_name = unicodedata.normalize("NFC", identifier_name)
+                argument_tokens.append(
+                    ("variable" if variable else "literal", identifier_name)
+                )
+                argument_cursor = identifier_end
+            delegated.append((callee, tuple(argument_tokens), arguments, requires_test))
+        arms.append((tuple(pattern_tokens), tuple(direct_targets), tuple(delegated)))
+    return tuple(arms)
+
+
+def rust_macro_arm_modules(
+    arms: tuple,
+    identifiers: list[str],
+    environment: dict[str, tuple[bool, tuple]],
+    visiting: frozenset[str],
+    raw_arguments: str | None = None,
+) -> list[tuple[str, bool]] | None:
+    """Resolve a supported macro invocation to concrete module identifiers."""
+    identifier_fragments = {
+        "expr",
+        "expr_2021",
+        "ident",
+        "meta",
+        "pat",
+        "pat_param",
+        "path",
+        "stmt",
+        "tt",
+        "ty",
+    }
+
+    def skip_trivia(text: str, cursor: int) -> int:
+        """Skip Rust whitespace and comments, including nested block comments."""
+        while cursor < len(text):
+            if text[cursor].isspace():
+                cursor += 1
+                continue
+            if text.startswith("//", cursor):
+                newline = text.find("\n", cursor + 2)
+                cursor = len(text) if newline == -1 else newline + 1
+                continue
+            if text.startswith("/*", cursor):
+                depth = 1
+                cursor += 2
+                while cursor < len(text) and depth:
+                    if text.startswith("/*", cursor):
+                        depth += 1
+                        cursor += 2
+                    elif text.startswith("*/", cursor):
+                        depth -= 1
+                        cursor += 2
+                    else:
+                        cursor += 1
+                if depth:
+                    raise ValueError("unclosed Rust block comment in macro tokens")
+                continue
+            break
+        return cursor
+
+    joint_punctuation = tuple(
+        sorted(
+            {
+                "<<=",
+                ">>=",
+                "...",
+                "..=",
+                "&&",
+                "||",
+                "<<",
+                ">>",
+                "+=",
+                "-=",
+                "*=",
+                "/=",
+                "%=",
+                "^=",
+                "&=",
+                "|=",
+                "==",
+                "!=",
+                ">=",
+                "<=",
+                "->",
+                "=>",
+                "..",
+                "::",
+            },
+            key=len,
+            reverse=True,
+        )
+    )
+
+    def punctuation_token(text: str, cursor: int) -> str:
+        """Return the longest joint Rust punctuation token at ``cursor``."""
+        return next(
+            (token for token in joint_punctuation if text.startswith(token, cursor)),
+            text[cursor],
+        )
+
+    def lexical_tokens(text: str) -> list[tuple[str, str]]:
+        """Return NFC Rust tokens needed for macro matching, ignoring trivia."""
+        identifiers_by_start = {
+            start: (end, text[start:end], value)
+            for start, end, value in rust_identifier_tokens(text)
+        }
+        tokens = []
+        cursor = 0
+        while cursor < len(text):
+            cursor = skip_trivia(text, cursor)
+            if cursor >= len(text):
+                break
+            literal_length = rust_literal_token_length(text[cursor:])
+            if literal_length is not None:
+                tokens.append(("literal", text[cursor : cursor + literal_length]))
+                cursor += literal_length
+                continue
+            identifier_token = identifiers_by_start.get(cursor)
+            if identifier_token is not None:
+                end, raw_value, _value = identifier_token
+                prefix = "r#" if raw_value.startswith("r#") else ""
+                value = raw_value.removeprefix("r#")
+                tokens.append(
+                    ("identifier", prefix + unicodedata.normalize("NFC", value))
+                )
+                cursor = end
+                continue
+            punctuation = punctuation_token(text, cursor)
+            tokens.append(("punctuation", punctuation))
+            cursor += len(punctuation)
+        return tokens
+
+    def structural_matcher_tokens(text: str) -> list[tuple[str, str, str]]:
+        """Return variable, literal identifier, and punctuation matcher tokens."""
+        identifiers_by_start = {
+            start: (end, text[start:end], value)
+            for start, end, value in rust_identifier_tokens(text)
+        }
+        tokens = []
+        cursor = 0
+        while cursor < len(text):
+            cursor = skip_trivia(text, cursor)
+            if cursor >= len(text):
+                break
+            literal_length = rust_literal_token_length(text[cursor:])
+            if literal_length is not None:
+                tokens.append(("literal", text[cursor : cursor + literal_length], ""))
+                cursor += literal_length
+                continue
+            if text[cursor] == "$":
+                name_start = skip_trivia(text, cursor + 1)
+                name_token = identifiers_by_start.get(name_start)
+                if name_token is not None:
+                    name_end, _raw_name, name = name_token
+                    name = unicodedata.normalize("NFC", name)
+                    colon = skip_trivia(text, name_end)
+                    if colon < len(text) and text[colon] == ":":
+                        fragment_start = skip_trivia(text, colon + 1)
+                        fragment_token = identifiers_by_start.get(fragment_start)
+                        if fragment_token is not None:
+                            fragment_end, _raw_fragment, fragment = fragment_token
+                            fragment = unicodedata.normalize("NFC", fragment)
+                            tokens.append(("variable", name, fragment))
+                            cursor = fragment_end
+                            continue
+            identifier_token = identifiers_by_start.get(cursor)
+            if identifier_token is not None:
+                end, raw_value, _value = identifier_token
+                prefix = "r#" if raw_value.startswith("r#") else ""
+                value = raw_value.removeprefix("r#")
+                tokens.append(
+                    ("identifier", prefix + unicodedata.normalize("NFC", value), "")
+                )
+                cursor = end
+                continue
+            punctuation = punctuation_token(text, cursor)
+            tokens.append(("punctuation", punctuation, ""))
+            cursor += len(punctuation)
+        return tokens
+
+    def match_fixed_pattern(pattern: str, raw: str) -> tuple[bool, dict[str, str]]:
+        """Match the supported one-token fragment subset in source order."""
+        pattern_parts = structural_matcher_tokens(pattern)
+        raw_parts = lexical_tokens(raw)
+
+        def single_token_tree(text: str) -> str | None:
+            start = skip_trivia(text, 0)
+
+            def token_if_trailing_trivia(end: int) -> str | None:
+                if skip_trivia(text, end) == len(text):
+                    return text[start:end]
+                return None
+
+            source = text[start:]
+            literal_length = rust_literal_token_length(source)
+            if literal_length is not None:
+                token = token_if_trailing_trivia(start + literal_length)
+                if token is not None:
+                    return token
+            if source.startswith("'"):
+                lifetime_tokens = rust_identifier_tokens(source[1:])
+                if len(lifetime_tokens) == 1 and lifetime_tokens[0][0] == 0:
+                    token = token_if_trailing_trivia(start + 1 + lifetime_tokens[0][1])
+                    if token is not None:
+                        return token
+            for punctuation in {
+                "&&",
+                "||",
+                "<<",
+                ">>",
+                "+=",
+                "-=",
+                "*=",
+                "/=",
+                "%=",
+                "^=",
+                "&=",
+                "|=",
+                "<<=",
+                ">>=",
+                "==",
+                "!=",
+                ">=",
+                "<=",
+                "->",
+                "=>",
+                "..",
+                "..=",
+                "...",
+                "::",
+            }:
+                if source.startswith(punctuation):
+                    token = token_if_trailing_trivia(start + len(punctuation))
+                    if token is not None:
+                        return token
+            literal = re.match(
+                r"(?:b)?'(?:\\.|[^'\\\n])+'|"
+                r"(?:0[xob])?[0-9A-Fa-f](?:_?[0-9A-Fa-f]|_)*"
+                r"(?:\.(?:[0-9](?:_?[0-9])*)?)?"
+                r"(?:[eE][+-]?[0-9](?:_?[0-9])*)?"
+                r"(?:[iu](?:8|16|32|64|128|size)|f(?:32|64))?",
+                source,
+            )
+            if literal is not None:
+                token = token_if_trailing_trivia(start + literal.end())
+                if token is not None:
+                    return token
+            if len(lexical_tokens(text)) == 1:
+                token_kind, token_value = lexical_tokens(text)[0]
+                if token_kind == "identifier":
+                    identifier = next(
+                        token
+                        for token in rust_identifier_tokens(source)
+                        if token[0] == 0 and token[2] == token_value.removeprefix("r#")
+                    )
+                    return token_if_trailing_trivia(start + identifier[1])
+                return token_if_trailing_trivia(start + 1)
+            pairs = {"(": ")", "[": "]", "{": "}"}
+            if not source or source[0] not in pairs:
+                return None
+            masked = mask_noncode(text, nested_block_comments=True)
+            stack = [pairs[source[0]]]
+            for index in range(start + 1, len(masked)):
+                character = masked[index]
+                if character in pairs:
+                    stack.append(pairs[character])
+                elif stack and character == stack[-1]:
+                    stack.pop()
+                    if not stack:
+                        return token_if_trailing_trivia(index + 1)
+            return None
+
+        single_tt = None
+        if (
+            len(pattern_parts) == 1
+            and pattern_parts[0][0] == "variable"
+            and pattern_parts[0][2] == "tt"
+        ):
+            single_tt = single_token_tree(raw)
+        if single_tt is not None:
+            return True, {pattern_parts[0][1]: single_tt}
+
+        def fixed_token_matches(
+            matcher_part: tuple[str, str, str], raw_part: tuple[str, str]
+        ) -> bool:
+            kind, value, _fragment = matcher_part
+            raw_kind, raw_value = raw_part
+            return kind == "variable" or (kind == raw_kind and value == raw_value)
+
+        first_variable = next(
+            (
+                index
+                for index, part in enumerate(pattern_parts)
+                if part[0] == "variable"
+            ),
+            len(pattern_parts),
+        )
+        last_variable = next(
+            (
+                index
+                for index in range(len(pattern_parts) - 1, -1, -1)
+                if pattern_parts[index][0] == "variable"
+            ),
+            -1,
+        )
+        fixed_prefix = pattern_parts[:first_variable]
+        fixed_suffix = pattern_parts[last_variable + 1 :] if last_variable >= 0 else []
+        if len(raw_parts) < len(fixed_prefix) + len(fixed_suffix):
+            return False, {}
+        if any(
+            not fixed_token_matches(matcher_part, raw_part)
+            for matcher_part, raw_part in zip(
+                fixed_prefix, raw_parts[: len(fixed_prefix)], strict=True
+            )
+        ):
+            return False, {}
+        if fixed_suffix and any(
+            not fixed_token_matches(matcher_part, raw_part)
+            for matcher_part, raw_part in zip(
+                fixed_suffix, raw_parts[-len(fixed_suffix) :], strict=True
+            )
+        ):
+            return False, {}
+        if len(pattern_parts) != len(raw_parts):
+            if any(
+                kind == "variable" and fragment not in {"ident", "tt"}
+                for kind, _value, fragment in pattern_parts
+            ):
+                fragment = next(
+                    fragment
+                    for kind, _value, fragment in pattern_parts
+                    if kind == "variable" and fragment not in {"ident", "tt"}
+                )
+                raise ValueError(
+                    "unsupported Rust macro fragment controls raw arm selection"
+                    + (f": {fragment}" if fragment == "vis" else "")
+                )
+            return False, {}
+        bindings = {}
+        for (kind, value, fragment), (raw_kind, raw_value) in zip(
+            pattern_parts, raw_parts, strict=True
+        ):
+            if kind == "variable":
+                if fragment not in identifier_fragments:
+                    raise ValueError(
+                        "unsupported Rust macro fragment controls arm selection: "
+                        f"{fragment}"
+                    )
+                if fragment != "tt" and raw_kind != "identifier":
+                    return False, {}
+                bindings[value] = raw_value
+            elif kind != raw_kind or value != raw_value:
+                return False, {}
+        return True, bindings
+
+    def repetition_matches(descriptor: tuple, raw: str) -> bool | None:
+        prefix, suffix, repeated_text, separator, quantifier = descriptor
+        nested_structure = mask_noncode(
+            repeated_text + suffix, nested_block_comments=True
+        )
+        if re.search(r"\$\s*[({\[]", nested_structure):
+            return None
+        repeated_parts = structural_matcher_tokens(repeated_text)
+        if len(repeated_parts) != 1 or repeated_parts[0][0] != "variable":
+            return None
+        _kind, _name, fragment = repeated_parts[0]
+        prefix_parts = structural_matcher_tokens(prefix)
+        suffix_parts = structural_matcher_tokens(suffix)
+        separator_parts = lexical_tokens(separator)
+        raw_parts = lexical_tokens(raw)
+        complex_edge = any(
+            kind == "variable" and edge_fragment not in {"ident", "tt"}
+            for kind, _value, edge_fragment in (*prefix_parts, *suffix_parts)
+        )
+        if complex_edge:
+            leading_fixed = []
+            for part in prefix_parts:
+                if part[0] == "variable":
+                    break
+                leading_fixed.append(part)
+            trailing_fixed = []
+            for part in reversed(suffix_parts):
+                if part[0] == "variable":
+                    break
+                trailing_fixed.append(part)
+            trailing_fixed.reverse()
+            if len(raw_parts) < len(leading_fixed) + len(trailing_fixed):
+                return False
+            if any(
+                (kind, value) != raw_part
+                for (kind, value, _fragment), raw_part in zip(
+                    leading_fixed, raw_parts[: len(leading_fixed)], strict=True
+                )
+            ):
+                return False
+            if trailing_fixed and any(
+                (kind, value) != raw_part
+                for (kind, value, _fragment), raw_part in zip(
+                    trailing_fixed,
+                    raw_parts[-len(trailing_fixed) :],
+                    strict=True,
+                )
+            ):
+                return False
+            return None
+        if (
+            fragment == "tt"
+            and not prefix_parts
+            and not suffix_parts
+            and not separator_parts
+        ):
+            if quantifier == "+":
+                return bool(raw_parts)
+            if quantifier == "?":
+                if not raw_parts:
+                    return True
+                return True if len(raw_parts) == 1 else None
+            return True
+        if fragment != "ident":
+            return None
+        fixed_count = len(prefix_parts) + len(suffix_parts)
+        if len(raw_parts) < fixed_count:
+            return False
+        prefix_raw = raw_parts[: len(prefix_parts)]
+        suffix_raw = (
+            raw_parts[len(raw_parts) - len(suffix_parts) :] if suffix_parts else []
+        )
+        prefix_raw_text = " ".join(value for _kind, value in prefix_raw)
+        suffix_raw_text = " ".join(value for _kind, value in suffix_raw)
+        prefix_match, _prefix_bindings = match_fixed_pattern(prefix, prefix_raw_text)
+        suffix_match, _suffix_bindings = match_fixed_pattern(suffix, suffix_raw_text)
+        if not prefix_match or not suffix_match:
+            return False
+        middle = raw_parts[
+            len(prefix_parts) : (
+                len(raw_parts) - len(suffix_parts) if suffix_parts else None
+            )
+        ]
+        if not middle:
+            return quantifier in "*?"
+        repeated_count = 0
+        cursor = 0
+        while cursor < len(middle):
+            if middle[cursor][0] != "identifier":
+                return False
+            repeated_count += 1
+            cursor += 1
+            if cursor == len(middle):
+                break
+            if (
+                not separator_parts
+                or middle[cursor : cursor + len(separator_parts)] != separator_parts
+            ):
+                return False
+            cursor += len(separator_parts)
+        return quantifier != "?" or repeated_count <= 1
+
+    def substitute_bindings(text: str, bindings: dict[str, str]) -> str:
+        """Substitute macro metavariables using normalized Rust identifiers."""
+        replacements = []
+        cursor = 0
+        masked = mask_noncode(text, nested_block_comments=True)
+        identifiers = rust_identifier_tokens(masked)
+        identifiers_by_start = {
+            start: (end, unicodedata.normalize("NFC", value))
+            for start, end, value in identifiers
+        }
+        while cursor < len(masked):
+            if masked[cursor] != "$":
+                cursor += 1
+                continue
+            name_start = cursor + 1
+            while name_start < len(masked) and masked[name_start].isspace():
+                name_start += 1
+            identifier = identifiers_by_start.get(name_start)
+            if identifier is None:
+                cursor += 1
+                continue
+            name_end, name = identifier
+            if name in bindings:
+                replacements.append((cursor, name_end, bindings[name]))
+            cursor = name_end
+        for start, end, replacement in reversed(replacements):
+            text = text[:start] + replacement + text[end:]
+        return text
+
+    if not arms:
+        return None
+    invocation = raw_arguments if raw_arguments is not None else " ".join(identifiers)
+    for pattern, direct_targets, delegated in arms:
+        raw_pattern = next(
+            (value for kind, value in pattern if kind == "matcher:raw"), ""
+        )
+        repetition = next(
+            (value for kind, value in pattern if kind == "unsupported:repetition"),
+            None,
+        )
+        if repetition is not None:
+            matches = repetition_matches(repetition, invocation)
+            if matches is None:
+                raise ValueError(
+                    "unsupported Rust macro repetition controls arm selection"
+                )
+            if not matches:
+                continue
+            if not direct_targets and not delegated:
+                return []
+            raise ValueError(
+                "unsupported Rust macro fragment controls arm selection: repetition"
+            )
+        unsupported = next(
+            (
+                kind.removeprefix("unsupported:")
+                for kind, _value in pattern
+                if kind.startswith("unsupported:")
+            ),
+            None,
+        )
+        if unsupported is not None:
+            variable_pattern = re.compile(
+                rf"\$[A-Za-z_][A-Za-z0-9_]*\s*:\s*{re.escape(unsupported)}"
+            )
+            remainder = variable_pattern.sub("", raw_pattern, count=1)
+            if unsupported == "vis":
+                matches, _bindings = match_fixed_pattern(remainder, invocation)
+                if matches:
+                    raise ValueError(
+                        "unsupported Rust macro fragment controls raw arm selection: vis"
+                    )
+            elif unsupported == "block":
+                stripped = invocation.strip()
+                if not remainder.strip() and stripped[:1] in "({[":
+                    raise ValueError(
+                        "unsupported Rust macro fragment controls raw arm selection"
+                    )
+            elif raw_arguments is None and len(identifiers) == sum(
+                kind in {"variable", "literal"} for kind, _value in pattern
+            ):
+                raise ValueError(
+                    "unsupported Rust macro fragment controls arm selection: "
+                    f"{unsupported}"
+                )
+        matched, bindings = match_fixed_pattern(raw_pattern, invocation)
+        if not matched:
+            continue
+        if matched:
+            identifier_bindings = {
+                name: tokens[0][1].removeprefix("r#")
+                for name, value in bindings.items()
+                if len(tokens := lexical_tokens(value)) == 1
+                and tokens[0][0] == "identifier"
+            }
+            non_identifier_bindings = {
+                name for name in bindings if name not in identifier_bindings
+            }
+            if non_identifier_bindings and (
+                any(
+                    kind == "variable" and value in non_identifier_bindings
+                    for kind, value, _requires_test, _explicit_path in direct_targets
+                )
+                or delegated
+            ):
+                raise ValueError(
+                    "unsupported Rust tt fragment controls module generation"
+                )
+            modules = [
+                (
+                    (
+                        f"@path:{explicit_path}"
+                        if explicit_path is not None
+                        else (
+                            identifier_bindings[value] if kind == "variable" else value
+                        )
+                    ),
+                    requires_test,
+                )
+                for kind, value, requires_test, explicit_path in direct_targets
+                if kind == "literal" or value in bindings
+            ]
+            for (
+                callee,
+                argument_tokens,
+                delegated_arguments,
+                requires_test,
+            ) in delegated:
+                concrete_arguments = [
+                    identifier_bindings[value] if kind == "variable" else value
+                    for kind, value in argument_tokens
+                    if kind == "literal" or value in bindings
+                ]
+                concrete_raw_arguments = substitute_bindings(
+                    delegated_arguments, bindings
+                )
+                modules.extend(
+                    (module, requires_test or module_requires_test)
+                    for module, module_requires_test in rust_resolve_macro_modules(
+                        callee,
+                        concrete_arguments,
+                        environment,
+                        visiting,
+                        concrete_raw_arguments,
+                    )
+                )
+            return modules
+    return None
+
+
+def rust_resolve_macro_modules(
+    name: str,
+    identifiers: list[str],
+    environment: dict[str, tuple[bool, tuple]],
+    visiting: frozenset[str] = frozenset(),
+    raw_arguments: str | None = None,
+) -> list[tuple[str, bool]]:
+    """Resolve one supported macro invocation through delegated wrappers."""
+    definition = environment.get(name)
+    if definition is None:
+        return []
+    if name in visiting:
+        raise ValueError(f"cyclic module-generating macro expansion: {name}!")
+    direct, arms = definition
+    if not direct and not any(
+        direct_targets or delegated for _pattern, direct_targets, delegated in arms
+    ):
+        return []
+    try:
+        modules = rust_macro_arm_modules(
+            arms, identifiers, environment, visiting | {name}, raw_arguments
+        )
+    except ValueError as error:
+        raise ValueError(f"{error} in {name}!") from error
+    if modules is not None:
+        return modules
+    return [(identifier, False) for identifier in identifiers] if direct else []
+
+
+def rust_macro_definitions(masked: str) -> list[tuple[int, str, bool]]:
+    """Return directly module-generating local macro definitions."""
+    return [
+        (position, name, direct)
+        for position, name, direct, _callees, _closing in (
+            rust_macro_definition_specs(masked)
+        )
+    ]
+
+
+def rust_macro_definition_ranges(masked: str) -> list[tuple[int, int]]:
+    """Return complete local ``macro_rules!`` definition ranges."""
+    return [
+        (position, closing)
+        for position, _name, _direct, _callees, closing in (
+            rust_macro_definition_specs(masked)
+        )
+    ]
+
+
+def rust_module_macro_definitions(masked: str) -> set[str]:
+    """Return macros in ``masked`` whose expansion can declare ``mod $x``."""
+    return {
+        name
+        for _position, name, generates in rust_macro_definitions(masked)
+        if generates
+    }
+
+
+def rust_identifier_macro_invocation_specs(
+    masked: str,
+    source: str | None = None,
+) -> list[tuple[int, int, str, list[str], str]]:
+    """Return structurally matched macro names, identifiers, and arguments."""
+    source = masked if source is None else source
+    if len(source) != len(masked):
+        raise ValueError("Rust macro invocation source and mask lengths differ")
+    invocations = []
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    for invocation_start, invocation_end, name in rust_identifier_tokens(masked):
+        cursor = invocation_end
+        while cursor < len(masked) and masked[cursor].isspace():
+            cursor += 1
+        if cursor >= len(masked) or masked[cursor] != "!":
+            continue
+        cursor += 1
+        while cursor < len(masked) and masked[cursor].isspace():
+            cursor += 1
+        if cursor >= len(masked) or masked[cursor] not in pairs:
+            continue
+        opening = cursor
+        closing_char = pairs[masked[opening]]
+        depth = 1
+        cursor = opening + 1
+        while cursor < len(masked) and depth:
+            depth += masked[cursor] == masked[opening]
+            depth -= masked[cursor] == closing_char
+            cursor += 1
+        if depth:
+            raise ValueError(f"unclosed Rust macro invocation: {name}!")
+        masked_arguments = masked[opening + 1 : cursor - 1]
+        arguments = source[opening + 1 : cursor - 1]
+        identifiers = [token[2] for token in rust_identifier_tokens(masked_arguments)]
+        invocations.append((invocation_start, cursor, name, identifiers, arguments))
+    return invocations
+
+
+def rust_identifier_macro_invocations(
+    masked: str,
+) -> list[tuple[int, str, list[str]]]:
+    """Return macro names and identifier arguments from structurally valid calls."""
+    return [
+        (position, name, identifiers)
+        for position, _end, name, identifiers, _arguments in (
+            rust_identifier_macro_invocation_specs(masked)
+        )
+    ]
+
+
+def rust_macro_module_invocations(
+    masked: str, definitions: set[str] | None = None
+) -> list[tuple[int, str]]:
+    """Return module names passed to visible module-generating macros."""
+    definitions = definitions or rust_module_macro_definitions(masked)
+    return [
+        (invocation_start, identifier)
+        for invocation_start, name, identifiers in rust_identifier_macro_invocations(
+            masked
+        )
+        if name in definitions
+        for identifier in identifiers
+    ]
+
+
 def external_test_module_paths(
     repo_root: pathlib.Path, files: list[pathlib.Path]
 ) -> set[pathlib.Path]:
@@ -2932,6 +4126,12 @@ def external_test_module_paths(
         pathlib.Path,
         tuple[str, str, list[tuple[int, int, str]], list[tuple[int, int]]],
     ] = {}
+    macro_definition_events: dict[
+        pathlib.Path, list[tuple[int, str, bool, frozenset[str], int]]
+    ] = {}
+    macro_imports: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
+    macro_includes: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
+    macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
 
     def add_candidate(path: pathlib.Path, *, require_rust_suffix: bool = True) -> bool:
         resolved = path.resolve()
@@ -2957,6 +4157,12 @@ def external_test_module_paths(
             rust_inline_module_contexts(masked),
             rust_test_ranges(masked, source),
         )
+        test_ranges = parsed[owner.resolve()][3]
+        macro_definition_events[owner.resolve()] = [
+            definition
+            for definition in rust_macro_definition_specs(masked, source)
+            if not any(start <= definition[0] < end for start, end in test_ranges)
+        ]
 
     for owner in list(files):
         parse_candidate(owner)
@@ -2964,6 +4170,176 @@ def external_test_module_paths(
         path.resolve(): {(path.parent, False)}
         for path in rust_crate_roots(repo_root, files)
     }
+
+    def lexical_scope(owner_resolved: pathlib.Path, position: int) -> tuple[int, int]:
+        masked = parsed[owner_resolved][1]
+        stack = []
+        containing = [(-1, len(masked))]
+        for cursor, character in enumerate(masked):
+            if character == "{":
+                stack.append(cursor)
+            elif character == "}" and stack:
+                opening = stack.pop()
+                if opening < position < cursor:
+                    containing.append((opening, cursor))
+        return max(containing, key=lambda scope: scope[0])
+
+    def add_macro_modules(
+        owner_resolved: pathlib.Path,
+        base: pathlib.Path,
+        inherited_requires_test: bool,
+        imported_definitions: dict[str, tuple[bool, tuple]],
+    ) -> bool:
+        source, masked, inline_modules, test_ranges = parsed[owner_resolved]
+        changed = False
+        local_definitions = macro_definition_stream(
+            owner_resolved, include_test_definitions=inherited_requires_test
+        )
+        definition_ranges = rust_macro_definition_ranges(masked)
+        for (
+            invocation_start,
+            _invocation_end,
+            name,
+            identifiers,
+            raw_arguments,
+        ) in rust_identifier_macro_invocation_specs(masked, source):
+            if any(start <= invocation_start < end for start, end in definition_ranges):
+                continue
+            environment = macro_environment_at(
+                owner_resolved, invocation_start, imported_definitions
+            )
+            modules = rust_resolve_macro_modules(
+                name, identifiers, environment, raw_arguments=raw_arguments
+            )
+            if not modules:
+                continue
+            local_requires_test = any(
+                start <= invocation_start < end for start, end in test_ranges
+            )
+            ancestors = sorted(
+                (
+                    context
+                    for context in inline_modules
+                    if context[0] < invocation_start < context[1]
+                ),
+                key=lambda context: context[0],
+            )
+            declaration_base = base
+            explicit_base = base if ancestors else owner_resolved.parent
+            for _opening, _closing, ancestor_name in ancestors:
+                declaration_base /= ancestor_name
+                explicit_base /= ancestor_name
+            for module, expansion_requires_test in modules:
+                explicit_path = (
+                    module.removeprefix("@path:")
+                    if module.startswith("@path:")
+                    else None
+                )
+                targets = (
+                    ((explicit_base / explicit_path, True),)
+                    if explicit_path is not None
+                    else (
+                        (declaration_base / f"{module}.rs", False),
+                        (declaration_base / module / "mod.rs", False),
+                    )
+                )
+                for target, target_is_explicit in targets:
+                    resolved = target.resolve()
+                    if add_candidate(resolved):
+                        state = (
+                            (
+                                resolved.parent
+                                if target_is_explicit
+                                else declaration_base / module
+                            ),
+                            inherited_requires_test
+                            or local_requires_test
+                            or expansion_requires_test,
+                        )
+                        states = owner_states.setdefault(resolved, set())
+                        if state not in states:
+                            states.add(state)
+                            changed = True
+        return changed
+
+    def macro_definition_stream(
+        owner_resolved: pathlib.Path,
+        *,
+        include_test_definitions: bool = False,
+        exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] | None = None,
+    ) -> list[tuple[int, str, bool, tuple, int, int]]:
+        exports = macro_exports if exports is None else exports
+        raw_definitions = (
+            rust_macro_definition_specs(
+                parsed[owner_resolved][1], parsed[owner_resolved][0]
+            )
+            if include_test_definitions
+            else list(macro_definition_events[owner_resolved])
+        )
+        definitions = [
+            (
+                position,
+                name,
+                direct,
+                callees,
+                *lexical_scope(owner_resolved, position),
+            )
+            for position, name, direct, callees, _closing in raw_definitions
+        ]
+        for include_position, included in macro_includes.get(owner_resolved, []):
+            scope_start, scope_end = lexical_scope(owner_resolved, include_position)
+            definitions.extend(
+                (
+                    include_position,
+                    name,
+                    generates,
+                    arms,
+                    scope_start,
+                    scope_end,
+                )
+                for name, (generates, arms) in exports.get(included, {}).items()
+            )
+        for import_position, imported in macro_imports.get(owner_resolved, []):
+            scope_start, scope_end = lexical_scope(owner_resolved, import_position)
+            definitions.extend(
+                (
+                    import_position,
+                    name,
+                    generates,
+                    arms,
+                    scope_start,
+                    scope_end,
+                )
+                for name, (generates, arms) in exports.get(imported, {}).items()
+            )
+        resolved = []
+        for position, name, direct, arms, scope_start, scope_end in sorted(
+            definitions, key=lambda definition: definition[0]
+        ):
+            resolved.append((position, name, direct, arms, scope_start, scope_end))
+        return resolved
+
+    def macro_environment_at(
+        owner_resolved: pathlib.Path,
+        position: int,
+        imported_definitions: dict[str, tuple[bool, tuple]],
+    ) -> dict[str, tuple[bool, tuple]]:
+        environment = dict(imported_definitions)
+        for (
+            definition_position,
+            name,
+            direct,
+            arms,
+            scope_start,
+            scope_end,
+        ) in macro_definition_stream(owner_resolved):
+            if definition_position >= position:
+                break
+            if not scope_start < position < scope_end:
+                continue
+            environment[name] = (direct, arms)
+        return environment
+
     processed: set[tuple[pathlib.Path, pathlib.Path, bool]] = set()
     while True:
         pending = [
@@ -2973,10 +4349,69 @@ def external_test_module_paths(
             if (owner, base, inherited_requires_test) not in processed
         ]
         if not pending:
+            macro_exports = {owner: {} for owner in macro_definition_events}
+            seen_exports = set()
+            while True:
+                fingerprint = tuple(
+                    (owner, tuple(sorted(exports.items())))
+                    for owner, exports in sorted(macro_exports.items())
+                )
+                if fingerprint in seen_exports:
+                    raise ValueError("macro export visibility does not converge")
+                seen_exports.add(fingerprint)
+                updated_exports = {}
+                for owner in macro_exports:
+                    exported = {}
+                    for (
+                        _position,
+                        name,
+                        generates,
+                        arms,
+                        scope_start,
+                        scope_end,
+                    ) in macro_definition_stream(owner, exports=macro_exports):
+                        if (scope_start, scope_end) != (
+                            -1,
+                            len(parsed[owner][1]),
+                        ):
+                            continue
+                        exported[name] = (generates, arms)
+                    updated_exports[owner] = exported
+                if updated_exports == macro_exports:
+                    break
+                macro_exports = updated_exports
+            include_imports = {owner: {} for owner in macro_definition_events}
+            imports_changed = True
+            while imports_changed:
+                imports_changed = False
+                for owner, inclusions in macro_includes.items():
+                    imported = include_imports[owner]
+                    for position, included in inclusions:
+                        environment = macro_environment_at(owner, position, imported)
+                        before = dict(include_imports[included])
+                        include_imports[included].update(environment)
+                        imports_changed |= include_imports[included] != before
+            changed = False
+            for owner_resolved, states in list(owner_states.items()):
+                for base, inherited_requires_test in list(states):
+                    changed |= add_macro_modules(
+                        owner_resolved,
+                        base,
+                        inherited_requires_test,
+                        include_imports[owner_resolved],
+                    )
+            if changed:
+                continue
             break
         for owner_resolved, base, inherited_requires_test in pending:
             processed.add((owner_resolved, base, inherited_requires_test))
             source, masked, inline_modules, test_ranges = parsed[owner_resolved]
+            add_macro_modules(
+                owner_resolved,
+                base,
+                inherited_requires_test,
+                {},
+            )
             for match in include_declaration.finditer(masked):
                 macro_start = match.start("macro")
                 if source[max(0, macro_start - 2) : macro_start] == "r#" or (
@@ -3029,7 +4464,15 @@ def external_test_module_paths(
                 owner_states.setdefault(included, set()).add(
                     (included.parent, inherited_requires_test or local_requires_test)
                 )
+                macro_includes.setdefault(owner_resolved, []).append(
+                    (match.start(), included)
+                )
             for match in declaration.finditer(masked):
+                if any(
+                    start <= match.start() < end
+                    for start, end in rust_macro_definition_ranges(masked)
+                ):
+                    continue
                 attributes = source[match.start(1) : match.end(1)]
                 ancestors = sorted(
                     (
@@ -3089,6 +4532,18 @@ def external_test_module_paths(
                         ) or any(
                             start <= match.start() < end for start, end in test_ranges
                         )
+                        if (
+                            not inherited_requires_test
+                            and not local_requires_test
+                            and not path_requires_test
+                            and re.search(
+                                r"#\s*\[\s*macro_use(?:\s*\([^]]*\))?\s*\]",
+                                mask_noncode(attributes, nested_block_comments=True),
+                            )
+                        ):
+                            macro_imports.setdefault(owner_resolved, []).append(
+                                (match.start(), resolved)
+                            )
                         owner_states.setdefault(resolved, set()).add(
                             (
                                 child_base,

@@ -1759,6 +1759,22 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
 
+    def test_renderer_shader_sources_are_generator_inputs(self) -> None:
+        patterns = behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS[
+            "crates/nuxie-renderer-ffi/build.rs"
+        ]
+        for path in (
+            "renderer/src/shaders/constants.glsl",
+            "renderer/src/shaders/draw_path.vert",
+            "renderer/src/shaders/minify.py",
+            "renderer/src/shaders/metal/draw.metal",
+            "renderer/src/shaders/spirv/draw_path.main",
+        ):
+            self.assertTrue(
+                any(pathlib.PurePosixPath(path).match(pattern) for pattern in patterns),
+                path,
+            )
+
     def test_rust_candidates_cover_shipped_sources_outside_src(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

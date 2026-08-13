@@ -1692,6 +1692,15 @@ def generated_line_ranges(path: str, source: str) -> list[tuple[int, int]]:
 
 
 def rust_test_ranges(masked: str, source: str) -> list[tuple[int, int]]:
+    def leading_documentation_start(attribute_start: int) -> int:
+        prefix = source[:attribute_start]
+        attached = re.search(
+            r"(?ms)(?P<docs>(?:(?:^[ \t]*//[//!][^\n]*(?:\n|$))|"
+            r"(?:^[ \t]*/\*[*!].*?\*/[ \t]*(?:\n|$)))+)[ \t]*\Z",
+            prefix,
+        )
+        return attached.start("docs") if attached else attribute_start
+
     ranges = []
     macro_definition_ranges = rust_macro_definition_ranges(masked)
     inner_attributes = re.compile(r"(?ms)(?:#\s*!\s*\[[^]]+\]\s*)+")
@@ -1712,7 +1721,7 @@ def rust_test_ranges(masked: str, source: str) -> list[tuple[int, int]]:
         opening = stack[-1]
         closing = matching_brace(masked, opening)
         if closing is not None:
-            ranges.append((opening + 1, closing - 1))
+            ranges.append((leading_documentation_start(opening + 1), closing - 1))
     function_signatures = []
     for function in rust_function_matches(masked):
         cursor = function.end()
@@ -1751,7 +1760,7 @@ def rust_test_ranges(masked: str, source: str) -> list[tuple[int, int]]:
             masked, match.end(), signature_boundary, signature_closer
         )
         if closing is not None:
-            ranges.append((match.start(), closing))
+            ranges.append((leading_documentation_start(match.start()), closing))
     return ranges
 
 

@@ -20,19 +20,7 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 - Remove `BrowserBackendPreference`, `BrowserBackend`, `fallback_reason`,
   backend-selection enums, and all public `WebGl2*` exports.
 - Make `webgpu_adapter_info` return `&WgpuAdapterInfo`, not `Option`.
-- Keep active-frame resize protection.
-- Make ordinary `BrowserFrame::present` submit directly to the WebGPU canvas
-  surface without GPU-to-CPU readback or Canvas2D presentation.
-- Configure the browser surface for premultiplied alpha and preserve the
-  renderer's premultiplied attachment bytes; Apple drawable presentation keeps
-  its existing straight-alpha conversion.
-- Recover an `Outdated` browser surface by reconfiguring it once and recover a
-  `Lost` surface by recreating it from the retained canvas, configuring it with
-  the retained premultiplied-alpha contract, and retrying acquisition once.
-  A second failure is returned as a typed renderer error; presentation never
-  loops and callers do not rebuild the factory or trigger a no-op resize.
-- Reserve `BrowserFrame::finish_with_readback` for explicit pixel capture. It
-  returns exactly `width * height * 4` RGBA bytes and does not present.
+- Keep active-frame resize protection and browser canvas presentation behavior.
 
 ## Removal surface
 
@@ -43,10 +31,8 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 - Remove WebGL2-only GPU-canvas translation/rendering code and tests while
   preserving the WebGPU GPU-canvas implementation and its tests.
 - Simplify `tools/browser-renderer-smoke` to exercise WebGPU only, including
-  Core/Compatibility admission, presented resize, same-present recovery after
-  a one-shot surface-acquisition loss, bounded typed failure after persistent
-  loss, premultiplied-alpha composition, stream replay, GPU-canvas, path clip,
-  and explicit failure when WebGPU is unavailable.
+  Core/Compatibility admission, resize, presentation, stream replay,
+  GPU-canvas, path clip, and explicit failure when WebGPU is unavailable.
 - Remove stale HTML controls/query parameters for selecting or forcing WebGL2.
 - Update re-exports, documentation, status/defect ledgers, and parity checks so
   the supported browser contract is unambiguously WebGPU-only.
@@ -72,12 +58,6 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 2. `cargo test -p nuxie-renderer`
 3. `cargo test --workspace`
 4. `make browser-renderer-smoke`
-   proves normal presentation calls neither `GPUBuffer.mapAsync` nor
-   `CanvasRenderingContext2D.putImageData`, while explicit readback performs
-   one mapped readback and returns exact RGBA pixels. The same gate observes
-   two distinct surface-construction calls for one-shot loss recovery and
-   reruns the half-alpha compositor oracle over blue on the recovered surface.
-   Persistent loss performs exactly two acquisition attempts.
 5. `make browser-renderer-gpu-smoke`
 6. `make renderer-golden-same-runner` remains at the unchanged 1,468-row pixel
    floor.

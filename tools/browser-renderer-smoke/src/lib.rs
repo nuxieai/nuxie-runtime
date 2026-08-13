@@ -125,46 +125,9 @@ fn fs_main() -> @location(0) vec4<f32> {
         frame.restore();
         frame.clip_path(clip.as_ref());
         frame.draw_path(path.as_ref(), paint.as_ref());
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish().await.map_err(js_error)?;
         assert_pixels(&pixels)?;
         Ok(format!("backend=webgpu checksum={:016x}", fnv1a64(&pixels)))
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_direct_presentation(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        factory
-            .begin_frame(0x80ff_0000)
-            .map_err(js_error)?
-            .present()
-            .await
-            .map_err(js_error)?;
-        Ok("browser-presentation=direct-webgpu alpha=premultiplied".into())
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_explicit_readback(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        let pixels = factory
-            .begin_frame(0xff12_3456)
-            .map_err(js_error)?
-            .finish_with_readback()
-            .await
-            .map_err(js_error)?;
-        let expected = [0x12, 0x34, 0x56, 0xff];
-        if pixels.len() != 4 * 3 * 4
-            || pixels
-                .chunks_exact(4)
-                .any(|pixel| pixel != expected.as_slice())
-        {
-            return Err(JsValue::from_str(
-                "explicit browser readback did not return exact RGBA pixels",
-            ));
-        }
-        Ok(format!(
-            "browser-readback=explicit rgba-bytes={} exact=true",
-            pixels.len()
-        ))
     }
 
     #[wasm_bindgen]
@@ -191,7 +154,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 "in-flight resize changed readable factory state",
             ));
         }
-        if frame.finish_with_readback().await.map_err(js_error)?.len() != 8 * 6 * 4 {
+        if frame.finish().await.map_err(js_error)?.len() != 8 * 6 * 4 {
             return Err(JsValue::from_str(
                 "in-flight frame changed extent after rejected resize",
             ));
@@ -205,7 +168,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         let pixels = factory
             .begin_frame(0xff65_4321)
             .map_err(js_error)?
-            .finish_with_readback()
+            .finish()
             .await
             .map_err(js_error)?;
         if pixels.len() != 13 * 9 * 4 {
@@ -213,48 +176,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 "resized frame returned the old pixel extent",
             ));
         }
-        factory
-            .begin_frame(0xff65_4321)
-            .map_err(js_error)?
-            .present()
-            .await
-            .map_err(js_error)?;
-        Ok("resize=webgpu in-flight=rejected extent=13x9 presented=true".into())
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_surface_acquisition_retry(
-        canvas: HtmlCanvasElement,
-    ) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        factory
-            .begin_frame(0x80ff_0000)
-            .map_err(js_error)?
-            .present()
-            .await
-            .map_err(js_error)?;
-        Ok("surface-acquisition-loss=recreated retry=same-present alpha=premultiplied".into())
-    }
-
-    #[wasm_bindgen]
-    pub async fn assert_persistent_surface_acquisition_failure(
-        canvas: HtmlCanvasElement,
-    ) -> Result<String, JsValue> {
-        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        let error = factory
-            .begin_frame(0xff12_3456)
-            .map_err(js_error)?
-            .present()
-            .await
-            .expect_err("persistent surface loss must fail after one recovery attempt")
-            .to_string();
-        let expected = "wgpu device error: browser WebGPU canvas surface remained lost after surface recreation";
-        if error != expected {
-            return Err(JsValue::from_str(&format!(
-                "persistent surface loss returned {error:?}, expected {expected:?}"
-            )));
-        }
-        Ok("surface-acquisition-persistent-loss=typed retry=bounded".into())
+        Ok("resize=webgpu in-flight=rejected extent=13x9".into())
     }
 
     #[wasm_bindgen]
@@ -277,7 +199,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         instance
             .draw(&mut factory, &mut frame)
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish().await.map_err(js_error)?;
         let red_pixels = pixels
             .chunks_exact(4)
             .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
@@ -316,7 +238,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish().await.map_err(js_error)?;
         let red = pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [255, 0, 0, 255])
@@ -435,7 +357,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -458,7 +380,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        let valid_pixels = valid_frame.finish_with_readback().await.map_err(js_error)?;
+        let valid_pixels = valid_frame.finish().await.map_err(js_error)?;
         let red = valid_pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [0xff, 0x00, 0x00, 0xff])
@@ -547,7 +469,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -571,7 +493,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        valid_frame.finish_with_readback().await.map_err(js_error)?;
+        valid_frame.finish().await.map_err(js_error)?;
         Ok("webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean".into())
     }
 
@@ -598,7 +520,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
         stream
             .replay_frame(0, &mut factory, &mut frame)
             .map_err(js_error)?;
-        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
+        let pixels = frame.finish().await.map_err(js_error)?;
         let actual = RgbaImage::new(width, height, pixels).map_err(js_error)?;
         let expected = RgbaImage::decode_png(&reference_png).map_err(js_error)?;
         let report = compare(
@@ -801,8 +723,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::{
-    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas,
-    assert_persistent_surface_acquisition_failure, assert_resize, assert_surface_acquisition_retry,
+    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas, assert_resize,
     assert_webgpu_clean_error_scope, assert_webgpu_gpu_canvas_rejects_invalid_interface,
     assert_webgpu_uniform_limit_rejection, recording_float_probe, run_backend, run_stream_case,
 };

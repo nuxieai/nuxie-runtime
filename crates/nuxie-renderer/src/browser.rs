@@ -1,7 +1,3 @@
-use super::browser_surface_lifecycle::{
-    acquire_surface_texture, SurfaceAcquisitionFailure, SurfaceRecoveryAction, SurfaceRecoveryError,
-};
-use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
@@ -10,14 +6,13 @@ use nuxie_render_api::{
     Renderer,
 };
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{Clamped, JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::HtmlCanvasElement;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 /// Failure to retarget a browser renderer's canvas.
 #[derive(Debug)]
@@ -58,7 +53,6 @@ impl From<RendererError> for BrowserResizeError {
 pub struct BrowserFactory {
     inner: WgpuFactory,
     canvas: HtmlCanvasElement,
-    presentation: Rc<BrowserPresentation>,
     width: u32,
     height: u32,
     active_frames: Rc<Cell<u32>>,
@@ -81,16 +75,9 @@ impl BrowserFactory {
         let inner = WgpuFactory::new_async(width, height).await?;
         canvas.set_width(width);
         canvas.set_height(height);
-        let presentation = Rc::new(BrowserPresentation::new(
-            &inner,
-            canvas.clone(),
-            width,
-            height,
-        )?);
         Ok(Self {
             inner,
             canvas,
-            presentation,
             width,
             height,
             active_frames: Rc::new(Cell::new(0)),
@@ -122,7 +109,6 @@ impl BrowserFactory {
         self.inner.resize(width, height)?;
         self.canvas.set_width(width);
         self.canvas.set_height(height);
-        self.presentation.configure(width, height);
         self.width = width;
         self.height = height;
         Ok(())
@@ -134,7 +120,7 @@ impl BrowserFactory {
             .set(self.active_frames.get().saturating_add(1));
         Ok(BrowserFrame {
             inner: self.inner.begin_frame(clear_color),
-            presentation: Rc::clone(&self.presentation),
+            canvas: self.canvas.clone(),
             lease: BrowserFrameLease {
                 active_frames: Rc::clone(&self.active_frames),
             },
@@ -304,7 +290,7 @@ impl Factory for BrowserFactory {
 /// In-progress browser frame created by [`BrowserFactory::begin_frame`].
 pub struct BrowserFrame {
     inner: WgpuFrame,
-    presentation: Rc<BrowserPresentation>,
+    canvas: HtmlCanvasElement,
     lease: BrowserFrameLease,
 }
 
@@ -320,180 +306,17 @@ impl Drop for BrowserFrameLease {
 }
 
 impl BrowserFrame {
-    /// Submits the frame directly to the WebGPU canvas surface.
-    pub async fn present(self) -> Result<(), RendererError> {
+    /// Submits the frame, presents it to the canvas, and returns RGBA pixels.
+    pub async fn finish(self) -> Result<Vec<u8>, RendererError> {
         let Self {
             inner,
-            presentation,
-            lease,
-        } = self;
-        let surface_texture = presentation.current_texture()?;
-        let view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        inner
-            .finish_to_texture_view_async(&view, &presentation.presenter)
-            .await?;
-        presentation.queue.present(surface_texture);
-        drop(lease);
-        Ok(())
-    }
-
-    /// Finishes the frame and returns exactly `width * height * 4` RGBA bytes.
-    ///
-    /// This explicit capture path performs a GPU-to-CPU readback. Use [`Self::present`]
-    /// for ordinary browser frames.
-    pub async fn finish_with_readback(self) -> Result<Vec<u8>, RendererError> {
-        let Self {
-            inner,
-            presentation: _,
+            canvas,
             lease,
         } = self;
         let pixels = inner.finish_async().await?;
+        present_pixels(&canvas, &pixels)?;
         drop(lease);
         Ok(pixels)
-    }
-}
-
-struct BrowserPresentation {
-    instance: wgpu::Instance,
-    device: wgpu::Device,
-    canvas: HtmlCanvasElement,
-    surface: RefCell<wgpu::Surface<'static>>,
-    configuration: RefCell<wgpu::SurfaceConfiguration>,
-    presenter: PresentPipeline,
-    queue: wgpu::Queue,
-}
-
-impl BrowserPresentation {
-    fn new(
-        factory: &WgpuFactory,
-        canvas: HtmlCanvasElement,
-        width: u32,
-        height: u32,
-    ) -> Result<Self, RendererError> {
-        let instance = factory.context.instance.clone();
-        let device = factory.context.device.clone();
-        let surface = create_browser_surface(&instance, canvas.clone(), "creation")?;
-        let mut configuration = surface
-            .get_default_config(&factory.context.adapter, width, height)
-            .ok_or_else(|| {
-                RendererError::Adapter(
-                    "selected WebGPU adapter cannot present to the browser canvas".into(),
-                )
-            })?;
-        configuration.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
-        surface.configure(&device, &configuration);
-        Ok(Self {
-            presenter: PresentPipeline::new(
-                &device,
-                configuration.format,
-                PresentTargetAlpha::Premultiplied,
-            ),
-            instance,
-            device,
-            canvas,
-            surface: RefCell::new(surface),
-            configuration: RefCell::new(configuration),
-            queue: factory.context.queue.clone(),
-        })
-    }
-
-    fn configure(&self, width: u32, height: u32) {
-        let mut configuration = self.configuration.borrow_mut();
-        configuration.width = width;
-        configuration.height = height;
-        self.surface
-            .borrow()
-            .configure(&self.device, &configuration);
-    }
-
-    fn current_texture(&self) -> Result<wgpu::SurfaceTexture, RendererError> {
-        acquire_surface_texture(
-            || self.acquire_current_texture(),
-            |action| match action {
-                SurfaceRecoveryAction::ReconfigureAndRetry => self.reconfigure_surface(),
-                SurfaceRecoveryAction::RecreateAndRetry => self.recreate_surface(),
-            },
-        )
-        .map_err(|error| match error {
-            SurfaceRecoveryError::Acquisition { failure, recovery } => {
-                surface_acquisition_error(failure, recovery)
-            }
-            SurfaceRecoveryError::Recovery(error) => error,
-        })
-    }
-
-    fn acquire_current_texture(&self) -> Result<wgpu::SurfaceTexture, SurfaceAcquisitionFailure> {
-        match self.surface.borrow().get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(texture)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => Ok(texture),
-            status => Err(surface_failure(status)),
-        }
-    }
-
-    fn reconfigure_surface(&self) -> Result<(), RendererError> {
-        let configuration = self.configuration.borrow();
-        self.surface
-            .borrow()
-            .configure(&self.device, &configuration);
-        Ok(())
-    }
-
-    fn recreate_surface(&self) -> Result<(), RendererError> {
-        let surface = create_browser_surface(&self.instance, self.canvas.clone(), "recreation")?;
-        surface.configure(&self.device, &self.configuration.borrow());
-        *self.surface.borrow_mut() = surface;
-        Ok(())
-    }
-}
-
-fn create_browser_surface(
-    instance: &wgpu::Instance,
-    canvas: HtmlCanvasElement,
-    operation: &'static str,
-) -> Result<wgpu::Surface<'static>, RendererError> {
-    instance
-        .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
-        .map_err(|error| {
-            RendererError::Device(format!(
-                "browser WebGPU canvas surface {operation} failed: {error}"
-            ))
-        })
-}
-
-fn surface_acquisition_error(
-    failure: SurfaceAcquisitionFailure,
-    recovery: Option<SurfaceRecoveryAction>,
-) -> RendererError {
-    let status = match failure {
-        SurfaceAcquisitionFailure::Timeout => "acquisition timed out",
-        SurfaceAcquisitionFailure::Occluded => "is occluded",
-        SurfaceAcquisitionFailure::Outdated => "remained outdated",
-        SurfaceAcquisitionFailure::Lost => "remained lost",
-        SurfaceAcquisitionFailure::Validation => "acquisition failed validation",
-    };
-    let recovery = recovery
-        .map(|recovery| match recovery {
-            SurfaceRecoveryAction::ReconfigureAndRetry => {
-                " after surface reconfiguration".to_owned()
-            }
-            SurfaceRecoveryAction::RecreateAndRetry => " after surface recreation".to_owned(),
-        })
-        .unwrap_or_default();
-    RendererError::Device(format!("browser WebGPU canvas surface {status}{recovery}"))
-}
-
-fn surface_failure(status: wgpu::CurrentSurfaceTexture) -> SurfaceAcquisitionFailure {
-    match status {
-        wgpu::CurrentSurfaceTexture::Timeout => SurfaceAcquisitionFailure::Timeout,
-        wgpu::CurrentSurfaceTexture::Occluded => SurfaceAcquisitionFailure::Occluded,
-        wgpu::CurrentSurfaceTexture::Outdated => SurfaceAcquisitionFailure::Outdated,
-        wgpu::CurrentSurfaceTexture::Lost => SurfaceAcquisitionFailure::Lost,
-        wgpu::CurrentSurfaceTexture::Validation => SurfaceAcquisitionFailure::Validation,
-        wgpu::CurrentSurfaceTexture::Success(_) | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
-            unreachable!("successful surface acquisition has no failure status")
-        }
     }
 }
 
@@ -556,4 +379,31 @@ impl Renderer for BrowserFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.inner.modulate_opacity(opacity);
     }
+}
+
+fn present_pixels(canvas: &HtmlCanvasElement, pixels: &[u8]) -> Result<(), RendererError> {
+    let context = canvas
+        .get_context("2d")
+        .map_err(js_error)?
+        .ok_or_else(|| {
+            RendererError::Device("browser canvas has no 2D presentation context".into())
+        })?
+        .dyn_into::<CanvasRenderingContext2d>()
+        .map_err(|error| js_error(error.into()))?;
+    let image = ImageData::new_with_u8_clamped_array_and_sh(
+        Clamped(pixels),
+        canvas.width(),
+        canvas.height(),
+    )
+    .map_err(js_error)?;
+    context.put_image_data(&image, 0.0, 0.0).map_err(js_error)
+}
+
+fn js_error(error: JsValue) -> RendererError {
+    RendererError::Device(format!(
+        "browser canvas presentation failed: {}",
+        error
+            .as_string()
+            .unwrap_or_else(|| format!("browser JavaScript error: {error:?}"))
+    ))
 }

@@ -2867,18 +2867,11 @@ fn append_direct_msaa_tessellation_to_shadow_buffers(
 }
 
 fn production_msaa_uses_retained_tessellation(
-    production: bool,
-    config: LogicalFrameConfig,
-    draw: &SolidDraw,
+    _production: bool,
+    _config: LogicalFrameConfig,
+    _draw: &SolidDraw,
 ) -> bool {
-    production
-        && config.mode == RenderMode::Msaa
-        && draw.paint.feather == 0.0
-        && draw.image.is_none()
-        && matches!(
-            draw.paint.style,
-            RenderPaintStyle::Fill | RenderPaintStyle::Stroke
-        )
+    false
 }
 
 fn push_u8(buffer: &mut Vec<u8>, value: u8) {

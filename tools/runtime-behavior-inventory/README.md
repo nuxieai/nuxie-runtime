@@ -68,9 +68,9 @@ make runtime-behavior-inventory-snapshot
 
 The tool requires `RIVE_RUNTIME_DIR` to be checked out at the exact
 `port-manifest.toml` pin with no tracked or untracked changes under the
-inventoried `src` and `include/rive` roots. Ignored files with an inventoried
-C++/header suffix are also rejected because discovery would otherwise read
-them. New, removed, changed, duplicate, or malformed records fail with
-owner-family diagnostics. Never regenerate merely to make a red gate green:
-inspect the member/item delta and update parity evidence or an approved seam
-first.
+inventoried `src` and `include/rive` roots or configured upstream native
+generator inputs. Ignored files with an inventoried C++/header suffix are also
+rejected because discovery would otherwise read them. New, removed, changed,
+duplicate, or malformed records fail with owner-family diagnostics. Never
+regenerate merely to make a red gate green: inspect the member/item delta and
+update parity evidence or an approved seam first.

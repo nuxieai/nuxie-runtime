@@ -4406,6 +4406,7 @@ def external_test_module_paths(
     macro_imports: dict[
         pathlib.Path, list[tuple[int, pathlib.Path, str | None, str | None]]
     ] = {}
+    scoped_macro_imports: dict[pathlib.Path, list[tuple[int, str, bool, tuple]]] = {}
     macro_includes: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
     macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
     crate_exported_macro_names: dict[pathlib.Path, set[str]] = {}
@@ -4652,6 +4653,20 @@ def external_test_module_paths(
                 )
                 for name, (generates, arms) in exports.get(imported, {}).items()
                 if imported_name is None or name == imported_name
+            )
+        for import_position, local_name, generates, arms in scoped_macro_imports.get(
+            owner_resolved, []
+        ):
+            scope_start, scope_end = lexical_scope(owner_resolved, import_position)
+            definitions.append(
+                (
+                    import_position,
+                    local_name,
+                    generates,
+                    arms,
+                    scope_start,
+                    scope_end,
+                )
             )
         resolved = []
         for position, name, direct, arms, scope_start, scope_end in sorted(
@@ -5020,6 +5035,36 @@ def external_test_module_paths(
                     states = next_states
                 return {owner for owner, _child_base in states}
 
+            def inline_module_definitions(
+                module_path: tuple[str, ...], imported_name: str | None
+            ) -> list[tuple[str, bool, tuple]]:
+                segments = list(module_path)
+                if segments and segments[0] in {"crate", "self"}:
+                    segments.pop(0)
+                if not segments or any(segment == "super" for segment in segments):
+                    return []
+                definitions = []
+                for (
+                    position,
+                    name,
+                    generates,
+                    arms,
+                    _closing,
+                ) in macro_definition_events[owner_resolved]:
+                    ancestors = sorted(
+                        (
+                            context
+                            for context in inline_modules
+                            if context[0] < position < context[1]
+                        ),
+                        key=lambda context: context[0],
+                    )
+                    if [context[2] for context in ancestors] != segments:
+                        continue
+                    if imported_name is None or imported_name == name:
+                        definitions.append((name, generates, arms))
+                return definitions
+
             for import_start, module_path, imported_name, alias in rust_use_imports(
                 masked
             ):
@@ -5027,7 +5072,8 @@ def external_test_module_paths(
                     start <= import_start < end for start, end in definition_ranges
                 ) or any(start <= import_start < end for start, end in test_ranges):
                     continue
-                for imported in imported_module_owners(module_path):
+                imported_owners = imported_module_owners(module_path)
+                for imported in imported_owners:
                     macro_imports.setdefault(owner_resolved, []).append(
                         (
                             import_start,
@@ -5036,6 +5082,13 @@ def external_test_module_paths(
                             alias or imported_name,
                         )
                     )
+                if not imported_owners:
+                    for name, generates, arms in inline_module_definitions(
+                        module_path, imported_name
+                    ):
+                        scoped_macro_imports.setdefault(owner_resolved, []).append(
+                            (import_start, alias or name, generates, arms)
+                        )
 
     production_reachable = {
         owner

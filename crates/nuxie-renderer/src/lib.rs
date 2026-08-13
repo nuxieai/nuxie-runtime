@@ -1135,6 +1135,7 @@ impl WgpuFactory {
     ))]
     #[doc(hidden)]
     pub fn capture_builtin_present_pipeline_variants(&self) {
+        #[cfg(any(target_os = "ios", target_os = "macos"))]
         for alpha in [
             present_pipeline::PresentTargetAlpha::Straight,
             present_pipeline::PresentTargetAlpha::Premultiplied,

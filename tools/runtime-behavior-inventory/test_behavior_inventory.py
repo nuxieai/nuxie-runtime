@@ -3432,6 +3432,32 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotIn(behavior.resolve(), excluded)
 
+    def test_inline_module_macro_import_is_resolved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "mod macros {\n"
+                "    macro_rules! load { () => { mod behavior; } }\n"
+                "    pub(crate) use load;\n"
+                "}\n"
+                "use macros::load;\n"
+                "load!();\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
     def test_unknown_macro_retains_explicit_module_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

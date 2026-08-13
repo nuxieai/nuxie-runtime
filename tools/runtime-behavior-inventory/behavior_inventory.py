@@ -4042,6 +4042,21 @@ def rust_resolve_macro_modules(
     definition = environment.get(name)
     if definition is None:
         return []
+    if definition[0] == "alternatives":
+        resolved = []
+        for alternative in definition[1]:
+            alternative_environment = dict(environment)
+            alternative_environment[name] = alternative
+            resolved.extend(
+                rust_resolve_macro_modules(
+                    name,
+                    identifiers,
+                    alternative_environment,
+                    visiting,
+                    raw_arguments,
+                )
+            )
+        return list(dict.fromkeys(resolved))
     if name in visiting:
         raise ValueError(f"cyclic module-generating macro expansion: {name}!")
     direct, arms = definition
@@ -4192,6 +4207,7 @@ def external_test_module_paths(
     macro_includes: dict[pathlib.Path, list[tuple[int, pathlib.Path]]] = {}
     macro_exports: dict[pathlib.Path, dict[str, tuple[bool, tuple]]] = {}
     crate_exported_macro_names: dict[pathlib.Path, set[str]] = {}
+    conditional_macro_positions: dict[pathlib.Path, set[int]] = {}
 
     def add_candidate(path: pathlib.Path, *, require_rust_suffix: bool = True) -> bool:
         resolved = path.resolve()
@@ -4223,6 +4239,16 @@ def external_test_module_paths(
             for definition in rust_macro_definition_specs(masked, source)
             if not any(start <= definition[0] < end for start, end in test_ranges)
         ]
+        conditional_macro_positions[owner.resolve()] = {
+            definition[0]
+            for definition in macro_definition_events[owner.resolve()]
+            if re.search(
+                r"#\s*\[\s*cfg(?:_attr)?\b",
+                masked[
+                    rust_leading_attribute_start(masked, definition[0]) : definition[0]
+                ],
+            )
+        }
         crate_exported_macro_names[owner.resolve()] = {
             definition[1]
             for definition in macro_definition_events[owner.resolve()]
@@ -4287,9 +4313,26 @@ def external_test_module_paths(
                 imported_definitions,
                 definition_stream,
             )
-            modules = rust_resolve_macro_modules(
-                name, identifiers, environment, raw_arguments=raw_arguments
-            )
+            if name in environment:
+                modules = rust_resolve_macro_modules(
+                    name, identifiers, environment, raw_arguments=raw_arguments
+                )
+            else:
+                # Dependency macros such as cfg_if! can own local module
+                # declarations even though their definitions are outside this
+                # repository. Conservatively retain explicit mod tokens from
+                # that invocation instead of treating an unknown expansion as
+                # proof that the source is unreachable.
+                argument_mask = mask_noncode(raw_arguments, nested_block_comments=True)
+                modules = [
+                    (
+                        match.group(2),
+                        attributes_require_test(
+                            raw_arguments[match.start(1) : match.end(1)]
+                        ),
+                    )
+                    for match in declaration.finditer(argument_mask)
+                ]
             if not modules:
                 continue
             local_requires_test = any(
@@ -4438,7 +4481,19 @@ def external_test_module_paths(
                 break
             if not scope_start < position < scope_end:
                 continue
-            environment[name] = (direct, arms)
+            definition = (direct, arms)
+            if (
+                definition_position in conditional_macro_positions[owner_resolved]
+                and name in environment
+            ):
+                previous = environment[name]
+                alternatives = (
+                    list(previous[1]) if previous[0] == "alternatives" else [previous]
+                )
+                alternatives.append(definition)
+                environment[name] = ("alternatives", tuple(alternatives))
+            else:
+                environment[name] = definition
         return environment
 
     processed: set[tuple[pathlib.Path, pathlib.Path, bool]] = set()
@@ -4693,35 +4748,75 @@ def external_test_module_paths(
                                 or path_requires_test,
                             )
                         )
+            identifier_text = r"(?:r#)?[A-Za-z_][A-Za-z0-9_]*"
+
+            def imported_module_owners(path_text: str) -> set[pathlib.Path]:
+                segments = [
+                    segment.removeprefix("r#")
+                    for segment in path_text.split("::")
+                    if segment
+                ]
+                crate_root = next(
+                    (
+                        root
+                        for root in crate_roots
+                        if owner_resolved.is_relative_to(root)
+                    ),
+                    None,
+                )
+                if crate_root is None:
+                    return set()
+                if segments and segments[0] == "crate":
+                    segments.pop(0)
+                    import_base = crate_root / "src"
+                elif segments and segments[0] == "self":
+                    segments.pop(0)
+                    import_base = base
+                elif segments and segments[0] == "super":
+                    import_base = base
+                    while segments and segments[0] == "super":
+                        segments.pop(0)
+                        import_base = import_base.parent
+                else:
+                    import_base = crate_root / "src"
+                if not segments:
+                    return set()
+                stem = import_base.joinpath(*segments)
+                return {
+                    candidate.resolve()
+                    for candidate in (stem.with_suffix(".rs"), stem / "mod.rs")
+                    if candidate.resolve() in candidates
+                }
+
             use_import = re.compile(
-                r"(?m)(?<![A-Za-z0-9_])use\s+"
-                r"(?:(?:crate|self)::)?"
-                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)::"
-                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)"
-                r"(?:\s+as\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*))?\s*;"
+                rf"(?m)(?<![A-Za-z0-9_])use\s+"
+                rf"(?P<module>(?:{identifier_text}::)+)"
+                rf"(?P<name>{identifier_text})"
+                rf"(?:\s+as\s+(?P<alias>{identifier_text}))?\s*;"
             )
             for match in use_import.finditer(masked):
                 if any(
                     start <= match.start() < end for start, end in definition_ranges
                 ) or any(start <= match.start() < end for start, end in test_ranges):
                     continue
-                module, imported_name, alias = match.groups()
-                for imported in module_targets.get(module, set()):
+                imported_name = match.group("name").removeprefix("r#")
+                alias = (match.group("alias") or imported_name).removeprefix("r#")
+                module_path = match.group("module").removesuffix("::")
+                for imported in imported_module_owners(module_path):
                     macro_imports.setdefault(owner_resolved, []).append(
-                        (match.start(), imported, imported_name, alias or imported_name)
+                        (match.start(), imported, imported_name, alias)
                     )
             grouped_use_import = re.compile(
-                r"(?ms)(?<![A-Za-z0-9_])use\s+"
-                r"(?:(?:crate|self)::)?"
-                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)::\s*\{([^{}]*)\}\s*;"
+                rf"(?ms)(?<![A-Za-z0-9_])use\s+"
+                rf"(?P<module>{identifier_text}(?:::{identifier_text})*)::\s*"
+                r"\{(?P<items>[^{}]*)\}\s*;"
             )
             for match in grouped_use_import.finditer(masked):
                 if any(
                     start <= match.start() < end for start, end in definition_ranges
                 ) or any(start <= match.start() < end for start, end in test_ranges):
                     continue
-                module = match.group(1)
-                source_group = source[match.start(2) : match.end(2)]
+                source_group = source[match.start("items") : match.end("items")]
                 for item in rust_meta_arguments(source_group):
                     item_masked = mask_noncode(item, nested_block_comments=True)
                     imported_match = re.fullmatch(
@@ -4732,7 +4827,7 @@ def external_test_module_paths(
                     if imported_match is None:
                         continue
                     imported_name, alias = imported_match.groups()
-                    for imported in module_targets.get(module, set()):
+                    for imported in imported_module_owners(match.group("module")):
                         macro_imports.setdefault(owner_resolved, []).append(
                             (
                                 match.start(),

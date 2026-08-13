@@ -306,8 +306,9 @@ impl Drop for BrowserFrameLease {
 }
 
 impl BrowserFrame {
-    /// Submits the frame, presents it to the canvas, and returns RGBA pixels.
-    pub async fn finish(self) -> Result<Vec<u8>, RendererError> {
+    /// Submits the frame and presents it through the historical CPU-readback
+    /// canvas path.
+    pub async fn present(self) -> Result<(), RendererError> {
         let Self {
             inner,
             canvas,
@@ -315,6 +316,18 @@ impl BrowserFrame {
         } = self;
         let pixels = inner.finish_async().await?;
         present_pixels(&canvas, &pixels)?;
+        drop(lease);
+        Ok(())
+    }
+
+    /// Finishes the frame and returns exactly `width * height * 4` RGBA bytes.
+    pub async fn finish_with_readback(self) -> Result<Vec<u8>, RendererError> {
+        let Self {
+            inner,
+            canvas: _,
+            lease,
+        } = self;
+        let pixels = inner.finish_async().await?;
         drop(lease);
         Ok(pixels)
     }

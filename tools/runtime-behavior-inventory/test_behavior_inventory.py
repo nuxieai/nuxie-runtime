@@ -3307,6 +3307,80 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotIn(behavior.resolve(), excluded)
 
+    def test_cfg_alternative_macro_definitions_union_production_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            unix = source / "unix_impl.rs"
+            windows = source / "windows_impl.rs"
+            lib.write_text(
+                "#[cfg(unix)]\n"
+                "macro_rules! load { () => { mod unix_impl; } }\n"
+                "#[cfg(windows)]\n"
+                "macro_rules! load { () => { mod windows_impl; } }\n"
+                "load!();\n"
+            )
+            unix.write_text("fn unix_behavior() {}\n")
+            windows.write_text("fn windows_behavior() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, unix, windows]
+            )
+            self.assertNotIn(unix.resolve(), excluded)
+            self.assertNotIn(windows.resolve(), excluded)
+
+    def test_nested_use_path_reaches_exported_module_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            nested = source / "outer"
+            nested.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\nedition = "2024"\n'
+            )
+            lib = source / "lib.rs"
+            outer = source / "outer.rs"
+            inner = nested / "inner.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text("mod outer;\nuse outer::inner::load;\nload!(behavior);\n")
+            outer.write_text("pub mod inner;\n")
+            inner.write_text(
+                "macro_rules! load { ($module:ident) => { mod $module; } }\n"
+                "pub(crate) use load;\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, outer, inner, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_unknown_macro_retains_explicit_module_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            platform = source / "platform.rs"
+            lib.write_text("cfg_if! { if #[cfg(unix)] { mod platform; } }\n")
+            platform.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, platform]
+            )
+            self.assertNotIn(platform.resolve(), excluded)
+
     def test_included_macro_is_visible_only_after_include(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

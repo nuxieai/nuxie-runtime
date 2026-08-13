@@ -1154,6 +1154,25 @@ class RustDiscoveryTests(unittest.TestCase):
             behavior_inventory.rust_shipped_source(after),
         )
 
+    def test_test_only_unicode_escaped_char_is_fully_projected(self) -> None:
+        source = (
+            "#[cfg(test)]\n"
+            "const TEST_SEPARATOR: char = '\\u{2028}';\n"
+            "fn shipped() { production(); }\n"
+        )
+
+        projected = behavior_inventory.rust_shipped_source(source)
+        self.assertEqual("fn shipped() { production(); }\n", projected)
+        self.assertEqual(
+            ["shipped"],
+            [
+                item["name"]
+                for item in behavior_inventory.rust_items(
+                    "crates/demo/src/lib.rs", source
+                )
+            ],
+        )
+
     def test_local_helpers_include_the_enclosing_function_in_their_identity(
         self,
     ) -> None:

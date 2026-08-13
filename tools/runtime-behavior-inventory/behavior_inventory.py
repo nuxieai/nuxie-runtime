@@ -495,7 +495,10 @@ def mask_noncode(
                 block_comment_depth = 1
                 state = "block-comment"
                 continue
-            if char == "'" and not re.match(r"'(?:\\.|[^\\'\n])'", source[index:]):
+            if char == "'" and not re.match(
+                r"'(?:\\u\{[0-9A-Fa-f_]+\}|\\x[0-9A-Fa-f]{2}|\\.|[^\\'\n])'",
+                source[index:],
+            ):
                 # Rust lifetimes (`'a`, `'static`) are code, not character
                 # literals. A character literal always has its closing quote
                 # in this compact form; raw/multibyte content is handled by
@@ -1489,7 +1492,7 @@ def rust_literal_token_length(source: str) -> int | None:
             length = suffix_length + 1
     if length is None:
         match = re.match(
-            r"(?:b)?'(?:\\.|[^'\\\n])+'|"
+            r"(?:b)?'(?:\\u\{[0-9A-Fa-f_]+\}|\\x[0-9A-Fa-f]{2}|\\.|[^'\\\n])'|"
             r"(?:0x[0-9A-Fa-f](?:_?[0-9A-Fa-f]|_)*|"
             r"0o[0-7](?:_?[0-7]|_)*|0b[01](?:_?[01]|_)*|"
             r"[0-9](?:_?[0-9]|_)*(?:\.(?!\.)(?:[0-9](?:_?[0-9])*)?)?"

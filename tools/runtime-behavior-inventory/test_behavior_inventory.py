@@ -2158,6 +2158,47 @@ class GateTests(unittest.TestCase):
             self.assertNotIn(default.resolve(), excluded)
             self.assertNotIn(alternate.resolve(), excluded)
 
+    def test_include_inside_macro_is_reached_only_when_invoked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            literal = source / "literal.rs"
+            variable = source / "variable.rs"
+            literal.write_text("fn literal() {}\n")
+            variable.write_text("fn variable() {}\n")
+            definitions = (
+                "macro_rules! literal_include {\n"
+                '    () => { include!("literal.rs"); };\n'
+                "}\n"
+                "macro_rules! variable_include {\n"
+                "    ($path:tt) => { include!($path); };\n"
+                "}\n"
+            )
+
+            lib.write_text(definitions)
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, literal, variable]
+            )
+            self.assertIn(literal.resolve(), excluded)
+            self.assertIn(variable.resolve(), excluded)
+
+            lib.write_text(
+                definitions
+                + "literal_include!();\n"
+                + 'variable_include!("variable.rs");\n'
+            )
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, literal, variable]
+            )
+            self.assertNotIn(literal.resolve(), excluded)
+            self.assertNotIn(variable.resolve(), excluded)
+
     def test_invoked_wrapper_macro_reaches_concrete_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

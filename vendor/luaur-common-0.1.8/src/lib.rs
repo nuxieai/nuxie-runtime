@@ -36,122 +36,156 @@ pub mod strtod_shim;
 pub use functions::assert_call_handler::assert_call_handler;
 pub use records::f_value::set_luau_bool_flags;
 
-/// C++ CLI `setLuauFlagsDefault(value)` analog: set every non-Debug FFlag.
-/// (Rust statics cannot self-register, so the list is generated explicitly.)
+use records::f_value::FValue;
+
+/// Apply the complete supported Luau flag profile through a caller-selected
+/// mutation strategy. Keeping the generated flag catalogue in one place makes
+/// global startup configuration and thread-local compiler scopes identical.
 #[allow(non_snake_case)]
-pub fn set_all_flags(value: bool) {
-    FFlag::FixMathNoisePrecision.set(value);
-    FFlag::LuauAddRecursionCounterToNonStrictTypeChecker.set(value);
-    FFlag::LuauAllowGlobalDeclarationToBeCalledClass.set(value);
-    FFlag::LuauAlsoInstantiateInferredArguments.set(value);
-    FFlag::LuauAutoStack.set(false);
-    FFlag::LuauAutocompleteConst.set(value);
-    FFlag::LuauAutocompleteExport.set(value);
-    FFlag::LuauAutocompleteStringSingletonIntersection.set(value);
-    FFlag::LuauBidirectionalInferenceBetterUnionHandling.set(value);
-    FFlag::LuauCallFeedback.set(value);
-    FFlag::LuauBackedgeHeapCheck.set(false);
-    FFlag::LuauBytecodeCostModel.set(false);
-    FFlag::LuauBytecodeFold.set(false);
-    FFlag::LuauCIProto.set(false);
-    FFlag::LuauCheckFunctionStatementTypes.set(value);
-    FFlag::LuauCloneTableFix.set(false);
-    FFlag::LuauCodeGenCallWrapperEmitInst.set(value);
-    FFlag::LuauCodegenBufferInteger.set(value);
-    FFlag::LuauCodegenDsePtrStoreTagCheck.set(value);
-    FFlag::LuauCodegenDseRestoreHints.set(value);
-    FFlag::LuauCodegenExtraTableOpts.set(value);
-    FFlag::LuauCodegenFixBufferLenCheck.set(value);
-    FFlag::LuauCodegenForwardRematerialize.set(value);
-    FFlag::LuauCodegenFreeBlocks.set(value);
-    FFlag::LuauCodegenInteger2.set(value);
-    FFlag::LuauCodegenIntegerArg3Fix.set(value);
-    FFlag::LuauCodegenIntegerFastcall2k.set(value);
-    FFlag::LuauCodegenLinearSetupEntryState3.set(value);
-    FFlag::LuauCodegenLoadPropagateOrigin.set(value);
-    FFlag::LuauCodegenNopPadding.set(value);
-    FFlag::LuauCodegenProtectData.set(value);
-    FFlag::LuauCodegenRecordAllBlockExitInfo.set(value);
-    FFlag::LuauCodegenRegTag2.set(value);
-    FFlag::LuauCodegenSuggestArgumentRegisterX64.set(value);
-    FFlag::LuauCodegenVmExitSync.set(value);
-    FFlag::LuauCodegenVmExitSyncFix.set(value);
-    FFlag::LuauCompileStringInterpTargetTop.set(value);
-    FFlag::LuauCompileIifeInline.set(false);
-    FFlag::LuauConcatDoesntAlwaysReturnString.set(value);
-    FFlag::LuauConstraintGraph.set(value);
-    FFlag::LuauCostModel.set(false);
-    FFlag::LuauCompileEmitVectorDouble.set(false);
-    FFlag::LuauDirectFieldGet.set(value);
-    FFlag::LuauDisallowExternClassInTypeDefinitions.set(false);
-    FFlag::LuauDisallowRedefiningBuiltinTypes.set(value);
-    FFlag::LuauEmitCallFeedback.set(value);
-    FFlag::LuauExplicitTypeInstantiationSupport.set(value);
+fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, bool)) {
+    apply(&FFlag::FixMathNoisePrecision, value);
+    apply(&FFlag::LuauAddRecursionCounterToNonStrictTypeChecker, value);
+    apply(&FFlag::LuauAllowGlobalDeclarationToBeCalledClass, value);
+    apply(&FFlag::LuauAlsoInstantiateInferredArguments, value);
+    apply(&FFlag::LuauAutoStack, false);
+    apply(&FFlag::LuauAutocompleteConst, value);
+    apply(&FFlag::LuauAutocompleteExport, value);
+    apply(&FFlag::LuauAutocompleteStringSingletonIntersection, value);
+    apply(&FFlag::LuauBidirectionalInferenceBetterUnionHandling, value);
+    apply(&FFlag::LuauCallFeedback, value);
+    apply(&FFlag::LuauBackedgeHeapCheck, false);
+    apply(&FFlag::LuauBytecodeCostModel, false);
+    apply(&FFlag::LuauBytecodeFold, false);
+    apply(&FFlag::LuauCIProto, false);
+    apply(&FFlag::LuauCheckFunctionStatementTypes, value);
+    apply(&FFlag::LuauCloneTableFix, false);
+    apply(&FFlag::LuauCodeGenCallWrapperEmitInst, value);
+    apply(&FFlag::LuauCodegenBufferInteger, value);
+    apply(&FFlag::LuauCodegenDsePtrStoreTagCheck, value);
+    apply(&FFlag::LuauCodegenDseRestoreHints, value);
+    apply(&FFlag::LuauCodegenExtraTableOpts, value);
+    apply(&FFlag::LuauCodegenFixBufferLenCheck, value);
+    apply(&FFlag::LuauCodegenForwardRematerialize, value);
+    apply(&FFlag::LuauCodegenFreeBlocks, value);
+    apply(&FFlag::LuauCodegenInteger2, value);
+    apply(&FFlag::LuauCodegenIntegerArg3Fix, value);
+    apply(&FFlag::LuauCodegenIntegerFastcall2k, value);
+    apply(&FFlag::LuauCodegenLinearSetupEntryState3, value);
+    apply(&FFlag::LuauCodegenLoadPropagateOrigin, value);
+    apply(&FFlag::LuauCodegenNopPadding, value);
+    apply(&FFlag::LuauCodegenProtectData, value);
+    apply(&FFlag::LuauCodegenRecordAllBlockExitInfo, value);
+    apply(&FFlag::LuauCodegenRegTag2, value);
+    apply(&FFlag::LuauCodegenSuggestArgumentRegisterX64, value);
+    apply(&FFlag::LuauCodegenVmExitSync, value);
+    apply(&FFlag::LuauCodegenVmExitSyncFix, value);
+    apply(&FFlag::LuauCompileStringInterpTargetTop, value);
+    apply(&FFlag::LuauCompileIifeInline, false);
+    apply(&FFlag::LuauConcatDoesntAlwaysReturnString, value);
+    apply(&FFlag::LuauConstraintGraph, value);
+    apply(&FFlag::LuauCostModel, false);
+    apply(&FFlag::LuauCompileEmitVectorDouble, false);
+    apply(&FFlag::LuauDirectFieldGet, value);
+    apply(&FFlag::LuauDisallowExternClassInTypeDefinitions, false);
+    apply(&FFlag::LuauDisallowRedefiningBuiltinTypes, value);
+    apply(&FFlag::LuauEmitCallFeedback, value);
+    apply(&FFlag::LuauExplicitTypeInstantiationSupport, value);
     // Experimental "export values" syntax is intentionally NOT enabled here: it
     // is incomplete in this port — a closure that captures an exported local
     // mis-compiles the upvalue register (the C++ reference handles it), so it can
     // produce out-of-range bytecode. Keep it off (default false) until the
     // export-table/closure codegen is fixed. Tests that exercise it set the flag
     // explicitly via a scoped override.
-    FFlag::LuauExportValueSyntax.set(false);
-    FFlag::LuauExportValueTypecheck.set(false);
-    FFlag::LuauExternTypesNormalizeWithShapes.set(value);
-    FFlag::LuauFixIndexerSubtypingOrdering.set(value);
-    FFlag::LuauFixPropReadsOnMetatableTypes.set(value);
-    FFlag::LuauInstantiateFunctionTypeBeforePush.set(value);
-    FFlag::LuauInstantiateInSubtyping.set(value);
-    FFlag::LuauInstantiationUsesPolarity.set(value);
-    FFlag::LuauIntegerBufferFastcalls.set(false);
-    FFlag::LuauIntegerFastcalls.set(false);
-    FFlag::LuauIntegerLibrary.set(value);
-    FFlag::LuauIntegerType2.set(value);
-    FFlag::LuauIterativeInstantiationQueuer.set(value);
-    FFlag::LuauKnowsTheDataModel3.set(value);
-    FFlag::LuauLValueCompoundAssignmentVisitLhs.set(value);
-    FFlag::LuauLimitUnificationRecursion.set(value);
-    FFlag::LuauMathRoundNegZero.set(false);
-    FFlag::LuauGcTraceUdata.set(false);
-    FFlag::LuauNativeCodeTargetCheck.set(value);
-    FFlag::LuauNonStrictModeUseErrorSupressingTag.set(value);
-    FFlag::LuauNoDuplicateBinaryPrefix.set(false);
-    FFlag::LuauOccursCheckForAllBindings.set(value);
-    FFlag::LuauOptimizeExportTable.set(false);
-    FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds.set(value);
-    FFlag::LuauPropagateTypeAnnotationsInForInLoops.set(value);
-    FFlag::LuauPropertyModifierMismatchErrors.set(value);
-    FFlag::LuauPromoteProto.set(false);
-    FFlag::LuauReadOnlyIndexers.set(value);
-    FFlag::LuauRefineNilFromTableIndexerResultType.set(value);
-    FFlag::LuauRemoveConstraintSolverEmplace.set(value);
-    FFlag::LuauReplacerIsSolverAgnostic.set(value);
-    FFlag::LuauRequireResolveAliasNullCheck.set(value);
-    FFlag::LuauRbsConfigAliasResolution.set(false);
-    FFlag::LuauSilenceDynamicFormatStringErrors.set(value);
-    FFlag::LuauSolverV2.set(value);
-    FFlag::LuauStoreConstKeywordBegin.set(false);
-    FFlag::LuauSubtypingMissingPropertiesAsNil.set(value);
-    FFlag::LuauSubtypingTablesHasBetterErrorSuppression.set(value);
-    FFlag::LuauTrackPrefixLocal.set(false);
-    FFlag::LuauTableFreezeCheckIsSubtype.set(value);
-    FFlag::LuauTidyTypePrototyping.set(value);
-    FFlag::LuauTransitiveSubtyping.set(value);
-    FFlag::LuauTweakAccessViolationReporting.set(value);
-    FFlag::LuauTypeFunctionRobustness.set(value);
-    FFlag::LuauTypeFunctionSerializeArgNames.set(value);
-    FFlag::LuauTypeFunctionStructuredErrors.set(value);
-    FFlag::LuauTypeFunctionSupportsFrozen.set(value);
-    FFlag::LuauUdataDirectAccess6.set(value);
-    FFlag::LuauUdataMetatablePinned.set(false);
-    FFlag::LuauUdtfTypeIsSubtypeOf.set(value);
-    FFlag::LuauUseNativeStackGuard.set(value);
-    FFlag::LuauVirtualBcBuilder.set(false);
-    FFlag::LuauVisitCallTypeArgsInDfg.set(value);
-    FFlag::LuauYieldIter2.set(value);
-    FFlag::LuauXpcallFixMessageYieldPath.set(false);
-    FFlag::LuauManagedDebugNames.set(false);
-    DFFlag::LuauGcMarkUdataAccess.set(false);
-    DFFlag::LuauGcTableStepFix.set(false);
-    DFFlag::LuauSelfIsSelfAndAlwaysSelf.set(false);
+    apply(&FFlag::LuauExportValueSyntax, false);
+    apply(&FFlag::LuauExportValueTypecheck, false);
+    apply(&FFlag::LuauExternTypesNormalizeWithShapes, value);
+    apply(&FFlag::LuauFixIndexerSubtypingOrdering, value);
+    apply(&FFlag::LuauFixPropReadsOnMetatableTypes, value);
+    apply(&FFlag::LuauInstantiateFunctionTypeBeforePush, value);
+    apply(&FFlag::LuauInstantiateInSubtyping, value);
+    apply(&FFlag::LuauInstantiationUsesPolarity, value);
+    apply(&FFlag::LuauIntegerBufferFastcalls, false);
+    apply(&FFlag::LuauIntegerFastcalls, false);
+    apply(&FFlag::LuauIntegerLibrary, value);
+    apply(&FFlag::LuauIntegerType2, value);
+    apply(&FFlag::LuauIterativeInstantiationQueuer, value);
+    apply(&FFlag::LuauKnowsTheDataModel3, value);
+    apply(&FFlag::LuauLValueCompoundAssignmentVisitLhs, value);
+    apply(&FFlag::LuauLimitUnificationRecursion, value);
+    apply(&FFlag::LuauMathRoundNegZero, false);
+    apply(&FFlag::LuauGcTraceUdata, false);
+    apply(&FFlag::LuauNativeCodeTargetCheck, value);
+    apply(&FFlag::LuauNonStrictModeUseErrorSupressingTag, value);
+    apply(&FFlag::LuauNoDuplicateBinaryPrefix, false);
+    apply(&FFlag::LuauOccursCheckForAllBindings, value);
+    apply(&FFlag::LuauOptimizeExportTable, false);
+    apply(&FFlag::LuauPropagateFreeTypesIntoUnionAndIntersectionBounds, value);
+    apply(&FFlag::LuauPropagateTypeAnnotationsInForInLoops, value);
+    apply(&FFlag::LuauPropertyModifierMismatchErrors, value);
+    apply(&FFlag::LuauPromoteProto, false);
+    apply(&FFlag::LuauReadOnlyIndexers, value);
+    apply(&FFlag::LuauRefineNilFromTableIndexerResultType, value);
+    apply(&FFlag::LuauRemoveConstraintSolverEmplace, value);
+    apply(&FFlag::LuauReplacerIsSolverAgnostic, value);
+    apply(&FFlag::LuauRequireResolveAliasNullCheck, value);
+    apply(&FFlag::LuauRbsConfigAliasResolution, false);
+    apply(&FFlag::LuauSilenceDynamicFormatStringErrors, value);
+    apply(&FFlag::LuauSolverV2, value);
+    apply(&FFlag::LuauStoreConstKeywordBegin, false);
+    apply(&FFlag::LuauSubtypingMissingPropertiesAsNil, value);
+    apply(&FFlag::LuauSubtypingTablesHasBetterErrorSuppression, value);
+    apply(&FFlag::LuauTrackPrefixLocal, false);
+    apply(&FFlag::LuauTableFreezeCheckIsSubtype, value);
+    apply(&FFlag::LuauTidyTypePrototyping, value);
+    apply(&FFlag::LuauTransitiveSubtyping, value);
+    apply(&FFlag::LuauTweakAccessViolationReporting, value);
+    apply(&FFlag::LuauTypeFunctionRobustness, value);
+    apply(&FFlag::LuauTypeFunctionSerializeArgNames, value);
+    apply(&FFlag::LuauTypeFunctionStructuredErrors, value);
+    apply(&FFlag::LuauTypeFunctionSupportsFrozen, value);
+    apply(&FFlag::LuauUdataDirectAccess6, value);
+    apply(&FFlag::LuauUdataMetatablePinned, false);
+    apply(&FFlag::LuauUdtfTypeIsSubtypeOf, value);
+    apply(&FFlag::LuauUseNativeStackGuard, value);
+    apply(&FFlag::LuauVirtualBcBuilder, false);
+    apply(&FFlag::LuauVisitCallTypeArgsInDfg, value);
+    apply(&FFlag::LuauYieldIter2, value);
+    apply(&FFlag::LuauXpcallFixMessageYieldPath, false);
+    apply(&FFlag::LuauManagedDebugNames, false);
+    apply(&DFFlag::LuauGcMarkUdataAccess, false);
+    apply(&DFFlag::LuauGcTableStepFix, false);
+    apply(&DFFlag::LuauSelfIsSelfAndAlwaysSelf, false);
+}
+
+/// C++ CLI `setLuauFlagsDefault(value)` analog: set every non-Debug FFlag.
+/// This remains the process-global startup API used before worker threads run.
+pub fn set_all_flags(value: bool) {
+    apply_all_flags(value, |flag, enabled| flag.set(enabled));
+}
+
+/// Thread-local Luau flag profile for work that must compile with a different
+/// compatibility floor while other Rust test threads execute runtime code.
+pub struct ScopedAllFlags {
+    flags: Vec<&'static FValue<bool>>,
+}
+
+impl ScopedAllFlags {
+    pub fn enter(value: bool) -> Self {
+        let mut flags = Vec::new();
+        apply_all_flags(value, |flag, enabled| {
+            flag.push_test_override(enabled);
+            flags.push(flag);
+        });
+        Self { flags }
+    }
+}
+
+impl Drop for ScopedAllFlags {
+    fn drop(&mut self) {
+        for flag in self.flags.iter().rev() {
+            flag.pop_test_override();
+        }
+    }
 }
 
 /// FastFlag namespace `FFlag::` — static (non-dynamic) bool flags. Definitions
@@ -591,5 +625,24 @@ mod fastflag_timetrace_tests {
         crate::LUAU_TIMETRACE_ARGUMENT!("k", "v");
         crate::FFlag::DebugLuauTimeTracing.set(true);
         assert_eq!(crate::FFlag::DebugLuauTimeTracing.get(), true);
+    }
+
+    #[test]
+    fn scoped_all_flags_do_not_change_parallel_runtime_threads() {
+        crate::set_all_flags(true);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let compiler_barrier = barrier.clone();
+        let compiler = std::thread::spawn(move || {
+            let _flags = crate::ScopedAllFlags::enter(false);
+            assert!(!crate::FFlag::LuauCallFeedback.get());
+            compiler_barrier.wait();
+            compiler_barrier.wait();
+        });
+
+        barrier.wait();
+        assert!(crate::FFlag::LuauCallFeedback.get());
+        barrier.wait();
+        compiler.join().expect("compiler flag scope exits cleanly");
+        assert!(crate::FFlag::LuauCallFeedback.get());
     }
 }

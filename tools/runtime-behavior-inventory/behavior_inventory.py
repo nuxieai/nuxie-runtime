@@ -49,6 +49,18 @@ ADAPTATION_CATEGORIES = {
     "retained-render",
 }
 MAX_CFG_ATOMS = 16
+SINGLE_VALUE_CFG_KEYS = frozenset(
+    {
+        "panic",
+        "target_abi",
+        "target_arch",
+        "target_endian",
+        "target_env",
+        "target_os",
+        "target_pointer_width",
+        "target_vendor",
+    }
+)
 GENERATED_RUST_FILES = {
     "crates/nuxie-schema/src/generated/schema.rs": "tools/nuxie-codegen",
 }
@@ -1681,6 +1693,26 @@ def generated_line_ranges(path: str, source: str) -> list[tuple[int, int]]:
 
 def rust_test_ranges(masked: str, source: str) -> list[tuple[int, int]]:
     ranges = []
+    macro_definition_ranges = rust_macro_definition_ranges(masked)
+    inner_attributes = re.compile(r"(?ms)(?:#\s*!\s*\[[^]]+\]\s*)+")
+    for match in inner_attributes.finditer(masked):
+        if any(start <= match.start() < end for start, end in macro_definition_ranges):
+            continue
+        attributes = source[match.start() : match.end()]
+        if not attributes_require_test(attributes):
+            continue
+        stack = []
+        for index, character in enumerate(masked[: match.start()]):
+            if character == "{":
+                stack.append(index)
+            elif character == "}" and stack:
+                stack.pop()
+        if not stack:
+            return [(0, len(source) - 1)] if source else []
+        opening = stack[-1]
+        closing = matching_brace(masked, opening)
+        if closing is not None:
+            ranges.append((opening + 1, closing - 1))
     function_signatures = []
     for function in rust_function_matches(masked):
         cursor = function.end()
@@ -2086,6 +2118,13 @@ def cfg_values_without_test(expression: str) -> set[bool]:
         assignments = {
             atom: bool(bits & (1 << index)) for index, atom in enumerate(atoms)
         }
+        selected_single_values = [
+            atom.partition("=")[0]
+            for atom, enabled in assignments.items()
+            if enabled and atom.partition("=")[0] in SINGLE_VALUE_CFG_KEYS
+        ]
+        if len(selected_single_values) != len(set(selected_single_values)):
+            continue
         possible.add(evaluate_cfg_expression(parsed, assignments))
         if possible == {False, True}:
             break
@@ -2143,7 +2182,7 @@ def rust_cfg_meta_constraints(
 def attributes_require_test(attributes: str) -> bool:
     expressions = []
     masked = mask_noncode(attributes, nested_block_comments=True)
-    attribute_start = re.compile(r"#\s*\[")
+    attribute_start = re.compile(r"#\s*!?\s*\[")
     cursor = 0
     while match := attribute_start.search(masked, cursor):
         opening_bracket = masked.find("[", match.start(), match.end())

@@ -63,6 +63,16 @@ mod wasm {
     use wasm_bindgen::prelude::*;
     use web_sys::HtmlCanvasElement;
 
+    #[wasm_bindgen(inline_js = r#"
+        export function waitForBrowserPresentation() {
+            return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        }
+    "#)]
+    extern "C" {
+        #[wasm_bindgen(catch, js_name = waitForBrowserPresentation)]
+        async fn wait_for_browser_presentation() -> Result<JsValue, JsValue>;
+    }
+
     #[cfg(feature = "correctness-smoke")]
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/imported-gpu-canvas.riv"));
@@ -313,6 +323,11 @@ fn fs_main() -> @location(0) vec4<f32> {
             .present(factory.begin_frame(0x80ff_0000))
             .await
             .map_err(js_error)?;
+        // WebGPU canvas presentation is automatic at the next rendering
+        // update. Keep the surface/instance alive through that boundary so
+        // the pixel oracle observes a presented frame rather than a context
+        // dropped in the same task that submitted it.
+        wait_for_browser_presentation().await?;
         Ok("browser-presentation=direct-webgpu alpha=premultiplied".into())
     }
 

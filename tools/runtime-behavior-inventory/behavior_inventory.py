@@ -4670,6 +4670,37 @@ def external_test_module_paths(
                     macro_imports.setdefault(owner_resolved, []).append(
                         (match.start(), imported, imported_name, alias or imported_name)
                     )
+            grouped_use_import = re.compile(
+                r"(?ms)(?<![A-Za-z0-9_])use\s+"
+                r"(?:(?:crate|self)::)?"
+                r"(?:r#)?([A-Za-z_][A-Za-z0-9_]*)::\s*\{([^{}]*)\}\s*;"
+            )
+            for match in grouped_use_import.finditer(masked):
+                if any(
+                    start <= match.start() < end for start, end in definition_ranges
+                ) or any(start <= match.start() < end for start, end in test_ranges):
+                    continue
+                module = match.group(1)
+                source_group = source[match.start(2) : match.end(2)]
+                for item in rust_meta_arguments(source_group):
+                    item_masked = mask_noncode(item, nested_block_comments=True)
+                    imported_match = re.fullmatch(
+                        r"\s*(?:r#)?([A-Za-z_][A-Za-z0-9_]*)"
+                        r"(?:\s+as\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*))?\s*",
+                        item_masked,
+                    )
+                    if imported_match is None:
+                        continue
+                    imported_name, alias = imported_match.groups()
+                    for imported in module_targets.get(module, set()):
+                        macro_imports.setdefault(owner_resolved, []).append(
+                            (
+                                match.start(),
+                                imported,
+                                imported_name,
+                                alias or imported_name,
+                            )
+                        )
 
     production_reachable = {
         owner

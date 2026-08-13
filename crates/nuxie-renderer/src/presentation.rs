@@ -2,8 +2,10 @@
 //!
 //! Platform packages own their window/canvas, resize ordering, acquisition
 //! recovery, and frame lifecycle. This module keeps the renderer's raw wgpu
-//! device, queue, surface, texture, and final-blit pipeline private.
+//! device, queue, surface, acquired target, and any platform-specific final
+//! blit pipeline private.
 
+#[cfg(not(target_arch = "wasm32"))]
 use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{Context, RendererError, WgpuFrame, WgpuFrameMetrics};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -31,6 +33,7 @@ pub struct WgpuPresentationSurface {
     context: Arc<Context>,
     surface: wgpu::Surface<'static>,
     configuration: wgpu::SurfaceConfiguration,
+    #[cfg(not(target_arch = "wasm32"))]
     presenter: Arc<PresentPipeline>,
 }
 
@@ -39,6 +42,7 @@ pub struct WgpuPresentationSurface {
 pub struct WgpuPresentationFrame {
     context: Arc<Context>,
     texture: wgpu::SurfaceTexture,
+    #[cfg(not(target_arch = "wasm32"))]
     presenter: Arc<PresentPipeline>,
 }
 
@@ -82,7 +86,27 @@ impl WgpuPresentationSurface {
             WgpuPresentationAlpha::Straight => wgpu::CompositeAlphaMode::Auto,
             WgpuPresentationAlpha::Premultiplied => wgpu::CompositeAlphaMode::PreMultiplied,
         };
+        #[cfg(target_arch = "wasm32")]
+        {
+            let capabilities = surface.get_capabilities(&context.adapter);
+            if !capabilities
+                .formats
+                .contains(&wgpu::TextureFormat::Rgba8Unorm)
+            {
+                return Err(RendererError::Adapter(
+                    "browser WebGPU surface does not support Rgba8Unorm".into(),
+                ));
+            }
+            // Upstream Rive's WebGPU host binds the acquired RGBA8 texture as
+            // the renderer target. CopySrc is needed by advanced blending;
+            // TextureBinding retains the upstream surface contract exactly.
+            configuration.format = wgpu::TextureFormat::Rgba8Unorm;
+            configuration.usage = wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING;
+        }
         surface.configure(&context.device, &configuration);
+        #[cfg(not(target_arch = "wasm32"))]
         let presenter = Arc::new(PresentPipeline::new(
             &context.device,
             configuration.format,
@@ -95,6 +119,7 @@ impl WgpuPresentationSurface {
             context,
             surface,
             configuration,
+            #[cfg(not(target_arch = "wasm32"))]
             presenter,
         })
     }
@@ -142,6 +167,7 @@ impl WgpuPresentationSurface {
         Ok(WgpuPresentationFrame {
             context: Arc::clone(&self.context),
             texture,
+            #[cfg(not(target_arch = "wasm32"))]
             presenter: Arc::clone(&self.presenter),
         })
     }
@@ -159,6 +185,11 @@ impl WgpuPresentationFrame {
             .texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        #[cfg(target_arch = "wasm32")]
+        let metrics = frame
+            .finish_to_surface_texture_async(&self.texture.texture, &view)
+            .await?;
+        #[cfg(not(target_arch = "wasm32"))]
         let metrics = frame
             .finish_to_texture_view_async(&view, &self.presenter)
             .await?;

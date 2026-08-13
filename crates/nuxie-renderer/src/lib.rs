@@ -2968,6 +2968,38 @@ pub struct WgpuFrame {
     work_recorder: work_metrics::FrameWorkRecorder,
 }
 
+#[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+#[derive(Clone, Copy)]
+enum FramePresentation<'a> {
+    #[cfg(not(target_arch = "wasm32"))]
+    Blit {
+        target: &'a wgpu::TextureView,
+        presenter: &'a present_pipeline::PresentPipeline,
+    },
+    #[cfg(target_arch = "wasm32")]
+    Direct {
+        target_texture: &'a wgpu::Texture,
+        target_view: &'a wgpu::TextureView,
+    },
+}
+
+#[cfg(target_arch = "wasm32")]
+fn browser_frame_target(
+    frame_attachments: &FrameAttachments,
+    presentation: Option<FramePresentation<'_>>,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    match presentation {
+        Some(FramePresentation::Direct {
+            target_texture,
+            target_view,
+        }) => (target_texture.clone(), target_view.clone()),
+        None => (
+            frame_attachments.target_texture.clone(),
+            frame_attachments.target_view.clone(),
+        ),
+    }
+}
+
 impl std::ops::Deref for WgpuFrame {
     type Target = logical_frame::LogicalFrame;
 
@@ -3471,7 +3503,7 @@ impl WgpuFrame {
         pollster::block_on(self.finish_to_texture_view_async(target, presenter))
     }
 
-    #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     pub(crate) async fn finish_to_texture_view_async(
         self,
         target: &wgpu::TextureView,
@@ -3479,7 +3511,42 @@ impl WgpuFrame {
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
         let (_, _, _, _, _, backend_work, _, _) = self
-            .finish_internal(false, false, false, false, Some((target, presenter)))
+            .finish_internal(
+                false,
+                false,
+                false,
+                false,
+                Some(FramePresentation::Blit { target, presenter }),
+            )
+            .await?;
+        metrics.backend_work = backend_work;
+        Ok(metrics)
+    }
+
+    /// Finishes a browser frame directly into the acquired canvas texture.
+    ///
+    /// This mirrors upstream Rive WebGPU's `setTargetTextureView` contract:
+    /// the acquired surface texture is the frame's main target, while the
+    /// renderer continues to own its auxiliary MSAA, stencil, clip, and
+    /// scratch attachments.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) async fn finish_to_surface_texture_async(
+        self,
+        target_texture: &wgpu::Texture,
+        target_view: &wgpu::TextureView,
+    ) -> Result<WgpuFrameMetrics, RendererError> {
+        let mut metrics = self.metrics();
+        let (_, _, _, _, _, backend_work, _, _) = self
+            .finish_internal(
+                false,
+                false,
+                false,
+                false,
+                Some(FramePresentation::Direct {
+                    target_texture,
+                    target_view,
+                }),
+            )
             .await?;
         metrics.backend_work = backend_work;
         Ok(metrics)
@@ -3492,7 +3559,7 @@ impl WgpuFrame {
         read_pixels: bool,
         logical_diagnostics: bool,
         #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-        presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
+        presentation: Option<FramePresentation<'_>>,
         #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
         _presentation: Option<()>,
     ) -> Result<
@@ -3540,7 +3607,11 @@ impl WgpuFrame {
         }
         .map_err(RendererError::Unsupported)?;
         let frame_attachments = Arc::clone(&self.frame_attachments.attachments);
+        #[cfg(target_arch = "wasm32")]
+        let (texture, view) = browser_frame_target(&frame_attachments, presentation);
+        #[cfg(not(target_arch = "wasm32"))]
         let texture = frame_attachments.target_texture.clone();
+        #[cfg(not(target_arch = "wasm32"))]
         let view = frame_attachments.target_view.clone();
         let multisample_view = frame_attachments.multisample_view.clone();
         let stencil_view = frame_attachments.stencil_view.clone();
@@ -7125,8 +7196,8 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
-            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-            if let Some((target, presenter)) = presentation {
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            if let Some(FramePresentation::Blit { target, presenter }) = presentation {
                 presenter.encode(&self.context.device, &mut encoder, target, &view);
             }
             tessellation_uploads

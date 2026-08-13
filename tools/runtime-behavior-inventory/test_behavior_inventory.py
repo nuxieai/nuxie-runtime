@@ -3389,6 +3389,34 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotIn(behavior.resolve(), excluded)
 
+    def test_path_qualified_macro_is_not_shadowed_by_bare_local_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\nedition = "2024"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            hidden = source / "hidden.rs"
+            lib.write_text(
+                "macro_rules! mount { ($module:ident) => { mod $module; } }\n"
+                "mod macros;\nmacros::mount!(hidden);\n"
+            )
+            macros.write_text(
+                "macro_rules! mount { ($module:ident) => { "
+                "#[cfg(test)] mod $module; } }\n"
+                "pub(crate) use mount;\n"
+            )
+            hidden.write_text("fn fixture() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, hidden]
+            )
+            self.assertIn(hidden.resolve(), excluded)
+
     def test_custom_target_root_resolves_crate_macro_import(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

@@ -18,7 +18,12 @@ from typing import Any
 
 SCHEMA = "nuxie-runtime-behavior-inventory/v1"
 CPP_SUFFIXES = {".cpp", ".mm", ".h", ".hpp"}
-UPSTREAM_SOURCE_ROOTS = ("src", "include/rive")
+UPSTREAM_SOURCE_ROOTS = (
+    "src",
+    "include/rive",
+    "tests/common/render_context_null.cpp",
+    "tests/common/render_context_null.hpp",
+)
 CPP_OWNER_ALIASES = {
     # Apple builds compile the same owners through ObjC++ wrappers; the text
     # owner adds CoreText behavior beside the portable HarfBuzz implementation.
@@ -89,6 +94,12 @@ RUST_GENERATOR_OUTPUTS = {
 RUST_GENERATOR_INPUT_GLOBS = {
     "crates/nuxie-renderer-ffi/build.rs": [
         "crates/nuxie-renderer-ffi/cpp/*",
+    ],
+}
+RUST_GENERATOR_UPSTREAM_INPUT_GLOBS = {
+    "crates/nuxie-renderer-ffi/build.rs": [
+        "tests/common/render_context_null.cpp",
+        "tests/common/render_context_null.hpp",
     ],
 }
 NAMED_ADAPTATION_PATH_RULES = {
@@ -2508,6 +2519,29 @@ def compact_seam_policies(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "named extension selectors do not resolve to shipped Rust items: "
             f"{stale_extensions}"
         )
+    stale_adaptations = sorted(
+        rust_path
+        for rust_path, (_, selector, _, _, _) in NAMED_ADAPTATION_PATH_RULES.items()
+        if selector is not None
+        and not any(
+            item["path"] == rust_path
+            and (
+                (isinstance(selector, set) and item.get("context") in selector)
+                or (
+                    isinstance(selector, re.Pattern)
+                    and selector.search(
+                        f"{item.get('context', 'module')}::{item['name']}"
+                    )
+                )
+            )
+            for item in items
+        )
+    )
+    if stale_adaptations:
+        raise ValueError(
+            "named adaptation selectors do not resolve to shipped Rust items: "
+            f"{stale_adaptations}"
+        )
     policies: dict[str, dict[str, Any]] = {}
 
     def register(policy: dict[str, Any]) -> str:
@@ -3064,7 +3098,9 @@ def rust_generator_paths(
 
 
 def rust_generator_input_records(
-    repo_root: pathlib.Path, generator: str
+    repo_root: pathlib.Path,
+    generator: str,
+    upstream_root: pathlib.Path | None = None,
 ) -> list[dict[str, str]]:
     """Hash non-Rust repository inputs compiled by a Cargo build script."""
     records = []
@@ -3077,6 +3113,17 @@ def rust_generator_input_records(
                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                     }
                 )
+    if upstream_root is not None:
+        for pattern in RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.get(generator, []):
+            for path in sorted(upstream_root.glob(pattern)):
+                if path.is_file():
+                    relative = path.relative_to(upstream_root).as_posix()
+                    records.append(
+                        {
+                            "path": f"rive-runtime/{relative}",
+                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        }
+                    )
     return records
 
 
@@ -5263,7 +5310,7 @@ def rust_source_candidates(
 
 
 def discover_rust(
-    repo_root: pathlib.Path,
+    repo_root: pathlib.Path, upstream_root: pathlib.Path | None = None
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     provenance = load_rust_provenance(repo_root)
     candidates = rust_source_candidates(repo_root)
@@ -5304,7 +5351,9 @@ def discover_rust(
             file_record["generated_by"] = GENERATED_RUST_FILES[relative]
         if generator_outputs is not None:
             file_record["generator_outputs"] = generator_outputs
-            generator_inputs = rust_generator_input_records(repo_root, relative)
+            generator_inputs = rust_generator_input_records(
+                repo_root, relative, upstream_root
+            )
             if generator_inputs:
                 file_record["generator_inputs"] = generator_inputs
         file_records.append(file_record)
@@ -5316,7 +5365,7 @@ def build_inventory(
     repo_root: pathlib.Path, upstream_root: pathlib.Path, upstream_ref: str
 ) -> dict[str, Any]:
     cpp_files, cpp_member_records = discover_cpp(upstream_root)
-    rust_files, rust_item_records = discover_rust(repo_root)
+    rust_files, rust_item_records = discover_rust(repo_root, upstream_root)
     cpp_owner_policies = attach_cpp_owner_policies(
         repo_root, cpp_files, cpp_member_records
     )
@@ -5376,7 +5425,9 @@ def adaptation_policy_coverage_errors(
     ]
 
 
-def validate_configuration(repo_root: pathlib.Path) -> list[str]:
+def validate_configuration(
+    repo_root: pathlib.Path, upstream_root: pathlib.Path | None = None
+) -> list[str]:
     errors = []
     shipped = workspace_shipped_crates(repo_root)
     declared = set(RUST_CRATES)
@@ -5408,6 +5459,21 @@ def validate_configuration(repo_root: pathlib.Path) -> list[str]:
             errors.append(
                 f"[generated] runtime generator inputs are empty: {generator}"
             )
+    if upstream_root is not None:
+        for generator, patterns in RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.items():
+            if generator not in declared_generators:
+                errors.append(
+                    "[generated] upstream input owner is not a runtime generator: "
+                    f"{generator}"
+                )
+            if not patterns or any(
+                not any(path.is_file() for path in upstream_root.glob(pattern))
+                for pattern in patterns
+            ):
+                errors.append(
+                    "[generated] upstream runtime generator inputs are empty: "
+                    f"{generator}"
+                )
     additions = tomllib.loads((repo_root / "rust-additions.toml").read_text())
     manifest = tomllib.loads(
         (repo_root / "file-correspondence-manifest.toml").read_text()
@@ -5842,7 +5908,7 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     upstream_root = args.upstream_root.resolve()
     upstream_ref = resolve_upstream_ref(repo_root)
-    configuration_errors = validate_configuration(repo_root)
+    configuration_errors = validate_configuration(repo_root, upstream_root)
     if configuration_errors:
         print("runtime behavior inventory configuration invalid:", file=sys.stderr)
         print("\n".join(configuration_errors), file=sys.stderr)

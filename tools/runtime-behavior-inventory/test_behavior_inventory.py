@@ -1710,6 +1710,45 @@ class GateTests(unittest.TestCase):
             self.assertEqual("crates/demo/cpp/native.cpp", before[0]["path"])
             self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
 
+    def test_runtime_generator_upstream_native_inputs_are_hashed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo_root = root / "repo"
+            upstream_root = root / "rive-runtime"
+            repo_root.mkdir()
+            native = upstream_root / "tests/common/render_context_null.cpp"
+            native.parent.mkdir(parents=True)
+            native.write_text("int behavior() { return 1; }\n")
+            generator = "crates/demo/build.rs"
+            prior = behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.get(
+                generator
+            )
+            behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS[generator] = [
+                "tests/common/render_context_null.cpp"
+            ]
+            try:
+                before = behavior_inventory.rust_generator_input_records(
+                    repo_root, generator, upstream_root
+                )
+                native.write_text("int behavior() { return 2; }\n")
+                after = behavior_inventory.rust_generator_input_records(
+                    repo_root, generator, upstream_root
+                )
+            finally:
+                if prior is None:
+                    del behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS[
+                        generator
+                    ]
+                else:
+                    behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS[
+                        generator
+                    ] = prior
+            self.assertEqual(
+                "rive-runtime/tests/common/render_context_null.cpp",
+                before[0]["path"],
+            )
+            self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
+
     def test_rust_candidates_cover_shipped_sources_outside_src(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)
@@ -3765,7 +3804,14 @@ class GateTests(unittest.TestCase):
             source = root / "src" / "owner.cpp"
             source.parent.mkdir()
             source.write_text("int owner() { return 1; }\n")
-            subprocess.run(["git", "add", "src/owner.cpp"], cwd=root, check=True)
+            native = root / "tests/common/render_context_null.cpp"
+            native.parent.mkdir(parents=True)
+            native.write_text("int native_owner() { return 1; }\n")
+            subprocess.run(
+                ["git", "add", "src/owner.cpp", "tests/common/render_context_null.cpp"],
+                cwd=root,
+                check=True,
+            )
             subprocess.run(
                 [
                     "git",
@@ -3789,6 +3835,13 @@ class GateTests(unittest.TestCase):
             self.assertFalse(behavior_inventory.git_worktree_clean(root))
             subprocess.run(
                 ["git", "checkout", "--", "src/owner.cpp"], cwd=root, check=True
+            )
+            native.write_text("int native_owner() { return 2; }\n")
+            self.assertFalse(behavior_inventory.git_worktree_clean(root))
+            subprocess.run(
+                ["git", "checkout", "--", "tests/common/render_context_null.cpp"],
+                cwd=root,
+                check=True,
             )
             include = root / "include" / "rive"
             include.mkdir(parents=True)
@@ -4418,7 +4471,22 @@ class GateTests(unittest.TestCase):
         )
 
     def test_itemless_adaptation_rules_still_publish_seam_policies(self) -> None:
-        with mock.patch.dict(behavior_inventory.NAMED_EXTENSION_RULES, {}, clear=True):
+        itemless_rules = {
+            path: rule
+            for path, rule in behavior_inventory.NAMED_ADAPTATION_PATH_RULES.items()
+            if rule[1] is None
+            and path
+            in {
+                "crates/nuxie-runtime/src/focus.rs",
+                "crates/nuxie-audio/src/lib.rs",
+                "crates/nuxie-scripting/src/lib.rs",
+            }
+        }
+        with mock.patch.dict(
+            behavior_inventory.NAMED_ADAPTATION_PATH_RULES,
+            itemless_rules,
+            clear=True,
+        ), mock.patch.dict(behavior_inventory.NAMED_EXTENSION_RULES, {}, clear=True):
             policies = behavior_inventory.compact_seam_policies([])
         by_adaptation = {policy["adaptation"]: policy for policy in policies}
         self.assertEqual(
@@ -4727,6 +4795,33 @@ class GateTests(unittest.TestCase):
                 ValueError, "named extension selectors do not resolve"
             ):
                 behavior_inventory.compact_seam_policies([])
+
+    def test_stale_named_adaptation_selector_fails_snapshot_generation(self) -> None:
+        with mock.patch.dict(
+            behavior_inventory.NAMED_ADAPTATION_PATH_RULES,
+            {
+                "crates/demo/src/lib.rs": (
+                    "removed-adaptation",
+                    {"impl Removed"},
+                    ["src/demo.cpp"],
+                    ["skip-baseline-effect"],
+                    ["docs/PORTING.md:X1"],
+                )
+            },
+            clear=True,
+        ), mock.patch.dict(behavior_inventory.NAMED_EXTENSION_RULES, {}, clear=True):
+            with self.assertRaisesRegex(
+                ValueError, "named adaptation selectors do not resolve"
+            ):
+                behavior_inventory.compact_seam_policies(
+                    [
+                        {
+                            "path": "crates/demo/src/lib.rs",
+                            "context": "impl Renamed",
+                            "name": "behavior",
+                        }
+                    ]
+                )
 
     def test_only_exact_reviewed_host_items_escape_unmapped(self) -> None:
         inventory = {

@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "d3f97e4607554c49c2770934f887edd6a00d8a5f5ddc67df0c8954e13a0359c4",
-    "cpp_coverage_sha256": "f1ff573b2b36277e13088538f1671b18fea73cd243eb768949922ed9303e2759",
-    "cpp_mechanism_coverage_sha256": "5efd3820fed4eb2de00697245f3bb735956aa58a5a83a8284897ca58ea34995a",
-    "cpp_steady_coverage_sha256": "29ab20eacc16137b553c06a3d844bc1ff623a6360f0c26267c74ab0dc8ef64dc",
-    "rust_binary_sha256": "5504df5568e52008885fd2bf337426990e82545ef83c5d62b8c2f2cd4f505118",
-    "rust_coverage_sha256": "559b47c5d6b48635718511b652209a1738234406556f63968840320035405de5",
-    "rust_mechanism_coverage_sha256": "6631a4c6cc6224cf549873898a66a501b0f9c0578a7ec2ac6b22cff2d4a9b8bf",
-    "rust_steady_coverage_sha256": "4e0f68bc42215e01eac2edb982bfddb8269520dde11eee92fe5aa1e166f011b7"
+    "cpp_binary_sha256": "d5a536f481291d0a21e2e07d0eb7c3ea00312b4b8362d3166e1d019c527b060a",
+    "cpp_coverage_sha256": "ad0f0f6355da658172b6911e2a85e14ca3f4c8acdb22960657f2e68885701591",
+    "cpp_mechanism_coverage_sha256": "1d28e41fb5c693e4ba90b355148fd9d51aa4cd43f0898df8c475a23701dc250f",
+    "cpp_steady_coverage_sha256": "6d71a1c323676987021a702036b3aa8398c8af577164202e8838bc7d16941a5a",
+    "rust_binary_sha256": "f6ef6e908018a36d547d0b7ef37b322d6edd308d9e320850122177fad0f9f06a",
+    "rust_coverage_sha256": "38ce5e2aa18d4bff25e667b44be9b4b07f4ff2d72dd2bf087f40d8bf84dc542f",
+    "rust_mechanism_coverage_sha256": "467166c8a5300751a8bc1996b5fc44056c415302872bbc264bb98a7dd4834b9d",
+    "rust_steady_coverage_sha256": "77c38b7813a147def44822ba1694a6922547ec5ba96cead8b2786057ad4ba955"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -63,12 +63,12 @@
   ],
   "dirty_text_clean_guard_artifacts": {
     "local_bounds": {
-      "cpp_coverage_sha256": "fba9228592c40025f1803760f855c437a797188b3d123168c342d5a2a23d1461",
-      "rust_coverage_sha256": "b5da3316263f51ce842416927ddd7910174008ba06b488402dc1e09fe7afe743"
+      "cpp_coverage_sha256": "b2d0b481d308f8a7e4ced1e17a29b608b3938d812a34a501b0d4c42976d10e61",
+      "rust_coverage_sha256": "1bccc4a5acd6cd56d587c43c7e61a2cb9491794102b5a27193f6c0e7d0c236bf"
     },
     "viewmodel_based_condition": {
-      "cpp_coverage_sha256": "72fd9c48f451ccd7c69fc1e9a8dbb256a26587e15577e859b1a6fa3d97da5180",
-      "rust_coverage_sha256": "414d38a57007e7cc56d9e80ca0ee89778b4aefe8d5910e07cc037ca36a1c801c"
+      "cpp_coverage_sha256": "1654d13512f9bd0c9bfc5c5959f2fd2d9c1d405ad8cd54284947a61403ce1352",
+      "rust_coverage_sha256": "80436a70f9612a9a90b46e9f0782f0199684e10a76f1a307306661bf9d4bad46"
     }
   },
   "dirty_text_clean_guard_corpus": [
@@ -208,13 +208,13 @@
   "dirty_text_clean_guard_rust_candidate_source": {
     "file_count": 8914,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "2db6f8906dd03a4305c2d0a3d2adabf264706eb678abbbb69d2232e181fb7262"
+    "sha256": "373e94800c33b2c6786f0273c58970b450637b3192fe295a6d36f6b9447f7265"
   },
   "dirty_text_clean_guard_rust_runner_provenance": {
     "candidate_source": {
       "file_count": 8914,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "2db6f8906dd03a4305c2d0a3d2adabf264706eb678abbbb69d2232e181fb7262"
+      "sha256": "373e94800c33b2c6786f0273c58970b450637b3192fe295a6d36f6b9447f7265"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -9619,14 +9619,14 @@
   "rust_candidate_source": {
     "file_count": 8914,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "2db6f8906dd03a4305c2d0a3d2adabf264706eb678abbbb69d2232e181fb7262"
+    "sha256": "373e94800c33b2c6786f0273c58970b450637b3192fe295a6d36f6b9447f7265"
   },
-  "rust_ref": "c629de44d908cb258e9d8d1247b8901abfacf3ef",
+  "rust_ref": "fbfdeb2a87004974565f1ca2112920e4313e88c2",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 8914,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "2db6f8906dd03a4305c2d0a3d2adabf264706eb678abbbb69d2232e181fb7262"
+      "sha256": "373e94800c33b2c6786f0273c58970b450637b3192fe295a6d36f6b9447f7265"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

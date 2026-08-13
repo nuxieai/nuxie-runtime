@@ -3253,12 +3253,17 @@ class GateTests(unittest.TestCase):
             macros = source / "macros.rs"
             behavior = source / "behavior.rs"
             renamed = source / "renamed.rs"
+            grouped = source / "grouped.rs"
+            grouped_renamed = source / "grouped_renamed.rs"
             lib.write_text(
                 "mod macros;\n"
                 "use macros::load;\n"
                 "use crate::macros::load as renamed_load;\n"
+                "use macros::{load as grouped_load, load as grouped_renamed_load};\n"
                 "load!(behavior);\n"
                 "renamed_load!(renamed);\n"
+                "grouped_load!(grouped);\n"
+                "grouped_renamed_load!(grouped_renamed);\n"
             )
             macros.write_text(
                 "macro_rules! load { ($module:ident) => { mod $module; } }\n"
@@ -3266,12 +3271,17 @@ class GateTests(unittest.TestCase):
             )
             behavior.write_text("fn shipped() {}\n")
             renamed.write_text("fn renamed_shipped() {}\n")
+            grouped.write_text("fn grouped_shipped() {}\n")
+            grouped_renamed.write_text("fn grouped_renamed_shipped() {}\n")
 
             excluded = behavior_inventory.external_test_module_paths(
-                repo_root, [lib, macros, behavior, renamed]
+                repo_root,
+                [lib, macros, behavior, renamed, grouped, grouped_renamed],
             )
             self.assertNotIn(behavior.resolve(), excluded)
             self.assertNotIn(renamed.resolve(), excluded)
+            self.assertNotIn(grouped.resolve(), excluded)
+            self.assertNotIn(grouped_renamed.resolve(), excluded)
 
     def test_included_macro_is_visible_only_after_include(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

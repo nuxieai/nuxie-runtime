@@ -19,6 +19,7 @@
         assert_webgpu_uniform_limit_rejection,
         run_backend,
         run_stream_case,
+        run_stream_presentation_reference,
       } from "./pkg/browser_renderer_smoke.js";
 
       const status = document.querySelector("#status");
@@ -369,12 +370,74 @@
             results.push(
               `${directPresentation} exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0`,
             );
+            const streamCanvas = document.createElement("canvas");
+            const presentationStream = await fetch(
+              "/fixtures/renderer/streams/riv/superbowl.rive-stream",
+            ).then((response) => response.text());
+            const presentationReference = await run_stream_presentation_reference(
+              streamCanvas,
+              presentationStream,
+            );
+            for (let offset = 3; offset < presentationReference.length; offset += 4) {
+              if (presentationReference[offset] !== 255) {
+                throw new Error(
+                  `complex presentation reference was not opaque at pixel ${(offset - 3) / 4}`,
+                );
+              }
+            }
+            const presentationBitmap = await createImageBitmap(streamCanvas);
+            try {
+              const presentationPixels = readBitmapPixels(
+                presentationBitmap,
+                streamCanvas.width,
+                streamCanvas.height,
+              );
+              if (presentationPixels.length !== presentationReference.length) {
+                throw new Error(
+                  "complex direct presentation returned a different pixel extent from explicit readback",
+                );
+              }
+              let differentPixels = 0;
+              for (let offset = 0; offset < presentationPixels.length; offset += 4) {
+                if (
+                  presentationPixels[offset] !== presentationReference[offset] ||
+                  presentationPixels[offset + 1] !== presentationReference[offset + 1] ||
+                  presentationPixels[offset + 2] !== presentationReference[offset + 2] ||
+                  presentationPixels[offset + 3] !== presentationReference[offset + 3]
+                ) {
+                  differentPixels += 1;
+                }
+              }
+              if (differentPixels !== 0) {
+                throw new Error(
+                  `complex direct presentation differed from explicit readback at ${differentPixels} pixels`,
+                );
+              }
+            } finally {
+              presentationBitmap.close();
+            }
+            if (
+              presentationCalls.counters.getCurrentTexture !== 2 ||
+              presentationCalls.counters.mapAsync < 1 ||
+              presentationCalls.counters.putImageData !== 0
+            ) {
+              throw new Error(
+                "complex direct presentation called " +
+                  `getCurrentTexture=${presentationCalls.counters.getCurrentTexture} ` +
+                  `mapAsync=${presentationCalls.counters.mapAsync} ` +
+                `putImageData=${presentationCalls.counters.putImageData}`,
+              );
+            }
+            const streamReadbackMapAsync = presentationCalls.counters.mapAsync;
+            results.push(
+              "browser-presentation=direct-webgpu stream=riv-superbowl exact-readback=true",
+            );
             const explicitReadback = await assert_explicit_readback(
               document.createElement("canvas"),
             );
             if (
-              presentationCalls.counters.getCurrentTexture !== 1 ||
-              presentationCalls.counters.mapAsync !== 1 ||
+              presentationCalls.counters.getCurrentTexture !== 2 ||
+              presentationCalls.counters.mapAsync !== streamReadbackMapAsync + 1 ||
               presentationCalls.counters.putImageData !== 0
             ) {
               throw new Error(

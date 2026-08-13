@@ -1370,6 +1370,44 @@ class RustDiscoveryTests(unittest.TestCase):
             ],
         )
 
+    def test_inner_cfg_test_excludes_the_enclosing_source_or_module(self) -> None:
+        crate_source = "#![cfg(test)]\nfn fixture_only() { probe_one(); }\n"
+        changed_crate_source = crate_source.replace("probe_one", "probe_two")
+        self.assertEqual(
+            [],
+            behavior_inventory.rust_items("crates/demo/src/fixture.rs", crate_source),
+        )
+        self.assertEqual(
+            behavior_inventory.rust_shipped_source(crate_source),
+            behavior_inventory.rust_shipped_source(changed_crate_source),
+        )
+
+        inline_source = """
+        mod fixtures {
+            #![cfg(test)]
+            fn fixture_only() { probe(); }
+        }
+        fn shipped() { production(); }
+        """
+        self.assertEqual(
+            ["shipped"],
+            [
+                item["name"]
+                for item in behavior_inventory.rust_items(
+                    "crates/demo/src/lib.rs", inline_source
+                )
+            ],
+        )
+        self.assertNotIn("probe", behavior_inventory.rust_shipped_source(inline_source))
+
+        macro_source = (
+            "macro_rules! tokens {\n"
+            "    () => { mod fixtures { #![cfg(test)] fn fixture() {} } };\n"
+            "}\n"
+            "fn shipped() { production(); }\n"
+        )
+        self.assertIn("fixture", behavior_inventory.rust_shipped_source(macro_source))
+
     def test_cfg_alternatives_and_not_test_remain_shipped(self) -> None:
         source = """
         #[cfg(any(test, target_arch = "wasm32"))]
@@ -1438,6 +1476,26 @@ class RustDiscoveryTests(unittest.TestCase):
         """
         self.assertEqual(
             [], behavior_inventory.rust_items("crates/demo/src/lib.rs", source)
+        )
+
+    def test_single_value_builtin_cfg_atoms_are_mutually_exclusive(self) -> None:
+        source = """
+        #[cfg(any(test, all(target_os = "linux", target_os = "macos")))]
+        fn same_attribute_test_only() {}
+        #[cfg(any(test, target_arch = "x86_64"))]
+        #[cfg(target_arch = "aarch64")]
+        fn cross_attribute_test_only() {}
+        #[cfg(any(test, all(feature = "one", feature = "two")))]
+        fn multiple_features_remain_production_capable() {}
+        """
+        self.assertEqual(
+            ["multiple_features_remain_production_capable"],
+            [
+                item["name"]
+                for item in behavior_inventory.rust_items(
+                    "crates/demo/src/lib.rs", source
+                )
+            ],
         )
 
     def test_distinct_cfg_feature_atoms_survive_structural_masking(self) -> None:

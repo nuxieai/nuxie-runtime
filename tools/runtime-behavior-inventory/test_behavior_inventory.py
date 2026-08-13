@@ -3377,6 +3377,61 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotIn(behavior.resolve(), excluded)
 
+    def test_path_module_target_resolves_imported_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            support = source / "support"
+            support.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = support / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                '#[path = "support/macros.rs"] mod macros;\n'
+                "use macros::load;\n"
+                "load!();\n"
+            )
+            macros.write_text(
+                "macro_rules! load { () => { mod behavior; } }\n"
+                "pub(crate) use load;\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
+    def test_nested_use_tree_and_unicode_macro_name_are_resolved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            crate = repo_root / "crates/nuxie"
+            source = crate / "src"
+            source.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text(
+                '[package]\nname = "nuxie"\nversion = "0.1.0"\n'
+            )
+            lib = source / "lib.rs"
+            macros = source / "macros.rs"
+            behavior = source / "behavior.rs"
+            lib.write_text(
+                "mod macros;\n" "use crate::{macros::chargé};\n" "chargé!();\n"
+            )
+            macros.write_text(
+                "macro_rules! chargé { () => { mod behavior; } }\n"
+                "pub(crate) use chargé;\n"
+            )
+            behavior.write_text("fn shipped() {}\n")
+
+            excluded = behavior_inventory.external_test_module_paths(
+                repo_root, [lib, macros, behavior]
+            )
+            self.assertNotIn(behavior.resolve(), excluded)
+
     def test_unknown_macro_retains_explicit_module_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo_root = pathlib.Path(directory)

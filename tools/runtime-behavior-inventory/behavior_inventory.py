@@ -3064,6 +3064,123 @@ def rust_identifier_token_at(source: str, cursor: int) -> tuple[int, int, str] |
     return start, end, source[identifier_start:end]
 
 
+def rust_use_imports(
+    masked: str,
+) -> list[tuple[int, tuple[str, ...], str | None, str | None]]:
+    """Return imported names from nested Rust use trees."""
+    imports = []
+    use_pattern = re.compile(r"(?<!\w)use\b")
+
+    for use_match in use_pattern.finditer(masked):
+        cursor = use_match.end()
+        depth = 0
+        end = cursor
+        while end < len(masked):
+            if masked[end] == "{":
+                depth += 1
+            elif masked[end] == "}" and depth:
+                depth -= 1
+            elif masked[end] == ";" and depth == 0:
+                break
+            end += 1
+        if end == len(masked):
+            continue
+        tree = masked[cursor:end]
+
+        def skip_trivia(position: int) -> int:
+            while position < len(tree) and tree[position].isspace():
+                position += 1
+            return position
+
+        def identifier(position: int) -> tuple[int, str, bool] | None:
+            position = skip_trivia(position)
+            token = rust_identifier_token_at(tree, position)
+            if token is None:
+                return None
+            _start, token_end, value = token
+            return (
+                token_end,
+                unicodedata.normalize("NFC", value),
+                tree.startswith("r#", position),
+            )
+
+        parsed = []
+
+        def parse_branch(position: int, prefix: tuple[str, ...]) -> int | None:
+            position = skip_trivia(position)
+            if tree.startswith("::", position):
+                position = skip_trivia(position + 2)
+            if position < len(tree) and tree[position] == "{":
+                return parse_group(position, prefix)
+            if position < len(tree) and tree[position] == "*":
+                parsed.append((prefix, None, None))
+                return position + 1
+
+            segments = []
+            while True:
+                token = identifier(position)
+                if token is None:
+                    return None
+                position, value, raw = token
+                segments.append(value)
+                position = skip_trivia(position)
+                if not tree.startswith("::", position):
+                    break
+                position = skip_trivia(position + 2)
+                if position < len(tree) and tree[position] == "{":
+                    return parse_group(position, prefix + tuple(segments))
+                if position < len(tree) and tree[position] == "*":
+                    parsed.append((prefix + tuple(segments), None, None))
+                    return position + 1
+
+            alias = None
+            alias_token = identifier(position)
+            if alias_token is not None:
+                alias_end, alias_keyword, alias_raw = alias_token
+                if alias_keyword == "as" and not alias_raw:
+                    alias_value = identifier(alias_end)
+                    if alias_value is None:
+                        return None
+                    position, alias, _alias_raw = alias_value
+            full_path = prefix + tuple(segments)
+            if len(full_path) >= 2 and full_path[-1] not in {
+                "crate",
+                "self",
+                "super",
+            }:
+                parsed.append((full_path[:-1], full_path[-1], alias))
+            return position
+
+        def parse_group(position: int, prefix: tuple[str, ...]) -> int | None:
+            position += 1
+            while True:
+                position = skip_trivia(position)
+                if position >= len(tree):
+                    return None
+                if tree[position] == "}":
+                    return position + 1
+                position = parse_branch(position, prefix)
+                if position is None:
+                    return None
+                position = skip_trivia(position)
+                if position < len(tree) and tree[position] == ",":
+                    position += 1
+                    continue
+                if position < len(tree) and tree[position] == "}":
+                    return position + 1
+                return None
+
+        parsed_end = parse_branch(0, ())
+        if parsed_end is None or skip_trivia(parsed_end) != len(tree):
+            continue
+        imports.extend(
+            (use_match.start(), module_path, name, alias)
+            for module_path, name, alias in parsed
+            if alias != "_"
+        )
+    return imports
+
+
 def rust_external_module_declarations(
     masked: str,
 ) -> list[tuple[int, int, int, str]]:
@@ -4742,7 +4859,7 @@ def external_test_module_paths(
                 macro_includes.setdefault(owner_resolved, []).append(
                     (match.start(), included)
                 )
-            module_targets: dict[str, set[pathlib.Path]] = {}
+            module_targets: dict[str, set[tuple[pathlib.Path, pathlib.Path]]] = {}
             for (
                 match_start,
                 attr_start,
@@ -4800,16 +4917,18 @@ def external_test_module_paths(
                 for target, path_requires_test, target_is_explicit in targets:
                     resolved = target.resolve()
                     if add_candidate(resolved):
+                        if target_is_explicit:
+                            child_base = resolved.parent
+                        else:
+                            child_base = declaration_base / module
                         if not (
                             inherited_requires_test
                             or attributes_require_test(attributes)
                             or path_requires_test
                         ):
-                            module_targets.setdefault(module, set()).add(resolved)
-                        if target_is_explicit:
-                            child_base = resolved.parent
-                        else:
-                            child_base = declaration_base / module
+                            module_targets.setdefault(module, set()).add(
+                                (resolved, child_base)
+                            )
                         local_requires_test = attributes_require_test(
                             attributes
                         ) or any(
@@ -4835,14 +4954,11 @@ def external_test_module_paths(
                                 or path_requires_test,
                             )
                         )
-            identifier_text = r"(?:r#)?[A-Za-z_][A-Za-z0-9_]*"
 
-            def imported_module_owners(path_text: str) -> set[pathlib.Path]:
-                segments = [
-                    segment.removeprefix("r#")
-                    for segment in path_text.split("::")
-                    if segment
-                ]
+            def imported_module_owners(
+                module_path: tuple[str, ...],
+            ) -> set[pathlib.Path]:
+                segments = list(module_path)
                 crate_root = next(
                     (
                         root
@@ -4868,61 +4984,58 @@ def external_test_module_paths(
                     import_base = crate_root / "src"
                 if not segments:
                     return set()
-                stem = import_base.joinpath(*segments)
-                return {
-                    candidate.resolve()
-                    for candidate in (stem.with_suffix(".rs"), stem / "mod.rs")
-                    if candidate.resolve() in candidates
-                }
+                first = segments.pop(0)
+                states = set(module_targets.get(first, set()))
+                if not states:
+                    stem = import_base / first
+                    states = {
+                        (
+                            candidate.resolve(),
+                            (
+                                candidate.parent
+                                if candidate.name == "mod.rs"
+                                else candidate.with_suffix("")
+                            ),
+                        )
+                        for candidate in (stem.with_suffix(".rs"), stem / "mod.rs")
+                        if candidate.resolve() in candidates
+                    }
+                for segment in segments:
+                    next_states = set()
+                    for _owner, child_base in states:
+                        stem = child_base / segment
+                        for candidate in (stem.with_suffix(".rs"), stem / "mod.rs"):
+                            resolved = candidate.resolve()
+                            if resolved in candidates:
+                                next_states.add(
+                                    (
+                                        resolved,
+                                        (
+                                            candidate.parent
+                                            if candidate.name == "mod.rs"
+                                            else candidate.with_suffix("")
+                                        ),
+                                    )
+                                )
+                    states = next_states
+                return {owner for owner, _child_base in states}
 
-            use_import = re.compile(
-                rf"(?m)(?<![A-Za-z0-9_])use\s+"
-                rf"(?P<module>(?:{identifier_text}::)+)"
-                rf"(?P<name>{identifier_text})"
-                rf"(?:\s+as\s+(?P<alias>{identifier_text}))?\s*;"
-            )
-            for match in use_import.finditer(masked):
+            for import_start, module_path, imported_name, alias in rust_use_imports(
+                masked
+            ):
                 if any(
-                    start <= match.start() < end for start, end in definition_ranges
-                ) or any(start <= match.start() < end for start, end in test_ranges):
+                    start <= import_start < end for start, end in definition_ranges
+                ) or any(start <= import_start < end for start, end in test_ranges):
                     continue
-                imported_name = match.group("name").removeprefix("r#")
-                alias = (match.group("alias") or imported_name).removeprefix("r#")
-                module_path = match.group("module").removesuffix("::")
                 for imported in imported_module_owners(module_path):
                     macro_imports.setdefault(owner_resolved, []).append(
-                        (match.start(), imported, imported_name, alias)
-                    )
-            grouped_use_import = re.compile(
-                rf"(?ms)(?<![A-Za-z0-9_])use\s+"
-                rf"(?P<module>{identifier_text}(?:::{identifier_text})*)::\s*"
-                r"\{(?P<items>[^{}]*)\}\s*;"
-            )
-            for match in grouped_use_import.finditer(masked):
-                if any(
-                    start <= match.start() < end for start, end in definition_ranges
-                ) or any(start <= match.start() < end for start, end in test_ranges):
-                    continue
-                source_group = source[match.start("items") : match.end("items")]
-                for item in rust_meta_arguments(source_group):
-                    item_masked = mask_noncode(item, nested_block_comments=True)
-                    imported_match = re.fullmatch(
-                        r"\s*(?:r#)?([A-Za-z_][A-Za-z0-9_]*)"
-                        r"(?:\s+as\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*))?\s*",
-                        item_masked,
-                    )
-                    if imported_match is None:
-                        continue
-                    imported_name, alias = imported_match.groups()
-                    for imported in imported_module_owners(match.group("module")):
-                        macro_imports.setdefault(owner_resolved, []).append(
-                            (
-                                match.start(),
-                                imported,
-                                imported_name,
-                                alias or imported_name,
-                            )
+                        (
+                            import_start,
+                            imported,
+                            imported_name,
+                            alias or imported_name,
                         )
+                    )
 
     production_reachable = {
         owner

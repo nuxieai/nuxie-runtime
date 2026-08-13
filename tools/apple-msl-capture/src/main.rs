@@ -52,9 +52,7 @@ fn main() -> Result<()> {
     } else {
         (false, first)
     };
-    let root = root_arg
-        .map(PathBuf::from)
-        .unwrap_or(env::current_dir()?);
+    let root = root_arg.map(PathBuf::from).unwrap_or(env::current_dir()?);
     let captures = args.next().map(PathBuf::from).unwrap_or_else(|| {
         env::var_os("NUXIE_APPLE_MSL_CAPTURE_DIR")
             .map(PathBuf::from)

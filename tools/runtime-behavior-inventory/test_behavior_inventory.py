@@ -3874,6 +3874,18 @@ class GateTests(unittest.TestCase):
                 cwd=root,
                 check=True,
             )
+            renderer_header.unlink()
+            self.assertFalse(behavior_inventory.git_worktree_clean(root))
+            subprocess.run(
+                [
+                    "git",
+                    "checkout",
+                    "--",
+                    "renderer/include/rive/renderer/render_context.hpp",
+                ],
+                cwd=root,
+                check=True,
+            )
             include = root / "include" / "rive"
             include.mkdir(parents=True)
             untracked = include / "untracked.hpp"

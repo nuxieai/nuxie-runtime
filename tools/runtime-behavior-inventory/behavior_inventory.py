@@ -5887,13 +5887,13 @@ def git_head(root: pathlib.Path) -> str:
 
 
 def git_worktree_clean(root: pathlib.Path) -> bool:
-    inventory_paths = set(UPSTREAM_SOURCE_ROOTS)
+    inventory_pathspecs = set(UPSTREAM_SOURCE_ROOTS)
     for patterns in RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.values():
         for pattern in patterns:
-            inventory_paths.update(
-                path.relative_to(root).as_posix()
-                for path in root.glob(pattern)
-                if path.is_file()
+            inventory_pathspecs.add(
+                f":(glob){pattern}"
+                if any(char in pattern for char in "*?[")
+                else pattern
             )
     changed = subprocess.run(
         [
@@ -5902,7 +5902,7 @@ def git_worktree_clean(root: pathlib.Path) -> bool:
             "--porcelain=v1",
             "--untracked-files=all",
             "--",
-            *sorted(inventory_paths),
+            *sorted(inventory_pathspecs),
         ],
         cwd=root,
         check=True,
@@ -5918,7 +5918,7 @@ def git_worktree_clean(root: pathlib.Path) -> bool:
             "--exclude-standard",
             "-z",
             "--",
-            *sorted(inventory_paths),
+            *sorted(inventory_pathspecs),
         ],
         cwd=root,
         check=True,

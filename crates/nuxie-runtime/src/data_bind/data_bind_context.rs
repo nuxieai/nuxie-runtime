@@ -11544,7 +11544,7 @@ mod tests {
         );
     }
 
-    fn same_artboard_binding_fixture() -> RuntimeFile {
+    fn nested_artboard_binding_fixture(bound_artboard_id: u64) -> RuntimeFile {
         RuntimeFile::from_fixture_records(vec![
             record("Backboard", Vec::new()),
             record(
@@ -11587,7 +11587,7 @@ mod tests {
                     property(
                         "ViewModelInstanceArtboard",
                         "propertyValue",
-                        FixtureValue::Uint(1),
+                        FixtureValue::Uint(bound_artboard_id),
                     ),
                 ],
             ),
@@ -11631,13 +11631,20 @@ mod tests {
                     property("Artboard", "height", FixtureValue::Double(50.0)),
                 ],
             ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", FixtureValue::Double(25.0)),
+                    property("Artboard", "height", FixtureValue::Double(25.0)),
+                ],
+            ),
         ])
-        .expect("same-artboard binding fixture imports")
+        .expect("nested-artboard binding fixture imports")
     }
 
     #[test]
     fn first_artboard_binding_recreates_an_equal_authored_nested_source() {
-        let file = same_artboard_binding_fixture();
+        let file = nested_artboard_binding_fixture(1);
         let graphs =
             nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
         let graph = graphs
@@ -11660,6 +11667,65 @@ mod tests {
         let replacement = &artboard.nested_artboards[&host_local];
         assert_ne!(replacement.child.instance_identity(), original_identity);
         assert_eq!(replacement.render_cache_revision, 1);
+    }
+
+    #[test]
+    fn ordinary_nested_artboard_id_write_does_not_replace_the_mounted_child() {
+        let file = nested_artboard_binding_fixture(1);
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let host_local = graph.nested_artboards[0].local_id;
+        let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId")
+            .expect("NestedArtboard artboardId key");
+
+        assert!(artboard.set_uint_property(host_local, artboard_id_key, 2));
+
+        assert_eq!(artboard.uint_property(host_local, artboard_id_key), Some(2));
+        assert_eq!(
+            artboard.nested_artboards[&host_local].child.graph_global_id,
+            graphs.artboards[1].global_id,
+            "the generated setter changes only the field; C++ does not call updateArtboard"
+        );
+    }
+
+    #[test]
+    fn artboard_valued_binding_swaps_without_mutating_the_generated_id() {
+        let file = nested_artboard_binding_fixture(2);
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let host_local = graph.nested_artboards[0].local_id;
+        let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId")
+            .expect("NestedArtboard artboardId key");
+        let context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+
+        assert_eq!(artboard.uint_property(host_local, artboard_id_key), Some(1));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        assert_eq!(
+            artboard.nested_artboards[&host_local].child.graph_global_id,
+            graphs.artboards[2].global_id
+        );
+        assert_eq!(
+            artboard.uint_property(host_local, artboard_id_key),
+            Some(1),
+            "DataBindContextValueArtboard calls updateArtboard directly and leaves the generated field authored"
+        );
     }
 
     #[test]

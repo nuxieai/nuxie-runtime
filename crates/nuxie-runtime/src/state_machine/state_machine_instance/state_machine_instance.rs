@@ -7529,6 +7529,8 @@ impl StateMachineInstance {
             }
             crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
                 let notifier_local = occurrence.local_id();
+                let should_forward_to_parent =
+                    should_deliver && occurrence.has_parent_event_listener();
                 let phase = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
@@ -7554,7 +7556,7 @@ impl StateMachineInstance {
                     let Some(batch) = batch else {
                         break;
                     };
-                    let ancestor_changed = should_deliver
+                    let ancestor_changed = should_forward_to_parent
                         && !batch.bubbled_events.is_empty()
                         && Self::complete_nested_report_batch(
                             parent_artboard,

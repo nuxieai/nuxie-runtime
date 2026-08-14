@@ -9020,12 +9020,6 @@ impl ArtboardInstance {
                     property_key,
                 ) && self.mark_constraint_parent_transform_dirty(local_id)
             });
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedArtboard")
-            && property_key_for_name("NestedArtboard", "artboardId") == Some(property_key)
-            && let Some(value) = self.uint_property(local_id, property_key)
-        {
-            changed |= self.set_nested_artboard_artboard_id(local_id, value);
-        }
         if solo_active_component_id_property_key() == Some(property_key) {
             if let Some(solo) = self.component_handle(local_id) {
                 changed |= self.propagate_solo_collapse(solo);

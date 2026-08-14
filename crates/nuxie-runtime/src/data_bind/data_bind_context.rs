@@ -2618,7 +2618,7 @@ pub(super) struct RuntimeArtboardNestedHostBindingInstance {
 
 #[derive(Debug, Clone, Copy)]
 enum RuntimeArtboardNestedHostProperty {
-    ArtboardId { property_key: u16 },
+    ArtboardId,
     IsPaused { property_key: u16 },
     Speed { property_key: u16 },
     Quantize { property_key: u16 },
@@ -3858,7 +3858,7 @@ pub(super) fn build_artboard_nested_host_bindings(
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
             let property = if Some(property_key) == artboard_id_key {
-                RuntimeArtboardNestedHostProperty::ArtboardId { property_key }
+                RuntimeArtboardNestedHostProperty::ArtboardId
             } else if Some(property_key) == is_paused_key {
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key }
             } else if Some(property_key) == speed_key {
@@ -8884,7 +8884,7 @@ impl ArtboardInstance {
                         matches!(
                             (binding.property, &value),
                             (
-                                RuntimeArtboardNestedHostProperty::ArtboardId { .. },
+                                RuntimeArtboardNestedHostProperty::ArtboardId,
                                 RuntimeDataBindGraphValue::Artboard(_)
                             )
                         ) && !std::mem::replace(&mut binding.artboard_value_applied, true);
@@ -8917,17 +8917,14 @@ impl ArtboardInstance {
     ) -> bool {
         match (property, value) {
             (
-                RuntimeArtboardNestedHostProperty::ArtboardId { property_key },
+                RuntimeArtboardNestedHostProperty::ArtboardId,
                 RuntimeDataBindGraphValue::Artboard(value),
             ) => {
-                let property_changed =
-                    self.set_uint_property(target_local_id, property_key, *value);
-                let artboard_changed = if first_artboard_apply && !property_changed {
+                if first_artboard_apply {
                     self.replace_nested_artboard_artboard_id(target_local_id, *value)
                 } else {
                     self.set_nested_artboard_artboard_id(target_local_id, *value)
-                };
-                property_changed || artboard_changed
+                }
             }
             (
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key },

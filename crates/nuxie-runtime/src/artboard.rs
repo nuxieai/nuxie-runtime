@@ -10148,6 +10148,7 @@ impl ArtboardInstance {
                 property_key_for_name("NestedArtboard", "quantize")?,
             )
             .unwrap_or(-1.0),
+            true,
             &self.profile_path,
         )
         .ok()?;
@@ -10578,6 +10579,7 @@ fn build_runtime_nested_artboard_instances(
             host_object.bool_property("isPaused").unwrap_or(false),
             host_object.double_property("speed").unwrap_or(1.0),
             host_object.double_property("quantize").unwrap_or(-1.0),
+            false,
             parent_profile_path,
         )?;
         nested_artboards.insert(host.local_id, instance);
@@ -10602,6 +10604,7 @@ fn build_runtime_nested_artboard_instance(
     is_paused: bool,
     speed: f32,
     quantize: f32,
+    replacement_default_state_machine: bool,
     parent_profile_path: &[crate::ProfilePathSegment],
 ) -> Result<RuntimeNestedArtboardInstance> {
     let mut profile_path = parent_profile_path.to_vec();
@@ -10631,13 +10634,23 @@ fn build_runtime_nested_artboard_instance(
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
     }
-    // C++ initializes the authored nested animation occurrences before
-    // `onAddedClean` discovers the active stateful VMI
-    // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
-    // consume its default context during construction; the pending stateful
-    // latch below defers that bind to the occurrence's first advance.
-    let animations =
-        runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child);
+    let animations = if replacement_default_state_machine {
+        // `NestedArtboard::updateArtboard` discards authored nested-animation
+        // occurrences and synthesizes the replacement target's state machine
+        // at index 0. The host local id is a unique private lookup key; no
+        // authored NestedInput can target this generated occurrence.
+        RuntimeNestedStateMachineInstance::from_default(host_local_id, &mut child)
+            .map(RuntimeNestedAnimationInstance::StateMachine)
+            .into_iter()
+            .collect()
+    } else {
+        // Initial construction initializes authored nested-animation
+        // occurrences before `onAddedClean` discovers the active stateful VMI
+        // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
+        // consume its default context during construction; the pending
+        // stateful latch below defers that bind to the first advance.
+        runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child)
+    };
     let data_bind_view_model_instance_locals_by_id =
         build_nested_host_view_model_instance_locals(parent_slots, parent_objects, host_local_id);
     let is_stateful = property_key_for_name("NestedArtboard", "isStateful")

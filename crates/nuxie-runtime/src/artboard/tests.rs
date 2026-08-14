@@ -2528,6 +2528,123 @@
     }
 
     #[test]
+    fn nested_artboard_swap_creates_the_replacement_default_state_machine() {
+        let bytes = synthetic_riv(9704, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            push_synthetic_object(bytes, "StateMachineBool", &[]);
+        });
+        let file = read_runtime_file(&bytes).expect("nested swap fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested swap fixture graphs");
+        let parent_graph = &graphs.artboards[0];
+        let host_local_id = parent_graph.nested_artboards[0].local_id;
+        let mut parent =
+            ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graphs.artboards)
+                .expect("parent artboard instance");
+
+        assert!(parent.set_nested_artboard_artboard_id(host_local_id, 2));
+
+        let replacement = parent
+            .nested_artboards
+            .get_mut(&host_local_id)
+            .expect("replacement nested occurrence");
+        assert_eq!(replacement.animations.len(), 1);
+        let RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+            &mut replacement.animations[0]
+        else {
+            panic!("replacement owns its target's default state machine");
+        };
+        assert_eq!(occurrence.animation_id(), 0);
+        let machine = occurrence
+            .state_machine_mut()
+            .expect("replacement state machine is live");
+        assert!(machine.set_bool(0, true));
+        assert_eq!(
+            machine
+                .input(0)
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn nested_artboard_swap_default_state_machine_has_no_parent_event_listener() {
+        let bytes = synthetic_riv(9705, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1)],
+            );
+            push_synthetic_object(
+                bytes,
+                "NestedStateMachine",
+                &[("parentId", 1), ("animationId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "StateMachine", &[]);
+        });
+        let file = read_runtime_file(&bytes).expect("nested swap listener fixture imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("nested swap listener fixture graphs");
+        let parent_graph = &graphs.artboards[0];
+        let host_local_id = parent_graph.nested_artboards[0].local_id;
+        let mut parent =
+            ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graphs.artboards)
+                .expect("parent artboard instance");
+        parent.state_machines = Arc::new(vec![empty_state_machine(9705)]);
+        let definitions = Arc::clone(&parent.state_machines);
+        let mut parent_machine = StateMachineInstance::new(0, &definitions[0], &mut parent);
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        parent_machine.configure_nested_event_root_test(
+            "parent-local",
+            "parent-audio",
+            Rc::clone(&total_order),
+            [host_local_id],
+        );
+
+        assert!(parent.set_nested_artboard_artboard_id(host_local_id, 2));
+        let (event, _) = nested_audio_event(7);
+        let replacement = parent
+            .nested_artboards
+            .get_mut(&host_local_id)
+            .expect("replacement nested occurrence");
+        let RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+            &mut replacement.animations[0]
+        else {
+            panic!("replacement owns its target's default state machine");
+        };
+        occurrence
+            .state_machine_mut()
+            .expect("replacement state machine is live")
+            .configure_nested_event_source_test(
+                "replacement-local",
+                "replacement-audio",
+                Rc::clone(&total_order),
+                event,
+            );
+
+        parent_machine
+            .advance_and_apply(&mut parent, 0.25)
+            .expect("replacement frame advances");
+
+        assert!(total_order.borrow().contains(&"replacement-local"));
+        assert!(!total_order.borrow().contains(&"parent-local"));
+        assert_eq!(parent_machine.audio_event_seam_receipt(), (0, None));
+    }
+
+    #[test]
     fn stateful_nested_source_switch_uses_the_replacement_view_model_default() {
         let bytes = synthetic_riv(9700, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);

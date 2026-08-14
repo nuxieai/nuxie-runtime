@@ -60,6 +60,7 @@ pub(crate) struct RuntimeNestedStateMachineInstance {
     animation_id: usize,
     state_machine: Option<Box<StateMachineInstance>>,
     nested_inputs: Vec<RuntimeNestedInput>,
+    parent_event_listener_attached: bool,
 }
 
 impl RuntimeNestedStateMachineInstance {
@@ -86,6 +87,7 @@ impl RuntimeNestedStateMachineInstance {
             animation_id: state_machine.state_machine_index(),
             state_machine: Some(Box::new(state_machine)),
             nested_inputs,
+            parent_event_listener_attached: true,
         };
         occurrence.apply_authored_values();
         occurrence
@@ -140,9 +142,20 @@ impl RuntimeNestedStateMachineInstance {
             animation_id,
             state_machine: state_machine.map(Box::new),
             nested_inputs,
+            parent_event_listener_attached: true,
         };
         occurrence.apply_authored_values();
         occurrence
+    }
+
+    pub(crate) fn from_default(local_id: usize, child: &mut ArtboardInstance) -> Option<Self> {
+        let state_machine = child.state_machine_instance(0)?;
+        let mut occurrence = Self::new(local_id, state_machine, Vec::new());
+        // `NestedArtboard::updateArtboard` creates this occurrence only after
+        // deleting the outgoing animation notifiers and never calls
+        // `addNestedEventListener` on the synthesized default machine.
+        occurrence.parent_event_listener_attached = false;
+        Some(occurrence)
     }
 
     pub(crate) fn cold_clone(&self, child: &mut ArtboardInstance) -> Self {
@@ -161,6 +174,7 @@ impl RuntimeNestedStateMachineInstance {
             animation_id: self.animation_id,
             state_machine: state_machine.map(Box::new),
             nested_inputs,
+            parent_event_listener_attached: self.parent_event_listener_attached,
         };
         occurrence.apply_authored_values();
         occurrence
@@ -176,6 +190,10 @@ impl RuntimeNestedStateMachineInstance {
 
     pub(crate) fn has_state_machine(&self) -> bool {
         self.state_machine.is_some()
+    }
+
+    pub(crate) fn has_parent_event_listener(&self) -> bool {
+        self.parent_event_listener_attached
     }
 
     pub(crate) fn state_machine(&self) -> Option<&StateMachineInstance> {

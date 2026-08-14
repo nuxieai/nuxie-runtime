@@ -417,9 +417,11 @@ impl CommandServer {
                         continue;
                     };
                     let original_size = artboard.dimensions().unwrap_or((0.0, 0.0));
-                    let bindable = nuxie_runtime::RuntimeBindableArtboard::new(
-                        artboard.name().unwrap_or_default(),
-                    );
+                    let bindable =
+                        nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_index(
+                            artboard.name().unwrap_or_default(),
+                            artboard.index(),
+                        );
                     match OwnedArtboardInstance::instantiate(
                         Arc::clone(&file_value),
                         artboard.index(),

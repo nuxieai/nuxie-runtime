@@ -42,11 +42,11 @@ use crate::view_model_cell::{
     RuntimeViewModelCellValue,
 };
 use crate::{
-    ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeDataContext, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
-    RuntimeViewModelPointer, ScriptInstance, data_bind_flags_apply_source_to_target,
-    data_bind_flags_apply_target_to_source,
+    ArtboardInstance, Mat2D, RuntimeBindableArtboard, RuntimeDataBindGraphConverter,
+    RuntimeDataBindGraphValue, RuntimeDataContext, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeViewModelImage, RuntimeViewModelPointer, ScriptInstance,
+    data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 use nuxie_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
@@ -1643,6 +1643,12 @@ impl RuntimeOwnedViewModelBindingSource {
         self.context
             .borrow()
             .runtime_image_by_property_path(&self.property_path)
+    }
+
+    fn runtime_artboard(&self) -> Option<RuntimeBindableArtboard> {
+        self.context
+            .borrow()
+            .runtime_artboard_by_property_path(&self.property_path)
     }
 
     fn list_source(&self) -> Option<RuntimeOwnedViewModelListHandle> {
@@ -8872,36 +8878,43 @@ impl ArtboardInstance {
             .artboard_data_bind_target_queues
             .drain_dirty_nested_hosts();
         for index in indices {
-            let Some((target_local_id, property, value, first_artboard_apply)) = self
-                .artboard_nested_host_bindings
-                .get_mut(index)
-                .and_then(|binding| {
-                    let value = self
-                        .artboard_data_bind_values
-                        .get(binding.path.as_slice())?
-                        .clone();
-                    let first_artboard_apply =
-                        matches!(
-                            (binding.property, &value),
-                            (
-                                RuntimeArtboardNestedHostProperty::ArtboardId,
-                                RuntimeDataBindGraphValue::Artboard(_)
-                            )
-                        ) && !std::mem::replace(&mut binding.artboard_value_applied, true);
-                    Some((
-                        binding.target_local_id,
-                        binding.property,
-                        value,
-                        first_artboard_apply,
-                    ))
-                })
+            let Some((data_bind_index, target_local_id, property, value, first_artboard_apply)) =
+                self.artboard_nested_host_bindings
+                    .get_mut(index)
+                    .and_then(|binding| {
+                        let value = self
+                            .artboard_data_bind_values
+                            .get(binding.path.as_slice())?
+                            .clone();
+                        let first_artboard_apply =
+                            matches!(
+                                (binding.property, &value),
+                                (
+                                    RuntimeArtboardNestedHostProperty::ArtboardId,
+                                    RuntimeDataBindGraphValue::Artboard(_)
+                                )
+                            ) && !std::mem::replace(&mut binding.artboard_value_applied, true);
+                        Some((
+                            binding.data_bind_index,
+                            binding.target_local_id,
+                            binding.property,
+                            value,
+                            first_artboard_apply,
+                        ))
+                    })
             else {
                 continue;
             };
+            let runtime_artboard = self
+                .artboard_authored_data_bind_states
+                .get(data_bind_index)
+                .and_then(|state| state.source.as_ref())
+                .and_then(RuntimeOwnedViewModelBindingSource::runtime_artboard);
             changed |= self.apply_artboard_nested_host_binding_value(
                 target_local_id,
                 property,
                 &value,
+                runtime_artboard.as_ref(),
                 first_artboard_apply,
             );
         }
@@ -8913,6 +8926,7 @@ impl ArtboardInstance {
         target_local_id: usize,
         property: RuntimeArtboardNestedHostProperty,
         value: &RuntimeDataBindGraphValue,
+        runtime_artboard: Option<&RuntimeBindableArtboard>,
         first_artboard_apply: bool,
     ) -> bool {
         match (property, value) {
@@ -8920,10 +8934,14 @@ impl ArtboardInstance {
                 RuntimeArtboardNestedHostProperty::ArtboardId,
                 RuntimeDataBindGraphValue::Artboard(value),
             ) => {
+                let value = runtime_artboard
+                    .and_then(RuntimeBindableArtboard::artboard_index)
+                    .and_then(|index| u64::try_from(index).ok())
+                    .unwrap_or(*value);
                 if first_artboard_apply {
-                    self.replace_nested_artboard_artboard_id(target_local_id, *value)
+                    self.replace_nested_artboard_artboard_id(target_local_id, value)
                 } else {
-                    self.set_nested_artboard_artboard_id(target_local_id, *value)
+                    self.set_nested_artboard_artboard_id(target_local_id, value)
                 }
             }
             (
@@ -11738,18 +11756,45 @@ mod tests {
             ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
                 .expect("parent artboard builds");
         let host_local = graph.nested_artboards[0].local_id;
-        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
-            .expect("serialized view model instance builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                .expect("serialized view model instance builds"),
+        );
         let live_artboard = crate::RuntimeBindableArtboard::new_with_artboard_index("live B", 2);
 
-        assert!(context.set_runtime_artboard_by_property_name("child", Some(live_artboard)));
-        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        assert_eq!(
+            artboard.nested_artboards[&host_local].child.graph_global_id,
+            graphs.artboards[1].global_id
+        );
+
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_runtime_artboard_by_property_name("child", Some(live_artboard))
+        );
         assert!(artboard.advance_artboard_data_binds());
 
         assert_eq!(
             artboard.nested_artboards[&host_local].child.graph_global_id,
             graphs.artboards[2].global_id,
             "C++ resolves ViewModelInstanceArtboard.asset before its -1 propertyValue sentinel"
+        );
+
+        let live_artboard = crate::RuntimeBindableArtboard::new_with_artboard_index("live A", 1);
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_runtime_artboard_by_property_name("child", Some(live_artboard))
+        );
+        assert!(artboard.advance_artboard_data_binds());
+        assert_eq!(
+            artboard.nested_artboards[&host_local].child.graph_global_id,
+            graphs.artboards[1].global_id,
+            "replacing one live asset with another publishes bindings dirt even though both scalar values are -1"
         );
     }
 

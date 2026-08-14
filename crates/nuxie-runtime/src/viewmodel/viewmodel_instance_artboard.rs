@@ -4,6 +4,7 @@
 #[derive(Debug)]
 struct RuntimeBindableArtboardInner {
     name: String,
+    artboard_index: Option<usize>,
 }
 
 /// Retained safe-Rust analogue of one runtime `BindableArtboard`.
@@ -15,7 +16,20 @@ pub struct RuntimeBindableArtboard {
 impl RuntimeBindableArtboard {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
-            inner: Rc::new(RuntimeBindableArtboardInner { name: name.into() }),
+            inner: Rc::new(RuntimeBindableArtboardInner {
+                name: name.into(),
+                artboard_index: None,
+            }),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn new_with_artboard_index(name: impl Into<String>, artboard_index: usize) -> Self {
+        Self {
+            inner: Rc::new(RuntimeBindableArtboardInner {
+                name: name.into(),
+                artboard_index: Some(artboard_index),
+            }),
         }
     }
 
@@ -25,6 +39,10 @@ impl RuntimeBindableArtboard {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
+    }
+
+    pub(crate) fn artboard_index(&self) -> Option<usize> {
+        self.inner.artboard_index
     }
 }
 
@@ -72,6 +90,10 @@ impl RuntimeOwnedViewModelArtboard {
 
     fn runtime_state(&self) -> Rc<RefCell<RuntimeOwnedViewModelArtboardState>> {
         Rc::clone(&self.runtime_state)
+    }
+
+    fn notify_bindings_value_changed(&self) {
+        self.cell.notify_bindings_value_changed();
     }
 }
 

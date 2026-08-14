@@ -210,7 +210,7 @@ FEATURE_ROWS.update(
         ),
         "src/nested_artboard.cpp": (
             "partial",
-            "crates/nuxie-runtime/src/artboard.rs",
+            "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs",
             "F13: nested artboards are ported; latent hit-propagation ceilings remain.",
         ),
         "src/data_bind/context/context_value_artboard.cpp": (

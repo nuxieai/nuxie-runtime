@@ -2869,13 +2869,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 #[cfg(feature = "tools")]
                 pub struct RuntimeNestedRemapAnimationReport;
-                #[cfg(feature = "tools")]
-                pub fn runtime_nested_remap_animation_reports() {}
                 """,
                 """
                 pub struct RuntimeNestedRemapAnimationReport;
-                #[cfg(feature = "tools")]
-                pub fn runtime_nested_remap_animation_reports() {}
                 """,
             ),
             (
@@ -3147,15 +3143,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "crates/nuxie-runtime/src/artboard.rs",
             textwrap.dedent(
                 """
-                pub fn advance_nested_artboards_with_state_machine() {
-                    StateMachineInstance::dispatch_nested_event_sources_with(
-                        |artboard, nested_event_dispatch| {
-                            artboard.advance_nested_artboards(
-                                Some(nested_event_dispatch),
-                            );
-                        },
-                    );
-                }
                 pub fn advance_frame_components_with_state_machine_report() {
                     StateMachineInstance::dispatch_nested_event_sources_with(
                         |artboard, nested_event_dispatch| {
@@ -3177,9 +3164,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             textwrap.dedent(
                 """
-                pub fn advance_nested_artboards_with_state_machine() {
-                    advance_nested_artboards_collect_events();
-                }
                 pub fn advance_frame_components_with_state_machine() {
                     advance_frame_components_collect_events_with_mode();
                 }

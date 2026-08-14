@@ -18,7 +18,7 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "8f87e5bfd5b214f44143e5a4c595957ef0a54af27309994f91f9f80e3035e870",
+    "cpp_binary_sha256": "cc52971454fa4ac4c6a43b1cacd9b427631bd6d748cc7318ec4d6f4ad38335e5",
     "cpp_coverage_sha256": "7ab616c10bbe16617d0deabc7e4b4982339312bcc5bd82a5ab317122c5157b40",
     "cpp_mechanism_coverage_sha256": "5dfd9d4f2749c8293c0f49648783f199fe41a2cc654274257fbe472225deb99e",
     "cpp_steady_coverage_sha256": "b70df59d8754a5ef6fccae5fb805e16c7937995247c064293f64205452058760",
@@ -208,13 +208,13 @@
   "dirty_text_clean_guard_rust_candidate_source": {
     "file_count": 9422,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "ce8c948f085523b59f255d7f5f28bba6617ff3b908eac98e2abf50ac9bd3c6da"
+    "sha256": "ccbc4608ca9948a74890edb58f7dda8bc4a78e57993d8ec05e20c67a4ac71033"
   },
   "dirty_text_clean_guard_rust_runner_provenance": {
     "candidate_source": {
       "file_count": 9422,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "ce8c948f085523b59f255d7f5f28bba6617ff3b908eac98e2abf50ac9bd3c6da"
+      "sha256": "ccbc4608ca9948a74890edb58f7dda8bc4a78e57993d8ec05e20c67a4ac71033"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -9627,14 +9627,14 @@
   "rust_candidate_source": {
     "file_count": 9422,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "ce8c948f085523b59f255d7f5f28bba6617ff3b908eac98e2abf50ac9bd3c6da"
+    "sha256": "ccbc4608ca9948a74890edb58f7dda8bc4a78e57993d8ec05e20c67a4ac71033"
   },
-  "rust_ref": "f357dbea71149929b791fc04803251acc3bc3a96",
+  "rust_ref": "ca7fd0076b1c17d9efa3758af4abdefa23f3e403",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 9422,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "ce8c948f085523b59f255d7f5f28bba6617ff3b908eac98e2abf50ac9bd3c6da"
+      "sha256": "ccbc4608ca9948a74890edb58f7dda8bc4a78e57993d8ec05e20c67a4ac71033"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

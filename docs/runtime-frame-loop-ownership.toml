@@ -8,7 +8,7 @@ phase = "closed"
 steady_zero_allocation_fixtures = ["component_list_virtualized"]
 
 [expected_trace_artifacts]
-cpp_binary_sha256 = "8f87e5bfd5b214f44143e5a4c595957ef0a54af27309994f91f9f80e3035e870"
+cpp_binary_sha256 = "cc52971454fa4ac4c6a43b1cacd9b427631bd6d748cc7318ec4d6f4ad38335e5"
 cpp_coverage_sha256 = "7ab616c10bbe16617d0deabc7e4b4982339312bcc5bd82a5ab317122c5157b40"
 cpp_mechanism_coverage_sha256 = "5dfd9d4f2749c8293c0f49648783f199fe41a2cc654274257fbe472225deb99e"
 cpp_steady_coverage_sha256 = "b70df59d8754a5ef6fccae5fb805e16c7937995247c064293f64205452058760"

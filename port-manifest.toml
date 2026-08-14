@@ -1820,7 +1820,7 @@ note = "Consolidated Rust port for math."
 [[file]]
 upstream = "src/nested_artboard.cpp"
 status = "partial"
-rust_module = "crates/nuxie-runtime/src/artboard.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 note = "F13: nested artboards are ported; latent hit-propagation ceilings remain."
 
 [[file]]

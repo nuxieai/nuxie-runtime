@@ -1,5 +1,7 @@
 use nuxie_binary::RuntimeFile;
 
+#[cfg(feature = "tools")]
+use super::RuntimeNestedRemapAnimationReport;
 use super::{
     ArtboardInstance, RuntimeNestedAnimationInstance, RuntimeNestedArtboardInstance,
     RuntimeScriptAdvanceMode,
@@ -7,7 +9,157 @@ use super::{
 use crate::RuntimeOwnedViewModelInstance;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::scripting::ScriptError;
-use crate::state_machine::{StateMachineInstance, StateMachineReportedEvent};
+use crate::state_machine::{
+    RuntimeNestedStateMachineReport, StateMachineInstance, StateMachineReportedEvent,
+};
+
+impl ArtboardInstance {
+    pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
+        self.advance_nested_artboards_collect_events(elapsed_seconds, None)
+    }
+
+    /// Report imported nested-state-machine occurrence ownership and empty
+    /// forwarding behavior for pinned-C++ differentials.
+    #[doc(hidden)]
+    pub fn runtime_nested_state_machine_reports(&self) -> Vec<RuntimeNestedStateMachineReport> {
+        self.nested_artboards
+            .values()
+            .flat_map(|nested| {
+                nested
+                    .animations
+                    .iter()
+                    .filter_map(|animation| match animation {
+                        RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
+                            Some(occurrence.empty_contract_report(&nested.child))
+                        }
+                        RuntimeNestedAnimationInstance::Simple { .. }
+                        | RuntimeNestedAnimationInstance::Remap { .. } => None,
+                    })
+            })
+            .collect()
+    }
+
+    /// Report mounted remap occurrence time for pinned-C++ differentials.
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn runtime_nested_remap_animation_reports(&self) -> Vec<RuntimeNestedRemapAnimationReport> {
+        self.nested_artboards
+            .iter()
+            .flat_map(|(host_local_id, nested)| {
+                nested
+                    .animations
+                    .iter()
+                    .filter_map(|animation| match animation {
+                        RuntimeNestedAnimationInstance::Remap {
+                            local_id,
+                            animation,
+                            ..
+                        } => Some(RuntimeNestedRemapAnimationReport {
+                            host_local_id: *host_local_id,
+                            local_id: *local_id,
+                            animation_time: animation.time(),
+                        }),
+                        RuntimeNestedAnimationInstance::Simple { .. }
+                        | RuntimeNestedAnimationInstance::StateMachine(_) => None,
+                    })
+            })
+            .collect()
+    }
+
+    pub fn try_visit_nested_artboard_instances_mut<E>(
+        &mut self,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.try_visit_nested_artboard_instances_mut_at_depth(1, visitor)
+    }
+
+    fn try_visit_nested_artboard_instances_mut_at_depth<E>(
+        &mut self,
+        depth: usize,
+        visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for nested in self.nested_artboards.values_mut() {
+            visitor(depth, nested.child.graph_global_id, nested.child.as_mut())?;
+            nested
+                .child
+                .try_visit_nested_artboard_instances_mut_at_depth(depth + 1, visitor)?;
+        }
+        Ok(())
+    }
+
+    pub fn bind_nested_artboard_owned_context_for_graph(
+        &mut self,
+        file: &RuntimeFile,
+        graph_global_id: u32,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let mut changed = false;
+        for nested in self.nested_artboards.values_mut() {
+            if nested.child.graph_global_id == graph_global_id {
+                let context_chain: [&[usize]; 1] = [&[]];
+                changed |=
+                    nested.bind_owned_view_model_animation_contexts(file, context, &context_chain);
+                changed |= nested
+                    .child
+                    .bind_owned_view_model_artboard_context(file, context);
+            } else {
+                changed |= nested.child.bind_nested_artboard_owned_context_for_graph(
+                    file,
+                    graph_global_id,
+                    context,
+                );
+            }
+        }
+        changed
+    }
+
+    pub fn set_nested_script_owned_context_for_graph(
+        &mut self,
+        graph_global_id: u32,
+        context: RuntimeOwnedViewModelInstance,
+    ) {
+        self.nested_script_owned_contexts
+            .insert(graph_global_id, context);
+    }
+
+    pub fn rebind_nested_script_owned_contexts(&mut self, file: &RuntimeFile) -> bool {
+        let contexts = self
+            .nested_script_owned_contexts
+            .iter()
+            .map(|(graph_global_id, context)| (*graph_global_id, context.clone()))
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (graph_global_id, context) in contexts {
+            changed |=
+                self.bind_nested_artboard_owned_context_for_graph(file, graph_global_id, &context);
+        }
+        changed
+    }
+
+    pub fn advance_nested_artboards_with_state_machine(
+        &mut self,
+        elapsed_seconds: f32,
+        state_machine: &mut StateMachineInstance,
+    ) -> bool {
+        StateMachineInstance::dispatch_nested_event_sources_with(
+            self,
+            state_machine,
+            |artboard, nested_event_dispatch| {
+                let _ = artboard
+                    .advance_retained_components_collect_events_with_scripts(
+                        elapsed_seconds,
+                        true,
+                        &mut RuntimeScriptAdvanceMode::Disabled,
+                        None,
+                        Some(nested_event_dispatch),
+                    )
+                    .expect("disabled script dispatch cannot fail");
+                Ok(())
+            },
+        )
+        .expect("nested-artboard collection cannot dispatch scripts")
+    }
+}
 
 impl RuntimeNestedArtboardInstance {
     /// A same-layer authored VMI write can be consumed by the mounted child

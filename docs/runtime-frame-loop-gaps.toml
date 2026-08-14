@@ -1214,9 +1214,9 @@ max_occurrences = 1
 [[ratchet]]
 id = "runtime_nested_remap_probe_items_gated"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\][\\s\\S]{0,160}?(?:pub\\s+struct\\s+RuntimeNestedRemapAnimationReport|pub\\s+fn\\s+runtime_nested_remap_animation_reports)"
-min_occurrences = 2
-max_occurrences = 2
+pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\][\\s\\S]{0,160}?pub\\s+struct\\s+RuntimeNestedRemapAnimationReport"
+min_occurrences = 1
+max_occurrences = 1
 
 [[ratchet]]
 id = "runtime_nested_remap_probe_reexport_gated"
@@ -1615,7 +1615,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_artboard_single_nested_delegation_required"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine_report\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine_report\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1669,6 +1669,20 @@ kind = "selection"
 anchor = "ArtboardInstance::advance_nested_artboard_entry"
 guarded_name = "advance_nested_animation_owner_with"
 site_hash = "fdba451f76ab853e66e277b2b73008bfe364fb3fca4b1e4c1e0e0c75780a5db5"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::runtime_nested_state_machine_reports"
+guarded_name = "StateMachine"
+site_hash = "79cbe02437c76c2ea6c12f97de6f24d11c9f55b4a88201c68998763460b87853"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::runtime_nested_remap_animation_reports"
+guarded_name = "StateMachine"
+site_hash = "3ebdc61afb60fa725c43419a151aae8ff98147954a5d2df10b4caf65f08a2b0f"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/artboard.rs"
@@ -1912,7 +1926,7 @@ guarded_name = "dispatch_nested_event_sources_with"
 site_hash = "62d47ec6773da5b18e0b0eda23801548caa7e84145b93f40850b8949377f1528"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/artboard/nested_artboard.rs"
 kind = "dispatch"
 anchor = "ArtboardInstance::advance_nested_artboards_with_state_machine"
 guarded_name = "dispatch_nested_event_sources_with"

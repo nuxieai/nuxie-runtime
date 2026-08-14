@@ -6003,13 +6003,8 @@ def git_worktree_clean(root: pathlib.Path) -> bool:
         check=True,
         capture_output=True,
     ).stdout.split(b"\0")
-    ignored_inventory_sources = any(
-        pathlib.PurePosixPath(path.decode(errors="surrogateescape")).suffix
-        in CPP_SUFFIXES
-        for path in ignored
-        if path
-    )
-    return not changed and not ignored_inventory_sources
+    ignored_inventory_inputs = any(ignored)
+    return not changed and not ignored_inventory_inputs
 
 
 def main() -> int:

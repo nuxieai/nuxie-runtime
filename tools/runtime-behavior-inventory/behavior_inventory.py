@@ -1363,7 +1363,9 @@ RUST_FN_PREFIX = re.compile(
     r"fn\s+"
 )
 RUST_CONTEXT = re.compile(
-    r"(?m)^[ \t]*((?:#\s*\[[^]]+\]\s*)*(?:unsafe\s+)?(?:impl|trait)\b[^;{]+)\{"
+    r"(?m)^[ \t]*((?:#\s*\[[^]]+\]\s*)*"
+    r"(?:(?:unsafe\s+)?impl|(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?trait)"
+    r"\b[^;{]+)\{"
 )
 
 

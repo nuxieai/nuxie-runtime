@@ -1265,6 +1265,18 @@ class RustDiscoveryTests(unittest.TestCase):
         self.assertIn("::trait Wake::wake@", items[0]["id"])
         self.assertIn("::impl Wake for Node::wake@", items[1]["id"])
 
+    def test_visible_traits_retain_default_method_context(self) -> None:
+        source = """
+        pub trait Visible { fn same(&self) { first(); } }
+        pub(crate) unsafe trait Scoped { fn same(&self) { second(); } }
+        """
+        items = behavior_inventory.rust_items("crates/demo/src/lib.rs", source)
+        self.assertEqual(
+            ["pub trait Visible", "pub(crate) unsafe trait Scoped"],
+            [item["context"] for item in items],
+        )
+        self.assertEqual(2, len({item["id"] for item in items}))
+
     def test_inline_module_contexts_distinguish_sibling_items(self) -> None:
         source = """
         mod unix { fn init() {} }

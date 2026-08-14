@@ -756,6 +756,40 @@ impl RuntimeOwnedViewModelViewModel {
             .active_runtime_image_by_property_path(rest)
     }
 
+    fn active_runtime_artboard_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeBindableArtboard> {
+        if property_path.len() == 1 {
+            let property_index = property_path[0];
+            if let Some(linked) = self.endpoint.linked_instance() {
+                return linked
+                    .try_borrow()
+                    .ok()?
+                    .runtime_artboard_by_property_path(property_path);
+            }
+            let artboards = match self.endpoint.value() {
+                RuntimeViewModelPointer::OwnedGenerated { .. } => &self.artboards,
+                RuntimeViewModelPointer::Imported { object_id } => {
+                    self.imported_artboards.get(&object_id)?
+                }
+                _ => return None,
+            };
+            return artboards
+                .iter()
+                .find(|artboard| artboard.property_index == property_index)?
+                .runtime_state()
+                .borrow()
+                .bindable_artboard
+                .clone();
+        }
+        let (view_model_index, rest) = property_path.split_first()?;
+        self.active_children()?
+            .iter()
+            .find(|view_model| view_model.property_index == *view_model_index)?
+            .active_runtime_artboard_by_property_path(rest)
+    }
+
     fn set_active_runtime_image_by_property_index(
         &mut self,
         property_index: usize,

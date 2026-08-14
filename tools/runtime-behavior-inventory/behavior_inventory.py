@@ -99,6 +99,14 @@ RUST_GENERATOR_INPUT_GLOBS = {
         "crates/nuxie-renderer-ffi/cpp/*",
     ],
 }
+RUST_EMBEDDED_INPUT_GLOBS = {
+    # shader_catalog.rs embeds these modules with include_str!, so their bytes
+    # are production renderer behavior even though they are not Rust sources.
+    "crates/nuxie-renderer/src/shader_catalog.rs": [
+        "crates/nuxie-renderer/src/*.wgsl",
+        "crates/nuxie-renderer/src/generated/*.wgsl",
+    ],
+}
 RUST_GENERATOR_UPSTREAM_INPUT_GLOBS = {
     "crates/nuxie-renderer-ffi/build.rs": [
         "renderer/src/draw.cpp",
@@ -117,6 +125,8 @@ RUST_GENERATOR_UPSTREAM_INPUT_GLOBS = {
         "renderer/src/sk_rectanizer_skyline.cpp",
         "renderer/include/**/*.h",
         "renderer/include/**/*.hpp",
+        "decoders/include/**/*.hpp",
+        "include/rive/decoders/**/*.hpp",
         "renderer/src/*.hpp",
         "renderer/src/metal/*.h",
         "renderer/src/ore/**/*.hpp",
@@ -3157,6 +3167,23 @@ def rust_generator_input_records(
     return records
 
 
+def rust_embedded_input_records(
+    repo_root: pathlib.Path, owner: str
+) -> list[dict[str, str]]:
+    """Hash non-Rust repository inputs embedded into a production Rust owner."""
+    records = []
+    for pattern in RUST_EMBEDDED_INPUT_GLOBS.get(owner, []):
+        for path in sorted(repo_root.glob(pattern)):
+            if path.is_file():
+                records.append(
+                    {
+                        "path": path.relative_to(repo_root).as_posix(),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                )
+    return records
+
+
 def rust_identifier_tokens(source: str) -> list[tuple[int, int, str]]:
     """Return Rust-like identifiers, including raw and Unicode XID spellings."""
     tokens = []
@@ -5386,6 +5413,9 @@ def discover_rust(
             )
             if generator_inputs:
                 file_record["generator_inputs"] = generator_inputs
+        embedded_inputs = rust_embedded_input_records(repo_root, relative)
+        if embedded_inputs:
+            file_record["embedded_inputs"] = embedded_inputs
         file_records.append(file_record)
         item_records.extend(items)
     return file_records, item_records
@@ -5409,6 +5439,7 @@ def build_inventory(
             "cpp": ["src/**/*.{cpp,mm,h,hpp}", "include/rive/**/*.{h,hpp}"],
             "rust_crates": list(RUST_CRATES),
             "rust_generators": sorted(RUST_GENERATOR_OUTPUTS),
+            "rust_embedded_input_owners": sorted(RUST_EMBEDDED_INPUT_GLOBS),
         },
         "summary": {
             "cpp_files": len(cpp_files),
@@ -5492,6 +5523,14 @@ def validate_configuration(
             errors.append(
                 f"[generated] runtime generator inputs are empty: {generator}"
             )
+    for owner, patterns in RUST_EMBEDDED_INPUT_GLOBS.items():
+        if not (repo_root / owner).is_file():
+            errors.append(f"[embedded] input owner does not exist: {owner}")
+        if not patterns or any(
+            not any(path.is_file() for path in repo_root.glob(pattern))
+            for pattern in patterns
+        ):
+            errors.append(f"[embedded] runtime inputs are empty: {owner}")
     if upstream_root is not None:
         for generator, patterns in RUST_GENERATOR_UPSTREAM_INPUT_GLOBS.items():
             if generator not in declared_generators:
@@ -5590,6 +5629,38 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
                 or len(outputs) != len(set(outputs))
             ):
                 errors.append(f"[generated] malformed generator outputs: {path}")
+    if isinstance(scope, dict) and "rust_embedded_input_owners" in scope:
+        declared_owners = scope.get("rust_embedded_input_owners")
+        embedded_files = {
+            str(record.get("path", "")): record.get("embedded_inputs")
+            for record in inventory.get("rust_files", [])
+            if "embedded_inputs" in record
+        }
+        if not isinstance(declared_owners, list) or set(declared_owners) != set(
+            embedded_files
+        ):
+            errors.append("[embedded] runtime input owner coverage mismatch")
+        for owner, inputs in embedded_files.items():
+            if not isinstance(inputs, list) or not inputs:
+                errors.append(f"[embedded] malformed runtime inputs: {owner}")
+                continue
+            paths = [
+                str(record.get("path", ""))
+                for record in inputs
+                if isinstance(record, dict)
+            ]
+            if (
+                len(paths) != len(inputs)
+                or any(not path for path in paths)
+                or len(paths) != len(set(paths))
+            ):
+                errors.append(f"[embedded] malformed runtime inputs: {owner}")
+                continue
+            if any(
+                re.fullmatch(r"[0-9a-f]{64}", str(record.get("sha256", ""))) is None
+                for record in inputs
+            ):
+                errors.append(f"[embedded] malformed runtime inputs: {owner}")
     for file_record in inventory.get("cpp_files", []):
         if (
             "behavioral_macros" not in file_record

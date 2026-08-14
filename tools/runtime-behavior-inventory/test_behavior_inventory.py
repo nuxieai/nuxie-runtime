@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import unicodedata
@@ -1774,6 +1775,60 @@ class GateTests(unittest.TestCase):
                 any(pathlib.PurePosixPath(path).match(pattern) for pattern in patterns),
                 path,
             )
+
+    def test_renderer_decoder_headers_are_generator_inputs(self) -> None:
+        patterns = behavior_inventory.RUST_GENERATOR_UPSTREAM_INPUT_GLOBS[
+            "crates/nuxie-renderer-ffi/build.rs"
+        ]
+        for pattern in (
+            "decoders/include/**/*.hpp",
+            "include/rive/decoders/**/*.hpp",
+        ):
+            self.assertIn(pattern, patterns)
+
+    def test_renderer_embedded_shaders_are_hashed(self) -> None:
+        repo_root = pathlib.Path(__file__).parents[2]
+        owner = "crates/nuxie-renderer/src/shader_catalog.rs"
+        records = behavior_inventory.rust_embedded_input_records(repo_root, owner)
+        recorded_paths = {record["path"] for record in records}
+        source = (repo_root / owner).read_text()
+        direct_includes = {
+            (repo_root / owner)
+            .parent.joinpath(relative)
+            .relative_to(repo_root)
+            .as_posix()
+            for relative in re.findall(r'include_str!\(\s*"([^"]+)"\s*\)', source, re.S)
+        }
+        self.assertTrue(direct_includes)
+        self.assertLessEqual(direct_includes, recorded_paths)
+        self.assertIn(
+            "crates/nuxie-renderer/src/advanced_composite.wgsl", recorded_paths
+        )
+
+    def test_embedded_input_hash_changes_without_rust_source_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = pathlib.Path(directory)
+            asset = repo_root / "crates/demo/src/behavior.wgsl"
+            asset.parent.mkdir(parents=True)
+            asset.write_text("behavior one\n")
+            owner = "crates/demo/src/lib.rs"
+            prior = behavior_inventory.RUST_EMBEDDED_INPUT_GLOBS.get(owner)
+            behavior_inventory.RUST_EMBEDDED_INPUT_GLOBS[owner] = [
+                "crates/demo/src/*.wgsl"
+            ]
+            try:
+                before = behavior_inventory.rust_embedded_input_records(
+                    repo_root, owner
+                )
+                asset.write_text("behavior two\n")
+                after = behavior_inventory.rust_embedded_input_records(repo_root, owner)
+            finally:
+                if prior is None:
+                    del behavior_inventory.RUST_EMBEDDED_INPUT_GLOBS[owner]
+                else:
+                    behavior_inventory.RUST_EMBEDDED_INPUT_GLOBS[owner] = prior
+            self.assertEqual("crates/demo/src/behavior.wgsl", before[0]["path"])
+            self.assertNotEqual(before[0]["sha256"], after[0]["sha256"])
 
     def test_rust_candidates_cover_shipped_sources_outside_src(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -4691,6 +4746,33 @@ class GateTests(unittest.TestCase):
         errors = "\n".join(behavior_inventory.validate_inventory(inventory))
         self.assertIn("behavioral macro count mismatch", errors)
         self.assertIn("malformed behavioral macro record", errors)
+
+    def test_embedded_input_records_are_validated_fail_closed(self) -> None:
+        inventory = {
+            "scope": {
+                "rust_embedded_input_owners": ["crates/demo/src/lib.rs"],
+            },
+            "rust_files": [
+                {
+                    "path": "crates/demo/src/lib.rs",
+                    "embedded_inputs": [
+                        {
+                            "path": "crates/demo/src/behavior.wgsl",
+                            "sha256": "not-a-hash",
+                        }
+                    ],
+                }
+            ],
+        }
+        self.assertIn(
+            "malformed runtime inputs",
+            "\n".join(behavior_inventory.validate_inventory(inventory)),
+        )
+        inventory["scope"]["rust_embedded_input_owners"] = []
+        self.assertIn(
+            "runtime input owner coverage mismatch",
+            "\n".join(behavior_inventory.validate_inventory(inventory)),
+        )
 
     def test_checked_snapshot_duplicate_ids_fail_before_comparison(self) -> None:
         member = {

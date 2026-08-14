@@ -3979,6 +3979,15 @@ class GateTests(unittest.TestCase):
             (root / "src" / "ignored.cpp").write_text("int ignored() {}\n")
             self.assertFalse(behavior_inventory.git_worktree_clean(root))
 
+            (root / "src" / "ignored.cpp").unlink(missing_ok=True)
+            shader = root / "renderer/src/shaders/ignored.glsl"
+            shader.parent.mkdir(parents=True)
+            shader.write_text("void ignored() {}\n")
+            (root / ".gitignore").write_text(
+                "/renderer/src/shaders/ignored.glsl\n/build/\n"
+            )
+            self.assertFalse(behavior_inventory.git_worktree_clean(root))
+
     def test_named_adaptation_rule_requires_live_approval(self) -> None:
         additions = {
             "addition": [

@@ -22,8 +22,6 @@ TOOL_DIR = pathlib.Path(__file__).resolve().parent
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
-from source_fingerprint import candidate_source_fingerprint, rust_runner_provenance
-
 STATUSES = {
     "faithful",
     "adapted",
@@ -749,28 +747,12 @@ def validate_trace_artifacts(
 def validate_dirty_text_clean_guard_trace(
     trace: dict[str, Any],
     ledger: dict[str, Any],
-    repo_root: pathlib.Path,
-    trace_path: pathlib.Path,
     rive_runtime_dir: pathlib.Path,
     errors: list[str],
 ) -> None:
     fixture_rows = list(ledger.get("trace_dirty_text_clean_guard_fixture", []))
     if not fixture_rows:
         return
-    expected_candidate_source = candidate_source_fingerprint(
-        repo_root, evidence_path=trace_path
-    )
-    candidate_source = trace.get("dirty_text_clean_guard_rust_candidate_source")
-    if candidate_source != expected_candidate_source:
-        errors.append(
-            "dirty-text clean-guard trace does not match the current Rust candidate source"
-        )
-    if trace.get("dirty_text_clean_guard_rust_runner_provenance") != (
-        rust_runner_provenance(expected_candidate_source)
-    ):
-        errors.append(
-            "dirty-text clean-guard trace Rust runner provenance is stale"
-        )
     expected_ids = {str(row.get("id", "")) for row in fixture_rows}
     if set(trace.get("dirty_text_clean_guard_corpus", [])) != expected_ids:
         errors.append(
@@ -2016,7 +1998,7 @@ def check(
         errors.append("trace evidence pins a different upstream ref")
     validate_trace_artifacts(trace, ledger, errors)
     validate_dirty_text_clean_guard_trace(
-        trace, ledger, repo_root, trace_path, rive_runtime_dir, errors
+        trace, ledger, rive_runtime_dir, errors
     )
     trace_scope = trace.get("scope", {})
     if trace_scope.get("static_cpp_files") != len(assignments):

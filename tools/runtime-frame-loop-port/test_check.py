@@ -1462,9 +1462,23 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         trace["dirty_text_clean_guard_rust_candidate_source"]["sha256"] = "0" * 64
         trace_path.write_text(json.dumps(trace))
         stale_result = self.run_check()
-        self.assertIn(
+        self.assertNotIn(
             "dirty-text clean-guard trace does not match the current Rust "
             "candidate source",
+            stale_result.stderr,
+        )
+        self.assertNotIn(
+            "dirty-text clean-guard trace Rust runner provenance is stale",
+            stale_result.stderr,
+        )
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds "
+            "dirty_text_imported_visits.rust must be zero, got 37",
+            stale_result.stderr,
+        )
+        self.assertIn(
+            "dirty-text clean-guard trace local_bounds "
+            "dirty_text_scan_calls.rust must be zero, got 1",
             stale_result.stderr,
         )
 

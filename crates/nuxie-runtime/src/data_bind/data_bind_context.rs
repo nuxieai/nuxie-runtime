@@ -11726,6 +11726,34 @@ mod tests {
     }
 
     #[test]
+    fn live_bindable_artboard_asset_is_mounted_by_nested_binding() {
+        let file = nested_artboard_binding_fixture(1);
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let host_local = graph.nested_artboards[0].local_id;
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+        let live_artboard = crate::RuntimeBindableArtboard::new_with_artboard_index("live B", 2);
+
+        assert!(context.set_runtime_artboard_by_property_name("child", Some(live_artboard)));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        assert_eq!(
+            artboard.nested_artboards[&host_local].child.graph_global_id,
+            graphs.artboards[2].global_id,
+            "C++ resolves ViewModelInstanceArtboard.asset before its -1 propertyValue sentinel"
+        );
+    }
+
+    #[test]
     fn font_binding_retains_live_font_value_and_applies_text_style_override() {
         let file = font_binding_fixture();
         let graphs =

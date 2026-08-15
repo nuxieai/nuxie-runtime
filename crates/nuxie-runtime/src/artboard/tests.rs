@@ -3091,6 +3091,53 @@
     }
 
     #[test]
+    fn initial_nested_host_activates_the_first_standard_vmi_despite_a_model_mismatch() {
+        let bytes = synthetic_riv(9709, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1), ("isStateful", 0)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstance",
+                &[("parentId", 1), ("viewModelId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+        });
+        let file = read_runtime_file(&bytes).expect("mismatched nested VMI fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("mismatched nested VMI graphs");
+        let parent_graph = &graphs.artboards[0];
+        let host_local_id = parent_graph.nested_artboards[0].local_id;
+        let parent =
+            ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graphs.artboards)
+                .expect("mismatched nested VMI parent instance");
+        let nested = parent
+            .nested_artboards
+            .get(&host_local_id)
+            .expect("authored nested occurrence");
+
+        assert!(
+            nested.stateful_view_model_instance_local.is_some(),
+            "onAddedClean selects the first standard child VMI before considering the mounted artboard model",
+        );
+        assert_eq!(
+            nested
+                .stateful_view_model_context
+                .as_ref()
+                .map(|context| context.borrow().view_model_index()),
+            Some(0),
+            "initial construction borrows authored model 0 even though the mounted child declares model 1",
+        );
+    }
+
+    #[test]
     fn public_artboard_clone_is_cold_but_transient_layout_clone_keeps_scripts() {
         let mut original = synthetic_instance(Vec::new(), Vec::new());
         original.set_script_instance_for_global(

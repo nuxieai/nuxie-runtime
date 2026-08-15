@@ -1,7 +1,9 @@
 use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_render_api::NullFactory;
-use nuxie_runtime::{ArtboardInstance, ComponentDirt, TransformProperty};
+use nuxie_runtime::{
+    ArtboardInstance, ComponentDirt, RuntimeOwnedViewModelInstance, TransformProperty,
+};
 #[cfg(feature = "tools")]
 use nuxie_runtime::{
     reset_runtime_shape_paint_command_report_count, runtime_shape_paint_command_report_count,
@@ -66,6 +68,102 @@ fn nested_fixture_artboard() -> ArtboardInstance {
     let graphs = GraphFile::from_runtime_file(&file).expect("nested fixture graphs");
     ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
         .expect("nested fixture instantiates")
+}
+
+fn nested_binding_fixture() -> (RuntimeFile, ArtboardInstance, RuntimeOwnedViewModelInstance) {
+    let file = RuntimeFile::from_fixture_records(vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "ViewModel",
+            vec![fixture_property(
+                "ViewModel",
+                "name",
+                FixtureValue::String("Model".to_owned()),
+            )],
+        ),
+        fixture_record(
+            "ViewModelPropertyArtboard",
+            vec![fixture_property(
+                "ViewModelPropertyArtboard",
+                "name",
+                FixtureValue::String("child".to_owned()),
+            )],
+        ),
+        fixture_record(
+            "ViewModelInstance",
+            vec![fixture_property(
+                "ViewModelInstance",
+                "viewModelId",
+                FixtureValue::Uint(0),
+            )],
+        ),
+        fixture_record(
+            "ViewModelInstanceArtboard",
+            vec![
+                fixture_property(
+                    "ViewModelInstanceArtboard",
+                    "parentId",
+                    FixtureValue::Uint(0),
+                ),
+                fixture_property(
+                    "ViewModelInstanceArtboard",
+                    "viewModelPropertyId",
+                    FixtureValue::Uint(0),
+                ),
+                fixture_property(
+                    "ViewModelInstanceArtboard",
+                    "propertyValue",
+                    FixtureValue::Uint(2),
+                ),
+            ],
+        ),
+        fixture_record(
+            "Artboard",
+            vec![fixture_property(
+                "Artboard",
+                "viewModelId",
+                FixtureValue::Uint(0),
+            )],
+        ),
+        fixture_record(
+            "NestedArtboard",
+            vec![
+                fixture_property("NestedArtboard", "parentId", FixtureValue::Uint(0)),
+                fixture_property("NestedArtboard", "artboardId", FixtureValue::Uint(1)),
+            ],
+        ),
+        fixture_record(
+            "DataBindContext",
+            vec![
+                fixture_property(
+                    "DataBindContext",
+                    "propertyKey",
+                    FixtureValue::Uint(u64::from(
+                        fixture_property("NestedArtboard", "artboardId", FixtureValue::Uint(0)).key,
+                    )),
+                ),
+                fixture_property(
+                    "DataBindContext",
+                    "sourcePathIds",
+                    FixtureValue::Bytes(vec![0, 0]),
+                ),
+            ],
+        ),
+        fixture_record("Artboard", vec![]),
+        fixture_record(
+            "Node",
+            vec![fixture_property("Node", "parentId", FixtureValue::Uint(0))],
+        ),
+        fixture_record("Artboard", vec![]),
+    ])
+    .expect("nested binding fixture imports");
+    let graphs = GraphFile::from_runtime_file(&file).expect("nested binding fixture graphs");
+    let artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .expect("nested binding fixture instantiates");
+    let context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+        .expect("nested binding fixture view model instantiates");
+    (file, artboard, context)
 }
 
 fn nested_layout_fixture_artboard() -> ArtboardInstance {
@@ -792,20 +890,14 @@ fn semantic_geometry_revision_changes_when_nested_host_drawable_flags_hide_visib
 
 #[test]
 fn semantic_geometry_revision_changes_for_nested_artboard_topology() {
-    let mut artboard = nested_fixture_artboard();
+    let (file, mut artboard, context) = nested_binding_fixture();
     artboard.update_pass();
-    let host_local_id = artboard
-        .components()
-        .iter()
-        .find(|component| component.type_name == "NestedArtboard")
-        .map(|component| component.local_id)
-        .expect("fixture has a nested host");
-    let artboard_id = fixture_property("NestedArtboard", "artboardId", FixtureValue::Uint(0)).key;
+    assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
     let before = artboard
         .try_semantic_geometry_revision()
         .expect("fixture has covered semantic geometry");
 
-    assert!(artboard.set_uint_property(host_local_id, artboard_id, u64::from(u32::MAX)));
+    assert!(artboard.advance_artboard_data_binds());
 
     assert_ne!(
         artboard

@@ -10894,14 +10894,37 @@ fn build_runtime_nested_artboard_instance(
     // active local root; tryScheduleBindStateful then binds that exact pointer
     // whenever the mounted instance is present (`nested_artboard.cpp:567-621,
     // 156-180`). `isStateful` controls replacement/default creation, not this
-    // authored-child bind.
-    let stateful_view_model_instance_local = child_view_model_index
-        .and_then(|view_model_index| u32::try_from(view_model_index).ok())
-        .and_then(|view_model_id| {
-            data_bind_view_model_instance_locals_by_id
-                .get(&view_model_id)
-                .copied()
-        });
+    // authored-child bind. Model-id matching belongs only to updateArtboard's
+    // replacement path (`nested_artboard.cpp:297-327`).
+    let stateful_view_model_instance_local = if replacement_default_state_machine {
+        child_view_model_index
+            .and_then(|view_model_index| u32::try_from(view_model_index).ok())
+            .and_then(|view_model_id| {
+                data_bind_view_model_instance_locals_by_id
+                    .get(&view_model_id)
+                    .copied()
+            })
+    } else {
+        property_key_for_name("Component", "parentId")
+            .zip(property_key_for_name("ViewModelInstance", "viewModelId"))
+            .and_then(|(parent_key, view_model_key)| {
+                parent_slots.iter().find_map(|slot| {
+                    if slot.type_name != Some("ViewModelInstance")
+                        || parent_objects.uint_property(slot.local_id, parent_key)
+                            != Some(host_local_id as u64)
+                    {
+                        return None;
+                    }
+                    let is_global = parent_objects
+                        .uint_property(slot.local_id, view_model_key)
+                        .and_then(|view_model_id| usize::try_from(view_model_id).ok())
+                        .and_then(|view_model_index| parent_file.view_model(view_model_index))
+                        .and_then(|view_model| view_model.object.uint_property("viewModelType"))
+                        == Some(2);
+                    (!is_global).then_some(slot.local_id)
+                })
+            })
+    };
     let stateful_view_model_context = if let Some(local_id) = stateful_view_model_instance_local {
         let slot = parent_slots.iter().find(|slot| slot.local_id == local_id);
         slot.and_then(|slot| parent_file.object(slot.source_global_id as usize))

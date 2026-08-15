@@ -6,6 +6,7 @@ use nuxie_binary::{
 use nuxie_schema::{definition_by_type_key, object_supports_property};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GraphFile {
@@ -18,10 +19,18 @@ pub struct GraphFile {
 impl GraphFile {
     pub fn from_runtime_file(file: &RuntimeFile) -> Result<Self> {
         let artboard_ranges = artboard_ranges(file);
+        let source_file_identity = Arc::new(());
         let artboards = artboard_ranges
             .into_iter()
             .enumerate()
-            .map(|(artboard_index, range)| ArtboardGraph::build(file, artboard_index, range))
+            .map(|(artboard_index, range)| {
+                ArtboardGraph::build(
+                    file,
+                    artboard_index,
+                    range,
+                    Arc::clone(&source_file_identity),
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
@@ -43,6 +52,12 @@ struct ArtboardRange {
 pub struct ArtboardGraph {
     pub name: Option<String>,
     pub global_id: u32,
+    /// Stable identity of the loaded graph source shared by every artboard
+    /// definition from that source. Runtime occurrence cycle checks use this
+    /// as the Rust analogue of C++ `Artboard::artboardSource()` ownership.
+    #[doc(hidden)]
+    #[serde(skip)]
+    pub source_file_identity: Arc<()>,
     pub local_objects: Vec<LocalObject>,
     pub components: Vec<ComponentNode>,
     pub dependency_nodes: Vec<DependencyNode>,
@@ -96,7 +111,12 @@ pub struct ArtboardGraph {
 }
 
 impl ArtboardGraph {
-    fn build(file: &RuntimeFile, artboard_index: usize, range: ArtboardRange) -> Result<Self> {
+    fn build(
+        file: &RuntimeFile,
+        artboard_index: usize,
+        range: ArtboardRange,
+        source_file_identity: Arc<()>,
+    ) -> Result<Self> {
         let mut local_objects = Vec::new();
         for global_id in range.start..range.end {
             let object = file
@@ -285,6 +305,7 @@ impl ArtboardGraph {
         Ok(Self {
             name: object_name(artboard),
             global_id: range.start as u32,
+            source_file_identity,
             local_objects,
             components,
             dependency_nodes,

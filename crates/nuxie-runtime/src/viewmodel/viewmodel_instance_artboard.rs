@@ -1,10 +1,15 @@
 // Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_instance_artboard.cpp`.
 // Artboard-valued cell identity, sentinel value, import, and clone behavior.
 
+use crate::ArtboardInstance;
+
 #[derive(Debug)]
 struct RuntimeBindableArtboardInner {
     name: String,
-    artboard_index: Option<usize>,
+    // C++ `BindableArtboard` retains the concrete source ArtboardInstance, not
+    // a file-local index. Keeping the cold-clone source here preserves both
+    // cross-file identity and live generated properties such as resized bounds.
+    source: RefCell<Option<ArtboardInstance>>,
 }
 
 /// Retained safe-Rust analogue of one runtime `BindableArtboard`.
@@ -18,19 +23,29 @@ impl RuntimeBindableArtboard {
         Self {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
-                artboard_index: None,
+                source: RefCell::new(None),
             }),
         }
     }
 
     #[doc(hidden)]
-    pub fn new_with_artboard_index(name: impl Into<String>, artboard_index: usize) -> Self {
+    pub fn new_with_artboard_instance(
+        name: impl Into<String>,
+        artboard: &ArtboardInstance,
+    ) -> Self {
         Self {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
-                artboard_index: Some(artboard_index),
+                source: RefCell::new(Some(artboard.clone())),
             }),
         }
+    }
+
+    /// Refresh the retained source occurrence before publishing this stable
+    /// bindable identity through a host command.
+    #[doc(hidden)]
+    pub fn refresh_artboard_instance(&self, artboard: &ArtboardInstance) {
+        self.inner.source.replace(Some(artboard.clone()));
     }
 
     pub fn name(&self) -> &str {
@@ -41,8 +56,8 @@ impl RuntimeBindableArtboard {
         Rc::ptr_eq(&self.inner, &other.inner)
     }
 
-    pub(crate) fn artboard_index(&self) -> Option<usize> {
-        self.inner.artboard_index
+    pub(crate) fn artboard_instance(&self) -> Option<ArtboardInstance> {
+        self.inner.source.borrow().clone()
     }
 }
 

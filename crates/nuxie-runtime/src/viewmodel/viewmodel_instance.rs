@@ -2526,6 +2526,20 @@ impl RuntimeOwnedViewModelInstance {
             _ => false,
         };
         if same {
+            if artboard.is_some() {
+                state.borrow_mut().bound_view_model_instance.take();
+                if let Some(artboard) = self
+                    .artboards
+                    .iter()
+                    .find(|artboard| artboard.property_index == property_index)
+                {
+                    // C++ `ViewModelInstanceArtboard::asset` always adds
+                    // Bindings dirt, including when the stable BindableArtboard
+                    // pointer now carries a refreshed source occurrence.
+                    artboard.notify_bindings_value_changed();
+                }
+                return true;
+            }
             return false;
         }
         let scalar_changed =

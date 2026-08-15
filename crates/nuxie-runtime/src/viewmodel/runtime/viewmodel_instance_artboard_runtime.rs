@@ -34,10 +34,17 @@ impl ViewModelInstanceArtboardRuntime {
             .bound_view_model_instance
             .take();
         if same_artboard {
-            return self
+            let changed = self
                 .value
                 .cell()
                 .set_value(RuntimeViewModelCellValue::Artboard(u32::MAX));
+            if artboard.is_some() && !changed {
+                // C++ `asset()` dirties bindings even when the retained
+                // BindableArtboard pointer is unchanged.
+                self.value.cell().notify_bindings_value_changed();
+                return true;
+            }
+            return changed;
         }
         self.runtime_state.borrow_mut().bindable_artboard = artboard;
         let changed = self

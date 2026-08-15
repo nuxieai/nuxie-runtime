@@ -8934,14 +8934,15 @@ impl ArtboardInstance {
                 RuntimeArtboardNestedHostProperty::ArtboardId,
                 RuntimeDataBindGraphValue::Artboard(value),
             ) => {
-                let value = runtime_artboard
-                    .and_then(RuntimeBindableArtboard::artboard_index)
-                    .and_then(|index| u64::try_from(index).ok())
-                    .unwrap_or(*value);
-                if first_artboard_apply {
-                    self.replace_nested_artboard_artboard_id(target_local_id, value)
+                if let Some(runtime_artboard) = runtime_artboard {
+                    let Some(source) = runtime_artboard.artboard_instance() else {
+                        return false;
+                    };
+                    self.replace_nested_artboard_artboard_instance(target_local_id, source)
+                } else if first_artboard_apply {
+                    self.replace_nested_artboard_artboard_id(target_local_id, *value)
                 } else {
-                    self.set_nested_artboard_artboard_id(target_local_id, value)
+                    self.set_nested_artboard_artboard_id(target_local_id, *value)
                 }
             }
             (
@@ -11760,7 +11761,15 @@ mod tests {
             RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
                 .expect("serialized view model instance builds"),
         );
-        let live_artboard = crate::RuntimeBindableArtboard::new_with_artboard_index("live B", 2);
+        let mut live_source = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[2],
+            &graphs.artboards,
+        )
+        .expect("live source artboard builds");
+        assert!(live_source.set_artboard_dimensions(73.0, 37.0));
+        let live_artboard =
+            crate::RuntimeBindableArtboard::new_with_artboard_instance("live B", &live_source);
 
         assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
         assert!(artboard.advance_artboard_data_binds());
@@ -11773,7 +11782,7 @@ mod tests {
             context
                 .main_mut()
                 .expect("main view model remains shared")
-                .set_runtime_artboard_by_property_name("child", Some(live_artboard))
+                .set_runtime_artboard_by_property_name("child", Some(live_artboard.clone()))
         );
         assert!(artboard.advance_artboard_data_binds());
 
@@ -11782,8 +11791,39 @@ mod tests {
             graphs.artboards[2].global_id,
             "C++ resolves ViewModelInstanceArtboard.asset before its -1 propertyValue sentinel"
         );
+        assert_eq!(
+            artboard.nested_artboards[&host_local]
+                .child
+                .artboard_dimensions(),
+            (73.0, 37.0),
+            "BindableArtboard retains the live source occurrence, not its authored file row"
+        );
 
-        let live_artboard = crate::RuntimeBindableArtboard::new_with_artboard_index("live A", 1);
+        assert!(live_source.set_artboard_dimensions(91.0, 45.0));
+        live_artboard.refresh_artboard_instance(&live_source);
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_runtime_artboard_by_property_name("child", Some(live_artboard))
+        );
+        assert!(artboard.advance_artboard_data_binds());
+        assert_eq!(
+            artboard.nested_artboards[&host_local]
+                .child
+                .artboard_dimensions(),
+            (91.0, 45.0),
+            "reassigning a refreshed stable bindable must remount its current source"
+        );
+
+        let live_source = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[1],
+            &graphs.artboards,
+        )
+        .expect("live source artboard builds");
+        let live_artboard =
+            crate::RuntimeBindableArtboard::new_with_artboard_instance("live A", &live_source);
         assert!(
             context
                 .main_mut()
@@ -11795,6 +11835,71 @@ mod tests {
             artboard.nested_artboards[&host_local].child.graph_global_id,
             graphs.artboards[1].global_id,
             "replacing one live asset with another publishes bindings dirt even though both scalar values are -1"
+        );
+    }
+
+    #[test]
+    fn live_bindable_artboard_uses_its_cross_file_source() {
+        let parent_file = nested_artboard_binding_fixture(1);
+        let parent_graphs = nuxie_graph::GraphFile::from_runtime_file(&parent_file)
+            .expect("parent fixture graph builds");
+        let parent_graph = parent_graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &parent_file,
+            parent_graph,
+            &parent_graphs.artboards,
+        )
+        .expect("parent artboard builds");
+        let host_local = parent_graph.nested_artboards[0].local_id;
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::from_instance(&parent_file, 0, 0)
+                .expect("serialized view model instance builds"),
+        );
+
+        let source_file = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", FixtureValue::Double(211.0)),
+                    property("Artboard", "height", FixtureValue::Double(109.0)),
+                ],
+            ),
+        ])
+        .expect("cross-file source imports");
+        let source_graphs = nuxie_graph::GraphFile::from_runtime_file(&source_file)
+            .expect("cross-file source graph builds");
+        let mut source = ArtboardInstance::from_graph_with_artboards(
+            &source_file,
+            &source_graphs.artboards[0],
+            &source_graphs.artboards,
+        )
+        .expect("cross-file source occurrence builds");
+        assert!(source.set_artboard_dimensions(233.0, 127.0));
+        let bindable = crate::RuntimeBindableArtboard::new_with_artboard_instance(
+            "cross-file source",
+            &source,
+        );
+
+        assert!(parent.bind_owned_view_model_artboard_contexts(&parent_file, &context));
+        let _ = parent.advance_artboard_data_binds();
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_runtime_artboard_by_property_name("child", Some(bindable))
+        );
+        assert!(parent.advance_artboard_data_binds());
+
+        assert_eq!(
+            parent.nested_artboards[&host_local]
+                .child
+                .artboard_dimensions(),
+            (233.0, 127.0),
+            "the source file/occurrence must not be conflated with the same index in the host file"
         );
     }
 

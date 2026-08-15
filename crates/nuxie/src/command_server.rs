@@ -417,16 +417,17 @@ impl CommandServer {
                         continue;
                     };
                     let original_size = artboard.dimensions().unwrap_or((0.0, 0.0));
-                    let bindable =
-                        nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_index(
-                            artboard.name().unwrap_or_default(),
-                            artboard.index(),
-                        );
+                    let artboard_name = artboard.name().unwrap_or_default().to_owned();
                     match OwnedArtboardInstance::instantiate(
                         Arc::clone(&file_value),
                         artboard.index(),
                     ) {
                         Ok(instance) => {
+                            let bindable =
+                                nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance(
+                                    artboard_name,
+                                    instance.raw(),
+                                );
                             self.artboards.insert(
                                 handle,
                                 ArtboardEntry {
@@ -1761,10 +1762,12 @@ impl CommandServer {
             _ => None,
         };
         let artboard = match &value {
-            CommandValue::Artboard(Some(value)) => self
-                .artboards
-                .get(value)
-                .map(|entry| Some(entry.bindable.clone())),
+            CommandValue::Artboard(Some(value)) => self.artboards.get(value).map(|entry| {
+                entry
+                    .bindable
+                    .refresh_artboard_instance(entry.instance.raw());
+                Some(entry.bindable.clone())
+            }),
             CommandValue::Artboard(None) => Some(None),
             _ => None,
         };

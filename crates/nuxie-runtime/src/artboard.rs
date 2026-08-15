@@ -10038,9 +10038,30 @@ impl ArtboardInstance {
             drop(removed);
             return changed;
         }
-        let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
+        let Some(nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
             return false;
         };
+        self.commit_nested_artboard_replacement(local_id, nested, force)
+    }
+
+    pub(crate) fn replace_nested_artboard_artboard_instance(
+        &mut self,
+        local_id: usize,
+        source: ArtboardInstance,
+    ) -> bool {
+        let Some(nested) = self.runtime_nested_artboard_instance_for_source(local_id, source)
+        else {
+            return false;
+        };
+        self.commit_nested_artboard_replacement(local_id, nested, true)
+    }
+
+    fn commit_nested_artboard_replacement(
+        &mut self,
+        local_id: usize,
+        mut nested: RuntimeNestedArtboardInstance,
+        force: bool,
+    ) -> bool {
         if !bindable_artboard_requires_replacement(
             self.nested_artboards
                 .get(&local_id)
@@ -10085,6 +10106,89 @@ impl ArtboardInstance {
         true
     }
 
+    fn runtime_nested_artboard_instance_for_source(
+        &self,
+        host_local_id: usize,
+        mut source: ArtboardInstance,
+    ) -> Option<RuntimeNestedArtboardInstance> {
+        let parent_context = self.build_context.as_ref()?;
+        let source_context = source.build_context.as_ref()?.clone();
+        if Arc::ptr_eq(&parent_context.file, &source_context.file)
+            && source.graph_global_id == self.graph_global_id
+        {
+            return None;
+        }
+        let parent_graph = parent_context
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == self.graph_global_id)?;
+        let child_graph = source_context
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == source.graph_global_id)?;
+        let (data_bind_path_ids, data_bind_path_is_relative) = self
+            .slot(host_local_id)
+            .and_then(|host| parent_context.file.object(host.source_global_id as usize))
+            .map(|host_object| referencer_data_bind_path(&parent_context.file, host_object))
+            .unwrap_or((None, false));
+        let mut visiting = BTreeSet::new();
+        visiting.insert(self.graph_global_id);
+        let mut nested = build_runtime_nested_artboard_instance(
+            &source_context.file,
+            &parent_context.file,
+            parent_graph,
+            source_context.artboards.as_slice(),
+            &self.slots,
+            &self.objects,
+            host_local_id,
+            child_graph,
+            &mut visiting,
+            Some(source_context.clone()),
+            Arc::clone(&self.semantic_geometry_authority),
+            data_bind_path_ids,
+            data_bind_path_is_relative,
+            self.bool_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "isPaused")?,
+            )
+            .unwrap_or(false),
+            self.double_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "speed")?,
+            )
+            .unwrap_or(1.0),
+            self.double_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "quantize")?,
+            )
+            .unwrap_or(-1.0),
+            true,
+            &self.profile_path,
+        )
+        .ok()?;
+
+        source.reset_layout_constraint_bounds_for_new_occurrence();
+        source.adopt_semantic_geometry_authority(Arc::clone(&self.semantic_geometry_authority));
+        source.profile_path = nested.child.profile_path.clone();
+        apply_nested_artboard_origin_override(&self.objects, host_local_id, &mut source);
+        source.set_frame_origin(false);
+        source.added_to_host();
+        source.bind_default_view_model_artboard_list_context(&source_context.file);
+        if !child_has_state_machine_data_binds(&source_context.file, child_graph) {
+            source.clear_default_text_property_context();
+        }
+        nested.child = Box::new(source);
+        nested.animations =
+            RuntimeNestedStateMachineInstance::from_default(host_local_id, &mut nested.child)
+                .map(RuntimeNestedAnimationInstance::StateMachine)
+                .into_iter()
+                .collect();
+        nested
+            .child
+            .inherit_audio_configuration_from(&self.audio_event_playback);
+        Some(nested)
+    }
+
     fn runtime_nested_artboard_instance_for_id(
         &self,
         host_local_id: usize,
@@ -10115,6 +10219,7 @@ impl ArtboardInstance {
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
         let mut nested = build_runtime_nested_artboard_instance(
+            &context.file,
             &context.file,
             parent_graph,
             context.artboards.as_slice(),
@@ -10559,6 +10664,7 @@ fn build_runtime_nested_artboard_instances(
 
         let instance = build_runtime_nested_artboard_instance(
             file,
+            file,
             graph,
             artboards,
             slots,
@@ -10583,7 +10689,8 @@ fn build_runtime_nested_artboard_instances(
 }
 
 fn build_runtime_nested_artboard_instance(
-    file: &RuntimeFile,
+    child_file: &RuntimeFile,
+    parent_file: &RuntimeFile,
     parent_graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     parent_slots: &[InstanceSlot],
@@ -10612,7 +10719,7 @@ fn build_runtime_nested_artboard_instance(
         .unwrap_or_default();
     profile_path.push(crate::ProfilePathSegment::nested_artboard(host_name));
     let mut child = Box::new(ArtboardInstance::from_graph_inner(
-        file,
+        child_file,
         child_graph,
         artboards,
         visiting,
@@ -10624,8 +10731,8 @@ fn build_runtime_nested_artboard_instance(
     apply_nested_artboard_origin_override(parent_objects, host_local_id, &mut child);
     child.set_frame_origin(false);
     child.added_to_host();
-    child.bind_default_view_model_artboard_list_context(file);
-    if !child_has_state_machine_data_binds(file, child_graph) {
+    child.bind_default_view_model_artboard_list_context(child_file);
+    if !child_has_state_machine_data_binds(child_file, child_graph) {
         child.clear_default_text_property_context();
     }
     let animations = if replacement_default_state_machine {
@@ -10643,18 +10750,18 @@ fn build_runtime_nested_artboard_instance(
         // (`src/nested_artboard.cpp:570-620`). The occurrence is not allowed to
         // consume its default context during construction; the pending
         // stateful latch below defers that bind to the first advance.
-        runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child)
+        runtime_nested_animation_instances(parent_file, parent_graph, host_local_id, &mut child)
     };
     let data_bind_view_model_instance_locals_by_id =
         build_nested_host_view_model_instance_locals(parent_slots, parent_objects, host_local_id);
     let is_stateful = property_key_for_name("NestedArtboard", "isStateful")
         .and_then(|property_key| parent_objects.bool_property(host_local_id, property_key))
         .unwrap_or(false);
-    let child_view_model_index = file
+    let child_view_model_index = child_file
         .object(child_graph.global_id as usize)
         .and_then(|artboard| artboard.uint_property("viewModelId"))
         .and_then(|view_model_id| usize::try_from(view_model_id).ok())
-        .filter(|&view_model_index| file.view_model(view_model_index).is_some());
+        .filter(|&view_model_index| child_file.view_model(view_model_index).is_some());
     // onAddedClean retains the first authored standard child VMI as the
     // active local root; tryScheduleBindStateful then binds that exact pointer
     // whenever the mounted instance is present (`nested_artboard.cpp:567-621,
@@ -10669,20 +10776,20 @@ fn build_runtime_nested_artboard_instance(
         });
     let stateful_view_model_context = if let Some(local_id) = stateful_view_model_instance_local {
         let slot = parent_slots.iter().find(|slot| slot.local_id == local_id);
-        slot.and_then(|slot| file.object(slot.source_global_id as usize))
+        slot.and_then(|slot| parent_file.object(slot.source_global_id as usize))
             .and_then(|instance| {
                 let view_model_index =
                     usize::try_from(instance.uint_property("viewModelId")?).ok()?;
                 RuntimeOwnedViewModelInstance::from_instance_object(
-                    file,
+                    parent_file,
                     view_model_index,
                     instance,
                 )
             })
     } else if is_stateful {
         child_view_model_index.and_then(|view_model_index| {
-            RuntimeOwnedViewModelInstance::from_instance(file, view_model_index, 0)
-                .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_index))
+            RuntimeOwnedViewModelInstance::from_instance(child_file, view_model_index, 0)
+                .or_else(|| RuntimeOwnedViewModelInstance::new(child_file, view_model_index))
         })
     } else {
         None
@@ -10693,14 +10800,14 @@ fn build_runtime_nested_artboard_instance(
             .iter()
             .filter_map(|(&view_model_id, &local_id)| {
                 let view_model_index = usize::try_from(view_model_id).ok()?;
-                let view_model = file.view_model(view_model_index)?;
+                let view_model = parent_file.view_model(view_model_index)?;
                 if view_model.object.uint_property("viewModelType") != Some(2) {
                     return None;
                 }
                 let slot = parent_slots.iter().find(|slot| slot.local_id == local_id)?;
-                let instance = file.object(slot.source_global_id as usize)?;
+                let instance = parent_file.object(slot.source_global_id as usize)?;
                 let context = RuntimeOwnedViewModelInstance::from_instance_object(
-                    file,
+                    parent_file,
                     view_model_index,
                     instance,
                 )?;

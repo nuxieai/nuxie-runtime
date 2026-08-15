@@ -69,6 +69,19 @@ impl Clone for RuntimeNestedArtboardInstance {
             .animations
             .iter()
             .map(|animation| match animation {
+                RuntimeNestedAnimationInstance::Simple {
+                    local_id,
+                    animation,
+                    is_playing,
+                    speed,
+                    mix,
+                } => RuntimeNestedAnimationInstance::Simple {
+                    local_id: *local_id,
+                    animation: animation.cold_clone_for_nested_animation(),
+                    is_playing: *is_playing,
+                    speed: *speed,
+                    mix: *mix,
+                },
                 RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
                     RuntimeNestedAnimationInstance::StateMachine(occurrence.cold_clone(&mut child))
                 }
@@ -115,7 +128,7 @@ impl Clone for RuntimeNestedArtboardInstance {
             is_paused: self.is_paused,
             speed: self.speed,
             quantize: self.quantize,
-            cumulated_seconds: self.cumulated_seconds,
+            cumulated_seconds: 0.0,
         }
     }
 }

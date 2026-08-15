@@ -129,6 +129,20 @@ impl Clone for LinearAnimationInstance {
 }
 
 impl LinearAnimationInstance {
+    /// Reinitialize the private occurrence owned by a cloned
+    /// `NestedSimpleAnimation`. Pinned C++ clones the generated nested object,
+    /// then `NestedLinearAnimation::initializeAnimation` constructs a fresh
+    /// `LinearAnimationInstance` against the cloned child artboard.
+    pub(crate) fn cold_clone_for_nested_animation(&self) -> Self {
+        Self::new(
+            self.animation,
+            Arc::clone(&self.animation_definitions),
+            Arc::clone(&self.empty_animation_definition),
+            1.0,
+        )
+        .expect("a live nested animation retains a resolvable definition")
+    }
+
     pub(crate) fn new(
         animation: RuntimeLinearAnimationHandle,
         animation_definitions: Arc<Vec<RuntimeLinearAnimation>>,

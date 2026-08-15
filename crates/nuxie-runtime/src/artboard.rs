@@ -1155,9 +1155,10 @@ impl ArtboardInstance {
                 // A transient layout clone is a non-mutating view of this
                 // exact mounted occurrence, not a generated public clone.
                 // Restore its live nested-animation snapshot after the public
-                // clone path deliberately reconstructed NestedStateMachine
-                // occurrences cold.
+                // clone path deliberately reconstructed the private nested
+                // animation occurrences cold.
                 cloned_nested.animations = source_nested.animations.clone();
+                cloned_nested.cumulated_seconds = source_nested.cumulated_seconds;
                 cloned_nested.layout_data_transferred = source_nested.layout_data_transferred;
                 cloned_nested.layout_data_transfer_key = source_nested.layout_data_transfer_key;
                 cloned_nested

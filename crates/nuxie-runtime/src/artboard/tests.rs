@@ -4958,6 +4958,77 @@
     }
 
     #[test]
+    fn nested_host_world_transform_dirt_updates_retained_child_semantic_bounds() {
+        let mut child = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "SemanticData"),
+            ],
+            vec![0, 1, 2],
+        );
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_link_parent(&mut child, 2, 1);
+        child.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 3.0,
+                y: 5.0,
+                width: 20.0,
+                height: 10.0,
+            },
+            None,
+        );
+        let child_identity = child.instance_identity();
+
+        let mut parent = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "NestedArtboard"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut parent, 1, 0);
+        let mut nested = synthetic_nested_artboard_instance(1);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(1, nested);
+
+        let key = crate::state_machine::state_machine_instance::RuntimeSemanticOccurrenceKey {
+            owner_identity: child_identity,
+            data_local_id: 2,
+        };
+        let mut tree = crate::semantic_runtime_tree::RuntimeSemanticTree::default();
+        tree.synchronize(&mut parent, &[]);
+        let node = tree.data[&key]
+            .node_handle()
+            .expect("mounted child SemanticData owns a retained node");
+        assert_eq!(
+            node.borrow().bounds(),
+            crate::SemanticBounds::from_xywh(0.0, 0.0, 20.0, 10.0),
+        );
+
+        parent
+            .component_mut(1)
+            .expect("nested host")
+            .transform
+            .world_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 30.0, 40.0]);
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        parent.update_nested_artboard_from_host_dirt(
+            1,
+            ComponentDirt::WORLD_TRANSFORM,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+        );
+        tree.synchronize(&mut parent, &[]);
+
+        assert_eq!(
+            node.borrow().bounds(),
+            crate::SemanticBounds::from_xywh(30.0, 40.0, 20.0, 10.0),
+            "NestedArtboard::update marks the mounted semantic boundary transform dirty",
+        );
+    }
+
+    #[test]
     fn root_advance_settles_components_and_reports_retained_component_dirt() {
         let mut artboard =
             synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);

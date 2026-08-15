@@ -375,6 +375,11 @@
         should_fail: Rc<Cell<bool>>,
     }
 
+    struct ViewModelWritingAdvanceScriptInstance {
+        context: RuntimeOwnedViewModelHandle,
+        value: f32,
+    }
+
     impl ScriptInstance for AdvanceScriptInstance {
         fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
             Ok(method == ScriptMethod::Advance)
@@ -547,6 +552,33 @@
             if self.should_fail.replace(false) {
                 return Err(ScriptError::new("fail once"));
             }
+            Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for ViewModelWritingAdvanceScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            self.context
+                .borrow_mut()
+                .set_number_by_property_index(0, self.value);
             Ok(ScriptValue::Bool(true))
         }
 
@@ -3911,6 +3943,104 @@
                 "(`artboard.cpp:1463-1480`; `scripted_drawable.cpp:376-399`; ",
                 "`scripted_path_effect.cpp:111-133`)"
             )
+        );
+    }
+
+    #[test]
+    fn later_parent_converter_write_reaches_nested_child_binding_in_the_same_frame() {
+        let rectangle_width_key =
+            property_key_for_name("Rectangle", "width").expect("Rectangle.width property key");
+        let file = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("ViewModel", Vec::new()),
+            fixture_record("ViewModelPropertyNumber", Vec::new()),
+            fixture_record(
+                "Artboard",
+                vec![fixture_property(
+                    "Artboard",
+                    "viewModelId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "Shape",
+                vec![fixture_property(
+                    "Shape",
+                    "parentId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "Rectangle",
+                vec![
+                    fixture_property("Rectangle", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("Rectangle", "width", FixtureValue::Double(1.0)),
+                ],
+            ),
+            fixture_record(
+                "DataBindContext",
+                vec![
+                    fixture_property(
+                        "DataBindContext",
+                        "propertyKey",
+                        FixtureValue::Uint(u64::from(rectangle_width_key)),
+                    ),
+                    fixture_property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        FixtureValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+        ])
+        .expect("nested data-bind ordering fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let child_graph = graphs.artboards.first().expect("fixture child artboard");
+        let rectangle_local = child_graph
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("Rectangle"))
+            .map(|object| object.local_id)
+            .expect("fixture rectangle");
+        let mut child = ArtboardInstance::from_graph(&file, child_graph)
+            .expect("fixture child artboard instantiates");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("fixture view-model instance"),
+        );
+        assert!(child.bind_owned_view_model_artboard_handle(&file, &context));
+        child.advance_artboard_data_binds();
+        assert_eq!(
+            child.double_property(rectangle_local, rectangle_width_key),
+            Some(0.0),
+            "the child starts from the retained shared source value",
+        );
+
+        let nested_host = synthetic_component_for_type(0, "NestedArtboard");
+        let mut later_converter = synthetic_component_for_type(1, "ScriptedDataConverter");
+        later_converter.global_id = 20;
+        let mut parent = synthetic_instance(vec![nested_host, later_converter], vec![0, 1]);
+        let mut nested = synthetic_nested_artboard_instance(child.graph_global_id);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(0, nested);
+        parent.nested_artboard_locals.push(0);
+        parent.set_scripted_data_converter_instance_for_global(
+            20,
+            Box::new(ViewModelWritingAdvanceScriptInstance {
+                context,
+                value: 42.0,
+            }),
+        );
+
+        parent
+            .advance_frame_components(0.1)
+            .expect("parent retained-component frame advances");
+
+        assert_eq!(
+            parent.nested_artboards[&0]
+                .child
+                .double_property(rectangle_local, rectangle_width_key),
+            Some(42.0),
+            "Artboard::updateDataBinds must recurse nested hosts after every parent advancing component has run",
         );
     }
 

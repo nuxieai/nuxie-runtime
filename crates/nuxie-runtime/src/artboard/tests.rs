@@ -776,6 +776,7 @@
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
+            ancestor_artboard_sources: Vec::new(),
             profile_name: String::new(),
             profile_path: Vec::new(),
             build_context: None,
@@ -2432,6 +2433,61 @@
             Some(77)
         );
         assert_eq!(parent.nested_artboard_locals, [3]);
+    }
+
+    #[test]
+    fn ancestor_nested_artboard_swap_is_rejected_and_preserves_the_mounted_child() {
+        let bytes = synthetic_riv(9706, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 2)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+        });
+        let file = read_runtime_file(&bytes).expect("ancestor-swap fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("ancestor-swap fixture graphs");
+        let root_host_local = graphs.artboards[0].nested_artboards[0].local_id;
+        let child_host_local = graphs.artboards[1].nested_artboards[0].local_id;
+        let outgoing_graph_global_id = graphs.artboards[2].global_id;
+        let mut root = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("ancestor-swap root instance");
+        let child = &mut root
+            .nested_artboards
+            .get_mut(&root_host_local)
+            .expect("root mounts child B")
+            .child;
+
+        assert_eq!(
+            child.nested_artboards[&child_host_local]
+                .child
+                .graph_global_id,
+            outgoing_graph_global_id,
+            "child B initially mounts outgoing child C",
+        );
+        assert!(
+            !child.set_nested_artboard_artboard_id(child_host_local, 0),
+            "child B must reject ancestor target A",
+        );
+        assert_eq!(
+            child.nested_artboards[&child_host_local]
+                .child
+                .graph_global_id,
+            outgoing_graph_global_id,
+            "a rejected ancestor target preserves outgoing child C",
+        );
     }
 
     #[test]

@@ -1731,7 +1731,7 @@ file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
 guarded_name = "StateMachine"
-site_hash = "a8aa75d3c55b78b313ec988ebe3a0a3816c7132affac00b7670ac1764f7b96ed"
+site_hash = "c696c028fc32971c7103cdd69a5208e1499056cd3ffac1ac11171dae684e1b39"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/nested_artboard.rs"
@@ -1745,7 +1745,7 @@ file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
 guarded_name = "RuntimeNestedAnimationInstance"
-site_hash = "a8aa75d3c55b78b313ec988ebe3a0a3816c7132affac00b7670ac1764f7b96ed"
+site_hash = "c696c028fc32971c7103cdd69a5208e1499056cd3ffac1ac11171dae684e1b39"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/artboard.rs"

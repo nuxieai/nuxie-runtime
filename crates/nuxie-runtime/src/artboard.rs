@@ -865,6 +865,7 @@ pub struct RuntimeNestedRemapAnimationReport {
 #[derive(Debug, Clone)]
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
+    source_file_identity: Arc<()>,
     file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
     state_machine_actions: RuntimeFileStateMachineActionCatalog,
     artboards: Arc<Vec<ArtboardGraph>>,
@@ -877,13 +878,14 @@ struct RuntimeArtboardBuildContext {
 
 #[derive(Debug, Clone)]
 struct RuntimeArtboardSourceIdentity {
-    file: Arc<RuntimeFile>,
+    source_file_identity: Arc<()>,
     graph_global_id: u32,
 }
 
 impl RuntimeArtboardSourceIdentity {
-    fn matches(&self, file: &Arc<RuntimeFile>, graph_global_id: u32) -> bool {
-        Arc::ptr_eq(&self.file, file) && self.graph_global_id == graph_global_id
+    fn matches(&self, source_file_identity: &Arc<()>, graph_global_id: u32) -> bool {
+        Arc::ptr_eq(&self.source_file_identity, source_file_identity)
+            && self.graph_global_id == graph_global_id
     }
 }
 
@@ -2186,6 +2188,7 @@ impl ArtboardInstance {
         let artboards = vec![graph.clone()];
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
+            source_file_identity: Arc::clone(&graph.source_file_identity),
             file_view_model_instances,
             state_machine_actions: RuntimeFileStateMachineActionCatalog::new(file),
             artboards: Arc::new(artboards.clone()),
@@ -2313,6 +2316,7 @@ impl ArtboardInstance {
     ) -> Result<Self> {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
+            source_file_identity: Arc::clone(&graph.source_file_identity),
             file_view_model_instances,
             state_machine_actions,
             artboards: Arc::new(artboards.to_vec()),
@@ -2351,7 +2355,7 @@ impl ArtboardInstance {
                     .iter()
                     .copied()
                     .map(|graph_global_id| RuntimeArtboardSourceIdentity {
-                        file: Arc::clone(&context.file),
+                        source_file_identity: Arc::clone(&context.source_file_identity),
                         graph_global_id,
                     })
                     .collect()
@@ -10184,7 +10188,10 @@ impl ArtboardInstance {
     ) -> Option<RuntimeNestedArtboardInstance> {
         let parent_context = self.build_context.as_ref()?;
         let source_context = source.build_context.as_ref()?.clone();
-        if self.source_is_self_or_ancestor(&source_context.file, source.graph_global_id) {
+        if self.source_is_self_or_ancestor(
+            &source_context.source_file_identity,
+            source.graph_global_id,
+        ) {
             return None;
         }
         let parent_graph = parent_context
@@ -10200,7 +10207,7 @@ impl ArtboardInstance {
             .and_then(|host| parent_context.file.object(host.source_global_id as usize))
             .map(|host_object| referencer_data_bind_path(&parent_context.file, host_object))
             .unwrap_or((None, false));
-        let mut visiting = self.visiting_graphs_for_file(&source_context.file);
+        let mut visiting = self.visiting_graphs_for_file(&source_context.source_file_identity);
         let mut nested = build_runtime_nested_artboard_instance(
             &source_context.file,
             &parent_context.file,
@@ -10273,7 +10280,7 @@ impl ArtboardInstance {
             .artboards
             .iter()
             .find(|artboard| artboard.global_id == referenced.id)?;
-        if self.source_is_self_or_ancestor(&context.file, child_graph.global_id) {
+        if self.source_is_self_or_ancestor(&context.source_file_identity, child_graph.global_id) {
             return None;
         }
         let parent_graph = context
@@ -10285,7 +10292,7 @@ impl ArtboardInstance {
             .and_then(|host| context.file.object(host.source_global_id as usize))
             .map(|host_object| referencer_data_bind_path(&context.file, host_object))
             .unwrap_or((None, false));
-        let mut visiting = self.visiting_graphs_for_file(&context.file);
+        let mut visiting = self.visiting_graphs_for_file(&context.source_file_identity);
         let mut nested = build_runtime_nested_artboard_instance(
             &context.file,
             &context.file,
@@ -10325,30 +10332,35 @@ impl ArtboardInstance {
         Some(nested)
     }
 
-    fn source_is_self_or_ancestor(&self, file: &Arc<RuntimeFile>, graph_global_id: u32) -> bool {
+    fn source_is_self_or_ancestor(
+        &self,
+        source_file_identity: &Arc<()>,
+        graph_global_id: u32,
+    ) -> bool {
         self.build_context.as_ref().is_some_and(|context| {
-            Arc::ptr_eq(&context.file, file) && self.graph_global_id == graph_global_id
+            Arc::ptr_eq(&context.source_file_identity, source_file_identity)
+                && self.graph_global_id == graph_global_id
         }) || self
             .ancestor_artboard_sources
             .iter()
-            .any(|ancestor| ancestor.matches(file, graph_global_id))
+            .any(|ancestor| ancestor.matches(source_file_identity, graph_global_id))
     }
 
     fn child_ancestor_artboard_sources(&self) -> Vec<RuntimeArtboardSourceIdentity> {
         let mut ancestors = self.ancestor_artboard_sources.clone();
         if let Some(context) = self.build_context.as_ref() {
             ancestors.push(RuntimeArtboardSourceIdentity {
-                file: Arc::clone(&context.file),
+                source_file_identity: Arc::clone(&context.source_file_identity),
                 graph_global_id: self.graph_global_id,
             });
         }
         ancestors
     }
 
-    fn visiting_graphs_for_file(&self, file: &Arc<RuntimeFile>) -> BTreeSet<u32> {
+    fn visiting_graphs_for_file(&self, source_file_identity: &Arc<()>) -> BTreeSet<u32> {
         self.child_ancestor_artboard_sources()
             .into_iter()
-            .filter(|source| Arc::ptr_eq(&source.file, file))
+            .filter(|source| Arc::ptr_eq(&source.source_file_identity, source_file_identity))
             .map(|source| source.graph_global_id)
             .collect()
     }

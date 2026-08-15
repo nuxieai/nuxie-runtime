@@ -2208,7 +2208,7 @@
     }
 
     #[test]
-    fn public_clone_rebuilds_nested_state_machine_cold_but_transient_clone_keeps_live_value() {
+    fn public_clone_rebuilds_nested_animations_cold_but_transient_clone_keeps_live_progress() {
         let mut definition = empty_state_machine(11);
         definition.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_bool(
             1,
@@ -2229,29 +2229,77 @@
                 .expect("valid nested state machine")
                 .set_bool(0, false)
         );
+        let linear_animation = RuntimeLinearAnimation {
+            global_id: 12,
+            name: None,
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 0,
+            work_start: 0,
+            work_end: 60,
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
+        };
+        let mut linear_animation_instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &linear_animation,
+            1.0,
+        );
+        assert!(linear_animation_instance.advance(0.25));
+        nested
+            .animations
+            .push(RuntimeNestedAnimationInstance::Simple {
+                local_id: 6,
+                animation: linear_animation_instance,
+                is_playing: true,
+                speed: 1.0,
+                mix: 1.0,
+            });
         nested
             .animations
             .push(RuntimeNestedAnimationInstance::StateMachine(occurrence));
+        nested.quantize = 2.0;
+        assert_eq!(nested.calculate_local_elapsed_seconds(0.25), 0.0);
 
         let mut parent = synthetic_instance(Vec::new(), Vec::new());
         parent.nested_artboards.insert(3, nested);
-        let cloned = parent.clone();
-        let transient = parent.clone_for_transient_layout();
+        let mut cloned = parent.clone();
+        let mut transient = parent.clone_for_transient_layout();
 
         let bool_value = |artboard: &ArtboardInstance| {
             let nested = artboard
                 .nested_artboards
                 .get(&3)
                 .expect("nested occurrence");
-            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = &nested.animations[0]
-            else {
-                panic!("nested animation remains a state machine");
-            };
+            let occurrence = nested
+                .animations
+                .iter()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine(occurrence) => Some(occurrence),
+                    _ => None,
+                })
+                .expect("nested animation remains a state machine");
             occurrence
                 .state_machine()
                 .expect("valid nested state machine")
                 .input(0)
                 .and_then(|input| input.bool_value())
+        };
+        let simple_time = |artboard: &ArtboardInstance| {
+            artboard.nested_artboards[&3]
+                .animations
+                .iter()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::Simple { animation, .. } => {
+                        Some(animation.time())
+                    }
+                    _ => None,
+                })
+                .expect("nested simple animation remains mounted")
         };
         assert_eq!(
             bool_value(&cloned),
@@ -2262,6 +2310,34 @@
             bool_value(&transient),
             Some(false),
             "transient layout clone views the live occurrence snapshot"
+        );
+        assert_eq!(
+            simple_time(&cloned),
+            0.0,
+            "public generated clone rebuilds the nested simple animation at its initial time"
+        );
+        assert_eq!(
+            simple_time(&transient),
+            0.25,
+            "transient layout clone keeps the live nested simple animation time"
+        );
+        assert_eq!(
+            cloned
+                .nested_artboards
+                .get_mut(&3)
+                .expect("cloned nested occurrence")
+                .calculate_local_elapsed_seconds(0.3),
+            0.0,
+            "public generated clone starts with no accumulated quantization time"
+        );
+        assert_eq!(
+            transient
+                .nested_artboards
+                .get_mut(&3)
+                .expect("transient nested occurrence")
+                .calculate_local_elapsed_seconds(0.3),
+            0.5,
+            "transient layout clone keeps the live accumulated quantization time"
         );
     }
 

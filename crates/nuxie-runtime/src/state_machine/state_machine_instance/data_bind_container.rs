@@ -177,7 +177,7 @@ impl StateMachineInstance {
     /// source-to-target values must be visible to event listeners and
     /// transition conditions without polling or writing target-to-source
     /// bindings.
-    pub(super) fn update_data_binds_false(
+    pub(crate) fn update_data_binds_false(
         &mut self,
         artboard: &ArtboardInstance,
         owned_context: Option<&RuntimeOwnedViewModelInstance>,

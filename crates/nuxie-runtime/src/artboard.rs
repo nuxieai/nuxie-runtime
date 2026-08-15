@@ -6091,8 +6091,102 @@ impl ArtboardInstance {
             nested_event_dispatch,
         );
         changed |= retained_result.as_ref().copied().unwrap_or(false);
+        let host_data_bind_result =
+            self.update_artboard_host_data_binds_after_advancing_components(Mat2D::IDENTITY);
+        changed |= host_data_bind_result.as_ref().copied().unwrap_or(false);
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         if let Err(error) = retained_result {
+            return Err(error);
+        }
+        if let Err(error) = host_data_bind_result {
+            return Err(error);
+        }
+        Ok(changed)
+    }
+
+    /// Mirrors the host-recursion half of C++ `Artboard::updateDataBinds`.
+    ///
+    /// A child's own `advanceDataBinds(elapsedSeconds)` still runs inside its
+    /// `advanceInternal`, but source writes from later parent advancing
+    /// components are not visible until the parent completes that schedule.
+    /// C++ then visits every `ArtboardHost` in authored order before updating
+    /// the parent's own container (`src/artboard.cpp:1195-1202,1463-1480`).
+    fn update_artboard_host_data_binds_after_advancing_components(
+        &mut self,
+        root_transform: Mat2D,
+    ) -> Result<bool, ScriptError> {
+        let mut changed = false;
+        let mut first_script_error = None;
+        for index in 0..self.advancing_components.len() {
+            let entry = self.advancing_components[index];
+            match entry.kind {
+                AdvancingComponentKind::NestedArtboard => {
+                    let host_world = self
+                        .component(entry.local_id)
+                        .map(|component| component.transform.world_transform)
+                        .unwrap_or(Mat2D::IDENTITY);
+                    let Some(nested) = self.nested_artboards.get_mut(&entry.local_id) else {
+                        continue;
+                    };
+                    if nested.is_paused {
+                        continue;
+                    }
+                    let child_root_transform = nested
+                        .child
+                        .mounted_root_transform(root_transform.multiply(host_world));
+                    match nested
+                        .child
+                        .update_artboard_host_data_binds_after_advancing_components(
+                            child_root_transform,
+                        ) {
+                        Ok(host_changed) => changed |= host_changed,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                        }
+                    }
+                    changed |= nested
+                        .child
+                        .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
+                }
+                AdvancingComponentKind::ArtboardComponentList => {
+                    let roots = self
+                        .runtime_component_list_child_root_transforms(root_transform)
+                        .remove(&entry.local_id)
+                        .unwrap_or_default();
+                    let Some(items) = self.component_list_items_mut(entry.local_id) else {
+                        continue;
+                    };
+                    for (item_index, item) in items.iter_mut().enumerate() {
+                        let child_root_transform =
+                            roots.get(item_index).copied().unwrap_or(root_transform);
+                        let child = item.child.as_mut();
+                        for state_machine in &mut item.state_machines {
+                            if let Err(error) = state_machine.update_data_binds_false(
+                                child,
+                                None,
+                                &mut NoopScriptHost,
+                            ) {
+                                first_script_error.get_or_insert(error);
+                            }
+                        }
+                        match child.update_artboard_host_data_binds_after_advancing_components(
+                            child_root_transform,
+                        ) {
+                            Ok(host_changed) => changed |= host_changed,
+                            Err(error) => {
+                                first_script_error.get_or_insert(error);
+                            }
+                        }
+                        changed |= child.advance_artboard_data_binds_with_root_transform(
+                            child_root_transform,
+                            0.0,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(error) = first_script_error {
             return Err(error);
         }
         Ok(changed)

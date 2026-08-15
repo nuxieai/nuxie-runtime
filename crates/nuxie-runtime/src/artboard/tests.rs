@@ -2491,6 +2491,118 @@
     }
 
     #[test]
+    fn live_same_file_ancestor_swap_is_rejected_and_preserves_the_mounted_child() {
+        let bytes = synthetic_riv(9707, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 2)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+        });
+        let file = read_runtime_file(&bytes).expect("live ancestor-swap fixture imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("live ancestor-swap fixture graphs");
+        let root_host_local = graphs.artboards[0].nested_artboards[0].local_id;
+        let child_host_local = graphs.artboards[1].nested_artboards[0].local_id;
+        let outgoing_graph_global_id = graphs.artboards[2].global_id;
+        let live_ancestor = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("independent live ancestor occurrence");
+        let mut root = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("live ancestor-swap root instance");
+        let child = &mut root
+            .nested_artboards
+            .get_mut(&root_host_local)
+            .expect("root mounts child B")
+            .child;
+
+        assert!(
+            !child.replace_nested_artboard_artboard_instance(child_host_local, live_ancestor),
+            "child B must reject a separately instantiated live ancestor A from the same file",
+        );
+        assert_eq!(
+            child.nested_artboards[&child_host_local]
+                .child
+                .graph_global_id,
+            outgoing_graph_global_id,
+            "a rejected live ancestor preserves outgoing child C",
+        );
+    }
+
+    #[test]
+    fn identical_separately_loaded_live_source_is_not_an_ancestor() {
+        let bytes = synthetic_riv(9708, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 1)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(
+                bytes,
+                "NestedArtboard",
+                &[("parentId", 0), ("artboardId", 2)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[]);
+        });
+        let parent_file = read_runtime_file(&bytes).expect("parent fixture imports");
+        let parent_graphs =
+            GraphFile::from_runtime_file(&parent_file).expect("parent fixture graphs");
+        let root_host_local = parent_graphs.artboards[0].nested_artboards[0].local_id;
+        let child_host_local = parent_graphs.artboards[1].nested_artboards[0].local_id;
+        let mut root = ArtboardInstance::from_graph_with_artboards(
+            &parent_file,
+            &parent_graphs.artboards[0],
+            &parent_graphs.artboards,
+        )
+        .expect("parent root instance");
+
+        let source_file = read_runtime_file(&bytes).expect("identical source fixture imports");
+        let source_graphs =
+            GraphFile::from_runtime_file(&source_file).expect("identical source fixture graphs");
+        let live_source = ArtboardInstance::from_graph_with_artboards(
+            &source_file,
+            &source_graphs.artboards[0],
+            &source_graphs.artboards,
+        )
+        .expect("separately loaded live source instance");
+        let child = &mut root
+            .nested_artboards
+            .get_mut(&root_host_local)
+            .expect("root mounts child B")
+            .child;
+
+        assert!(
+            child.replace_nested_artboard_artboard_instance(child_host_local, live_source),
+            "byte-identical but separately loaded sources must retain distinct source identity",
+        );
+        assert_eq!(
+            child.nested_artboards[&child_host_local]
+                .child
+                .graph_global_id,
+            source_graphs.artboards[0].global_id,
+        );
+    }
+
+    #[test]
     fn null_then_unresolved_nested_artboard_binding_stays_absent() {
         let mut parent = synthetic_instance(Vec::new(), Vec::new());
         parent

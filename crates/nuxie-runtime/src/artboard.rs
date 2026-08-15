@@ -7482,6 +7482,33 @@ impl ArtboardInstance {
         std::mem::take(&mut self.semantic_bounds_dirty_locals)
     }
 
+    /// Mirrors `Artboard::markSemanticBoundaryTransformDirty` for Rust's
+    /// retained outer-space semantic bounds. C++ marks one structural boundary
+    /// and the shared semantic manager propagates its transform through the
+    /// mounted subtree. Rust stores the final outer-space bounds on each
+    /// occurrence, so journal every semantic occurrence beneath this boundary.
+    fn mark_semantic_boundary_transform_dirty(&mut self) {
+        let semantic_locals = self
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "SemanticData")
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        self.semantic_bounds_dirty_locals.extend(semantic_locals);
+        for nested in self.nested_artboards.values_mut() {
+            nested.child.mark_semantic_boundary_transform_dirty();
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for list_local in list_locals {
+            let Some(items) = self.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child.mark_semantic_boundary_transform_dirty();
+            }
+        }
+    }
+
     #[doc(hidden)]
     pub fn debug_update_pass_with_root_transform(&mut self, root_transform: Mat2D) -> bool {
         if let Some(root) = self.objects.root() {
@@ -8077,6 +8104,13 @@ impl ArtboardInstance {
             return false;
         }
         let mut changed = false;
+        if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+            && let Some(nested) = self.nested_artboards.get_mut(&host_local_id)
+        {
+            // `NestedArtboard::update` publishes the host transform change to
+            // the mounted child's semantic boundary before any child update.
+            nested.child.mark_semantic_boundary_transform_dirty();
+        }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             changed |= self.sync_nested_artboard_root_opacity(host_local_id);
         }

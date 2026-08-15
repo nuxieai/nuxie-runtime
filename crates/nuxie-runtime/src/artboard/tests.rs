@@ -5029,6 +5029,102 @@
     }
 
     #[test]
+    fn component_list_world_transform_dirt_updates_retained_item_semantic_bounds() {
+        let mut child = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "SemanticData"),
+            ],
+            vec![0, 1, 2],
+        );
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_link_parent(&mut child, 2, 1);
+        child.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 20.0,
+                height: 10.0,
+            },
+            None,
+        );
+        let child_identity = child.instance_identity();
+
+        let (file, _, _) = owned_view_model_action_fixture(9_722, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("row context"),
+        );
+        let mut parent = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "ArtboardComponentList"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut parent, 1, 0);
+        let list = parent
+            .component_list_state_mut(1)
+            .expect("component-list state");
+        list.item_transforms = vec![Mat2D::IDENTITY];
+        list.items = vec![RuntimeComponentListItemInstance {
+            child: Box::new(child),
+            render_resources: RefCell::new(
+                crate::draw::RuntimeOccurrenceRenderResources::default(),
+            ),
+            state_machines: Vec::new(),
+            context_rebind_sink: {
+                let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                context.add_rebind_dependent(&sink);
+                sink
+            },
+            draw_index_sink: None,
+            context,
+            occurrence_identity: 1,
+            logical_index: 0,
+            settled_layout_size: Cell::new(None),
+            transform: Mat2D::IDENTITY,
+            render_cache_revision: 1,
+        }];
+
+        let key = crate::state_machine::state_machine_instance::RuntimeSemanticOccurrenceKey {
+            owner_identity: child_identity,
+            data_local_id: 2,
+        };
+        let mut tree = crate::semantic_runtime_tree::RuntimeSemanticTree::default();
+        tree.synchronize(&mut parent, &[]);
+        let node = tree.data[&key]
+            .node_handle()
+            .expect("mounted row SemanticData owns a retained node");
+        assert_eq!(
+            node.borrow().bounds(),
+            crate::SemanticBounds::from_xywh(0.0, 0.0, 20.0, 10.0),
+        );
+
+        parent
+            .component_mut(0)
+            .expect("parent artboard")
+            .transform
+            .world_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 30.0, 40.0]);
+        let list_handle = parent.component_handle(1).expect("component-list handle");
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        parent.update_component_with_script_mode(
+            list_handle,
+            ComponentDirt::WORLD_TRANSFORM,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+        );
+        tree.synchronize(&mut parent, &[]);
+
+        assert_eq!(
+            node.borrow().bounds(),
+            crate::SemanticBounds::from_xywh(30.0, 40.0, 20.0, 10.0),
+            "ArtboardComponentList::update marks each mounted semantic boundary transform dirty",
+        );
+    }
+
+    #[test]
     fn root_advance_settles_components_and_reports_retained_component_dirt() {
         let mut artboard =
             synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);

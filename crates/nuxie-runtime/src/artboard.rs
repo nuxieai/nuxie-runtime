@@ -8802,9 +8802,17 @@ impl ArtboardInstance {
             .is_some_and(|component| component.concrete.constrainable_list.is_some())
         {
             // The concrete list owner runs these tails after Super::update:
-            // mounted child update under Components dirt and inherited
+            // semantic boundary publication under WorldTransform dirt,
+            // mounted child update under Components dirt, and inherited
             // Artboard opacity under RenderOpacity dirt
             // (`artboard_component_list.cpp:1254-1297`).
+            if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+                && let Some(items) = self.component_list_items_mut(local_id)
+            {
+                for item in items {
+                    item.child.mark_semantic_boundary_transform_dirty();
+                }
+            }
             if dirt.contains(ComponentDirt::RENDER_OPACITY) {
                 let opacity = self.component_at(component_handle).transform.render_opacity;
                 let opacity_key = property_key_for_name("Artboard", "opacity");

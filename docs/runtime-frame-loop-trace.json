@@ -9621,7 +9621,7 @@
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
     "sha256": "1da8e6038b16ab4baae365a0ac84a992df6b22f602ce45921e506a244db149cf"
   },
-  "rust_ref": "3ee45f0f06c66507c2071ad1bbae4a488707a67c",
+  "rust_ref": "1febdc0caf7d6297783ea13a50570cb9cee0b5c4",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 8914,

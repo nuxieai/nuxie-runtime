@@ -115,6 +115,10 @@ class CaptureTraceTest(unittest.TestCase):
             root_inventory_log.write_text("before\n")
             root_inventory_report = repo / "E8-inv-text.md"
             root_inventory_report.write_text("before\n")
+            upstream_runtime = repo / "rive-runtime"
+            subprocess.run(
+                ["git", "init", "-q", str(upstream_runtime)], check=True
+            )
 
             first = CAPTURE.candidate_source_fingerprint(
                 repo, evidence_path=output
@@ -127,6 +131,9 @@ class CaptureTraceTest(unittest.TestCase):
             root_wave_report.write_text("after\n")
             root_inventory_log.write_text("after\n")
             root_inventory_report.write_text("after\n")
+            upstream_source = upstream_runtime / "src/runtime.cpp"
+            upstream_source.parent.mkdir()
+            upstream_source.write_text("void advance() {}\n")
             generated = repo / "tools/trace/__pycache__/capture.pyc"
             generated.parent.mkdir(parents=True)
             generated.write_bytes(b"generated")

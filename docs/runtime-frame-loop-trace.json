@@ -208,13 +208,13 @@
   "dirty_text_clean_guard_rust_candidate_source": {
     "file_count": 8914,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "1da8e6038b16ab4baae365a0ac84a992df6b22f602ce45921e506a244db149cf"
+    "sha256": "ad591c3e583785e9eefe5fab9ff91c1bdb2231bf42194f74554f5ffaaff59b01"
   },
   "dirty_text_clean_guard_rust_runner_provenance": {
     "candidate_source": {
       "file_count": 8914,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "1da8e6038b16ab4baae365a0ac84a992df6b22f602ce45921e506a244db149cf"
+      "sha256": "ad591c3e583785e9eefe5fab9ff91c1bdb2231bf42194f74554f5ffaaff59b01"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -9619,14 +9619,14 @@
   "rust_candidate_source": {
     "file_count": 8914,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "1da8e6038b16ab4baae365a0ac84a992df6b22f602ce45921e506a244db149cf"
+    "sha256": "ad591c3e583785e9eefe5fab9ff91c1bdb2231bf42194f74554f5ffaaff59b01"
   },
-  "rust_ref": "1febdc0caf7d6297783ea13a50570cb9cee0b5c4",
+  "rust_ref": "b4b23196d3337df609bdc9f9cdf264db2be681b9",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 8914,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "1da8e6038b16ab4baae365a0ac84a992df6b22f602ce45921e506a244db149cf"
+      "sha256": "ad591c3e583785e9eefe5fab9ff91c1bdb2231bf42194f74554f5ffaaff59b01"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

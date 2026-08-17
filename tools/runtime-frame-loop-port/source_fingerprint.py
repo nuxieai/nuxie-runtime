@@ -31,6 +31,9 @@ LOCAL_FIXTURE_LINKS = {
     pathlib.PurePosixPath(f"fixtures/{name}")
     for name in ("animation", "flow", "graph", "minimal")
 }
+# CI and local tooling may materialize the pinned upstream checkout here. It is
+# an oracle input, not part of the Rust candidate whose trace is being bound.
+LOCAL_UPSTREAM_RUNTIME_DIRS = {"rive-runtime"}
 # FL-C5 work-package state plus root W-wave and E-wave inventory receipts are
 # local orchestration evidence rather than candidate source. Exclude only their
 # fixed naming forms, even when those receipts are untracked and actively
@@ -90,7 +93,11 @@ def _is_excluded(
     if relative in LOCAL_FIXTURE_LINKS:
         return True
     if (
-        (relative.parts and relative.parts[0] in LOCAL_ORCHESTRATION_DIRS)
+        (
+            relative.parts
+            and relative.parts[0]
+            in LOCAL_ORCHESTRATION_DIRS | LOCAL_UPSTREAM_RUNTIME_DIRS
+        )
         or (
             len(relative.parts) == 1
             and LOCAL_WAVE_ARTIFACT.fullmatch(relative.name) is not None

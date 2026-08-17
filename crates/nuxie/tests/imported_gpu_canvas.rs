@@ -10,9 +10,9 @@ use std::task::{Context, Poll, Waker};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderStage, ImageDecodeError, PersistentFactory, RawPath, RecordingFactory,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
-    RenderPaint, RenderPath, RenderShader, WgpuFactory,
+    GpuCanvasShaderStage, ImageDecodeError, OwnedArtboardInstance, PersistentFactory, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPath, RenderShader, WgpuFactory,
 };
 use nuxie_schema::definition_by_name;
 
@@ -767,6 +767,54 @@ fn scripted_drawable_hydrates_authored_boolean_input_before_init() {
         .unwrap();
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     assert!(block_on(instance.mount_scripted_drawables_async(&mut factory)).unwrap());
+}
+
+#[test]
+fn scripted_drawable_mount_preparation_can_finish_before_installing_into_live_instance() {
+    let file =
+        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file)).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+
+    let plan = instance
+        .plan_scripted_drawable_mounts()
+        .unwrap()
+        .expect("fixture has a pending scripted drawable mount");
+    let prepared = block_on(plan.prepare(&mut factory)).unwrap();
+    assert!(
+        instance
+            .install_prepared_scripted_drawable_mounts(prepared)
+            .unwrap()
+    );
+}
+
+#[test]
+fn scripted_drawable_mount_preparation_rejects_a_replacement_file_identity() {
+    let original =
+        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
+    let mut original_instance =
+        OwnedArtboardInstance::instantiate_default(Arc::clone(&original)).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let plan = original_instance
+        .plan_scripted_drawable_mounts()
+        .unwrap()
+        .expect("fixture has a pending scripted drawable mount");
+    let prepared = block_on(plan.prepare(&mut factory)).unwrap();
+
+    let replacement =
+        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
+    let mut replacement_instance = OwnedArtboardInstance::instantiate_default(replacement).unwrap();
+    assert!(
+        !replacement_instance
+            .install_prepared_scripted_drawable_mounts(prepared)
+            .unwrap()
+    );
+    assert!(
+        replacement_instance
+            .plan_scripted_drawable_mounts()
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[test]

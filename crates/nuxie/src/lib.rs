@@ -12,7 +12,7 @@ use std::any::Any;
 
 #[cfg(feature = "scripting")]
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeSet, VecDeque},
     rc::Rc,
 };
@@ -695,16 +695,17 @@ struct ReadyFileScripts {
     vm: ScriptVm,
     host: Box<dyn ScriptHostExtensionInstance>,
     factory_domain: usize,
-    default_context_initialized: bool,
+    default_context_initialized: Cell<bool>,
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Clone)]
 struct FileScriptRuntime {
     assets: Arc<[FileScriptAsset]>,
     capability: Option<ScriptExecutionCapability>,
     execution_limits: Option<ScriptExecutionLimits>,
     log_sink: Option<ScriptingLogSink>,
-    ready: Option<ReadyFileScripts>,
+    ready: Option<Rc<ReadyFileScripts>>,
 }
 
 #[cfg(feature = "scripting")]
@@ -918,7 +919,7 @@ impl FileScriptRuntime {
             vm,
             host,
             factory_domain: render_factory_domain(factory),
-            default_context_initialized: false,
+            default_context_initialized: Cell::new(false),
         })
     }
 
@@ -968,7 +969,7 @@ impl FileScriptRuntime {
         }
 
         let domain = render_factory_domain(factory);
-        if let Some(ready) = self.ready.as_ref() {
+        if let Some(ready) = self.ready.as_mut() {
             if ready.factory_domain != domain {
                 return Err(nuxie_runtime::ScriptError::new(
                     "scripted File was used with a different renderer Factory domain",
@@ -979,7 +980,7 @@ impl FileScriptRuntime {
 
         let mut candidate = self.build_candidate(runtime, factory)?;
         Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
-        self.ready = Some(candidate);
+        self.ready = Some(Rc::new(candidate));
         Ok(true)
     }
 
@@ -1000,9 +1001,14 @@ impl FileScriptRuntime {
                     "scripted File was used with a different renderer Factory domain",
                 ));
             }
-            let initialize_default_context = !ready.default_context_initialized;
+            let initialize_default_context = !ready.default_context_initialized.get();
             if initialize_default_context {
-                ready
+                Rc::get_mut(ready)
+                    .ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(
+                            "script runtime is shared with detached preparation",
+                        )
+                    })?
                     .vm
                     .set_default_context_view_model(default_context_view_model);
             }
@@ -1012,7 +1018,7 @@ impl FileScriptRuntime {
                 return Ok(None);
             };
             if initialize_default_context {
-                ready.default_context_initialized = true;
+                ready.default_context_initialized.set(true);
             }
             return Ok(Some(PreparedFileScriptMounts {
                 groups,
@@ -1027,7 +1033,7 @@ impl FileScriptRuntime {
         candidate
             .vm
             .set_default_context_view_model(default_context_view_model);
-        candidate.default_context_initialized = true;
+        candidate.default_context_initialized.set(true);
         Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
         let Some(groups) =
             instantiate_script_mounts(&candidate, file, groups, factory, root_view_model)?
@@ -1053,17 +1059,17 @@ impl FileScriptRuntime {
     ) -> std::result::Result<Option<PreparedFileScriptMounts>, nuxie_runtime::ScriptError> {
         let runtime = &file.runtime;
         let domain = render_factory_domain(factory);
-        if let Some(ready) = self.ready.as_mut() {
+        if let Some(ready) = self.ready.as_ref() {
             if ready.factory_domain != domain {
                 return Err(nuxie_runtime::ScriptError::new(
                     "scripted File was used with a different renderer Factory domain",
                 ));
             }
-            let initialize_default_context = !ready.default_context_initialized;
+            let initialize_default_context = !ready.default_context_initialized.get();
             if initialize_default_context {
-                ready
-                    .vm
-                    .set_default_context_view_model(default_context_view_model);
+                return Err(nuxie_runtime::ScriptError::new(
+                    "detached script preparation requires an initialized default context",
+                ));
             }
             let Some(groups) =
                 instantiate_script_mounts_async(ready, file, groups, factory, root_view_model)
@@ -1072,7 +1078,7 @@ impl FileScriptRuntime {
                 return Ok(None);
             };
             if initialize_default_context {
-                ready.default_context_initialized = true;
+                ready.default_context_initialized.set(true);
             }
             return Ok(Some(PreparedFileScriptMounts {
                 groups,
@@ -1084,7 +1090,7 @@ impl FileScriptRuntime {
         candidate
             .vm
             .set_default_context_view_model(default_context_view_model);
-        candidate.default_context_initialized = true;
+        candidate.default_context_initialized.set(true);
         Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
         let Some(groups) =
             instantiate_script_mounts_async(&candidate, file, groups, factory, root_view_model)
@@ -1311,6 +1317,63 @@ struct PreparedFileScriptMounts {
     // Field order is intentional: Lua table handles drop before the cold VM.
     groups: Vec<PreparedScriptMountGroup>,
     candidate: Option<ReadyFileScripts>,
+}
+
+/// An owned snapshot of the scripted occurrences that need renderer-backed
+/// construction. Planning borrows the live artboard only synchronously; the
+/// returned value can complete GPU work while that artboard remains available
+/// to its owner.
+#[cfg(feature = "scripting")]
+pub struct ScriptedDrawableMountPlan {
+    file: Arc<File>,
+    artboard_index: usize,
+    groups: Vec<ScriptMountGroup>,
+    root_view_model: Option<ViewModelInstance>,
+    scripts: FileScriptRuntime,
+}
+
+/// Renderer-backed script instances that have not yet been attached to their
+/// live artboard occurrences.
+#[cfg(feature = "scripting")]
+pub struct PreparedScriptedDrawableMounts {
+    file: Arc<File>,
+    artboard_index: usize,
+    mounts: Option<PreparedFileScriptMounts>,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptedDrawableMountPlan {
+    /// Perform the asynchronous renderer work without borrowing the live
+    /// artboard instance captured by the planning phase.
+    pub async fn prepare(
+        self,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<PreparedScriptedDrawableMounts, nuxie_runtime::ScriptError> {
+        let Self {
+            file,
+            artboard_index,
+            groups,
+            root_view_model,
+            mut scripts,
+        } = self;
+        let mounts = scripts
+            .prepare_mounts_async(
+                &file,
+                &file.file_asset_owners,
+                &groups,
+                factory,
+                root_view_model.as_ref().and_then(|view_model| {
+                    nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
+                }),
+                root_view_model.as_ref().map(ViewModelInstance::handle),
+            )
+            .await?;
+        Ok(PreparedScriptedDrawableMounts {
+            file,
+            artboard_index,
+            mounts,
+        })
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -4434,7 +4497,7 @@ fn mount_scripted_artboard_tree(
     // attaching its tables so every mounted handle always has a live owner;
     // attachment itself is now an infallible commit over the validated tree.
     if let Some(candidate) = prepared.candidate.take() {
-        file.scripts.borrow_mut().ready = Some(candidate);
+        file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
     }
     attach_prepared_script_mounts(instance, prepared.groups, file);
 
@@ -4477,21 +4540,19 @@ async fn mount_scripted_artboard_tree_async(
     }
     let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mounted = groups.iter().any(|group| !group.targets.is_empty());
-    let prepared = {
-        let mut scripts = file.scripts.borrow_mut();
-        scripts
-            .prepare_mounts_async(
-                file,
-                &file.file_asset_owners,
-                &groups,
-                factory,
-                root_view_model.and_then(|view_model| {
-                    nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
-                }),
-                root_view_model.map(ViewModelInstance::handle),
-            )
-            .await?
-    };
+    let mut scripts = file.scripts.borrow().clone();
+    let prepared = scripts
+        .prepare_mounts_async(
+            file,
+            &file.file_asset_owners,
+            &groups,
+            factory,
+            root_view_model.and_then(|view_model| {
+                nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
+            }),
+            root_view_model.map(ViewModelInstance::handle),
+        )
+        .await?;
     let Some(mut prepared) = prepared else {
         return Ok(ScriptMountResult {
             has_script_target,
@@ -4500,7 +4561,7 @@ async fn mount_scripted_artboard_tree_async(
     };
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
     if let Some(candidate) = prepared.candidate.take() {
-        file.scripts.borrow_mut().ready = Some(candidate);
+        file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
     }
     attach_prepared_script_mounts(instance, prepared.groups, file);
     let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
@@ -8333,6 +8394,103 @@ impl OwnedArtboardInstance {
         Ok(())
     }
 
+    /// Snapshot pending scripted occurrences without retaining a borrow of
+    /// this live artboard across renderer-backed asynchronous work.
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn plan_scripted_drawable_mounts(&mut self) -> Result<Option<ScriptedDrawableMountPlan>> {
+        {
+            let scripts = self.file.scripts.borrow();
+            if !scripts.scripts_are_authenticated()
+                || !scripts.assets.iter().any(|asset| {
+                    asset.type_name == "ScriptAsset" && !asset.is_external_data_converter
+                })
+            {
+                return Ok(None);
+            }
+        }
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        let (has_script_target, groups) =
+            collect_script_mount_groups(&self.file, artboard, &mut self.raw)
+                .context("failed to plan scripted drawable mounts")?;
+        if !has_script_target {
+            return Ok(None);
+        }
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        let scripts = {
+            let mut scripts = self.file.scripts.borrow_mut();
+            if let Some(ready) = scripts.ready.as_mut()
+                && !ready.default_context_initialized.get()
+            {
+                Rc::get_mut(ready)
+                    .context("script runtime is shared with detached preparation")?
+                    .vm
+                    .set_default_context_view_model(root_view_model.as_ref().and_then(
+                        |view_model| {
+                            nuxie_runtime::script_view_model_from_owned(
+                                &self.file.runtime,
+                                view_model.handle(),
+                            )
+                        },
+                    ));
+                ready.default_context_initialized.set(true);
+            }
+            scripts.clone()
+        };
+        Ok(Some(ScriptedDrawableMountPlan {
+            file: Arc::clone(&self.file),
+            artboard_index: self.artboard_index,
+            groups,
+            root_view_model,
+            scripts,
+        }))
+    }
+
+    /// Attach preparation only to the exact File/artboard identity that
+    /// produced it. A replacement instance rejects stale work without
+    /// mutating its live runtime state.
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn install_prepared_scripted_drawable_mounts(
+        &mut self,
+        prepared: PreparedScriptedDrawableMounts,
+    ) -> Result<bool> {
+        if self.artboard_index != prepared.artboard_index
+            || !Arc::ptr_eq(&self.file, &prepared.file)
+        {
+            return Ok(false);
+        }
+        let Some(PreparedFileScriptMounts {
+            groups,
+            mut candidate,
+        }) = prepared.mounts
+        else {
+            return Ok(true);
+        };
+        validate_prepared_script_mount_topology(&mut self.raw, &groups)
+            .context("prepared scripted drawable topology is stale")?;
+        if let Some(candidate) = candidate.take() {
+            self.file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
+        }
+        attach_prepared_script_mounts(&mut self.raw, groups, &self.file);
+        verify_scripted_artboard_tree_attached(
+            &self.file,
+            self.file
+                .graph
+                .artboards
+                .get(self.artboard_index)
+                .context("owned artboard instance graph is unavailable")?,
+            &mut self.raw,
+        )
+        .context("failed to verify prepared scripted drawable mounts")?;
+        Ok(true)
+    }
+
     /// Owning mirror of [`ArtboardInstance::mount_scripted_drawables_async`].
     #[doc(hidden)]
     pub async fn mount_scripted_drawables_async(
@@ -8341,23 +8499,14 @@ impl OwnedArtboardInstance {
     ) -> Result<bool> {
         #[cfg(feature = "scripting")]
         {
-            let artboard = self
-                .file
-                .graph
-                .artboards
-                .get(self.artboard_index)
-                .context("owned artboard instance graph is unavailable")?;
-            let root_view_model = retained_artboard_root_view_model(&self.raw);
-            return Ok(mount_scripted_artboard_tree_async(
-                &self.file,
-                artboard,
-                &mut self.raw,
-                factory,
-                root_view_model.as_ref(),
-            )
-            .await
-            .context("failed to mount scripted drawables")?
-            .has_script_target);
+            let Some(plan) = self.plan_scripted_drawable_mounts()? else {
+                return Ok(false);
+            };
+            let prepared = plan
+                .prepare(factory)
+                .await
+                .context("failed to prepare scripted drawable mounts")?;
+            return self.install_prepared_scripted_drawable_mounts(prepared);
         }
         #[cfg(not(feature = "scripting"))]
         {

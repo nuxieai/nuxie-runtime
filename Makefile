@@ -1,6 +1,7 @@
 .PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-native-metal-tracer-binary renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
 .PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe
+.PHONY: renderer-native-metal-replay
 .PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 .PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
@@ -75,11 +76,13 @@ RENDERER_METAL_REFERENCE_INPUT_MANIFEST ?= $(RENDERER_METAL_REFERENCE_DIR)/upstr
 RENDERER_METAL_REFERENCE_BINDING ?= $(RENDERER_METAL_REFERENCE_DIR)/renderer-replay.inputs.sha256
 RENDERER_METAL_ARCHIVE_PATHS = $(addprefix $(RIVE_RUNTIME_DIR)/tests/out/release/,librive.a librive_pls_renderer.a librive_decoders.a liblibwebp.a liblibpng.a libzlib.a liblibjpeg.a librive_harfbuzz.a librive_sheenbidi.a librive_yoga.a)
 RENDERER_METAL_BRIDGE_PATHS = $(addprefix $(CURDIR)/,Cargo.lock tools/renderer-replay/Cargo.toml tools/renderer-replay/src/main.rs crates/nuxie-renderer-ffi/Cargo.toml crates/nuxie-renderer-ffi/build.rs crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi.cpp crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi.h crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_private.hpp crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_metal.mm)
-RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_GOLDEN_RUST_REPLAY)
-RENDERER_METAL_CANDIDATE_BACKEND ?= rust-wgpu
+RENDERER_METAL_CANDIDATE_BUILD_DIR ?= $(CURDIR)/target/renderer-native-metal
+RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_METAL_CANDIDATE_BUILD_DIR)/release/renderer-replay
+RENDERER_METAL_CANDIDATE_BACKEND ?= rust-metal
+RENDERER_METAL_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus.toml
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
 RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
-RENDERER_METAL_ORACLE_ENTRIES ?= --entry first-light-triangle-clockwise-atomic
+RENDERER_METAL_ORACLE_ENTRIES ?= --entry native-metal-first-light-rectangle
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
 RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
 RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
@@ -256,6 +259,9 @@ metal-port-check:
 
 renderer-native-metal-tracer-binary:
 	tools/check-native-metal-tracer-binary.sh
+
+renderer-native-metal-replay:
+	MACOSX_DEPLOYMENT_TARGET=12.0 CARGO_TARGET_DIR="$(RENDERER_METAL_CANDIDATE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features native-metal --bin renderer-replay
 
 rust-attribution-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/b6-audit -p 'test_rust_attribution.py' -v
@@ -667,13 +673,11 @@ renderer-metal-reference-check:
 	@test -f "$(RENDERER_METAL_REFERENCE_BINDING)" && shasum -a 256 -c "$(RENDERER_METAL_REFERENCE_BINDING)" >/dev/null || { echo "C++ Metal reference replay or its bridge inputs changed; rerun renderer-metal-reference-replay" >&2; exit 2; }
 	@if otool -L "$(RENDERER_METAL_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Metal reference replay unexpectedly requires a Dawn/WebGPU dynamic library" >&2; exit 2; fi
 
-# Before the Rust Metal adapter exists this compares current Rust-wgpu against
-# C++ Metal and proves the oracle plumbing. UNIV-2086 replaces the candidate
-# replay/backend variables with the real Rust Metal build; the conditional
-# second invocation then records Rust-wgpu as an independent secondary oracle.
-renderer-metal-oracle-tracers: renderer-rust-replay-release renderer-metal-reference-check
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
-	@if [ "$(RENDERER_METAL_CANDIDATE_BACKEND)" != rust-wgpu ]; then cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES); else echo "Rust Metal candidate not selected; Rust-wgpu is the bootstrap candidate and secondary comparison is deferred"; fi
+# Compare the actual Rust Metal candidate against pinned C++ Metal, then run
+# the same candidate and stream against current Rust-wgpu as a secondary oracle.
+renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay-release renderer-metal-reference-check
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 
 # Native Metal deliberately has no WebGPU-style MSAA execution mode. Keep this
 # green negative contract so a future harness cannot silently relabel Dawn

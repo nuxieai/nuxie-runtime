@@ -1,0 +1,10 @@
+[[entry]]
+id = "native-metal-first-light-rectangle"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-rectangle.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-rectangle.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0

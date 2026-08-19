@@ -88,6 +88,10 @@ impl NativeMetalFactory {
         (self.width, self.height)
     }
 
+    pub fn adapter_name(&self) -> String {
+        self.context.device.name().to_string()
+    }
+
     /// Replaces the dimensions used by subsequently created frames. Frames
     /// already handed to a caller retain their original size, matching the
     /// upstream target-owner boundary during an in-flight resize.
@@ -249,14 +253,16 @@ impl Renderer for NativeMetalFrame {
             || paint.invalid_shader
             || paint.feather != 0.0
             || paint.blend_mode != BlendMode::SrcOver
+            || paint.color >> 24 != 0xff
+            || self.state.opacity != 1.0
         {
             self.unsupported
-                .get_or_insert("native Metal tracer only supports solid SrcOver fills");
+                .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
             return;
         }
         let Some(vertices) = solid_triangle_fan(path, self.state.transform) else {
             self.unsupported.get_or_insert(
-                "native Metal tracer requires one closed convex finite line contour",
+                "native Metal tracer requires one pixel-aligned axis-aligned rectangle",
             );
             return;
         };
@@ -465,7 +471,7 @@ fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 
             [point.x, point.y]
         })
         .collect();
-    if !is_convex_finite_polygon(&points) {
+    if !is_convex_finite_polygon(&points) || !is_pixel_aligned_axis_aligned_rectangle(&points) {
         return None;
     }
     let mut vertices = Vec::with_capacity(vertex_count);
@@ -473,6 +479,34 @@ fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 
         vertices.extend([points[0], points[index], points[index + 1]]);
     }
     Some(vertices)
+}
+
+fn is_pixel_aligned_axis_aligned_rectangle(points: &[[f32; 2]]) -> bool {
+    if points.len() != 4
+        || points
+            .iter()
+            .flatten()
+            .any(|coordinate| coordinate.fract() != 0.0)
+    {
+        return false;
+    }
+    for index in 0..points.len() {
+        let a = points[index];
+        let b = points[(index + 1) % points.len()];
+        if (a[0] == b[0]) == (a[1] == b[1]) {
+            return false;
+        }
+    }
+    points
+        .iter()
+        .filter(|point| point[0] == points[0][0])
+        .count()
+        == 2
+        && points
+            .iter()
+            .filter(|point| point[1] == points[0][1])
+            .count()
+            == 2
 }
 
 fn inline_triangle_fan_vertex_count(point_count: usize) -> Option<usize> {
@@ -669,6 +703,27 @@ mod tests {
             [0.309_017, -0.951_057],
             [0.309_017, 0.951_057],
             [-0.809_017, -0.587_785],
+        ]));
+    }
+
+    #[test]
+    fn diagnostic_pipeline_accepts_only_pixel_aligned_axis_aligned_rectangles() {
+        assert!(is_pixel_aligned_axis_aligned_rectangle(&[
+            [8.0, 8.0],
+            [56.0, 8.0],
+            [56.0, 56.0],
+            [8.0, 56.0],
+        ]));
+        assert!(!is_pixel_aligned_axis_aligned_rectangle(&[
+            [4.0, 4.0],
+            [60.0, 4.0],
+            [32.0, 60.0],
+        ]));
+        assert!(!is_pixel_aligned_axis_aligned_rectangle(&[
+            [8.5, 8.0],
+            [56.0, 8.0],
+            [56.0, 56.0],
+            [8.5, 56.0],
         ]));
     }
 

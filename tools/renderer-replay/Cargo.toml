@@ -7,6 +7,7 @@ license = "MIT"
 [features]
 default = ["rust-wgpu"]
 rust-wgpu = ["dep:nuxie-renderer"]
+native-metal = ["dep:nuxie-renderer", "nuxie-renderer/native-metal-experimental"]
 apple-msl-replay = ["rust-wgpu", "nuxie-renderer/apple-msl-replay"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]

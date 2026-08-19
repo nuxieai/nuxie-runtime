@@ -93,12 +93,12 @@ The native Metal harness uses the same invariant. Build pin-matched upstream
 archives with `make renderer-metal-reference-bootstrap`, build the C++
 Metal-only replay with `make renderer-metal-reference-replay`, verify it with
 `make renderer-metal-reference-check`, and exercise the green atomic tracer
-with `make renderer-metal-oracle-tracers`. Before UNIV-2086 supplies a Rust
-Metal candidate, that tracer target compares current Rust-wgpu to C++ Metal
-only to validate the oracle plumbing; it is not a Metal-port parity claim.
-After a Rust Metal candidate is selected, the target emits both primary C++
-Metal and secondary Rust-wgpu comparisons. C++ Metal provenance names and
-hashes the input manifest containing the Rive SHA and every linked archive.
+with `make renderer-metal-oracle-tracers`. The target builds the explicit
+`rust-metal` replay and compares its supported pixel-aligned rectangle first
+against pinned C++ Metal and then against current Rust-wgpu. C++ Metal
+provenance names and hashes the input manifest containing the Rive SHA and
+every linked archive; the native tracer remains a deliberately narrow trial,
+not a claim of full renderer parity.
 
 `make renderer-metal-msaa-contract` is a green negative contract. Both the
 pinned source and current upstream native Metal explicitly exclude

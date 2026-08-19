@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 12, in-progress = 0, ported = 0, verified = 0 }
+expected_status_counts = { pending = 8, in-progress = 4, ported = 0, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -12,7 +12,7 @@ expected_status_counts = { pending = 12, in-progress = 0, ported = 0, verified =
 [[owner]]
 id = "renderer.target_textures_and_atomic_storage"
 issue = "UNIV-2086"
-status = "pending"
+status = "in-progress"
 rule = "The render target retains its target texture, memoryless attachments, and lazily allocated private atomic buffers; resize replaces the complete size-dependent owner set."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:21-87"]
 required_tests = ["target compatibility and replacement", "lazy atomic allocation", "resize invalidates size-dependent storage", "drop releases all retained Metal objects"]
@@ -20,7 +20,7 @@ required_tests = ["target compatibility and replacement", "lazy atomic allocatio
 [[owner]]
 id = "renderer.device_queue_and_command_buffer"
 issue = "UNIV-2086"
-status = "pending"
+status = "in-progress"
 rule = "The context retains the device and optional queue. Each flush receives exactly one command buffer, and commit/abandon paths cannot double-submit or leak it."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:112-133", "cpp:renderer/src/metal/render_context_metal_impl.mm:1227-1246"]
 required_tests = ["queue required before product submission", "one command buffer per flush", "completion and error status propagation", "abandoned frame releases uncommitted resources"]
@@ -36,7 +36,7 @@ required_tests = ["ring rollover", "more than kBufferRingSize concurrent submiss
 [[owner]]
 id = "renderer.offline_library_and_pipeline_cache"
 issue = "UNIV-2086"
-status = "pending"
+status = "in-progress"
 rule = "Platform-specific offline metallibs are the shipping shader source. Pipeline specialization and fallback selection preserve the upstream feature-key mapping without runtime Naga or WGSL."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:29-56", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:240-266", "cpp:renderer/src/metal/render_context_metal_impl.mm:177-240"]
 required_tests = ["metallib provenance per Apple slice", "every runtime-reachable pipeline key resolves", "pipeline creation failure is fail-closed", "final Mach-O has no runtime shader translation"]
@@ -44,7 +44,7 @@ required_tests = ["metallib provenance per Apple slice", "every runtime-reachabl
 [[owner]]
 id = "renderer.capability_and_barrier_selection"
 issue = "UNIV-2089"
-status = "pending"
+status = "in-progress"
 rule = "Raster ordering, fragment barriers, and render-pass breaks are selected from the same device capabilities and workarounds as the pinned upstream Metal implementation."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:161-188"]
 required_tests = ["Apple Silicon raster-order selection", "discrete Mac barrier selection", "oldest supported Mac fallback", "forced framebuffer-read disable path"]

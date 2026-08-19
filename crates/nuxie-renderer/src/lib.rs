@@ -1,4 +1,7 @@
-//! Pure-Rust WebGPU renderer behind the `nuxie-render-api` trait boundary.
+//! Renderer implementations behind the `nuxie-render-api` trait boundary.
+//!
+//! WebGPU remains the default implementation. The native Metal tracer is
+//! available only through its explicit experimental feature during the port.
 
 #[cfg(test)]
 mod atlas_blit_oracle;
@@ -38,6 +41,11 @@ mod mipmap_pipeline;
 mod msaa_atlas_pipeline;
 mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(target_os = "ios", target_os = "macos")
+))]
+mod native_metal;
 mod path_pipeline;
 #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
 mod present_pipeline;
@@ -95,6 +103,7 @@ pub enum RendererError {
     InvalidGpuCanvas(String),
     InvalidImageUpload(String),
     Map(String),
+    NativeMetal(String),
     Unsupported(&'static str),
 }
 
@@ -116,6 +125,7 @@ impl fmt::Display for RendererError {
             Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
             Self::InvalidImageUpload(message) => write!(f, "invalid image upload: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
+            Self::NativeMetal(message) => write!(f, "native Metal error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
         }
     }
@@ -850,6 +860,11 @@ pub use logical_frame::{
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(target_os = "ios", target_os = "macos")
+))]
+pub use native_metal::{NativeMetalFactory, NativeMetalFrame};
 pub use work_metrics::BackendWorkMetrics;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1625,7 +1640,7 @@ impl Factory for WgpuFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(WgpuShader::Linear {
+        Box::new(LogicalShader::Linear {
             start: (sx, sy),
             end: (ex, ey),
             colors: colors.to_vec(),
@@ -1641,7 +1656,7 @@ impl Factory for WgpuFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(WgpuShader::Radial {
+        Box::new(LogicalShader::Radial {
             center: (cx, cy),
             radius,
             colors: colors.to_vec(),
@@ -1916,7 +1931,7 @@ impl RenderPath for LogicalPath {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-enum WgpuShader {
+enum LogicalShader {
     Linear {
         start: (f32, f32),
         end: (f32, f32),
@@ -1931,7 +1946,7 @@ enum WgpuShader {
     },
 }
 
-impl RenderShader for WgpuShader {
+impl RenderShader for LogicalShader {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1946,7 +1961,7 @@ struct LogicalPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
-    shader: Option<WgpuShader>,
+    shader: Option<LogicalShader>,
     invalid_shader: bool,
 }
 
@@ -1999,7 +2014,8 @@ impl LogicalPaint {
         }
         match &self.shader {
             None => self.color >> 24 == 0xff,
-            Some(WgpuShader::Linear { colors, .. }) | Some(WgpuShader::Radial { colors, .. }) => {
+            Some(LogicalShader::Linear { colors, .. })
+            | Some(LogicalShader::Radial { colors, .. }) => {
                 colors.iter().all(|color| color >> 24 == 0xff)
             }
         }
@@ -2042,7 +2058,7 @@ impl RenderPaint for LogicalPaint {
     fn shader(&mut self, shader: Option<&dyn RenderShader>) {
         match shader {
             Some(shader) => {
-                self.shader = shader.as_any().downcast_ref::<WgpuShader>().cloned();
+                self.shader = shader.as_any().downcast_ref::<LogicalShader>().cloned();
                 self.invalid_shader = self.shader.is_none();
             }
             None => {
@@ -10890,7 +10906,7 @@ mod tests {
         let colors = vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff];
         let stops = vec![0.0, 0.4, 1.0];
         let mut paint = LogicalPaint::default();
-        paint.shader = Some(WgpuShader::Linear {
+        paint.shader = Some(LogicalShader::Linear {
             start: (8.0, 8.0),
             end: (56.0, 56.0),
             colors: colors.clone(),
@@ -11289,7 +11305,7 @@ mod tests {
                 fill_rule: draw.fill_rule,
                 valid: true,
             };
-            frame.draw_path(&path, &draw.paint.into_wgpu());
+            frame.draw_path(&path, &draw.paint.into_logical_paint());
             frame.restore();
         }
         frame.finish_logical_frame_for_differential().unwrap()
@@ -11596,7 +11612,7 @@ mod tests {
             feather: 100.0,
             ..Default::default()
         }
-        .into_wgpu();
+        .into_logical_paint();
         let state = DrawState::default();
         let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
             .unwrap()
@@ -12082,7 +12098,7 @@ mod tests {
     #[test]
     fn radial_gradient_normalization_scales_the_radius_to_the_last_stop() {
         let gradient = normalize_gradient(
-            &WgpuShader::Radial {
+            &LogicalShader::Radial {
                 center: (3.0, 4.0),
                 radius: 20.0,
                 colors: vec![0x80ff0000, 0x400000ff],
@@ -12120,13 +12136,13 @@ mod tests {
             prepared_feather: None,
         };
         let batch = prepare_gradient_batch(&[
-            draw(WgpuShader::Linear {
+            draw(LogicalShader::Linear {
                 start: (0.0, 0.0),
                 end: (10.0, 0.0),
                 colors: vec![0xff000000, 0xffffffff],
                 stops: vec![0.0, 1.0],
             }),
-            draw(WgpuShader::Radial {
+            draw(LogicalShader::Radial {
                 center: (0.0, 0.0),
                 radius: 10.0,
                 colors: vec![0xffff0000, 0xff00ff00, 0xff0000ff],
@@ -12144,7 +12160,7 @@ mod tests {
 
     #[test]
     fn prepared_gradients_are_owned_by_exact_flushes_and_reused_for_encoder_views() {
-        let gradient = || WgpuShader::Linear {
+        let gradient = || LogicalShader::Linear {
             start: (0.0, 0.0),
             end: (10.0, 0.0),
             colors: vec![0xff000000, 0xffffffff],
@@ -12268,7 +12284,7 @@ mod tests {
                     fill_rule: FillRule::NonZero,
                 },
                 LogicalPaint {
-                    shader: Some(WgpuShader::Linear {
+                    shader: Some(LogicalShader::Linear {
                         start: (0.0, 0.0),
                         end: (64.0, 0.0),
                         colors: vec![0xff00_0000, 0xff00_ff00, 0xffff_ffff],
@@ -17352,7 +17368,7 @@ mod tests {
         let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::Msaa).unwrap();
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
         let paint = LogicalPaint {
-            shader: Some(WgpuShader::Linear {
+            shader: Some(LogicalShader::Linear {
                 start: (0.0, 0.0),
                 end: (64.0, 0.0),
                 colors: vec![0xffff_0000, 0xff00_00ff],
@@ -17386,7 +17402,7 @@ mod tests {
             let left = rect_path([0.0, 0.0, 32.0, 64.0], FillRule::Clockwise);
             let right = rect_path([32.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
             let left_paint = LogicalPaint {
-                shader: Some(WgpuShader::Linear {
+                shader: Some(LogicalShader::Linear {
                     start: (0.0, 0.0),
                     end: (32.0, 0.0),
                     colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
@@ -17395,7 +17411,7 @@ mod tests {
                 ..LogicalPaint::default()
             };
             let right_paint = LogicalPaint {
-                shader: Some(WgpuShader::Linear {
+                shader: Some(LogicalShader::Linear {
                     start: (32.0, 0.0),
                     end: (64.0, 0.0),
                     colors: vec![0xff00_00ff, 0xffff_ffff, 0xffff_0000],
@@ -17957,7 +17973,7 @@ mod tests {
         };
         let fill = rect_path([0.0, 0.0, 64.0, 64.0], FillRule::Clockwise);
         let paint = LogicalPaint {
-            shader: Some(WgpuShader::Linear {
+            shader: Some(LogicalShader::Linear {
                 start: (0.0, 0.0),
                 end: (64.0, 64.0),
                 colors: vec![0xffff_ffff, 0xff00_0000],
@@ -20405,7 +20421,7 @@ mod tests {
         let paint = LogicalPaint {
             feather: 4.0,
             blend_mode: BlendMode::Multiply,
-            shader: Some(WgpuShader::Linear {
+            shader: Some(LogicalShader::Linear {
                 start: (8.0, 8.0),
                 end: (56.0, 56.0),
                 colors: vec![0xffff_0000, 0xff00_00ff],
@@ -20432,7 +20448,7 @@ mod tests {
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
             feather: 4.0,
-            shader: Some(WgpuShader::Linear {
+            shader: Some(LogicalShader::Linear {
                 start: (8.0, 8.0),
                 end: (56.0, 56.0),
                 colors: vec![0xffff_0000, 0xff00_00ff],
@@ -21683,7 +21699,7 @@ mod tests {
             prepared_feather: None,
         };
         for index in 0..2048u32 {
-            draw.paint.shader = Some(WgpuShader::Linear {
+            draw.paint.shader = Some(LogicalShader::Linear {
                 start: (0.0, 0.0),
                 end: (64.0, 64.0),
                 colors: vec![0xff00_0000 | index, 0xff00_ff00, 0xff00_00ff],

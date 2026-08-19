@@ -220,14 +220,14 @@ pub enum LogicalGradient {
 }
 
 impl LogicalGradient {
-    fn into_wgpu(self) -> super::WgpuShader {
+    fn into_logical_shader(self) -> super::LogicalShader {
         match self {
             Self::Linear {
                 start,
                 end,
                 colors,
                 stops,
-            } => super::WgpuShader::Linear {
+            } => super::LogicalShader::Linear {
                 start,
                 end,
                 colors,
@@ -238,7 +238,7 @@ impl LogicalGradient {
                 radius,
                 colors,
                 stops,
-            } => super::WgpuShader::Radial {
+            } => super::LogicalShader::Radial {
                 center,
                 radius,
                 colors,
@@ -263,7 +263,7 @@ impl Default for LogicalPathPaint {
 }
 
 impl LogicalPathPaint {
-    pub(crate) fn into_wgpu(self) -> LogicalPaint {
+    pub(crate) fn into_logical_paint(self) -> LogicalPaint {
         LogicalPaint {
             style: self.style,
             color: self.color,
@@ -298,8 +298,8 @@ impl LogicalResourceCounts {
         let mut gradient_stop_records = 0usize;
         for shader in draws.iter().filter_map(|draw| draw.paint.shader.as_ref()) {
             let (colors, stops) = match shader {
-                super::WgpuShader::Linear { colors, stops, .. }
-                | super::WgpuShader::Radial { colors, stops, .. } => (colors, stops),
+                super::LogicalShader::Linear { colors, stops, .. }
+                | super::LogicalShader::Radial { colors, stops, .. } => (colors, stops),
             };
             gradient_records = gradient_records.saturating_add(1);
             gradient_color_records = gradient_color_records.saturating_add(colors.len());
@@ -2089,12 +2089,12 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
 }
 
 pub(crate) fn normalize_gradient(
-    shader: &super::WgpuShader,
+    shader: &super::LogicalShader,
     opacity: f32,
 ) -> Option<GradientDefinition> {
     const EPSILON: f32 = 1.0 / 4096.0;
     let (paint_type, mut colors, stops, coeffs) = match shader {
-        super::WgpuShader::Linear {
+        super::LogicalShader::Linear {
             start,
             end,
             colors,
@@ -2143,7 +2143,7 @@ pub(crate) fn normalize_gradient(
                 [vx, vy, -(vx * start.0 + vy * start.1)],
             )
         }
-        super::WgpuShader::Radial {
+        super::LogicalShader::Radial {
             center,
             radius,
             colors,
@@ -3109,8 +3109,8 @@ impl NullLogicalRenderer {
             return Ok(());
         }
         let result = (|| {
-            let mut paint = paint.into_wgpu();
-            paint.shader = gradient.map(LogicalGradient::into_wgpu);
+            let mut paint = paint.into_logical_paint();
+            paint.shader = gradient.map(LogicalGradient::into_logical_shader);
             let Some(admitted) =
                 admit_path_draw(config, frame.logical_state.state, &path.path, &paint)?
             else {

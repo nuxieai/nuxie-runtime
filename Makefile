@@ -1,5 +1,6 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
+.PHONY: renderer-metal-msaa-probe
 .PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 .PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
@@ -21,6 +22,9 @@ PORT_MANIFEST_UPSTREAM_REF ?= $(shell git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEA
 RUNTIME_DRAWING_PORT_TOOL ?= $(CURDIR)/tools/runtime-drawing-port/check.py
 RUNTIME_DRAWING_OWNERSHIP ?= $(CURDIR)/docs/runtime-drawing-ownership.toml
 RUNTIME_DRAWING_GAPS ?= $(CURDIR)/docs/runtime-drawing-gaps.toml
+METAL_PORT_TOOL ?= $(CURDIR)/tools/metal-port/check.py
+METAL_PORT_MANIFEST ?= $(CURDIR)/docs/metal-port-manifest.toml
+METAL_PORT_OWNERSHIP ?= $(CURDIR)/docs/metal-port-ownership.toml
 RUNTIME_FRAME_LOOP_PORT_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check.py
 TEST_CORRESPONDENCE_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_test_correspondence.py
 LAYOUT_STYLE_HANDLER_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_layout_style_handlers.py
@@ -63,6 +67,18 @@ RENDERER_SAME_RUNNER_JOBS ?= 1
 RENDERER_REPLAY_TIMEOUT_SECONDS ?= 60
 RENDERER_GOLDEN_TARGET_DIR ?= $(CURDIR)/target/renderer-golden
 RENDERER_GOLDEN_RUST_REPLAY ?= $(RENDERER_GOLDEN_TARGET_DIR)/release/renderer-replay
+RENDERER_METAL_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-metal-reference-build
+RENDERER_METAL_REFERENCE_DIR ?= $(CURDIR)/target/renderer-metal-reference
+RENDERER_METAL_REFERENCE_REPLAY ?= $(RENDERER_METAL_REFERENCE_DIR)/renderer-replay
+RENDERER_METAL_UPSTREAM_STAMP ?= $(RIVE_RUNTIME_DIR)/tests/out/release/.nuxie-metal-upstream-ref
+RENDERER_METAL_REFERENCE_INPUT_MANIFEST ?= $(RENDERER_METAL_REFERENCE_DIR)/upstream-inputs.sha256
+RENDERER_METAL_REFERENCE_BINDING ?= $(RENDERER_METAL_REFERENCE_DIR)/renderer-replay.inputs.sha256
+RENDERER_METAL_ARCHIVE_PATHS = $(addprefix $(RIVE_RUNTIME_DIR)/tests/out/release/,librive.a librive_pls_renderer.a librive_decoders.a liblibwebp.a liblibpng.a libzlib.a liblibjpeg.a librive_harfbuzz.a librive_sheenbidi.a librive_yoga.a)
+RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_GOLDEN_RUST_REPLAY)
+RENDERER_METAL_CANDIDATE_BACKEND ?= rust-wgpu
+RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
+RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
+RENDERER_METAL_ORACLE_ENTRIES ?= --entry first-light-triangle-clockwise-atomic
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
 RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
 RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
@@ -230,6 +246,12 @@ port-manifest-gate:
 	@tools/report-all.sh "port-manifest" \
 		"port-manifest tool unit tests" "$(MAKE) --no-print-directory port-manifest-test" \
 		"upstream C++ port manifest check" "$(MAKE) --no-print-directory port-manifest-check"
+
+metal-port-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/metal-port -p 'test_*.py' -v
+
+metal-port-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_PORT_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --ownership "$(METAL_PORT_OWNERSHIP)"
 
 rust-attribution-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/b6-audit -p 'test_rust_attribution.py' -v
@@ -607,6 +629,53 @@ renderer-golden: renderer-replay
 # the immutable renderer-port pixel oracle and is never relabeled as current-runtime output.
 renderer-rust-replay-release:
 	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --bin renderer-replay
+
+# Build the upstream archives and bind them to the exact source revision. The
+# stamp prevents a checkout change from silently reusing ABI-incompatible
+# archives.
+renderer-metal-reference-bootstrap:
+	@test "$$(git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD)" = "$(RIVE_RUNTIME_REF)" || { echo "C++ Metal oracle checkout does not match RIVE_RUNTIME_REF=$(RIVE_RUNTIME_REF)" >&2; exit 2; }
+	@git -C "$(RIVE_RUNTIME_DIR)" diff --quiet --ignore-submodules -- && git -C "$(RIVE_RUNTIME_DIR)" diff --cached --quiet --ignore-submodules -- || { echo "C++ Metal oracle checkout has tracked changes" >&2; exit 2; }
+	cd "$(RIVE_RUNTIME_DIR)/tests" && ../build/build_rive.sh release -- rive rive_pls_renderer rive_decoders libwebp libpng zlib libjpeg rive_harfbuzz rive_sheenbidi rive_yoga
+	git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD > "$(RENDERER_METAL_UPSTREAM_STAMP)"
+	mkdir -p "$(RENDERER_METAL_REFERENCE_DIR)"
+	rm -f "$(RENDERER_METAL_REFERENCE_BINDING)"
+	@{ printf 'runtime_revision=%s\n' "$(RIVE_RUNTIME_REF)"; shasum -a 256 $(RENDERER_METAL_ARCHIVE_PATHS); } > "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)"
+
+# Build a C++ native-Metal-only oracle replay. This deliberately disables the
+# default Rust-wgpu feature and does not compile the Dawn bridge.
+renderer-metal-reference-replay:
+	@test -f "$(RENDERER_METAL_UPSTREAM_STAMP)" || { echo "missing pinned upstream Metal archive stamp; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
+	@test "$$(cat "$(RENDERER_METAL_UPSTREAM_STAMP)")" = "$(RIVE_RUNTIME_REF)" || { echo "stale upstream Metal archives; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_METAL_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features ffi --bin renderer-replay
+	mkdir -p "$(RENDERER_METAL_REFERENCE_DIR)"
+	cp "$(RENDERER_METAL_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_METAL_REFERENCE_REPLAY)"
+	chmod 0755 "$(RENDERER_METAL_REFERENCE_REPLAY)"
+	@shasum -a 256 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | awk '{print $$1}' > "$(RENDERER_METAL_REFERENCE_BINDING)"
+
+renderer-metal-reference-check:
+	@test -x "$(RENDERER_METAL_REFERENCE_REPLAY)" || { echo "missing executable C++ Metal reference replay: $(RENDERER_METAL_REFERENCE_REPLAY)" >&2; exit 2; }
+	@test "$$(git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD)" = "$(RIVE_RUNTIME_REF)" || { echo "C++ Metal oracle checkout moved from $(RIVE_RUNTIME_REF)" >&2; exit 2; }
+	@git -C "$(RIVE_RUNTIME_DIR)" diff --quiet --ignore-submodules -- && git -C "$(RIVE_RUNTIME_DIR)" diff --cached --quiet --ignore-submodules -- || { echo "C++ Metal oracle checkout has tracked changes" >&2; exit 2; }
+	@test -f "$(RENDERER_METAL_UPSTREAM_STAMP)" && test "$$(cat "$(RENDERER_METAL_UPSTREAM_STAMP)")" = "$(RIVE_RUNTIME_REF)" || { echo "missing or stale upstream Metal archive stamp" >&2; exit 2; }
+	@test -f "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" && grep -Fqx 'runtime_revision=$(RIVE_RUNTIME_REF)' "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" || { echo "missing or stale Metal reference input manifest" >&2; exit 2; }
+	@tail -n +2 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | shasum -a 256 -c - >/dev/null || { echo "C++ Metal oracle archive identity changed; rerun renderer-metal-reference-bootstrap and rebuild the replay" >&2; exit 2; }
+	@test -f "$(RENDERER_METAL_REFERENCE_BINDING)" && test "$$(cat "$(RENDERER_METAL_REFERENCE_BINDING)")" = "$$(shasum -a 256 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | awk '{print $$1}')" || { echo "C++ Metal reference replay is not bound to the current input manifest; rerun renderer-metal-reference-replay" >&2; exit 2; }
+	@if otool -L "$(RENDERER_METAL_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Metal reference replay unexpectedly requires a Dawn/WebGPU dynamic library" >&2; exit 2; fi
+
+# Before the Rust Metal adapter exists this compares current Rust-wgpu against
+# C++ Metal and proves the oracle plumbing. UNIV-2086 replaces the candidate
+# replay/backend variables with the real Rust Metal build; the conditional
+# second invocation then records Rust-wgpu as an independent secondary oracle.
+renderer-metal-oracle-tracers: renderer-rust-replay-release renderer-metal-reference-check
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	@if [ "$(RENDERER_METAL_CANDIDATE_BACKEND)" != rust-wgpu ]; then cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES); else echo "Rust Metal candidate not selected; Rust-wgpu is the bootstrap candidate and secondary comparison is deferred"; fi
+
+# Keep the known-red MSAA reference probe separate from the green oracle smoke
+# target. UNIV-2088 owns selecting a working authoritative upstream MSAA path.
+renderer-metal-msaa-probe: renderer-metal-reference-check
+	mkdir -p "$(RENDERER_METAL_TRACER_OUTPUT_DIR)"
+	"$(RENDERER_METAL_REFERENCE_REPLAY)" --stream "$(CURDIR)/fixtures/renderer/streams/first-light-rectangle.rive-stream" --output "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/first-light-rectangle-msaa-reference.png" --backend ffi-metal --mode msaa
 
 # Bootstrap the pinned Dawn checkout and the exact static C++ archives consumed
 # by nuxie-renderer-ffi. `gclient`, `gn`, `ninja`, `premake5`, and Naga 30 must

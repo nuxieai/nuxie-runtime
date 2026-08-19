@@ -192,7 +192,7 @@ impl FfiFactory {
         })
     }
 
-    #[cfg(all(feature = "dawn", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     pub fn adapter_name(&self) -> Result<String, NativeRendererError> {
         let mut name = [0 as c_char; 256];
         let required = unsafe {
@@ -906,7 +906,7 @@ mod ffi {
             context: *mut Context,
             out: *mut FfiBackendWorkMetrics,
         );
-        #[cfg(all(feature = "dawn", target_os = "macos"))]
+        #[cfg(target_os = "macos")]
         pub fn rive_ffi_context_adapter_name(
             context: *mut Context,
             out: *mut std::os::raw::c_char,

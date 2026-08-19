@@ -1438,14 +1438,21 @@ path.
 
 ## Named adaptation ceilings
 
-- **lua-gpu-wgpu-adapter** (D18): Lua GPU objects execute on wgpu via
-  immutable submission snapshots; explicit `finish()` is required at script
-  return; at most 16 external texture identities are retained. Browser WebGPU
-  validates the exact immutable WGSL asynchronously before mounting Lua because
-  its error scopes are promise-backed. Each later synchronous `Context::shader`
+- **lua-gpu-platform-adapter** (D18): Lua GPU objects execute through the
+  selected concrete platform adapter via immutable submission snapshots;
+  explicit `finish()` is required at script return; at most 16 external texture
+  identities are retained. Browser uses wgpu/WebGPU. Apple continues to use
+  wgpu until the native Metal adapter passes `METAL_PORTING.md` and UNIV-2092
+  cuts over; after that cutover Apple uses native Metal and carries no wgpu
+  dependency. Browser WebGPU validates exact immutable WGSL asynchronously
+  before mounting Lua because its error scopes are promise-backed. Native Metal
+  executes authenticated target-2 MSL with target-10 BindingMap reflection as
+  specified by the Metal guide. Each later synchronous `Context::shader`
   lookup must still allocate a fresh occurrence and physical shader module,
   matching pinned C++ ownership. Never drop GPU-prefixed names, share the
-  physical module across lookups, or substitute CPU rendering.
+  physical module across lookups, repair a native failure with a different
+  shader target, or substitute CPU rendering. UNIV-1643/UNIV-2085 are the
+  approved Apple replacement decision; browser scope is unchanged.
 
 ## Named item-bound host adaptations
 

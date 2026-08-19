@@ -5,6 +5,12 @@ fast as the C++ Dawn renderer without changing its rendered result. It
 supersedes R4's historical 2.0x directional threshold. The old R4 reports
 remain useful history, but `1.0x` is now the acceptance threshold.
 
+This workflow remains authoritative for the current WebGPU adapter. The native
+Metal campaign has a same-backend primary oracle and translation discipline in
+`docs/METAL_PORTING.md`: Rust Metal is compared to pinned C++ Metal, while the
+current Rust-wgpu renderer is a separate secondary regression oracle. Results
+from those two lanes must not be merged or relabeled.
+
 ## Definition of parity
 
 The primary metric is submit-to-GPU-complete frame time from

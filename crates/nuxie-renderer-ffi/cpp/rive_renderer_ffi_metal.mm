@@ -28,7 +28,14 @@ public:
                 return false;
             }
 
-            context = rive::gpu::RenderContextMetalImpl::MakeContext(gpu);
+            rive::gpu::RenderContextMetalImpl::ContextOptions options;
+            // Match upstream's golden/GM harness: oracle captures must compile
+            // every selected shader synchronously so an async pipeline cannot
+            // turn a deterministic replay into a missing-function failure.
+            options.shaderCompilationMode =
+                rive::gpu::ShaderCompilationMode::alwaysSynchronous;
+            context =
+                rive::gpu::RenderContextMetalImpl::MakeContext(gpu, options);
             if (context == nullptr)
             {
                 return false;

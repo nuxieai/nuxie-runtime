@@ -32,10 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "rust-wgpu")]
         "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "ffi", target_os = "macos"))]
-        "ffi-metal" => (
-            replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?,
-            None,
-        ),
+        "ffi-metal" => {
+            replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         #[cfg(all(feature = "perf-dawn", target_os = "macos"))]
         "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
         backend => {
@@ -104,11 +103,12 @@ fn replay_ffi_metal(
     height: u32,
     clear: u32,
     mode: &str,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let factory = nuxie_renderer_ffi::FfiFactory::new_metal(width, height)?;
+    let adapter = factory.adapter_name()?;
     let mut pixels = replay_ffi(stream, frame_index, factory, clear, mode)?;
     flip_rows(&mut pixels, width, height);
-    Ok(pixels)
+    Ok((pixels, Some(adapter)))
 }
 
 #[cfg(all(feature = "perf-dawn", target_os = "macos"))]

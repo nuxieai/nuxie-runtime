@@ -558,6 +558,10 @@ struct DynamicProvenance<'a> {
     reference_replay: String,
     reference_replay_sha256: &'a str,
     reference_backend: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reference_input_manifest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reference_input_manifest_sha256: Option<&'a str>,
     reference_output: String,
     reference_png_sha256: String,
     reference_adapter: &'a str,
@@ -645,6 +649,11 @@ fn prepare_dynamic_reference_report(
         reference_replay: reference_replay.replay.display().to_string(),
         reference_replay_sha256: &run_provenance.reference_replay_sha256,
         reference_backend: reference_replay.backend,
+        reference_input_manifest: run_provenance
+            .reference_input_manifest
+            .as_ref()
+            .map(|path| path.display().to_string()),
+        reference_input_manifest_sha256: run_provenance.reference_input_manifest_sha256.as_deref(),
         reference_output: reference_png.display().to_string(),
         reference_png_sha256: sha256_file(reference_png)?,
         reference_adapter: reference_adapter.as_deref().unwrap_or("unreported"),
@@ -672,6 +681,8 @@ fn prepare_dynamic_reference_report(
 struct DynamicRunProvenance {
     reference_replay_sha256: String,
     candidate_replay_sha256: String,
+    reference_input_manifest: Option<PathBuf>,
+    reference_input_manifest_sha256: Option<String>,
 }
 
 impl DynamicRunProvenance {
@@ -685,9 +696,16 @@ impl DynamicRunProvenance {
         } else {
             sha256_file(reference.replay)?
         };
+        let reference_input_manifest_sha256 = options
+            .reference_input_manifest
+            .as_deref()
+            .map(sha256_file)
+            .transpose()?;
         Ok(Some(Self {
             reference_replay_sha256,
             candidate_replay_sha256,
+            reference_input_manifest: options.reference_input_manifest.clone(),
+            reference_input_manifest_sha256,
         }))
     }
 }
@@ -1416,6 +1434,7 @@ struct Options {
     entry_ids: Vec<String>,
     reference_replay: Option<PathBuf>,
     reference_backend: Option<String>,
+    reference_input_manifest: Option<PathBuf>,
     replay_timeout: Duration,
 }
 
@@ -1435,6 +1454,7 @@ impl Options {
         let mut entry_ids = Vec::new();
         let mut reference_replay = None;
         let mut reference_backend = None;
+        let mut reference_input_manifest = None;
         let mut replay_timeout = Duration::from_secs(DEFAULT_REPLAY_TIMEOUT_SECONDS);
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
@@ -1459,6 +1479,9 @@ impl Options {
                     reference_replay = Some(PathBuf::from(args.next().ok_or(usage())?))
                 }
                 "--reference-backend" => reference_backend = Some(args.next().ok_or(usage())?),
+                "--reference-input-manifest" => {
+                    reference_input_manifest = Some(PathBuf::from(args.next().ok_or(usage())?))
+                }
                 "--replay-timeout-seconds" => {
                     let value = args.next().ok_or(usage())?;
                     let seconds = value.parse::<u64>().map_err(|_| {
@@ -1482,11 +1505,19 @@ impl Options {
                 "--reference-replay and --reference-backend must be provided together".into(),
             );
         }
+        if reference_input_manifest.is_some() && reference_replay.is_none() {
+            return Err(
+                "--reference-input-manifest requires --reference-replay and --reference-backend"
+                    .into(),
+            );
+        }
         if reference_backend
             .as_deref()
-            .is_some_and(|backend| !matches!(backend, "ffi-dawn" | "rust-wgpu"))
+            .is_some_and(|backend| !matches!(backend, "ffi-metal" | "ffi-dawn" | "rust-wgpu"))
         {
-            return Err("--reference-backend must be `ffi-dawn` or `rust-wgpu`".into());
+            return Err(
+                "--reference-backend must be `ffi-metal`, `ffi-dawn`, or `rust-wgpu`".into(),
+            );
         }
         Ok(Self {
             manifest,
@@ -1499,6 +1530,7 @@ impl Options {
             entry_ids,
             reference_replay,
             reference_backend,
+            reference_input_manifest,
             replay_timeout,
         })
     }
@@ -1518,7 +1550,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend ffi-dawn|rust-wgpu] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--entry ID ...] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend ffi-metal|ffi-dawn|rust-wgpu] [--reference-input-manifest FILE] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--entry ID ...] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -2120,10 +2152,18 @@ mod tests {
         let reference = options.dynamic_reference().unwrap();
         assert_eq!(reference.replay, Path::new("renderer-replay"));
         assert_eq!(reference.backend, "ffi-dawn");
+
+        let error = Options::parse_args([
+            "--reference-input-manifest".to_owned(),
+            "inputs.txt".to_owned(),
+        ])
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("requires --reference-replay"));
     }
 
     #[test]
-    fn dynamic_reference_accepts_same_backend_replay_and_rejects_other_backends() {
+    fn dynamic_reference_accepts_renderer_oracle_backends_and_rejects_stub() {
         let options = Options::parse_args([
             "--reference-replay".to_owned(),
             "renderer-replay".to_owned(),
@@ -2133,18 +2173,25 @@ mod tests {
         .unwrap();
         assert_eq!(options.dynamic_reference().unwrap().backend, "rust-wgpu");
 
-        for backend in ["stub", "ffi-metal"] {
-            let error = Options::parse_args([
-                "--reference-replay".to_owned(),
-                "renderer-replay".to_owned(),
-                "--reference-backend".to_owned(),
-                backend.to_owned(),
-            ])
-            .err()
-            .unwrap();
-            assert!(error
-                .to_string()
-                .contains("--reference-backend must be `ffi-dawn` or `rust-wgpu`"));
-        }
+        let metal = Options::parse_args([
+            "--reference-replay".to_owned(),
+            "renderer-replay".to_owned(),
+            "--reference-backend".to_owned(),
+            "ffi-metal".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(metal.dynamic_reference().unwrap().backend, "ffi-metal");
+
+        let error = Options::parse_args([
+            "--reference-replay".to_owned(),
+            "renderer-replay".to_owned(),
+            "--reference-backend".to_owned(),
+            "stub".to_owned(),
+        ])
+        .err()
+        .unwrap();
+        assert!(error
+            .to_string()
+            .contains("--reference-backend must be `ffi-metal`, `ffi-dawn`, or `rust-wgpu`"));
     }
 }

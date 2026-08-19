@@ -5,7 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 36, in-progress = 0, ported = 0, verified = 0 }
+expected_status_counts = { pending = 34, in-progress = 2, ported = 0, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -35,7 +35,7 @@ source_excludes = [
 upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "pending"
+status = "in-progress"
 rust_modules = []
 evidence = []
 [[source]]
@@ -58,7 +58,7 @@ evidence = []
 upstream = "renderer/src/metal/render_context_metal_impl.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "pending"
+status = "in-progress"
 rust_modules = []
 evidence = []
 

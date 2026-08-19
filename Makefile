@@ -1,6 +1,6 @@
 .PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
-.PHONY: renderer-metal-msaa-probe
+.PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe
 .PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 .PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
@@ -671,11 +671,17 @@ renderer-metal-oracle-tracers: renderer-rust-replay-release renderer-metal-refer
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 	@if [ "$(RENDERER_METAL_CANDIDATE_BACKEND)" != rust-wgpu ]; then cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES); else echo "Rust Metal candidate not selected; Rust-wgpu is the bootstrap candidate and secondary comparison is deferred"; fi
 
-# Keep the known-red MSAA reference probe separate from the green oracle smoke
-# target. UNIV-2088 owns selecting a working authoritative upstream MSAA path.
-renderer-metal-msaa-probe: renderer-metal-reference-check
+# Native Metal deliberately has no WebGPU-style MSAA execution mode. Keep this
+# green negative contract so a future harness cannot silently relabel Dawn
+# output or attempt to construct an unsupported native Metal pipeline.
+renderer-metal-msaa-contract: renderer-metal-reference-check
 	mkdir -p "$(RENDERER_METAL_TRACER_OUTPUT_DIR)"
-	"$(RENDERER_METAL_REFERENCE_REPLAY)" --stream "$(CURDIR)/fixtures/renderer/streams/first-light-rectangle.rive-stream" --output "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/first-light-rectangle-msaa-reference.png" --backend ffi-metal --mode msaa
+	@if "$(RENDERER_METAL_REFERENCE_REPLAY)" --stream "$(CURDIR)/fixtures/renderer/streams/first-light-rectangle.rive-stream" --output "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/first-light-rectangle-msaa-reference.png" --backend ffi-metal --mode msaa >"$(RENDERER_METAL_TRACER_OUTPUT_DIR)/msaa-contract.log" 2>&1; then echo "native Metal unexpectedly accepted the WebGPU MSAA mode" >&2; exit 1; fi
+	@grep -Fq 'native Metal does not implement `msaa`' "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/msaa-contract.log" || { cat "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/msaa-contract.log" >&2; exit 1; }
+	@echo "native Metal correctly rejected the WebGPU MSAA mode"
+
+# Compatibility alias for existing local invocations.
+renderer-metal-msaa-probe: renderer-metal-msaa-contract
 
 # Bootstrap the pinned Dawn checkout and the exact static C++ archives consumed
 # by nuxie-renderer-ffi. `gclient`, `gn`, `ninja`, `premake5`, and Naga 30 must

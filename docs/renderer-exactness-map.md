@@ -100,13 +100,13 @@ After a Rust Metal candidate is selected, the target emits both primary C++
 Metal and secondary Rust-wgpu comparisons. C++ Metal provenance names and
 hashes the input manifest containing the Rive SHA and every linked archive.
 
-`make renderer-metal-msaa-probe` is deliberately separate and red at the
-pinned upstream revision: native Metal aborts while constructing the requested
-MSAA pipeline (`vertexFunction must not be nil`), and upstream's Metal test
-window does not forward its `metalmsaa` flag into `FrameDescriptor`.
-UNIV-2088 must identify the authoritative working upstream MSAA path before
-MSAA becomes a primary C++ Metal oracle. The existing Dawn MSAA PNG remains a
-secondary regression reference; it must not be relabeled as C++ Metal.
+`make renderer-metal-msaa-contract` is a green negative contract. Both the
+pinned source and current upstream native Metal explicitly exclude
+`InterlockMode::msaa`; native Metal selects raster-order execution or an atomic
+fallback instead. The contract rejects MSAA before C++ pipeline construction,
+where the old probe crashed. UNIV-2088 covers both native execution branches.
+The existing Dawn MSAA PNG remains WebGPU regression evidence and must not be
+relabeled as C++ Metal.
 
 ## Same-tier Migration
 

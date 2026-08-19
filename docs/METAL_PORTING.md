@@ -262,16 +262,32 @@ different class of translation error.
    - performance at least matches the pinned C++ contract over independent
      reports; no single warm run is a release verdict.
 8. **Product and distribution**
-   - iOS device arm64, simulator arm64/x86_64, macOS arm64/x86_64;
-   - required physical devices, OS floors, MSL versions, and GPU families;
+   - preserve the existing iOS 15 and macOS 12 floors;
+   - iOS device arm64, simulator arm64/x86_64, macOS arm64/x86_64, including
+     Intel macOS and Intel Simulator support;
+   - qualify capability branches rather than marketing generations: legacy
+     PowerVR iOS, modern Apple-family iOS, Intel Mac, discrete AMD Mac, Apple
+     Silicon Mac, Intel-hosted Simulator, and Apple-Silicon-hosted Simulator;
+   - Apple Silicon Mac, modern physical iOS, and both simulator branches gate
+     renderer changes. Legacy PowerVR, Intel Mac, and discrete AMD Mac gate
+     cutover, releases, and changes to capability/barrier selection;
+   - every row has fresh candidate/artifact, OS, SDK, device-family, corpus,
+     output, and evidence digests. Provenance-complete external device-lab or
+     trusted-contributor runs are valid for scarce hardware;
    - C and Swift consumer tests;
    - final consumed Mach-Os, not intermediate `.rlib` estimates.
 9. **Slim-closure deletion gate**
    - Apple selects Rust Metal with no fallback;
    - wgpu/Naga/WGSL/runtime-MSL-generation reachability is absent;
    - Apple-only wgpu paths and feature flips are deleted, not left dormant;
-   - release size and performance are recorded against the pre-cutover baseline
-     and the pinned C++ comparator.
+   - both scripting-off and scripting-on rooted Mach-O closures are at least 5%
+     smaller than a freshly reproduced wgpu baseline built with identical
+     roots and toolchain;
+   - no Apple slice or packaged artifact grows. Record absolute and percentage
+     changes for every slice and XCFramework without applying the rooted 5%
+     threshold to compressed bundles;
+   - release performance is recorded against the pre-cutover baseline and the
+     pinned C++ comparator.
 
 ## ORE-specific fail-closed rules
 
@@ -289,6 +305,10 @@ UNIV-2087. The authored shader lane additionally requires:
 
 Keep ORE's interface limited to production-authored operations. Vulkan-only or
 editor-only operations are added later when a concrete adapter requires them.
+ORE Metal lives in a separate crate from the built-in Metal renderer so a
+scripting-disabled product can prove its shader, reflection, and trust
+machinery is absent. It may consume only the narrow device/queue service proven
+by the concrete Metal adapter.
 
 ## Merge and cutover discipline
 
@@ -297,6 +317,15 @@ does not change until UNIV-2092. Before cutover, every native failure is visible
 and testable; it cannot silently route to wgpu. UNIV-2092 changes the default,
 qualifies all distribution slices and devices, measures the final artifacts,
 and deletes the obsolete Apple dependency paths in the same closeout.
+
+After UNIV-2086 proves the concrete device, queue, frame, surface, completion,
+and ownership boundary, mechanically extract the demonstrated backend-neutral
+planning into `nuxie-renderer-core` and add `nuxie-renderer-metal` before
+UNIV-2087 expands the implementation. Add `nuxie-ore-metal` when UNIV-2091
+begins. Keep the existing `nuxie-renderer` name on the wgpu implementation for
+the Metal campaign; rename or replace it only when the WebGPU phase begins.
+This extraction preserves source correspondence and is not an invitation for
+idiomatic cleanup.
 
 Idiomatic refactoring begins only after the complete Metal adapter is at parity.
 At that point compare the concrete Metal and WebGPU adapters, extract only
@@ -314,28 +343,28 @@ advance is a separate review that:
 4. reruns C++ Metal oracle provenance;
 5. lands independently of behavioral cleanup.
 
-## Decisions requiring product ownership
+## Recorded decisions
 
-Implementation can begin without resolving these, but the named gates cannot
-close until they are explicit:
+1. **Apple support floor:** preserve iOS 15, macOS 12, Intel macOS, and Intel
+   Simulator during the Metal migration. Platform retirement is separate work.
+2. **Required hardware matrix:** gate the distinct capability branches listed
+   in validation rung 8. A failure on any supported branch blocks cutover; it
+   never retains wgpu as an escape hatch. An upstream-equivalent native Metal
+   execution mode is valid when it passes the same parity gates.
+3. **Parity decisions:** default to exact pinned-C++ parity. If evidence exposes
+   a necessary divergence, Codex presents its exact scope and recommendation;
+   the user decides. Record only the resulting bounded technical contract in
+   its Universe issue and enforcing test.
+4. **Size success threshold:** remove all forbidden reachability and reduce
+   both rooted Mach-O variants by at least 5% versus the same-toolchain wgpu
+   baseline, with no Apple slice or packaged artifact growth.
+5. **Crate layout:** make the first concrete adapter work in UNIV-2086, then
+   perform the mechanical core/Metal split before UNIV-2087. Keep ORE Metal
+   separate and defer the existing wgpu crate rename to the WebGPU phase.
 
-1. **Apple support floor:** minimum iOS and macOS versions, including whether
-   Intel macOS remains a shipping requirement. This determines texture-format,
-   barrier, metallib, and real-device rows.
-2. **Required hardware matrix:** the oldest physical Mac GPU family and oldest
-   physical iPhone/iPad family that must gate raster-order/atomic behavior.
-3. **Parity exception authority:** who may approve a deliberate divergence from
-   pinned C++ Metal, and where its bounded contract is recorded. Default is no
-   divergence.
-4. **Size success threshold:** whether success is simply removal of forbidden
-   dependencies plus a measured reduction, or a numeric final Apple artifact
-   target. Both measurements are required; the numeric release threshold needs
-   product ownership.
-5. **Post-Metal crate layout:** whether the proven backend-neutral planner moves
-   to a distinct crate before the WebGPU rewrite or during it. No decision is
-   needed for UNIV-2086; the concrete Metal implementation should supply the
-   evidence.
-6. **Native Metal MSAA authority:** at the pinned revision, direct C++ Metal
+## Remaining decision
+
+1. **Native Metal MSAA authority:** at the pinned revision, direct C++ Metal
    replay aborts while creating an MSAA pipeline, and upstream's Metal test
    window does not actually propagate its `metalmsaa` selection into the frame
    descriptor. Decide whether UNIV-2088 should track a newer known-good

@@ -24,6 +24,22 @@ measurements plus a NOTE (never a failure) when a variant exceeds the 9 MiB
 reference. At FL-E completion the budget USER-GATE reopens with complete
 measurements and the binding number is set then.
 
+## Native Metal migration gate
+
+The native Metal campaign has a separate comparative success gate from the
+absolute SDK budget above. UNIV-2092 may cut Apple over only when:
+
+- final consumed Mach-Os contain no reachable wgpu, wgpu-core, wgpu-hal,
+  runtime Naga, WGSL parser/validator, MSL generator, or diagnostic renderer;
+- both scripting-off and scripting-on rooted Mach-O closures are at least 5%
+  smaller than a freshly reproduced wgpu baseline built with identical public
+  roots, toolchain, target, LTO, and linker settings; and
+- no Apple architecture slice or packaged XCFramework grows.
+
+Every slice and package still records absolute bytes and percentage change.
+The 5% threshold applies to rooted Mach-O closures, not compressed packages,
+where unrelated contents dilute the renderer-specific delta.
+
 History: the initial 8 MiB choice was made against the 2026-07-20
 measurements below, which predate concurrent main `974aab66` (editor-cutover
 runtime support). Re-measurement at `2f82f9e7`, including the 43rd audited

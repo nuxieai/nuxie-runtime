@@ -136,8 +136,8 @@ the complete workflow before the campaign expands:
    experimental; failure does not fall back.
 3. Compare the same recorded stream in the same run against pinned C++ Metal
    and current Rust wgpu. `renderer-metal-oracle-tracers` records C++ Metal as
-   the primary reference and, once a Rust Metal candidate is selected, runs a
-   separate Rust-wgpu secondary comparison into its own output directory.
+   the primary reference and runs a separate Rust-wgpu secondary comparison
+   into its own output directory.
 4. Exercise create, submit, completion, resize, abandonment, and drop.
 5. Produce a rooted test Mach-O and prove the selected path contains none of
    the forbidden dependency families.

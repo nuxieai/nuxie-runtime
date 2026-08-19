@@ -240,15 +240,17 @@ different class of translation error.
    - `make renderer-metal-reference-replay`
    - `make renderer-metal-reference-check`
    - `make renderer-metal-oracle-tracers`
-   - `make renderer-metal-msaa-probe` is a known-red capability probe, not part
-     of the green smoke gate, until UNIV-2088 selects a working upstream path;
+   - `make renderer-metal-msaa-contract` is a green negative contract proving
+     that the native Metal oracle rejects the WebGPU-only MSAA mode before
+     pipeline construction;
    - solid/clear/present/readback first;
    - same-runner Rust Metal versus C++ Metal is the primary comparison;
    - current Rust wgpu is recorded independently;
    - resize, abandonment, error, and completion paths are exercised.
 5. **Pipeline-family corpus**
-   - gradient/tessellation, MSAA, raster-order, clockwise, atomic, image,
-     clipping, blend, text-facing resources, and mipmaps;
+   - gradient/tessellation, raster-order, clockwise, atomic, image, clipping,
+     blend, text-facing resources, and mipmaps; keep MSAA coverage in the
+     WebGPU/Dawn suite rather than inventing a native Metal execution mode;
    - use existing row contracts; do not widen tolerance to close a port bug;
    - report byte identity as a secondary health metric.
 6. **Hostile replay and fuzzing**
@@ -361,13 +363,8 @@ advance is a separate review that:
 5. **Crate layout:** make the first concrete adapter work in UNIV-2086, then
    perform the mechanical core/Metal split before UNIV-2087. Keep ORE Metal
    separate and defer the existing wgpu crate rename to the WebGPU phase.
-
-## Remaining decision
-
-1. **Native Metal MSAA authority:** at the pinned revision, direct C++ Metal
-   replay aborts while creating an MSAA pipeline, and upstream's Metal test
-   window does not actually propagate its `metalmsaa` selection into the frame
-   descriptor. Decide whether UNIV-2088 should track a newer known-good
-   upstream revision, use a different upstream Metal harness, or explicitly
-   treat Rust-wgpu/Dawn MSAA as temporary secondary evidence. Do not label Dawn
-   output as C++ Metal.
+6. **Native Metal execution modes:** native Metal implements raster-order
+   execution where supported and an atomic fallback; it does not implement the
+   WebGPU-specific `InterlockMode::msaa`. UNIV-2088 therefore proves parity for
+   those two upstream-native branches and explicit MSAA non-reachability. Dawn
+   MSAA remains WebGPU regression evidence and is never labeled C++ Metal.

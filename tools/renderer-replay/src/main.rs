@@ -21,6 +21,7 @@ struct Options {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let options = parse_options()?;
+    validate_backend_mode(&options.backend, &options.mode)?;
     let mut stream = RenderStream::parse(&fs::read_to_string(&options.stream)?)?;
     apply_command_limit(&mut stream, options.frame, options.command_limit)?;
     let (width, height) = stream
@@ -71,6 +72,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         height,
         options.output.display()
     );
+    Ok(())
+}
+
+fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "msaa" | "clockwise-atomic") {
+        return Err(format!("unsupported renderer mode `{mode}`"));
+    }
+    if backend == "ffi-metal" && mode == "msaa" {
+        return Err(
+            "native Metal does not implement `msaa`; upstream Metal selects raster-order or atomic execution"
+                .to_owned(),
+        );
+    }
     Ok(())
 }
 
@@ -224,7 +238,7 @@ fn usage() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_command_limit, clear_pixels, flip_rows};
+    use super::{apply_command_limit, clear_pixels, flip_rows, validate_backend_mode};
     use nuxie_render_stream::RenderStream;
 
     #[test]
@@ -257,5 +271,13 @@ mod tests {
             apply_command_limit(&mut stream, 2, Some(1)).unwrap_err(),
             "render stream has no frame 2"
         );
+    }
+
+    #[test]
+    fn native_metal_rejects_the_webgpu_msaa_mode_before_replay() {
+        let error = validate_backend_mode("ffi-metal", "msaa").unwrap_err();
+        assert!(error.contains("native Metal does not implement `msaa`"));
+        validate_backend_mode("ffi-metal", "clockwise-atomic").unwrap();
+        validate_backend_mode("ffi-dawn", "msaa").unwrap();
     }
 }

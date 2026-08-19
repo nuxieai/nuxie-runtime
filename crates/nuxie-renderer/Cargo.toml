@@ -60,6 +60,10 @@ nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 png = "0.18"
 
+[[example]]
+name = "native_metal_tracer_root"
+required-features = ["native-metal-experimental"]
+
 [[bench]]
 name = "upstream_microbenchmarks"
 harness = false

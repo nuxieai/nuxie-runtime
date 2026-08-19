@@ -74,6 +74,7 @@ RENDERER_METAL_UPSTREAM_STAMP ?= $(RIVE_RUNTIME_DIR)/tests/out/release/.nuxie-me
 RENDERER_METAL_REFERENCE_INPUT_MANIFEST ?= $(RENDERER_METAL_REFERENCE_DIR)/upstream-inputs.sha256
 RENDERER_METAL_REFERENCE_BINDING ?= $(RENDERER_METAL_REFERENCE_DIR)/renderer-replay.inputs.sha256
 RENDERER_METAL_ARCHIVE_PATHS = $(addprefix $(RIVE_RUNTIME_DIR)/tests/out/release/,librive.a librive_pls_renderer.a librive_decoders.a liblibwebp.a liblibpng.a libzlib.a liblibjpeg.a librive_harfbuzz.a librive_sheenbidi.a librive_yoga.a)
+RENDERER_METAL_BRIDGE_PATHS = $(addprefix $(CURDIR)/,Cargo.lock tools/renderer-replay/Cargo.toml tools/renderer-replay/src/main.rs crates/nuxie-renderer-ffi/Cargo.toml crates/nuxie-renderer-ffi/build.rs crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi.cpp crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi.h crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_private.hpp crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_metal.mm)
 RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_GOLDEN_RUST_REPLAY)
 RENDERER_METAL_CANDIDATE_BACKEND ?= rust-wgpu
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
@@ -654,7 +655,7 @@ renderer-metal-reference-replay:
 	mkdir -p "$(RENDERER_METAL_REFERENCE_DIR)"
 	cp "$(RENDERER_METAL_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_METAL_REFERENCE_REPLAY)"
 	chmod 0755 "$(RENDERER_METAL_REFERENCE_REPLAY)"
-	@shasum -a 256 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | awk '{print $$1}' > "$(RENDERER_METAL_REFERENCE_BINDING)"
+	@shasum -a 256 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" "$(RENDERER_METAL_REFERENCE_REPLAY)" $(RENDERER_METAL_BRIDGE_PATHS) > "$(RENDERER_METAL_REFERENCE_BINDING)"
 
 renderer-metal-reference-check:
 	@test -x "$(RENDERER_METAL_REFERENCE_REPLAY)" || { echo "missing executable C++ Metal reference replay: $(RENDERER_METAL_REFERENCE_REPLAY)" >&2; exit 2; }
@@ -663,7 +664,7 @@ renderer-metal-reference-check:
 	@test -f "$(RENDERER_METAL_UPSTREAM_STAMP)" && test "$$(cat "$(RENDERER_METAL_UPSTREAM_STAMP)")" = "$(RIVE_RUNTIME_REF)" || { echo "missing or stale upstream Metal archive stamp" >&2; exit 2; }
 	@test -f "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" && grep -Fqx 'runtime_revision=$(RIVE_RUNTIME_REF)' "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" || { echo "missing or stale Metal reference input manifest" >&2; exit 2; }
 	@tail -n +2 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | shasum -a 256 -c - >/dev/null || { echo "C++ Metal oracle archive identity changed; rerun renderer-metal-reference-bootstrap and rebuild the replay" >&2; exit 2; }
-	@test -f "$(RENDERER_METAL_REFERENCE_BINDING)" && test "$$(cat "$(RENDERER_METAL_REFERENCE_BINDING)")" = "$$(shasum -a 256 "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" | awk '{print $$1}')" || { echo "C++ Metal reference replay is not bound to the current input manifest; rerun renderer-metal-reference-replay" >&2; exit 2; }
+	@test -f "$(RENDERER_METAL_REFERENCE_BINDING)" && shasum -a 256 -c "$(RENDERER_METAL_REFERENCE_BINDING)" >/dev/null || { echo "C++ Metal reference replay or its bridge inputs changed; rerun renderer-metal-reference-replay" >&2; exit 2; }
 	@if otool -L "$(RENDERER_METAL_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Metal reference replay unexpectedly requires a Dawn/WebGPU dynamic library" >&2; exit 2; fi
 
 # Before the Rust Metal adapter exists this compares current Rust-wgpu against

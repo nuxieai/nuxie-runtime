@@ -491,6 +491,24 @@ fn is_convex_finite_polygon(points: &[[f32; 2]]) -> bool {
         return false;
     }
 
+    for first in 0..points.len() {
+        let first_next = (first + 1) % points.len();
+        for second in first + 1..points.len() {
+            let second_next = (second + 1) % points.len();
+            if first == second_next || first_next == second {
+                continue;
+            }
+            if line_segments_intersect(
+                points[first],
+                points[first_next],
+                points[second],
+                points[second_next],
+            ) {
+                return false;
+            }
+        }
+    }
+
     let mut winding = 0.0_f32;
     for index in 0..points.len() {
         let a = points[index];
@@ -506,6 +524,31 @@ fn is_convex_finite_polygon(points: &[[f32; 2]]) -> bool {
         winding = cross;
     }
     winding != 0.0
+}
+
+fn line_segments_intersect(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2]) -> bool {
+    fn orientation(a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> f32 {
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    }
+
+    fn on_segment(a: [f32; 2], b: [f32; 2], point: [f32; 2]) -> bool {
+        point[0] >= a[0].min(b[0])
+            && point[0] <= a[0].max(b[0])
+            && point[1] >= a[1].min(b[1])
+            && point[1] <= a[1].max(b[1])
+    }
+
+    let ac = orientation(a, b, c);
+    let ad = orientation(a, b, d);
+    let ca = orientation(c, d, a);
+    let cb = orientation(c, d, b);
+    if ac * ad < 0.0 && ca * cb < 0.0 {
+        return true;
+    }
+    (ac == 0.0 && on_segment(a, b, c))
+        || (ad == 0.0 && on_segment(a, b, d))
+        || (ca == 0.0 && on_segment(c, d, a))
+        || (cb == 0.0 && on_segment(c, d, b))
 }
 
 fn select_device_capabilities(device: &ProtocolObject<dyn MTLDevice>) -> MetalCapabilitySelection {
@@ -619,6 +662,13 @@ mod tests {
             [0.0, 0.0],
             [f32::NAN, 0.0],
             [0.0, 1.0],
+        ]));
+        assert!(!is_convex_finite_polygon(&[
+            [1.0, 0.0],
+            [-0.809_017, 0.587_785],
+            [0.309_017, -0.951_057],
+            [0.309_017, 0.951_057],
+            [-0.809_017, -0.587_785],
         ]));
     }
 

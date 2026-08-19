@@ -166,9 +166,11 @@ feature profile decodes WAV/MP3/FLAC samples without shipping unused tag and
 charset tables. The command restores Cargo's
 renderer-on/scripting-off `release-size` output after measuring both variants.
 
-The accepted [UNIV-1642 renderer stack decision](evidence/univ-1642-renderer-stack-decision-2026-08-12.md)
-keeps WGSL/Naga in editor, browser, and development tiers while defining the
-evidence required before Apple can switch to committed, layout-aware MSL.
+The historical [UNIV-1642 renderer stack decision](evidence/univ-1642-renderer-stack-decision-2026-08-12.md)
+retains useful shader/reflection research, but its wgpu-passthrough shipping
+direction is superseded by UNIV-2085. The active Apple plan is the native Metal
+mechanical port in [METAL_PORTING.md](METAL_PORTING.md), ending with final
+Mach-Os that contain neither wgpu nor runtime Naga/WGSL machinery.
 
 ## Budget status
 

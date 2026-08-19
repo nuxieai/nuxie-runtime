@@ -1,7 +1,10 @@
 # UNIV-1642 renderer stack decision
 
-Status: accepted on 2026-08-12. This decision proves a direction and its safety
-gates; it does not enable the native-shader shipping path.
+Status: superseded for shipping architecture by UNIV-2085. Accepted research
+from 2026-08-12 remains authoritative for shader provenance, reflection,
+pipeline inventory, and qualification tooling. Do not implement the wgpu
+passthrough product cutover described below; follow `docs/METAL_PORTING.md` and
+UNIV-1643/2086-2092 for the active native Metal direction.
 
 ## Decision
 

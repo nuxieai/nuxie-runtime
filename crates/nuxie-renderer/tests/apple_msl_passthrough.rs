@@ -1,4 +1,4 @@
-#![cfg(target_os = "macos")]
+#![cfg(all(target_os = "macos", feature = "apple-authored-msl"))]
 
 use std::borrow::Cow;
 

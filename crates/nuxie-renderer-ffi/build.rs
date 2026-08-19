@@ -1,4 +1,5 @@
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -9,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_dawn.cpp");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
+    println!("cargo:rerun-if-env-changed=RIVE_RENDERER_OUT_DIR");
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
 
     if env::var_os("CARGO_FEATURE_NATIVE").is_none() {
@@ -29,15 +31,22 @@ fn main() {
     if has_dawn && (!target_is_macos || profile != "release") {
         panic!("the Dawn renderer bridge requires a release build on macOS");
     }
-    let renderer_out_dir = if has_dawn {
+    let renderer_out_dir = if let Some(path) = env::var_os("RIVE_RENDERER_OUT_DIR") {
+        PathBuf::from(path)
+    } else if has_dawn {
         runtime_dir
             .join("renderer")
             .join("out")
             .join("cpp-atlas-mask-oracle")
     } else {
-        runtime_dir.join("renderer").join("out").join(&profile)
+        let unified = runtime_dir.join("tests").join("out").join(&profile);
+        if unified.join("librive_pls_renderer.a").exists() {
+            unified
+        } else {
+            runtime_dir.join("renderer").join("out").join(&profile)
+        }
     };
-    let root_lib_dir = if has_dawn {
+    let root_lib_dir = if renderer_out_dir.join("librive.a").exists() {
         renderer_out_dir.clone()
     } else {
         runtime_dir.join("out").join(&profile)
@@ -55,8 +64,13 @@ fn main() {
 
     let generated_include_dir = renderer_out_dir.join("include");
     let renderer_lib = renderer_out_dir.join("librive_pls_renderer.a");
+    let renderer_makefile = renderer_out_dir.join("rive_pls_renderer.make");
     println!("cargo:rerun-if-changed={}", renderer_lib.display());
+    println!("cargo:rerun-if-changed={}", renderer_makefile.display());
     let has_metal_backend = target_is_macos && renderer_lib.exists();
+    let renderer_with_rive_tools = fs::read_to_string(&renderer_makefile)
+        .map(|contents| contents.contains("-DWITH_RIVE_TOOLS"))
+        .unwrap_or(false);
 
     let renderer_static_libs = [
         ("rive_pls_renderer", renderer_lib.clone()),
@@ -136,6 +150,13 @@ fn main() {
                 "RIVE_KTX2",
             ] {
                 build.define(define, None);
+            }
+            // This changes RenderContextMetalImpl's layout, so the bridge must
+            // mirror the archive before invoking inline methods such as
+            // setCommandQueue(). Current tests/out builds enable it; older
+            // standalone renderer builds may not.
+            if renderer_with_rive_tools {
+                build.define("WITH_RIVE_TOOLS", None);
             }
         }
         build.define("YOGA_EXPORT", Some(""));

@@ -1,0 +1,319 @@
+version = 1
+title = "Native Metal mechanical-port source manifest"
+upstream_repository = "rive-app/rive-runtime"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+porting_guide = "docs/METAL_PORTING.md"
+ownership_inventory = "docs/metal-port-ownership.toml"
+status_values = ["pending", "in-progress", "ported", "verified"]
+expected_status_counts = { pending = 36, in-progress = 0, ported = 0, verified = 0 }
+
+# These globs are intentionally exhaustive for the upstream native Metal
+# platform implementation, the backend-neutral ORE interface consumed by
+# Metal, the ORE Metal adapter, and the checked-in Metal shader sources.
+source_globs = [
+  "renderer/include/rive/renderer/metal/*",
+  "renderer/src/metal/*",
+  "renderer/include/rive/renderer/ore/ore_*.hpp",
+  "renderer/src/ore/metal/*",
+  "renderer/src/shaders/metal/*",
+]
+source_excludes = [
+  "renderer/include/rive/renderer/ore/ore_context_d3d11.hpp",
+  "renderer/include/rive/renderer/ore/ore_context_d3d12.hpp",
+  "renderer/include/rive/renderer/ore/ore_context_gl.hpp",
+  "renderer/include/rive/renderer/ore/ore_context_vulkan.hpp",
+  "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp",
+]
+
+# A row changes to ported only when its Rust owner and focused `evidence` are
+# checked-in files and the evidence is green. It changes to verified only after
+# checked-in `parity_evidence` records the issue-level parity gates. A
+# time-boxed side-by-side review is optional and is not manifest promotion
+# evidence.
+
+[[source]]
+upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
+lane = "renderer-platform"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+[[source]]
+upstream = "renderer/src/metal/background_shader_compiler.h"
+lane = "renderer-platform"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/metal/background_shader_compiler.mm"
+lane = "renderer-platform"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/metal/render_context_metal_impl.mm"
+lane = "renderer-platform"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/shaders/metal/color_ramp.metal"
+lane = "platform-shaders"
+issue = "UNIV-2087"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/shaders/metal/draw.metal"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/shaders/metal/generate_draw_combinations.py"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/shaders/metal/tessellate.metal"
+lane = "platform-shaders"
+issue = "UNIV-2087"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_binding_map.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_buffer.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_context.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_context_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_pipeline.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_render_pass.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_sampler.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_shader_module.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_texture.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/ore/ore_types.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_bind_group_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_bind_group_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_buffer_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_buffer_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_context_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_pipeline_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_render_pass_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_render_pass_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_sampler_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_sampler_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_shader_module_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_shader_module_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_texture_metal.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/metal/ore_texture_metal.mm"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []

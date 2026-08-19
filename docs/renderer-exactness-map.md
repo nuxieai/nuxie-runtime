@@ -38,14 +38,20 @@ movement is visible.
 1. WebGPU parity uses Rust wgpu versus C++ Dawn WebGPU in the same render mode
    on the same Metal adapter. Native C++ Metal is diagnostic evidence, not the
    primary WebGPU oracle.
-2. Every reference change is produced by the manifest-bound C++ replay and has
+2. Native Metal parity uses Rust Metal versus pinned C++ native Metal in the
+   same render mode on the same reported Metal adapter. C++ Metal is the
+   primary platform oracle; Rust wgpu is a separately recorded secondary
+   regression oracle. Follow `docs/METAL_PORTING.md` and run the reference as
+   `--reference-backend ffi-metal`.
+3. Every reference change is produced by the manifest-bound C++ replay and has
    a provenance sidecar containing the adapter, stream and PNG hashes, runtime
-   and Dawn revisions, replay-binary hash, frame, mode, and dimensions.
-3. A row promotes only under its existing contract. Tolerance widening cannot
+   revision, backend-specific dependency revisions, replay-binary hash, frame,
+   mode, and dimensions.
+4. A row promotes only under its existing contract. Tolerance widening cannot
    close a gate.
-4. A stable same-tier row may tighten to `0/0` independently. Deterministic
+5. A stable same-tier row may tighten to `0/0` independently. Deterministic
    CPU or intermediate-buffer oracles use `0/0` from the start.
-5. Byte identity is always reported, but universal byte identity is not a
+6. Byte identity is always reported, but universal byte identity is not a
    release condition.
 
 The Dawn capture path is reproducible with a `perf-dawn` renderer-replay build
@@ -82,6 +88,25 @@ line. A mismatch or a missing identity fails the corpus before pixel comparison
 and retains the generated frames plus provenance naming the mismatch or the
 side that did not report. Dynamic same-runner comparisons never claim a
 verified match without two equal adapter identities.
+
+The native Metal harness uses the same invariant. Build pin-matched upstream
+archives with `make renderer-metal-reference-bootstrap`, build the C++
+Metal-only replay with `make renderer-metal-reference-replay`, verify it with
+`make renderer-metal-reference-check`, and exercise the green atomic tracer
+with `make renderer-metal-oracle-tracers`. Before UNIV-2086 supplies a Rust
+Metal candidate, that tracer target compares current Rust-wgpu to C++ Metal
+only to validate the oracle plumbing; it is not a Metal-port parity claim.
+After a Rust Metal candidate is selected, the target emits both primary C++
+Metal and secondary Rust-wgpu comparisons. C++ Metal provenance names and
+hashes the input manifest containing the Rive SHA and every linked archive.
+
+`make renderer-metal-msaa-probe` is deliberately separate and red at the
+pinned upstream revision: native Metal aborts while constructing the requested
+MSAA pipeline (`vertexFunction must not be nil`), and upstream's Metal test
+window does not forward its `metalmsaa` flag into `FrameDescriptor`.
+UNIV-2088 must identify the authoritative working upstream MSAA path before
+MSAA becomes a primary C++ Metal oracle. The existing Dawn MSAA PNG remains a
+secondary regression reference; it must not be relabeled as C++ Metal.
 
 ## Same-tier Migration
 

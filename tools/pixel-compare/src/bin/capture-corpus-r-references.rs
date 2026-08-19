@@ -245,13 +245,10 @@ fn temporary_path(reference: &Path, index: usize) -> Result<PathBuf, Box<dyn Err
     Ok(reference.with_file_name(format!(".{name}.{}.{}.capture", std::process::id(), index)))
 }
 
-fn require_supported_mode(backend: ReplayBackend, mode: &str) -> Result<(), Box<dyn Error>> {
-    match (backend, mode) {
-        (_, "clockwise-atomic") | (ReplayBackend::FfiDawn, "msaa") => Ok(()),
-        (ReplayBackend::FfiMetal, "msaa") => {
-            Err("C++ Metal reference capture only supports clockwise-atomic mode".into())
-        }
-        (_, mode) => Err(format!("unsupported renderer mode `{mode}`").into()),
+fn require_supported_mode(_backend: ReplayBackend, mode: &str) -> Result<(), Box<dyn Error>> {
+    match mode {
+        "clockwise-atomic" | "msaa" => Ok(()),
+        mode => Err(format!("unsupported renderer mode `{mode}`").into()),
     }
 }
 
@@ -321,9 +318,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_msaa_capture_before_launching_replay() {
-        let error = require_supported_mode(ReplayBackend::FfiMetal, "msaa").unwrap_err();
-        assert!(error.to_string().contains("only supports clockwise-atomic"));
+    fn metal_capture_allows_both_modes_to_reach_the_reference_replay() {
+        require_supported_mode(ReplayBackend::FfiMetal, "clockwise-atomic").unwrap();
+        require_supported_mode(ReplayBackend::FfiMetal, "msaa").unwrap();
     }
 
     #[test]

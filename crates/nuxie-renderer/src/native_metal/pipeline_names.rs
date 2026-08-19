@@ -1,7 +1,8 @@
 //! Names for the precompiled Metal draw functions.
 //!
 //! This is a direct Rust translation of `DrawPipeline::GetPrecompiledFunctionName`
-//! in the pinned upstream `renderer/src/metal/render_context_metal_impl.mm`.
+//! in upstream `renderer/src/metal/render_context_metal_impl.mm` pinned at
+//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 //! The bit positions are part of the generated-shader namespace contract and
 //! must stay in sync with upstream `generate_draw_combinations.py`.
 

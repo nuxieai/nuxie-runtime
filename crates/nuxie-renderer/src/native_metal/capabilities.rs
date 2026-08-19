@@ -1,3 +1,7 @@
+//! Mechanical capability-selection translation from pinned upstream
+//! `renderer/src/metal/render_context_metal_impl.mm` at
+//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)] // Each target constructs only its own platform variant.
 pub(crate) enum ApplePlatform {

@@ -17,7 +17,7 @@ use capabilities::{
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
     RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, Vec2D,
 };
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{msg_send, rc::Retained};
@@ -462,6 +462,9 @@ fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 
         return None;
     }
     let vertex_count = inline_triangle_fan_vertex_count(point_count)?;
+    if !fill_rule_accepts_source_winding(path.fill_rule, path.raw_path.points()) {
+        return None;
+    }
     let points: Vec<[f32; 2]> = path
         .raw_path
         .points()
@@ -479,6 +482,26 @@ fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 
         vertices.extend([points[0], points[index], points[index + 1]]);
     }
     Some(vertices)
+}
+
+fn fill_rule_accepts_source_winding(fill_rule: FillRule, points: &[Vec2D]) -> bool {
+    if fill_rule != FillRule::Clockwise {
+        return true;
+    }
+    let Some(origin) = points.first() else {
+        return false;
+    };
+    let doubled_area = points[1..]
+        .windows(2)
+        .map(|edge| {
+            let ax = f64::from(edge[0].x) - f64::from(origin.x);
+            let ay = f64::from(edge[0].y) - f64::from(origin.y);
+            let bx = f64::from(edge[1].x) - f64::from(origin.x);
+            let by = f64::from(edge[1].y) - f64::from(origin.y);
+            ax * by - bx * ay
+        })
+        .sum::<f64>();
+    doubled_area > 0.0
 }
 
 fn is_pixel_aligned_axis_aligned_rectangle(points: &[[f32; 2]]) -> bool {
@@ -725,6 +748,46 @@ mod tests {
             [56.0, 56.0],
             [8.5, 56.0],
         ]));
+    }
+
+    #[test]
+    fn clockwise_fill_checks_source_winding_but_accepts_reflected_draws() {
+        let make_path = |points: &[[f32; 2]], fill_rule| {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(points[0][0], points[0][1]);
+            for point in &points[1..] {
+                raw_path.line_to(point[0], point[1]);
+            }
+            raw_path.close();
+            LogicalPath {
+                raw_path: Arc::new(raw_path),
+                fill_rule,
+                valid: true,
+            }
+        };
+        let clockwise = make_path(
+            &[[8.0, 8.0], [56.0, 8.0], [56.0, 56.0], [8.0, 56.0]],
+            FillRule::Clockwise,
+        );
+        let counterclockwise = make_path(
+            &[[8.0, 56.0], [56.0, 56.0], [56.0, 8.0], [8.0, 8.0]],
+            FillRule::Clockwise,
+        );
+        let translated_unit = make_path(
+            &[
+                [4096.0, 4096.0],
+                [4097.0, 4096.0],
+                [4097.0, 4097.0],
+                [4096.0, 4097.0],
+            ],
+            FillRule::Clockwise,
+        );
+        let reflected = Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]);
+
+        assert!(solid_triangle_fan(&clockwise, Mat2D::IDENTITY).is_some());
+        assert!(solid_triangle_fan(&clockwise, reflected).is_some());
+        assert!(solid_triangle_fan(&translated_unit, Mat2D::IDENTITY).is_some());
+        assert!(solid_triangle_fan(&counterclockwise, Mat2D::IDENTITY).is_none());
     }
 
     #[test]

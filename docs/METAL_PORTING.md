@@ -239,6 +239,28 @@ format. The focused
 `astc_footprints_use_their_exact_metal_pixel_formats_across_enum_gap` test is
 the evidence for this adaptation.
 
+### ORE behavior-root checkpoint: UNIV-2091
+
+File translation closes first with the pinned upstream
+`tests/gm/ore_binding_witness` behavior, before Nuxie's authenticated scripting
+adapter is introduced. The macOS-only
+`crates/nuxie-ore-metal/tests/ore_binding_witness.rs` fixture preserves the
+exact target-2 MSL and target-10 BindingMap from upstream revision
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`. It creates a real Metal device,
+queue, ORE context, shader module, layout, pipeline, sparse authored UBO
+bindings 0 and 7, shared RGBA8 target, render pass, repeated submissions, GPU
+completion, and native readback. Every output pixel must contain both uniform
+values; the historical broken slot route is observably red instead of olive.
+
+`make ore-metal-binding-witness` runs that executable under Metal API and
+shader validation, rejects WGPU, Naga, `nuxie-renderer`, and the Apple MSL
+catalog in the exact Cargo dependency graph, scans the rooted Mach-O for
+WGPU/Naga/WGSL markers, and rejects direct Dawn/WebGPU dynamic-library links. This is an ORE
+behavior root, not yet the authenticated product adapter: supplemental
+reflection, scripting occurrence identity, texture/sampler plans, and the
+shipping backend selector remain UNIV-2091 follow-up work. No default changes
+before UNIV-2092.
+
 ## Trial translation: UNIV-2086
 
 UNIV-2086 is the process trial as well as the solid-render tracer. It must prove

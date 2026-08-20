@@ -1401,6 +1401,7 @@ dependencies = [
  "objc2",
  "objc2-foundation",
  "objc2-metal",
+ "sha2",
 ]
 
 [[package]]

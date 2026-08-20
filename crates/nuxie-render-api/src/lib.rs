@@ -1133,6 +1133,7 @@ pub struct GpuCanvasAppleMetalShader {
     source: String,
     entries: Vec<GpuCanvasShaderEntry>,
     bindings: Vec<GpuCanvasShaderBinding>,
+    binding_map_bytes: Arc<[u8]>,
     entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
     binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
     provenance: GpuCanvasShaderProvenance,
@@ -1144,12 +1145,14 @@ impl GpuCanvasAppleMetalShader {
     ///
     /// # Safety
     ///
-    /// `source`, the entry and binding maps, and both reflection tables must
-    /// all have been decoded and cross-validated from `artifact_sha256` at
-    /// `artifact_size`. The source must also retain the trusted exporter's
-    /// validity guarantee for unsafe backend passthrough. Supplying arbitrary,
-    /// merely authenticated, unrelated, or hand-mutated code invalidates the
-    /// safety argument.
+    /// `source`, `binding_map_bytes`, the decoded entry and binding maps, and
+    /// both reflection tables must all have been decoded and cross-validated
+    /// from `artifact_sha256` at `artifact_size`. `binding_map_bytes` must be
+    /// the exact authenticated target-10 blob represented by `bindings`,
+    /// including append-only row tails and trailing extension data. The source
+    /// must also retain the trusted exporter's validity guarantee for unsafe
+    /// backend passthrough. Supplying arbitrary, merely authenticated,
+    /// unrelated, or hand-mutated parts invalidates the safety argument.
     #[doc(hidden)]
     pub unsafe fn from_verified_parts(
         provenance: GpuCanvasShaderProvenance,
@@ -1158,6 +1161,7 @@ impl GpuCanvasAppleMetalShader {
         source: String,
         entries: Vec<GpuCanvasShaderEntry>,
         bindings: Vec<GpuCanvasShaderBinding>,
+        binding_map_bytes: Arc<[u8]>,
         entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
         binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
     ) -> Option<Self> {
@@ -1167,6 +1171,7 @@ impl GpuCanvasAppleMetalShader {
                 source,
                 entries,
                 bindings,
+                binding_map_bytes,
                 entry_reflection,
                 binding_reflection,
                 provenance,
@@ -1181,6 +1186,14 @@ impl GpuCanvasAppleMetalShader {
     }
     pub fn bindings(&self) -> &[GpuCanvasShaderBinding] {
         &self.bindings
+    }
+    /// Exact authenticated target-10 bytes consumed by ORE.
+    ///
+    /// Keep the original append-only row widths and trailing extension data;
+    /// reconstructing this blob from decoded rows would lose authenticated
+    /// information that older readers intentionally preserve.
+    pub fn binding_map_bytes(&self) -> &[u8] {
+        &self.binding_map_bytes
     }
     pub fn entry_reflection(&self) -> &[GpuCanvasShaderEntryReflection] {
         &self.entry_reflection

@@ -232,8 +232,13 @@ fn trusted_factory_profile_materializes_authenticated_msl() {
             min_buffer_size: 16,
         },
     ];
-    // SAFETY: source, entries, bindings, and reflection are the exact synthetic parts
-    // covered by the test-only authority above.
+    let binding_map = vec![
+        2, 1, 14, 0, 2, 0, 0, 0, // v2 header, two 14-byte rows
+        0, 0, 0, 2, 0, 0xff, 0xff, 0, 0, 0xff, 0xff, 2, 1, 0, // group 0, binding 0
+        2, 3, 0, 2, 2, 0xff, 0xff, 1, 0, 0xff, 0xff, 2, 1, 0, // group 2, binding 3
+    ];
+    // SAFETY: source, entries, decoded bindings, exact v2 target-10 bytes,
+    // and reflection are the synthetic parts covered by the test authority.
     let shader = unsafe {
         nuxie_render_api::GpuCanvasAppleMetalShader::from_verified_parts(
             provenance,
@@ -242,6 +247,7 @@ fn trusted_factory_profile_materializes_authenticated_msl() {
             PROBE_MSL.into(),
             entries,
             bindings.clone(),
+            binding_map.into(),
             reflection,
             binding_reflection,
         )

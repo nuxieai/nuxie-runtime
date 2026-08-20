@@ -80,9 +80,10 @@ RENDERER_METAL_CANDIDATE_BUILD_DIR ?= $(CURDIR)/target/renderer-native-metal
 RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_METAL_CANDIDATE_BUILD_DIR)/release/renderer-replay
 RENDERER_METAL_CANDIDATE_BACKEND ?= rust-metal
 RENDERER_METAL_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus.toml
+RENDERER_METAL_WGPU_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus-wgpu-secondary.toml
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
 RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
-RENDERER_METAL_ORACLE_ENTRIES ?= --entry native-metal-first-light-rectangle
+RENDERER_METAL_ORACLE_ENTRIES ?= --entry native-metal-first-light-rectangle --entry native-metal-first-light-gradient-cubic
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
 RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
 RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
@@ -677,7 +678,7 @@ renderer-metal-reference-check:
 # the same candidate and stream against current Rust-wgpu as a secondary oracle.
 renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay-release renderer-metal-reference-check
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 
 # Native Metal deliberately has no WebGPU-style MSAA execution mode. Keep this
 # green negative contract so a future harness cannot silently relabel Dawn

@@ -5,7 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 30, in-progress = 2, ported = 4, verified = 0 }
+expected_status_counts = { pending = 28, in-progress = 2, ported = 6, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -55,10 +55,13 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/resource_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
@@ -67,13 +70,21 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/resource_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
+  "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
   "tools/check-native-metal-tracer-binary.sh",
+  "tools/metal-port/tracer-corpus.toml",
+  "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.h"
@@ -201,9 +212,24 @@ evidence = [
 upstream = "renderer/src/shaders/metal/color_ramp.metal"
 lane = "platform-shaders"
 issue = "UNIV-2087"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+]
+evidence = [
+  "crates/nuxie-renderer/build.rs",
+  "crates/nuxie-renderer/src/native_metal/shaders/bezier_utils.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/color_ramp.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/color_ramp.minified.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/resource_shader_provenance.txt",
+  "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
+  "tools/metal-port/tracer-corpus.toml",
+]
 
 [[source]]
 upstream = "renderer/src/shaders/metal/draw.metal"
@@ -245,9 +271,24 @@ evidence = [
 upstream = "renderer/src/shaders/metal/tessellate.metal"
 lane = "platform-shaders"
 issue = "UNIV-2087"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
+]
+evidence = [
+  "crates/nuxie-renderer/build.rs",
+  "crates/nuxie-renderer/src/native_metal/shaders/bezier_utils.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/tessellate.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/tessellate.minified.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/resource_shader_provenance.txt",
+  "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
+  "tools/metal-port/tracer-corpus.toml",
+]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"

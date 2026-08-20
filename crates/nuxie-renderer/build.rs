@@ -7,6 +7,9 @@ fn main() {
     for source in DRAW_SHADER_SOURCES {
         println!("cargo:rerun-if-changed={source}");
     }
+    for source in RESOURCE_SHADER_SOURCES {
+        println!("cargo:rerun-if-changed={source}");
+    }
     if env::var_os("CARGO_FEATURE_NATIVE_METAL_EXPERIMENTAL").is_none() {
         return;
     }
@@ -88,6 +91,49 @@ fn main() {
             .output(),
         "link native Metal offline draw shader library",
     );
+
+    let resource_sources = [
+        (
+            manifest.join("src/native_metal/shaders/color_ramp.metal"),
+            output.join("native_metal_color_ramp.air"),
+        ),
+        (
+            manifest.join("src/native_metal/shaders/tessellate.metal"),
+            output.join("native_metal_tessellate.air"),
+        ),
+    ];
+    let resource_metallib = output.join("native_metal_resources.metallib");
+    for (source, air) in &resource_sources {
+        checked(
+            Command::new("xcrun")
+                .args(["-sdk", sdk, "metal", "-c"])
+                .arg(deployment_target)
+                .arg(metal_standard)
+                .arg("-I")
+                .arg(&draw_include_dir)
+                .args([
+                    "-ffast-math",
+                    "-ffp-contract=fast",
+                    "-fpreserve-invariance",
+                    "-fvisibility=hidden",
+                ])
+                .arg(source)
+                .arg("-o")
+                .arg(air)
+                .output(),
+            "compile native Metal color-ramp/tessellate resource shader",
+        );
+    }
+    let mut resource_link = Command::new("xcrun");
+    resource_link
+        .args(["-sdk", sdk, "metallib"])
+        .args(resource_sources.iter().map(|(_, air)| air))
+        .arg("-o")
+        .arg(&resource_metallib);
+    checked(
+        resource_link.output(),
+        "link native Metal color-ramp/tessellate resource shader library",
+    );
 }
 
 const DRAW_SHADER_SOURCES: &[&str] = &[
@@ -104,6 +150,18 @@ const DRAW_SHADER_SOURCES: &[&str] = &[
     "src/native_metal/shaders/draw_raster_order_path.minified.frag",
     "src/native_metal/shaders/draw_mesh.minified.frag",
     "src/native_metal/shaders/draw_image_mesh.minified.vert",
+];
+
+const RESOURCE_SHADER_SOURCES: &[&str] = &[
+    "src/native_metal/shaders/color_ramp.metal",
+    "src/native_metal/shaders/tessellate.metal",
+    "src/native_metal/shaders/metal.minified.glsl",
+    "src/native_metal/shaders/constants.minified.glsl",
+    "src/native_metal/shaders/flush_uniforms.minified.glsl",
+    "src/native_metal/shaders/common.minified.glsl",
+    "src/native_metal/shaders/color_ramp.minified.glsl",
+    "src/native_metal/shaders/bezier_utils.minified.glsl",
+    "src/native_metal/shaders/tessellate.minified.glsl",
 ];
 
 fn checked(output: std::io::Result<Output>, operation: &str) {

@@ -52,7 +52,7 @@ impl FeatherLut {
     }
 }
 
-fn table_rows() -> [[u16; TABLE_SIZE]; 2] {
+pub(crate) fn table_rows() -> [[u16; TABLE_SIZE]; 2] {
     let gaussian = gaussian_integral();
     let inverse = inverse_gaussian_integral();
     [gaussian.map(float_to_half), inverse.map(float_to_half)]

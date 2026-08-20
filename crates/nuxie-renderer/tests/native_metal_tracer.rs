@@ -9,6 +9,59 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 
+fn read_png(path: impl AsRef<std::path::Path>) -> Vec<u8> {
+    let reference = File::open(path).expect("open renderer reference");
+    let decoder = png::Decoder::new(BufReader::new(reference));
+    let mut reader = decoder.read_info().expect("read renderer reference info");
+    let mut pixels = vec![0; reader.output_buffer_size().expect("reference buffer size")];
+    let info = reader
+        .next_frame(&mut pixels)
+        .expect("decode renderer reference");
+    pixels.truncate(info.buffer_size());
+    pixels
+}
+
+fn assert_rgba8_with_tolerance(
+    actual: &[u8],
+    expected: &[u8],
+    maximum_allowed_delta: u8,
+    require_exact_occupancy: bool,
+    label: &str,
+) {
+    assert_eq!(actual.len(), expected.len(), "{label}: byte length");
+    let mut maximum_delta = 0u8;
+    let mut first_excess = None;
+    let mut first_occupancy_mismatch = None;
+    for (pixel_index, (actual, expected)) in actual
+        .chunks_exact(4)
+        .zip(expected.chunks_exact(4))
+        .enumerate()
+    {
+        let actual_occupied = actual[..3].iter().any(|channel| *channel != 0);
+        let expected_occupied = expected[..3].iter().any(|channel| *channel != 0);
+        if actual_occupied != expected_occupied && first_occupancy_mismatch.is_none() {
+            first_occupancy_mismatch = Some((pixel_index, actual.to_vec(), expected.to_vec()));
+        }
+        for channel in 0..4 {
+            let delta = actual[channel].abs_diff(expected[channel]);
+            maximum_delta = maximum_delta.max(delta);
+            if delta > maximum_allowed_delta && first_excess.is_none() {
+                first_excess = Some((pixel_index, channel, actual[channel], expected[channel]));
+            }
+        }
+    }
+    if require_exact_occupancy {
+        assert_eq!(
+            first_occupancy_mismatch, None,
+            "{label}: geometry/coverage occupancy mismatch"
+        );
+    }
+    assert_eq!(
+        first_excess, None,
+        "{label}: exceeded {maximum_allowed_delta}-LSB RGBA8 tolerance; maximum delta={maximum_delta}"
+    );
+}
+
 #[test]
 fn native_metal_frame_clears_and_reads_back() {
     let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
@@ -65,6 +118,54 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
         "native Rust Metal versus pinned C++ Metal"
     );
     assert_eq!(actual, wgpu_pixels, "native Rust Metal versus Rust-wgpu");
+}
+
+#[test]
+fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(
+            fixture_root.join("streams/first-light-gradient-cubic.rive-stream"),
+        )
+        .expect("read gradient cubic stream"),
+    )
+    .expect("parse gradient cubic stream");
+    let (width, height) = stream.frame_size.expect("gradient cubic frame size");
+
+    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
+    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+    stream
+        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+        .expect("replay gradient cubic through Rust-wgpu oracle");
+    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+
+    let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("acquire native Metal gradient frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay gradient cubic through Factory/Renderer seam");
+    let actual = frame.finish().expect("finish native Metal gradient frame");
+
+    let cpp_metal = read_png(fixture_root.join("reference/metal/first-light-gradient-cubic.png"));
+    assert_rgba8_with_tolerance(
+        &actual,
+        &cpp_metal,
+        1,
+        true,
+        "native Rust Metal versus pinned C++ Metal",
+    );
+    // Rust-wgpu's default factory path differs by up to 59 LSBs on this
+    // antialiased cubic edge. Keep WGPU as a secondary
+    // cross-backend guard without pretending its rasterization is byte-exact.
+    assert_rgba8_with_tolerance(
+        &actual,
+        &wgpu_pixels,
+        64,
+        false,
+        "native Rust Metal versus Rust-wgpu",
+    );
 }
 
 #[test]

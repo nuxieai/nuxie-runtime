@@ -7740,7 +7740,15 @@ fn transform_rect_to_new_space(
 
 fn clip_rect_paint_aux(clip: Option<ClipRectState>) -> gpu::PaintAuxData {
     let Some(clip) = clip else {
-        return gpu::PaintAuxData::zeroed();
+        // Match C++ `ClipRectInverseMatrix::WideOpen()`. Fully featured
+        // ubershaders evaluate clip-rect coverage even for unclipped paints;
+        // a singular matrix makes the shader use tx/ty as uniform coverage.
+        // `[1, 1]` therefore means wide open, while an all-zero record means
+        // an empty clip and would suppress the entire draw.
+        return gpu::PaintAuxData {
+            clip_rect_inverse_matrix: [0.0, 0.0, 0.0, 0.0, 1.0, 1.0],
+            ..gpu::PaintAuxData::zeroed()
+        };
     };
     let [left, top, right, bottom] = clip.rect;
     let normalized_rect = Mat2D([
@@ -16958,6 +16966,16 @@ mod tests {
         raw_path.line_to(0.0, 32.0);
         raw_path.close();
         assert_eq!(path_aabb(&raw_path), Some([0.0, 0.0, 64.0, 32.0]));
+    }
+
+    #[test]
+    fn unclipped_paint_aux_matches_cpp_wide_open_clip_rect() {
+        let aux = clip_rect_paint_aux(None);
+
+        assert_eq!(aux.matrix, [0.0; 6]);
+        assert_eq!(aux.paint_value, [0.0; 2]);
+        assert_eq!(aux.inverse_fwidth, [0.0; 2]);
+        assert_eq!(aux.clip_rect_inverse_matrix, [0.0, 0.0, 0.0, 0.0, 1.0, 1.0]);
     }
 
     #[test]

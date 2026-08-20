@@ -7,6 +7,7 @@ ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 render_context_file_map = "docs/render-context-metal-file-map.tsv"
 render_context_field_map = "docs/render-context-metal-fields.tsv"
+render_context_configuration_map = "docs/render-context-metal-configurations.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
 expected_status_counts = { pending = 0, in-progress = 2, ported = 40, verified = 0 }
 

@@ -83,6 +83,32 @@ RENDER_CONTEXT_FIELD_MAP_COLUMNS = (
     "evidence",
 )
 RENDER_CONTEXT_FIELD_MAP_STATUSES = {"review-needed", "prepared", "verified"}
+RENDER_CONTEXT_CONFIGURATION_MAP_COLUMNS = (
+    "version",
+    "upstream_sha",
+    "upstream_file",
+    "block",
+    "lines",
+    "branch_lines",
+    "configurations",
+    "source_behavior",
+    "rust_owner",
+    "rust_configuration",
+    "status",
+    "remaining",
+    "evidence",
+)
+RENDER_CONTEXT_CONFIGURATION_MAP_STATUSES = {
+    "review-needed",
+    "prepared",
+    "verified",
+}
+RENDER_CONTEXT_CONFIGURATION_MAP_SOURCES = {
+    "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+    "renderer/src/metal/render_context_metal_impl.mm",
+    "renderer/src/metal/background_shader_compiler.h",
+    "renderer/src/metal/background_shader_compiler.mm",
+}
 RENDER_CONTEXT_FIELD_DECLARATION_SPANS = (
     (
         "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
@@ -576,6 +602,185 @@ def validate_render_context_field_map(
         if status in {"prepared", "verified"} and not evidence:
             errors.append(
                 f"render-context field map line {line_number} is {status} without evidence"
+            )
+        for citation in evidence:
+            validate_evidence_citation(citation, repo_root, upstream_root, errors)
+
+
+def extract_render_context_configuration_blocks(
+    upstream_root: pathlib.Path, errors: list[str]
+) -> dict[tuple[str, int, int], tuple[int, ...]]:
+    blocks: dict[tuple[str, int, int], tuple[int, ...]] = {}
+    opening = re.compile(r"^\s*#(?:if\s|ifdef\s|ifndef\s)")
+    branch = re.compile(r"^\s*#(?:elif\s|else(?:\s|$))")
+    closing = re.compile(r"^\s*#endif(?:\s|$)")
+    for relative in sorted(RENDER_CONTEXT_CONFIGURATION_MAP_SOURCES):
+        path = upstream_root / relative
+        if not path.is_file():
+            errors.append(f"missing pinned configuration source {relative}")
+            continue
+        stack: list[tuple[int, list[int]]] = []
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if opening.match(line):
+                stack.append((line_number, [line_number]))
+            elif branch.match(line):
+                if not stack:
+                    errors.append(
+                        f"orphan preprocessor branch in {relative}:{line_number}"
+                    )
+                else:
+                    stack[-1][1].append(line_number)
+            elif closing.match(line):
+                if not stack:
+                    errors.append(f"orphan #endif in {relative}:{line_number}")
+                    continue
+                start, branches = stack.pop()
+                blocks[(relative, start, line_number)] = tuple(branches)
+        if stack:
+            errors.append(
+                f"unterminated preprocessor blocks in {relative}: "
+                + ", ".join(str(start) for start, _ in stack)
+            )
+    return blocks
+
+
+def compare_render_context_configuration_rows(
+    rows: list[dict[str, str]],
+    blocks: dict[tuple[str, int, int], tuple[int, ...]],
+    errors: list[str],
+) -> None:
+    ledger: dict[tuple[str, int, int], tuple[int, tuple[int, ...]]] = {}
+    for line_number, row in enumerate(rows, 2):
+        match = re.fullmatch(r"(\d+)-(\d+)", row.get("lines", ""))
+        if not match:
+            errors.append(
+                f"render-context configuration map line {line_number} has invalid range"
+            )
+            continue
+        start, end = map(int, match.groups())
+        try:
+            branches = tuple(
+                int(value) for value in row.get("branch_lines", "").split(",")
+            )
+        except ValueError:
+            errors.append(
+                f"render-context configuration map line {line_number} has invalid branch lines"
+            )
+            continue
+        key = (row.get("upstream_file", ""), start, end)
+        if key in ledger:
+            errors.append(
+                "duplicate render-context configuration row: "
+                + f"{key[0]}:{start}-{end}"
+            )
+        ledger[key] = (line_number, branches)
+
+    missing = sorted(set(blocks) - set(ledger))
+    extra = sorted(set(ledger) - set(blocks))
+    if missing:
+        errors.append(
+            "render-context configuration map omits blocks: "
+            + ", ".join(f"{path}:{start}-{end}" for path, start, end in missing)
+        )
+    if extra:
+        errors.append(
+            "render-context configuration map invents blocks: "
+            + ", ".join(f"{path}:{start}-{end}" for path, start, end in extra)
+        )
+    for key in sorted(set(blocks) & set(ledger)):
+        line_number, actual = ledger[key]
+        expected = blocks[key]
+        if actual != expected:
+            errors.append(
+                f"render-context configuration map line {line_number} has branch lines "
+                f"{actual}, expected {expected} for {key[0]}:{key[1]}-{key[2]}"
+            )
+
+
+def validate_render_context_configuration_map(
+    manifest: dict[str, Any],
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> None:
+    relative = str(manifest.get("render_context_configuration_map", ""))
+    path = repo_root / relative
+    if not relative or not path.is_file():
+        errors.append(f"missing render-context configuration map {relative}")
+        return
+    if not git_tracked_file(repo_root, relative):
+        errors.append(f"untracked render-context configuration map {relative}")
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            fieldnames = tuple(reader.fieldnames or ())
+            rows = [
+                {str(key): str(value or "") for key, value in row.items() if key is not None}
+                for row in reader
+            ]
+    except (OSError, csv.Error) as error:
+        errors.append(f"cannot read render-context configuration map {relative}: {error}")
+        return
+    if fieldnames != RENDER_CONTEXT_CONFIGURATION_MAP_COLUMNS:
+        errors.append(
+            "render-context configuration map schema must be: "
+            + "\t".join(RENDER_CONTEXT_CONFIGURATION_MAP_COLUMNS)
+        )
+        return
+
+    blocks = extract_render_context_configuration_blocks(upstream_root, errors)
+    compare_render_context_configuration_rows(rows, blocks, errors)
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    required_prose = (
+        "block",
+        "configurations",
+        "source_behavior",
+        "rust_configuration",
+        "remaining",
+    )
+    block_names: set[str] = set()
+    for line_number, row in enumerate(rows, 2):
+        if row["version"] != "1":
+            errors.append(
+                f"render-context configuration map line {line_number} has invalid version"
+            )
+        if row["upstream_sha"] != upstream_ref:
+            errors.append(
+                f"render-context configuration map line {line_number} pin does not match upstream_ref"
+            )
+        if row["block"] in block_names:
+            errors.append(
+                f"duplicate render-context configuration block name `{row['block']}`"
+            )
+        block_names.add(row["block"])
+        status = row["status"]
+        if status not in RENDER_CONTEXT_CONFIGURATION_MAP_STATUSES:
+            errors.append(
+                f"render-context configuration map line {line_number} has invalid status `{status}`"
+            )
+        for column in required_prose:
+            if not row[column].strip():
+                errors.append(
+                    f"render-context configuration map line {line_number} has empty {column}"
+                )
+        rust_owner = row["rust_owner"]
+        if rust_owner == "-":
+            if status != "review-needed":
+                errors.append(
+                    f"render-context configuration map line {line_number} lacks a Rust owner but is {status}"
+                )
+        elif not (repo_root / rust_owner).is_file():
+            errors.append(
+                f"render-context configuration map line {line_number} names missing Rust owner {rust_owner}"
+            )
+        elif not git_tracked_file(repo_root, rust_owner):
+            errors.append(
+                f"render-context configuration map line {line_number} names untracked Rust owner {rust_owner}"
+            )
+        evidence = [value.strip() for value in row["evidence"].split(";") if value.strip()]
+        if status in {"prepared", "verified"} and not evidence:
+            errors.append(
+                f"render-context configuration map line {line_number} is {status} without evidence"
             )
         for citation in evidence:
             validate_evidence_citation(citation, repo_root, upstream_root, errors)
@@ -1108,6 +1313,9 @@ def check(
     source_counts = validate_source_rows(manifest, repo_root, upstream_root, errors)
     validate_render_context_file_map(manifest, repo_root, upstream_root, errors)
     validate_render_context_field_map(manifest, repo_root, upstream_root, errors)
+    validate_render_context_configuration_map(
+        manifest, repo_root, upstream_root, errors
+    )
     units = validate_translation_units(manifest, errors)
     validate_lifetime_ledger(manifest, repo_root, upstream_root, errors)
     validate_reference_provenance(manifest, repo_root, errors)

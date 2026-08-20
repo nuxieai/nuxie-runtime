@@ -149,6 +149,19 @@ current = "Not started."
 
 [[report]]
 date = "2026-08-20"
+title = "Conditional configuration surface made exhaustive"
+status = "amber"
+summary = "The campaign checker now derives all 30 conditional blocks across the pinned Metal context and background compiler units and rejects omitted blocks, invented blocks, or branch-line drift."
+results = [
+  "30/30 preprocessor blocks inventoried",
+  "13 blocks prepared",
+  "17 blocks remain review-needed",
+  "open configurations include visionOS, tvOS, simulators, full RIVE_CANVAS, and the inert WITH_RIVE_TOOLS context field",
+]
+evidence = "docs/render-context-metal-configurations.tsv"
+
+[[report]]
+date = "2026-08-20"
 title = "State-bearing field inventory made exhaustive"
 status = "amber"
 summary = "The campaign checker now extracts all 37 fields from the pinned RenderTargetMetal, ContextOptions, DrawPipeline, and RenderContextMetalImpl declarations and rejects omissions, inventions, duplicates, or declaration-line drift."

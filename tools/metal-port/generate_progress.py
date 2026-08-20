@@ -124,6 +124,34 @@ def field_summary(rows: list[dict[str, str]]) -> str:
     return "".join(cards)
 
 
+def configuration_summary(rows: list[dict[str, str]]) -> str:
+    cards = []
+    for upstream_file in dict.fromkeys(row["upstream_file"] for row in rows):
+        source_rows = [row for row in rows if row["upstream_file"] == upstream_file]
+        prepared = sum(
+            row["status"] in {"prepared", "verified"} for row in source_rows
+        )
+        review = [
+            row["block"] for row in source_rows if row["status"] == "review-needed"
+        ]
+        percent = prepared / len(source_rows) * 100
+        review_text = (
+            f'<p class="field-review">Open branches: <code>{escape(", ".join(review))}</code></p>'
+            if review
+            else '<p class="field-ready">Every conditional block is prepared.</p>'
+        )
+        cards.append(
+            f"""
+            <article class="field-card">
+              <div class="source-card-head"><div><h3>{escape(source_label(upstream_file))}</h3><code>{len(source_rows)} conditional blocks</code></div><strong>{prepared}/{len(source_rows)} prepared</strong></div>
+              <div class="stacked-bar" aria-label="{escape(source_label(upstream_file))} configuration preparation"><span class="bar-part bar-ported" style="width:{percent:.5f}%"></span><span class="bar-part bar-missing" style="width:{100 - percent:.5f}%"></span></div>
+              {review_text}
+            </article>
+            """
+        )
+    return "".join(cards)
+
+
 def phase_rail(phases: list[dict]) -> str:
     return "".join(
         f"""
@@ -261,6 +289,9 @@ def render(repo_root: Path) -> str:
     ownership = load_toml(repo_root / "docs/metal-port-ownership.toml")
     manifest = load_toml(repo_root / "docs/metal-port-manifest.toml")
     field_rows = parse_tsv(repo_root / manifest["render_context_field_map"])
+    configuration_rows = parse_tsv(
+        repo_root / manifest["render_context_configuration_map"]
+    )
     metal_sources = [
         source
         for source in manifest.get("source", [])
@@ -281,6 +312,9 @@ def render(repo_root: Path) -> str:
     missing_lines = sum(int(row["length"]) for row in rows if row["status"] == "missing")
     prepared_fields = sum(
         row["status"] in {"prepared", "verified"} for row in field_rows
+    )
+    prepared_configurations = sum(
+        row["status"] in {"prepared", "verified"} for row in configuration_rows
     )
     corpus_config = progress["corpus"]
     corpus = load_toml(repo_root / corpus_config["manifest"])
@@ -327,16 +361,16 @@ h1 {{ margin:0; max-width:820px; font-size:clamp(2rem,5vw,4.8rem); line-height:.
 .hero-meta {{ border-left:3px solid var(--green); padding:14px 0 14px 18px; }} .hero-meta span,.hero-meta strong {{ display:block; }} .hero-meta span {{ color:var(--muted); font-size:.85rem; margin-top:5px; }}
 .section {{ margin-top:44px; }} .section-head {{ display:flex; justify-content:space-between; gap:20px; align-items:end; margin-bottom:18px; }}
 h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{ margin:0; color:var(--muted); max-width:680px; line-height:1.45; }}
-.overview {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }}
+.overview {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }}
 .metric {{ background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .metric strong {{ font-size:2rem; display:block; }} .metric span {{ color:var(--muted); }}
 .source-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:18px; }}
 .source-card {{ background:var(--panel); border:1px solid var(--line); padding:20px; box-shadow:var(--shadow); }} .source-card-head {{ display:flex; justify-content:space-between; gap:12px; align-items:start; }} .source-card h3 {{ margin:0 0 5px; }}
-.field-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .field-card {{ background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .field-card h3 {{ margin:0 0 5px; }} .field-review {{ color:var(--red); margin:0; }} .field-ready {{ color:var(--green); margin:0; }}
+.field-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .field-card {{ min-width:0; background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .field-card h3 {{ margin:0 0 5px; overflow-wrap:anywhere; }} .field-review {{ color:var(--red); margin:0; overflow-wrap:anywhere; }} .field-review code {{ word-break:break-word; }} .field-ready {{ color:var(--green); margin:0; }} .source-card-head>* {{ min-width:0; }}
 .stacked-bar {{ display:flex; width:100%; height:18px; overflow:hidden; margin:22px 0 13px; background:var(--line); }} .bar-part {{ display:block; }} .bar-ported {{ background:var(--green); }} .bar-partial {{ background:var(--amber); }} .bar-missing {{ background:var(--red); }}
 .bar-legend {{ display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:.84rem; }} .dot {{ display:inline-block; width:9px; height:9px; margin-right:6px; }} .dot-ported {{ background:var(--green); }} .dot-partial {{ background:var(--amber); }} .dot-missing {{ background:var(--red); }}
 .phases {{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0; }} .phase {{ position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); }} .phase-marker {{ position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); }} .phase-active {{ border-color:var(--green); }} .phase-active .phase-marker {{ background:var(--green); box-shadow:0 0 0 5px var(--green-soft); }} .phase strong {{ display:block; margin-bottom:8px; }} .phase p {{ color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }}
 .status {{ display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; }} .status-ported,.status-verified,.status-exact,.status-green,.status-active {{ color:var(--green); background:var(--green-soft); }} .status-partial,.status-in-progress,.status-amber {{ color:var(--amber); background:var(--amber-soft); }} .status-missing,.status-pending {{ color:var(--red); background:var(--red-soft); }} .status-queued {{ color:var(--queued); }}
-.owner-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .owner {{ background:var(--panel); border:1px solid var(--line); }} .owner summary {{ cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }} .owner p,.owner-meta {{ margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; }} .owner-meta {{ display:grid; gap:5px; font-size:.82rem; }}
+.owner-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .owner {{ min-width:0; background:var(--panel); border:1px solid var(--line); }} .owner summary {{ min-width:0; cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }} .owner summary>span:first-child {{ min-width:0; overflow-wrap:anywhere; word-break:break-word; }} .owner p,.owner-meta {{ min-width:0; margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; overflow-wrap:anywhere; }} .owner-meta {{ display:grid; gap:5px; font-size:.82rem; }}
 .filters {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }} .filters button {{ appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; }} .filters button[aria-pressed="true"] {{ border-color:var(--green); color:var(--green); background:var(--green-soft); }}
 .table-wrap {{ overflow-x:auto; border:1px solid var(--line); background:var(--panel); }} table {{ width:100%; border-collapse:collapse; min-width:920px; }} th,td {{ padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }} th {{ color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; }} td small {{ color:var(--muted); }} td:nth-child(1) {{ width:220px; }} td:nth-child(3) {{ width:120px; }} td:nth-child(5) {{ max-width:340px; overflow-wrap:anywhere; }} tr:last-child td {{ border-bottom:0; }}
 	.reports {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .report {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .report-green {{ border-top-color:var(--green); }} .report-amber {{ border-top-color:var(--amber); }} .report-head,.report footer {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }} .report time {{ color:var(--muted); }} .report h3 {{ margin:15px 0 8px; }} .report p {{ color:var(--muted); line-height:1.5; }} .report footer {{ margin-top:16px; }} .runs {{ display:grid; gap:8px; margin-top:14px; }} .run {{ border-left:2px solid var(--line); padding-left:10px; }} .run code,.run span {{ display:block; overflow-wrap:anywhere; }} .run span {{ color:var(--muted); margin-top:3px; font-size:.82rem; }}
@@ -361,6 +395,7 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
       <div class="metric"><strong>{partial_lines:,}</strong><span>partial source lines still under translation</span></div>
       <div class="metric"><strong>{missing_lines:,}</strong><span>missing source lines with no Rust owner</span></div>
       <div class="metric"><strong>{prepared_fields}/{len(field_rows)}</strong><span>state-bearing fields prepared</span></div>
+      <div class="metric"><strong>{prepared_configurations}/{len(configuration_rows)}</strong><span>conditional blocks prepared</span></div>
     </div>
     <div class="source-grid">{source_summary(rows)}</div>
   </section>
@@ -370,6 +405,11 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
   <section class="section">
     <div class="section-head"><h2>State-bearing field closure</h2><p>The checker derives all 37 declarations from the pinned header and implementation. Any omitted or invented ledger row fails the campaign gate.</p></div>
     <div class="field-grid">{field_summary(field_rows)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Conditional-configuration closure</h2><p>The checker extracts every preprocessor block and branch line from the pinned context and compiler units. Missing platform, tools, canvas, simulator, or header modes stay red.</p></div>
+    <div class="field-grid">{configuration_summary(configuration_rows)}</div>
   </section>
 
   <section class="section">

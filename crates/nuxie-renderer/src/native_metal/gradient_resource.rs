@@ -224,7 +224,7 @@ mod tests {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
             return;
         };
-        let mut resource = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 3)
+        let mut resource = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 1)
             .unwrap()
             .unwrap();
         let clone = resource.clone();
@@ -234,7 +234,7 @@ mod tests {
             clone.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>
         ));
         let before_descriptor = resource.descriptor();
-        let replacement = GradientResourceDescriptor::new(GRADIENT_TEXTURE_WIDTH, 4).unwrap();
+        let replacement = GradientResourceDescriptor::new(GRADIENT_TEXTURE_WIDTH, 2).unwrap();
 
         let failed = resource.resize_with(replacement, |_| {
             Err(RendererError::NativeMetal(
@@ -250,11 +250,17 @@ mod tests {
 
         let retained_before_retry = resource.retained_texture().unwrap();
         let after = resource
-            .resize(&device, GRADIENT_TEXTURE_WIDTH, 4)
+            .resize(&device, GRADIENT_TEXTURE_WIDTH, 2)
             .unwrap()
             .unwrap() as *const ProtocolObject<dyn MTLTexture>;
         assert!(!std::ptr::eq(before, after));
         assert_eq!(retained_before_retry.width(), 512);
-        assert_eq!(resource.descriptor().unwrap().height, 4);
+        assert_eq!(retained_before_retry.height(), 1);
+        assert_eq!(resource.descriptor().unwrap().height, 2);
+        let same_shape = resource
+            .resize(&device, GRADIENT_TEXTURE_WIDTH, 2)
+            .unwrap()
+            .unwrap() as *const ProtocolObject<dyn MTLTexture>;
+        assert!(std::ptr::eq(after, same_shape));
     }
 }

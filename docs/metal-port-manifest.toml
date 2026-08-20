@@ -290,10 +290,13 @@ status = "in-progress"
 # coalesced-resolve flags, and the exact four-group/five-barrier schedule from
 # render_context.cpp:1067-1083, 1680-1808, 1953-1965, 2223-2241, 3957-4010,
 # gpu.hpp:780-925, and Metal 1298-1385, 1759-1812, 1857-1925, 1989-1997.
+# The seventh ports one four-linear-gradient flush, including complex and
+# simple content dedup, simple-first rows, and per-occurrence matrices from
+# render_context.cpp:93-129, 578-663, and 1450-1515.
 # This full source row remains in-progress:
 # clip rectangles and clip mutation after content, gradients in clipped
-# flushes, more than one gradient in a flush, radial/complex gradients,
-# atlas, images, strokes, advanced blends with gradients/clips or non-midpoint
+# flushes, radial gradients, atlas, images, strokes,
+# advanced blends with gradients/clips or non-midpoint
 # geometry, multi-flush/general scheduling,
 # simulator coverage, and fallback remain.
 rust_modules = [
@@ -360,6 +363,8 @@ evidence = [
   "fixtures/renderer/streams/riv/deterministic_mode.rive-stream",
   "fixtures/renderer/reference/metal/gm/overfill_blendmodes-clockwise-atomic.png",
   "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream",
+  "fixtures/renderer/reference/metal/gm/rect_grad-clockwise-atomic.png",
+  "fixtures/renderer/streams/gm/rect_grad.rive-stream",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",

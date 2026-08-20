@@ -238,6 +238,81 @@ fn main() {
         );
         assert!(!mixed_output.execution_inventory.atomic_color_plane);
 
+        // Root one same-flush multi-gradient frame with repeated simple and
+        // complex ramp content. Geometry differs per occurrence, while the
+        // retained 512x2 ramp texture contains one shared row of each kind.
+        let complex_forward = atomic_factory.make_linear_gradient(
+            0.0,
+            0.0,
+            64.0,
+            64.0,
+            &[0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+            &[0.0, 0.5, 1.0],
+        );
+        let complex_reverse = atomic_factory.make_linear_gradient(
+            64.0,
+            0.0,
+            0.0,
+            64.0,
+            &[0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+            &[0.0, 0.5, 1.0],
+        );
+        let simple_reverse = atomic_factory.make_linear_gradient(
+            64.0,
+            0.0,
+            0.0,
+            64.0,
+            &[0xff00_0000, 0xffff_ffff],
+            &[0.0, 1.0],
+        );
+        let simple_forward = atomic_factory.make_linear_gradient(
+            0.0,
+            0.0,
+            64.0,
+            64.0,
+            &[0xff00_0000, 0xffff_ffff],
+            &[0.0, 1.0],
+        );
+        let gradients = [
+            complex_forward,
+            complex_reverse,
+            simple_reverse,
+            simple_forward,
+        ];
+        let mut gradient_paints = Vec::new();
+        for gradient in &gradients {
+            let mut paint = atomic_factory.make_render_paint();
+            paint.shader(Some(gradient.as_ref()));
+            gradient_paints.push(paint);
+        }
+        let mut multi_gradient_frame = atomic_factory
+            .begin_frame(0xffff_ffff)
+            .expect("acquire forced-atomic multi-gradient command buffer");
+        for paint in &gradient_paints {
+            multi_gradient_frame.draw_path(mixed_background.as_ref(), paint.as_ref());
+        }
+        let multi_gradient_output = multi_gradient_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic multi-gradient flush");
+        assert!(
+            multi_gradient_output
+                .execution_inventory
+                .color_ramp_pipeline
+        );
+        assert!(multi_gradient_output.execution_inventory.gradient_texture);
+        assert!(
+            multi_gradient_output
+                .execution_inventory
+                .fixed_function_color_output
+        );
+        assert!(!multi_gradient_output.execution_inventory.atomic_color_plane);
+        assert_eq!(multi_gradient_output.execution_inventory.atomic_draws, 4);
+        assert_eq!(
+            multi_gradient_output.execution_inventory.atomic_draw_groups,
+            4
+        );
+        assert_eq!(multi_gradient_output.execution_inventory.atomic_barriers, 5);
+
         // Root the non-fixed-function generic-atomic branch with both an
         // advanced RGB blend and HSL blends, including translucent paint.
         let advanced_specs = [

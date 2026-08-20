@@ -417,6 +417,87 @@ fn native_metal_forced_atomic_mixed_gradient_flush_matches_pinned_cpp_metal_orac
 }
 
 #[test]
+fn native_metal_forced_atomic_rect_grad_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/rect_grad.rive-stream"))
+            .expect("read rect-grad stream"),
+    )
+    .expect("parse rect-grad stream");
+    let (width, height) = stream.frame_size.expect("rect-grad frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal rect-grad frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay rect-grad through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal rect-grad");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: true,
+            gradient_texture: true,
+            atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
+            atomic_draws: 4,
+            atomic_draw_groups: 4,
+            atomic_barriers: 5,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
+        },
+        "rect-grad must remain a fixed-function, midpoint-only generic-atomic flush"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 3,
+            buffer_upload_calls: 7,
+            buffer_upload_bytes: 2_264,
+            queue_submissions: 1,
+            gpu_draw_calls: 8,
+            gpu_draw_instances: 32,
+            tessellation_spans: 19,
+            path_patches: 8,
+            ..BackendWorkMetrics::default()
+        },
+        "one deduplicated ramp pass, one tessellation pass, and four grouped path commands between initialize and resolve"
+    );
+
+    let cpp_metal =
+        read_png(fixture_root.join("reference/metal/gm/rect_grad-clockwise-atomic.png"));
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(32),
+        false,
+        "forced generic-atomic Rust Metal rect-grad versus pinned C++ Metal",
+    );
+    assert_clear_color_occupancy(
+        &output.pixels,
+        &cpp_metal,
+        [255, 255, 255, 255],
+        "forced generic-atomic Rust Metal rect-grad versus pinned C++ Metal",
+    );
+}
+
+#[test]
 fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream = RenderStream::parse(

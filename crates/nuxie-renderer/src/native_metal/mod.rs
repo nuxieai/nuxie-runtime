@@ -1007,18 +1007,6 @@ impl NativeMetalFrame {
             }
             .map_err(RendererError::Unsupported)?;
             if let Some(flush) = flush {
-                if flush.gradient_batch.is_some()
-                    && self
-                        .atomic_path_inputs
-                        .iter()
-                        .filter(|input| input.paint.shader.is_some())
-                        .count()
-                        != 1
-                {
-                    return Err(RendererError::Unsupported(
-                        "native Metal atomic gradient tracer supports one gradient draw per flush",
-                    ));
-                }
                 if flush
                     .draws
                     .iter()

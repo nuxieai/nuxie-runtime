@@ -205,6 +205,11 @@ pub struct AnyResourceHandle {
 }
 
 impl AnyResourceHandle {
+    /// Whether two erased handles retain the same intrusive resource.
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(self.allocation(), other.allocation())
+    }
+
     pub fn downcast<T: GpuResourcePayload>(mut self) -> Result<ResourceHandle<T>, Self> {
         let is_type = self.allocation().payload().downcast_ref::<T>().is_some();
         if !is_type {

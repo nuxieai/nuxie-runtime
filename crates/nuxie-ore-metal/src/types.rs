@@ -10,7 +10,10 @@
 
 use std::any::{Any, TypeId};
 use std::ops::{BitAnd, BitOr};
+#[cfg(test)]
 use std::sync::Arc;
+
+use crate::gpu_resource::AnyResourceHandle;
 
 // ============================================================================
 // Constants
@@ -463,9 +466,9 @@ impl<'a> Default for TextureDesc<'a> {
     }
 }
 
-#[derive(Clone)]
-pub struct TextureViewDesc {
-    pub texture: Arc<dyn Texture>,
+#[derive(Clone, Copy)]
+pub struct TextureViewDesc<'a> {
+    pub texture: &'a AnyResourceHandle,
     pub dimension: TextureViewDimension,
     pub aspect: TextureAspect,
     pub baseMipLevel: u32,
@@ -784,9 +787,9 @@ impl<'a> Default for BindGroupLayoutDesc<'a> {
 }
 
 pub struct PipelineDesc<'a> {
-    pub vertexModule: Option<&'a Arc<dyn ShaderModule>>,
+    pub vertexModule: Option<&'a AnyResourceHandle>,
     pub vertexEntryPoint: Option<&'a str>,
-    pub fragmentModule: Option<&'a Arc<dyn ShaderModule>>,
+    pub fragmentModule: Option<&'a AnyResourceHandle>,
     pub fragmentEntryPoint: Option<&'a str>,
     pub vertexBuffers: Option<&'a [VertexBufferLayout<'a>]>,
     pub topology: PrimitiveTopology,
@@ -801,7 +804,7 @@ pub struct PipelineDesc<'a> {
     pub stencilReadMask: u8,
     pub stencilWriteMask: u8,
     pub sampleCount: u32,
-    pub bindGroupLayouts: Option<&'a [Option<Arc<dyn BindGroupLayout>>]>,
+    pub bindGroupLayouts: Option<&'a [Option<&'a AnyResourceHandle>]>,
     pub label: Option<&'a str>,
 }
 
@@ -852,8 +855,8 @@ impl Default for ClearColor {
 
 #[derive(Clone, Copy)]
 pub struct ColorAttachment<'a> {
-    pub view: Option<&'a dyn TextureView>,
-    pub resolveTarget: Option<&'a dyn TextureView>,
+    pub view: Option<&'a AnyResourceHandle>,
+    pub resolveTarget: Option<&'a AnyResourceHandle>,
     pub loadOp: LoadOp,
     pub storeOp: StoreOp,
     pub clearColor: ClearColor,
@@ -873,7 +876,7 @@ impl<'a> Default for ColorAttachment<'a> {
 
 #[derive(Clone, Copy)]
 pub struct DepthStencilAttachment<'a> {
-    pub view: Option<&'a dyn TextureView>,
+    pub view: Option<&'a AnyResourceHandle>,
     pub depthLoadOp: LoadOp,
     pub depthStoreOp: StoreOp,
     pub depthClearValue: f32,
@@ -917,7 +920,7 @@ impl<'a> Default for RenderPassDesc<'a> {
 #[derive(Clone, Copy)]
 pub struct UBOEntry<'a> {
     pub slot: u32,
-    pub buffer: Option<&'a Arc<dyn Buffer>>,
+    pub buffer: Option<&'a AnyResourceHandle>,
     pub offset: u32,
     pub size: u32,
 }
@@ -925,13 +928,13 @@ pub struct UBOEntry<'a> {
 #[derive(Clone, Copy)]
 pub struct TexEntry<'a> {
     pub slot: u32,
-    pub view: Option<&'a Arc<dyn TextureView>>,
+    pub view: Option<&'a AnyResourceHandle>,
 }
 
 #[derive(Clone, Copy)]
 pub struct SampEntry<'a> {
     pub slot: u32,
-    pub sampler: Option<&'a Arc<dyn Sampler>>,
+    pub sampler: Option<&'a AnyResourceHandle>,
 }
 
 impl Default for UBOEntry<'_> {
@@ -964,7 +967,7 @@ impl Default for SampEntry<'_> {
 }
 
 pub struct BindGroupDesc<'a> {
-    pub layout: Option<&'a Arc<dyn BindGroupLayout>>,
+    pub layout: Option<&'a AnyResourceHandle>,
     pub ubos: &'a [UBOEntry<'a>],
     pub textures: &'a [TexEntry<'a>],
     pub samplers: &'a [SampEntry<'a>],
@@ -1047,6 +1050,7 @@ impl Default for Features {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gpu_resource::ResourceHandle;
 
     struct MetalBackend;
     struct OtherBackend;
@@ -1098,25 +1102,22 @@ mod tests {
 
     #[test]
     fn retaining_descriptor_positions_expose_exact_strong_owners() {
-        let module: Arc<dyn ShaderModule> = Arc::new(MetalShaderModule);
-        let layout: Arc<dyn BindGroupLayout> = Arc::new(MetalBindGroupLayout);
-        let layouts = [Some(Arc::clone(&layout))];
+        let module = ResourceHandle::new(None, MetalShaderModule).erase();
+        let layout = ResourceHandle::new(None, MetalBindGroupLayout).erase();
+        let layouts = [Some(&layout)];
         let pipeline = PipelineDesc {
             vertexModule: Some(&module),
             bindGroupLayouts: Some(&layouts),
             ..PipelineDesc::default()
         };
 
-        let retained_module = Arc::clone(pipeline.vertexModule.expect("module owner"));
-        let retained_layout = Arc::clone(
-            pipeline.bindGroupLayouts.expect("layout owners")[0]
-                .as_ref()
-                .expect("layout owner"),
-        );
-        assert!(Arc::ptr_eq(&module, &retained_module));
-        assert!(Arc::ptr_eq(&layout, &retained_layout));
+        let retained_module = pipeline.vertexModule.expect("module owner").clone();
+        let retained_layout =
+            (pipeline.bindGroupLayouts.expect("layout owners")[0].expect("layout owner")).clone();
+        assert!(module.ptr_eq(&retained_module));
+        assert!(layout.ptr_eq(&retained_layout));
 
-        let buffer: Arc<dyn Buffer> = Arc::new(MetalBuffer);
+        let buffer = ResourceHandle::new(None, MetalBuffer).erase();
         let ubos = [UBOEntry {
             buffer: Some(&buffer),
             ..UBOEntry::default()
@@ -1126,8 +1127,11 @@ mod tests {
             ubos: &ubos,
             ..BindGroupDesc::default()
         };
-        let retained_buffer = Arc::clone(bind_group.ubos[0].buffer.expect("buffer owner"));
-        assert!(Arc::ptr_eq(&buffer, &retained_buffer));
+        let retained_buffer = bind_group.ubos[0].buffer.expect("buffer owner").clone();
+        assert!(buffer.ptr_eq(&retained_buffer));
+        assert_eq!(module.debugging_ref_count(), 2);
+        assert_eq!(layout.debugging_ref_count(), 2);
+        assert_eq!(buffer.debugging_ref_count(), 2);
     }
 
     #[test]

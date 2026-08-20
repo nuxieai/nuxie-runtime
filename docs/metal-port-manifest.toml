@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 26, in-progress = 2, ported = 14, verified = 0 }
+expected_status_counts = { pending = 17, in-progress = 2, ported = 23, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -582,25 +582,25 @@ evidence = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
 upstream = "renderer/include/rive/renderer/ore/ore_sampler.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/sampler.rs"]
+evidence = ["crates/nuxie-ore-metal/src/sampler.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_shader_module.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/shader_module.rs"]
+evidence = ["crates/nuxie-ore-metal/src/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_texture.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/texture.rs"]
+evidence = ["crates/nuxie-ore-metal/src/texture.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_types.hpp"
@@ -686,49 +686,49 @@ evidence = []
 upstream = "renderer/src/ore/metal/ore_sampler_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_sampler_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_shader_module_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_shader_module_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_texture_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_texture_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
 
 [[translation_unit]]
 id = "ore-types"
@@ -840,7 +840,7 @@ requires_lifetime_rows = true
 [[translation_unit]]
 id = "ore-texture"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-texture"
 sources = [
   "renderer/include/rive/renderer/ore/ore_texture.hpp",
   "renderer/src/ore/metal/ore_texture_metal.hpp",
@@ -856,13 +856,13 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]
 id = "ore-sampler"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-sampler"
 sources = [
   "renderer/include/rive/renderer/ore/ore_sampler.hpp",
   "renderer/src/ore/metal/ore_sampler_metal.hpp",
@@ -878,13 +878,13 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]
 id = "ore-shader-module"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-shader"
 sources = [
   "renderer/include/rive/renderer/ore/ore_shader_module.hpp",
   "renderer/src/ore/metal/ore_shader_module_metal.hpp",
@@ -900,7 +900,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]

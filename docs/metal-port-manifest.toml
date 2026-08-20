@@ -293,9 +293,14 @@ status = "in-progress"
 # The seventh ports one four-linear-gradient flush, including complex and
 # simple content dedup, simple-first rows, and per-occurrence matrices from
 # render_context.cpp:93-129, 578-663, and 1450-1515.
+# The eighth ports an axis-aligned clip rectangle introduced after the first
+# content draw, including per-draw state snapshots, PaintAux inverse matrices,
+# ENABLE_CLIP_RECT pipeline keys, exact scissor transitions, and full-target
+# resolve restoration from rive_renderer.cpp:204-309, render_context.cpp:81-91,
+# 2083-2088, 3024-3059, 3947-3961, and Metal 1753-1895.
 # This full source row remains in-progress:
-# clip rectangles and clip mutation after content, gradients in clipped
-# flushes, radial gradients, atlas, images, strokes,
+# divergent path-clip stacks and general clip mutation/restores after content,
+# gradients in clipped flushes, radial gradients, atlas, images, strokes,
 # advanced blends with gradients/clips or non-midpoint
 # geometry, multi-flush/general scheduling,
 # simulator coverage, and fallback remain.
@@ -365,6 +370,8 @@ evidence = [
   "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream",
   "fixtures/renderer/reference/metal/gm/rect_grad-clockwise-atomic.png",
   "fixtures/renderer/streams/gm/rect_grad.rive-stream",
+  "fixtures/renderer/reference/metal/gm/gamma_correction_clip-clockwise-atomic.png",
+  "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",

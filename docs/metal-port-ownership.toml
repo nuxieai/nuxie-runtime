@@ -145,14 +145,17 @@ status = "in-progress"
 # flush, non-fixed output with all three atomic planes, exact whole-flush
 # shader keys, and the exact four-group/five-barrier schedule. The seventh adds
 # one four-linear-gradient flush with byte-keyed simple/complex ramp dedup,
-# simple-first rows, and per-occurrence matrices. Remaining clip
-# rectangles or clip mutation after content, gradients in clipped flushes,
+# simple-first rows, and per-occurrence matrices. The eighth adds one
+# axis-aligned clip rectangle after content begins, with per-draw state,
+# PaintAux inverse data, paired CLIP_RECT midpoint/resolve keys, and exact
+# scissor transitions. Remaining divergent path-clip stacks or general clip
+# mutation/restores after content, gradients in clipped flushes,
 # atlas, images, strokes, advanced blends with gradients/clips or non-midpoint geometry, radial gradients, multiple
 # logical flushes, and the general scheduler remain
 # explicitly outside this promotion.
 rule = "A capability-selected or explicitly forced generic-atomic frame realizes the same fixed-function or advanced/HSL pipeline keys, PLS buffer bindings, barriers, and initialize/path/resolve topology as upstream Metal."
-citations = ["cpp:renderer/include/rive/renderer/gpu.hpp:780-925", "cpp:renderer/src/render_context.cpp:93-129", "cpp:renderer/src/render_context.cpp:578-663", "cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/render_context.cpp:1450-1515", "cpp:renderer/src/render_context.cpp:1680-1808", "cpp:renderer/src/render_context.cpp:1953-1965", "cpp:renderer/src/render_context.cpp:2223-2241", "cpp:renderer/src/render_context.cpp:3033-3054", "cpp:renderer/src/render_context.cpp:3948-4010", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1058", "cpp:renderer/src/metal/render_context_metal_impl.mm:1298-1450", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
-required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint, gradient, same-flush multi-draw, nested-clip, mixed solid/simple-gradient, repeated simple/complex-gradient, and advanced/HSL blend equivalence with independent exactly-once canonical consumption plus byte-exact final relocated upload planes", "retained color-ramp pass and generated gradient texture binding", "content-key gradient-ramp dedup with simple-first physical rows, exact span bytes, and per-occurrence matrices", "real clip and coverage atomic planes for fixed output plus transactional color/clip/coverage planes for advanced output", "flush-wide clipped, unclipped, fixed, advanced, and HSL initialize/midpoint/outer-curve/interior/resolve pipeline inventories", "exact disjoint grouping and ROG/memory/render-pass-break barrier policy", "unchanged triangle 2/32, byte-exact forced-atomic gradient, rect-grad 2/32, unchanged overfill 2/48, byte-exact nested clip 0/0, deterministic-mode mixed-gradient 2/32, and overfill-blendmodes 2/32 oracles with exact occupancy", "forced-atomic solid, gradient, multi-draw, nested-clip, mixed-gradient, repeated simple/complex-gradient, and advanced/HSL product Mach-O contains no WGPU"]
+citations = ["cpp:renderer/include/rive/renderer/gpu.hpp:780-925", "cpp:renderer/src/rive_renderer.cpp:204-309", "cpp:renderer/src/render_context.cpp:81-129", "cpp:renderer/src/render_context.cpp:578-663", "cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/render_context.cpp:1450-1515", "cpp:renderer/src/render_context.cpp:1680-1808", "cpp:renderer/src/render_context.cpp:1953-1965", "cpp:renderer/src/render_context.cpp:2083-2088", "cpp:renderer/src/render_context.cpp:2223-2241", "cpp:renderer/src/render_context.cpp:3024-3059", "cpp:renderer/src/render_context.cpp:3947-4010", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1058", "cpp:renderer/src/metal/render_context_metal_impl.mm:1298-1450", "cpp:renderer/src/metal/render_context_metal_impl.mm:1753-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
+required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint, gradient, same-flush multi-draw, nested-clip, mixed solid/simple-gradient, repeated simple/complex-gradient, clip-rect, and advanced/HSL blend equivalence with independent exactly-once canonical consumption plus byte-exact final relocated upload planes", "retained color-ramp pass and generated gradient texture binding", "content-key gradient-ramp dedup with simple-first physical rows, exact span bytes, and per-occurrence matrices", "real clip and coverage atomic planes for fixed output plus transactional color/clip/coverage planes for advanced output", "flush-wide clipped, clip-rect, unclipped, fixed, advanced, and HSL initialize/midpoint/outer-curve/interior/resolve pipeline inventories", "exact disjoint grouping and ROG/memory/render-pass-break barrier and scissor policy", "unchanged triangle 2/32, byte-exact forced-atomic gradient, rect-grad 2/32, gamma-correction-clip 2/8, unchanged overfill 2/48, byte-exact nested clip 0/0, deterministic-mode mixed-gradient 2/32, and overfill-blendmodes 2/32 oracles with exact occupancy", "forced-atomic solid, gradient, multi-draw, nested-clip, clip-rect, mixed-gradient, repeated simple/complex-gradient, and advanced/HSL product Mach-O contains no WGPU"]
 evidence_paths = [
   "crates/nuxie-renderer/src/lib.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -174,6 +177,8 @@ evidence_paths = [
   "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream",
   "fixtures/renderer/reference/metal/gm/rect_grad-clockwise-atomic.png",
   "fixtures/renderer/streams/gm/rect_grad.rive-stream",
+  "fixtures/renderer/reference/metal/gm/gamma_correction_clip-clockwise-atomic.png",
+  "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream",
   "tools/check-native-metal-tracer-binary.sh",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/renderer-replay/src/bin/native-metal-product-root.rs",

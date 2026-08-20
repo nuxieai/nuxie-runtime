@@ -84,6 +84,7 @@ fn main() {
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
                 clipped_path_pipeline_set: false,
+                clip_rect_pipeline: false,
                 outer_curve_pipeline: false,
                 interior_triangulation_pipeline: false,
                 atomic_draws: 1,
@@ -140,6 +141,7 @@ fn main() {
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
                 clipped_path_pipeline_set: false,
+                clip_rect_pipeline: false,
                 outer_curve_pipeline: false,
                 interior_triangulation_pipeline: false,
                 atomic_draws: 1,
@@ -353,6 +355,64 @@ fn main() {
             !advanced_output
                 .execution_inventory
                 .interior_triangulation_pipeline
+        );
+
+        // Root a clip rectangle introduced after content has begun. This is
+        // the platform-specific ENABLE_CLIP_RECT path: draw state is snapped
+        // per occurrence, the second group receives a bounded scissor, and
+        // resolve restores the full target.
+        let mut clip_background = RawPath::new();
+        clip_background.move_to(4.0, 4.0);
+        clip_background.line_to(60.0, 4.0);
+        clip_background.line_to(60.0, 60.0);
+        clip_background.line_to(4.0, 60.0);
+        clip_background.close();
+        let clip_background = atomic_factory.make_render_path(clip_background, FillRule::NonZero);
+        let mut clip_foreground = RawPath::new();
+        clip_foreground.move_to(16.0, 16.0);
+        clip_foreground.line_to(48.0, 16.0);
+        clip_foreground.line_to(48.0, 48.0);
+        clip_foreground.line_to(16.0, 48.0);
+        clip_foreground.close();
+        let clip_foreground = atomic_factory.make_render_path(clip_foreground, FillRule::NonZero);
+        let mut clip_rect = RawPath::new();
+        clip_rect.move_to(24.0, 24.0);
+        clip_rect.line_to(40.0, 24.0);
+        clip_rect.line_to(40.0, 40.0);
+        clip_rect.line_to(24.0, 40.0);
+        clip_rect.close();
+        let clip_rect = atomic_factory.make_render_path(clip_rect, FillRule::NonZero);
+        let mut magenta = atomic_factory.make_render_paint();
+        magenta.color(0xffb0_00b0);
+        let mut yellow = atomic_factory.make_render_paint();
+        yellow.color(0xfff0_b000);
+        let mut clip_rect_frame = atomic_factory
+            .begin_frame(0xffff_ffff)
+            .expect("acquire forced-atomic clip-rect command buffer");
+        clip_rect_frame.save();
+        clip_rect_frame.draw_path(clip_background.as_ref(), magenta.as_ref());
+        clip_rect_frame.clip_path(clip_rect.as_ref());
+        clip_rect_frame.draw_path(clip_foreground.as_ref(), yellow.as_ref());
+        clip_rect_frame.restore();
+        let clip_rect_output = clip_rect_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal clip rectangle");
+        assert!(clip_rect_output.execution_inventory.clip_rect_pipeline);
+        assert!(
+            clip_rect_output
+                .execution_inventory
+                .fixed_function_color_output
+        );
+        assert_eq!(clip_rect_output.execution_inventory.atomic_draws, 2);
+        assert_eq!(clip_rect_output.execution_inventory.atomic_draw_groups, 2);
+        assert_eq!(clip_rect_output.execution_inventory.atomic_barriers, 3);
+        assert_eq!(
+            clip_rect_output.pixels[(32 * 64 + 32) * 4..][..4],
+            [240, 176, 0, 255]
+        );
+        assert_eq!(
+            clip_rect_output.pixels[(32 * 64 + 23) * 4..][..4],
+            [176, 0, 176, 255]
         );
 
         // Root flush-wide generic-atomic clipping plus both physical geometry

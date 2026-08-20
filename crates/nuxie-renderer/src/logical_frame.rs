@@ -1152,6 +1152,36 @@ impl LogicalDrawState {
         Ok(())
     }
 
+    /// Transactionally classifies the only clip mutation permitted after the
+    /// bounded native-Metal atomic flush has begun. Incompatible rectangles
+    /// must not fall through to path-clip storage because the already-recorded
+    /// content cannot be retroactively rewritten as a clipped-path flush.
+    #[cfg(any(test, feature = "native-metal-experimental"))]
+    pub(crate) fn clip_rect_after_atomic_content(
+        &mut self,
+        path: &LogicalPath,
+    ) -> Result<(), &'static str> {
+        if !path.valid {
+            return Err("clip path contains resources from another renderer backend");
+        }
+        let mut staged = self.state;
+        if path.raw_path.verbs().is_empty() {
+            staged.overall_clip_pixel_bounds = [0; 4];
+            self.state = staged;
+            return Ok(());
+        }
+        let rect = path_aabb(&path.raw_path).ok_or(
+            "native Metal atomic tracer only supports compatible rectangular clips after content",
+        )?;
+        if !apply_clip_rect(&mut staged, rect) {
+            return Err(
+                "native Metal atomic tracer only supports compatible rectangular clips after content",
+            );
+        }
+        self.state = staged;
+        Ok(())
+    }
+
     pub(crate) fn push_clip_path(&mut self, path: &LogicalPath) {
         let height = self.state.clip_stack_height;
         let needs_new_element = self
@@ -3307,6 +3337,7 @@ pub(crate) struct PreparedAtomicPathDraw {
     pub(crate) instance_count: u32,
     pub(crate) patch_kind: PreparedAtomicPatchKind,
     pub(crate) triangle_range: std::ops::Range<usize>,
+    pub(crate) scissor: Option<[u16; 4]>,
 }
 
 /// Flush-wide resources and the canonical disjoint draw-group schedule for the
@@ -3329,6 +3360,7 @@ pub(crate) struct PreparedAtomicPathFlush {
     pub(crate) draw_group_starts: Vec<usize>,
     pub(crate) gradient_batch: Option<GradientBatch>,
     pub(crate) uses_clipping: bool,
+    pub(crate) uses_clip_rects: bool,
     pub(crate) uses_advanced_blend: bool,
     pub(crate) uses_hsl_blend_modes: bool,
     pub(crate) authored_draw_count: usize,
@@ -3345,6 +3377,8 @@ struct PendingAtomicPath {
     gradient_transform: Mat2D,
     blend_mode: BlendMode,
     is_translucent: bool,
+    scissor: Option<[u16; 4]>,
+    has_clip_rect: bool,
 }
 
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3431,8 +3465,8 @@ fn prepare_atomic_path_draw_resources(
     role: DrawRole,
     gradient_definition: Option<GradientDefinition>,
 ) -> Result<PreparedSingleAtomicPathDraw, &'static str> {
-    if paint.style != RenderPaintStyle::Fill || paint.feather != 0.0 || state.clip_rect.is_some() {
-        return Err("atomic path preparation requires a non-feathered fill without a clip rect");
+    if paint.style != RenderPaintStyle::Fill || paint.feather != 0.0 {
+        return Err("atomic path preparation requires a non-feathered fill");
     }
     let (mut path_data, spans, contours, triangles, base_instance, instance_count, uses_interior) =
         if prepared.should_use_interior(path, state.transform) {
@@ -3481,7 +3515,7 @@ fn prepare_atomic_path_draw_resources(
     let local_contour_ids_are_dense =
         !uses_interior && contours.len() <= gpu::CONTOUR_ID_MASK as usize;
     let fill_rule = atomic_paint_fill_rule(path.fill_rule, true);
-    let paint_data = match role {
+    let mut paint_data = match role {
         DrawRole::ClipUpdate {
             replacement_id,
             parent_id,
@@ -3504,13 +3538,16 @@ fn prepare_atomic_path_draw_resources(
         DrawRole::ClipReset { .. } => return Err("atomic clip reset is outside the native slice"),
     }
     .with_generic_clockwise_fill();
+    if state.clip_rect.is_some() {
+        paint_data = paint_data.with_clip_rect();
+    }
     let triangle_count = triangles.len();
     Ok(PreparedSingleAtomicPathDraw {
         resources: PreparedTypedDrawResources {
             contour_base: 0,
             path: path_data,
             paint: paint_data,
-            paint_aux: clip_rect_paint_aux(None),
+            paint_aux: clip_rect_paint_aux(state.clip_rect),
             spans,
             contours,
             triangles,
@@ -3527,6 +3564,34 @@ fn prepare_atomic_path_draw_resources(
         gradient_batch: None,
         gradient_definition,
     })
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn atomic_path_clip_scissor(
+    config: LogicalFrameConfig,
+    draw_bounds: [i32; 4],
+    state: DrawState,
+) -> Result<Option<[u16; 4]>, &'static str> {
+    if state.clip_rect.is_none() {
+        return Ok(None);
+    }
+    let frame_bounds = [0, 0, config.width as i32, config.height as i32];
+    let visible_draw_bounds = intersect_pixel_bounds(draw_bounds, frame_bounds);
+    let clip_bounds = state.overall_clip_pixel_bounds;
+    let clip_contains_draw = clip_bounds[0] <= visible_draw_bounds[0]
+        && clip_bounds[1] <= visible_draw_bounds[1]
+        && clip_bounds[2] >= visible_draw_bounds[2]
+        && clip_bounds[3] >= visible_draw_bounds[3];
+    if clip_contains_draw {
+        return Ok(None);
+    }
+    let [left, top, right, bottom] = intersect_pixel_bounds(clip_bounds, frame_bounds);
+    Ok(Some([
+        u16::try_from(left).map_err(|_| "atomic clip scissor exceeds UInt16")?,
+        u16::try_from(top).map_err(|_| "atomic clip scissor exceeds UInt16")?,
+        u16::try_from(right).map_err(|_| "atomic clip scissor exceeds UInt16")?,
+        u16::try_from(bottom).map_err(|_| "atomic clip scissor exceeds UInt16")?,
+    ]))
 }
 
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3686,6 +3751,15 @@ pub(crate) fn prepare_atomic_path_flush(
             .preparation
             .pixel_bounds
             .ok_or("admitted atomic path omitted pixel bounds")?;
+        let scissor = atomic_path_clip_scissor(config, bounds, admitted.state)?;
+        let grouping_bounds = scissor.map_or(bounds, |[left, top, right, bottom]| {
+            [
+                i32::from(left),
+                i32::from(top),
+                i32::from(right),
+                i32::from(bottom),
+            ]
+        });
         let mut resources = prepared.resources;
         let path_id =
             u16::try_from(pending.len() + 1).map_err(|_| "atomic path ID exceeds UInt16")?;
@@ -3697,7 +3771,7 @@ pub(crate) fn prepare_atomic_path_flush(
         resources.contour_base = contour_base;
         pending.push(PendingAtomicPath {
             input_index,
-            bounds,
+            bounds: grouping_bounds,
             resources,
             gradient_definition: prepared.gradient_definition,
             gradient_transform: admitted.state.transform,
@@ -3705,6 +3779,8 @@ pub(crate) fn prepare_atomic_path_flush(
             is_translucent: modulate_color_alpha(admitted.paint.color, admitted.state.opacity)
                 >> 24
                 != 0xff,
+            scissor,
+            has_clip_rect: admitted.state.clip_rect.is_some(),
         });
     }
     assemble_atomic_path_flush(config, pending, false, gradient_batch)
@@ -3799,6 +3875,8 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
             gradient_transform: clip_state.transform,
             blend_mode: BlendMode::SrcOver,
             is_translucent: false,
+            scissor: None,
+            has_clip_rect: false,
         });
         parent_id = replacement_id;
     }
@@ -3851,6 +3929,8 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
         blend_mode: admitted.paint.blend_mode,
         is_translucent: modulate_color_alpha(admitted.paint.color, admitted.state.opacity) >> 24
             != 0xff,
+        scissor: None,
+        has_clip_rect: false,
     });
     logical_state.commit_generic_atomic_path_clip(config, parent_id, true);
     assemble_atomic_path_flush(config, pending, true, None)
@@ -3870,6 +3950,10 @@ fn assemble_atomic_path_flush(
         .iter()
         .filter(|draw| draw.gradient_definition.is_some())
         .count();
+    let uses_clip_rects = pending.iter().any(|draw| draw.has_clip_rect);
+    if uses_clip_rects && gradient_count != 0 {
+        return Err("atomic clip-rect flush requires solid draws");
+    }
     if uses_clipping && gradient_count != 0 {
         return Err("atomic clipped path flush does not support gradients");
     }
@@ -3882,6 +3966,12 @@ fn assemble_atomic_path_flush(
             BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity
         )
     });
+    if uses_clip_rects && uses_advanced_blend {
+        return Err("atomic clip-rect flush requires SrcOver draws");
+    }
+    if uses_clip_rects && pending.iter().any(|draw| draw.resources.uses_interior) {
+        return Err("atomic clip-rect flush only supports midpoint geometry");
+    }
     if uses_advanced_blend && (uses_clipping || gradient_count != 0) {
         return Err("atomic advanced-blend flush requires unclipped solid draws");
     }
@@ -4094,6 +4184,7 @@ fn assemble_atomic_path_flush(
             instance_count: draw.resources.instance_count,
             patch_kind: patch_kinds[pending_index],
             triangle_range: triangle_start..triangle_start,
+            scissor: draw.scissor,
         });
         let patch_group = usize::try_from(draw_group).map_err(|_| "atomic draw group overflow")?;
         if group_commands.len() < patch_group {
@@ -4113,6 +4204,7 @@ fn assemble_atomic_path_flush(
                 instance_count: 0,
                 patch_kind: PreparedAtomicPatchKind::OuterCurve,
                 triangle_range,
+                scissor: draw.scissor,
             });
             let interior_group =
                 usize::try_from(interior_group).map_err(|_| "atomic draw group overflow")?;
@@ -4145,6 +4237,7 @@ fn assemble_atomic_path_flush(
         draw_group_starts,
         gradient_batch,
         uses_clipping,
+        uses_clip_rects,
         uses_advanced_blend,
         uses_hsl_blend_modes,
         authored_draw_count,

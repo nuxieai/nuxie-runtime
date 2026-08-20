@@ -1,7 +1,10 @@
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use nuxie_render_api::{BlendMode, Factory, FillRule, RawPath, Renderer};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-use nuxie_renderer::{NativeMetalExecutionInventory, NativeMetalFactory, RenderMode};
+use nuxie_renderer::{
+    NativeMetalContextOptions, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
+    ShaderCompilationMode,
+};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use objc2::rc::autoreleasepool;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -50,9 +53,16 @@ fn main() {
 
         // Root successful forced generic-atomic execution in the final
         // product-shaped Mach-O so size/no-WGPU checks cannot dead-strip it.
-        let mut atomic_factory =
-            NativeMetalFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic)
-                .expect("create forced-atomic native Metal tracer");
+        let mut atomic_factory = NativeMetalFactory::new_with_mode_and_context_options(
+            64,
+            64,
+            RenderMode::ClockwiseAtomic,
+            NativeMetalContextOptions {
+                shader_compilation_mode: ShaderCompilationMode::OnlyUbershaders,
+                disable_framebuffer_reads: false,
+            },
+        )
+        .expect("create forced-atomic native Metal tracer");
         let mut atomic_path = RawPath::new();
         atomic_path.move_to(4.0, 4.0);
         atomic_path.line_to(60.0, 4.0);

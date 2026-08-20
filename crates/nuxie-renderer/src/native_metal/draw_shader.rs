@@ -204,6 +204,7 @@ impl DrawShaderSource {
 }
 
 /// Retained device-specific Metal library loaded from the build-script output.
+#[derive(Clone)]
 pub struct DrawShaderLibrary {
     library: Retained<ProtocolObject<dyn MTLLibrary>>,
 }

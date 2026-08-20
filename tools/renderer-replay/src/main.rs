@@ -111,7 +111,14 @@ fn replay_native_metal(
     height: u32,
     clear: u32,
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
-    let mut factory = nuxie_renderer::NativeMetalFactory::new(width, height)?;
+    let mut factory = nuxie_renderer::NativeMetalFactory::new_with_context_options(
+        width,
+        height,
+        nuxie_renderer::NativeMetalContextOptions {
+            shader_compilation_mode: nuxie_renderer::ShaderCompilationMode::AlwaysSynchronous,
+            disable_framebuffer_reads: false,
+        },
+    )?;
     let adapter = factory.adapter_name();
     let mut frame = factory.begin_frame(clear)?;
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
@@ -131,7 +138,15 @@ fn replay_native_metal_atomic(
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported native Metal mode `{value}`").into()),
     };
-    let mut factory = nuxie_renderer::NativeMetalFactory::new_with_mode(width, height, mode)?;
+    let mut factory = nuxie_renderer::NativeMetalFactory::new_with_mode_and_context_options(
+        width,
+        height,
+        mode,
+        nuxie_renderer::NativeMetalContextOptions {
+            shader_compilation_mode: nuxie_renderer::ShaderCompilationMode::AlwaysSynchronous,
+            disable_framebuffer_reads: false,
+        },
+    )?;
     let adapter = factory.adapter_name();
     let mut frame = factory.begin_frame(clear)?;
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;

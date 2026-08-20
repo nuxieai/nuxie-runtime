@@ -255,6 +255,15 @@ impl NativeMetalFactory {
         self.context.retained_device()
     }
 
+    /// Copies the renderer's ordered command queue for same-context Metal
+    /// adapters. Work submitted by ORE/canvas integration must use this queue
+    /// rather than selecting a second device or creating an unrelated queue.
+    pub fn retained_metal_queue(
+        &self,
+    ) -> Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>> {
+        self.context.retained_queue()
+    }
+
     pub(crate) fn begin_drawable_frame_parts<'a>(
         &self,
         drawable: &'a ProtocolObject<dyn objc2_metal::MTLDrawable>,
@@ -2569,6 +2578,21 @@ fn new_library_from_metallib_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use objc2_metal::MTLCommandQueue;
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn factory_exposes_one_retained_ordered_metal_queue() {
+        let factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
+        let first = factory.retained_metal_queue();
+        let second = factory.retained_metal_queue();
+
+        assert_eq!(Retained::as_ptr(&first), Retained::as_ptr(&second));
+        assert_eq!(
+            Retained::as_ptr(&first.device()),
+            Retained::as_ptr(&factory.retained_metal_device())
+        );
+    }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]

@@ -48,6 +48,21 @@ LIFETIME_COLUMNS = (
     "status",
     "evidence",
 )
+RENDER_CONTEXT_FILE_MAP_COLUMNS = (
+    "version",
+    "upstream_sha",
+    "upstream_file",
+    "lines",
+    "symbol",
+    "status",
+    "rust_owner",
+    "remaining",
+)
+RENDER_CONTEXT_FILE_MAP_STATUSES = {"ported", "partial", "missing"}
+RENDER_CONTEXT_FILE_MAP_SOURCES = {
+    "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+    "renderer/src/metal/render_context_metal_impl.mm",
+}
 FOUNDATION_TRIAL_UNITS = {
     "ore-types": {"renderer/include/rive/renderer/ore/ore_types.hpp"},
     "ore-rstb-container": {
@@ -215,6 +230,143 @@ def expand_source_scope(
         for path in upstream_root.glob(pattern)
         if path.is_file() and path.relative_to(upstream_root).as_posix() not in excluded
     }
+
+
+def validate_render_context_file_map(
+    manifest: dict[str, Any],
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> None:
+    relative = str(manifest.get("render_context_file_map", ""))
+    path = repo_root / relative
+    if not relative or not path.is_file():
+        errors.append(f"missing render-context file map {relative}")
+        return
+    if not git_tracked_file(repo_root, relative):
+        errors.append(f"untracked render-context file map {relative}")
+
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            fieldnames = tuple(reader.fieldnames or ())
+            rows = list(reader)
+    except (OSError, csv.Error) as error:
+        errors.append(f"cannot read render-context file map {relative}: {error}")
+        return
+    if fieldnames != RENDER_CONTEXT_FILE_MAP_COLUMNS:
+        errors.append(
+            "render-context file map schema must be: "
+            + "\t".join(RENDER_CONTEXT_FILE_MAP_COLUMNS)
+        )
+        return
+
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    rows_by_source: dict[str, list[tuple[int, int, int]]] = collections.defaultdict(
+        list
+    )
+    for line_number, row in enumerate(rows, 2):
+        if None in row:
+            errors.append(
+                f"render-context file map line {line_number} has surplus columns"
+            )
+        upstream_file = str(row.get("upstream_file", ""))
+        if row.get("version") != "1":
+            errors.append(
+                f"render-context file map line {line_number} has invalid version"
+            )
+        if row.get("upstream_sha") != upstream_ref:
+            errors.append(
+                f"render-context file map line {line_number} pin does not match upstream_ref"
+            )
+        if upstream_file not in RENDER_CONTEXT_FILE_MAP_SOURCES:
+            errors.append(
+                f"render-context file map line {line_number} names unexpected source {upstream_file}"
+            )
+        status = str(row.get("status", ""))
+        if status not in RENDER_CONTEXT_FILE_MAP_STATUSES:
+            errors.append(
+                f"render-context file map line {line_number} has invalid status `{status}`"
+            )
+        if not str(row.get("symbol", "")).strip():
+            errors.append(
+                f"render-context file map line {line_number} has an empty symbol"
+            )
+        if not str(row.get("remaining", "")).strip():
+            errors.append(
+                f"render-context file map line {line_number} has empty remaining work"
+            )
+        rust_owner = str(row.get("rust_owner", ""))
+        if status == "missing":
+            if rust_owner != "-":
+                errors.append(
+                    f"render-context file map line {line_number} marks missing work with a Rust owner"
+                )
+        elif rust_owner == "-":
+            errors.append(
+                f"render-context file map line {line_number} is {status} without a Rust owner"
+            )
+        elif not (repo_root / rust_owner).is_file():
+            errors.append(
+                f"render-context file map line {line_number} names missing Rust owner {rust_owner}"
+            )
+        elif not git_tracked_file(repo_root, rust_owner):
+            errors.append(
+                f"render-context file map line {line_number} names untracked Rust owner {rust_owner}"
+            )
+
+        range_match = re.fullmatch(r"(\d+)-(\d+)", str(row.get("lines", "")))
+        if range_match is None:
+            errors.append(
+                f"render-context file map line {line_number} has invalid line range"
+            )
+            continue
+        start, end = (int(value) for value in range_match.groups())
+        if start < 1 or end < start:
+            errors.append(
+                f"render-context file map line {line_number} has invalid line range {start}-{end}"
+            )
+            continue
+        rows_by_source[upstream_file].append((line_number, start, end))
+
+    mapped_sources = set(rows_by_source)
+    if mapped_sources != RENDER_CONTEXT_FILE_MAP_SOURCES:
+        missing = sorted(RENDER_CONTEXT_FILE_MAP_SOURCES - mapped_sources)
+        extra = sorted(mapped_sources - RENDER_CONTEXT_FILE_MAP_SOURCES)
+        if missing:
+            errors.append("render-context file map omits sources: " + ", ".join(missing))
+        if extra:
+            errors.append(
+                "render-context file map includes extra sources: " + ", ".join(extra)
+            )
+
+    for upstream_file in sorted(RENDER_CONTEXT_FILE_MAP_SOURCES):
+        source_path = upstream_root / upstream_file
+        if not source_path.is_file():
+            errors.append(
+                f"render-context file map source does not exist: {upstream_file}"
+            )
+            continue
+        with source_path.open(encoding="utf-8", errors="replace") as source:
+            line_count = sum(1 for _ in source)
+        expected_start = 1
+        for line_number, start, end in rows_by_source.get(upstream_file, []):
+            if start != expected_start:
+                errors.append(
+                    "render-context file map does not continuously cover "
+                    f"{upstream_file}: line {line_number} starts at {start}, "
+                    f"expected {expected_start}"
+                )
+            if end > line_count:
+                errors.append(
+                    f"render-context file map line {line_number} ends outside {upstream_file}"
+                )
+            expected_start = end + 1
+        if expected_start != line_count + 1:
+            errors.append(
+                "render-context file map does not reach the end of "
+                f"{upstream_file}: stopped at {expected_start - 1}, expected {line_count}"
+            )
 
 
 def validate_citation(
@@ -742,6 +894,7 @@ def check(
         errors.append(f"Metal porting guide does not exist: {guide}")
 
     source_counts = validate_source_rows(manifest, repo_root, upstream_root, errors)
+    validate_render_context_file_map(manifest, repo_root, upstream_root, errors)
     units = validate_translation_units(manifest, errors)
     validate_lifetime_ledger(manifest, repo_root, upstream_root, errors)
     validate_reference_provenance(manifest, repo_root, errors)

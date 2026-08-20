@@ -217,7 +217,6 @@ pub(crate) struct NativeMetalContext {
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
     solid_rgba_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     solid_bgra_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     _draw_shader_library: DrawShaderLibrary,
@@ -235,6 +234,11 @@ pub(crate) struct NativeMetalContext {
     upload_coordinator: BufferRingCoordinator,
     resources: Mutex<ResourceState>,
     samplers: NativeMetalSamplers,
+    // One compiler belongs to the context for its entire lifetime, matching
+    // `RenderContextMetalImpl::m_backgroundShaderCompiler`. The current
+    // resource-generation mutex serializes submissions until the complete
+    // compatible-pipeline cache owns asynchronous scheduling.
+    background_shader_compiler: NativeBackgroundShaderCompiler,
 }
 
 impl NativeMetalContext {
@@ -246,6 +250,15 @@ impl NativeMetalContext {
         let queue = device.newCommandQueue().ok_or_else(|| {
             RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
         })?;
+        Self::new_with_queue(device, queue, capabilities, platform)
+    }
+
+    pub(crate) fn new_with_queue(
+        device: Retained<ProtocolObject<dyn MTLDevice>>,
+        queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
+        capabilities: MetalCapabilitySelection,
+        platform: ApplePlatform,
+    ) -> Result<Self, RendererError> {
         let draw_shader_library = DrawShaderLibrary::load(&device)
             .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
         let resource_shader_library = new_library_from_metallib_bytes(&device, RESOURCE_METALLIB)?;
@@ -296,6 +309,13 @@ impl NativeMetalContext {
             uploads: UploadRings::default(),
         });
         let samplers = NativeMetalSamplers::new(&device)?;
+        let background_shader_compiler = NativeBackgroundShaderCompiler::new_metal(
+            device.clone(),
+            MetalFeatures {
+                atomic_barrier_type: capabilities.atomic_barrier_type,
+            },
+            platform,
+        );
         let solid_rgba_pipeline =
             make_solid_pipeline(&device, objc2_metal::MTLPixelFormat::RGBA8Unorm)?;
         let solid_bgra_pipeline =
@@ -304,7 +324,6 @@ impl NativeMetalContext {
             device,
             queue,
             capabilities,
-            platform,
             solid_rgba_pipeline,
             solid_bgra_pipeline,
             _draw_shader_library: draw_shader_library,
@@ -321,6 +340,7 @@ impl NativeMetalContext {
             upload_coordinator: BufferRingCoordinator::new(),
             resources,
             samplers,
+            background_shader_compiler,
         })
     }
 
@@ -330,6 +350,15 @@ impl NativeMetalContext {
 
     pub(crate) fn retained_device(&self) -> Retained<ProtocolObject<dyn MTLDevice>> {
         self.device.clone()
+    }
+
+    pub(crate) fn retained_queue(&self) -> Retained<ProtocolObject<dyn MTLCommandQueue>> {
+        self.queue.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn background_shader_compiler_is_started(&self) -> bool {
+        self.background_shader_compiler.is_started()
     }
 
     pub(crate) fn capabilities(&self) -> MetalCapabilitySelection {
@@ -545,8 +574,7 @@ impl NativeMetalContext {
                 if pipeline_families.advanced[key].is_none() {
                     pipeline_families.advanced[key] = Some(compile_atomic_advanced_path_pipelines(
                         &self.device,
-                        self.capabilities,
-                        self.platform,
+                        &self.background_shader_compiler,
                         request.uses_hsl_blend_modes,
                     )?);
                 }
@@ -554,8 +582,7 @@ impl NativeMetalContext {
                 if pipeline_families.fixed.is_none() {
                     pipeline_families.fixed = Some(compile_atomic_path_pipelines(
                         &self.device,
-                        self.capabilities,
-                        self.platform,
+                        &self.background_shader_compiler,
                     )?);
                 }
                 let fixed = pipeline_families
@@ -565,8 +592,7 @@ impl NativeMetalContext {
                 if request.uses_clip_rects && fixed.clip_rect.is_none() {
                     fixed.clip_rect = Some(compile_atomic_clip_rect_path_pipelines(
                         &self.device,
-                        self.capabilities,
-                        self.platform,
+                        &self.background_shader_compiler,
                     )?);
                 }
                 if request.uses_interior_geometry
@@ -575,15 +601,13 @@ impl NativeMetalContext {
                 {
                     fixed.interior_geometry = Some(compile_atomic_interior_geometry_pipelines(
                         &self.device,
-                        self.capabilities,
-                        self.platform,
+                        &self.background_shader_compiler,
                     )?);
                 }
                 if request.uses_clipping && fixed.clipped.is_none() {
                     fixed.clipped = Some(compile_atomic_clipped_path_pipelines(
                         &self.device,
-                        self.capabilities,
-                        self.platform,
+                        &self.background_shader_compiler,
                     )?);
                 }
             }
@@ -603,8 +627,7 @@ impl NativeMetalContext {
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
                 let atlas_blit_pipeline = compile_specialized_atlas_blit_pipeline(
                     &self.device,
-                    self.capabilities,
-                    self.platform,
+                    &self.background_shader_compiler,
                     specialized_job,
                 )?;
                 generation.feather_atlas = replacement;
@@ -1026,15 +1049,14 @@ const fn atomic_path_jobs() -> [BackgroundCompileJob; 3] {
 
 fn compile_atomic_path_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
 ) -> Result<AtomicFixedPathPipelines, RendererError> {
     let [initialize, midpoint, resolve] = atomic_path_jobs();
     Ok(AtomicFixedPathPipelines {
-        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
-        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
+        initialize: compile_specialized_draw_pipeline(device, compiler, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, compiler, midpoint)?,
         clip_rect: None,
-        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        resolve: compile_specialized_draw_pipeline(device, compiler, resolve)?,
         interior_geometry: None,
         clipped: None,
     })
@@ -1042,11 +1064,10 @@ fn compile_atomic_path_pipelines(
 
 fn compile_atomic_clip_rect_path_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
 ) -> Result<AtomicClipRectPathPipelines, RendererError> {
     let [midpoint, resolve] = atomic_clip_rect_path_jobs();
-    let midpoint = compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?;
+    let midpoint = compile_specialized_draw_pipeline(device, compiler, midpoint)?;
     #[cfg(test)]
     if FAIL_NEXT_ATOMIC_CLIP_RECT_RESOLVE_PIPELINE_COMPILE.with(|flag| flag.replace(false)) {
         return Err(RendererError::NativeMetal(
@@ -1055,7 +1076,7 @@ fn compile_atomic_clip_rect_path_pipelines(
     }
     Ok(AtomicClipRectPathPipelines {
         midpoint,
-        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        resolve: compile_specialized_draw_pipeline(device, compiler, resolve)?,
     })
 }
 
@@ -1096,18 +1117,12 @@ const fn atomic_interior_geometry_jobs() -> [BackgroundCompileJob; 2] {
 
 fn compile_atomic_interior_geometry_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
 ) -> Result<AtomicInteriorGeometryPipelines, RendererError> {
     let [outer_curve, interior] = atomic_interior_geometry_jobs();
     Ok(AtomicInteriorGeometryPipelines {
-        outer_curve: compile_specialized_draw_pipeline(
-            device,
-            capabilities,
-            platform,
-            outer_curve,
-        )?,
-        interior: compile_specialized_draw_pipeline(device, capabilities, platform, interior)?,
+        outer_curve: compile_specialized_draw_pipeline(device, compiler, outer_curve)?,
+        interior: compile_specialized_draw_pipeline(device, compiler, interior)?,
     })
 }
 
@@ -1149,21 +1164,15 @@ const fn atomic_clipped_path_jobs() -> [BackgroundCompileJob; 5] {
 
 fn compile_atomic_clipped_path_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
 ) -> Result<AtomicClippedPathPipelines, RendererError> {
     let [initialize, midpoint, outer_curve, interior, resolve] = atomic_clipped_path_jobs();
     Ok(AtomicClippedPathPipelines {
-        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
-        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
-        outer_curve: compile_specialized_draw_pipeline(
-            device,
-            capabilities,
-            platform,
-            outer_curve,
-        )?,
-        interior: compile_specialized_draw_pipeline(device, capabilities, platform, interior)?,
-        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        initialize: compile_specialized_draw_pipeline(device, compiler, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, compiler, midpoint)?,
+        outer_curve: compile_specialized_draw_pipeline(device, compiler, outer_curve)?,
+        interior: compile_specialized_draw_pipeline(device, compiler, interior)?,
+        resolve: compile_specialized_draw_pipeline(device, compiler, resolve)?,
     })
 }
 
@@ -1203,40 +1212,30 @@ fn atomic_advanced_path_jobs(uses_hsl_blend_modes: bool) -> [BackgroundCompileJo
 
 fn compile_atomic_advanced_path_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
     uses_hsl_blend_modes: bool,
 ) -> Result<AtomicAdvancedPathPipelines, RendererError> {
     let [initialize, midpoint, resolve] = atomic_advanced_path_jobs(uses_hsl_blend_modes);
     Ok(AtomicAdvancedPathPipelines {
-        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
-        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
-        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        initialize: compile_specialized_draw_pipeline(device, compiler, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, compiler, midpoint)?,
+        resolve: compile_specialized_draw_pipeline(device, compiler, resolve)?,
     })
 }
 
 fn compile_specialized_atlas_blit_pipeline(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
     job: BackgroundCompileJob,
 ) -> Result<DrawPipeline, RendererError> {
-    compile_specialized_draw_pipeline(device, capabilities, platform, job)
+    compile_specialized_draw_pipeline(device, compiler, job)
 }
 
 fn compile_specialized_draw_pipeline(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
-    capabilities: MetalCapabilitySelection,
-    platform: ApplePlatform,
+    compiler: &NativeBackgroundShaderCompiler,
     job: BackgroundCompileJob,
 ) -> Result<DrawPipeline, RendererError> {
-    let compiler = NativeBackgroundShaderCompiler::new_metal(
-        device.clone(),
-        MetalFeatures {
-            atomic_barrier_type: capabilities.atomic_barrier_type,
-        },
-        platform,
-    );
     compiler.push_job(job);
     let finished = compiler.pop_finished_job(true).ok_or_else(|| {
         RendererError::NativeMetal(
@@ -1875,6 +1874,47 @@ mod tests {
             NativeMetalContext::new(device, capabilities, platform)
                 .expect("create native Metal context"),
         )
+    }
+
+    #[test]
+    fn context_retains_supplied_metal_service_and_starts_its_compiler_lazily() {
+        let Some(device) = MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let queue = device
+            .newCommandQueue()
+            .expect("create command queue for context service");
+        let device_identity = Retained::as_ptr(&device);
+        let queue_identity = Retained::as_ptr(&queue);
+        let platform = super::super::select_apple_platform(&device);
+        let capabilities = super::super::select_device_capabilities(&device, platform);
+        let context = NativeMetalContext::new_with_queue(device, queue, capabilities, platform)
+            .expect("create native Metal context from supplied service");
+
+        assert_eq!(
+            Retained::as_ptr(&context.retained_device()),
+            device_identity
+        );
+        assert_eq!(Retained::as_ptr(&context.retained_queue()), queue_identity);
+        assert!(!context.background_shader_compiler_is_started());
+
+        let fixture = UploadFixture::new();
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    fixture.batch(),
+                )
+                .expect("realize first specialized family"),
+        );
+        assert!(context.background_shader_compiler_is_started());
     }
 
     fn texture_identity(texture: &Retained<ProtocolObject<dyn MTLTexture>>) -> *const () {

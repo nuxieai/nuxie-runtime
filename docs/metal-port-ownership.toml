@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 4, in-progress = 6, ported = 5, verified = 0 }
+expected_status_counts = { pending = 4, in-progress = 5, ported = 6, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -65,11 +65,11 @@ evidence_paths = [
 [[owner]]
 id = "renderer.background_shader_compiler_lifecycle"
 issue = "UNIV-2086"
-status = "in-progress"
+status = "ported"
 rule = "The compiler retains metal_features and platform beside shared.pending_jobs, shared.finished_jobs, shared.should_quit, both condition variables, the one-shot compiler callback, and at most one lazily started worker handle; pending work is FIFO, completion publication is LIFO, and drop signals quit and joins before releasing the native callback and its retained device."
 citations = ["cpp:renderer/src/metal/background_shader_compiler.h:17-61", "cpp:renderer/src/metal/background_shader_compiler.mm:28-93", "cpp:renderer/src/metal/background_shader_compiler.mm:277-344"]
-required_tests = ["construction does not start the worker", "FIFO pending compile and LIFO completion publication", "drop during active compilation signals quit and joins before pending work", "compiler panic publishes a failure and preserves later work", "device-backed native callback compiles source while retaining its device"]
-evidence_paths = ["crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs"]
+required_tests = ["construction does not start the worker", "FIFO pending compile and LIFO completion publication", "drop during active compilation signals quit and joins before pending work", "compiler panic publishes a failure and preserves later work", "device-backed native callback compiles source while retaining its device", "one context-owned compiler remains dormant through construction and starts on the first specialized pipeline request"]
+evidence_paths = ["crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs", "crates/nuxie-renderer/src/native_metal/context.rs"]
 
 [[owner]]
 id = "renderer.buffer_ring_reuse"

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import pathlib
 import re
 import subprocess
@@ -60,6 +61,100 @@ def git_tracked_file(repo_root: pathlib.Path, relative: str) -> bool:
 def duplicate_values(values: Iterable[str]) -> list[str]:
     counts = collections.Counter(values)
     return sorted(value for value, count in counts.items() if count > 1)
+
+
+def sha256_file(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def parse_provenance(path: pathlib.Path, errors: list[str]) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        errors.append(f"cannot read reference provenance {path}: {error}")
+        return fields
+    for line_number, raw_line in enumerate(lines, 1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "=" not in line:
+            errors.append(f"{path} line {line_number} is not key=value provenance")
+            continue
+        key, value = (part.strip() for part in line.split("=", 1))
+        if not key or not value:
+            errors.append(f"{path} line {line_number} has an empty key or value")
+        elif key in fields:
+            errors.append(f"{path} repeats provenance field `{key}`")
+        else:
+            fields[key] = value
+    return fields
+
+
+def validate_reference_provenance(
+    manifest: dict[str, Any], repo_root: pathlib.Path, errors: list[str]
+) -> None:
+    rows = list(manifest.get("reference_provenance", []))
+    duplicates = duplicate_values(str(row.get("id", "")) for row in rows)
+    if duplicates:
+        errors.append(f"duplicate reference provenance rows: {', '.join(duplicates)}")
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    for row in rows:
+        record_id = str(row.get("id", ""))
+        relative_paths = {
+            key: str(row.get(key, "")) for key in ("path", "stream", "reference")
+        }
+        resolved: dict[str, pathlib.Path] = {}
+        for key, relative in relative_paths.items():
+            path = repo_root / relative
+            resolved[key] = path
+            if not relative or not path.is_file():
+                errors.append(
+                    f"reference provenance {record_id} names missing {key} path {relative}"
+                )
+            elif not git_tracked_file(repo_root, relative):
+                errors.append(
+                    f"reference provenance {record_id} names untracked {key} path {relative}"
+                )
+        if not all(path.is_file() for path in resolved.values()):
+            continue
+        fields = parse_provenance(resolved["path"], errors)
+        expected = {
+            "provenance_schema": "1",
+            "renderer_implementation": str(row.get("renderer_implementation", "")),
+            "capture_tool": str(row.get("capture_tool", "")),
+            "backend": str(row.get("backend", "")),
+            "adapter_device": str(row.get("adapter_device", "")),
+            "case_id": record_id,
+            "runtime_revision": upstream_ref,
+            "replay_sha256": str(row.get("replay_sha256", "")),
+            "reference_input_manifest_sha256": str(
+                row.get("reference_input_manifest_sha256", "")
+            ),
+            "stream_sha256": sha256_file(resolved["stream"]),
+            "png_sha256": sha256_file(resolved["reference"]),
+            "frame": str(row.get("frame", "")),
+            "frame_width": str(row.get("frame_width", "")),
+            "frame_height": str(row.get("frame_height", "")),
+            "mode": str(row.get("mode", "")),
+            "sample_count": str(row.get("sample_count", "")),
+        }
+        for key, expected_value in expected.items():
+            actual = fields.get(key)
+            if actual != expected_value:
+                errors.append(
+                    f"reference provenance {record_id} {key} `{actual}` does not match `{expected_value}`"
+                )
+        for key in ("replay_sha256", "reference_input_manifest_sha256"):
+            value = fields.get(key, "")
+            if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                errors.append(
+                    f"reference provenance {record_id} {key} must be 64 lowercase hex characters"
+                )
 
 
 def expand_source_scope(
@@ -249,6 +344,7 @@ def check(
         errors.append(f"Metal porting guide does not exist: {guide}")
 
     source_counts = validate_source_rows(manifest, repo_root, upstream_root, errors)
+    validate_reference_provenance(manifest, repo_root, errors)
     expected_counts = {
         str(key): int(value)
         for key, value in dict(manifest.get("expected_status_counts", {})).items()

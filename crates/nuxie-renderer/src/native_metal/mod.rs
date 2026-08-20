@@ -17,6 +17,8 @@ mod draw_pipeline;
 #[allow(dead_code)]
 mod draw_shader;
 mod drawable;
+mod feather_atlas_pipeline;
+mod feather_atlas_resource;
 mod gradient_resource;
 #[allow(dead_code)]
 mod image_texture;
@@ -33,8 +35,8 @@ mod upload_buffer_ring;
 
 use super::gpu;
 use super::{
-    logical_frame::prepare_gradient_batch, BackendWorkMetrics, LogicalPaint, LogicalPath,
-    LogicalShader, RendererError,
+    logical_frame::prepare_single_gradient_batch, BackendWorkMetrics, LogicalFrameConfig,
+    LogicalPaint, LogicalPath, LogicalShader, RenderMode, RendererError,
 };
 use buffer::NativeMetalBuffer;
 use bytemuck::{Pod, Zeroable};
@@ -54,8 +56,9 @@ use objc2_metal::{
     MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
     MTLCreateSystemDefaultDevice, MTLCullMode, MTLDevice, MTLGPUFamily, MTLIndexType, MTLLibrary,
     MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
-    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize,
-    MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage, MTLViewport,
+    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLScissorRect,
+    MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+    MTLViewport,
 };
 use render_target::RenderTargetMetal;
 use std::cell::RefCell;
@@ -163,6 +166,7 @@ impl NativeMetalFactory {
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
             gradient_draws: Vec::new(),
+            atlas_draws: Vec::new(),
             resource_lease: None,
             collect_work_metrics,
             backend_work: BackendWorkMetrics {
@@ -289,6 +293,7 @@ pub struct NativeMetalFrame {
     state_stack: Vec<NativeMetalRenderState>,
     solid_draws: Vec<SolidTracerDraw>,
     gradient_draws: Vec<GradientDraw>,
+    atlas_draws: Vec<AtlasDraw>,
     resource_lease: Option<context::PreparedResourceLease>,
     collect_work_metrics: bool,
     backend_work: BackendWorkMetrics,
@@ -328,6 +333,113 @@ struct GradientUploadData {
     paint_aux: [gpu::PaintAuxData; 2],
 }
 
+struct AtlasDraw {
+    placement: super::AtlasPlacement,
+    batch: gpu::AtlasDrawBatch,
+    path: gpu::PathData,
+    paint: gpu::PaintData,
+    paint_aux: gpu::PaintAuxData,
+    spans: Vec<gpu::TessVertexSpan>,
+    contours: Vec<gpu::ContourData>,
+    blit_vertices: Vec<gpu::TriangleVertex>,
+    instance_count: u32,
+    is_stroke: bool,
+}
+
+struct AtlasUploadData {
+    flush_uniforms: gpu::FlushUniforms,
+    paths: [gpu::PathData; 2],
+    paints: [gpu::PaintData; 2],
+    paint_aux: [gpu::PaintAuxData; 2],
+}
+
+fn atlas_draw_from_typed(
+    resources: super::logical_frame::PreparedTypedDrawResources,
+    is_stroke: bool,
+) -> Result<AtlasDraw, &'static str> {
+    let placement = resources
+        .atlas_placement
+        .ok_or("logical preparation omitted native Metal atlas placement")?;
+    let right = placement.origin[0]
+        .checked_add(placement.width)
+        .ok_or("native Metal atlas scissor right overflows")?;
+    let bottom = placement.origin[1]
+        .checked_add(placement.height)
+        .ok_or("native Metal atlas scissor bottom overflows")?;
+    let scissor = [
+        u16::try_from(placement.origin[0])
+            .map_err(|_| "native Metal atlas scissor x exceeds UInt16")?,
+        u16::try_from(placement.origin[1])
+            .map_err(|_| "native Metal atlas scissor y exceeds UInt16")?,
+        u16::try_from(right).map_err(|_| "native Metal atlas scissor right exceeds UInt16")?,
+        u16::try_from(bottom).map_err(|_| "native Metal atlas scissor bottom exceeds UInt16")?,
+    ];
+    if resources.triangles.len() != 6 {
+        return Err("native Metal atlas blit requires six canonical vertices");
+    }
+    Ok(AtlasDraw {
+        placement,
+        batch: gpu::AtlasDrawBatch {
+            scissor,
+            patch_count: resources.instance_count,
+            base_patch: resources.base_instance,
+        },
+        path: resources.path,
+        paint: resources.paint,
+        paint_aux: resources.paint_aux,
+        spans: resources.spans,
+        contours: resources.contours,
+        blit_vertices: resources.triangles,
+        instance_count: resources.instance_count,
+        is_stroke,
+    })
+}
+
+impl AtlasUploadData {
+    fn new(
+        width: u32,
+        height: u32,
+        atlas_content_size: [u32; 2],
+        atlas_physical_size: [u32; 2],
+        draw: &AtlasDraw,
+    ) -> Self {
+        let tessellation_height = super::draw::tessellation_texture_height(&draw.spans);
+        let mut flush_uniforms = super::analytic_uniforms(width, height, tessellation_height);
+        flush_uniforms.max_path_id = 1;
+        flush_uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
+        flush_uniforms.atlas_texture_inverse_size = [
+            1.0 / atlas_physical_size[0] as f32,
+            1.0 / atlas_physical_size[1] as f32,
+        ];
+        flush_uniforms.atlas_content_inverse_viewport = [
+            2.0 / atlas_content_size[0] as f32,
+            -2.0 / atlas_content_size[1] as f32,
+        ];
+        Self {
+            flush_uniforms,
+            paths: [gpu::PathData::zeroed(), draw.path],
+            paints: [
+                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+                draw.paint,
+            ],
+            paint_aux: [gpu::PaintAuxData::zeroed(), draw.paint_aux],
+        }
+    }
+
+    fn batch<'a>(&'a self, draw: &'a AtlasDraw) -> context::UploadBatch<'a> {
+        context::UploadBatch {
+            flush_uniforms: &self.flush_uniforms,
+            gradient_spans: &[],
+            tessellation_spans: &draw.spans,
+            paths: &self.paths,
+            paints: &self.paints,
+            paint_aux: &self.paint_aux,
+            contours: &draw.contours,
+            triangles: &draw.blit_vertices,
+        }
+    }
+}
+
 impl GradientUploadData {
     fn new(width: u32, height: u32, draw: &GradientDraw) -> Self {
         let tessellation_height =
@@ -364,6 +476,7 @@ impl GradientUploadData {
             paints: &self.paints,
             paint_aux: &self.paint_aux,
             contours: &draw.tessellation.contours,
+            triangles: &[],
         }
     }
 }
@@ -394,10 +507,49 @@ impl Renderer for NativeMetalFrame {
                 .get_or_insert("paint from another renderer backend");
             return;
         };
+        if paint.feather != 0.0 {
+            if !path.valid
+                || paint.invalid_shader
+                || paint.shader.is_some()
+                || paint.blend_mode != BlendMode::SrcOver
+                || self.state.opacity != 1.0
+                || !self.solid_draws.is_empty()
+                || !self.gradient_draws.is_empty()
+                || !self.atlas_draws.is_empty()
+                || !super::draw::feather_requires_atlas(paint.feather, self.state.transform, false)
+            {
+                self.unsupported.get_or_insert(
+                    "native Metal feather atlas requires one solid SrcOver atlas draw",
+                );
+                return;
+            }
+            let config = self.logical_frame_config();
+            let state = super::DrawState {
+                transform: self.state.transform,
+                opacity: self.state.opacity,
+                ..Default::default()
+            };
+            let prepared = match super::logical_frame::prepare_single_raster_ordering_atlas_draw(
+                config, state, path, paint,
+            ) {
+                Ok(Some(prepared)) => prepared,
+                Ok(None) => return,
+                Err(reason) => {
+                    self.unsupported.get_or_insert(reason);
+                    return;
+                }
+            };
+            match atlas_draw_from_typed(prepared.0, prepared.1) {
+                Ok(draw) => self.atlas_draws.push(draw),
+                Err(reason) => {
+                    self.unsupported.get_or_insert(reason);
+                }
+            }
+            return;
+        }
         if !path.valid
             || paint.style != RenderPaintStyle::Fill
             || paint.invalid_shader
-            || paint.feather != 0.0
             || paint.blend_mode != BlendMode::SrcOver
             || self.state.opacity != 1.0
         {
@@ -416,18 +568,13 @@ impl Renderer for NativeMetalFrame {
                 );
                 return;
             }
-            let logical_draw = super::SolidDraw::new(
-                path.clone(),
-                paint.clone(),
-                super::DrawState {
-                    transform: self.state.transform,
-                    opacity: self.state.opacity,
-                    ..Default::default()
-                },
-                super::DrawRole::Content { clip_id: 0 },
-                None,
-            );
-            let gradient_batch = prepare_gradient_batch(std::slice::from_ref(&logical_draw));
+            let Some(gradient_batch) =
+                prepare_single_gradient_batch(shader, self.state.opacity, self.state.transform)
+            else {
+                self.unsupported
+                    .get_or_insert("native Metal gradient parameters are invalid");
+                return;
+            };
             let Some(gradient) = gradient_batch.draw(0) else {
                 self.unsupported
                     .get_or_insert("native Metal gradient parameters are invalid");
@@ -522,6 +669,23 @@ impl Renderer for NativeMetalFrame {
 }
 
 impl NativeMetalFrame {
+    fn logical_frame_config(&self) -> LogicalFrameConfig {
+        let target = self.target.borrow();
+        LogicalFrameConfig {
+            width: target.width(),
+            height: target.height(),
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: self.context.capabilities().max_texture_size,
+            msaa_atlas_supports_clip_rect: false,
+        }
+    }
+
+    fn take_atlas_draw(&mut self) -> Option<AtlasDraw> {
+        let draw = self.atlas_draws.pop();
+        debug_assert!(self.atlas_draws.is_empty());
+        draw
+    }
+
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         Ok(self.finish_for_benchmark()?.pixels)
     }
@@ -583,19 +747,56 @@ impl NativeMetalFrame {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
         }
+        let atlas_draw = self.take_atlas_draw();
         let target = self.target.borrow();
         let width = target.width();
         let height = target.height();
         let texture = target.retained_target_texture().ok_or_else(|| {
             RendererError::NativeMetal("native Metal target has no readback texture".into())
         })?;
-        if let Some(draw) = self.gradient_draws.first() {
+        if let Some(draw) = atlas_draw.as_ref() {
+            let atlas_content_size = [
+                draw.placement.origin[0] + draw.placement.width,
+                draw.placement.origin[1] + draw.placement.height,
+            ];
+            let atlas_physical_size = super::cpp_webgpu_atlas_physical_size(
+                atlas_content_size,
+                [width, height],
+                self.context.capabilities().max_texture_size,
+            );
+            let tessellation_height = super::draw::tessellation_texture_height(&draw.spans);
+            let upload_data =
+                AtlasUploadData::new(width, height, atlas_content_size, atlas_physical_size, draw);
+            let lease = self.context.prepare_resources(
+                0,
+                tessellation_height as usize,
+                Some(atlas_physical_size.map(|value| value as usize)),
+                Some(draw.is_stroke),
+                upload_data.batch(draw),
+            )?;
+            if self.collect_work_metrics {
+                self.backend_work.buffer_upload_calls = lease.upload_calls;
+                self.backend_work.buffer_upload_bytes = lease.upload_bytes;
+            }
+            self.resource_lease = Some(lease);
+            encode_atlas_resource_passes(
+                &self.context,
+                &self.command_buffer,
+                draw,
+                atlas_content_size,
+                self.resource_lease
+                    .as_ref()
+                    .expect("atlas resource reservation retained by the frame"),
+            )?;
+        } else if let Some(draw) = self.gradient_draws.first() {
             let tessellation_height =
                 super::draw::tessellation_texture_height(&draw.tessellation.spans);
             let upload_data = GradientUploadData::new(width, height, draw);
             let lease = self.context.prepare_resources(
                 draw.gradient_batch.height as usize,
                 tessellation_height as usize,
+                None,
+                None,
                 upload_data.batch(draw),
             )?;
             if self.collect_work_metrics {
@@ -620,7 +821,7 @@ impl NativeMetalFrame {
         attachment.setLoadAction(MTLLoadAction::Clear);
         attachment.setStoreAction(MTLStoreAction::Store);
         attachment.setClearColor(clear_color(self.clear_color));
-        if !self.gradient_draws.is_empty() {
+        if !self.gradient_draws.is_empty() || atlas_draw.is_some() {
             configure_raster_order_attachments(&pass, &target)?;
         }
         let encoder = self
@@ -629,7 +830,19 @@ impl NativeMetalFrame {
             .ok_or_else(|| {
                 RendererError::NativeMetal("failed to create render command encoder".into())
             })?;
-        if let Some(draw) = self.gradient_draws.first() {
+        if let Some(draw) = atlas_draw.as_ref() {
+            encode_atlas_final_draw(
+                &self.context,
+                &encoder,
+                target.pixel_format(),
+                width,
+                height,
+                draw,
+                self.resource_lease
+                    .as_ref()
+                    .expect("atlas resource passes prepared a lease"),
+            )?;
+        } else if let Some(draw) = self.gradient_draws.first() {
             encode_gradient_final_draw(
                 &self.context,
                 &encoder,
@@ -678,8 +891,25 @@ impl NativeMetalFrame {
         }
         encoder.endEncoding();
         if self.collect_work_metrics {
-            self.backend_work.render_passes = if self.gradient_draws.is_empty() { 1 } else { 3 };
-            if let Some(draw) = self.gradient_draws.first() {
+            self.backend_work.render_passes =
+                if self.gradient_draws.is_empty() && atlas_draw.is_none() {
+                    1
+                } else {
+                    3
+                };
+            if let Some(draw) = atlas_draw.as_ref() {
+                self.backend_work.gpu_draw_calls = 3;
+                self.backend_work.gpu_draw_instances = u64::try_from(
+                    // `gpu_draw_instances` counts instances submitted per
+                    // draw, not vertices within an instance. The atlas blit
+                    // is one non-instanced draw of six vertices.
+                    draw.spans.len() + draw.instance_count as usize + 1,
+                )
+                .unwrap_or(u64::MAX);
+                self.backend_work.tessellation_spans =
+                    u64::try_from(draw.spans.len()).unwrap_or(u64::MAX);
+                self.backend_work.path_patches = u64::from(draw.instance_count);
+            } else if let Some(draw) = self.gradient_draws.first() {
                 self.backend_work.gpu_draw_calls = 3;
                 self.backend_work.gpu_draw_instances = u64::try_from(
                     draw.gradient_batch.spans.len()
@@ -776,7 +1006,10 @@ fn encode_gradient_resource_passes(
     // which upstream uses for the RGBA8 color-ramp texture.
     let gradient_attachment =
         unsafe { gradient_pass.colorAttachments().objectAtIndexedSubscript(0) };
-    gradient_attachment.setTexture(Some(&lease.gradient));
+    let gradient_texture = lease.gradient.as_deref().ok_or_else(|| {
+        RendererError::NativeMetal("gradient resource texture is absent".to_owned())
+    })?;
+    gradient_attachment.setTexture(Some(gradient_texture));
     gradient_attachment.setLoadAction(MTLLoadAction::DontCare);
     gradient_attachment.setStoreAction(MTLStoreAction::Store);
     let gradient_encoder = command_buffer
@@ -794,7 +1027,13 @@ fn encode_gradient_resource_passes(
     });
     gradient_encoder.setRenderPipelineState(context.color_ramp_pipeline());
     bind_vertex_buffer(&gradient_encoder, &lease.flush_uniforms, 3);
-    bind_vertex_buffer(&gradient_encoder, &lease.gradient_spans, 0);
+    bind_vertex_buffer(
+        &gradient_encoder,
+        lease.gradient_spans.as_deref().ok_or_else(|| {
+            RendererError::NativeMetal("gradient span upload is absent".to_owned())
+        })?,
+        0,
+    );
     gradient_encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the compiled color-ramp ABI consumes exactly eight vertices per
     // span; the retained shared upload buffer contains every initialized Pod
@@ -865,6 +1104,217 @@ fn encode_gradient_resource_passes(
     Ok(())
 }
 
+fn encode_atlas_resource_passes(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    draw: &AtlasDraw,
+    atlas_content_size: [u32; 2],
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    let tessellation_height = super::draw::tessellation_texture_height(&draw.spans);
+    let tessellation_pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    tessellation_pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
+    tessellation_pass.setRenderTargetHeight(tessellation_height as usize);
+    // SAFETY: every Metal render-pass descriptor owns attachment zero; this is
+    // the pinned RGBA32Uint tessellation target and the lease retains it.
+    let tessellation_attachment = unsafe {
+        tessellation_pass
+            .colorAttachments()
+            .objectAtIndexedSubscript(0)
+    };
+    tessellation_attachment.setTexture(Some(&lease.tessellation));
+    tessellation_attachment.setLoadAction(MTLLoadAction::DontCare);
+    tessellation_attachment.setStoreAction(MTLStoreAction::Store);
+    let tessellation_encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&tessellation_pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create atlas tessellation encoder".to_owned())
+        })?;
+    tessellation_encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: tessellation_resource::TESSELLATION_TEXTURE_WIDTH as f64,
+        height: tessellation_height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    tessellation_encoder.setRenderPipelineState(context.tessellate_pipeline());
+    // SAFETY: texture slot 9 is the exact generated tessellation ABI and the
+    // context retains the Gaussian table through command-buffer completion.
+    unsafe {
+        tessellation_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+    }
+    bind_vertex_buffer(&tessellation_encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(&tessellation_encoder, &lease.tessellation_spans, 0);
+    bind_vertex_buffer(&tessellation_encoder, &lease.paths, 5);
+    bind_vertex_buffer(&tessellation_encoder, &lease.contours, 8);
+    tessellation_encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the retained UInt16 index buffer contains the complete static
+    // tessellation index table; every per-frame input is held by the lease.
+    unsafe {
+        tessellation_encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                tessellation_resource::K_TESS_SPAN_INDICES.len(),
+                MTLIndexType::UInt16,
+                context.tess_span_index_buffer(),
+                0,
+                draw.spans.len(),
+            );
+    }
+    tessellation_encoder.endEncoding();
+
+    let atlas_texture = lease
+        .feather_atlas
+        .as_deref()
+        .ok_or_else(|| RendererError::NativeMetal("feather atlas texture is absent".to_owned()))?;
+    let atlas_pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    atlas_pass.setRenderTargetWidth(atlas_content_size[0] as usize);
+    atlas_pass.setRenderTargetHeight(atlas_content_size[1] as usize);
+    // SAFETY: every Metal render-pass descriptor owns attachment zero; this is
+    // the pinned private R16Float feather-atlas target retained by the lease.
+    let atlas_attachment = unsafe { atlas_pass.colorAttachments().objectAtIndexedSubscript(0) };
+    atlas_attachment.setTexture(Some(atlas_texture));
+    atlas_attachment.setLoadAction(MTLLoadAction::Clear);
+    atlas_attachment.setStoreAction(MTLStoreAction::Store);
+    atlas_attachment.setClearColor(MTLClearColor {
+        red: 0.0,
+        green: 0.0,
+        blue: 0.0,
+        alpha: 0.0,
+    });
+    let atlas_encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&atlas_pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create feather atlas encoder".to_owned())
+        })?;
+    atlas_encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: atlas_content_size[0] as f64,
+        height: atlas_content_size[1] as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    atlas_encoder.setRenderPipelineState(lease.feather_atlas_pipeline.as_deref().ok_or_else(
+        || RendererError::NativeMetal("feather atlas pipeline is absent".to_owned()),
+    )?);
+    bind_vertex_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
+    bind_fragment_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(&atlas_encoder, &lease.paths, 5);
+    bind_vertex_buffer(&atlas_encoder, &lease.paints, 6);
+    bind_vertex_buffer(&atlas_encoder, &lease.paint_aux, 7);
+    bind_vertex_buffer(&atlas_encoder, &lease.contours, 8);
+    // SAFETY: the generated atlas ABI fixes tessellation/Gaussian/gradient at
+    // slots 7/9/8/9. A solid atlas paint intentionally binds no gradient
+    // texture, matching upstream's nullable zero-height gradient resource.
+    unsafe {
+        atlas_encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
+        atlas_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        atlas_encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
+        atlas_encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        atlas_encoder.setVertexBuffer_offset_atIndex(
+            Some(context.path_patch_vertex_buffer()),
+            0,
+            0,
+        );
+    }
+    let [left, top, right, bottom] = draw.batch.scissor;
+    atlas_encoder.setScissorRect(MTLScissorRect {
+        x: left as usize,
+        y: top as usize,
+        width: usize::from(right - left),
+        height: usize::from(bottom - top),
+    });
+    set_vertex_bytes(&atlas_encoder, &draw.batch.base_patch, 4)?;
+    atlas_encoder.setCullMode(if draw.is_stroke {
+        MTLCullMode::Back
+    } else {
+        MTLCullMode::None
+    });
+    let (index_count, index_offset) = if draw.is_stroke {
+        (gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT, 0)
+    } else {
+        (
+            gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT,
+            gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT * std::mem::size_of::<u16>(),
+        )
+    };
+    // SAFETY: the static patch index buffer contains both exact index ranges;
+    // the canonical batch supplies a validated base patch and patch count.
+    unsafe {
+        atlas_encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                index_count,
+                MTLIndexType::UInt16,
+                context.path_patch_index_buffer(),
+                index_offset,
+                draw.batch.patch_count as usize,
+            );
+    }
+    atlas_encoder.endEncoding();
+    Ok(())
+}
+
+fn encode_atlas_final_draw(
+    context: &NativeMetalContext,
+    encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    pixel_format: MTLPixelFormat,
+    width: u32,
+    height: u32,
+    draw: &AtlasDraw,
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: width as f64,
+        height: height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    encoder.setRenderPipelineState(context.atlas_blit_pipeline(pixel_format)?);
+    let triangles = lease.triangles.as_deref().ok_or_else(|| {
+        RendererError::NativeMetal("atlas blit triangle upload is absent".to_owned())
+    })?;
+    bind_vertex_buffer(encoder, triangles, 0);
+    bind_vertex_buffer(encoder, &lease.flush_uniforms, 3);
+    bind_fragment_buffer(encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(encoder, &lease.paths, 5);
+    bind_vertex_buffer(encoder, &lease.paints, 6);
+    bind_vertex_buffer(encoder, &lease.paint_aux, 7);
+    bind_vertex_buffer(encoder, &lease.contours, 8);
+    let atlas_texture = lease.feather_atlas.as_deref().ok_or_else(|| {
+        RendererError::NativeMetal("feather atlas texture is absent for final blit".to_owned())
+    })?;
+    // SAFETY: slots 7-11 are the pinned compatible AtlasBlit ubershader ABI;
+    // all objects are retained by the context or resource lease until the
+    // synchronous command-buffer completion point.
+    unsafe {
+        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
+        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
+        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentTexture_atIndex(Some(atlas_texture), 10);
+        encoder.setFragmentSamplerState_atIndex(
+            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
+            11,
+        );
+    }
+    encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the canonical typed writer emitted exactly six initialized
+    // TriangleVertex records into the retained triangle upload buffer.
+    unsafe {
+        encoder.drawPrimitives_vertexStart_vertexCount(
+            MTLPrimitiveType::Triangle,
+            0,
+            draw.blit_vertices.len(),
+        );
+    }
+    Ok(())
+}
+
 fn encode_gradient_final_draw(
     context: &NativeMetalContext,
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
@@ -905,7 +1355,7 @@ fn encode_gradient_final_draw(
     unsafe {
         encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
         encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        encoder.setFragmentTexture_atIndex(Some(&lease.gradient), 8);
+        encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
         encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
         encoder.setFragmentSamplerState_atIndex(
             Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
@@ -1285,6 +1735,10 @@ mod tests {
     #[test]
     fn begin_frame_owns_one_uncommitted_buffer_and_one_target_generation() {
         let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
+        assert!(
+            !factory.context.feather_atlas_resources_are_initialized(),
+            "non-atlas factory creation must not realize the lazy atlas texture or pipelines"
+        );
         let first_generation = Rc::clone(&factory.target);
         let frame = factory
             .begin_frame(0)
@@ -1523,6 +1977,43 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn admitted_atlas_fixture_has_pinned_cpp_extent_and_threshold() {
+        let mut path = RawPath::new();
+        path.move_to(16.0, 16.0);
+        path.line_to(48.0, 16.0);
+        path.line_to(48.0, 48.0);
+        path.line_to(16.0, 48.0);
+        path.close();
+        let paint = LogicalPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            feather: 24.0,
+            ..LogicalPaint::default()
+        };
+
+        assert!(crate::draw::feather_requires_atlas(
+            paint.feather,
+            Mat2D::IDENTITY,
+            false
+        ));
+        let placement = crate::feather_atlas_placement(
+            &path,
+            Mat2D::IDENTITY,
+            paint.feather,
+            paint.effective_stroke(),
+            64,
+            64,
+        )
+        .expect("atlas-selected fixture has a visible placement");
+        assert_eq!(placement.bounds, [0.0, 0.0, 64.0, 64.0]);
+        assert_eq!([placement.width, placement.height], [33, 33]);
+        assert_eq!(
+            crate::cpp_webgpu_atlas_physical_size([33, 33], [64, 64], 16_384),
+            [41, 41]
+        );
     }
 
     #[test]

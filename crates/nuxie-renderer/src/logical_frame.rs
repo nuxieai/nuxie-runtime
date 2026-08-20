@@ -30,6 +30,9 @@ use super::{
     SolidDraw, FEATHER_ATLAS_PADDING,
 };
 
+#[cfg(any(test, feature = "native-metal-experimental"))]
+use super::PreparedFeatherGeometry;
+
 #[cfg(test)]
 thread_local! {
     static PATH_DRAW_ADMISSION_EVALUATIONS: Cell<usize> = const { Cell::new(0) };
@@ -1513,6 +1516,14 @@ struct PreparedTypedDrawSlot {
 
 #[derive(Clone)]
 pub(crate) struct PreparedTypedDrawResources {
+    /// Finalized feather-atlas placement for this draw, including logical
+    /// flush packing. Platform backends consume this instead of independently
+    /// repeating atlas layout or translating the authored draw a second time.
+    #[cfg_attr(
+        not(any(test, feature = "native-metal-experimental")),
+        allow(dead_code)
+    )]
+    pub(crate) atlas_placement: Option<super::AtlasPlacement>,
     pub(crate) contour_base: u32,
     pub(crate) path: gpu::PathData,
     pub(crate) paint: gpu::PaintData,
@@ -1932,12 +1943,6 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
     #[cfg(test)]
     GRADIENT_BATCH_PREPARATIONS.with(|preparations| preparations.set(preparations.get() + 1));
 
-    const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
-    const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
-    const LEFT_BORDER: u32 = 0x8000_0000;
-    const RIGHT_BORDER: u32 = 0x4000_0000;
-    const COMPLEX_BORDER: u32 = 0x2000_0000;
-
     // Preserve C++'s sparse solid-paint shape: allocate the per-draw table
     // only after the first authored gradient appears.
     let mut definitions = Vec::new();
@@ -1948,11 +1953,22 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
                 continue;
             };
             definitions.reserve(draws.len());
-            definitions.resize_with(draw_index, || None);
-            definitions.push(normalize_gradient(shader, draw.state.opacity));
+            definitions.extend(
+                draws[..draw_index]
+                    .iter()
+                    .map(|prior| (prior.logical_occurrence_id, prior.state.transform, None)),
+            );
+            definitions.push((
+                draw.logical_occurrence_id,
+                draw.state.transform,
+                normalize_gradient(shader, draw.state.opacity),
+            ));
         } else {
-            definitions
-                .push(shader.and_then(|shader| normalize_gradient(shader, draw.state.opacity)));
+            definitions.push((
+                draw.logical_occurrence_id,
+                draw.state.transform,
+                shader.and_then(|shader| normalize_gradient(shader, draw.state.opacity)),
+            ));
         }
     }
     if definitions.is_empty() {
@@ -1962,18 +1978,44 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
             draws: Vec::new(),
         };
     }
+    prepare_normalized_gradient_batch(definitions)
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) fn prepare_single_gradient_batch(
+    shader: &super::LogicalShader,
+    opacity: f32,
+    transform: Mat2D,
+) -> Option<GradientBatch> {
+    let gradient = normalize_gradient(shader, opacity)?;
+    Some(prepare_normalized_gradient_batch(vec![(
+        0,
+        transform,
+        Some(gradient),
+    )]))
+}
+
+fn prepare_normalized_gradient_batch(
+    definitions: Vec<(u64, Mat2D, Option<GradientDefinition>)>,
+) -> GradientBatch {
+    const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
+    const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
+    const LEFT_BORDER: u32 = 0x8000_0000;
+    const RIGHT_BORDER: u32 = 0x4000_0000;
+    const COMPLEX_BORDER: u32 = 0x2000_0000;
+
     let is_simple = |gradient: &GradientDefinition| {
         gradient.stops.len() == 1
             || (gradient.stops.len() == 2 && gradient.stops[0] == 0.0 && gradient.stops[1] == 1.0)
     };
     let simple_count = definitions
         .iter()
-        .flatten()
+        .filter_map(|(_, _, gradient)| gradient.as_ref())
         .filter(|gradient| is_simple(gradient))
         .count();
     let complex_count = definitions
         .iter()
-        .flatten()
+        .filter_map(|(_, _, gradient)| gradient.as_ref())
         .filter(|gradient| !is_simple(gradient))
         .count();
     let simple_height = simple_count.div_ceil(RAMPS_PER_SIMPLE_ROW) as u32;
@@ -1981,11 +2023,11 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
     let mut simple_index = 0usize;
     let mut complex_index = 0u32;
     let mut spans = Vec::new();
-    let mut prepared = Vec::with_capacity(draws.len());
-    for (draw, gradient) in draws.iter().zip(definitions) {
+    let mut prepared = Vec::with_capacity(definitions.len());
+    for (occurrence_id, transform, gradient) in definitions {
         let Some(gradient) = gradient else {
             prepared.push(PreparedGradientDraw {
-                occurrence_id: draw.logical_occurrence_id,
+                occurrence_id,
                 gradient: None,
             });
             continue;
@@ -2048,7 +2090,7 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
                 ],
             )
         };
-        let inverse = super::invert(draw.state.transform).unwrap_or(Mat2D([0.0; 6]));
+        let inverse = super::invert(transform).unwrap_or(Mat2D([0.0; 6]));
         let gradient_matrix = match gradient.paint_type {
             gpu::PaintType::LinearGradient => Mat2D([
                 gradient.coeffs[0],
@@ -2072,7 +2114,7 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
             _ => unreachable!(),
         };
         prepared.push(PreparedGradientDraw {
-            occurrence_id: draw.logical_occurrence_id,
+            occurrence_id,
             gradient: Some(PreparedGradient {
                 paint_type: gradient.paint_type,
                 texture_y: (row as f32 + 0.5) / height as f32,
@@ -2315,6 +2357,7 @@ fn write_resources(
                         .with(|copies| copies.set(copies.get() + 1));
                 }
                 PreparedTypedDrawResources {
+                    atlas_placement,
                     contour_base: u32::try_from(contour_start).expect("contour base overflow"),
                     path: buffers.paths[path_start],
                     paint: paint.paint,
@@ -2392,7 +2435,7 @@ fn raster_ordering_feather_atlas_placements(
     if config.mode != RenderMode::RasterOrdering {
         return Vec::new();
     }
-    let mut placements = draws
+    let placements = draws
         .iter()
         .map(|draw| {
             (draw.paint.feather != 0.0
@@ -2413,6 +2456,13 @@ fn raster_ordering_feather_atlas_placements(
     #[cfg(test)]
     LOGICAL_FEATHER_ATLAS_PLACEMENT_RECORDS
         .with(|records| records.set(records.get().saturating_add(placements.len())));
+    pack_raster_ordering_feather_atlas_placements(config, placements)
+}
+
+fn pack_raster_ordering_feather_atlas_placements(
+    config: LogicalFrameConfig,
+    mut placements: Vec<Option<super::AtlasPlacement>>,
+) -> Vec<Option<super::AtlasPlacement>> {
     let draw_sizes = placements
         .iter()
         .filter_map(|placement| {
@@ -2585,7 +2635,6 @@ fn write_typed_draw_resources(
     if matches!(draw.role, DrawRole::ClipReset { .. }) || draw.image.is_some() {
         return (false, false);
     }
-
     let path_id = u16::try_from(draw_index + 1).expect("logical path ID overflow");
     let frame_clockwise_override = config.mode == RenderMode::ClockwiseAtomic;
     let clockwise_override = atomic_fill_clockwise_override(draw, frame_clockwise_override);
@@ -2834,6 +2883,77 @@ fn write_typed_draw_resources(
     )
 }
 
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn write_raster_ordering_atlas_resources(
+    buffers: &mut ShadowBuffers,
+    draw_index: usize,
+    path_source: &LogicalPath,
+    paint_source: &LogicalPaint,
+    state: DrawState,
+    prepared: &PreparedFeatherGeometry,
+    placement: super::AtlasPlacement,
+) -> bool {
+    debug_assert_eq!(prepared.mode, RenderMode::RasterOrdering);
+    let path_id = u16::try_from(draw_index + 1).expect("logical path ID overflow");
+    let contour_offset = u32::try_from(buffers.contours.len()).expect("contour offset overflow");
+    let mut spans = prepared.tessellation.spans.clone();
+    let mut contours = prepared.tessellation.contours.clone();
+    let mut path = prepared.tessellation.path;
+    path.atlas_transform = gpu::AtlasTransform {
+        scale_factor: placement.scale,
+        translate_x: placement.translate[0],
+        translate_y: placement.translate[1],
+    };
+    let [left, top, right, bottom] = placement.bounds;
+    let mut triangles = vec![
+        gpu::TriangleVertex::new([left, bottom], 1, path_id),
+        gpu::TriangleVertex::new([left, top], 1, path_id),
+        gpu::TriangleVertex::new([right, bottom], 1, path_id),
+        gpu::TriangleVertex::new([right, bottom], 1, path_id),
+        gpu::TriangleVertex::new([left, top], 1, path_id),
+        gpu::TriangleVertex::new([right, top], 1, path_id),
+    ];
+    for span in &mut spans {
+        let local_id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
+        if local_id != 0 {
+            span.contour_id_with_flags = (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK)
+                | contour_offset.saturating_add(local_id);
+        }
+    }
+    for contour in &mut contours {
+        contour.path_id = u32::from(path_id);
+    }
+    for triangle in &mut triangles {
+        triangle.weight_path_id = (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+    }
+    path.z_index = 0;
+    let mut paint = if paint_source.style == RenderPaintStyle::Stroke {
+        gpu::PaintData::solid_stroke(
+            modulate_color_alpha(paint_source.color, state.opacity),
+            paint_source.blend_mode,
+        )
+    } else {
+        gpu::PaintData::solid(
+            modulate_color_alpha(paint_source.color, state.opacity),
+            path_source.fill_rule,
+            paint_source.blend_mode,
+        )
+    }
+    .with_clip_id(0);
+    if state.clip_rect.is_some() {
+        paint = paint.with_clip_rect();
+    }
+    buffers.paths.push(path);
+    buffers.paints.push(TypedPaintRecord {
+        paint,
+        aux: clip_rect_paint_aux(state.clip_rect),
+    });
+    buffers.contours.extend(contours);
+    buffers.tessellations.extend(spans);
+    buffers.triangles.extend(triangles);
+    prepared.local_contour_ids_are_dense
+}
+
 fn append_direct_msaa_tessellation_to_shadow_buffers(
     buffers: &mut ShadowBuffers,
     tessellation: &draw::FillTessellation,
@@ -2985,6 +3105,106 @@ pub(crate) fn admit_path_draw(
         preparation,
         msaa_feather_atlas,
     }))
+}
+
+/// Admit and materialize backend-neutral typed resources for the one-draw
+/// raster-ordering feather-atlas seam used by platform renderers.
+///
+/// The returned value and every temporary contain no backend-owned image
+/// resources. This is intentional: platform-only binaries must not retain the
+/// WGPU-bearing `SolidDraw` ownership graph merely to consume the narrow
+/// serializer. A focused byte-level test pins this serializer to the canonical
+/// writer for the admitted solid-atlas fixture.
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) fn prepare_single_raster_ordering_atlas_draw(
+    config: LogicalFrameConfig,
+    state: DrawState,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
+) -> Result<Option<(PreparedTypedDrawResources, bool)>, &'static str> {
+    if config.mode != RenderMode::RasterOrdering
+        || paint.feather == 0.0
+        || !draw::feather_requires_atlas(paint.feather, state.transform, false)
+    {
+        return Err("single feather-atlas preparation requires raster-ordering atlas routing");
+    }
+    if !path_draw_has_valid_parameters(path, paint) {
+        return Ok(None);
+    }
+    let Some(pixel_bounds) = path_draw_pixel_bounds(path, paint, state.transform) else {
+        return Ok(None);
+    };
+    let clipped_pixel_bounds =
+        intersect_pixel_bounds(pixel_bounds, state.overall_clip_pixel_bounds);
+    if pixel_bounds_are_outside_frame(clipped_pixel_bounds, config.width, config.height) {
+        return Ok(None);
+    }
+    let Some(preparation) = prepare_path_draw_with_pixel_bounds(
+        path,
+        paint,
+        state,
+        Some(pixel_bounds),
+        config.mode,
+        config.width,
+        config.height,
+    ) else {
+        return Ok(None);
+    };
+    let prepared_feather = preparation
+        .prepared_feather
+        .as_deref()
+        .ok_or("logical preparation omitted feather geometry")?;
+    let placement = feather_atlas_placement(
+        &path.raw_path,
+        state.transform,
+        paint.feather,
+        paint.effective_stroke(),
+        config.width,
+        config.height,
+    )
+    .ok_or("logical preparation omitted feather-atlas placement")?;
+    let atlas_placement =
+        pack_raster_ordering_feather_atlas_placements(config, vec![Some(placement)])
+            .into_iter()
+            .next()
+            .flatten()
+            .ok_or("logical preparation omitted packed feather-atlas placement")?;
+    let mut buffers = ShadowBuffers::default();
+    let local_contour_ids_are_dense = write_raster_ordering_atlas_resources(
+        &mut buffers,
+        0,
+        path,
+        paint,
+        state,
+        prepared_feather,
+        atlas_placement,
+    );
+    if buffers.paths.len() != 1 || buffers.paints.len() != 1 {
+        return Err("narrow logical serializer omitted feather-atlas resources");
+    }
+    let paint_record = buffers.paints[0];
+    let tessellation = &prepared_feather.tessellation;
+    Ok(Some((
+        PreparedTypedDrawResources {
+            atlas_placement: Some(atlas_placement),
+            contour_base: 0,
+            path: buffers.paths[0],
+            paint: paint_record.paint,
+            paint_aux: paint_record.aux,
+            spans: buffers.tessellations,
+            contours: buffers.contours,
+            triangles: buffers.triangles,
+            base_instance: tessellation.base_instance,
+            instance_count: tessellation.instance_count,
+            triangle_count: 0,
+            borrowed_triangle_count: 0,
+            main_triangle_batches: Vec::new(),
+            has_interior_triangles: false,
+            uses_interior: false,
+            local_contour_ids_are_dense,
+        },
+        paint.style == RenderPaintStyle::Stroke,
+    )))
 }
 
 struct NullFrame {

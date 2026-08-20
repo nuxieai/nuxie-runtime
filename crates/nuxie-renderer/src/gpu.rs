@@ -270,6 +270,14 @@ pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
 pub(crate) const MITER_CLIP_JOIN_CONTOUR_FLAG: u32 = 5 << 26;
 pub(crate) const EMULATED_STROKE_CAP_CONTOUR_FLAG: u32 = 1 << 25;
 
+/// Finalized feather-atlas patch batch shared by platform encoders.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AtlasDrawBatch {
+    pub(crate) scissor: [u16; 4],
+    pub(crate) patch_count: u32,
+    pub(crate) base_patch: u32,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PatchType {
     MidpointFan,

@@ -15,6 +15,8 @@ use super::buffer_ring_coordinator::{
 use super::capabilities::MetalCapabilitySelection;
 use super::draw_pipeline::{DrawPipeline, MetalInterlockMode};
 use super::draw_shader::DrawShaderLibrary;
+use super::feather_atlas_pipeline::FeatherAtlasPipelines;
+use super::feather_atlas_resource::FeatherAtlasResource;
 use super::gradient_resource::{GradientResource, GRADIENT_TEXTURE_WIDTH};
 use super::samplers::NativeMetalSamplers;
 use super::tessellation_resource::{
@@ -46,23 +48,30 @@ const TESSELLATE_VERTEX_MAIN: &str = "WF";
 const TESSELLATE_FRAGMENT_MAIN: &str = "XF";
 const UBER_PATH_VERTEX_MAIN: &str = "p1111000000::GC";
 const UBER_PATH_FRAGMENT_MAIN: &str = "p1111111100::JB";
+const ATLAS_BLIT_VERTEX_MAIN: &str = "p1110000011::GC";
+const ATLAS_BLIT_FRAGMENT_MAIN: &str = "p1110001111::JB";
 
 struct ResourceState {
     gradient: GradientResource,
     tessellation: TessellationResource,
+    feather_atlas: Option<FeatherAtlasResource>,
+    feather_atlas_pipelines: Option<FeatherAtlasPipelines>,
     uploads: UploadRings,
 }
 
 pub(crate) struct PreparedResourceLease {
-    pub(crate) gradient: Retained<ProtocolObject<dyn MTLTexture>>,
+    pub(crate) gradient: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
     pub(crate) tessellation: Retained<ProtocolObject<dyn MTLTexture>>,
+    pub(crate) feather_atlas: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
+    pub(crate) feather_atlas_pipeline: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,
     pub(crate) flush_uniforms: Retained<ProtocolObject<dyn MTLBuffer>>,
-    pub(crate) gradient_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) gradient_spans: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     pub(crate) tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) paths: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) paints: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) contours: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) triangles: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     pub(crate) upload_calls: u64,
     pub(crate) upload_bytes: u64,
     ownership: BufferRingLease,
@@ -86,6 +95,7 @@ pub(crate) struct UploadBatch<'a> {
     pub(crate) paints: &'a [gpu::PaintData],
     pub(crate) paint_aux: &'a [gpu::PaintAuxData],
     pub(crate) contours: &'a [gpu::ContourData],
+    pub(crate) triangles: &'a [gpu::TriangleVertex],
 }
 
 #[derive(Default)]
@@ -97,6 +107,7 @@ struct UploadRings {
     paints: Option<UploadBufferRing>,
     paint_aux: Option<UploadBufferRing>,
     contours: Option<UploadBufferRing>,
+    triangles: Option<UploadBufferRing>,
 }
 
 /// Long-lived resources shared by every frame from one native Metal factory.
@@ -114,6 +125,7 @@ pub(crate) struct NativeMetalContext {
     color_ramp_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     tessellate_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     midpoint_draw_pipeline: DrawPipeline,
+    atlas_blit_pipeline: DrawPipeline,
     tess_span_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_vertex_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
@@ -158,6 +170,16 @@ impl NativeMetalContext {
             0,
         )
         .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
+        let atlas_blit_pipeline = DrawPipeline::new(
+            &device,
+            Some(draw_shader_library.library()),
+            &NSString::from_str(ATLAS_BLIT_VERTEX_MAIN),
+            &NSString::from_str(ATLAS_BLIT_FRAGMENT_MAIN),
+            DrawType::AtlasBlit,
+            MetalInterlockMode::RasterOrdering,
+            0,
+        )
+        .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
         let tess_span_index_buffer = make_buffer(&device, &K_TESS_SPAN_INDICES)?;
         let (patch_vertices, patch_indices) = gpu::generate_patch_buffer_data();
         let path_patch_vertex_buffer = make_buffer(&device, &patch_vertices)?;
@@ -170,6 +192,8 @@ impl NativeMetalContext {
         let resources = Mutex::new(ResourceState {
             gradient,
             tessellation,
+            feather_atlas: None,
+            feather_atlas_pipelines: None,
             uploads: UploadRings::default(),
         });
         let samplers = NativeMetalSamplers::new(&device)?;
@@ -188,6 +212,7 @@ impl NativeMetalContext {
             color_ramp_pipeline,
             tessellate_pipeline,
             midpoint_draw_pipeline,
+            atlas_blit_pipeline,
             tess_span_index_buffer,
             path_patch_vertex_buffer,
             path_patch_index_buffer,
@@ -208,6 +233,15 @@ impl NativeMetalContext {
 
     pub(crate) fn capabilities(&self) -> MetalCapabilitySelection {
         self.capabilities
+    }
+
+    #[cfg(test)]
+    pub(crate) fn feather_atlas_resources_are_initialized(&self) -> bool {
+        let state = self
+            .resources
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.feather_atlas.is_some() && state.feather_atlas_pipelines.is_some()
     }
 
     pub(crate) fn solid_pipeline(
@@ -242,6 +276,15 @@ impl NativeMetalContext {
             .map_err(|error| RendererError::NativeMetal(error.to_string()))
     }
 
+    pub(crate) fn atlas_blit_pipeline(
+        &self,
+        pixel_format: MTLPixelFormat,
+    ) -> Result<&ProtocolObject<dyn MTLRenderPipelineState>, RendererError> {
+        self.atlas_blit_pipeline
+            .pipeline_state(pixel_format)
+            .map_err(|error| RendererError::NativeMetal(error.to_string()))
+    }
+
     pub(crate) fn tess_span_index_buffer(&self) -> &ProtocolObject<dyn MTLBuffer> {
         &self.tess_span_index_buffer
     }
@@ -269,6 +312,8 @@ impl NativeMetalContext {
         &self,
         gradient_height: usize,
         tessellation_height: usize,
+        feather_atlas_extent: Option<[usize; 2]>,
+        feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
@@ -283,19 +328,44 @@ impl NativeMetalContext {
             TESSELLATION_TEXTURE_WIDTH,
             tessellation_height,
         )?;
-
+        if feather_atlas_extent.is_some() != feather_atlas_is_stroke.is_some() {
+            return Err(RendererError::NativeMetal(
+                "feather atlas extent and pipeline selection must be supplied together".to_owned(),
+            ));
+        }
+        if let Some([width, height]) = feather_atlas_extent {
+            if state.feather_atlas.is_none() {
+                let replacement = FeatherAtlasResource::new(self.device(), width, height)?;
+                let pipelines =
+                    FeatherAtlasPipelines::new(self.device(), self._draw_shader_library.library())
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
+                state.feather_atlas = replacement;
+                state.feather_atlas_pipelines = Some(pipelines);
+            } else if let Some(resource) = state.feather_atlas.as_mut() {
+                resource.ensure_capacity(self.device(), width, height)?;
+            }
+        }
         let sizes = UploadSizes::new(&uploads)?;
         let upload_bytes = sizes.total_bytes()?;
         state.uploads.ensure_capacities(self.device(), sizes)?;
         let uploaded = state.uploads.upload(uploads)?;
 
         Ok(PreparedResourceLease {
-            gradient: state.gradient.retained_texture().ok_or_else(|| {
-                RendererError::NativeMetal("gradient resource texture is absent".to_owned())
-            })?,
+            gradient: state.gradient.retained_texture(),
             tessellation: state.tessellation.retained_texture().ok_or_else(|| {
                 RendererError::NativeMetal("tessellation resource texture is absent".to_owned())
             })?,
+            feather_atlas: state
+                .feather_atlas
+                .as_ref()
+                .and_then(FeatherAtlasResource::retained_texture),
+            feather_atlas_pipeline: feather_atlas_is_stroke.map(|is_stroke| {
+                state
+                    .feather_atlas_pipelines
+                    .as_ref()
+                    .expect("nonzero feather atlas allocation realizes its paired pipelines")
+                    .retained(is_stroke)
+            }),
             flush_uniforms: uploaded.flush_uniforms,
             gradient_spans: uploaded.gradient_spans,
             tessellation_spans: uploaded.tessellation_spans,
@@ -303,7 +373,8 @@ impl NativeMetalContext {
             paints: uploaded.paints,
             paint_aux: uploaded.paint_aux,
             contours: uploaded.contours,
-            upload_calls: 7,
+            triangles: uploaded.triangles,
+            upload_calls: sizes.nonempty_count(),
             upload_bytes,
             ownership,
         })
@@ -380,18 +451,20 @@ struct UploadSizes {
     paints: usize,
     paint_aux: usize,
     contours: usize,
+    triangles: usize,
 }
 
 impl UploadSizes {
     fn new(batch: &UploadBatch<'_>) -> Result<Self, RendererError> {
         Ok(Self {
             flush_uniforms: std::mem::size_of_val(batch.flush_uniforms),
-            gradient_spans: upload_byte_len(batch.gradient_spans)?,
+            gradient_spans: optional_upload_byte_len(batch.gradient_spans)?,
             tessellation_spans: upload_byte_len(batch.tessellation_spans)?,
             paths: upload_byte_len(batch.paths)?,
             paints: upload_byte_len(batch.paints)?,
             paint_aux: upload_byte_len(batch.paint_aux)?,
             contours: upload_byte_len(batch.contours)?,
+            triangles: optional_upload_byte_len(batch.triangles)?,
         })
     }
 
@@ -404,6 +477,7 @@ impl UploadSizes {
             self.paints,
             self.paint_aux,
             self.contours,
+            self.triangles,
         ]
         .into_iter()
         .try_fold(0_u64, |total, bytes| {
@@ -415,16 +489,33 @@ impl UploadSizes {
             })
         })
     }
+
+    fn nonempty_count(self) -> u64 {
+        [
+            self.flush_uniforms,
+            self.gradient_spans,
+            self.tessellation_spans,
+            self.paths,
+            self.paints,
+            self.paint_aux,
+            self.contours,
+            self.triangles,
+        ]
+        .into_iter()
+        .filter(|bytes| *bytes != 0)
+        .count() as u64
+    }
 }
 
 struct UploadedBuffers {
     flush_uniforms: Retained<ProtocolObject<dyn MTLBuffer>>,
-    gradient_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    gradient_spans: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
     paths: Retained<ProtocolObject<dyn MTLBuffer>>,
     paints: Retained<ProtocolObject<dyn MTLBuffer>>,
     paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
     contours: Retained<ProtocolObject<dyn MTLBuffer>>,
+    triangles: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
 }
 
 impl UploadRings {
@@ -434,7 +525,9 @@ impl UploadRings {
         sizes: UploadSizes,
     ) -> Result<(), RendererError> {
         ensure_upload_capacity(device, &mut self.flush_uniforms, sizes.flush_uniforms)?;
-        ensure_upload_capacity(device, &mut self.gradient_spans, sizes.gradient_spans)?;
+        if sizes.gradient_spans != 0 {
+            ensure_upload_capacity(device, &mut self.gradient_spans, sizes.gradient_spans)?;
+        }
         ensure_upload_capacity(
             device,
             &mut self.tessellation_spans,
@@ -444,6 +537,9 @@ impl UploadRings {
         ensure_upload_capacity(device, &mut self.paints, sizes.paints)?;
         ensure_upload_capacity(device, &mut self.paint_aux, sizes.paint_aux)?;
         ensure_upload_capacity(device, &mut self.contours, sizes.contours)?;
+        if sizes.triangles != 0 {
+            ensure_upload_capacity(device, &mut self.triangles, sizes.triangles)?;
+        }
         Ok(())
     }
 
@@ -453,10 +549,14 @@ impl UploadRings {
                 required_upload_ring(&mut self.flush_uniforms, "flush uniforms")?,
                 batch.flush_uniforms,
             )?,
-            gradient_spans: upload_slice(
-                required_upload_ring(&mut self.gradient_spans, "gradient spans")?,
-                batch.gradient_spans,
-            )?,
+            gradient_spans: (!batch.gradient_spans.is_empty())
+                .then(|| {
+                    upload_slice(
+                        required_upload_ring(&mut self.gradient_spans, "gradient spans")?,
+                        batch.gradient_spans,
+                    )
+                })
+                .transpose()?,
             tessellation_spans: upload_slice(
                 required_upload_ring(&mut self.tessellation_spans, "tessellation spans")?,
                 batch.tessellation_spans,
@@ -474,6 +574,14 @@ impl UploadRings {
                 required_upload_ring(&mut self.contours, "contours")?,
                 batch.contours,
             )?,
+            triangles: (!batch.triangles.is_empty())
+                .then(|| {
+                    upload_slice(
+                        required_upload_ring(&mut self.triangles, "triangles")?,
+                        batch.triangles,
+                    )
+                })
+                .transpose()?,
         })
     }
 }
@@ -486,6 +594,17 @@ fn upload_byte_len<T>(values: &[T]) -> Result<usize, RendererError> {
         .ok_or_else(|| {
             RendererError::NativeMetal(
                 "native Metal upload payload is empty or exceeds address space".to_owned(),
+            )
+        })
+}
+
+fn optional_upload_byte_len<T>(values: &[T]) -> Result<usize, RendererError> {
+    values
+        .len()
+        .checked_mul(std::mem::size_of::<T>())
+        .ok_or_else(|| {
+            RendererError::NativeMetal(
+                "native Metal optional upload payload exceeds address space".to_owned(),
             )
         })
 }
@@ -751,6 +870,7 @@ mod tests {
             paints: &paints,
             paint_aux: &paint_aux,
             contours: &contours,
+            triangles: &[],
         };
         let mut rings = UploadRings {
             flush_uniforms: UploadBufferRing::new(&device, std::mem::size_of_val(&uniforms))

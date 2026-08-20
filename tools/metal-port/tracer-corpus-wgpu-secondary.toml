@@ -24,3 +24,14 @@ backend = "metal"
 status = "exact"
 max_channel_delta = 35
 max_different_pixels = 0
+
+[[entry]]
+id = "native-metal-first-light-atlas-feather-stroke"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-atlas-feather-stroke.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 1024

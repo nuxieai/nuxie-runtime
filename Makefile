@@ -395,7 +395,7 @@ runtime-frame-loop-port-gate:
 # nuxie-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
 LINT_GATE_DENY_CRATES = nuxie nuxie-schema
-LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-graph nux-capi
+LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-graph nuxie-ore-metal nux-capi
 
 .PHONY: lint-gate
 lint-gate:
@@ -434,6 +434,7 @@ feature-compile-gate-portable:
 	@tools/report-all.sh "feature-compile-gate (portable)" \
 		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
 		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --test cpp_probe" \
+		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
 		"nuxie-renderer --features perf-diagnostics" "cargo check -p nuxie-renderer --features perf-diagnostics --lib" \
 		"nuxie-renderer --features perf-counters" "cargo check -p nuxie-renderer --features perf-counters --lib" \
 		"nuxie-runtime upstream microbenchmarks" "cargo check -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks" \

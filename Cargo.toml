@@ -4,6 +4,7 @@ members = [
     "crates/nuxie-binary",
     "crates/nuxie-graph",
     "crates/nuxie-image-codec",
+    "crates/nuxie-ore-metal",
     "crates/nuxie-render-api",
     "crates/nuxie-render-stream",
     "crates/nuxie-renderer",
@@ -82,8 +83,8 @@ symphonia-utils-xiph = { path = "vendor/symphonia-utils-xiph-0.5.5" }
 
 # Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
-# only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-schema,
-# nuxie, nux-capi) --
+# only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-ore-metal,
+# nuxie-schema, nuxie, nux-capi) --
 # NOT the tools/ crates and NOT nuxie-scripting (active external work area).
 # These are `[lints.clippy]` entries, so they fire only under `cargo clippy`
 # (no cargo build/check noise). All three sit at WARN because the pre-existing

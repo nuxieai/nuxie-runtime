@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 33, in-progress = 2, ported = 7, verified = 0 }
+expected_status_counts = { pending = 29, in-progress = 2, ported = 11, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -494,9 +494,9 @@ evidence = []
 upstream = "renderer/src/ore/ore_binding_map.cpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/ore_bind_group_layout.cpp"
@@ -526,9 +526,9 @@ evidence = []
 upstream = "renderer/include/rive/renderer/ore/ore_binding_map.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_buffer.hpp"
@@ -574,9 +574,9 @@ evidence = []
 upstream = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
+evidence = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_sampler.hpp"
@@ -606,9 +606,9 @@ evidence = []
 upstream = "renderer/include/rive/renderer/ore/ore_types.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/types.rs"]
+evidence = ["crates/nuxie-ore-metal/src/types.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_bind_group_metal.hpp"
@@ -742,7 +742,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "ready"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]
@@ -757,7 +757,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "ready"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]
@@ -775,7 +775,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "ready"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]

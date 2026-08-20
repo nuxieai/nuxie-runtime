@@ -129,8 +129,9 @@ The first mechanical wave records the complete
 `ported`. The background compiler and render-context rows remain
 `in-progress`: background compilation includes job inputs and the deterministic
 macro/source plan, but not the compiler thread or `newLibraryWithSource`;
-render-context coverage includes only draw-pipeline policy, render-target/lazy
-atomic resources, and the shared exact `DrawType` discriminants.
+render-context coverage includes only precompiled-function naming,
+draw-pipeline policy, render-target/lazy atomic resources, and the shared exact
+`DrawType` discriminants.
 
 ## Trial translation: UNIV-2086
 

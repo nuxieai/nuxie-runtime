@@ -69,12 +69,14 @@ rust_modules = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
 ]
 

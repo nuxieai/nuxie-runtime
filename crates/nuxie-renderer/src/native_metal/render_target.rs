@@ -60,6 +60,15 @@ fn atomic_buffer_size(width: u32, height: u32) -> Result<usize, RendererError> {
         .ok_or_else(|| RendererError::NativeMetal("atomic buffer size overflow".to_owned()))
 }
 
+fn validate_render_target_extent(width: u32, height: u32) -> Result<(), RendererError> {
+    if width == 0 || height == 0 {
+        return Err(RendererError::NativeMetal(format!(
+            "render target dimensions must be at least 1x1 (got {width}x{height})"
+        )));
+    }
+    Ok(())
+}
+
 fn make_pls_memoryless_texture(
     device: &ProtocolObject<dyn MTLDevice>,
     pixel_format: MTLPixelFormat,
@@ -70,6 +79,12 @@ fn make_pls_memoryless_texture(
     // make_pls_memoryless_texture() in the pinned upstream implementation.
     let descriptor = MTLTextureDescriptor::new();
     descriptor.setPixelFormat(pixel_format);
+    // SAFETY: `RenderTargetMetal::new` validates width and height are >= 1
+    // before calling this helper, satisfying objc2's size precondition. Both
+    // values widen losslessly from `u32`, the single mip level is valid for a
+    // 2D texture, and these setters retain no Rust pointers. Metal validates
+    // the typed pixel-format/dimension combination when
+    // `newTextureWithDescriptor` is called and reports failure as `nil`.
     unsafe {
         descriptor.setWidth(width as usize);
         descriptor.setHeight(height as usize);
@@ -123,6 +138,8 @@ impl RenderTargetMetal {
         height: u32,
         capabilities: MetalCapabilitySelection,
     ) -> Result<Self, RendererError> {
+        validate_render_target_extent(width, height)?;
+
         let formats =
             raster_order_attachment_formats(capabilities.supports_raster_ordering, pixel_format);
         let (
@@ -364,6 +381,23 @@ mod tests {
             atomic_buffer_size(u32::MAX, u32::MAX),
             Err(RendererError::NativeMetal(message)) if message == "atomic buffer size overflow"
         ));
+    }
+
+    #[test]
+    fn render_target_extent_requires_nonzero_dimensions() {
+        for (width, height) in [(0, 1), (1, 0)] {
+            assert!(matches!(
+                validate_render_target_extent(width, height),
+                Err(RendererError::NativeMetal(message))
+                    if message
+                        == format!(
+                            "render target dimensions must be at least 1x1 (got {width}x{height})"
+                        )
+            ));
+        }
+
+        assert!(validate_render_target_extent(1, 1).is_ok());
+        assert!(validate_render_target_extent(u32::MAX, u32::MAX).is_ok());
     }
 
     #[test]

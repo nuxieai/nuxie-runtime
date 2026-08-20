@@ -45,6 +45,7 @@ evidence_paths = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
   "crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal",

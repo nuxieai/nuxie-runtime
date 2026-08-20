@@ -213,17 +213,32 @@ fn make_pipeline_state(
 
 fn apply_attachment_policy(descriptor: &MTLRenderPipelineDescriptor, policy: AttachmentPolicy) {
     let attachments = descriptor.colorAttachments();
+    // SAFETY: `MTLRenderPipelineDescriptor.colorAttachments` owns eight
+    // non-null descriptors. Index 0 is upstream's `COLOR_PLANE_IDX`, and
+    // objc2 returns a retained descriptor that remains owned for this scope.
     let framebuffer = unsafe { attachments.objectAtIndexedSubscript(0) };
     framebuffer.setPixelFormat(policy.framebuffer);
 
     if let Some(pixel_format) = policy.clip_plane {
-        unsafe { attachments.objectAtIndexedSubscript(1) }.setPixelFormat(pixel_format);
+        // SAFETY: Index 1 is upstream's `CLIP_PLANE_IDX`, within Metal's
+        // eight-entry attachment array. objc2 returns a retained, non-null
+        // descriptor, and `pixel_format` is a typed `MTLPixelFormat` value.
+        let clip_plane = unsafe { attachments.objectAtIndexedSubscript(1) };
+        clip_plane.setPixelFormat(pixel_format);
     }
     if let Some(pixel_format) = policy.scratch_color_plane {
-        unsafe { attachments.objectAtIndexedSubscript(2) }.setPixelFormat(pixel_format);
+        // SAFETY: Index 2 is upstream's `SCRATCH_COLOR_PLANE_IDX`, within
+        // Metal's eight-entry attachment array. objc2 retains the non-null
+        // descriptor for this scope; the pixel-format enum is passed by value.
+        let scratch_color_plane = unsafe { attachments.objectAtIndexedSubscript(2) };
+        scratch_color_plane.setPixelFormat(pixel_format);
     }
     if let Some(pixel_format) = policy.coverage_plane {
-        unsafe { attachments.objectAtIndexedSubscript(3) }.setPixelFormat(pixel_format);
+        // SAFETY: Index 3 is upstream's `COVERAGE_PLANE_IDX`, within Metal's
+        // eight-entry attachment array. objc2 retains the non-null descriptor
+        // for this scope; the pixel-format enum is passed by value.
+        let coverage_plane = unsafe { attachments.objectAtIndexedSubscript(3) };
+        coverage_plane.setPixelFormat(pixel_format);
     }
 
     match policy.blend {

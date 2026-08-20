@@ -53,6 +53,8 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             solid_draws: Vec::new(),
             gradient_draws: Vec::new(),
             resource_lease: None,
+            collect_work_metrics: false,
+            backend_work: crate::BackendWorkMetrics::default(),
             unsupported: None,
         };
         Ok(Self { frame, drawable })
@@ -61,17 +63,25 @@ impl<'a> NativeMetalDrawableFrame<'a> {
     /// Commits renderer work, then presents the borrowed drawable on the next
     /// command buffer from the same queue, matching the pinned product oracle.
     pub fn finish(mut self) -> Result<(), RendererError> {
-        if let Err(error) = self.frame.encode() {
-            self.frame.release_resource_slot()?;
-            return Err(error);
-        }
+        self.frame.encode()?;
+        let mut upload_completion = self.frame.transfer_upload_ownership()?;
         let completion = self
             .frame
             .context
             .commit_and_present(&self.frame.command_buffer, self.drawable);
-        let release = self.frame.release_resource_slot();
+        let release = upload_completion
+            .as_mut()
+            .map(|completion| {
+                completion.complete().map_err(|error| {
+                    RendererError::NativeMetal(format!(
+                        "complete native Metal upload-ring ownership: {error:?}"
+                    ))
+                })
+            })
+            .transpose();
         completion?;
-        release
+        release?;
+        Ok(())
     }
 }
 

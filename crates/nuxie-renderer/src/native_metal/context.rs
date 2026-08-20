@@ -9,15 +9,18 @@
 //! Pinned upstream source: `rive-runtime` at
 //! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 
+use super::buffer_ring_coordinator::{
+    BufferRingCompletion, BufferRingCoordinator, BufferRingLease,
+};
 use super::capabilities::MetalCapabilitySelection;
 use super::draw_pipeline::{DrawPipeline, MetalInterlockMode};
 use super::draw_shader::DrawShaderLibrary;
 use super::gradient_resource::{GradientResource, GRADIENT_TEXTURE_WIDTH};
-use super::resource_ring::ResourceRing;
 use super::samplers::NativeMetalSamplers;
 use super::tessellation_resource::{
     TessellationResource, K_TESS_SPAN_INDICES, TESSELLATION_TEXTURE_WIDTH,
 };
+use super::upload_buffer_ring::UploadBufferRing;
 use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
 use crate::RendererError;
@@ -45,15 +48,55 @@ const UBER_PATH_VERTEX_MAIN: &str = "p1111000000::GC";
 const UBER_PATH_FRAGMENT_MAIN: &str = "p1111111100::JB";
 
 struct ResourceState {
-    ring: ResourceRing,
     gradient: GradientResource,
     tessellation: TessellationResource,
+    uploads: UploadRings,
 }
 
 pub(crate) struct PreparedResourceLease {
-    pub(crate) slot: usize,
     pub(crate) gradient: Retained<ProtocolObject<dyn MTLTexture>>,
     pub(crate) tessellation: Retained<ProtocolObject<dyn MTLTexture>>,
+    pub(crate) flush_uniforms: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) gradient_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) paths: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) paints: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) contours: Retained<ProtocolObject<dyn MTLBuffer>>,
+    pub(crate) upload_calls: u64,
+    pub(crate) upload_bytes: u64,
+    ownership: BufferRingLease,
+}
+
+impl PreparedResourceLease {
+    pub(crate) fn transfer_to_completion(&mut self) -> Result<BufferRingCompletion, RendererError> {
+        self.ownership.transfer_to_completion().map_err(|error| {
+            RendererError::NativeMetal(format!(
+                "transfer native Metal upload-ring ownership: {error:?}"
+            ))
+        })
+    }
+}
+
+pub(crate) struct UploadBatch<'a> {
+    pub(crate) flush_uniforms: &'a gpu::FlushUniforms,
+    pub(crate) gradient_spans: &'a [gpu::GradientSpan],
+    pub(crate) tessellation_spans: &'a [gpu::TessVertexSpan],
+    pub(crate) paths: &'a [gpu::PathData],
+    pub(crate) paints: &'a [gpu::PaintData],
+    pub(crate) paint_aux: &'a [gpu::PaintAuxData],
+    pub(crate) contours: &'a [gpu::ContourData],
+}
+
+#[derive(Default)]
+struct UploadRings {
+    flush_uniforms: Option<UploadBufferRing>,
+    gradient_spans: Option<UploadBufferRing>,
+    tessellation_spans: Option<UploadBufferRing>,
+    paths: Option<UploadBufferRing>,
+    paints: Option<UploadBufferRing>,
+    paint_aux: Option<UploadBufferRing>,
+    contours: Option<UploadBufferRing>,
 }
 
 /// Long-lived resources shared by every frame from one native Metal factory.
@@ -75,6 +118,7 @@ pub(crate) struct NativeMetalContext {
     path_patch_vertex_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     gaussian_integral_texture: Retained<ProtocolObject<dyn MTLTexture>>,
+    upload_coordinator: BufferRingCoordinator,
     resources: Mutex<ResourceState>,
     samplers: NativeMetalSamplers,
 }
@@ -124,9 +168,9 @@ impl NativeMetalContext {
         let tessellation = TessellationResource::new(&device, TESSELLATION_TEXTURE_WIDTH, 1)?
             .expect("the canonical tessellation texture extent is nonzero");
         let resources = Mutex::new(ResourceState {
-            ring: ResourceRing::new(),
             gradient,
             tessellation,
+            uploads: UploadRings::default(),
         });
         let samplers = NativeMetalSamplers::new(&device)?;
         let solid_rgba_pipeline =
@@ -148,6 +192,7 @@ impl NativeMetalContext {
             path_patch_vertex_buffer,
             path_patch_index_buffer,
             gaussian_integral_texture,
+            upload_coordinator: BufferRingCoordinator::new(),
             resources,
             samplers,
         })
@@ -224,49 +269,44 @@ impl NativeMetalContext {
         &self,
         gradient_height: usize,
         tessellation_height: usize,
+        uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
+        let ownership = self.upload_coordinator.prepare_to_flush();
         let mut state = self.resources.lock().map_err(|_| {
             RendererError::NativeMetal("native Metal resource ring is poisoned".to_owned())
         })?;
-        let slot = state.ring.prepare_to_flush().map_err(|error| {
-            RendererError::NativeMetal(format!("reserve native Metal resource slot: {error:?}"))
-        })?;
-        let prepared = (|| {
-            state
-                .gradient
-                .resize(self.device(), GRADIENT_TEXTURE_WIDTH, gradient_height)?;
-            state.tessellation.resize(
-                self.device(),
-                TESSELLATION_TEXTURE_WIDTH,
-                tessellation_height,
-            )?;
-            Ok(PreparedResourceLease {
-                slot,
-                gradient: state.gradient.retained_texture().ok_or_else(|| {
-                    RendererError::NativeMetal("gradient resource texture is absent".to_owned())
-                })?,
-                tessellation: state.tessellation.retained_texture().ok_or_else(|| {
-                    RendererError::NativeMetal("tessellation resource texture is absent".to_owned())
-                })?,
-            })
-        })();
-        if prepared.is_err() {
-            let _ = state.ring.abandon(slot);
-        }
-        prepared
-    }
+        state
+            .gradient
+            .resize(self.device(), GRADIENT_TEXTURE_WIDTH, gradient_height)?;
+        state.tessellation.resize(
+            self.device(),
+            TESSELLATION_TEXTURE_WIDTH,
+            tessellation_height,
+        )?;
 
-    pub(crate) fn release_resources(&self, slot: usize) -> Result<(), RendererError> {
-        self.resources
-            .lock()
-            .map_err(|_| {
-                RendererError::NativeMetal("native Metal resource ring is poisoned".to_owned())
-            })?
-            .ring
-            .release(slot)
-            .map_err(|error| {
-                RendererError::NativeMetal(format!("release native Metal resource slot: {error:?}"))
-            })
+        let sizes = UploadSizes::new(&uploads)?;
+        let upload_bytes = sizes.total_bytes()?;
+        state.uploads.ensure_capacities(self.device(), sizes)?;
+        let uploaded = state.uploads.upload(uploads)?;
+
+        Ok(PreparedResourceLease {
+            gradient: state.gradient.retained_texture().ok_or_else(|| {
+                RendererError::NativeMetal("gradient resource texture is absent".to_owned())
+            })?,
+            tessellation: state.tessellation.retained_texture().ok_or_else(|| {
+                RendererError::NativeMetal("tessellation resource texture is absent".to_owned())
+            })?,
+            flush_uniforms: uploaded.flush_uniforms,
+            gradient_spans: uploaded.gradient_spans,
+            tessellation_spans: uploaded.tessellation_spans,
+            paths: uploaded.paths,
+            paints: uploaded.paints,
+            paint_aux: uploaded.paint_aux,
+            contours: uploaded.contours,
+            upload_calls: 7,
+            upload_bytes,
+            ownership,
+        })
     }
 
     /// Acquires the one command buffer that a frame owns until finish or drop.
@@ -329,6 +369,174 @@ impl NativeMetalContext {
         );
         render_result.and(presentation_result)
     }
+}
+
+#[derive(Clone, Copy)]
+struct UploadSizes {
+    flush_uniforms: usize,
+    gradient_spans: usize,
+    tessellation_spans: usize,
+    paths: usize,
+    paints: usize,
+    paint_aux: usize,
+    contours: usize,
+}
+
+impl UploadSizes {
+    fn new(batch: &UploadBatch<'_>) -> Result<Self, RendererError> {
+        Ok(Self {
+            flush_uniforms: std::mem::size_of_val(batch.flush_uniforms),
+            gradient_spans: upload_byte_len(batch.gradient_spans)?,
+            tessellation_spans: upload_byte_len(batch.tessellation_spans)?,
+            paths: upload_byte_len(batch.paths)?,
+            paints: upload_byte_len(batch.paints)?,
+            paint_aux: upload_byte_len(batch.paint_aux)?,
+            contours: upload_byte_len(batch.contours)?,
+        })
+    }
+
+    fn total_bytes(self) -> Result<u64, RendererError> {
+        [
+            self.flush_uniforms,
+            self.gradient_spans,
+            self.tessellation_spans,
+            self.paths,
+            self.paints,
+            self.paint_aux,
+            self.contours,
+        ]
+        .into_iter()
+        .try_fold(0_u64, |total, bytes| {
+            let bytes = u64::try_from(bytes).map_err(|_| {
+                RendererError::NativeMetal("native Metal upload byte count exceeds UInt64".into())
+            })?;
+            total.checked_add(bytes).ok_or_else(|| {
+                RendererError::NativeMetal("native Metal upload byte count overflow".into())
+            })
+        })
+    }
+}
+
+struct UploadedBuffers {
+    flush_uniforms: Retained<ProtocolObject<dyn MTLBuffer>>,
+    gradient_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
+    paths: Retained<ProtocolObject<dyn MTLBuffer>>,
+    paints: Retained<ProtocolObject<dyn MTLBuffer>>,
+    paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
+    contours: Retained<ProtocolObject<dyn MTLBuffer>>,
+}
+
+impl UploadRings {
+    fn ensure_capacities(
+        &mut self,
+        device: &ProtocolObject<dyn MTLDevice>,
+        sizes: UploadSizes,
+    ) -> Result<(), RendererError> {
+        ensure_upload_capacity(device, &mut self.flush_uniforms, sizes.flush_uniforms)?;
+        ensure_upload_capacity(device, &mut self.gradient_spans, sizes.gradient_spans)?;
+        ensure_upload_capacity(
+            device,
+            &mut self.tessellation_spans,
+            sizes.tessellation_spans,
+        )?;
+        ensure_upload_capacity(device, &mut self.paths, sizes.paths)?;
+        ensure_upload_capacity(device, &mut self.paints, sizes.paints)?;
+        ensure_upload_capacity(device, &mut self.paint_aux, sizes.paint_aux)?;
+        ensure_upload_capacity(device, &mut self.contours, sizes.contours)?;
+        Ok(())
+    }
+
+    fn upload(&mut self, batch: UploadBatch<'_>) -> Result<UploadedBuffers, RendererError> {
+        Ok(UploadedBuffers {
+            flush_uniforms: upload_value(
+                required_upload_ring(&mut self.flush_uniforms, "flush uniforms")?,
+                batch.flush_uniforms,
+            )?,
+            gradient_spans: upload_slice(
+                required_upload_ring(&mut self.gradient_spans, "gradient spans")?,
+                batch.gradient_spans,
+            )?,
+            tessellation_spans: upload_slice(
+                required_upload_ring(&mut self.tessellation_spans, "tessellation spans")?,
+                batch.tessellation_spans,
+            )?,
+            paths: upload_slice(required_upload_ring(&mut self.paths, "paths")?, batch.paths)?,
+            paints: upload_slice(
+                required_upload_ring(&mut self.paints, "paints")?,
+                batch.paints,
+            )?,
+            paint_aux: upload_slice(
+                required_upload_ring(&mut self.paint_aux, "paint aux")?,
+                batch.paint_aux,
+            )?,
+            contours: upload_slice(
+                required_upload_ring(&mut self.contours, "contours")?,
+                batch.contours,
+            )?,
+        })
+    }
+}
+
+fn upload_byte_len<T>(values: &[T]) -> Result<usize, RendererError> {
+    values
+        .len()
+        .checked_mul(std::mem::size_of::<T>())
+        .filter(|length| *length != 0)
+        .ok_or_else(|| {
+            RendererError::NativeMetal(
+                "native Metal upload payload is empty or exceeds address space".to_owned(),
+            )
+        })
+}
+
+fn ensure_upload_capacity(
+    device: &ProtocolObject<dyn MTLDevice>,
+    ring: &mut Option<UploadBufferRing>,
+    required_bytes: usize,
+) -> Result<(), RendererError> {
+    if ring
+        .as_ref()
+        .is_some_and(|ring| ring.capacity() >= required_bytes)
+    {
+        return Ok(());
+    }
+    *ring = UploadBufferRing::new(device, required_bytes)?;
+    if ring.is_none() {
+        return Err(RendererError::NativeMetal(
+            "native Metal upload ring requires nonzero capacity".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn required_upload_ring<'a>(
+    ring: &'a mut Option<UploadBufferRing>,
+    label: &str,
+) -> Result<&'a mut UploadBufferRing, RendererError> {
+    ring.as_mut().ok_or_else(|| {
+        RendererError::NativeMetal(format!("native Metal {label} upload ring is absent"))
+    })
+}
+
+fn upload_value<T: bytemuck::Pod>(
+    ring: &mut UploadBufferRing,
+    value: &T,
+) -> Result<Retained<ProtocolObject<dyn MTLBuffer>>, RendererError> {
+    upload_slice(ring, std::slice::from_ref(value))
+}
+
+fn upload_slice<T: bytemuck::Pod>(
+    ring: &mut UploadBufferRing,
+    values: &[T],
+) -> Result<Retained<ProtocolObject<dyn MTLBuffer>>, RendererError> {
+    let bytes = bytemuck::cast_slice(values);
+    ring.map(bytes.len())
+        .map_err(|error| RendererError::NativeMetal(format!("map upload ring: {error}")))?
+        .copy_from_slice(bytes);
+    ring.unmap_submit()
+        .map_err(|error| RendererError::NativeMetal(format!("submit upload ring: {error}")))?;
+    ring.retained_submitted_buffer()
 }
 
 fn make_resource_pipeline(
@@ -466,6 +674,7 @@ fn command_buffer_completion_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytemuck::Zeroable;
 
     #[test]
     fn missing_command_buffer_acquisition_fails_closed() {
@@ -492,5 +701,81 @@ mod tests {
             Err(RendererError::NativeMetal(message))
                 if message.starts_with("command buffer failed: status ")
         ));
+    }
+
+    #[test]
+    fn upload_capacity_is_verbatim_reused_and_grows_by_replacement() {
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let mut ring = None;
+        ensure_upload_capacity(&device, &mut ring, 4).unwrap();
+        let initial = ring.as_ref().unwrap().buffer_identity(0);
+        assert_eq!(ring.as_ref().unwrap().capacity(), 4);
+
+        ensure_upload_capacity(&device, &mut ring, 4).unwrap();
+        assert_eq!(ring.as_ref().unwrap().buffer_identity(0), initial);
+
+        ensure_upload_capacity(&device, &mut ring, 9).unwrap();
+        assert_eq!(ring.as_ref().unwrap().capacity(), 9);
+        assert_ne!(ring.as_ref().unwrap().buffer_identity(0), initial);
+    }
+
+    #[test]
+    fn empty_upload_payload_is_rejected_before_metal_mapping() {
+        let empty: [gpu::GradientSpan; 0] = [];
+        assert!(matches!(
+            upload_byte_len(&empty),
+            Err(RendererError::NativeMetal(message))
+                if message == "native Metal upload payload is empty or exceeds address space"
+        ));
+    }
+
+    #[test]
+    fn later_upload_failure_leaves_earlier_rings_submitted_not_mapped() {
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let uniforms = gpu::FlushUniforms::zeroed();
+        let gradient_spans = [gpu::GradientSpan::zeroed()];
+        let tessellation_spans = [gpu::TessVertexSpan::zeroed()];
+        let paths = [gpu::PathData::zeroed()];
+        let paints = [gpu::PaintData::zeroed()];
+        let paint_aux = [gpu::PaintAuxData::zeroed()];
+        let contours = [gpu::ContourData::zeroed()];
+        let batch = UploadBatch {
+            flush_uniforms: &uniforms,
+            gradient_spans: &gradient_spans,
+            tessellation_spans: &tessellation_spans,
+            paths: &paths,
+            paints: &paints,
+            paint_aux: &paint_aux,
+            contours: &contours,
+        };
+        let mut rings = UploadRings {
+            flush_uniforms: UploadBufferRing::new(&device, std::mem::size_of_val(&uniforms))
+                .unwrap(),
+            gradient_spans: UploadBufferRing::new(&device, std::mem::size_of_val(&gradient_spans))
+                .unwrap(),
+            ..UploadRings::default()
+        };
+
+        assert!(matches!(
+            rings.upload(batch),
+            Err(RendererError::NativeMetal(message))
+                if message == "native Metal tessellation spans upload ring is absent"
+        ));
+        assert!(rings
+            .flush_uniforms
+            .as_ref()
+            .unwrap()
+            .retained_submitted_buffer()
+            .is_ok());
+        assert!(rings
+            .gradient_spans
+            .as_ref()
+            .unwrap()
+            .retained_submitted_buffer()
+            .is_ok());
     }
 }

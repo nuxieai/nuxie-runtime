@@ -141,6 +141,13 @@ on `unmap` instead of submission can render the same small fixture and still be
 wrong. A background worker that reproduces shader bytes but can strand a
 blocking waiter after a panic is likewise incomplete.
 
+Names are not ownership proof. This Metal port contains both a user-facing
+`RiveRenderBuffer` ring and separate RenderContext upload/uniform rings; they
+share vocabulary but have different source ranges, lifecycle transitions, and
+integration seams. Before extending a plausible existing type, trace its
+constructor and submission owner back to upstream. Port distinct owners as
+distinct modules until evidence demonstrates a real common abstraction.
+
 ## Adaptations and divergences
 
 Rust safety and library APIs sometimes require a different shape. The change

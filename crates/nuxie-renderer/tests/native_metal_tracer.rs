@@ -223,6 +223,7 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: false,
             interior_triangulation_pipeline: false,
             atomic_draws: 1,
@@ -301,6 +302,7 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: false,
             interior_triangulation_pipeline: false,
             atomic_draws: 1,
@@ -376,6 +378,7 @@ fn native_metal_forced_atomic_mixed_gradient_flush_matches_pinned_cpp_metal_orac
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: true,
             interior_triangulation_pipeline: true,
             atomic_draws: 3,
@@ -452,6 +455,7 @@ fn native_metal_forced_atomic_rect_grad_matches_pinned_cpp_metal_oracle() {
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: false,
             interior_triangulation_pipeline: false,
             atomic_draws: 4,
@@ -498,6 +502,176 @@ fn native_metal_forced_atomic_rect_grad_matches_pinned_cpp_metal_oracle() {
 }
 
 #[test]
+fn native_metal_forced_atomic_gamma_correction_clip_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/gamma_correction_clip.rive-stream"))
+            .expect("read gamma-correction clip stream"),
+    )
+    .expect("parse gamma-correction clip stream");
+    let (width, height) = stream.frame_size.expect("gamma-correction clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal gamma-correction clip frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay gamma-correction clip through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal gamma-correction clip");
+
+    let cpp_metal = read_png(
+        fixture_root.join("reference/metal/gm/gamma_correction_clip-clockwise-atomic.png"),
+    );
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: false,
+            gradient_texture: false,
+            atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            clip_rect_pipeline: true,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
+            atomic_draws: 2,
+            atomic_draw_groups: 2,
+            atomic_barriers: 3,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
+        }
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 2,
+            buffer_upload_calls: 6,
+            buffer_upload_bytes: 1_400,
+            queue_submissions: 1,
+            gpu_draw_calls: 5,
+            gpu_draw_instances: 17,
+            tessellation_spans: 11,
+            path_patches: 4,
+            ..BackendWorkMetrics::default()
+        }
+    );
+    assert_clear_color_occupancy(
+        &output.pixels,
+        &cpp_metal,
+        [255, 255, 255, 255],
+        "forced generic-atomic Rust Metal gamma-correction clip versus pinned C++ Metal",
+    );
+    let pixel = |x: usize, y: usize| &output.pixels[(y * width as usize + x) * 4..][..4];
+    let is_magenta = |pixel: &[u8]| pixel[0] == pixel[2] && pixel[1] == 0 && pixel[3] == 255;
+    let is_yellow =
+        |pixel: &[u8]| pixel[0] > pixel[1] && pixel[1] != 0 && pixel[2] == 0 && pixel[3] == 255;
+    let yellow = [240, 176, 0, 255];
+    assert!(is_magenta(pixel(239, 250)));
+    assert_eq!(pixel(240, 250), yellow);
+    assert_eq!(pixel(259, 250), yellow);
+    assert!(is_magenta(pixel(260, 250)));
+    assert_eq!(
+        output
+            .pixels
+            .chunks_exact(4)
+            .filter(|pixel| is_yellow(pixel))
+            .count(),
+        400,
+        "the 20x20 rectangular clip must admit exactly 400 yellow pixels"
+    );
+}
+
+#[test]
+fn native_metal_forced_atomic_rejects_non_rectangular_clip_after_content_publicly() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream_text = std::fs::read_to_string(
+        fixture_root.join("streams/gm/gamma_correction_clip.rive-stream"),
+    )
+    .expect("read gamma-correction clip stream")
+    .replace(
+        "verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]",
+        "verbs=[move,line,line,close],points=[(240,240),(260,240),(250,260)]",
+    );
+    let stream = RenderStream::parse(&stream_text).expect("parse non-rectangular clip stream");
+    let (width, height) = stream.frame_size.expect("non-rectangular clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force generic-atomic mode");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("begin non-rectangular clip frame");
+
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("renderer records unsupported state for finish");
+    assert!(matches!(
+        frame.finish(),
+        Err(RendererError::Unsupported(
+            "native Metal atomic tracer only supports compatible rectangular clips after content"
+        ))
+    ));
+}
+
+#[test]
+fn native_metal_forced_atomic_rejects_incompatible_post_content_clip_transactionally() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let baseline_text =
+        std::fs::read_to_string(fixture_root.join("streams/gm/gamma_correction_clip.rive-stream"))
+            .expect("read gamma-correction clip stream");
+    let stream_text = baseline_text.replace(
+        "clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\n",
+        "clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\ntransform matrix=[0.70710677,0.70710677,-0.70710677,0.70710677,0,0]\nclipPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\n",
+    );
+    assert_ne!(stream_text, baseline_text);
+    let stream = RenderStream::parse(&stream_text).expect("parse incompatible clip stream");
+    let (width, height) = stream.frame_size.expect("incompatible clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force generic-atomic mode");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("begin incompatible clip frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("renderer records unsupported state for finish");
+    assert!(matches!(
+        frame.finish(),
+        Err(RendererError::Unsupported(
+            "native Metal atomic tracer only supports compatible rectangular clips after content"
+        ))
+    ));
+
+    let baseline = RenderStream::parse(&baseline_text).expect("parse baseline clip stream");
+    let mut retry = factory
+        .begin_frame(baseline.clear_color.unwrap_or(0))
+        .expect("begin valid clip frame after transactional rejection");
+    baseline
+        .replay_frame(0, &mut factory, &mut retry)
+        .expect("replay valid clip frame after transactional rejection");
+    let output = retry
+        .finish_for_benchmark()
+        .expect("finish valid clip frame after transactional rejection");
+    assert!(output.execution_inventory.clip_rect_pipeline);
+    assert_eq!(
+        output
+            .pixels
+            .chunks_exact(4)
+            .filter(|pixel| pixel[0] > pixel[1] && pixel[1] != 0 && pixel[2] == 0)
+            .count(),
+        400
+    );
+}
+
+#[test]
 fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream = RenderStream::parse(
@@ -533,6 +707,7 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: false,
             interior_triangulation_pipeline: false,
             atomic_draws: 4,
@@ -614,6 +789,7 @@ fn native_metal_forced_atomic_overfill_blendmodes_matches_pinned_cpp_metal_oracl
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
             clipped_path_pipeline_set: false,
+            clip_rect_pipeline: false,
             outer_curve_pipeline: false,
             interior_triangulation_pipeline: false,
             atomic_draws: 4,

@@ -31,8 +31,8 @@ use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
 use crate::native_metal::shader_compile_plan::{
     BackgroundCompileJob, InterlockMode, MetalFeatures, COALESCED_RESOLVE_AND_TRANSFER,
-    ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_HSL_BLEND_MODES,
-    FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
+    ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT, ENABLE_DITHER,
+    ENABLE_HSL_BLEND_MODES, FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
 };
 use crate::RendererError;
 use objc2::rc::Retained;
@@ -47,6 +47,12 @@ use objc2_metal::{
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::Mutex;
+
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_ATOMIC_CLIP_RECT_RESOLVE_PIPELINE_COMPILE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
 
 const RESOURCE_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_resources.metallib"));
@@ -86,9 +92,16 @@ struct AtomicPathPipelines {
 struct AtomicFixedPathPipelines {
     initialize: DrawPipeline,
     midpoint: DrawPipeline,
+    clip_rect: Option<AtomicClipRectPathPipelines>,
     resolve: DrawPipeline,
     interior_geometry: Option<AtomicInteriorGeometryPipelines>,
     clipped: Option<AtomicClippedPathPipelines>,
+}
+
+#[derive(Clone)]
+struct AtomicClipRectPathPipelines {
+    midpoint: DrawPipeline,
+    resolve: DrawPipeline,
 }
 
 #[derive(Clone)]
@@ -117,6 +130,7 @@ struct AtomicAdvancedPathPipelines {
 struct AtomicPathRequest {
     pixel_format: MTLPixelFormat,
     uses_clipping: bool,
+    uses_clip_rects: bool,
     uses_interior_geometry: bool,
     uses_advanced_blend: bool,
     uses_hsl_blend_modes: bool,
@@ -434,6 +448,7 @@ impl NativeMetalContext {
         tessellation_height: usize,
         pixel_format: MTLPixelFormat,
         uses_clipping: bool,
+        uses_clip_rects: bool,
         uses_interior_geometry: bool,
         uses_advanced_blend: bool,
         uses_hsl_blend_modes: bool,
@@ -450,6 +465,7 @@ impl NativeMetalContext {
             Some(AtomicPathRequest {
                 pixel_format,
                 uses_clipping,
+                uses_clip_rects,
                 uses_interior_geometry,
                 uses_advanced_blend,
                 uses_hsl_blend_modes,
@@ -507,6 +523,15 @@ impl NativeMetalContext {
             tessellation_height,
         )?;
         if let Some(request) = atomic_path {
+            if request.uses_clip_rects
+                && (request.uses_clipping
+                    || request.uses_interior_geometry
+                    || request.uses_advanced_blend)
+            {
+                return Err(RendererError::Unsupported(
+                    "atomic clip-rect flush requires fixed-function midpoint-only solid draws",
+                ));
+            }
             let pipeline_families = generation
                 .atomic_path_pipelines
                 .get_or_insert_with(AtomicPathPipelines::default);
@@ -537,6 +562,13 @@ impl NativeMetalContext {
                     .fixed
                     .as_mut()
                     .expect("fixed atomic family created above");
+                if request.uses_clip_rects && fixed.clip_rect.is_none() {
+                    fixed.clip_rect = Some(compile_atomic_clip_rect_path_pipelines(
+                        &self.device,
+                        self.capabilities,
+                        self.platform,
+                    )?);
+                }
                 if request.uses_interior_geometry
                     && !request.uses_clipping
                     && fixed.interior_geometry.is_none()
@@ -679,7 +711,19 @@ impl NativeMetalContext {
                     midpoint: advanced
                         .map(|pipelines| &pipelines.midpoint)
                         .or_else(|| clipped.map(|pipelines| &pipelines.midpoint))
-                        .or_else(|| fixed.map(|pipelines| &pipelines.midpoint))
+                        .or_else(|| {
+                            fixed.map(|pipelines| {
+                                if request.uses_clip_rects {
+                                    &pipelines
+                                        .clip_rect
+                                        .as_ref()
+                                        .expect("requested atomic clip-rect pipeline pair")
+                                        .midpoint
+                                } else {
+                                    &pipelines.midpoint
+                                }
+                            })
+                        })
                         .expect("requested atomic midpoint pipeline")
                         .retained_pipeline_state(request.pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
@@ -698,7 +742,19 @@ impl NativeMetalContext {
                     resolve: advanced
                         .map(|pipelines| &pipelines.resolve)
                         .or_else(|| clipped.map(|pipelines| &pipelines.resolve))
-                        .or_else(|| fixed.map(|pipelines| &pipelines.resolve))
+                        .or_else(|| {
+                            fixed.map(|pipelines| {
+                                if request.uses_clip_rects {
+                                    &pipelines
+                                        .clip_rect
+                                        .as_ref()
+                                        .expect("requested atomic clip-rect pipeline pair")
+                                        .resolve
+                                } else {
+                                    &pipelines.resolve
+                                }
+                            })
+                        })
                         .expect("requested atomic resolve pipeline")
                         .retained_pipeline_state(request.pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
@@ -977,10 +1033,48 @@ fn compile_atomic_path_pipelines(
     Ok(AtomicFixedPathPipelines {
         initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
         midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
+        clip_rect: None,
         resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
         interior_geometry: None,
         clipped: None,
     })
+}
+
+fn compile_atomic_clip_rect_path_pipelines(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+) -> Result<AtomicClipRectPathPipelines, RendererError> {
+    let [midpoint, resolve] = atomic_clip_rect_path_jobs();
+    let midpoint = compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?;
+    #[cfg(test)]
+    if FAIL_NEXT_ATOMIC_CLIP_RECT_RESOLVE_PIPELINE_COMPILE.with(|flag| flag.replace(false)) {
+        return Err(RendererError::NativeMetal(
+            "injected atomic clip-rect resolve pipeline compilation failure".to_owned(),
+        ));
+    }
+    Ok(AtomicClipRectPathPipelines {
+        midpoint,
+        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+    })
+}
+
+const fn atomic_clip_rect_path_jobs() -> [BackgroundCompileJob; 2] {
+    let features = ENABLE_DITHER | ENABLE_CLIP_RECT;
+    [
+        BackgroundCompileJob::new(
+            DrawType::MidpointFanPatches,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::RenderPassResolve,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+    ]
 }
 
 const fn atomic_interior_geometry_jobs() -> [BackgroundCompileJob; 2] {
@@ -1495,6 +1589,26 @@ mod tests {
                 ),
             ]
         );
+
+        let clip_rect_features = ENABLE_DITHER | ENABLE_CLIP_RECT;
+        assert_eq!(
+            atomic_clip_rect_path_jobs().map(|job| {
+                assert_eq!(job.interlock_mode, InterlockMode::Atomics);
+                (job.draw_type, job.shader_features, job.shader_misc_flags)
+            }),
+            [
+                (
+                    DrawType::MidpointFanPatches,
+                    clip_rect_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT,
+                ),
+                (
+                    DrawType::RenderPassResolve,
+                    clip_rect_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT,
+                ),
+            ]
+        );
     }
 
     #[test]
@@ -1513,6 +1627,12 @@ mod tests {
         fn fixed_identities(family: &AtomicFixedPathPipelines) -> [*const (); 3] {
             [
                 pipeline_identity(&family.initialize),
+                pipeline_identity(&family.midpoint),
+                pipeline_identity(&family.resolve),
+            ]
+        }
+        fn clip_rect_identities(family: &AtomicClipRectPathPipelines) -> [*const (); 2] {
+            [
                 pipeline_identity(&family.midpoint),
                 pipeline_identity(&family.resolve),
             ]
@@ -1538,6 +1658,7 @@ mod tests {
                     MTLPixelFormat::BGRA8Unorm,
                     false,
                     false,
+                    false,
                     true,
                     true,
                     fixture.batch(),
@@ -1558,6 +1679,7 @@ mod tests {
                     1,
                     1,
                     MTLPixelFormat::BGRA8Unorm,
+                    false,
                     false,
                     false,
                     true,
@@ -1587,6 +1709,7 @@ mod tests {
                     false,
                     false,
                     false,
+                    false,
                     fixture.batch(),
                 )
                 .expect("realize fixed-function family"),
@@ -1605,12 +1728,78 @@ mod tests {
             fixed_identities(families.fixed.as_ref().unwrap())
         };
 
+        FAIL_NEXT_ATOMIC_CLIP_RECT_RESOLVE_PIPELINE_COMPILE.with(|flag| flag.set(true));
+        let error = match context.prepare_atomic_path_resources(
+            1,
+            1,
+            MTLPixelFormat::BGRA8Unorm,
+            false,
+            true,
+            false,
+            false,
+            false,
+            fixture.batch(),
+        ) {
+            Ok(_) => panic!("injected clip-rect pair compilation must fail"),
+            Err(error) => error,
+        };
+        assert!(error
+            .to_string()
+            .contains("injected atomic clip-rect resolve pipeline compilation failure"));
+        {
+            let state = context.resources.lock().unwrap();
+            let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+            let fixed = families.fixed.as_ref().unwrap();
+            assert_eq!(fixed_identities(fixed), fixed_family_ids);
+            assert!(fixed.clip_rect.is_none());
+        }
+
         drop(
             context
                 .prepare_atomic_path_resources(
                     1,
                     1,
                     MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    true,
+                    false,
+                    false,
+                    false,
+                    fixture.batch(),
+                )
+                .expect("retry clip-rect pair compilation"),
+        );
+        let clip_rect_ids = {
+            let state = context.resources.lock().unwrap();
+            let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+            let fixed = families.fixed.as_ref().unwrap();
+            assert_eq!(fixed_identities(fixed), fixed_family_ids);
+            clip_rect_identities(fixed.clip_rect.as_ref().unwrap())
+        };
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    true,
+                    false,
+                    false,
+                    false,
+                    fixture.batch(),
+                )
+                .expect("reuse clip-rect pair"),
+        );
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
                     false,
                     false,
                     true,
@@ -1632,6 +1821,10 @@ mod tests {
         assert_eq!(
             fixed_identities(families.fixed.as_ref().unwrap()),
             fixed_family_ids
+        );
+        assert_eq!(
+            clip_rect_identities(families.fixed.as_ref().unwrap().clip_rect.as_ref().unwrap()),
+            clip_rect_ids
         );
     }
 

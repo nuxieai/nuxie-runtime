@@ -742,9 +742,42 @@ runner row retains the checked-in 2-LSB/32-pixel contract, and the rooted Apple
 product path executes repeated simple and complex gradients without retaining
 WGPU.
 
-This is not general atomic-flush parity. Clip rectangles, clip-stack mutation
-after content, gradients in clipped flushes, radial gradients, feather atlas,
-images, strokes, advanced blends
+The eighth slice replays `gm/gamma_correction_clip` as two solid midpoint
+rectangles in one fixed-function SrcOver flush. The first magenta draw snapshots
+no clip; an axis-aligned `[240, 240, 260, 260]` clip is then introduced, and the
+second yellow draw snapshots both its clip-rect inverse matrix and a 20x20
+scissor. This is deliberately per-draw state: the first path keeps the wide-open
+`PaintAuxData`, while only the second sets `PAINT_FLAG_HAS_CLIP_RECT`. The two
+overlapping paths therefore form two groups with three semantic barriers. Metal
+uses the plain DITHER initialize pipeline, paired DITHER|CLIP_RECT midpoint and
+resolve pipelines, full-target scissor for initialize and the first draw, the
+20x20 scissor for the second draw, and full-target scissor again for resolve.
+
+Pinned rectangle classification, compatible-matrix intersection, pixel bounds,
+and inverse-matrix ownership are `rive_renderer.cpp:204-309`; the exact scissor
+predicate and per-batch snapshot are `render_context.cpp:81-91` and
+`2083-2088`; PaintData/PaintAux emission and CLIP_RECT feature selection are
+`3024-3059` and `3947-3961`. Metal filters the combined feature key and applies
+per-batch scissors at `render_context_metal_impl.mm:1753-1834`, with barriers
+at `1857-1895`. The Rust encoder reapplies the selected scissor after a
+render-pass break because a replacement Metal encoder does not inherit dynamic
+scissor state, then restores the full target before resolve.
+
+The public tracer pins two authored draws, two groups, three barriers, six
+uploads totaling 1,400 bytes, five GPU calls, 17 submitted instances, 11
+tessellation spans, four path patches, exact PaintData/PaintAux records, and
+exact 400-pixel yellow occupancy with boundary samples. The canonical test
+independently compares typed slots and final relocated planes and proves
+exactly-once consumption. The new atomic row establishes and pins a
+2-LSB/8-pixel contract; a fresh same-runner Apple M5 Max comparison of Rust Metal and pinned
+C++ Metal was byte-exact. The historical checked-in PNG is used only for
+geometry occupancy in the focused test because a fresh pinned C++ replay also
+differs from that older capture at dithered edge pixels. The product-root Mach-O
+executes this clip-rect specialization and remains WGPU-free.
+
+This is not general atomic-flush parity. General divergent clip stacks and
+path-clip mutation/restores after content, gradients in clipped flushes, radial
+gradients, feather atlas, images, strokes, advanced blends
 combined with gradients or clipping, advanced outer-curve/interior geometry,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those

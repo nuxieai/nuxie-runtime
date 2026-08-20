@@ -32,6 +32,17 @@ max_channel_delta = 2
 max_different_pixels = 32
 
 [[entry]]
+id = "native-metal-gm-gamma-correction-clip-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/gm/gamma_correction_clip.rive-stream"
+reference = "fixtures/renderer/reference/metal/gm/gamma_correction_clip-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 8
+
+[[entry]]
 id = "native-metal-first-light-gradient-cubic-generic-atomic"
 kind = "gm-stream"
 stream = "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream"

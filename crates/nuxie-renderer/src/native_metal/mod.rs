@@ -123,6 +123,8 @@ pub struct NativeMetalExecutionInventory {
     pub render_pass_resolve_pipeline: bool,
     /// Flush-wide clipping selected specialized initialize/midpoint/resolve.
     pub clipped_path_pipeline_set: bool,
+    /// At least one path used the fixed-function atomic clip-rectangle shader.
+    pub clip_rect_pipeline: bool,
     pub outer_curve_pipeline: bool,
     pub interior_triangulation_pipeline: bool,
     pub atomic_draws: usize,
@@ -240,6 +242,7 @@ impl NativeMetalFactory {
             atomic_memory_barrier_count: 0,
             atomic_render_pass_break_count: 0,
             atomic_uses_clipping: false,
+            atomic_uses_clip_rects: false,
             atomic_uses_advanced_blend: false,
             atomic_uses_hsl_blend_modes: false,
             unsupported: None,
@@ -376,6 +379,7 @@ pub struct NativeMetalFrame {
     atomic_memory_barrier_count: usize,
     atomic_render_pass_break_count: usize,
     atomic_uses_clipping: bool,
+    atomic_uses_clip_rects: bool,
     atomic_uses_advanced_blend: bool,
     atomic_uses_hsl_blend_modes: bool,
     unsupported: Option<&'static str>,
@@ -777,20 +781,19 @@ impl Renderer for NativeMetalFrame {
                 .get_or_insert("native Metal tracer does not support clipping yet");
             return;
         }
-        if !self.atomic_path_inputs.is_empty() {
-            self.unsupported
-                .get_or_insert("native Metal atomic clip tracer requires clips before content");
-            return;
-        }
         let Some(path) = path.as_any().downcast_ref::<LogicalPath>() else {
             self.unsupported
                 .get_or_insert("clip path from another renderer backend");
             return;
         };
-        if let Err(error) = self
-            .atomic_logical_state
-            .clip_path(self.logical_frame_config(), path)
-        {
+        let result = if self.atomic_path_inputs.is_empty() {
+            self.atomic_logical_state
+                .clip_path(self.logical_frame_config(), path)
+        } else {
+            self.atomic_logical_state
+                .clip_rect_after_atomic_content(path)
+        };
+        if let Err(error) = result {
             self.unsupported.get_or_insert(error);
         }
     }
@@ -906,6 +909,7 @@ impl NativeMetalFrame {
             midpoint_fan_pipeline: atomic_pipelines.is_some(),
             render_pass_resolve_pipeline: atomic_pipelines.is_some(),
             clipped_path_pipeline_set,
+            clip_rect_pipeline: self.atomic_uses_clip_rects,
             outer_curve_pipeline: atomic_pipelines
                 .is_some_and(|pipelines| pipelines.outer_curve.is_some()),
             interior_triangulation_pipeline: atomic_pipelines
@@ -1033,6 +1037,7 @@ impl NativeMetalFrame {
                     tessellation_height as usize,
                     pixel_format,
                     flush.uses_clipping,
+                    flush.uses_clip_rects,
                     uses_interior_geometry,
                     flush.uses_advanced_blend,
                     flush.uses_hsl_blend_modes,
@@ -1086,6 +1091,7 @@ impl NativeMetalFrame {
                 self.atomic_memory_barrier_count = barriers.memory;
                 self.atomic_render_pass_break_count = barriers.render_pass_breaks;
                 self.atomic_uses_clipping = flush.uses_clipping;
+                self.atomic_uses_clip_rects = flush.uses_clip_rects;
                 self.atomic_uses_advanced_blend = flush.uses_advanced_blend;
                 self.atomic_uses_hsl_blend_modes = flush.uses_hsl_blend_modes;
                 if self.collect_work_metrics {
@@ -1581,6 +1587,13 @@ fn encode_atomic_main_pass(
         lease,
         flush.uses_advanced_blend,
     )?;
+    let full_scissor = MTLScissorRect {
+        x: 0,
+        y: 0,
+        width: width as usize,
+        height: height as usize,
+    };
+    encoder.setScissorRect(full_scissor);
     encoder.setRenderPipelineState(&pipelines.initialize);
     // SAFETY: the generated initialize shader consumes the four implicit
     // triangle-strip vertices and requires no caller-provided vertex buffer.
@@ -1616,6 +1629,18 @@ fn encode_atomic_main_pass(
                 &mut render_passes,
             )?;
             next_group_start.next();
+        }
+        // A semantic barrier may replace the render encoder. Reapply the
+        // desired scissor even when it matches the preceding logical draw.
+        if let Some([left, top, right, bottom]) = draw.scissor {
+            encoder.setScissorRect(MTLScissorRect {
+                x: left as usize,
+                y: top as usize,
+                width: usize::from(right - left),
+                height: usize::from(bottom - top),
+            });
+        } else {
+            encoder.setScissorRect(full_scissor);
         }
         if draw.instance_count != 0 {
             let (pipeline, index_count, index_offset) = match draw.patch_kind {
@@ -1687,6 +1712,8 @@ fn encode_atomic_main_pass(
         encoder,
         &mut render_passes,
     )?;
+
+    encoder.setScissorRect(full_scissor);
 
     encoder.setRenderPipelineState(&pipelines.resolve);
     // SAFETY: the generated resolve shader consumes the four implicit

@@ -107,7 +107,8 @@ linear-gradient cubic, four-draw `gm/overfill_opaque` flush, and nested-clip
 outer-curve/interior slice, plus the three-draw `riv/deterministic_mode`
 solid/simple-linear-gradient/solid flush and the four-draw
 `gm/overfill_blendmodes` advanced/HSL flush, plus the four-gradient
-`gm/rect_grad` dedup slice, against the pinned C++ Metal replay
+`gm/rect_grad` dedup slice and the two-draw `gm/gamma_correction_clip`
+clip-rect slice, against the pinned C++ Metal replay
 on the same adapter. The triangle contract remains
 max-channel 2 and at most 32 differing pixels. The forced C++ atomic gradient
 is byte-identical to the existing checked-in gradient PNG, so its atomic row is
@@ -136,6 +137,14 @@ semantic barriers, a 512x2 ramp texture, and seven uploads totaling 2,264
 bytes. A structural oracle separately pins three simple-first ramp spans and
 four occurrence-specific matrices because the wrong non-deduplicated layout
 can still produce a byte-identical image.
+The new gamma-correction-clip atomic row establishes and pins a 2/8 contract. Its public
+inventory requires two midpoint draws, two physical groups, three semantic
+barriers, paired CLIP_RECT midpoint/resolve pipelines, six uploads totaling
+1,400 bytes, and exact 20x20 yellow occupancy with magenta/yellow boundary
+samples. The historical static PNG is an occupancy diagnostic because a fresh
+pinned C++ replay has the same dither drift from that capture. The primary
+same-runner comparison of Rust Metal to that fresh pinned C++ Metal output was
+byte-exact on Apple M5 Max.
 The existing `rust-metal` candidate rows remain capability-driven and retain
 their original labels and budgets.
 

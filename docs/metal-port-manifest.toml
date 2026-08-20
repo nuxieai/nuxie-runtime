@@ -549,7 +549,7 @@ lane = "ore-metal"
 issue = "UNIV-2091"
 status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
-evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+evidence = ["crates/nuxie-ore-metal/src/binding_map.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_buffer.hpp"
@@ -710,7 +710,7 @@ lane = "ore-metal"
 issue = "UNIV-2091"
 status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
-evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs", "tools/check-ore-metal-binding-witness.sh"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"
@@ -742,7 +742,7 @@ lane = "ore-metal"
 issue = "UNIV-2091"
 status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
-evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_sampler_metal.hpp"
